@@ -274,17 +274,19 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(channel.getState(true)).isEqualTo(ConnectivityState.IDLE);
 
     reset(mockLoadBalancer);
-    Map<String, ?> ignoredServiceConfig =
-        parseJson("{\"loadBalancingConfig\": [{\"round_robin\": {}}]}");
-    nameResolverFactory.nextRawServiceConfig.set(ignoredServiceConfig);
     nameResolverFactory.servers.clear();
 
     // 2nd resolution
     nameResolverFactory.allResolved();
 
-    // 2nd service config without address should be ignored
+    // 2nd service config without addresses
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(mockLoadBalancer, never()).handleResolvedAddresses(any(ResolvedAddresses.class));
-    verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
+    verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(statusCaptor.getValue().getDescription())
+        .contains("NameResolver returned no usable address.");
+    assertThat(channel.getState(true)).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
     assertWithMessage("Empty address should schedule NameResolver retry")
         .that(getNameResolverRefresh())
         .isNotNull();

@@ -19,7 +19,6 @@ package io.grpc.xds.internal.sds.trust;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_SERVER_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
-import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
@@ -29,9 +28,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.grpc.internal.testing.TestUtils;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
@@ -53,6 +51,7 @@ import sun.security.validator.ValidatorException;
 /**
  * Unit tests for {@link SdsX509TrustManager}.
  */
+// TODO(#7166): add more tests when xds v3 is implemented.
 @RunWith(JUnit4.class)
 public class SdsX509TrustManagerTest {
 
@@ -82,180 +81,6 @@ public class SdsX509TrustManagerTest {
     X509Certificate[] certs =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     trustManager.verifySubjectAltNameInChain(certs);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void missingPeerCerts() throws CertificateException, FileNotFoundException {
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder().addVerifySubjectAltName("foo.com").build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
-    try {
-      trustManager.verifySubjectAltNameInChain(null);
-      fail("no exception thrown");
-    } catch (CertificateException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate(s) missing");
-    }
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void emptyArrayPeerCerts() throws CertificateException, FileNotFoundException {
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder().addVerifySubjectAltName("foo.com").build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
-    try {
-      trustManager.verifySubjectAltNameInChain(new X509Certificate[0]);
-      fail("no exception thrown");
-    } catch (CertificateException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate(s) missing");
-    }
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void noSansInPeerCerts() throws CertificateException, IOException {
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder().addVerifySubjectAltName("foo.com").build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
-    X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(CLIENT_PEM_FILE));
-    try {
-      trustManager.verifySubjectAltNameInChain(certs);
-      fail("no exception thrown");
-    } catch (CertificateException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
-    }
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void oneSanInPeerCertsVerifies() throws CertificateException, IOException {
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder()
-            .addVerifySubjectAltName("waterzooi.test.google.be")
-            .build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
-    X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
-    trustManager.verifySubjectAltNameInChain(certs);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void oneSanInPeerCertsVerifiesMultipleVerifySans()
-      throws CertificateException, IOException {
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder()
-            .addVerifySubjectAltName("x.foo.com")
-            .addVerifySubjectAltName("waterzooi.test.google.be")
-            .build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
-    X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
-    trustManager.verifySubjectAltNameInChain(certs);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void oneSanInPeerCertsNotFoundException()
-      throws CertificateException, IOException {
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder().addVerifySubjectAltName("x.foo.com").build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
-    X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
-    try {
-      trustManager.verifySubjectAltNameInChain(certs);
-      fail("no exception thrown");
-    } catch (CertificateException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
-    }
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void wildcardSanInPeerCertsVerifiesMultipleVerifySans()
-      throws CertificateException, IOException {
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder()
-            .addVerifySubjectAltName("x.foo.com")
-            .addVerifySubjectAltName("abc.test.youtube.com") // should match *.test.youtube.com
-            .build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
-    X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
-    trustManager.verifySubjectAltNameInChain(certs);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void wildcardSanInPeerCertsVerifiesMultipleVerifySans1()
-      throws CertificateException, IOException {
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder()
-            .addVerifySubjectAltName("x.foo.com")
-            .addVerifySubjectAltName("abc.test.google.fr") // should match *.test.google.fr
-            .build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
-    X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
-    trustManager.verifySubjectAltNameInChain(certs);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void wildcardSanInPeerCertsSubdomainMismatch()
-      throws CertificateException, IOException {
-    // 2. Asterisk (*) cannot match across domain name labels.
-    //    For example, *.example.com matches test.example.com but does not match
-    //    sub.test.example.com.
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder()
-            .addVerifySubjectAltName("sub.abc.test.youtube.com")
-            .build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
-    X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
-    try {
-      trustManager.verifySubjectAltNameInChain(certs);
-      fail("no exception thrown");
-    } catch (CertificateException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
-    }
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void oneIpAddressInPeerCertsVerifies() throws CertificateException, IOException {
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder()
-            .addVerifySubjectAltName("x.foo.com")
-            .addVerifySubjectAltName("192.168.1.3")
-            .build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
-    X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
-    trustManager.verifySubjectAltNameInChain(certs);
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void oneIpAddressInPeerCertsMismatch() throws CertificateException, IOException {
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder()
-            .addVerifySubjectAltName("x.foo.com")
-            .addVerifySubjectAltName("192.168.2.3")
-            .build();
-    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
-    X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
-    try {
-      trustManager.verifySubjectAltNameInChain(certs);
-      fail("no exception thrown");
-    } catch (CertificateException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
-    }
   }
 
   @Test

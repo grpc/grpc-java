@@ -19,6 +19,7 @@ package io.grpc.android.integrationtest;
 import android.os.AsyncTask;
 import android.util.Log;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.testing.integration.AbstractInteropTest;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -154,6 +155,11 @@ final class InteropTask extends AsyncTask<Void, Void, String> {
     @Override
     protected ManagedChannel createChannel() {
       return channel;
+    }
+
+    @Override
+    protected ManagedChannelBuilder<?> createChannelBuilder() {
+      throw new UnsupportedOperationException();
     }
 
     @Override

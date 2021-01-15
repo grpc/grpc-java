@@ -32,19 +32,28 @@ import io.grpc.ExperimentalApi;
 public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> {
 
   /**
-   * If {@code true} indicates that the call has been cancelled by the remote peer.
+   * Returns {@code true} when the call is cancelled and the server is encouraged to abort
+   * processing to save resources, since the client will not be processing any further methods.
+   * Cancellations can be caused by timeouts, explicit cancellation by client, network errors, and
+   * similar.
    *
    * <p>This method may safely be called concurrently from multiple threads.
    */
   public abstract boolean isCancelled();
 
   /**
-   * Set a {@link Runnable} that will be called if the calls {@link #isCancelled()} state
-   * changes from {@code false} to {@code true}. It is guaranteed that execution of the
-   * {@link Runnable} are serialized with calls to the 'inbound' {@link StreamObserver}.
+   * Sets a {@link Runnable} to be called if the call is cancelled and the server is encouraged to
+   * abort processing to save resources, since the client will not process any further messages.
+   * Cancellations can be caused by timeouts, explicit cancellation by the client, network errors,
+   * etc.
    *
-   * <p>Note that the handler may be called some time after {@link #isCancelled()} has transitioned
-   * to {@code true} as other callbacks may still be executing in the 'inbound' observer.
+   * <p>It is guaranteed that execution of the {@link Runnable} is serialized with calls to the
+   * 'inbound' {@link StreamObserver}. That also means that the callback will be delayed if other
+   * callbacks are running; if one of those other callbacks runs for a significant amount of time
+   * it can poll {@link #isCancelled()}, which is not delayed.
+   *
+   * <p>This method may only be called during the initial call to the application, before the
+   * service returns its {@code StreamObserver}.
    *
    * <p>Setting the onCancelHandler will suppress the on-cancel exception thrown by
    * {@link #onNext}.
@@ -64,4 +73,26 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    * @throws IllegalArgumentException if the compressor name can not be found.
    */
   public abstract void setCompression(String compression);
+
+  /**
+   * Swaps to manual flow control where no message will be delivered to {@link
+   * StreamObserver#onNext(Object)} unless it is {@link #request request()}ed.
+   *
+   * <p>It may only be called during the initial call to the application, before the service returns
+   * its {@code StreamObserver}.
+   *
+   * <p>Note that for cases where the message is received before the service handler is invoked,
+   * this method will have no effect. This is true for:
+   *
+   * <ul>
+   *   <li>{@link io.grpc.MethodDescriptor.MethodType#UNARY} operations.</li>
+   *   <li>{@link io.grpc.MethodDescriptor.MethodType#SERVER_STREAMING} operations.</li>
+   * </ul>
+   * </p>
+   *
+   * <p>This API is still a work in-progress and may change in the future.
+   */
+  public void disableAutoRequest() {
+    throw new UnsupportedOperationException();
+  }
 }

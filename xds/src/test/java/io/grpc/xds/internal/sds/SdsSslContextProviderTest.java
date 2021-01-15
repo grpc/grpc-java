@@ -29,8 +29,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.Status.Code;
 import java.io.IOException;
 import java.util.Arrays;
@@ -40,7 +41,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link SdsSslContextProvider}. */
+/** Unit tests for {@link SdsClientSslContextProvider}. */
 @RunWith(JUnit4.class)
 public class SdsSslContextProviderTest {
 
@@ -62,10 +63,13 @@ public class SdsSslContextProviderTest {
     server.shutdown();
   }
 
-  /** Helper method to build SdsSslContextProvider from given names. */
-  private SdsSslContextProvider<?> getSdsSslContextProvider(
-      boolean server, String certName, String validationContextName,
-      Iterable<String> verifySubjectAltNames, Iterable<String> alpnProtocols) throws IOException {
+  /** Helper method to build SdsClientSslContextProvider from given names. */
+  private SdsClientSslContextProvider getSdsClientSslContextProvider(
+      String certName,
+      String validationContextName,
+      Iterable<StringMatcher> matchSubjectAltNames,
+      Iterable<String> alpnProtocols)
+      throws IOException {
 
     CommonTlsContext commonTlsContext =
         CommonTlsContextTestsUtil.buildCommonTlsContextWithAdditionalValues(
@@ -73,22 +77,41 @@ public class SdsSslContextProviderTest {
             /* certTargetUri= */ "inproc",
             validationContextName,
             /* validationContextTargetUri= */ "inproc",
-            verifySubjectAltNames,
+            matchSubjectAltNames,
             alpnProtocols,
             /* channelType= */ "inproc");
 
-    return server
-        ? SdsSslContextProvider.getProviderForServer(
-            CommonTlsContextTestsUtil.buildDownstreamTlsContext(
-                commonTlsContext, /* requireClientCert= */ false),
-            node,
-            MoreExecutors.directExecutor(),
-            MoreExecutors.directExecutor())
-        : SdsSslContextProvider.getProviderForClient(
-            SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext),
-            node,
-            MoreExecutors.directExecutor(),
-            MoreExecutors.directExecutor());
+    return SdsClientSslContextProvider.getProvider(
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(commonTlsContext),
+        node,
+        MoreExecutors.directExecutor(),
+        MoreExecutors.directExecutor());
+  }
+
+  /** Helper method to build SdsServerSslContextProvider from given names. */
+  private SdsServerSslContextProvider getSdsServerSslContextProvider(
+      String certName,
+      String validationContextName,
+      Iterable<StringMatcher> matchSubjectAltNames,
+      Iterable<String> alpnProtocols)
+      throws IOException {
+
+    CommonTlsContext commonTlsContext =
+        CommonTlsContextTestsUtil.buildCommonTlsContextWithAdditionalValues(
+            certName,
+            /* certTargetUri= */ "inproc",
+            validationContextName,
+            /* validationContextTargetUri= */ "inproc",
+            matchSubjectAltNames,
+            alpnProtocols,
+            /* channelType= */ "inproc");
+
+    return SdsServerSslContextProvider.getProvider(
+        CommonTlsContextTestsUtil.buildInternalDownstreamTlsContext(
+            commonTlsContext, /* requireClientCert= */ false),
+        node,
+        MoreExecutors.directExecutor(),
+        MoreExecutors.directExecutor());
   }
 
   @Test
@@ -98,8 +121,8 @@ public class SdsSslContextProviderTest {
     when(serverMock.getSecretFor(/* name= */ "valid1"))
         .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
 
-    SdsSslContextProvider<?> provider =
-        getSdsSslContextProvider(/* server= */ true, "cert1", "valid1", null, null);
+    SdsServerSslContextProvider provider =
+        getSdsServerSslContextProvider("cert1", "valid1", null, null);
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
 
@@ -113,12 +136,11 @@ public class SdsSslContextProviderTest {
     when(serverMock.getSecretFor("valid1"))
         .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
 
-    SdsSslContextProvider<?> provider =
-        getSdsSslContextProvider(
-            /* server= */ false,
+    SdsClientSslContextProvider provider =
+        getSdsClientSslContextProvider(
             /* certName= */ "cert1",
             /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null,
+            /* matchSubjectAltNames= */ null,
             /* alpnProtocols= */ null);
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
@@ -131,10 +153,12 @@ public class SdsSslContextProviderTest {
     when(serverMock.getSecretFor(/* name= */ "cert1"))
         .thenReturn(getOneTlsCertSecret(/* name= */ "cert1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
 
-    SdsSslContextProvider<?> provider =
-        getSdsSslContextProvider(
-            /* server= */ true, /* certName= */ "cert1", /* validationContextName= */ null,
-            /* verifySubjectAltNames= */ null, /* alpnProtocols= */ null);
+    SdsServerSslContextProvider provider =
+        getSdsServerSslContextProvider(
+            /* certName= */ "cert1",
+            /* validationContextName= */ null,
+            /* matchSubjectAltNames= */ null,
+            /* alpnProtocols= */ null);
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
 
@@ -146,10 +170,12 @@ public class SdsSslContextProviderTest {
     when(serverMock.getSecretFor(/* name= */ "valid1"))
         .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
 
-    SdsSslContextProvider<?> provider =
-        getSdsSslContextProvider(
-            /* server= */ false, /* certName= */ null, /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null, null);
+    SdsClientSslContextProvider provider =
+        getSdsClientSslContextProvider(
+            /* certName= */ null,
+            /* validationContextName= */ "valid1",
+            /* matchSubjectAltNames= */ null,
+            null);
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
 
@@ -161,10 +187,12 @@ public class SdsSslContextProviderTest {
     when(serverMock.getSecretFor(/* name= */ "valid1"))
         .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
 
-    SdsSslContextProvider<?> provider =
-        getSdsSslContextProvider(
-            /* server= */ true, /* certName= */ null, /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null, /* alpnProtocols= */ null);
+    SdsServerSslContextProvider provider =
+        getSdsServerSslContextProvider(
+            /* certName= */ null,
+            /* validationContextName= */ "valid1",
+            /* matchSubjectAltNames= */ null,
+            /* alpnProtocols= */ null);
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
 
@@ -184,13 +212,14 @@ public class SdsSslContextProviderTest {
     when(serverMock.getSecretFor("valid1"))
         .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
 
-    SdsSslContextProvider<?> provider =
-        getSdsSslContextProvider(
-            /* server= */ false,
+    SdsClientSslContextProvider provider =
+        getSdsClientSslContextProvider(
             /* certName= */ "cert1",
             /* validationContextName= */ "valid1",
             Arrays.asList(
-                "spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob"),
+                StringMatcher.newBuilder()
+                    .setExact("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob")
+                    .build()),
             /* alpnProtocols= */ null);
 
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
@@ -205,12 +234,11 @@ public class SdsSslContextProviderTest {
     when(serverMock.getSecretFor("valid1"))
         .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
 
-    SdsSslContextProvider<?> provider =
-        getSdsSslContextProvider(
-            /* server= */ false,
+    SdsClientSslContextProvider provider =
+        getSdsClientSslContextProvider(
             /* certName= */ "cert1",
             /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null,
+            /* matchSubjectAltNames= */ null,
             /* alpnProtocols= */ Arrays.asList("managed-mtls", "h2"));
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);
@@ -226,12 +254,11 @@ public class SdsSslContextProviderTest {
     when(serverMock.getSecretFor(/* name= */ "valid1"))
         .thenReturn(getOneCertificateValidationContextSecret(/* name= */ "valid1", CA_PEM_FILE));
 
-    SdsSslContextProvider<?> provider =
-        getSdsSslContextProvider(
-            /* server= */ true,
+    SdsServerSslContextProvider provider =
+        getSdsServerSslContextProvider(
             /* certName= */ "cert1",
             /* validationContextName= */ "valid1",
-            /* verifySubjectAltNames= */ null,
+            /* matchSubjectAltNames= */ null,
             /* alpnProtocols= */ Arrays.asList("managed-mtls", "h2"));
     SecretVolumeSslContextProviderTest.TestCallback testCallback =
         SecretVolumeSslContextProviderTest.getValueThruCallback(provider);

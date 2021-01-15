@@ -53,6 +53,7 @@ import io.envoyproxy.envoy.api.v2.listener.Filter;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
 import io.envoyproxy.envoy.api.v2.listener.FilterChainMatch;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
@@ -308,7 +309,7 @@ public class XdsClientImplTestForListener {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     List<Any> listeners = ImmutableList.of(
@@ -331,13 +332,13 @@ public class XdsClientImplTestForListener {
                                 "cluster-baz.googleapis.com"))))
                 .build()))));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000")));
 
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
     verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
@@ -357,14 +358,15 @@ public class XdsClientImplTestForListener {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(8000), null);
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(PORT,
         CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+        // Server is still speaking xds v2.
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default",
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
@@ -382,13 +384,13 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000")));
 
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
     verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
@@ -408,14 +410,15 @@ public class XdsClientImplTestForListener {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(8000), null);
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(PORT,
         CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+        // Server is still speaking xds v2.
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default",
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
@@ -433,13 +436,13 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000")));
 
     ArgumentCaptor<ListenerUpdate> listenerUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(listenerWatcher, times(1)).onListenerChanged(listenerUpdateCaptor.capture());
@@ -447,11 +450,28 @@ public class XdsClientImplTestForListener {
     EnvoyServerProtoData.Listener listener = configUpdate.getListener();
     assertThat(listener.getName()).isEqualTo(LISTENER_NAME);
     assertThat(listener.getAddress()).isEqualTo("0.0.0.0:" + PORT);
-    EnvoyServerProtoData.FilterChain[] expected = new EnvoyServerProtoData.FilterChain[]{
-        EnvoyServerProtoData.FilterChain.fromEnvoyProtoFilterChain(filterChainOutbound),
-        EnvoyServerProtoData.FilterChain.fromEnvoyProtoFilterChain(filterChainInbound)
-    };
-    assertThat(listener.getFilterChains()).isEqualTo(Arrays.asList(expected));
+    assertThat(listener.getFilterChains()).hasSize(2);
+    EnvoyServerProtoData.FilterChain filterChainOutboundInListenerUpdate
+        = listener.getFilterChains().get(0);
+    assertThat(filterChainOutboundInListenerUpdate.getFilterChainMatch().getDestinationPort())
+        .isEqualTo(8000);
+    EnvoyServerProtoData.FilterChain filterChainInboundInListenerUpdate
+        = listener.getFilterChains().get(1);
+    EnvoyServerProtoData.FilterChainMatch inBoundfilterChainMatch =
+        filterChainInboundInListenerUpdate.getFilterChainMatch();
+    assertThat(inBoundfilterChainMatch.getDestinationPort()).isEqualTo(PORT);
+    assertThat(inBoundfilterChainMatch.getPrefixRanges()).containsExactly(
+        new EnvoyServerProtoData.CidrRange(LOCAL_IP, 32));
+    CommonTlsContext downstreamCommonTlsContext =
+        filterChainInboundInListenerUpdate.getDownstreamTlsContext().getCommonTlsContext();
+    assertThat(downstreamCommonTlsContext.getTlsCertificateSdsSecretConfigs(0).getName())
+        .isEqualTo("google-sds-config-default");
+    assertThat(
+            downstreamCommonTlsContext
+                .getCombinedValidationContext()
+                .getValidationContextSdsSecretConfig()
+                .getName())
+        .isEqualTo("ROOTCA");
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -465,14 +485,15 @@ public class XdsClientImplTestForListener {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(8000), null);
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(PORT,
         CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+        // Server is still speaking xds v2.
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default",
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
@@ -490,13 +511,13 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000")));
 
     ArgumentCaptor<ListenerUpdate> listenerUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(listenerWatcher, times(1)).onListenerChanged(listenerUpdateCaptor.capture());
@@ -505,7 +526,7 @@ public class XdsClientImplTestForListener {
     final FilterChain filterChainNewInbound = buildFilterChain(buildFilterChainMatch(PORT,
         CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default1",
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default1",
             "ROOTCA2"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners1 = ImmutableList.of(
@@ -513,13 +534,13 @@ public class XdsClientImplTestForListener {
             filterChainNewInbound
         )));
     DiscoveryResponse response1 =
-        buildDiscoveryResponse("1", listeners1, XdsClientImpl.ADS_TYPE_URL_LDS, "0001");
+        buildDiscoveryResponse("1", listeners1, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001");
     responseObserver.onNext(response1);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "1",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "0001")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001")));
 
     // Updated listener is notified to config watcher.
     listenerUpdateCaptor = ArgumentCaptor.forClass(null);
@@ -527,10 +548,23 @@ public class XdsClientImplTestForListener {
     ListenerUpdate configUpdate = listenerUpdateCaptor.getValue();
     EnvoyServerProtoData.Listener listener = configUpdate.getListener();
     assertThat(listener.getName()).isEqualTo(LISTENER_NAME);
-    EnvoyServerProtoData.FilterChain[] expected = new EnvoyServerProtoData.FilterChain[]{
-        EnvoyServerProtoData.FilterChain.fromEnvoyProtoFilterChain(filterChainNewInbound)
-    };
-    assertThat(listener.getFilterChains()).isEqualTo(Arrays.asList(expected));
+    assertThat(listener.getFilterChains()).hasSize(1);
+    EnvoyServerProtoData.FilterChain filterChain =
+        Iterables.getOnlyElement(listener.getFilterChains());
+    EnvoyServerProtoData.FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+    assertThat(filterChainMatch.getDestinationPort()).isEqualTo(PORT);
+    assertThat(filterChainMatch.getPrefixRanges()).containsExactly(
+        new EnvoyServerProtoData.CidrRange(LOCAL_IP, 32));
+    CommonTlsContext downstreamCommonTlsContext =
+        filterChain.getDownstreamTlsContext().getCommonTlsContext();
+    assertThat(downstreamCommonTlsContext.getTlsCertificateSdsSecretConfigs(0).getName())
+        .isEqualTo("google-sds-config-default1");
+    assertThat(
+            downstreamCommonTlsContext
+                .getCombinedValidationContext()
+                .getValidationContextSdsSecretConfig()
+                .getName())
+        .isEqualTo("ROOTCA2");
   }
 
   /**
@@ -547,14 +581,15 @@ public class XdsClientImplTestForListener {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(8000), null);
     final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(PORT,
         CidrRange.newBuilder().setAddressPrefix(DIFFERENT_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+        // Server is still speaking xds v2.
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default",
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
@@ -572,13 +607,13 @@ public class XdsClientImplTestForListener {
             filterChainOutbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000")));
 
     verify(listenerWatcher, never()).onError(any(Status.class));
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
@@ -594,7 +629,7 @@ public class XdsClientImplTestForListener {
     // Client sends an LDS request with null in lds resource name
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(8000), null);
@@ -602,7 +637,8 @@ public class XdsClientImplTestForListener {
         PORT + 1,  // add 1 to mismatch
         CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+        // Server is still speaking xds v2.
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default",
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
@@ -620,13 +656,13 @@ public class XdsClientImplTestForListener {
             filterChainOutbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     // Client sends an ACK LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000")));
 
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
     verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
@@ -655,13 +691,14 @@ public class XdsClientImplTestForListener {
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(8000), null);
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(PORT,
         CidrRange.newBuilder().setAddressPrefix(LOCAL_IP)
             .setPrefixLen(UInt32Value.of(32)).build()),
-        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+        // Server is still speaking xds v2.
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContextV2("google-sds-config-default",
             "ROOTCA"),
         buildTestFilter("envoy.http_connection_manager"));
     List<Any> listeners = ImmutableList.of(
@@ -670,7 +707,7 @@ public class XdsClientImplTestForListener {
             filterChainInbound
         )));
     DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0000");
     responseObserver.onNext(response);
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
@@ -691,7 +728,7 @@ public class XdsClientImplTestForListener {
     // Retry resumes requests for all wanted resources.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server becomes unreachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -710,7 +747,7 @@ public class XdsClientImplTestForListener {
     requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server is still not reachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -729,11 +766,11 @@ public class XdsClientImplTestForListener {
     requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server sends back a LDS response.
     response = buildDiscoveryResponse("1", listeners,
-        XdsClientImpl.ADS_TYPE_URL_LDS, "0001");
+        XdsClientImpl.ADS_TYPE_URL_LDS_V2, "0001");
     responseObserver.onNext(response);
 
     // Client sent an LDS ACK request (Omitted).
@@ -752,7 +789,7 @@ public class XdsClientImplTestForListener {
 
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     // Management server becomes unreachable again.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -770,7 +807,7 @@ public class XdsClientImplTestForListener {
     requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+            XdsClientImpl.ADS_TYPE_URL_LDS_V2, "")));
 
     verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
         backoffPolicy2);

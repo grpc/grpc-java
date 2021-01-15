@@ -17,7 +17,7 @@ buildscript {
     repositories {
         jcenter()    // Bintray's repository - a fast Maven Central mirror & more
         maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
+            url "https://maven-central.storage-download.googleapis.com/maven2/" }
     }
     dependencies {
         classpath 'com.google.cloud.tools:appengine-gradle-plugin:1.3.5'
@@ -36,7 +36,7 @@ repositories {
     // repositories for Jar's you access in your code
     mavenLocal()
     maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
+        url "https://maven-central.storage-download.googleapis.com/maven2/" }
     jcenter()
 }
 
@@ -48,7 +48,9 @@ dependencies {
     implementation project(':grpc-netty')
     implementation project(":grpc-stub")
     implementation (project(':grpc-interop-testing')) {
+        // Avoid grpc-netty-shaded dependency
         exclude group: 'io.grpc', module: 'grpc-alts'
+        exclude group: 'io.grpc', module: 'grpc-xds'
     }
     implementation libraries.junit
     implementation libraries.protobuf

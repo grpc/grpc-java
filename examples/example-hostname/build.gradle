@@ -8,7 +8,7 @@ plugins {
 
 repositories {
     maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
+        url "https://maven-central.storage-download.googleapis.com/maven2/" }
     mavenCentral()
     mavenLocal()
 }
@@ -21,8 +21,8 @@ targetCompatibility = 1.7
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.30.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.11.0'
+def grpcVersion = '1.31.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.12.0'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"

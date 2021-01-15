@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
+import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.EDS_POLICY_NAME;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_KEY_FILE;
@@ -37,24 +38,27 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsClient.EndpointUpdate;
@@ -221,7 +225,7 @@ public class CdsLoadBalancerTest {
   }
 
   @Test
-  public void handleCdsConfigs() {
+  public void handleCdsConfigUpdate() {
     assertThat(xdsClient).isNull();
     ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
@@ -335,8 +339,9 @@ public class CdsLoadBalancerTest {
   }
 
   @Test
-  @SuppressWarnings({"unchecked"})
-  public void handleCdsConfigs_withUpstreamTlsContext()  {
+  public void handleCdsConfigUpdate_withUpstreamTlsContext()  {
+    assertThat(cdsLoadBalancer).isInstanceOf(CdsLoadBalancer.class);
+    ((CdsLoadBalancer)cdsLoadBalancer).setXdsSecurity(true);
     assertThat(xdsClient).isNull();
     ResolvedAddresses resolvedAddresses1 =
          ResolvedAddresses.newBuilder()
@@ -356,9 +361,8 @@ public class CdsLoadBalancerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
-    SslContextProvider<UpstreamTlsContext> mockSslContextProvider =
-        (SslContextProvider<UpstreamTlsContext>) mock(SslContextProvider.class);
-    doReturn(upstreamTlsContext).when(mockSslContextProvider).getSource();
+    SslContextProvider mockSslContextProvider = mock(SslContextProvider.class);
+    doReturn(upstreamTlsContext).when(mockSslContextProvider).getUpstreamTlsContext();
     doReturn(mockSslContextProvider).when(mockTlsContextManager)
         .findOrCreateClientSslContextProvider(same(upstreamTlsContext));
 
@@ -373,8 +377,8 @@ public class CdsLoadBalancerTest {
 
     assertThat(edsLbHelpers).hasSize(1);
     assertThat(edsLoadBalancers).hasSize(1);
-    verify(mockTlsContextManager, never()).releaseClientSslContextProvider(
-        (SslContextProvider<UpstreamTlsContext>) any(SslContextProvider.class));
+    verify(mockTlsContextManager, never())
+        .releaseClientSslContextProvider(any(SslContextProvider.class));
     Helper edsLbHelper1 = edsLbHelpers.poll();
 
     ArrayList<EquivalentAddressGroup> eagList = new ArrayList<>();
@@ -403,8 +407,8 @@ public class CdsLoadBalancerTest {
             .setUpstreamTlsContext(upstreamTlsContext)
             .build());
 
-    verify(mockTlsContextManager, never()).releaseClientSslContextProvider(
-        (SslContextProvider<UpstreamTlsContext>) any(SslContextProvider.class));
+    verify(mockTlsContextManager, never())
+        .releaseClientSslContextProvider(any(SslContextProvider.class));
     verify(mockTlsContextManager, never()).findOrCreateClientSslContextProvider(
         any(UpstreamTlsContext.class));
 
@@ -414,9 +418,8 @@ public class CdsLoadBalancerTest {
     UpstreamTlsContext upstreamTlsContext1 =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, CA_PEM_FILE);
-    SslContextProvider<UpstreamTlsContext> mockSslContextProvider1 =
-        (SslContextProvider<UpstreamTlsContext>) mock(SslContextProvider.class);
-    doReturn(upstreamTlsContext1).when(mockSslContextProvider1).getSource();
+    SslContextProvider mockSslContextProvider1 = mock(SslContextProvider.class);
+    doReturn(upstreamTlsContext1).when(mockSslContextProvider1).getUpstreamTlsContext();
     doReturn(mockSslContextProvider1).when(mockTlsContextManager)
         .findOrCreateClientSslContextProvider(same(upstreamTlsContext1));
     clusterWatcher1.onClusterChanged(
@@ -479,6 +482,70 @@ public class CdsLoadBalancerTest {
     assertThat(capturedUpstreamTlsContext).isSameInstanceAs(upstreamTlsContext);
     assertThat(capturedEag.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL))
         .isSameInstanceAs(xdsClientPool);
+  }
+
+  @Test
+  public void clusterWatcher_resourceNotExist() {
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+            .build())
+        .setLoadBalancingPolicyConfig(new CdsConfig("foo.googleapis.com"))
+        .build();
+    cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+
+    ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor = ArgumentCaptor.forClass(null);
+    verify(xdsClient).watchClusterData(eq("foo.googleapis.com"), clusterWatcherCaptor.capture());
+
+    ClusterWatcher clusterWatcher = clusterWatcherCaptor.getValue();
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
+    clusterWatcher.onResourceDoesNotExist("foo.googleapis.com");
+    assertThat(edsLoadBalancers).isEmpty();
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .isEqualTo("Resource foo.googleapis.com is unavailable");
+  }
+
+  @Test
+  public void clusterWatcher_resourceRemoved() {
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+            .build())
+        .setLoadBalancingPolicyConfig(new CdsConfig("foo.googleapis.com"))
+        .build();
+    cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+
+    ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor = ArgumentCaptor.forClass(null);
+    verify(xdsClient).watchClusterData(eq("foo.googleapis.com"), clusterWatcherCaptor.capture());
+
+    ClusterWatcher clusterWatcher = clusterWatcherCaptor.getValue();
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
+    clusterWatcher.onClusterChanged(
+        ClusterUpdate.newBuilder()
+            .setClusterName("foo.googleapis.com")
+            .setEdsServiceName("edsServiceFoo.googleapis.com")
+            .setLbPolicy("round_robin")
+            .build());
+    assertThat(edsLoadBalancers).hasSize(1);
+    assertThat(edsLbHelpers).hasSize(1);
+    LoadBalancer edsLoadBalancer = edsLoadBalancers.poll();
+    Helper edsHelper = edsLbHelpers.poll();
+    SubchannelPicker subchannelPicker = mock(SubchannelPicker.class);
+    edsHelper.updateBalancingState(READY, subchannelPicker);
+    verify(helper).updateBalancingState(eq(READY), same(subchannelPicker));
+
+    clusterWatcher.onResourceDoesNotExist("foo.googleapis.com");
+    verify(edsLoadBalancer).shutdown();
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .isEqualTo("Resource foo.googleapis.com is unavailable");
   }
 
   @Test

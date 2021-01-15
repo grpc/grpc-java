@@ -24,9 +24,12 @@ import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
-import io.envoyproxy.envoy.type.FractionalPercent;
-import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
+import io.envoyproxy.envoy.type.v3.FractionalPercent;
+import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.xds.RouteMatch.FractionMatcher;
+import io.grpc.xds.RouteMatch.HeaderMatcher;
+import io.grpc.xds.RouteMatch.PathMatcher;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -145,7 +148,15 @@ final class EnvoyProtoData {
       this.subZone = subZone;
     }
 
-    static Locality fromEnvoyProtoLocality(io.envoyproxy.envoy.api.v2.core.Locality locality) {
+    static Locality fromEnvoyProtoLocality(io.envoyproxy.envoy.config.core.v3.Locality locality) {
+      return new Locality(
+          /* region = */ locality.getRegion(),
+          /* zone = */ locality.getZone(),
+          /* subZone = */ locality.getSubZone());
+    }
+
+    @VisibleForTesting
+    static Locality fromEnvoyProtoLocalityV2(io.envoyproxy.envoy.api.v2.core.Locality locality) {
       return new Locality(
           /* region = */ locality.getRegion(),
           /* zone = */ locality.getZone(),
@@ -219,10 +230,25 @@ final class EnvoyProtoData {
     }
 
     static LocalityLbEndpoints fromEnvoyProtoLocalityLbEndpoints(
+        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto) {
+      List<LbEndpoint> endpoints = new ArrayList<>(proto.getLbEndpointsCount());
+      for (io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint endpoint :
+          proto.getLbEndpointsList()) {
+        endpoints.add(LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint));
+      }
+      return
+          new LocalityLbEndpoints(
+              endpoints,
+              proto.getLoadBalancingWeight().getValue(),
+              proto.getPriority());
+    }
+
+    @VisibleForTesting
+    static LocalityLbEndpoints fromEnvoyProtoLocalityLbEndpointsV2(
         io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints proto) {
       List<LbEndpoint> endpoints = new ArrayList<>(proto.getLbEndpointsCount());
       for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint endpoint : proto.getLbEndpointsList()) {
-        endpoints.add(LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint));
+        endpoints.add(LbEndpoint.fromEnvoyProtoLbEndpointV2(endpoint));
       }
       return
           new LocalityLbEndpoints(
@@ -296,18 +322,30 @@ final class EnvoyProtoData {
     }
 
     static LbEndpoint fromEnvoyProtoLbEndpoint(
+        io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint proto) {
+      io.envoyproxy.envoy.config.core.v3.SocketAddress socketAddress =
+          proto.getEndpoint().getAddress().getSocketAddress();
+      InetSocketAddress addr =
+          new InetSocketAddress(socketAddress.getAddress(), socketAddress.getPortValue());
+      return new LbEndpoint(
+          new EquivalentAddressGroup(ImmutableList.<java.net.SocketAddress>of(addr)),
+          proto.getLoadBalancingWeight().getValue(),
+          proto.getHealthStatus() == io.envoyproxy.envoy.config.core.v3.HealthStatus.HEALTHY
+              || proto.getHealthStatus()
+                  == io.envoyproxy.envoy.config.core.v3.HealthStatus.UNKNOWN);
+    }
+
+    private static LbEndpoint fromEnvoyProtoLbEndpointV2(
         io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint proto) {
       io.envoyproxy.envoy.api.v2.core.SocketAddress socketAddress =
           proto.getEndpoint().getAddress().getSocketAddress();
       InetSocketAddress addr =
           new InetSocketAddress(socketAddress.getAddress(), socketAddress.getPortValue());
-      return
-          new LbEndpoint(
-              new EquivalentAddressGroup(ImmutableList.<java.net.SocketAddress>of(addr)),
-              proto.getLoadBalancingWeight().getValue(),
-              proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.HEALTHY
-                  || proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.UNKNOWN
-              );
+      return new LbEndpoint(
+          new EquivalentAddressGroup(ImmutableList.<java.net.SocketAddress>of(addr)),
+          proto.getLoadBalancingWeight().getValue(),
+          proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.HEALTHY
+              || proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.UNKNOWN);
     }
 
     EquivalentAddressGroup getAddress() {
@@ -367,7 +405,7 @@ final class EnvoyProtoData {
     }
 
     static DropOverload fromEnvoyProtoDropOverload(
-        io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload proto) {
+        io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment.Policy.DropOverload proto) {
       FractionalPercent percent = proto.getDropPercentage();
       int numerator = percent.getNumerator();
       DenominatorType type = percent.getDenominator();
@@ -376,10 +414,38 @@ final class EnvoyProtoData {
           numerator *= 100;
           break;
         case HUNDRED:
-          numerator *= 100_00;
+          numerator *= 10_000;
           break;
         case MILLION:
           break;
+        case UNRECOGNIZED:
+        default:
+          throw new IllegalArgumentException("Unknown denominator type of " + percent);
+      }
+
+      if (numerator > 1_000_000) {
+        numerator = 1_000_000;
+      }
+
+      return new DropOverload(proto.getCategory(), numerator);
+    }
+
+    @VisibleForTesting
+    static DropOverload fromEnvoyProtoDropOverloadV2(
+        io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload proto) {
+      io.envoyproxy.envoy.type.FractionalPercent percent = proto.getDropPercentage();
+      int numerator = percent.getNumerator();
+      io.envoyproxy.envoy.type.FractionalPercent.DenominatorType type = percent.getDenominator();
+      switch (type) {
+        case TEN_THOUSAND:
+          numerator *= 100;
+          break;
+        case HUNDRED:
+          numerator *= 10_000;
+          break;
+        case MILLION:
+          break;
+        case UNRECOGNIZED:
         default:
           throw new IllegalArgumentException("Unknown denominator type of " + percent);
       }
@@ -444,8 +510,14 @@ final class EnvoyProtoData {
       return routeAction;
     }
 
+    // TODO(chengyuanzhang): delete and do not use after routing feature is always ON.
     boolean isDefaultRoute() {
-      return routeMatch.isMatchAll();
+      // For backward compatibility, all the other matchers are ignored.
+      String prefix = routeMatch.getPathMatch().getPrefix();
+      if (prefix != null) {
+        return prefix.isEmpty() || prefix.equals("/");
+      }
+      return false;
     }
 
     @Override
@@ -475,8 +547,9 @@ final class EnvoyProtoData {
     }
 
     @Nullable
-    static StructOrError<Route> fromEnvoyProtoRoute(io.envoyproxy.envoy.api.v2.route.Route proto) {
-      StructOrError<RouteMatch> routeMatch = RouteMatch.fromEnvoyProtoRouteMatch(proto.getMatch());
+    static StructOrError<Route> fromEnvoyProtoRoute(
+        io.envoyproxy.envoy.config.route.v3.Route proto) {
+      StructOrError<RouteMatch> routeMatch = convertEnvoyProtoRouteMatch(proto.getMatch());
       if (routeMatch == null) {
         return null;
       }
@@ -509,115 +582,12 @@ final class EnvoyProtoData {
       }
       return StructOrError.fromStruct(new Route(routeMatch.getStruct(), routeAction.getStruct()));
     }
-  }
-
-  /** See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.RouteMatch}. */
-  static final class RouteMatch {
-    // Exactly one of the following fields is non-null.
-    @Nullable
-    private final String pathPrefixMatch;
-    @Nullable
-    private final String pathExactMatch;
-    @Nullable
-    private final Pattern pathSafeRegExMatch;
-
-    private final List<HeaderMatcher> headerMatchers;
-    @Nullable
-    private final Fraction fractionMatch;
-
-    @VisibleForTesting
-    RouteMatch(
-        @Nullable String pathPrefixMatch, @Nullable String pathExactMatch,
-        @Nullable Pattern pathSafeRegExMatch, @Nullable Fraction fractionMatch,
-        List<HeaderMatcher> headerMatchers) {
-      this.pathPrefixMatch = pathPrefixMatch;
-      this.pathExactMatch = pathExactMatch;
-      this.pathSafeRegExMatch = pathSafeRegExMatch;
-      this.fractionMatch = fractionMatch;
-      this.headerMatchers = headerMatchers;
-    }
-
-    RouteMatch(@Nullable String pathPrefixMatch, @Nullable String pathExactMatch) {
-      this(
-          pathPrefixMatch, pathExactMatch, null, null,
-          Collections.<HeaderMatcher>emptyList());
-    }
-
-    @Nullable
-    String getPathPrefixMatch() {
-      return pathPrefixMatch;
-    }
-
-    @Nullable
-    String getPathExactMatch() {
-      return pathExactMatch;
-    }
-
-    boolean isMatchAll() {
-      if (pathSafeRegExMatch != null || fractionMatch != null) {
-        return false;
-      }
-      if (!headerMatchers.isEmpty()) {
-        return false;
-      }
-      if (pathExactMatch != null) {
-        return false;
-      }
-      if (pathPrefixMatch != null) {
-        return pathPrefixMatch.isEmpty() || pathPrefixMatch.equals("/");
-      }
-      return false;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      RouteMatch that = (RouteMatch) o;
-      return Objects.equals(pathPrefixMatch, that.pathPrefixMatch)
-          && Objects.equals(pathExactMatch, that.pathExactMatch)
-          && Objects.equals(
-              pathSafeRegExMatch == null ? null : pathSafeRegExMatch.pattern(),
-              that.pathSafeRegExMatch == null  ? null : that.pathSafeRegExMatch.pattern())
-          && Objects.equals(fractionMatch, that.fractionMatch)
-          && Objects.equals(headerMatchers, that.headerMatchers);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(
-          pathPrefixMatch, pathExactMatch,
-          pathSafeRegExMatch == null ? null : pathSafeRegExMatch.pattern(), headerMatchers,
-          fractionMatch);
-    }
-
-    @Override
-    public String toString() {
-      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
-      if (pathPrefixMatch != null) {
-        toStringHelper.add("pathPrefixMatch", pathPrefixMatch);
-      }
-      if (pathExactMatch != null) {
-        toStringHelper.add("pathExactMatch", pathExactMatch);
-      }
-      if (pathSafeRegExMatch != null) {
-        toStringHelper.add("pathSafeRegExMatch",pathSafeRegExMatch.pattern());
-      }
-      if (fractionMatch != null) {
-        toStringHelper.add("fractionMatch", fractionMatch);
-      }
-      return toStringHelper.add("headerMatchers", headerMatchers).toString();
-    }
 
     @VisibleForTesting
     @SuppressWarnings("deprecation")
     @Nullable
-    static StructOrError<RouteMatch> fromEnvoyProtoRouteMatch(
-        io.envoyproxy.envoy.api.v2.route.RouteMatch proto) {
+    static StructOrError<RouteMatch> convertEnvoyProtoRouteMatch(
+        io.envoyproxy.envoy.config.route.v3.RouteMatch proto) {
       if (proto.getQueryParametersCount() != 0) {
         return null;
       }
@@ -625,77 +595,24 @@ final class EnvoyProtoData {
         return StructOrError.fromError("Unsupported match option: case insensitive");
       }
 
-      Fraction fraction = null;
-      if (proto.hasRuntimeFraction()) {
-        io.envoyproxy.envoy.type.FractionalPercent percent =
-            proto.getRuntimeFraction().getDefaultValue();
-        int numerator = percent.getNumerator();
-        int denominator = 0;
-        switch (percent.getDenominator()) {
-          case HUNDRED:
-            denominator = 100;
-            break;
-          case TEN_THOUSAND:
-            denominator = 10_000;
-            break;
-          case MILLION:
-            denominator = 1_000_000;
-            break;
-          case UNRECOGNIZED:
-          default:
-            return StructOrError.fromError(
-                "Unrecognized fractional percent denominator: " + percent.getDenominator());
-        }
-        fraction = new Fraction(numerator, denominator);
+      StructOrError<PathMatcher> pathMatch = convertEnvoyProtoPathMatcher(proto);
+      if (pathMatch.getErrorDetail() != null) {
+        return StructOrError.fromError(pathMatch.getErrorDetail());
       }
 
-      String prefixPathMatch = null;
-      String exactPathMatch = null;
-      Pattern safeRegExPathMatch = null;
-      switch (proto.getPathSpecifierCase()) {
-        case PREFIX:
-          prefixPathMatch = proto.getPrefix();
-          // Supported prefix match format:
-          // "", "/" (default)
-          // "/service/"
-          if (!prefixPathMatch.isEmpty() && !prefixPathMatch.equals("/")) {
-            if (!prefixPathMatch.startsWith("/") || !prefixPathMatch.endsWith("/")
-                || prefixPathMatch.length() < 3) {
-              return StructOrError.fromError(
-                  "Invalid format of prefix path match: " + prefixPathMatch);
-            }
-          }
-          break;
-        case PATH:
-          exactPathMatch = proto.getPath();
-          int lastSlash = exactPathMatch.lastIndexOf('/');
-          // Supported exact match format:
-          // "/service/method"
-          if (!exactPathMatch.startsWith("/") || lastSlash == 0
-              || lastSlash == exactPathMatch.length() - 1) {
-            return StructOrError.fromError(
-                "Invalid format of exact path match: " + exactPathMatch);
-          }
-          break;
-        case REGEX:
-          return StructOrError.fromError("Unsupported path match type: regex");
-        case SAFE_REGEX:
-          String rawPattern = proto.getSafeRegex().getRegex();
-          try {
-            safeRegExPathMatch = Pattern.compile(rawPattern);
-          } catch (PatternSyntaxException e) {
-            return StructOrError.fromError("Malformed safe regex pattern: " + e.getMessage());
-          }
-          break;
-        case PATHSPECIFIER_NOT_SET:
-        default:
-          return StructOrError.fromError("Unknown path match type");
+      FractionMatcher fractionMatch = null;
+      if (proto.hasRuntimeFraction()) {
+        StructOrError<FractionMatcher> parsedFraction =
+            convertEnvoyProtoFraction(proto.getRuntimeFraction().getDefaultValue());
+        if (parsedFraction.getErrorDetail() != null) {
+          return StructOrError.fromError(parsedFraction.getErrorDetail());
+        }
+        fractionMatch = parsedFraction.getStruct();
       }
 
       List<HeaderMatcher> headerMatchers = new ArrayList<>();
-      for (io.envoyproxy.envoy.api.v2.route.HeaderMatcher hmProto : proto.getHeadersList()) {
-        StructOrError<HeaderMatcher> headerMatcher =
-            HeaderMatcher.fromEnvoyProtoHeaderMatcher(hmProto);
+      for (io.envoyproxy.envoy.config.route.v3.HeaderMatcher hmProto : proto.getHeadersList()) {
+        StructOrError<HeaderMatcher> headerMatcher = convertEnvoyProtoHeaderMatcher(hmProto);
         if (headerMatcher.getErrorDetail() != null) {
           return StructOrError.fromError(headerMatcher.getErrorDetail());
         }
@@ -704,96 +621,66 @@ final class EnvoyProtoData {
 
       return StructOrError.fromStruct(
           new RouteMatch(
-              prefixPathMatch, exactPathMatch, safeRegExPathMatch, fraction,
-              Collections.unmodifiableList(headerMatchers)));
+              pathMatch.getStruct(), Collections.unmodifiableList(headerMatchers), fractionMatch));
     }
 
-    static final class Fraction {
-      private final int numerator;
-      private final int denominator;
-
-      @VisibleForTesting
-      Fraction(int numerator, int denominator) {
-        this.numerator = numerator;
-        this.denominator = denominator;
+    @SuppressWarnings("deprecation")
+    private static StructOrError<PathMatcher> convertEnvoyProtoPathMatcher(
+        io.envoyproxy.envoy.config.route.v3.RouteMatch proto) {
+      String path = null;
+      String prefix = null;
+      Pattern safeRegEx = null;
+      switch (proto.getPathSpecifierCase()) {
+        case PREFIX:
+          prefix = proto.getPrefix();
+          break;
+        case PATH:
+          path = proto.getPath();
+          break;
+        case SAFE_REGEX:
+          String rawPattern = proto.getSafeRegex().getRegex();
+          try {
+            safeRegEx = Pattern.compile(rawPattern);
+          } catch (PatternSyntaxException e) {
+            return StructOrError.fromError("Malformed safe regex pattern: " + e.getMessage());
+          }
+          break;
+        case PATHSPECIFIER_NOT_SET:
+        default:
+          return StructOrError.fromError("Unknown path match type");
       }
-
-      @Override
-      public int hashCode() {
-        return Objects.hash(numerator, denominator);
-      }
-
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-          return false;
-        }
-        Fraction that = (Fraction) o;
-        return Objects.equals(numerator, that.numerator)
-            && Objects.equals(denominator, that.denominator);
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this)
-            .add("numerator", numerator)
-            .add("denominator", denominator)
-            .toString();
-      }
-    }
-  }
-
-  /**
-   * See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.route.HeaderMatcher}.
-   */
-  @SuppressWarnings("unused")
-  static final class HeaderMatcher {
-    private final String name;
-
-    // Exactly one of the following fields is non-null.
-    @Nullable
-    private final String exactMatch;
-    @Nullable
-    private final Pattern safeRegExMatch;
-    @Nullable
-    private final Range rangeMatch;
-    @Nullable
-    private final Boolean presentMatch;
-    @Nullable
-    private final String prefixMatch;
-    @Nullable
-    private final String suffixMatch;
-
-    private final boolean isInvertedMatch;
-
-    @VisibleForTesting
-    HeaderMatcher(
-        String name,
-        @Nullable String exactMatch, @Nullable Pattern safeRegExMatch, @Nullable Range rangeMatch,
-        @Nullable Boolean presentMatch, @Nullable String prefixMatch, @Nullable String suffixMatch,
-        boolean isInvertedMatch) {
-      this.name = name;
-      this.exactMatch = exactMatch;
-      this.safeRegExMatch = safeRegExMatch;
-      this.rangeMatch = rangeMatch;
-      this.presentMatch = presentMatch;
-      this.prefixMatch = prefixMatch;
-      this.suffixMatch = suffixMatch;
-      this.isInvertedMatch = isInvertedMatch;
+      return StructOrError.fromStruct(new PathMatcher(path, prefix, safeRegEx));
     }
 
-    // TODO (chengyuanzhang): add getters when needed.
+    private static StructOrError<FractionMatcher> convertEnvoyProtoFraction(
+        io.envoyproxy.envoy.type.v3.FractionalPercent proto) {
+      int numerator = proto.getNumerator();
+      int denominator = 0;
+      switch (proto.getDenominator()) {
+        case HUNDRED:
+          denominator = 100;
+          break;
+        case TEN_THOUSAND:
+          denominator = 10_000;
+          break;
+        case MILLION:
+          denominator = 1_000_000;
+          break;
+        case UNRECOGNIZED:
+        default:
+          return StructOrError.fromError(
+              "Unrecognized fractional percent denominator: " + proto.getDenominator());
+      }
+      return StructOrError.fromStruct(new FractionMatcher(numerator, denominator));
+    }
 
     @VisibleForTesting
     @SuppressWarnings("deprecation")
-    static StructOrError<HeaderMatcher> fromEnvoyProtoHeaderMatcher(
-        io.envoyproxy.envoy.api.v2.route.HeaderMatcher proto) {
+    static StructOrError<HeaderMatcher> convertEnvoyProtoHeaderMatcher(
+        io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
       String exactMatch = null;
       Pattern safeRegExMatch = null;
-      Range rangeMatch = null;
+      HeaderMatcher.Range rangeMatch = null;
       Boolean presentMatch = null;
       String prefixMatch = null;
       String suffixMatch = null;
@@ -802,9 +689,6 @@ final class EnvoyProtoData {
         case EXACT_MATCH:
           exactMatch = proto.getExactMatch();
           break;
-        case REGEX_MATCH:
-          return StructOrError.fromError(
-              "HeaderMatcher [" + proto.getName() + "] has unsupported match type: regex");
         case SAFE_REGEX_MATCH:
           String rawPattern = proto.getSafeRegexMatch().getRegex();
           try {
@@ -816,7 +700,9 @@ final class EnvoyProtoData {
           }
           break;
         case RANGE_MATCH:
-          rangeMatch = new Range(proto.getRangeMatch().getStart(), proto.getRangeMatch().getEnd());
+          rangeMatch =
+              new HeaderMatcher.Range(
+                  proto.getRangeMatch().getStart(), proto.getRangeMatch().getEnd());
           break;
         case PRESENT_MATCH:
           presentMatch = proto.getPresentMatch();
@@ -835,96 +721,6 @@ final class EnvoyProtoData {
           new HeaderMatcher(
               proto.getName(), exactMatch, safeRegExMatch, rangeMatch, presentMatch,
               prefixMatch, suffixMatch, proto.getInvertMatch()));
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      HeaderMatcher that = (HeaderMatcher) o;
-      return Objects.equals(name, that.name)
-          && Objects.equals(exactMatch, that.exactMatch)
-          && Objects.equals(
-              safeRegExMatch == null ? null : safeRegExMatch.pattern(),
-              that.safeRegExMatch == null ? null : that.safeRegExMatch.pattern())
-          && Objects.equals(rangeMatch, that.rangeMatch)
-          && Objects.equals(presentMatch, that.presentMatch)
-          && Objects.equals(prefixMatch, that.prefixMatch)
-          && Objects.equals(suffixMatch, that.suffixMatch)
-          && Objects.equals(isInvertedMatch, that.isInvertedMatch);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(
-          name, exactMatch, safeRegExMatch == null ? null : safeRegExMatch.pattern(),
-          rangeMatch, presentMatch, prefixMatch, suffixMatch, isInvertedMatch);
-    }
-
-    @Override
-    public String toString() {
-      ToStringHelper toStringHelper =
-          MoreObjects.toStringHelper(this).add("name", name);
-      if (exactMatch != null) {
-        toStringHelper.add("exactMatch", exactMatch);
-      }
-      if (safeRegExMatch != null) {
-        toStringHelper.add("safeRegExMatch", safeRegExMatch.pattern());
-      }
-      if (rangeMatch != null) {
-        toStringHelper.add("rangeMatch", rangeMatch);
-      }
-      if (presentMatch != null) {
-        toStringHelper.add("presentMatch", presentMatch);
-      }
-      if (prefixMatch != null) {
-        toStringHelper.add("prefixMatch", prefixMatch);
-      }
-      if (suffixMatch != null) {
-        toStringHelper.add("suffixMatch", suffixMatch);
-      }
-      return toStringHelper.add("isInvertedMatch", isInvertedMatch).toString();
-    }
-
-    static final class Range {
-      private final long start;
-      private final long end;
-
-      @VisibleForTesting
-      Range(long start, long end) {
-        this.start = start;
-        this.end = end;
-      }
-
-      @Override
-      public int hashCode() {
-        return Objects.hash(start, end);
-      }
-
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-          return false;
-        }
-        Range that = (Range) o;
-        return Objects.equals(start, that.start)
-            && Objects.equals(end, that.end);
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this)
-            .add("start", start)
-            .add("end", end)
-            .toString();
-      }
     }
   }
 
@@ -985,7 +781,7 @@ final class EnvoyProtoData {
     @Nullable
     @VisibleForTesting
     static StructOrError<RouteAction> fromEnvoyProtoRouteAction(
-        io.envoyproxy.envoy.api.v2.route.RouteAction proto) {
+        io.envoyproxy.envoy.config.route.v3.RouteAction proto) {
       String cluster = null;
       List<ClusterWeight> weightedClusters = null;
       switch (proto.getClusterSpecifierCase()) {
@@ -995,13 +791,14 @@ final class EnvoyProtoData {
         case CLUSTER_HEADER:
           return null;
         case WEIGHTED_CLUSTERS:
-          List<io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight> clusterWeights
+          List<io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight> clusterWeights
               = proto.getWeightedClusters().getClustersList();
           weightedClusters = new ArrayList<>();
-          for (io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight clusterWeight
+          for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
               : clusterWeights) {
             weightedClusters.add(ClusterWeight.fromEnvoyProtoClusterWeight(clusterWeight));
           }
+          // TODO(chengyuanzhang): validate if the sum of weights equals to total weight.
           break;
         case CLUSTERSPECIFIER_NOT_SET:
         default:
@@ -1061,7 +858,7 @@ final class EnvoyProtoData {
 
     @VisibleForTesting
     static ClusterWeight fromEnvoyProtoClusterWeight(
-        io.envoyproxy.envoy.api.v2.route.WeightedCluster.ClusterWeight proto) {
+        io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto) {
       return new ClusterWeight(proto.getName(), proto.getWeight().getValue());
     }
   }

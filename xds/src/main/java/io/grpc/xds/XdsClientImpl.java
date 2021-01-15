@@ -32,25 +32,25 @@ import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.JsonFormat;
 import com.google.rpc.Code;
-import io.envoyproxy.envoy.api.v2.Cluster;
-import io.envoyproxy.envoy.api.v2.Cluster.DiscoveryType;
-import io.envoyproxy.envoy.api.v2.Cluster.EdsClusterConfig;
-import io.envoyproxy.envoy.api.v2.Cluster.LbPolicy;
-import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
-import io.envoyproxy.envoy.api.v2.Listener;
-import io.envoyproxy.envoy.api.v2.RouteConfiguration;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
-import io.envoyproxy.envoy.api.v2.listener.FilterChain;
-import io.envoyproxy.envoy.api.v2.listener.FilterChainMatch;
-import io.envoyproxy.envoy.api.v2.route.Route;
-import io.envoyproxy.envoy.api.v2.route.VirtualHost;
-import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
-import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
+import io.envoyproxy.envoy.config.listener.v3.FilterChain;
+import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
+import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.config.route.v3.Route;
+import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
+import io.envoyproxy.envoy.config.route.v3.VirtualHost;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
 import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
@@ -64,6 +64,7 @@ import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
@@ -86,15 +87,29 @@ final class XdsClientImpl extends XdsClient {
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
 
   @VisibleForTesting
-  static final String ADS_TYPE_URL_LDS = "type.googleapis.com/envoy.api.v2.Listener";
+  static final String ADS_TYPE_URL_LDS_V2 = "type.googleapis.com/envoy.api.v2.Listener";
+  private static final String ADS_TYPE_URL_LDS =
+      "type.googleapis.com/envoy.config.listener.v3.Listener";
   @VisibleForTesting
-  static final String ADS_TYPE_URL_RDS =
+  static final String ADS_TYPE_URL_RDS_V2 =
       "type.googleapis.com/envoy.api.v2.RouteConfiguration";
+  private static final String ADS_TYPE_URL_RDS =
+      "type.googleapis.com/envoy.config.route.v3.RouteConfiguration";
+  private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
+      "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
+          + ".HttpConnectionManager";
+  private static final String TYPE_URL_HTTP_CONNECTION_MANAGER =
+      "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
+          + ".HttpConnectionManager";
   @VisibleForTesting
-  static final String ADS_TYPE_URL_CDS = "type.googleapis.com/envoy.api.v2.Cluster";
+  static final String ADS_TYPE_URL_CDS_V2 = "type.googleapis.com/envoy.api.v2.Cluster";
+  private static final String ADS_TYPE_URL_CDS =
+      "type.googleapis.com/envoy.config.cluster.v3.Cluster";
   @VisibleForTesting
-  static final String ADS_TYPE_URL_EDS =
+  static final String ADS_TYPE_URL_EDS_V2 =
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
+  private static final String ADS_TYPE_URL_EDS =
+      "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
   // Mutable for testing.
   static boolean enableExperimentalRouting = Boolean.parseBoolean(
@@ -263,7 +278,7 @@ final class XdsClientImpl extends XdsClient {
     if (adsStream == null) {
       startRpcStream();
     }
-    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
+    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS_V2, ImmutableList.of(ldsResourceName));
     ldsRespTimer =
         syncContext
             .schedule(
@@ -304,7 +319,7 @@ final class XdsClientImpl extends XdsClient {
       if (adsStream == null) {
         startRpcStream();
       }
-      adsStream.sendXdsRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet());
+      adsStream.sendXdsRequest(ADS_TYPE_URL_CDS_V2, clusterWatchers.keySet());
       ScheduledHandle timeoutHandle =
           syncContext
               .schedule(
@@ -341,7 +356,7 @@ final class XdsClientImpl extends XdsClient {
       }
       checkState(adsStream != null,
           "Severe bug: ADS stream was not created while an endpoint watcher was registered");
-      adsStream.sendXdsRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet());
+      adsStream.sendXdsRequest(ADS_TYPE_URL_CDS_V2, clusterWatchers.keySet());
     }
   }
 
@@ -382,7 +397,7 @@ final class XdsClientImpl extends XdsClient {
       if (adsStream == null) {
         startRpcStream();
       }
-      adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
+      adsStream.sendXdsRequest(ADS_TYPE_URL_EDS_V2, endpointWatchers.keySet());
       ScheduledHandle timeoutHandle =
           syncContext
               .schedule(
@@ -417,7 +432,7 @@ final class XdsClientImpl extends XdsClient {
         // Currently in retry backoff.
         return;
       }
-      adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
+      adsStream.sendXdsRequest(ADS_TYPE_URL_EDS_V2, endpointWatchers.keySet());
     }
   }
 
@@ -438,7 +453,7 @@ final class XdsClientImpl extends XdsClient {
       startRpcStream();
     }
     updateNodeMetadataForListenerRequest(port);
-    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of());
+    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS_V2, ImmutableList.<String>of());
     ldsRespTimer =
         syncContext
             .schedule(
@@ -452,10 +467,13 @@ final class XdsClientImpl extends XdsClient {
         .putFields("TRAFFICDIRECTOR_PROXYLESS",
             Value.newBuilder().setStringValue("1").build())
         .build();
-    Address listeningAddress =
-        Address.newBuilder()
+    io.envoyproxy.envoy.api.v2.core.Address listeningAddress =
+        io.envoyproxy.envoy.api.v2.core.Address.newBuilder()
             .setSocketAddress(
-                SocketAddress.newBuilder().setAddress("0.0.0.0").setPortValue(port).build())
+                SocketAddress.newBuilder()
+                    .setAddress("0.0.0.0")
+                    .setPortValue(port)
+                    .build())
             .build();
     node =
         node.toBuilder().setMetadata(newMetadata).addListeningAddresses(listeningAddress).build();
@@ -553,6 +571,9 @@ final class XdsClientImpl extends XdsClient {
     List<String> listenerNames = new ArrayList<>(ldsResponse.getResourcesCount());
     try {
       for (com.google.protobuf.Any res : ldsResponse.getResourcesList()) {
+        if (res.getTypeUrl().equals(ADS_TYPE_URL_LDS_V2)) {
+          res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_LDS).build();
+        }
         Listener listener = res.unpack(Listener.class);
         listeners.add(listener);
         listenerNames.add(listener.getName());
@@ -560,7 +581,7 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       logger.log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
+          ADS_TYPE_URL_LDS_V2, ImmutableList.of(ldsResourceName),
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
@@ -570,8 +591,12 @@ final class XdsClientImpl extends XdsClient {
     HttpConnectionManager requestedHttpConnManager = null;
     try {
       for (Listener listener : listeners) {
-        HttpConnectionManager hm =
-            listener.getApiListener().getApiListener().unpack(HttpConnectionManager.class);
+        Any apiListener = listener.getApiListener().getApiListener();
+        if (apiListener.getTypeUrl().equals(TYPE_URL_HTTP_CONNECTION_MANAGER_V2)) {
+          apiListener =
+              apiListener.toBuilder().setTypeUrl(TYPE_URL_HTTP_CONNECTION_MANAGER).build();
+        }
+        HttpConnectionManager hm = apiListener.unpack(HttpConnectionManager.class);
         if (listener.getName().equals(ldsResourceName)) {
           requestedHttpConnManager = hm;
         }
@@ -581,7 +606,7 @@ final class XdsClientImpl extends XdsClient {
           XdsLogLevel.WARNING,
           "Failed to unpack HttpConnectionManagers in Listeners of LDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
+          ADS_TYPE_URL_LDS_V2, ImmutableList.of(ldsResourceName),
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
@@ -627,11 +652,11 @@ final class XdsClientImpl extends XdsClient {
 
     if (errorMessage != null) {
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
+          ADS_TYPE_URL_LDS_V2, ImmutableList.of(ldsResourceName),
           ldsResponse.getVersionInfo(), errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
+    adsStream.sendAckRequest(ADS_TYPE_URL_LDS_V2, ImmutableList.of(ldsResourceName),
         ldsResponse.getVersionInfo());
 
     if (routes != null || rdsRouteConfigName != null) {
@@ -653,7 +678,7 @@ final class XdsClientImpl extends XdsClient {
         logger.log(
             XdsLogLevel.INFO,
             "Use RDS to dynamically resolve route config, resource name: {0}", rdsRouteConfigName);
-        adsStream.sendXdsRequest(ADS_TYPE_URL_RDS, ImmutableList.of(rdsRouteConfigName));
+        adsStream.sendXdsRequest(ADS_TYPE_URL_RDS_V2, ImmutableList.of(rdsRouteConfigName));
         // Cancel the timer for fetching the previous RDS resource.
         if (rdsRespTimer != null) {
           rdsRespTimer.cancel();
@@ -681,6 +706,9 @@ final class XdsClientImpl extends XdsClient {
     logger.log(XdsLogLevel.DEBUG, "Listener count: {0}", ldsResponse.getResourcesCount());
     try {
       for (com.google.protobuf.Any res : ldsResponse.getResourcesList()) {
+        if (res.getTypeUrl().equals(ADS_TYPE_URL_LDS_V2)) {
+          res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_LDS).build();
+        }
         Listener listener = res.unpack(Listener.class);
         logger.log(XdsLogLevel.DEBUG, "Found listener {0}", listener.toString());
         if (isRequestedListener(listener)) {
@@ -691,7 +719,7 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       logger.log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
+          ADS_TYPE_URL_LDS_V2, ImmutableList.<String>of(),
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
@@ -708,7 +736,7 @@ final class XdsClientImpl extends XdsClient {
       } catch (InvalidProtocolBufferException e) {
         logger.log(XdsLogLevel.WARNING, "Failed to unpack Listener in LDS response {0}", e);
         adsStream.sendNackRequest(
-            ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
+            ADS_TYPE_URL_LDS_V2, ImmutableList.<String>of(),
             ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
         return;
       }
@@ -717,7 +745,7 @@ final class XdsClientImpl extends XdsClient {
         listenerWatcher.onResourceDoesNotExist(":" + listenerPort);
       }
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
+    adsStream.sendAckRequest(ADS_TYPE_URL_LDS_V2, ImmutableList.<String>of(),
         ldsResponse.getVersionInfo());
     if (listenerUpdate != null) {
       listenerWatcher.onListenerChanged(listenerUpdate);
@@ -766,6 +794,9 @@ final class XdsClientImpl extends XdsClient {
     RouteConfiguration requestedRouteConfig = null;
     try {
       for (com.google.protobuf.Any res : rdsResponse.getResourcesList()) {
+        if (res.getTypeUrl().equals(ADS_TYPE_URL_RDS_V2)) {
+          res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_RDS).build();
+        }
         RouteConfiguration rc = res.unpack(RouteConfiguration.class);
         routeConfigNames.add(rc.getName());
         if (rc.getName().equals(adsStream.rdsResourceName)) {
@@ -776,7 +807,7 @@ final class XdsClientImpl extends XdsClient {
       logger.log(
           XdsLogLevel.WARNING, "Failed to unpack RouteConfiguration in RDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
+          ADS_TYPE_URL_RDS_V2, ImmutableList.of(adsStream.rdsResourceName),
           rdsResponse.getVersionInfo(), "Malformed RDS response: " + e);
       return;
     }
@@ -791,7 +822,7 @@ final class XdsClientImpl extends XdsClient {
       } catch (InvalidProtoDataException e) {
         String errorDetail = e.getMessage();
         adsStream.sendNackRequest(
-            ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
+            ADS_TYPE_URL_RDS_V2, ImmutableList.of(adsStream.rdsResourceName),
             rdsResponse.getVersionInfo(),
             "RouteConfiguration " + requestedRouteConfig.getName() + ": cannot find a "
                 + "valid cluster name in any virtual hosts with domains matching: "
@@ -801,7 +832,7 @@ final class XdsClientImpl extends XdsClient {
       }
     }
 
-    adsStream.sendAckRequest(ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
+    adsStream.sendAckRequest(ADS_TYPE_URL_RDS_V2, ImmutableList.of(adsStream.rdsResourceName),
         rdsResponse.getVersionInfo());
 
     // Notify the ConfigWatcher if this RDS response contains the most recently requested
@@ -858,14 +889,14 @@ final class XdsClientImpl extends XdsClient {
       throw new InvalidProtoDataException(
           "Virtual host [" + virtualHost.getName() + "] contains no usable route");
     }
-    // The last route must be a default route.
-    if (!Iterables.getLast(routes).isDefaultRoute()) {
-      throw new InvalidProtoDataException(
-          "Virtual host [" + virtualHost.getName()
-              + "] contains non-default route as the last route");
-    }
+
     if (!enableExperimentalRouting) {
       EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
+      if (!defaultRoute.isDefaultRoute()) {
+        throw new InvalidProtoDataException(
+            "Virtual host [" + virtualHost.getName()
+                + "] contains non-default route as the last route");
+      }
       return Collections.singletonList(defaultRoute);
     }
     return Collections.unmodifiableList(routes);
@@ -932,6 +963,9 @@ final class XdsClientImpl extends XdsClient {
     List<String> clusterNames = new ArrayList<>(cdsResponse.getResourcesCount());
     try {
       for (com.google.protobuf.Any res : cdsResponse.getResourcesList()) {
+        if (res.getTypeUrl().equals(ADS_TYPE_URL_CDS_V2)) {
+          res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_CDS).build();
+        }
         Cluster cluster = res.unpack(Cluster.class);
         clusters.add(cluster);
         clusterNames.add(cluster.getName());
@@ -939,7 +973,7 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       logger.log(XdsLogLevel.WARNING, "Failed to unpack Clusters in CDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_CDS, clusterWatchers.keySet(),
+          ADS_TYPE_URL_CDS_V2, clusterWatchers.keySet(),
           cdsResponse.getVersionInfo(), "Malformed CDS response: " + e);
       return;
     }
@@ -1003,7 +1037,7 @@ final class XdsClientImpl extends XdsClient {
       }
       try {
         UpstreamTlsContext upstreamTlsContext = getTlsContextFromCluster(cluster);
-        if (upstreamTlsContext != null && upstreamTlsContext.hasCommonTlsContext()) {
+        if (upstreamTlsContext != null && upstreamTlsContext.getCommonTlsContext() != null) {
           updateBuilder.setUpstreamTlsContext(upstreamTlsContext);
         }
       } catch (InvalidProtocolBufferException e) {
@@ -1014,21 +1048,26 @@ final class XdsClientImpl extends XdsClient {
     }
     if (errorMessage != null) {
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_CDS, clusterWatchers.keySet(), cdsResponse.getVersionInfo(), errorMessage);
+          ADS_TYPE_URL_CDS_V2,
+          clusterWatchers.keySet(),
+          cdsResponse.getVersionInfo(),
+          errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet(),
+    adsStream.sendAckRequest(ADS_TYPE_URL_CDS_V2, clusterWatchers.keySet(),
         cdsResponse.getVersionInfo());
 
     // Update local CDS cache with data in this response.
     absentCdsResources.removeAll(clusterUpdates.keySet());
-    for (String clusterName : clusterNamesToClusterUpdates.keySet()) {
-      if (!clusterUpdates.containsKey(clusterName)) {
+    for (Map.Entry<String, ClusterUpdate> entry : clusterNamesToClusterUpdates.entrySet()) {
+      if (!clusterUpdates.containsKey(entry.getKey())) {
         // Some previously existing resource no longer exists.
-        absentCdsResources.add(clusterName);
+        absentCdsResources.add(entry.getKey());
+      } else if (clusterUpdates.get(entry.getKey()).equals(entry.getValue())) {
+        clusterUpdates.remove(entry.getKey());
       }
     }
-    clusterNamesToClusterUpdates.clear();
+    clusterNamesToClusterUpdates.keySet().removeAll(absentCdsResources);
     clusterNamesToClusterUpdates.putAll(clusterUpdates);
 
     // Remove EDS cache entries for ClusterLoadAssignments not referenced by this CDS response.
@@ -1056,12 +1095,13 @@ final class XdsClientImpl extends XdsClient {
     // Notify watchers if clusters interested in present in this CDS response.
     for (Map.Entry<String, Set<ClusterWatcher>> entry : clusterWatchers.entrySet()) {
       String clusterName = entry.getKey();
-      if (clusterUpdates.containsKey(clusterName)) {
+      if (clusterUpdates.containsKey(entry.getKey())) {
         ClusterUpdate clusterUpdate = clusterUpdates.get(clusterName);
         for (ClusterWatcher watcher : entry.getValue()) {
           watcher.onClusterChanged(clusterUpdate);
         }
-      } else if (!cdsRespTimers.containsKey(clusterName)) {
+      } else if (!clusterNamesToClusterUpdates.containsKey(entry.getKey())
+          && !cdsRespTimers.containsKey(clusterName)) {
         // Update for previously present resource being removed.
         for (ClusterWatcher watcher : entry.getValue()) {
           watcher.onResourceDoesNotExist(entry.getKey());
@@ -1070,14 +1110,16 @@ final class XdsClientImpl extends XdsClient {
     }
   }
 
+  @Nullable
   private static UpstreamTlsContext getTlsContextFromCluster(Cluster cluster)
       throws InvalidProtocolBufferException {
     if (cluster.hasTransportSocket() && "tls".equals(cluster.getTransportSocket().getName())) {
       Any any = cluster.getTransportSocket().getTypedConfig();
-      return UpstreamTlsContext.parseFrom(any.getValue());
+      return UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+          io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.parseFrom(
+              any.getValue()));
     }
-    // TODO(sanjaypujare): remove when we move to envoy protos v3
-    return cluster.getTlsContext();
+    return null;
   }
 
   /**
@@ -1099,6 +1141,9 @@ final class XdsClientImpl extends XdsClient {
     List<String> claNames = new ArrayList<>(edsResponse.getResourcesCount());
     try {
       for (com.google.protobuf.Any res : edsResponse.getResourcesList()) {
+        if (res.getTypeUrl().equals(ADS_TYPE_URL_EDS_V2)) {
+          res = res.toBuilder().setTypeUrl(ADS_TYPE_URL_EDS).build();
+        }
         ClusterLoadAssignment assignment = res.unpack(ClusterLoadAssignment.class);
         clusterLoadAssignments.add(assignment);
         claNames.add(assignment.getClusterName());
@@ -1107,7 +1152,7 @@ final class XdsClientImpl extends XdsClient {
       logger.log(
           XdsLogLevel.WARNING, "Failed to unpack ClusterLoadAssignments in EDS response {0}", e);
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_EDS, endpointWatchers.keySet(),
+          ADS_TYPE_URL_EDS_V2, endpointWatchers.keySet(),
           edsResponse.getVersionInfo(), "Malformed EDS response: " + e);
       return;
     }
@@ -1131,7 +1176,7 @@ final class XdsClientImpl extends XdsClient {
       updateBuilder.setClusterName(clusterName);
       Set<Integer> priorities = new HashSet<>();
       int maxPriority = -1;
-      for (io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints localityLbEndpoints
+      for (io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints localityLbEndpoints
           : assignment.getEndpointsList()) {
         // Filter out localities without or with 0 weight.
         if (!localityLbEndpoints.hasLoadBalancingWeight()
@@ -1148,8 +1193,7 @@ final class XdsClientImpl extends XdsClient {
         priorities.add(localityPriority);
         // The endpoint field of each lb_endpoints must be set.
         // Inside of it: the address field must be set.
-        for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
-            : localityLbEndpoints.getLbEndpointsList()) {
+        for (LbEndpoint lbEndpoint : localityLbEndpoints.getLbEndpointsList()) {
           if (!lbEndpoint.getEndpoint().hasAddress()) {
             errorMessage = "ClusterLoadAssignment " + clusterName + " : endpoint with no address.";
             break;
@@ -1172,7 +1216,7 @@ final class XdsClientImpl extends XdsClient {
         errorMessage = "ClusterLoadAssignment " + clusterName + " : sparse priorities.";
         break;
       }
-      for (io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload dropOverload
+      for (ClusterLoadAssignment.Policy.DropOverload dropOverload
           : assignment.getPolicy().getDropOverloadsList()) {
         updateBuilder.addDropPolicy(DropOverload.fromEnvoyProtoDropOverload(dropOverload));
       }
@@ -1181,10 +1225,13 @@ final class XdsClientImpl extends XdsClient {
     }
     if (errorMessage != null) {
       adsStream.sendNackRequest(
-          ADS_TYPE_URL_EDS, endpointWatchers.keySet(), edsResponse.getVersionInfo(), errorMessage);
+          ADS_TYPE_URL_EDS_V2,
+          endpointWatchers.keySet(),
+          edsResponse.getVersionInfo(),
+          errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet(),
+    adsStream.sendAckRequest(ADS_TYPE_URL_EDS_V2, endpointWatchers.keySet(),
         edsResponse.getVersionInfo());
 
     // Update local EDS cache by inserting updated endpoint information.
@@ -1192,6 +1239,8 @@ final class XdsClientImpl extends XdsClient {
     absentEdsResources.removeAll(endpointUpdates.keySet());
 
     // Notify watchers waiting for updates of endpoint information received in this EDS response.
+    // Based on xDS protocol, the management server should not send endpoint data again if
+    // nothing has changed.
     for (Map.Entry<String, EndpointUpdate> entry : endpointUpdates.entrySet()) {
       String clusterName = entry.getKey();
       // Cancel and delete response timeout timer.
@@ -1213,7 +1262,7 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       startRpcStream();
       if (configWatcher != null) {
-        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
+        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS_V2, ImmutableList.of(ldsResourceName));
         ldsRespTimer =
             syncContext
                 .schedule(
@@ -1221,7 +1270,7 @@ final class XdsClientImpl extends XdsClient {
                     INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
       }
       if (listenerWatcher != null) {
-        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of());
+        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS_V2, ImmutableList.<String>of());
         ldsRespTimer =
             syncContext
                 .schedule(
@@ -1229,7 +1278,7 @@ final class XdsClientImpl extends XdsClient {
                     INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS, timeService);
       }
       if (!clusterWatchers.isEmpty()) {
-        adsStream.sendXdsRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet());
+        adsStream.sendXdsRequest(ADS_TYPE_URL_CDS_V2, clusterWatchers.keySet());
         for (String clusterName : clusterWatchers.keySet()) {
           ScheduledHandle timeoutHandle =
               syncContext
@@ -1240,7 +1289,7 @@ final class XdsClientImpl extends XdsClient {
         }
       }
       if (!endpointWatchers.isEmpty()) {
-        adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
+        adsStream.sendXdsRequest(ADS_TYPE_URL_EDS_V2, endpointWatchers.keySet());
         for (String clusterName : endpointWatchers.keySet()) {
           ScheduledHandle timeoutHandle =
               syncContext
@@ -1309,16 +1358,16 @@ final class XdsClientImpl extends XdsClient {
           // used for management server to identify which response the client is ACKing/NACking.
           // To avoid confusion, client-initiated requests will always use the nonce in
           // most recently received responses of each resource type.
-          if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
+          if (typeUrl.equals(ADS_TYPE_URL_LDS_V2) || typeUrl.equals(ADS_TYPE_URL_LDS)) {
             ldsRespNonce = response.getNonce();
             handleLdsResponse(response);
-          } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
+          } else if (typeUrl.equals(ADS_TYPE_URL_RDS_V2) || typeUrl.equals(ADS_TYPE_URL_LDS)) {
             rdsRespNonce = response.getNonce();
             handleRdsResponse(response);
-          } else if (typeUrl.equals(ADS_TYPE_URL_CDS)) {
+          } else if (typeUrl.equals(ADS_TYPE_URL_CDS_V2) || typeUrl.equals(ADS_TYPE_URL_CDS)) {
             cdsRespNonce = response.getNonce();
             handleCdsResponse(response);
-          } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
+          } else if (typeUrl.equals(ADS_TYPE_URL_EDS_V2) || typeUrl.equals(ADS_TYPE_URL_EDS)) {
             edsRespNonce = response.getNonce();
             handleEdsResponse(response);
           } else {
@@ -1422,22 +1471,22 @@ final class XdsClientImpl extends XdsClient {
       checkState(requestWriter != null, "ADS stream has not been started");
       String version = "";
       String nonce = "";
-      if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
+      if (typeUrl.equals(ADS_TYPE_URL_LDS_V2)) {
         version = ldsVersion;
         nonce = ldsRespNonce;
         logger.log(XdsLogLevel.INFO, "Sending LDS request for resources: {0}", resourceNames);
-      } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
+      } else if (typeUrl.equals(ADS_TYPE_URL_RDS_V2)) {
         checkArgument(resourceNames.size() == 1,
             "RDS request requesting for more than one resource");
         version = rdsVersion;
         nonce = rdsRespNonce;
         rdsResourceName = resourceNames.iterator().next();
         logger.log(XdsLogLevel.INFO, "Sending RDS request for resources: {0}", resourceNames);
-      } else if (typeUrl.equals(ADS_TYPE_URL_CDS)) {
+      } else if (typeUrl.equals(ADS_TYPE_URL_CDS_V2)) {
         version = cdsVersion;
         nonce = cdsRespNonce;
         logger.log(XdsLogLevel.INFO, "Sending CDS request for resources: {0}", resourceNames);
-      } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
+      } else if (typeUrl.equals(ADS_TYPE_URL_EDS_V2)) {
         version = edsVersion;
         nonce = edsRespNonce;
         logger.log(XdsLogLevel.INFO, "Sending EDS request for resources: {0}", resourceNames);
@@ -1463,16 +1512,16 @@ final class XdsClientImpl extends XdsClient {
         String versionInfo) {
       checkState(requestWriter != null, "ADS stream has not been started");
       String nonce = "";
-      if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
+      if (typeUrl.equals(ADS_TYPE_URL_LDS_V2)) {
         ldsVersion = versionInfo;
         nonce = ldsRespNonce;
-      } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
+      } else if (typeUrl.equals(ADS_TYPE_URL_RDS_V2)) {
         rdsVersion = versionInfo;
         nonce = rdsRespNonce;
-      } else if (typeUrl.equals(ADS_TYPE_URL_CDS)) {
+      } else if (typeUrl.equals(ADS_TYPE_URL_CDS_V2)) {
         cdsVersion = versionInfo;
         nonce = cdsRespNonce;
-      } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
+      } else if (typeUrl.equals(ADS_TYPE_URL_EDS_V2)) {
         edsVersion = versionInfo;
         nonce = edsRespNonce;
       }
@@ -1498,25 +1547,25 @@ final class XdsClientImpl extends XdsClient {
       checkState(requestWriter != null, "ADS stream has not been started");
       String versionInfo = "";
       String nonce = "";
-      if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
+      if (typeUrl.equals(ADS_TYPE_URL_LDS_V2)) {
         versionInfo = ldsVersion;
         nonce = ldsRespNonce;
         logger.log(
             XdsLogLevel.WARNING,
             "Rejecting LDS update, version: {0}, reason: {1}", rejectVersion, message);
-      } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
+      } else if (typeUrl.equals(ADS_TYPE_URL_RDS_V2)) {
         versionInfo = rdsVersion;
         nonce = rdsRespNonce;
         logger.log(
             XdsLogLevel.WARNING,
             "Rejecting RDS update, version: {0}, reason: {1}", rejectVersion, message);
-      } else if (typeUrl.equals(ADS_TYPE_URL_CDS)) {
+      } else if (typeUrl.equals(ADS_TYPE_URL_CDS_V2)) {
         versionInfo = cdsVersion;
         nonce = cdsRespNonce;
         logger.log(
             XdsLogLevel.WARNING,
             "Rejecting CDS update, version: {0}, reason: {1}", rejectVersion, message);
-      } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
+      } else if (typeUrl.equals(ADS_TYPE_URL_EDS_V2)) {
         versionInfo = edsVersion;
         nonce = edsRespNonce;
         logger.log(
@@ -1711,10 +1760,17 @@ final class XdsClientImpl extends XdsClient {
       com.google.protobuf.TypeRegistry registry =
           com.google.protobuf.TypeRegistry.newBuilder()
               .add(Listener.getDescriptor())
+              .add(io.envoyproxy.envoy.api.v2.Listener.getDescriptor())
               .add(HttpConnectionManager.getDescriptor())
+              .add(
+                  io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2
+                      .HttpConnectionManager.getDescriptor())
               .add(RouteConfiguration.getDescriptor())
+              .add(io.envoyproxy.envoy.api.v2.RouteConfiguration.getDescriptor())
               .add(Cluster.getDescriptor())
+              .add(io.envoyproxy.envoy.api.v2.Cluster.getDescriptor())
               .add(ClusterLoadAssignment.getDescriptor())
+              .add(io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.getDescriptor())
               .build();
       printer = JsonFormat.printer().usingTypeRegistry(registry);
     }

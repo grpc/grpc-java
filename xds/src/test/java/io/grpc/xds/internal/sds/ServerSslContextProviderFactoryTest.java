@@ -21,8 +21,8 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -41,8 +41,8 @@ public class ServerSslContextProviderFactoryTest {
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
-    SslContextProvider<DownstreamTlsContext> sslContextProvider =
-        serverSslContextProviderFactory.createSslContextProvider(downstreamTlsContext);
+    SslContextProvider sslContextProvider =
+        serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider).isNotNull();
   }
 
@@ -52,12 +52,12 @@ public class ServerSslContextProviderFactoryTest {
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
             "name", "unix:/tmp/sds/path", CA_PEM_FILE);
     DownstreamTlsContext downstreamTlsContext =
-        CommonTlsContextTestsUtil.buildDownstreamTlsContext(
+        CommonTlsContextTestsUtil.buildInternalDownstreamTlsContext(
             commonTlsContext, /* requireClientCert= */ false);
 
     try {
-      SslContextProvider<DownstreamTlsContext> unused =
-          serverSslContextProviderFactory.createSslContextProvider(downstreamTlsContext);
+      SslContextProvider unused =
+          serverSslContextProviderFactory.create(downstreamTlsContext);
       Assert.fail("no exception thrown");
     } catch (UnsupportedOperationException expected) {
       assertThat(expected)
@@ -72,12 +72,12 @@ public class ServerSslContextProviderFactoryTest {
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
             "name", "unix:/tmp/sds/path", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE);
     DownstreamTlsContext downstreamTlsContext =
-        CommonTlsContextTestsUtil.buildDownstreamTlsContext(
+        CommonTlsContextTestsUtil.buildInternalDownstreamTlsContext(
             commonTlsContext, /* requireClientCert= */ false);
 
     try {
-      SslContextProvider<DownstreamTlsContext> unused =
-          serverSslContextProviderFactory.createSslContextProvider(downstreamTlsContext);
+      SslContextProvider unused =
+          serverSslContextProviderFactory.create(downstreamTlsContext);
       Assert.fail("no exception thrown");
     } catch (UnsupportedOperationException expected) {
       assertThat(expected)

@@ -21,8 +21,8 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 
-import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -41,8 +41,8 @@ public class ClientSslContextProviderFactoryTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
-    SslContextProvider<UpstreamTlsContext> sslContextProvider =
-        clientSslContextProviderFactory.createSslContextProvider(upstreamTlsContext);
+    SslContextProvider sslContextProvider =
+        clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isNotNull();
   }
 
@@ -52,11 +52,11 @@ public class ClientSslContextProviderFactoryTest {
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
             /* name= */ "name", /* targetUri= */ "unix:/tmp/sds/path", CA_PEM_FILE);
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(commonTlsContext);
 
     try {
-      SslContextProvider<UpstreamTlsContext> unused =
-          clientSslContextProviderFactory.createSslContextProvider(upstreamTlsContext);
+      SslContextProvider unused =
+          clientSslContextProviderFactory.create(upstreamTlsContext);
       Assert.fail("no exception thrown");
     } catch (UnsupportedOperationException expected) {
       assertThat(expected)
@@ -74,11 +74,11 @@ public class ClientSslContextProviderFactoryTest {
             CLIENT_KEY_FILE,
             CLIENT_PEM_FILE);
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(commonTlsContext);
 
     try {
-      SslContextProvider<UpstreamTlsContext> unused =
-          clientSslContextProviderFactory.createSslContextProvider(upstreamTlsContext);
+      SslContextProvider unused =
+          clientSslContextProviderFactory.create(upstreamTlsContext);
       Assert.fail("no exception thrown");
     } catch (UnsupportedOperationException expected) {
       assertThat(expected)

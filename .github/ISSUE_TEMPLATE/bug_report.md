@@ -1,7 +1,6 @@
 ---
 name: Report a bug
 about: Create a bug report to help us improve
-labels: bug
 ---
 
 <!-- Please answer these questions before submitting a bug report. -->

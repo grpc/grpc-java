@@ -23,7 +23,6 @@ import static io.grpc.xds.XdsLbPolicies.EDS_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -36,6 +35,7 @@ import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
@@ -57,6 +57,9 @@ public final class CdsLoadBalancer extends LoadBalancer {
   private final LoadBalancerRegistry lbRegistry;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final TlsContextManager tlsContextManager;
+  // TODO(sanjaypujare): remove once xds security is released
+  private boolean enableXdsSecurity;
+  private static final String XDS_SECURITY_ENV_VAR = "GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT";
 
   // The following fields become non-null once handleResolvedAddresses() successfully.
 
@@ -126,6 +129,17 @@ public final class CdsLoadBalancer extends LoadBalancer {
     if (xdsClientPool != null) {
       xdsClientPool.returnObject(xdsClient);
     }
+  }
+
+  // TODO(sanjaypujare): remove once xDS security is released
+  private boolean isXdsSecurityEnabled() {
+    return enableXdsSecurity || Boolean.valueOf(System.getenv(XDS_SECURITY_ENV_VAR));
+  }
+
+  // TODO(sanjaypujare): remove once xDS security is released
+  @VisibleForTesting
+  void setXdsSecurity(boolean enable) {
+    enableXdsSecurity = enable;
   }
 
   /**
@@ -206,10 +220,10 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
   private static final class EdsLoadBalancingHelper extends ForwardingLoadBalancerHelper {
     private final Helper delegate;
-    private final AtomicReference<SslContextProvider<UpstreamTlsContext>> sslContextProvider;
+    private final AtomicReference<SslContextProvider> sslContextProvider;
 
     EdsLoadBalancingHelper(Helper helper,
-        AtomicReference<SslContextProvider<UpstreamTlsContext>> sslContextProvider) {
+        AtomicReference<SslContextProvider> sslContextProvider) {
       this.delegate = helper;
       this.sslContextProvider = sslContextProvider;
     }
@@ -222,7 +236,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
                 .toBuilder()
                 .setAddresses(
                     addUpstreamTlsContext(createSubchannelArgs.getAddresses(),
-                        sslContextProvider.get().getSource()))
+                        sslContextProvider.get().getUpstreamTlsContext()))
                 .build();
       }
       return delegate.createSubchannel(createSubchannelArgs);
@@ -259,15 +273,12 @@ public final class CdsLoadBalancer extends LoadBalancer {
     final EdsLoadBalancingHelper helper;
     final ResolvedAddresses resolvedAddresses;
 
-    // EDS balancer for the cluster.
-    // Becomes non-null once handleResolvedAddresses() successfully.
-    // Assigned at most once.
     @Nullable
     LoadBalancer edsBalancer;
 
     ClusterWatcherImpl(Helper helper, ResolvedAddresses resolvedAddresses) {
       this.helper = new EdsLoadBalancingHelper(helper,
-          new AtomicReference<SslContextProvider<UpstreamTlsContext>>());
+          new AtomicReference<SslContextProvider>());
       this.resolvedAddresses = resolvedAddresses;
     }
 
@@ -293,7 +304,9 @@ public final class CdsLoadBalancer extends LoadBalancer {
               /* edsServiceName = */ newUpdate.getEdsServiceName(),
               /* lrsServerName = */ newUpdate.getLrsServerName(),
               new PolicySelection(lbProvider, ImmutableMap.<String, Object>of(), lbConfig));
-      updateSslContextProvider(newUpdate.getUpstreamTlsContext());
+      if (isXdsSecurityEnabled()) {
+        updateSslContextProvider(newUpdate.getUpstreamTlsContext());
+      }
       if (edsBalancer == null) {
         edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(helper);
       }
@@ -303,10 +316,10 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
     /** For new UpstreamTlsContext value, release old SslContextProvider. */
     private void updateSslContextProvider(UpstreamTlsContext newUpstreamTlsContext) {
-      SslContextProvider<UpstreamTlsContext> oldSslContextProvider =
+      SslContextProvider oldSslContextProvider =
           helper.sslContextProvider.get();
       if (oldSslContextProvider != null) {
-        UpstreamTlsContext oldUpstreamTlsContext = oldSslContextProvider.getSource();
+        UpstreamTlsContext oldUpstreamTlsContext = oldSslContextProvider.getUpstreamTlsContext();
 
         if (oldUpstreamTlsContext.equals(newUpstreamTlsContext)) {
           return;
@@ -314,7 +327,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
         tlsContextManager.releaseClientSslContextProvider(oldSslContextProvider);
       }
       if (newUpstreamTlsContext != null) {
-        SslContextProvider<UpstreamTlsContext> newSslContextProvider =
+        SslContextProvider newSslContextProvider =
             tlsContextManager.findOrCreateClientSslContextProvider(newUpstreamTlsContext);
         helper.sslContextProvider.set(newSslContextProvider);
       } else {
@@ -325,15 +338,14 @@ public final class CdsLoadBalancer extends LoadBalancer {
     @Override
     public void onResourceDoesNotExist(String resourceName) {
       logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
-      // TODO(chengyuanzhang): should unconditionally propagate to downstream instances and
-      //  go to TRANSIENT_FAILURE.
-      if (edsBalancer == null) {
-        helper.updateBalancingState(
-            TRANSIENT_FAILURE,
-            new ErrorPicker(
-                Status.UNAVAILABLE.withDescription(
-                    "Resource " + resourceName + " is unavailable")));
+      if (edsBalancer != null) {
+        edsBalancer.shutdown();
+        edsBalancer = null;
       }
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE,
+          new ErrorPicker(
+              Status.UNAVAILABLE.withDescription("Resource " + resourceName + " is unavailable")));
     }
 
     @Override

@@ -41,7 +41,7 @@ final class RlsRequestFactory {
 
   private final String target;
   /**
-   * schema: Path(serviceName/methodName or serviceName/*), rls request headerName, header fields.
+   * schema: Path(/serviceName/methodName or /serviceName/*), rls request headerName, header fields.
    */
   private final Table<String, String, NameMatcher> keyBuilderTable;
 
@@ -60,7 +60,7 @@ final class RlsRequestFactory {
           String method =
               name.getMethod() == null || name.getMethod().isEmpty()
                   ? "*" : name.getMethod();
-          String path = name.getService() + "/" + method;
+          String path = "/" + name.getService() + "/" + method;
           table.put(path, nameMatcher.getKey(), nameMatcher);
         }
       }
@@ -73,11 +73,11 @@ final class RlsRequestFactory {
   RouteLookupRequest create(String service, String method, Metadata metadata) {
     checkNotNull(service, "service");
     checkNotNull(method, "method");
-    String path = service + "/" + method;
+    String path = "/" + service + "/" + method;
     Map<String, NameMatcher> keyBuilder = keyBuilderTable.row(path);
     // if no matching keyBuilder found, fall back to wildcard match (ServiceName/*)
     if (keyBuilder.isEmpty()) {
-      keyBuilder = keyBuilderTable.row(service + "/*");
+      keyBuilder = keyBuilderTable.row("/" + service + "/*");
     }
     Map<String, String> rlsRequestHeaders = createRequestHeaders(metadata, keyBuilder);
     return new RouteLookupRequest(target, path, "grpc", rlsRequestHeaders);

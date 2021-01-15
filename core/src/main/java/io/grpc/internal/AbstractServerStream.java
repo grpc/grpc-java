@@ -62,12 +62,6 @@ public abstract class AbstractServerStream extends AbstractStream
     void writeTrailers(Metadata trailers, boolean headersSent, Status status);
 
     /**
-     * Requests up to the given number of messages from the call to be delivered. This should end up
-     * triggering {@link TransportState#requestMessagesFromDeframer(int)} on the transport thread.
-     */
-    void request(int numMessages);
-
-    /**
      * Tears down the stream, typically in the event of a timeout. This method may be called
      * multiple times and from any thread.
      *
@@ -99,11 +93,6 @@ public abstract class AbstractServerStream extends AbstractStream
   @Override
   protected final MessageFramer framer() {
     return framer;
-  }
-
-  @Override
-  public final void request(int numMessages) {
-    abstractServerStreamSink().request(numMessages);
   }
 
   @Override

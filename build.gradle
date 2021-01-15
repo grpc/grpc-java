@@ -19,11 +19,11 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.30.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.31.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
+            url "https://maven-central.storage-download.googleapis.com/maven2/" }
         mavenCentral()
         mavenLocal()
     }
@@ -41,6 +41,12 @@ subprojects {
         }
     }
 
+    tasks.withType(GenerateModuleMetadata) {
+        // Module metadata, introduced in Gradle 6.0, conflicts with our publishing task for
+        // grpc-alts and grpc-compiler.
+        enabled = false
+    }
+
     def isAndroid = project.name in [
             'grpc-android', 'grpc-android-interop-testing', 'grpc-cronet']
 
@@ -50,9 +56,9 @@ subprojects {
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
         nettyVersion = '4.1.48.Final'
-        guavaVersion = '28.2-android'
+        guavaVersion = '29.0-android'
         googleauthVersion = '0.20.0'
-        protobufVersion = '3.11.0'
+        protobufVersion = '3.12.0'
         protocVersion = protobufVersion
         opencensusVersion = '0.24.0'
 
@@ -185,7 +191,7 @@ subprojects {
             math: 'org.apache.commons:commons-math3:3.6',
 
             // Jetty ALPN dependencies
-            jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.9'
+            jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.10'
         ]
 
         // A util function to config guava dependency with transitive dependencies

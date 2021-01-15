@@ -29,7 +29,6 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.ForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
-import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
@@ -122,7 +121,7 @@ public class TransportCompressionTest extends AbstractInteropTest {
   }
 
   @Override
-  protected ManagedChannel createChannel() {
+  protected NettyChannelBuilder createChannelBuilder() {
     NettyChannelBuilder builder = NettyChannelBuilder.forAddress(getListenAddress())
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .decompressorRegistry(decompressors)
@@ -167,7 +166,7 @@ public class TransportCompressionTest extends AbstractInteropTest {
         .usePlaintext();
     // Disable the default census stats interceptor, use testing interceptor instead.
     io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
-    return builder.intercept(createCensusStatsClientInterceptor()).build();
+    return builder.intercept(createCensusStatsClientInterceptor());
   }
 
   /**

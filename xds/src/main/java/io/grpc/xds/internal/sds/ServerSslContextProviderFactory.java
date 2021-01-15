@@ -16,35 +16,34 @@
 
 package io.grpc.xds.internal.sds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.grpc.xds.Bootstrapper;
-import io.grpc.xds.internal.sds.ReferenceCountingSslContextProviderMap.SslContextProviderFactory;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 import java.io.IOException;
 import java.util.concurrent.Executors;
 
 /** Factory to create server-side SslContextProvider from DownstreamTlsContext. */
 final class ServerSslContextProviderFactory
-    implements SslContextProviderFactory<DownstreamTlsContext> {
+    implements ValueFactory<DownstreamTlsContext, SslContextProvider> {
 
-  /** Creates an SslContextProvider from the given DownstreamTlsContext. */
+  /** Creates a SslContextProvider from the given DownstreamTlsContext. */
   @Override
-  public SslContextProvider<DownstreamTlsContext> createSslContextProvider(
+  public SslContextProvider create(
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
-    checkArgument(
-        downstreamTlsContext.hasCommonTlsContext(),
+    checkNotNull(
+        downstreamTlsContext.getCommonTlsContext(),
         "downstreamTlsContext should have CommonTlsContext");
     if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
         downstreamTlsContext.getCommonTlsContext())) {
-      return SecretVolumeSslContextProvider.getProviderForServer(downstreamTlsContext);
+      return SecretVolumeServerSslContextProvider.getProvider(downstreamTlsContext);
     } else if (CommonTlsContextUtil.hasAllSecretsUsingSds(
         downstreamTlsContext.getCommonTlsContext())) {
       try {
-        return SdsSslContextProvider.getProviderForServer(
+        return SdsServerSslContextProvider.getProvider(
             downstreamTlsContext,
             Bootstrapper.getInstance().readBootstrap().getNode(),
             Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()

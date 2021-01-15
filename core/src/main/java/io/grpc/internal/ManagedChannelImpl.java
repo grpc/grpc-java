@@ -60,6 +60,7 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
@@ -1260,7 +1261,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public ManagedChannel createResolvingOobChannel(String target) {
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
       final class ResolvingOobChannelBuilder
           extends AbstractManagedChannelImplBuilder<ResolvingOobChannelBuilder> {
         int defaultPort = -1;
@@ -1278,6 +1279,19 @@ final class ManagedChannelImpl extends ManagedChannel implements
         protected ClientTransportFactory buildTransportFactory() {
           throw new UnsupportedOperationException();
         }
+
+        @Override
+        public ManagedChannel build() {
+          // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
+          return new ManagedChannelImpl(
+                  this,
+                  transportFactory,
+                  backoffPolicyProvider,
+                  balancerRpcExecutorPool,
+                  stopwatchSupplier,
+                  Collections.<ClientInterceptor>emptyList(),
+                  timeProvider);
+        }
       }
 
       checkState(!terminated, "Channel is terminated");
@@ -1285,21 +1299,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
       ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder(target);
       builder.offloadExecutorPool = offloadExecutorHolder.pool;
       builder.overrideAuthority(getAuthority());
-      builder.nameResolverFactory(nameResolverFactory);
+      @SuppressWarnings("deprecation")
+      ResolvingOobChannelBuilder unused = builder.nameResolverFactory(nameResolverFactory);
       builder.executorPool = executorPool;
       builder.maxTraceEvents = maxTraceEvents;
       builder.proxyDetector = nameResolverArgs.getProxyDetector();
       builder.defaultPort = nameResolverArgs.getDefaultPort();
       builder.userAgent = userAgent;
-      return
-          new ManagedChannelImpl(
-              builder,
-              transportFactory,
-              backoffPolicyProvider,
-              balancerRpcExecutorPool,
-              stopwatchSupplier,
-              Collections.<ClientInterceptor>emptyList(),
-              timeProvider);
+      return builder;
     }
 
     @Override
@@ -1369,7 +1376,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
               "Resolved address: {0}, config={1}",
               servers,
               resolutionResult.getAttributes());
-          ResolutionState lastResolutionStateCopy = lastResolutionState;
 
           if (lastResolutionState != ResolutionState.SUCCESS) {
             channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
@@ -1457,14 +1463,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                     .build());
 
             if (!handleResult.isOk()) {
-              if (servers.isEmpty() && lastResolutionStateCopy == ResolutionState.SUCCESS) {
-                // lb doesn't expose that it needs address or not, because for some LB it is not
-                // deterministic. Assuming lb needs address if LB returns error when the address is
-                // empty and it is not the first resolution.
-                scheduleExponentialBackOffInSyncContext();
-              } else {
-                handleErrorInSyncContext(handleResult.augmentDescription(resolver + " was used"));
-              }
+              handleErrorInSyncContext(handleResult.augmentDescription(resolver + " was used"));
             }
           }
         }

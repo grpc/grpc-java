@@ -25,7 +25,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.ProtocolStringList;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
-import io.envoyproxy.envoy.api.v2.auth.Secret;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.Secret;
 import io.envoyproxy.envoy.service.discovery.v2.SecretDiscoveryServiceGrpc;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;

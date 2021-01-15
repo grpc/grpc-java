@@ -42,10 +42,10 @@ However, that didn't use XDS! To use XDS we assume you have deployed the server
 in your deployment environment and know its name. You need to set the
 `GRPC_XDS_BOOTSTRAP` environment variable to point to a gRPC XDS bootstrap
 file (see [gRFC A27](https://github.com/grpc/proposal/pull/170) for the
-bootstrap format). Then use the `xds-experimental:` target scheme during
+bootstrap format). Then use the `xds:` target scheme during
 channel creation.
 
 ```
 $ export GRPC_XDS_BOOTSTRAP=/path/to/bootstrap.json
-$ ./build/install/example-xds/bin/xds-hello-world-client "XDS world" xds-experimental:///yourServersName
+$ ./build/install/example-xds/bin/xds-hello-world-client "XDS world" xds:///yourServersName
 ```

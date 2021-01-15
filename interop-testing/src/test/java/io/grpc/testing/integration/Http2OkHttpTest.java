@@ -86,11 +86,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
   }
 
   @Override
-  protected ManagedChannel createChannel() {
-    return createChannelBuilder().build();
-  }
-
-  private OkHttpChannelBuilder createChannelBuilder() {
+  protected OkHttpChannelBuilder createChannelBuilder() {
     int port = ((InetSocketAddress) getListenAddress()).getPort();
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("localhost", port)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)

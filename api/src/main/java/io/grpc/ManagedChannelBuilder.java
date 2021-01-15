@@ -219,7 +219,12 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *
    * @return this
    * @since 1.0.0
+   * @deprecated Most usages should use a globally-registered {@link NameResolverProvider} instead,
+   *     with either the SPI mechanism or {@link NameResolverRegistry#register}. Replacements for
+   *     all use-cases are not necessarily available yet. See
+   *     <a href="https://github.com/grpc/grpc-java/issues/7133">#7133</a>.
    */
+  @Deprecated
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public abstract T nameResolverFactory(NameResolver.Factory resolverFactory);
 

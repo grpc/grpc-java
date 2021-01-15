@@ -77,7 +77,7 @@ public class RlsRequestFactoryTest {
 
     RouteLookupRequest request = factory.create("com.google.service1", "Create", metadata);
     assertThat(request.getTargetType()).isEqualTo("grpc");
-    assertThat(request.getPath()).isEqualTo("com.google.service1/Create");
+    assertThat(request.getPath()).isEqualTo("/com.google.service1/Create");
     assertThat(request.getServer()).isEqualTo("foo.google.com");
     assertThat(request.getKeyMap()).containsExactly("user", "test", "id", "123");
   }
@@ -106,7 +106,7 @@ public class RlsRequestFactoryTest {
     RouteLookupRequest request = factory.create("com.google.service1" , "Update", metadata);
 
     assertThat(request.getTargetType()).isEqualTo("grpc");
-    assertThat(request.getPath()).isEqualTo("com.google.service1/Update");
+    assertThat(request.getPath()).isEqualTo("/com.google.service1/Update");
     assertThat(request.getServer()).isEqualTo("foo.google.com");
     assertThat(request.getKeyMap()).containsExactly("user", "test", "password", "hunter2");
   }
@@ -121,7 +121,7 @@ public class RlsRequestFactoryTest {
     RouteLookupRequest request = factory.create("com.google.service1", "Update", metadata);
 
     assertThat(request.getTargetType()).isEqualTo("grpc");
-    assertThat(request.getPath()).isEqualTo("com.google.service1/Update");
+    assertThat(request.getPath()).isEqualTo("/com.google.service1/Update");
     assertThat(request.getServer()).isEqualTo("foo.google.com");
     assertThat(request.getKeyMap()).containsExactly("user", "test");
   }
@@ -136,7 +136,7 @@ public class RlsRequestFactoryTest {
     RouteLookupRequest request = factory.create("abc.def.service999", "Update", metadata);
 
     assertThat(request.getTargetType()).isEqualTo("grpc");
-    assertThat(request.getPath()).isEqualTo("abc.def.service999/Update");
+    assertThat(request.getPath()).isEqualTo("/abc.def.service999/Update");
     assertThat(request.getServer()).isEqualTo("foo.google.com");
     assertThat(request.getKeyMap()).isEmpty();
   }
@@ -151,7 +151,7 @@ public class RlsRequestFactoryTest {
     RouteLookupRequest request = factory.create("com.google.service3", "Update", metadata);
 
     assertThat(request.getTargetType()).isEqualTo("grpc");
-    assertThat(request.getPath()).isEqualTo("com.google.service3/Update");
+    assertThat(request.getPath()).isEqualTo("/com.google.service3/Update");
     assertThat(request.getServer()).isEqualTo("foo.google.com");
     assertThat(request.getKeyMap()).containsExactly("user", "test");
   }
