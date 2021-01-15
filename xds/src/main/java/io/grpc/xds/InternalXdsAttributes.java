@@ -57,9 +57,10 @@ public final class InternalXdsAttributes {
   /**
    * Name of the cluster that provides this EquivalentAddressGroup.
    */
+  @Internal
   @EquivalentAddressGroup.Attr
   public static final Attributes.Key<String> ATTR_CLUSTER_NAME =
-      Attributes.Key.create("io.grpc.xds.XdsAttributes.clusterName");
+      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.clusterName");
 
   // TODO (chengyuanzhang): temporary solution for migrating to LRS policy. Should access
   //   stats object via XdsClient interface.

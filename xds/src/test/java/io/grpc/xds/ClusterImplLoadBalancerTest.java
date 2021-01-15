@@ -393,7 +393,7 @@ public class ClusterImplLoadBalancerTest {
             .build();
     Subchannel subchannel = leafBalancer.helper.createSubchannel(args);
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_CLUSTER_NAME))
+      assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_CLUSTER_NAME))
           .isEqualTo(CLUSTER);
     }
   }
