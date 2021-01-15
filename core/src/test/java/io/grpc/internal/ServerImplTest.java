@@ -561,6 +561,7 @@ public class ServerImplTest {
     Context callContext = callContextReference.get();
     assertNotNull(callContext);
     assertEquals("context added by tracer", SERVER_TRACER_ADDED_KEY.get(callContext));
+    assertEquals(server, io.grpc.InternalServer.SERVER_CONTEXT_KEY.get(callContext));
 
     streamListener.messagesAvailable(new SingleMessageProducer(STRING_MARSHALLER.stream(request)));
     assertEquals(1, executor.runDueTasks());
@@ -1440,8 +1441,9 @@ public class ServerImplTest {
 
   private void ensureServerStateNotLeaked() {
     verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
-    assertEquals(Status.UNKNOWN, statusCaptor.getValue());
-    assertNull(statusCaptor.getValue().getCause());
+    assertEquals(Status.UNKNOWN.getCode(), statusCaptor.getValue().getCode());
+    // Used in InProcessTransport when set to include the cause with the status
+    assertNotNull(statusCaptor.getValue().getCause());
     assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }
 

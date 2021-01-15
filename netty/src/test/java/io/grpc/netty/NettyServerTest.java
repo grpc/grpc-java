@@ -92,6 +92,7 @@ public class NettyServerTest {
         addr,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
+        new HashMap<ChannelOption<?>, Object>(),
         new FixedObjectPool<>(eventLoop),
         new FixedObjectPool<>(eventLoop),
         false,
@@ -99,6 +100,7 @@ public class NettyServerTest {
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
+        false, // ignore
         1, // ignore
         1, // ignore
         1, // ignore
@@ -137,6 +139,7 @@ public class NettyServerTest {
         addr,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
+        new HashMap<ChannelOption<?>, Object>(),
         new FixedObjectPool<>(eventLoop),
         new FixedObjectPool<>(eventLoop),
         false,
@@ -144,6 +147,7 @@ public class NettyServerTest {
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
+        false, // ignore
         1, // ignore
         1, // ignore
         1, // ignore
@@ -161,9 +165,9 @@ public class NettyServerTest {
     final int originalLowWaterMark = 2097169;
     final int originalHighWaterMark = 2097211;
 
-    Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
+    Map<ChannelOption<?>, Object> childChannelOptions = new HashMap<>();
 
-    channelOptions.put(ChannelOption.WRITE_BUFFER_WATER_MARK,
+    childChannelOptions.put(ChannelOption.WRITE_BUFFER_WATER_MARK,
         new WriteBufferWaterMark(originalLowWaterMark, originalHighWaterMark));
 
     final AtomicInteger lowWaterMark = new AtomicInteger(0);
@@ -175,7 +179,8 @@ public class NettyServerTest {
     NettyServer ns = new NettyServer(
         addr,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
-        channelOptions,
+        new HashMap<ChannelOption<?>, Object>(),
+        childChannelOptions,
         new FixedObjectPool<>(eventLoop),
         new FixedObjectPool<>(eventLoop),
         false,
@@ -183,6 +188,7 @@ public class NettyServerTest {
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
+        false, // ignore
         1, // ignore
         1, // ignore
         1, // ignore
@@ -227,6 +233,7 @@ public class NettyServerTest {
         addr,
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
+        new HashMap<ChannelOption<?>, Object>(),
         new FixedObjectPool<>(eventLoop),
         new FixedObjectPool<>(eventLoop),
         false,
@@ -234,6 +241,7 @@ public class NettyServerTest {
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
+        false, // ignore
         1, // ignore
         1, // ignore
         1, // ignore

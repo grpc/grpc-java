@@ -18,6 +18,7 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -294,5 +295,10 @@ public class OkHttpProtocolNegotiatorTest {
 
     @Override
     public void startHandshake() throws IOException {}
+  }
+
+  @Test
+  public void isValidHostName_withUnderscore() {
+    assertFalse(OkHttpProtocolNegotiator.isValidHostName("test_cert_2"));
   }
 }

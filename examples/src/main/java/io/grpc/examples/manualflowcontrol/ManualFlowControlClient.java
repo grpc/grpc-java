@@ -54,7 +54,7 @@ public class ManualFlowControlClient {
             this.requestStream = requestStream;
             // Set up manual flow control for the response stream. It feels backwards to configure the response
             // stream's flow control using the request stream's observer, but this is the way it is.
-            requestStream.disableAutoInboundFlowControl();
+            requestStream.disableAutoRequestWithInitial(1);
 
             // Set up a back-pressure-aware producer for the request stream. The onReadyHandler will be invoked
             // when the consuming side has enough buffer space to receive more messages.

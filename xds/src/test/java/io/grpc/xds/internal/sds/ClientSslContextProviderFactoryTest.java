@@ -17,6 +17,9 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
@@ -29,17 +32,13 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ClientSslContextProviderFactoryTest {
 
-  private static final String CLIENT_PEM_FILE = "client.pem";
-  private static final String CLIENT_KEY_FILE = "client.key";
-  private static final String CA_PEM_FILE = "ca.pem";
-
   ClientSslContextProviderFactory clientSslContextProviderFactory =
       new ClientSslContextProviderFactory();
 
   @Test
   public void createSslContextProvider_allFilenames() {
     UpstreamTlsContext upstreamTlsContext =
-        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProvider<UpstreamTlsContext> sslContextProvider =

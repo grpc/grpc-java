@@ -83,6 +83,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   private final String userAgent;
   private final Optional<ServerListener> optionalServerListener;
   private int serverMaxInboundMetadataSize;
+  private final boolean includeCauseWithStatus;
   private ObjectPool<ScheduledExecutorService> serverSchedulerPool;
   private ScheduledExecutorService serverScheduler;
   private ServerTransportListener serverTransportListener;
@@ -115,7 +116,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       };
 
   private InProcessTransport(String name, int maxInboundMetadataSize, String authority,
-      String userAgent, Attributes eagAttrs, Optional<ServerListener> optionalServerListener) {
+      String userAgent, Attributes eagAttrs,
+      Optional<ServerListener> optionalServerListener, boolean includeCauseWithStatus) {
     this.name = name;
     this.clientMaxInboundMetadataSize = maxInboundMetadataSize;
     this.authority = authority;
@@ -129,13 +131,14 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         .build();
     this.optionalServerListener = optionalServerListener;
     logId = InternalLogId.allocate(getClass(), name);
+    this.includeCauseWithStatus = includeCauseWithStatus;
   }
 
   public InProcessTransport(
       String name, int maxInboundMetadataSize, String authority, String userAgent,
-      Attributes eagAttrs) {
+      Attributes eagAttrs, boolean includeCauseWithStatus) {
     this(name, maxInboundMetadataSize, authority, userAgent, eagAttrs,
-        Optional.<ServerListener>absent());
+        Optional.<ServerListener>absent(), includeCauseWithStatus);
   }
 
   InProcessTransport(
@@ -143,7 +146,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       Attributes eagAttrs, ObjectPool<ScheduledExecutorService> serverSchedulerPool,
       List<ServerStreamTracer.Factory> serverStreamTracerFactories,
       ServerListener serverListener) {
-    this(name, maxInboundMetadataSize, authority, userAgent, eagAttrs, Optional.of(serverListener));
+    this(name, maxInboundMetadataSize, authority, userAgent, eagAttrs,
+        Optional.of(serverListener), false);
     this.serverMaxInboundMetadataSize = maxInboundMetadataSize;
     this.serverSchedulerPool = serverSchedulerPool;
     this.serverStreamTracerFactories = serverStreamTracerFactories;
@@ -564,7 +568,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       /** clientStream.serverClosed() must be called before this method */
       private void notifyClientClose(Status status, Metadata trailers) {
-        Status clientStatus = stripCause(status);
+        Status clientStatus = cleanStatus(status, includeCauseWithStatus);
         synchronized (this) {
           if (closed) {
             return;
@@ -744,7 +748,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       // Must be thread-safe for shutdownNow()
       @Override
       public void cancel(Status reason) {
-        Status serverStatus = stripCause(reason);
+        Status serverStatus = cleanStatus(reason, includeCauseWithStatus);
         if (!internalCancel(serverStatus, serverStatus)) {
           return;
         }
@@ -843,19 +847,25 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   }
 
   /**
-   * Returns a new status with the same code and description, but stripped of any other information
-   * (i.e. cause).
+   * Returns a new status with the same code and description.
+   * If includeCauseWithStatus is true, cause is also included.
    *
-   * <p>This is, so that the InProcess transport behaves in the same way as the other transports,
-   * when exchanging statuses between client and server and vice versa.
+   * <p>For InProcess transport to behave in the same way as the other transports,
+   * when exchanging statuses between client and server and vice versa,
+   * the cause should be excluded from the status.
+   * For easier debugging, the status may be optionally included.
    */
-  private static Status stripCause(Status status) {
+  private static Status cleanStatus(Status status, boolean includeCauseWithStatus) {
     if (status == null) {
       return null;
     }
-    return Status
+    Status clientStatus = Status
         .fromCodeValue(status.getCode().value())
         .withDescription(status.getDescription());
+    if (includeCauseWithStatus) {
+      clientStatus = clientStatus.withCause(status.getCause());
+    }
+    return clientStatus;
   }
 
   private static class SingleMessageProducer implements StreamListener.MessageProducer {

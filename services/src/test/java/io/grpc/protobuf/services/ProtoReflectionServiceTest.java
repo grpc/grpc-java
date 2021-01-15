@@ -30,6 +30,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.reflection.testing.AnotherDynamicServiceGrpc;
+import io.grpc.reflection.testing.AnotherReflectableServiceGrpc;
 import io.grpc.reflection.testing.DynamicReflectionTestDepthTwoProto;
 import io.grpc.reflection.testing.DynamicServiceGrpc;
 import io.grpc.reflection.testing.ReflectableServiceGrpc;
@@ -47,14 +48,17 @@ import io.grpc.reflection.v1alpha.ServiceResponse;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.MutableHandlerRegistry;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import org.junit.After;
+import java.util.concurrent.ExecutionException;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -62,6 +66,9 @@ import org.junit.runners.JUnit4;
 /** Tests for {@link ProtoReflectionService}. */
 @RunWith(JUnit4.class)
 public class ProtoReflectionServiceTest {
+  @Rule
+  public GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
+
   private static final String TEST_HOST = "localhost";
   private MutableHandlerRegistry handlerRegistry = new MutableHandlerRegistry();
   private BindableService reflectionService;
@@ -69,14 +76,12 @@ public class ProtoReflectionServiceTest {
       new DynamicServiceGrpc.DynamicServiceImplBase() {}.bindService();
   private ServerServiceDefinition anotherDynamicService =
       new AnotherDynamicServiceGrpc.AnotherDynamicServiceImplBase() {}.bindService();
-  private Server server;
-  private ManagedChannel channel;
   private ServerReflectionGrpc.ServerReflectionStub stub;
 
   @Before
   public void setUp() throws Exception {
     reflectionService = ProtoReflectionService.newInstance();
-    server =
+    Server server =
         InProcessServerBuilder.forName("proto-reflection-test")
             .directExecutor()
             .addService(reflectionService)
@@ -84,18 +89,11 @@ public class ProtoReflectionServiceTest {
             .fallbackHandlerRegistry(handlerRegistry)
             .build()
             .start();
-    channel = InProcessChannelBuilder.forName("proto-reflection-test").directExecutor().build();
+    grpcCleanupRule.register(server);
+    ManagedChannel channel =
+        grpcCleanupRule.register(
+            InProcessChannelBuilder.forName("proto-reflection-test").directExecutor().build());
     stub = ServerReflectionGrpc.newStub(channel);
-  }
-
-  @After
-  public void tearDown() {
-    if (server != null) {
-      server.shutdownNow();
-    }
-    if (channel != null) {
-      channel.shutdownNow();
-    }
   }
 
   @Test
@@ -525,6 +523,40 @@ public class ProtoReflectionServiceTest {
   }
 
   @Test
+  public void sharedServiceBetweenServers()
+      throws IOException, ExecutionException, InterruptedException {
+    Server anotherServer = InProcessServerBuilder.forName("proto-reflection-test-2")
+        .directExecutor()
+        .addService(reflectionService)
+        .addService(new AnotherReflectableServiceGrpc.AnotherReflectableServiceImplBase() {})
+        .build()
+        .start();
+    grpcCleanupRule.register(anotherServer);
+    ManagedChannel anotherChannel = grpcCleanupRule.register(
+        InProcessChannelBuilder.forName("proto-reflection-test-2").directExecutor().build());
+    ServerReflectionGrpc.ServerReflectionStub stub2 = ServerReflectionGrpc.newStub(anotherChannel);
+
+    ServerReflectionRequest request =
+        ServerReflectionRequest.newBuilder().setHost(TEST_HOST).setListServices("services").build();
+    StreamRecorder<ServerReflectionResponse> responseObserver = StreamRecorder.create();
+    StreamObserver<ServerReflectionRequest> requestObserver =
+        stub2.serverReflectionInfo(responseObserver);
+    requestObserver.onNext(request);
+    requestObserver.onCompleted();
+    List<ServiceResponse> response =
+        responseObserver.firstValue().get().getListServicesResponse().getServiceList();
+    assertEquals(new HashSet<>(
+        Arrays.asList(
+            ServiceResponse.newBuilder()
+                .setName("grpc.reflection.v1alpha.ServerReflection")
+                .build(),
+            ServiceResponse.newBuilder()
+                .setName("grpc.reflection.testing.AnotherReflectableService")
+                .build())),
+        new HashSet<>(response));
+  }
+
+  @Test
   public void flowControl() throws Exception {
     FlowControlClientResponseObserver clientResponseObserver =
         new FlowControlClientResponseObserver();
@@ -532,8 +564,11 @@ public class ProtoReflectionServiceTest {
         (ClientCallStreamObserver<ServerReflectionRequest>)
             stub.serverReflectionInfo(clientResponseObserver);
 
-    // ClientCalls.startCall() calls request(1) initially, so we should get an immediate response.
+    // Verify we don't receive a response until we request it.
     requestObserver.onNext(flowControlRequest);
+    assertEquals(0, clientResponseObserver.getResponses().size());
+
+    requestObserver.request(1);
     assertEquals(1, clientResponseObserver.getResponses().size());
     assertEquals(flowControlGoldenResponse, clientResponseObserver.getResponses().get(0));
 
@@ -557,17 +592,15 @@ public class ProtoReflectionServiceTest {
         (ClientCallStreamObserver<ServerReflectionRequest>)
             stub.serverReflectionInfo(clientResponseObserver);
 
-    // ClientCalls.startCall() calls request(1) initially, so make additional request.
-    requestObserver.onNext(flowControlRequest);
     requestObserver.onNext(flowControlRequest);
     requestObserver.onCompleted();
-    assertEquals(1, clientResponseObserver.getResponses().size());
+    assertEquals(0, clientResponseObserver.getResponses().size());
     assertFalse(clientResponseObserver.onCompleteCalled());
 
     requestObserver.request(1);
     assertTrue(clientResponseObserver.onCompleteCalled());
-    assertEquals(2, clientResponseObserver.getResponses().size());
-    assertEquals(flowControlGoldenResponse, clientResponseObserver.getResponses().get(1));
+    assertEquals(1, clientResponseObserver.getResponses().size());
+    assertEquals(flowControlGoldenResponse, clientResponseObserver.getResponses().get(0));
   }
 
   private final ServerReflectionRequest flowControlRequest =
@@ -594,7 +627,7 @@ public class ProtoReflectionServiceTest {
 
     @Override
     public void beforeStart(final ClientCallStreamObserver<ServerReflectionRequest> requestStream) {
-      requestStream.disableAutoInboundFlowControl();
+      requestStream.disableAutoRequestWithInitial(0);
     }
 
     @Override

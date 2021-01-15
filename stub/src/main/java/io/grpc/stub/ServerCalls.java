@@ -223,8 +223,8 @@ public final class ServerCalls {
           new ServerCallStreamObserverImpl<>(call);
       StreamObserver<ReqT> requestObserver = method.invoke(responseObserver);
       responseObserver.freeze();
-      if (responseObserver.autoFlowControlEnabled) {
-        call.request(1);
+      if (responseObserver.initialRequest > 0) {
+        call.request(responseObserver.initialRequest);
       }
       return new StreamingServerCallListener(requestObserver, responseObserver, call);
     }
@@ -251,7 +251,7 @@ public final class ServerCalls {
         requestObserver.onNext(request);
 
         // Request delivery of the next inbound message.
-        if (responseObserver.autoFlowControlEnabled) {
+        if (responseObserver.autoRequestEnabled) {
           call.request(1);
         }
       }
@@ -308,7 +308,8 @@ public final class ServerCalls {
     final ServerCall<ReqT, RespT> call;
     volatile boolean cancelled;
     private boolean frozen;
-    private boolean autoFlowControlEnabled = true;
+    private int initialRequest = 1;
+    private boolean autoRequestEnabled = true;
     private boolean sentHeaders;
     private Runnable onReadyHandler;
     private Runnable onCancelHandler;
@@ -399,10 +400,18 @@ public final class ServerCalls {
       this.onCancelHandler = onCancelHandler;
     }
 
+    @Deprecated
     @Override
     public void disableAutoInboundFlowControl() {
+      disableAutoRequestWithInitial(0);
+    }
+
+    @Override
+    public void disableAutoRequestWithInitial(int request) {
       checkState(!frozen, "Cannot disable auto flow control after initialization");
-      autoFlowControlEnabled = false;
+      Preconditions.checkArgument(request >= 0, "Initial requests must be non-negative");
+      initialRequest = request;
+      autoRequestEnabled = false;
     }
 
     @Override

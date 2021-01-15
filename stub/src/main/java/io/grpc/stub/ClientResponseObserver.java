@@ -30,8 +30,8 @@ public interface ClientResponseObserver<ReqT, RespT> extends StreamObserver<Resp
    * onReady events, disable auto inbound flow and perform other advanced functions.
    *
    * <p>Only the methods {@link ClientCallStreamObserver#setOnReadyHandler(Runnable)} and
-   * {@link ClientCallStreamObserver#disableAutoInboundFlowControl()} may be called within this
-   * callback
+   * {@link ClientCallStreamObserver#disableAutoRequestWithInitial(int)} may be called within
+   * this callback
    *
    * <pre>
    *   // Copy an iterator to the request stream under flow-control

@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Internal;
+import io.grpc.InternalLogId;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ExponentialBackoffPolicy;
@@ -43,7 +44,6 @@ import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -65,70 +65,126 @@ public final class XdsClientWrapperForServerSds {
       new TimeServiceResource("GrpcServerXdsClient");
 
   private EnvoyServerProtoData.Listener curListener;
-  // TODO(sanjaypujare): implement shutting down XdsServer which will need xdsClient reference
   @SuppressWarnings("unused")
-  @Nullable private final XdsClient xdsClient;
+  @Nullable private XdsClient xdsClient;
   private final int port;
-  private final ScheduledExecutorService timeService;
+  private ScheduledExecutorService timeService;
+  private XdsClient.ListenerWatcher listenerWatcher;
 
   /**
-   * Factory method for creating a {@link XdsClientWrapperForServerSds}.
+   * Thrown when no suitable management server was found in the bootstrap file.
+   */
+  public static final class ManagementServerNotFoundException extends Exception {
+
+    private static final long serialVersionUID = 1;
+
+    public ManagementServerNotFoundException(String msg) {
+      super(msg);
+    }
+  }
+
+  /**
+   * Creates a {@link XdsClientWrapperForServerSds}.
    *
    * @param port server's port for which listener config is needed.
-   * @param bootstrapper {@link Bootstrapper} instance to load bootstrap config.
-   * @param syncContext {@link SynchronizationContext} needed by {@link XdsClient}.
    */
-  public static XdsClientWrapperForServerSds newInstance(
-      int port, Bootstrapper bootstrapper, SynchronizationContext syncContext) throws IOException {
-    Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.readBootstrap();
-    final List<Bootstrapper.ServerInfo> serverList = bootstrapInfo.getServers();
-    if (serverList.isEmpty()) {
-      throw new NoSuchElementException("No management server provided by bootstrap");
+  public XdsClientWrapperForServerSds(int port) {
+    this.port = port;
+  }
+
+  private SynchronizationContext createSynchronizationContext() {
+    final InternalLogId logId =
+        InternalLogId.allocate("XdsClientWrapperForServerSds", Integer.toString(port));
+    return new SynchronizationContext(
+        new Thread.UncaughtExceptionHandler() {
+          // needed by syncContext
+          private boolean panicMode;
+
+          @Override
+          public void uncaughtException(Thread t, Throwable e) {
+            logger.log(
+                Level.SEVERE,
+                "[" + logId + "] Uncaught exception in the SynchronizationContext. Panic!",
+                e);
+            panic(e);
+          }
+
+          void panic(final Throwable t) {
+            if (panicMode) {
+              // Preserve the first panic information
+              return;
+            }
+            panicMode = true;
+            shutdown();
+          }
+        });
+  }
+
+  public boolean hasXdsClient() {
+    return xdsClient != null;
+  }
+
+  /** Creates an XdsClient and starts a watch. */
+  public void createXdsClientAndStart() {
+    checkState(xdsClient == null, "start() called more than once");
+    Bootstrapper.BootstrapInfo bootstrapInfo;
+    List<Bootstrapper.ServerInfo> serverList;
+    try {
+      bootstrapInfo = Bootstrapper.getInstance().readBootstrap();
+      serverList = bootstrapInfo.getServers();
+      if (serverList.isEmpty()) {
+        throw new ManagementServerNotFoundException("No management server provided by bootstrap");
+      }
+    } catch (IOException | ManagementServerNotFoundException e) {
+      logger.log(Level.FINE, "Exception reading bootstrap", e);
+      logger.log(Level.INFO, "Fallback to plaintext for server at port {0}", port);
+      return;
     }
-    final Node node = bootstrapInfo.getNode();
-    ScheduledExecutorService timeService = SharedResourceHolder.get(timeServiceResource);
+    Node node = bootstrapInfo.getNode();
+    timeService = SharedResourceHolder.get(timeServiceResource);
     XdsClientImpl xdsClientImpl =
         new XdsClientImpl(
             "",
             serverList,
             XdsClient.XdsChannelFactory.getInstance(),
             node,
-            syncContext,
+            createSynchronizationContext(),
             timeService,
             new ExponentialBackoffPolicy.Provider(),
             GrpcUtil.STOPWATCH_SUPPLIER);
-    return new XdsClientWrapperForServerSds(port, xdsClientImpl, timeService);
+    start(xdsClientImpl);
   }
 
+  /** Accepts an XdsClient and starts a watch. */
   @VisibleForTesting
-  XdsClientWrapperForServerSds(int port, XdsClient xdsClient,
-      ScheduledExecutorService timeService) {
-    this.port = port;
+  public void start(XdsClient xdsClient) {
+    checkState(this.xdsClient == null, "start() called more than once");
+    checkNotNull(xdsClient, "xdsClient");
     this.xdsClient = xdsClient;
-    this.timeService = timeService;
-    xdsClient.watchListenerData(
-        port,
+    this.listenerWatcher =
         new XdsClient.ListenerWatcher() {
           @Override
           public void onListenerChanged(XdsClient.ListenerUpdate update) {
             logger.log(
                 Level.INFO,
-                "Setting myListener from ConfigUpdate listener :{0}",
-                update.getListener().toString());
+                "Setting myListener from ConfigUpdate listener: {0}",
+                update.getListener());
             curListener = update.getListener();
           }
 
           @Override
-          public void onError(Status error) {
-            // In order to distinguish between IO error and resource not found, set curListener
-            // to null in case of NOT_FOUND
-            if (error.getCode().equals(Status.Code.NOT_FOUND)) {
-              curListener = null;
-            }
-            // TODO(sanjaypujare): Implement logic for other cases based on final design.
-            logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds:{0}", error);
+          public void onResourceDoesNotExist(String resourceName) {
+            logger.log(Level.INFO, "Resource {0} is unavailable", resourceName);
+            curListener = null;
           }
-        });
+
+          @Override
+          public void onError(Status error) {
+            // TODO(sanjaypujare): Implement logic for other cases based on final design.
+            logger.log(Level.SEVERE, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
+          }
+        };
+    xdsClient.watchListenerData(port, listenerWatcher);
   }
 
   /**
@@ -155,6 +211,11 @@ public final class XdsClientWrapperForServerSds {
       }
     }
     return null;
+  }
+
+  @VisibleForTesting
+  XdsClient.ListenerWatcher getListenerWatcher() {
+    return listenerWatcher;
   }
 
   private static final class FilterChainComparator implements Comparator<FilterChain> {
@@ -252,9 +313,10 @@ public final class XdsClientWrapperForServerSds {
     logger.log(Level.FINER, "Shutdown");
     if (xdsClient != null) {
       xdsClient.shutdown();
+      xdsClient = null;
     }
     if (timeService != null) {
-      timeServiceResource.close(timeService);
+      timeService = SharedResourceHolder.release(timeServiceResource, timeService);
     }
   }
 

@@ -473,7 +473,12 @@ interface LocalityStore {
                 "Priority {0} contains localities: {1}", i, priorityTable.get(i));
           }
         }
-
+        if (priorityTable.isEmpty()) {
+          helper.updateBalancingState(
+              TRANSIENT_FAILURE,
+              new ErrorPicker(Status.UNAVAILABLE.withDescription("Received 0 locality")));
+          return;
+        }
         currentPriority = -1;
         failOver();
       }

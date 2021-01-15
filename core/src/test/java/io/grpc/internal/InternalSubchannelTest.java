@@ -57,6 +57,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Before;
@@ -700,6 +701,9 @@ public class InternalSubchannelTest {
         Arrays.asList(new EquivalentAddressGroup(Arrays.asList(addr3, addr4))));
     assertExactCallbackInvokes("onStateChange:IDLE");
     assertEquals(IDLE, internalSubchannel.getState());
+    verify(transports.peek().transport, never()).shutdown(any(Status.class));
+    fakeClock.forwardNanos(
+        TimeUnit.SECONDS.toNanos(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS));
     verify(transports.peek().transport).shutdown(any(Status.class));
 
     // And new addresses chosen when re-connecting
@@ -782,6 +786,59 @@ public class InternalSubchannelTest {
     verifyNoMoreInteractions(mockTransportFactory);
 
     fakeClock.forwardNanos(10); // Drain retry, but don't care about result
+  }
+
+  @Test public void updateAddresses_disjoint_readyTwice() {
+    SocketAddress addr1 = mock(SocketAddress.class);
+    createInternalSubchannel(addr1);
+    assertEquals(IDLE, internalSubchannel.getState());
+
+    // Address connects
+    assertNull(internalSubchannel.obtainActiveTransport());
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    verify(mockTransportFactory)
+        .newClientTransport(
+            eq(addr1),
+            eq(createClientTransportOptions()),
+            isA(TransportLogger.class));
+    transports.peek().listener.transportReady();
+    assertExactCallbackInvokes("onStateChange:READY");
+    assertEquals(READY, internalSubchannel.getState());
+
+    // Update addresses
+    SocketAddress addr2 = mock(SocketAddress.class);
+    internalSubchannel.updateAddresses(
+        Arrays.asList(new EquivalentAddressGroup(Arrays.asList(addr2))));
+    assertExactCallbackInvokes("onStateChange:IDLE");
+    assertEquals(IDLE, internalSubchannel.getState());
+    ConnectionClientTransport firstTransport = transports.poll().transport;
+    verify(firstTransport, never()).shutdown(any(Status.class));
+
+    // Address connects
+    assertNull(internalSubchannel.obtainActiveTransport());
+    assertExactCallbackInvokes("onStateChange:CONNECTING");
+    verify(mockTransportFactory)
+        .newClientTransport(
+            eq(addr2),
+            eq(createClientTransportOptions()),
+            isA(TransportLogger.class));
+    transports.peek().listener.transportReady();
+    assertExactCallbackInvokes("onStateChange:READY");
+    assertEquals(READY, internalSubchannel.getState());
+
+    // Update addresses
+    SocketAddress addr3 = mock(SocketAddress.class);
+    internalSubchannel.updateAddresses(
+        Arrays.asList(new EquivalentAddressGroup(Arrays.asList(addr3))));
+    assertExactCallbackInvokes("onStateChange:IDLE");
+    assertEquals(IDLE, internalSubchannel.getState());
+    // Earlier transport is shutdown eagerly
+    verify(firstTransport).shutdown(any(Status.class));
+    ConnectionClientTransport secondTransport = transports.peek().transport;
+    verify(secondTransport, never()).shutdown(any(Status.class));
+
+    internalSubchannel.shutdown(SHUTDOWN_REASON);
+    verify(secondTransport).shutdown(any(Status.class));
   }
 
   @Test

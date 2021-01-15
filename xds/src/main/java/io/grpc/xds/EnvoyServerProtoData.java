@@ -17,6 +17,9 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
+import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -173,11 +176,24 @@ final class EnvoyServerProtoData {
     }
 
     static FilterChain fromEnvoyProtoFilterChain(
-        io.envoyproxy.envoy.api.v2.listener.FilterChain proto) {
+        io.envoyproxy.envoy.api.v2.listener.FilterChain proto)
+        throws InvalidProtocolBufferException {
       return new FilterChain(
           FilterChainMatch.fromEnvoyProtoFilterChainMatch(proto.getFilterChainMatch()),
-          proto.getTlsContext()
+          getTlsContextFromFilterChain(proto)
       );
+    }
+
+    private static DownstreamTlsContext getTlsContextFromFilterChain(
+        io.envoyproxy.envoy.api.v2.listener.FilterChain filterChain)
+        throws InvalidProtocolBufferException {
+      if (filterChain.hasTransportSocket()
+          && "tls".equals(filterChain.getTransportSocket().getName())) {
+        Any any = filterChain.getTransportSocket().getTypedConfig();
+        return DownstreamTlsContext.parseFrom(any.getValue());
+      }
+      // TODO(sanjaypujare): remove when we move to envoy protos v3
+      return filterChain.getTlsContext();
     }
 
     public FilterChainMatch getFilterChainMatch() {
@@ -250,7 +266,8 @@ final class EnvoyServerProtoData {
       return null;
     }
 
-    static Listener fromEnvoyProtoListener(io.envoyproxy.envoy.api.v2.Listener proto) {
+    static Listener fromEnvoyProtoListener(io.envoyproxy.envoy.api.v2.Listener proto)
+        throws InvalidProtocolBufferException {
       List<FilterChain> filterChains = new ArrayList<>(proto.getFilterChainsCount());
       for (io.envoyproxy.envoy.api.v2.listener.FilterChain filterChain :
           proto.getFilterChainsList()) {

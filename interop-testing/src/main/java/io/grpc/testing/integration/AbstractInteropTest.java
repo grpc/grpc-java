@@ -797,6 +797,8 @@ public abstract class AbstractInteropTest {
         = asyncStub.fullDuplexCall(responseObserver);
     requestObserver.onCompleted();
     responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
+    assertSuccess(responseObserver);
+    assertTrue("Expected an empty stream", responseObserver.getValues().isEmpty());
   }
 
   @Test
@@ -1914,7 +1916,7 @@ public abstract class AbstractInteropTest {
    * Some tests run on memory constrained environments.  Rather than OOM, just give up.  64 is
    * chosen as a maximum amount of memory a large test would need.
    */
-  private static void assumeEnoughMemory() {
+  protected static void assumeEnoughMemory() {
     Runtime r = Runtime.getRuntime();
     long usedMem = r.totalMemory() - r.freeMemory();
     long actuallyFreeMemory = r.maxMemory() - usedMem;

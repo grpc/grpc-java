@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 
     id "com.github.johnrengelman.shadow"
@@ -13,34 +13,35 @@ sourceCompatibility = 1.7
 targetCompatibility = 1.7
 
 dependencies {
-    compile project(':grpc-auth'),
-            project(':grpc-core'),
+    api project(':grpc-core')
+    implementation project(':grpc-auth'),
             project(':grpc-grpclb'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.lang,
             libraries.protobuf,
             libraries.conscrypt
-    def nettyDependency = compile project(':grpc-netty')
-    compile (libraries.google_auth_oauth2_http) {
+    def nettyDependency = implementation project(':grpc-netty')
+    implementation (libraries.google_auth_oauth2_http) {
         // prefer our own versions instead of google-auth-oauth2-http's dependency
         exclude group: 'com.google.guava', module: 'guava'
         // we'll always be more up-to-date
         exclude group: 'io.grpc', module: 'grpc-context'
     }
+    guavaDependency 'implementation'
     compileOnly libraries.javax_annotation
 
-    shadow configurations.compile.getDependencies().minus(nettyDependency)
+    shadow configurations.implementation.getDependencies().minus(nettyDependency)
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
 
-    testCompile project(':grpc-testing'),
+    testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
             libraries.guava,
             libraries.guava_testlib,
             libraries.junit,
             libraries.mockito,
             libraries.truth
-    testRuntime libraries.netty_tcnative,
+    testRuntimeOnly libraries.netty_tcnative,
             libraries.netty_epoll
     signature 'org.codehaus.mojo.signature:java17:1.0@signature'
 }

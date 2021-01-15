@@ -37,6 +37,8 @@ import javax.annotation.Nullable;
  */
 final class ManagedChannelServiceConfig {
 
+  @Nullable
+  private final MethodInfo defaultMethodConfig;
   private final Map<String, MethodInfo> serviceMethodMap;
   private final Map<String, MethodInfo> serviceMap;
   @Nullable
@@ -47,11 +49,13 @@ final class ManagedChannelServiceConfig {
   private final Map<String, ?> healthCheckingConfig;
 
   ManagedChannelServiceConfig(
+      @Nullable MethodInfo defaultMethodConfig,
       Map<String, MethodInfo> serviceMethodMap,
       Map<String, MethodInfo> serviceMap,
       @Nullable Throttle retryThrottling,
       @Nullable Object loadBalancingConfig,
       @Nullable Map<String, ?> healthCheckingConfig) {
+    this.defaultMethodConfig = defaultMethodConfig;
     this.serviceMethodMap = Collections.unmodifiableMap(new HashMap<>(serviceMethodMap));
     this.serviceMap = Collections.unmodifiableMap(new HashMap<>(serviceMap));
     this.retryThrottling = retryThrottling;
@@ -66,6 +70,7 @@ final class ManagedChannelServiceConfig {
   static ManagedChannelServiceConfig empty() {
     return
         new ManagedChannelServiceConfig(
+            null,
             new HashMap<String, MethodInfo>(),
             new HashMap<String, MethodInfo>(),
             /* retryThrottling= */ null,
@@ -100,6 +105,7 @@ final class ManagedChannelServiceConfig {
       // this is surprising, but possible.
       return
           new ManagedChannelServiceConfig(
+              null,
               serviceMethodMap,
               serviceMap,
               retryThrottling,
@@ -107,6 +113,7 @@ final class ManagedChannelServiceConfig {
               healthCheckingConfig);
     }
 
+    MethodInfo defaultMethodConfig = null;
     for (Map<String, ?> methodConfig : methodConfigs) {
       MethodInfo info = new MethodInfo(
           methodConfig, retryEnabled, maxRetryAttemptsLimit, maxHedgedAttemptsLimit);
@@ -114,13 +121,21 @@ final class ManagedChannelServiceConfig {
       List<Map<String, ?>> nameList =
           ServiceConfigUtil.getNameListFromMethodConfig(methodConfig);
 
-      checkArgument(
-          nameList != null && !nameList.isEmpty(), "no names in method config %s", methodConfig);
+      if (nameList == null || nameList.isEmpty()) {
+        continue;
+      }
       for (Map<String, ?> name : nameList) {
         String serviceName = ServiceConfigUtil.getServiceFromName(name);
-        checkArgument(!Strings.isNullOrEmpty(serviceName), "missing service name");
         String methodName = ServiceConfigUtil.getMethodFromName(name);
-        if (Strings.isNullOrEmpty(methodName)) {
+        if (Strings.isNullOrEmpty(serviceName)) {
+          checkArgument(
+              Strings.isNullOrEmpty(methodName), "missing service name for method %s", methodName);
+          checkArgument(
+              defaultMethodConfig == null,
+              "Duplicate default method config in service config %s",
+              serviceConfig);
+          defaultMethodConfig = info;
+        } else if (Strings.isNullOrEmpty(methodName)) {
           // Service scoped config
           checkArgument(
               !serviceMap.containsKey(serviceName), "Duplicate service %s", serviceName);
@@ -139,6 +154,7 @@ final class ManagedChannelServiceConfig {
 
     return
         new ManagedChannelServiceConfig(
+            defaultMethodConfig,
             serviceMethodMap,
             serviceMap,
             retryThrottling,
@@ -163,6 +179,11 @@ final class ManagedChannelServiceConfig {
    */
   Map<String, MethodInfo> getServiceMethodMap() {
     return serviceMethodMap;
+  }
+
+  @Nullable
+  MethodInfo getDefaultMethodConfig() {
+    return defaultMethodConfig;
   }
 
   @VisibleForTesting

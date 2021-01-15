@@ -17,6 +17,11 @@
 package io.grpc.xds.internal.sds.trust;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_SERVER_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 
 import com.google.protobuf.ByteString;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
@@ -35,21 +40,6 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link SdsTrustManagerFactory}. */
 @RunWith(JUnit4.class)
 public class SdsTrustManagerFactoryTest {
-
-  /** Trust store cert. */
-  private static final String CA_PEM_FILE = "ca.pem";
-
-  /** server cert. */
-  private static final String SERVER_1_PEM_FILE = "server1.pem";
-
-  /** client cert. */
-  private static final String CLIENT_PEM_FILE = "client.pem";
-
-  /** bad server cert. */
-  private static final String BAD_SERVER_PEM_FILE = "badserver.pem";
-
-  /** bad client cert. */
-  private static final String BAD_CLIENT_PEM_FILE = "badclient.pem";
 
   @Test
   public void constructor_fromFile() throws CertificateException, IOException, CertStoreException {

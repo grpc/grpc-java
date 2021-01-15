@@ -39,12 +39,14 @@ import org.junit.runners.JUnit4;
 public class ServiceConfigStateTest {
 
   private final ManagedChannelServiceConfig serviceConfig1 = new ManagedChannelServiceConfig(
+      null,
       Collections.<String, MethodInfo>emptyMap(),
       Collections.<String, MethodInfo>emptyMap(),
       null,
       null,
       null);
   private final ManagedChannelServiceConfig serviceConfig2 = new ManagedChannelServiceConfig(
+      null,
       Collections.<String, MethodInfo>emptyMap(),
       Collections.<String, MethodInfo>emptyMap(),
       null,
@@ -428,6 +430,7 @@ public class ServiceConfigStateTest {
   public void lookup_default_onPresent_onPresent() {
     ServiceConfigState scs = new ServiceConfigState(serviceConfig1, true);
     ManagedChannelServiceConfig serviceConfig3 = new ManagedChannelServiceConfig(
+        null,
         Collections.<String, MethodInfo>emptyMap(),
         Collections.<String, MethodInfo>emptyMap(),
         null,

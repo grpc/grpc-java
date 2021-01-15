@@ -58,6 +58,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
@@ -922,6 +923,16 @@ public class LocalityStoreTest {
           .isEqualTo(
               localityInfoMap.get(localitiesBySubchannel.get(subchannel)).getLocalityWeight());
     }
+  }
+
+  @Test
+  public void updateLocalityStore_emptyEndpoints() {
+    localityStore.updateLocalityStore(Collections.<Locality, LocalityLbEndpoints>emptyMap());
+    assertThat(loadBalancers).hasSize(0);
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
   }
 
   @Test

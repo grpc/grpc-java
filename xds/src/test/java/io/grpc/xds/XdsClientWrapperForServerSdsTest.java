@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -32,6 +33,7 @@ import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -139,13 +141,40 @@ public class XdsClientWrapperForServerSdsTest {
   private XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
   private final DownstreamTlsContext[] tlsContexts = new DownstreamTlsContext[3];
 
+  /** Creates XdsClientWrapperForServerSds: also used by other classes. */
+  public static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(
+      int port, DownstreamTlsContext downstreamTlsContext) {
+    XdsClient mockXdsClient = mock(XdsClient.class);
+    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+        new XdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds.start(mockXdsClient);
+    generateListenerUpdateToWatcher(
+        port, downstreamTlsContext, xdsClientWrapperForServerSds.getListenerWatcher());
+    return xdsClientWrapperForServerSds;
+  }
+
+  static void generateListenerUpdateToWatcher(
+      int port, DownstreamTlsContext tlsContext, XdsClient.ListenerWatcher registeredWatcher) {
+    EnvoyServerProtoData.Listener listener =
+        XdsSdsClientServerTest.buildListener("listener1", "0.0.0.0", port, tlsContext);
+    XdsClient.ListenerUpdate listenerUpdate =
+        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
+    registeredWatcher.onListenerChanged(listenerUpdate);
+  }
+
   @Before
   public void setUp() throws IOException {
     MockitoAnnotations.initMocks(this);
-    xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(PORT, xdsClient, null);
+    xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(PORT);
+    xdsClientWrapperForServerSds.start(xdsClient);
     tlsContexts[0] = null;
     tlsContexts[1] = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("CERT1", "VA1");
     tlsContexts[2] = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("CERT2", "VA2");
+  }
+
+  @After
+  public void tearDown() {
+    xdsClientWrapperForServerSds.shutdown();
   }
 
   /**

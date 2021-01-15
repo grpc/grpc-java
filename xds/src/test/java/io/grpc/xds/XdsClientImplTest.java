@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsClientTestHelper.buildCluster;
 import static io.grpc.xds.XdsClientTestHelper.buildClusterLoadAssignment;
+import static io.grpc.xds.XdsClientTestHelper.buildDeprecatedSecureCluster;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryRequest;
 import static io.grpc.xds.XdsClientTestHelper.buildDiscoveryResponse;
 import static io.grpc.xds.XdsClientTestHelper.buildDropOverload;
@@ -31,6 +32,7 @@ import static io.grpc.xds.XdsClientTestHelper.buildUpstreamTlsContext;
 import static io.grpc.xds.XdsClientTestHelper.buildVirtualHost;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -45,6 +47,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import com.google.protobuf.BoolValue;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
@@ -58,6 +61,7 @@ import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.HealthStatus;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
+import io.envoyproxy.envoy.api.v2.route.QueryParameterMatcher;
 import io.envoyproxy.envoy.api.v2.route.RedirectAction;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.RouteAction;
@@ -110,6 +114,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -174,6 +179,8 @@ public class XdsClientImplTest {
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  @Rule
+  public ExpectedException thrown = ExpectedException.none();
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -300,7 +307,7 @@ public class XdsClientImplTest {
 
   @After
   public void tearDown() {
-    XdsClientImpl.enablePathMatching = false;
+    XdsClientImpl.enableExperimentalRouting = false;
     xdsClient.shutdown();
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
@@ -318,7 +325,7 @@ public class XdsClientImplTest {
   /**
    * Client receives an LDS response that does not contain a Listener for the requested resource.
    * The LDS response is ACKed.
-   * The config watcher is notified with an error after its response timer expires.
+   * The config watcher is notified with resource unavailable after its response timer expires.
    */
   @Test
   public void ldsResponseWithoutMatchingResource() {
@@ -362,12 +369,10 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onResourceDoesNotExist(TARGET_AUTHORITY);
     verify(configWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist(TARGET_AUTHORITY);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -413,13 +418,11 @@ public class XdsClientImplTest {
                 XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onResourceDoesNotExist(TARGET_AUTHORITY);
     verify(configWatcher, never()).onError(any(Status.class));
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist(TARGET_AUTHORITY);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -500,7 +503,7 @@ public class XdsClientImplTest {
    * RouteConfiguration for the requested resource while each received RouteConfiguration is valid.
    * The RDS response is ACKed.
    * After the resource fetch timeout expires, watcher waiting for the resource is notified
-   * with a resource not found error.
+   * with resource unavailable.
    */
   @Test
   public void rdsResponseWithoutMatchingResource() {
@@ -566,11 +569,10 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onResourceDoesNotExist(anyString());
     verify(configWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist("route-foo.googleapis.com");
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -645,7 +647,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void resolveVirtualHostWithPathMatchingInRdsResponse() {
-    XdsClientImpl.enablePathMatching = true;
+    XdsClientImpl.enableExperimentalRouting = true;
     xdsClient.watchConfigData(TARGET_AUTHORITY, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -690,10 +692,10 @@ public class XdsClientImplTest {
                             .setRoute(RouteAction.newBuilder().setWeightedClusters(
                                 WeightedCluster.newBuilder()
                                     .addClusters(WeightedCluster.ClusterWeight.newBuilder()
-                                        .setWeight(UInt32Value.newBuilder().setValue(30))
+                                        .setWeight(UInt32Value.of(30))
                                         .setName("cl21.googleapis.com"))
                                     .addClusters(WeightedCluster.ClusterWeight.newBuilder()
-                                        .setWeight(UInt32Value.newBuilder().setValue(70))
+                                        .setWeight(UInt32Value.of(70))
                                         .setName("cl22.googleapis.com"))))
                             .setMatch(RouteMatch.newBuilder().setPath("/service2/method2")))
                         .addRoutes(Route.newBuilder()
@@ -723,18 +725,18 @@ public class XdsClientImplTest {
     assertThat(routes.get(0)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with cluster route
-            new EnvoyProtoData.RouteMatch("", "/service1/method1", false),
-            new EnvoyProtoData.RouteAction(
-                "cl1.googleapis.com",
-                "",
-                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
+            new EnvoyProtoData.RouteMatch(
+                /* prefix= */ null,
+                /* path= */ "/service1/method1"),
+            new EnvoyProtoData.RouteAction("cl1.googleapis.com", null)));
     assertThat(routes.get(1)).isEqualTo(
         new EnvoyProtoData.Route(
             // path match with weighted cluster route
-            new EnvoyProtoData.RouteMatch("", "/service2/method2", false),
+            new EnvoyProtoData.RouteMatch(
+                /* prefix= */ null,
+                /* path= */ "/service2/method2"),
             new EnvoyProtoData.RouteAction(
-                "",
-                "",
+                null,
                 ImmutableList.of(
                     new EnvoyProtoData.ClusterWeight("cl21.googleapis.com", 30),
                     new EnvoyProtoData.ClusterWeight("cl22.googleapis.com", 70)
@@ -742,19 +744,18 @@ public class XdsClientImplTest {
     assertThat(routes.get(2)).isEqualTo(
         new EnvoyProtoData.Route(
             // prefix match with cluster route
-            new EnvoyProtoData.RouteMatch("/service1/", "", false),
-            new EnvoyProtoData.RouteAction(
-                "cl1.googleapis.com",
-                "",
-                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
+            new EnvoyProtoData.RouteMatch(
+                /* prefix= */ "/service1/",
+                /* path= */ null),
+            new EnvoyProtoData.RouteAction("cl1.googleapis.com", null)));
     assertThat(routes.get(3)).isEqualTo(
         new EnvoyProtoData.Route(
             // default match with cluster route
-            new EnvoyProtoData.RouteMatch("", "", false),
+            new EnvoyProtoData.RouteMatch(
+                /* prefix= */ "",
+                /* path= */ null),
             new EnvoyProtoData.RouteAction(
-                "cluster.googleapis.com",
-                "",
-                ImmutableList.<EnvoyProtoData.ClusterWeight>of())));
+                "cluster.googleapis.com", null)));
   }
 
   /**
@@ -763,7 +764,6 @@ public class XdsClientImplTest {
    * is invalid as it does not contain any VirtualHost with domains matching the requested
    * hostname.
    * The RDS response is NACKed, as if the XdsClient has not received this response.
-   * The config watcher is NOT notified with an error.
    */
   @Test
   public void failToFindVirtualHostInRdsResponse() {
@@ -817,11 +817,10 @@ public class XdsClientImplTest {
                 XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onResourceDoesNotExist(anyString());
     verify(configWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist("route-foo.googleapis.com");
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -831,7 +830,6 @@ public class XdsClientImplTest {
    * is invalid as the VirtualHost with domains matching the requested hostname contains invalid
    * data, its RouteAction message is absent.
    * The RDS response is NACKed, as if the XdsClient has not received this response.
-   * The config watcher is NOT notified with an error.
    */
   @Test
   public void matchingVirtualHostDoesNotContainRouteAction() {
@@ -863,7 +861,7 @@ public class XdsClientImplTest {
     VirtualHost virtualHost =
         VirtualHost.newBuilder()
             .setName("virtualhost00.googleapis.com")  // don't care
-            .addDomains("foo.googleapis.com")
+            .addDomains(TARGET_AUTHORITY)
             .addRoutes(
                 Route.newBuilder()
                     .setRedirect(
@@ -886,11 +884,10 @@ public class XdsClientImplTest {
                 XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onResourceDoesNotExist(anyString());
     verify(configWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist("route-foo.googleapis.com");
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -1052,9 +1049,7 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_LDS, "0003");
     responseObserver.onNext(response);
 
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist(TARGET_AUTHORITY);
   }
 
   // TODO(chengyuanzhang): tests for timeout waiting for responses for incremental
@@ -1242,11 +1237,7 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "1", TARGET_AUTHORITY,
             XdsClientImpl.ADS_TYPE_URL_LDS, "0001")));
 
-    // Notify config watcher with an error.
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(configWatcher).onResourceDoesNotExist(TARGET_AUTHORITY);
   }
 
   /**
@@ -1334,7 +1325,7 @@ public class XdsClientImplTest {
   /**
    * Client receives an CDS response that does not contain a Cluster for the requested resource
    * while each received Cluster is valid. The CDS response is ACKed. Cluster watchers are notified
-   * with an error for resource not found after initial resource fetch timeout has expired.
+   * with resource unavailable after initial resource fetch timeout has expired.
    */
   @Test
   public void cdsResponseWithoutMatchingResource() {
@@ -1361,13 +1352,12 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
     verify(clusterWatcher, never()).onClusterChanged(any(ClusterUpdate.class));
+    verify(clusterWatcher, never()).onResourceDoesNotExist("cluster-foo.googleapis.com");
     verify(clusterWatcher, never()).onError(any(Status.class));
 
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(clusterWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(clusterWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
   /**
@@ -1466,6 +1456,38 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate.getUpstreamTlsContext()).isEqualTo(testUpstreamTlsContext);
   }
 
+  /**
+   * CDS response containing UpstreamTlsContext for a cluster in a deprecated field.
+   */
+  // TODO(sanjaypujare): remove once we move to envoy proto v3
+  @Test
+  public void cdsResponseWithDeprecatedUpstreamTlsContext() {
+    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Management server sends back CDS response with UpstreamTlsContext.
+    UpstreamTlsContext testUpstreamTlsContext =
+        buildUpstreamTlsContext("secret1", "unix:/var/uds2");
+    List<Any> clusters = ImmutableList.of(
+        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
+        Any.pack(buildDeprecatedSecureCluster("cluster-foo.googleapis.com",
+            "eds-cluster-foo.googleapis.com", true, testUpstreamTlsContext)),
+        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK CDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(NODE, "0", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
+    ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
+    assertThat(clusterUpdate.getUpstreamTlsContext()).isEqualTo(testUpstreamTlsContext);
+  }
+
   @Test
   public void multipleClusterWatchers() {
     ClusterWatcher watcher1 = mock(ClusterWatcher.class);
@@ -1524,14 +1546,12 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate2.getLrsServerName()).isNull();
 
     verify(watcher3, never()).onClusterChanged(any(ClusterUpdate.class));
+    verify(watcher3, never()).onResourceDoesNotExist("cluster-bar.googleapis.com");
     verify(watcher3, never()).onError(any(Status.class));
 
     // The other watcher gets an error notification for cluster not found after its timer expired.
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(watcher3).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(watcher3).onResourceDoesNotExist("cluster-bar.googleapis.com");
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
 
     // Management server sends back another CDS response contains Clusters for all
@@ -1839,18 +1859,13 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // CDS resource "cluster-foo.googleapis.com" is known to be absent.
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(watcher1).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
-    verify(watcher2).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(watcher1).onResourceDoesNotExist("cluster-foo.googleapis.com");
+    verify(watcher2).onResourceDoesNotExist("cluster-foo.googleapis.com");
 
     // The absence result is known immediately.
     ClusterWatcher watcher5 = mock(ClusterWatcher.class);
     xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher5);
-
-    verify(watcher5).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(watcher5).onResourceDoesNotExist("cluster-foo.googleapis.com");
 
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
     ScheduledTask timeoutTask = Iterables.getOnlyElement(fakeClock.getPendingTasks());
@@ -1906,9 +1921,7 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
     responseObserver.onNext(response);
 
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(clusterWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(clusterWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
   }
 
   /**
@@ -1916,7 +1929,7 @@ public class XdsClientImplTest {
    * requested resource while each received ClusterLoadAssignment is valid.
    * The EDS response is ACKed.
    * After the resource fetch timeout expires, watchers waiting for the resource is notified
-   * with a resource not found error.
+   * with resource unavailable.
    */
   @Test
   public void edsResponseWithoutMatchingResource() {
@@ -1959,11 +1972,10 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
 
     verify(endpointWatcher, never()).onEndpointChanged(any(EndpointUpdate.class));
+    verify(endpointWatcher, never()).onResourceDoesNotExist("cluster-foo.googleapis.com");
     verify(endpointWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(endpointWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(endpointWatcher).onResourceDoesNotExist("cluster-foo.googleapis.com");
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -2042,6 +2054,27 @@ public class XdsClientImplTest {
                         2, true)), 1, 0),
             new Locality("region3", "zone3", "subzone3"),
             new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+
+    clusterLoadAssignments = ImmutableList.of(
+        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+            // 0 locality
+            ImmutableList.<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints>of(),
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
+    response =
+        buildDiscoveryResponse(
+            "1", clusterLoadAssignments, XdsClientImpl.ADS_TYPE_URL_EDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK EDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest(NODE, "1", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
+
+    verify(endpointWatcher, times(2)).onEndpointChanged(endpointUpdateCaptor.capture());
+    endpointUpdate = endpointUpdateCaptor.getValue();
+    assertThat(endpointUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(endpointUpdate.getDropPolicies()).isEmpty();
+    assertThat(endpointUpdate.getLocalityLbEndpointsMap()).isEmpty();
   }
 
   @Test
@@ -2477,18 +2510,13 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
 
     // EDS resource "cluster-foo.googleapis.com" is known to be absent.
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(watcher1).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
-    verify(watcher2).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(watcher1).onResourceDoesNotExist("cluster-foo.googleapis.com");
+    verify(watcher2).onResourceDoesNotExist("cluster-foo.googleapis.com");
 
     // The absence result is known immediately.
     EndpointWatcher watcher5 = mock(EndpointWatcher.class);
     xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher5);
-
-    verify(watcher5).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(watcher5).onResourceDoesNotExist("cluster-foo.googleapis.com");
 
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
     ScheduledTask timeoutTask = Iterables.getOnlyElement(fakeClock.getPendingTasks());
@@ -2559,9 +2587,7 @@ public class XdsClientImplTest {
     responseObserver.onNext(response);
 
     // Watcher get notification for endpoint resource "cluster-foo:service-bar" being deleted.
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(endpointWatcher).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(endpointWatcher).onResourceDoesNotExist("cluster-foo:service-bar");
   }
 
   /**
@@ -3334,117 +3360,133 @@ public class XdsClientImplTest {
   }
 
   @Test
-  public void findClusterNameInRouteConfig_exactMatchFirst() {
+  public void findVirtualHostForHostName_exactMatchFirst() {
     String hostname = "a.googleapis.com";
-    String targetClusterName = "cluster-hello.googleapis.com";
     VirtualHost vHost1 =
         VirtualHost.newBuilder()
             .setName("virtualhost01.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("a.googleapis.com", "b.googleapis.com"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost2 =
         VirtualHost.newBuilder()
             .setName("virtualhost02.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("*.googleapis.com"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hi.googleapis.com"))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost3 =
         VirtualHost.newBuilder()
             .setName("virtualhost03.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("*"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hey.googleapis.com"))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
-    List<EnvoyProtoData.Route> routes =
-        XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
-    assertThat(routes).hasSize(1);
-    assertThat(routes.get(0).getRouteAction().getCluster())
-        .isEqualTo(targetClusterName);
+    assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
   @Test
-  public void findClusterNameInRouteConfig_preferSuffixDomainOverPrefixDomain() {
+  public void findVirtualHostForHostName_preferSuffixDomainOverPrefixDomain() {
     String hostname = "a.googleapis.com";
-    String targetClusterName = "cluster-hello.googleapis.com";
     VirtualHost vHost1 =
         VirtualHost.newBuilder()
             .setName("virtualhost01.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("*.googleapis.com", "b.googleapis.com"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost2 =
         VirtualHost.newBuilder()
             .setName("virtualhost02.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("a.googleapis.*"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hi.googleapis.com"))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost3 =
         VirtualHost.newBuilder()
             .setName("virtualhost03.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("*"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hey.googleapis.com"))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2, vHost3));
-    List<EnvoyProtoData.Route> routes =
-        XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
-    assertThat(routes).hasSize(1);
-    assertThat(routes.get(0).getRouteAction().getCluster())
-        .isEqualTo(targetClusterName);
+    assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
   }
 
   @Test
-  public void findClusterNameInRouteConfig_asteriskMatchAnyDomain() {
+  public void findVirtualHostForHostName_asteriskMatchAnyDomain() {
     String hostname = "a.googleapis.com";
-    String targetClusterName = "cluster-hello.googleapis.com";
     VirtualHost vHost1 =
         VirtualHost.newBuilder()
             .setName("virtualhost01.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("*"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster(targetClusterName))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     VirtualHost vHost2 =
         VirtualHost.newBuilder()
             .setName("virtualhost02.googleapis.com")  // don't care
             .addAllDomains(ImmutableList.of("b.googleapis.com"))
-            .addRoutes(
-                Route.newBuilder()
-                    .setRoute(RouteAction.newBuilder().setCluster("cluster-hi.googleapis.com"))
-                    .setMatch(RouteMatch.newBuilder().setPrefix("")))
             .build();
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
             "route-foo.googleapis.com", ImmutableList.of(vHost1, vHost2));
-    List<EnvoyProtoData.Route> routes =
-        XdsClientImpl.findRoutesInRouteConfig(routeConfig, hostname);
-    assertThat(routes).hasSize(1);
-    assertThat(routes.get(0).getRouteAction().getCluster())
-        .isEqualTo(targetClusterName);
+    assertThat(XdsClientImpl.findVirtualHostForHostName(routeConfig, hostname)).isEqualTo(vHost1);
+  }
+
+  @Test
+  public void populateRoutesInVirtualHost_routeWithCaseInsensitiveMatch() {
+    VirtualHost virtualHost =
+        VirtualHost.newBuilder()
+            .setName("virtualhost00.googleapis.com")  // don't care
+            .addDomains(TARGET_AUTHORITY)
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
+                    .setMatch(
+                        RouteMatch.newBuilder()
+                            .setPrefix("")
+                            .setCaseSensitive(BoolValue.newBuilder().setValue(false))))
+            .build();
+
+    thrown.expect(XdsClientImpl.InvalidProtoDataException.class);
+    XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
+  }
+
+  @Test
+  public void populateRoutesInVirtualHost_lastRouteIsNotDefaultRoute() {
+    VirtualHost virtualHost =
+        VirtualHost.newBuilder()
+            .setName("virtualhost00.googleapis.com")  // don't care
+            .addDomains(TARGET_AUTHORITY)
+            .addRoutes(
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
+                    .setMatch(
+                        RouteMatch.newBuilder()
+                            .setPrefix("/service/method")
+                            .setCaseSensitive(BoolValue.newBuilder().setValue(true))))
+            .build();
+
+    thrown.expect(XdsClientImpl.InvalidProtoDataException.class);
+    XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
+  }
+
+  @Test
+  public void populateRoutesInVirtualHost_NoUsableRoute() {
+    VirtualHost virtualHost =
+        VirtualHost.newBuilder()
+            .setName("virtualhost00.googleapis.com")  // don't care
+            .addDomains(TARGET_AUTHORITY)
+            .addRoutes(
+                // route with unsupported action
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setClusterHeader("cluster header string"))
+                    .setMatch(RouteMatch.newBuilder().setPrefix("/")))
+            .addRoutes(
+                // route with unsupported matcher type
+                Route.newBuilder()
+                    .setRoute(RouteAction.newBuilder().setCluster("cluster.googleapis.com"))
+                    .setMatch(
+                        RouteMatch.newBuilder()
+                            .setPrefix("/")
+                            .addQueryParameters(QueryParameterMatcher.getDefaultInstance())))
+            .build();
+
+    thrown.expect(XdsClientImpl.InvalidProtoDataException.class);
+    XdsClientImpl.populateRoutesInVirtualHost(virtualHost);
   }
 
   @Test
@@ -3718,8 +3760,8 @@ public class XdsClientImplTest {
       this(versionInfo, ImmutableList.of(resourceName), typeUrl, responseNonce);
     }
 
-    private DiscoveryRequestMatcher(String versionInfo, List<String> resourceNames, String typeUrl,
-        String responseNonce) {
+    private DiscoveryRequestMatcher(
+        String versionInfo, List<String> resourceNames, String typeUrl, String responseNonce) {
       this.versionInfo = versionInfo;
       this.resourceNames = new HashSet<>(resourceNames);
       this.typeUrl = typeUrl;

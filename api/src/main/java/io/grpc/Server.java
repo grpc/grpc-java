@@ -31,6 +31,14 @@ import javax.annotation.concurrent.ThreadSafe;
 public abstract class Server {
 
   /**
+   * Key for accessing the {@link Server} instance inside server RPC {@link Context}. It's
+   * unclear to us what users would need. If you think you need to use this, please file an
+   * issue for us to discuss a public API.
+   */
+  static final Context.Key<Server> SERVER_CONTEXT_KEY =
+      Context.key("io.grpc.Server");
+
+  /**
    * Bind and start the server.  After this call returns, clients may begin connecting to the
    * listening socket(s).
    *

@@ -25,6 +25,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
+import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageOrBuilder;
 import com.google.protobuf.Struct;
@@ -40,6 +41,7 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
@@ -61,12 +63,12 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.EnvoyProtoData.RouteAction;
-import io.grpc.xds.EnvoyProtoData.RouteMatch;
+import io.grpc.xds.EnvoyProtoData.StructOrError;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -94,10 +96,9 @@ final class XdsClientImpl extends XdsClient {
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
-  // For now we do not support path matching unless enabled manually.
   // Mutable for testing.
-  static boolean enablePathMatching = Boolean.parseBoolean(
-      System.getenv("ENABLE_EXPERIMENTAL_PATH_MATCHING"));
+  static boolean enableExperimentalRouting = Boolean.parseBoolean(
+      System.getenv("GRPC_XDS_EXPERIMENTAL_ROUTING"));
 
   private final MessagePrinter respPrinter = new MessagePrinter();
 
@@ -286,10 +287,7 @@ final class XdsClientImpl extends XdsClient {
     // If local cache contains cluster information to be watched, notify the watcher immediately.
     if (absentCdsResources.contains(clusterName)) {
       logger.log(XdsLogLevel.DEBUG, "Cluster resource {0} is known to be absent", clusterName);
-      watcher.onError(
-          Status.NOT_FOUND
-              .withDescription(
-                  "Cluster resource [" + clusterName + "] not found."));
+      watcher.onResourceDoesNotExist(clusterName);
       return;
     }
     if (clusterNamesToClusterUpdates.containsKey(clusterName)) {
@@ -365,10 +363,7 @@ final class XdsClientImpl extends XdsClient {
       logger.log(
           XdsLogLevel.DEBUG,
           "Endpoint resource for cluster {0} is known to be absent.", clusterName);
-      watcher.onError(
-          Status.NOT_FOUND
-              .withDescription(
-                  "Endpoint resource for cluster " + clusterName + " not found."));
+      watcher.onResourceDoesNotExist(clusterName);
       return;
     }
     if (clusterNamesToEndpointUpdates.containsKey(clusterName)) {
@@ -606,14 +601,13 @@ final class XdsClientImpl extends XdsClient {
       //  data or one supersedes the other. TBD.
       if (requestedHttpConnManager.hasRouteConfig()) {
         RouteConfiguration rc = requestedHttpConnManager.getRouteConfig();
-        routes = findRoutesInRouteConfig(rc, ldsResourceName);
-        String errorDetail = validateRoutes(routes);
-        if (errorDetail != null) {
+        try {
+          routes = findRoutesInRouteConfig(rc, ldsResourceName);
+        } catch (InvalidProtoDataException e) {
           errorMessage =
               "Listener " + ldsResourceName + " : cannot find a valid cluster name in any "
-                  + "virtual hosts inside RouteConfiguration with domains matching: "
-                  + ldsResourceName
-                  + " with the reason : " + errorDetail;
+                  + "virtual hosts domains matching: " + ldsResourceName
+                  + " with the reason : " + e.getMessage();
         }
       } else if (requestedHttpConnManager.hasRds()) {
         Rds rds = requestedHttpConnManager.getRds();
@@ -648,23 +642,10 @@ final class XdsClientImpl extends XdsClient {
     }
     if (routes != null) {
       // Found  routes in the in-lined RouteConfiguration.
-      ConfigUpdate configUpdate;
-      if (!enablePathMatching) {
-        EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
-        configUpdate =
-            ConfigUpdate.newBuilder()
-                .addRoutes(ImmutableList.of(defaultRoute))
-                .build();
-        logger.log(
-            XdsLogLevel.INFO,
-            "Found cluster name (inlined in route config): {0}",
-            defaultRoute.getRouteAction().getCluster());
-      } else {
-        configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
-        logger.log(
-            XdsLogLevel.INFO,
-            "Found routes (inlined in route config): {0}", routes);
-      }
+      logger.log(
+          XdsLogLevel.DEBUG,
+          "Found routes (inlined in route config): {0}", routes);
+      ConfigUpdate configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
       configWatcher.onConfigChanged(configUpdate);
     } else if (rdsRouteConfigName != null) {
       // Send an RDS request if the resource to request has changed.
@@ -686,11 +667,8 @@ final class XdsClientImpl extends XdsClient {
     } else {
       // The requested Listener is removed by management server.
       if (ldsRespTimer == null) {
-        configWatcher.onError(
-            Status.NOT_FOUND.withDescription(
-                "Listener resource for listener " + ldsResourceName + " does not exist"));
+        configWatcher.onResourceDoesNotExist(ldsResourceName);
       }
-
     }
   }
 
@@ -717,22 +695,32 @@ final class XdsClientImpl extends XdsClient {
           ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
       return;
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
-        ldsResponse.getVersionInfo());
+    ListenerUpdate listenerUpdate = null;
     if (requestedListener != null) {
       if (ldsRespTimer != null) {
         ldsRespTimer.cancel();
         ldsRespTimer = null;
       }
-      ListenerUpdate listenerUpdate = ListenerUpdate.newBuilder()
-          .setListener(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(requestedListener))
-          .build();
-      listenerWatcher.onListenerChanged(listenerUpdate);
+      try {
+        listenerUpdate = ListenerUpdate.newBuilder()
+            .setListener(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(requestedListener))
+            .build();
+      } catch (InvalidProtocolBufferException e) {
+        logger.log(XdsLogLevel.WARNING, "Failed to unpack Listener in LDS response {0}", e);
+        adsStream.sendNackRequest(
+            ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
+            ldsResponse.getVersionInfo(), "Malformed LDS response: " + e);
+        return;
+      }
     } else {
       if (ldsRespTimer == null) {
-        listenerWatcher.onError(Status.NOT_FOUND.withDescription("did not find listener for "
-            + listenerPort));
+        listenerWatcher.onResourceDoesNotExist(":" + listenerPort);
       }
+    }
+    adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.<String>of(),
+        ldsResponse.getVersionInfo());
+    if (listenerUpdate != null) {
+      listenerWatcher.onListenerChanged(listenerUpdate);
     }
   }
 
@@ -798,9 +786,10 @@ final class XdsClientImpl extends XdsClient {
     // Resolved cluster name for the requested resource, if exists.
     List<EnvoyProtoData.Route> routes = null;
     if (requestedRouteConfig != null) {
-      routes = findRoutesInRouteConfig(requestedRouteConfig, ldsResourceName);
-      String errorDetail = validateRoutes(routes);
-      if (errorDetail != null) {
+      try {
+        routes = findRoutesInRouteConfig(requestedRouteConfig, ldsResourceName);
+      } catch (InvalidProtoDataException e) {
+        String errorDetail = e.getMessage();
         adsStream.sendNackRequest(
             ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
             rdsResponse.getVersionInfo(),
@@ -822,24 +811,9 @@ final class XdsClientImpl extends XdsClient {
         rdsRespTimer.cancel();
         rdsRespTimer = null;
       }
-
-      // Found routes in the in-lined RouteConfiguration.
-      ConfigUpdate configUpdate;
-      if (!enablePathMatching) {
-        EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
-        configUpdate =
-            ConfigUpdate.newBuilder()
-                .addRoutes(ImmutableList.of(defaultRoute))
-                .build();
-        logger.log(
-            XdsLogLevel.INFO,
-            "Found cluster name: {0}",
-            defaultRoute.getRouteAction().getCluster());
-      } else {
-        configUpdate = ConfigUpdate.newBuilder().addRoutes(routes).build();
-        logger.log(XdsLogLevel.INFO, "Found {0} routes", routes.size());
-        logger.log(XdsLogLevel.DEBUG, "Found routes: {0}", routes);
-      }
+      logger.log(XdsLogLevel.DEBUG, "Found routes: {0}", routes);
+      ConfigUpdate configUpdate  =
+          ConfigUpdate.newBuilder().addRoutes(routes).build();
       configWatcher.onConfigChanged(configUpdate);
     }
   }
@@ -847,9 +821,59 @@ final class XdsClientImpl extends XdsClient {
   /**
    * Processes a RouteConfiguration message to find the routes that requests for the given host will
    * be routed to.
+   *
+   * @throws InvalidProtoDataException if the message contains invalid data.
    */
+  private static List<EnvoyProtoData.Route> findRoutesInRouteConfig(
+      RouteConfiguration config, String hostName) throws InvalidProtoDataException {
+    VirtualHost targetVirtualHost = findVirtualHostForHostName(config, hostName);
+    if (targetVirtualHost == null) {
+      throw new InvalidProtoDataException("Unable to find virtual host for " + hostName);
+    }
+
+    // Note we would consider upstream cluster not found if the virtual host is not configured
+    // correctly for gRPC, even if there exist other virtual hosts with (lower priority)
+    // matching domains.
+    return populateRoutesInVirtualHost(targetVirtualHost);
+  }
+
   @VisibleForTesting
-  static List<EnvoyProtoData.Route> findRoutesInRouteConfig(
+  static List<EnvoyProtoData.Route> populateRoutesInVirtualHost(VirtualHost virtualHost)
+      throws InvalidProtoDataException {
+    List<EnvoyProtoData.Route> routes = new ArrayList<>();
+    List<Route> routesProto = virtualHost.getRoutesList();
+    for (Route routeProto : routesProto) {
+      StructOrError<EnvoyProtoData.Route> route =
+          EnvoyProtoData.Route.fromEnvoyProtoRoute(routeProto);
+      if (route == null) {
+        continue;
+      } else if (route.getErrorDetail() != null) {
+        throw new InvalidProtoDataException(
+            "Virtual host [" + virtualHost.getName() + "] contains invalid route : "
+                + route.getErrorDetail());
+      }
+      routes.add(route.getStruct());
+    }
+    if (routes.isEmpty()) {
+      throw new InvalidProtoDataException(
+          "Virtual host [" + virtualHost.getName() + "] contains no usable route");
+    }
+    // The last route must be a default route.
+    if (!Iterables.getLast(routes).isDefaultRoute()) {
+      throw new InvalidProtoDataException(
+          "Virtual host [" + virtualHost.getName()
+              + "] contains non-default route as the last route");
+    }
+    if (!enableExperimentalRouting) {
+      EnvoyProtoData.Route defaultRoute = Iterables.getLast(routes);
+      return Collections.singletonList(defaultRoute);
+    }
+    return Collections.unmodifiableList(routes);
+  }
+
+  @VisibleForTesting
+  @Nullable
+  static VirtualHost findVirtualHostForHostName(
       RouteConfiguration config, String hostName) {
     List<VirtualHost> virtualHosts = config.getVirtualHostsList();
     // Domain search order:
@@ -887,102 +911,7 @@ final class XdsClientImpl extends XdsClient {
         break;
       }
     }
-
-    List<EnvoyProtoData.Route> routes = new ArrayList<>();
-    // Proceed with the virtual host that has longest wildcard matched domain name with the
-    // hostname in original "xds:" URI.
-    // Note we would consider upstream cluster not found if the virtual host is not configured
-    // correctly for gRPC, even if there exist other virtual hosts with (lower priority)
-    // matching domains.
-    if (targetVirtualHost != null) {
-      List<Route> routesProto = targetVirtualHost.getRoutesList();
-      for (Route route : routesProto) {
-        routes.add(EnvoyProtoData.Route.fromEnvoyProtoRoute(route));
-      }
-    }
-    return routes;
-  }
-
-  /**
-   * Validates the given list of routes and returns error details if there's any error.
-   */
-  @Nullable
-  private static String validateRoutes(List<EnvoyProtoData.Route> routes) {
-    if (routes.isEmpty()) {
-      return "No routes found";
-    }
-
-    // We only validate the default route unless path matching is enabled.
-    if (!enablePathMatching) {
-      EnvoyProtoData.Route route = routes.get(routes.size() - 1);
-      RouteMatch routeMatch = route.getRouteMatch();
-      if (!routeMatch.getPath().isEmpty() || !routeMatch.getPrefix().isEmpty()
-          || routeMatch.hasRegex()) {
-        return "The last route must be the default route";
-      }
-      if (route.getRouteAction() == null) {
-        return "Route action is not specified for the default route";
-      }
-      if (route.getRouteAction().getCluster().isEmpty()) {
-        return "Cluster is not specified for the default route";
-      }
-      return null;
-    }
-
-    // We do more validation if path matching is enabled, but whether every single route is required
-    // to be valid for grpc is TBD.
-    // For now we consider the whole list invalid if anything invalid for grpc is found.
-    // TODO(zdapeng): Fix it if the decision is different from current implementation.
-    // TODO(zdapeng): Add test for validation.
-    Set<String> prefixMatches = new HashSet<>();
-    Set<String> pathMatches = new HashSet<>();
-    for (int i = 0; i < routes.size(); i++) {
-      EnvoyProtoData.Route route = routes.get(i);
-
-      if (route.getRouteAction() == null) {
-        return "Route action is not specified for one of the routes";
-      }
-
-      RouteMatch routeMatch = route.getRouteMatch();
-      String prefix = routeMatch.getPrefix();
-      String path = routeMatch.getPath();
-      if (!prefix.isEmpty()) {
-        if (!prefix.startsWith("/") || !prefix.endsWith("/") || prefix.length() < 3) {
-          return "Prefix route match must be in the format of '/service/'";
-        }
-        if (prefixMatches.contains(prefix)) {
-          return "Duplicate prefix match found";
-        }
-        prefixMatches.add(prefix);
-      } else if (!path.isEmpty()) {
-        int lastSlash = path.lastIndexOf('/');
-        if (!path.startsWith("/") || lastSlash == 0 || lastSlash ==  path.length() - 1) {
-          return "Path route match must be in the format of '/service/method'";
-        }
-        if (pathMatches.contains(path)) {
-          return "Duplicate path match found";
-        }
-        pathMatches.add(path);
-      } else if (routeMatch.hasRegex()) {
-        return "Regex route match not supported";
-      } else { // Default route match
-        if (i != routes.size() - 1) {
-          return "Default route found but is not the last route in the route list";
-        }
-      }
-
-      if (i == routes.size() - 1) {
-        if (!prefix.isEmpty() || !path.isEmpty()) {
-          return "The last route must be the default route";
-        }
-      }
-
-      RouteAction routeAction = route.getRouteAction();
-      if (routeAction.getCluster().isEmpty() && routeAction.getWeightedCluster().isEmpty()) {
-        return "Either cluster or weighted cluster route action must be provided";
-      }
-    }
-    return null;
+    return targetVirtualHost;
   }
 
   /**
@@ -1072,8 +1001,14 @@ final class XdsClientImpl extends XdsClient {
         }
         updateBuilder.setLrsServerName("");
       }
-      if (cluster.hasTlsContext()) {
-        updateBuilder.setUpstreamTlsContext(cluster.getTlsContext());
+      try {
+        UpstreamTlsContext upstreamTlsContext = getTlsContextFromCluster(cluster);
+        if (upstreamTlsContext != null && upstreamTlsContext.hasCommonTlsContext()) {
+          updateBuilder.setUpstreamTlsContext(upstreamTlsContext);
+        }
+      } catch (InvalidProtocolBufferException e) {
+        errorMessage = "Cluster " + clusterName + " : " + e.getMessage();
+        break;
       }
       clusterUpdates.put(clusterName, updateBuilder.build());
     }
@@ -1104,10 +1039,7 @@ final class XdsClientImpl extends XdsClient {
         if (endpointWatchers.containsKey(clusterName)) {
           Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
           for (EndpointWatcher watcher : watchers) {
-            watcher.onError(
-                Status.NOT_FOUND
-                    .withDescription(
-                        "Endpoint resource for cluster " + clusterName + " is deleted."));
+            watcher.onResourceDoesNotExist(clusterName);
           }
         }
       }
@@ -1132,12 +1064,20 @@ final class XdsClientImpl extends XdsClient {
       } else if (!cdsRespTimers.containsKey(clusterName)) {
         // Update for previously present resource being removed.
         for (ClusterWatcher watcher : entry.getValue()) {
-          watcher.onError(
-              Status.NOT_FOUND
-                  .withDescription("Cluster resource " + clusterName + " not found."));
+          watcher.onResourceDoesNotExist(entry.getKey());
         }
       }
     }
+  }
+
+  private static UpstreamTlsContext getTlsContextFromCluster(Cluster cluster)
+      throws InvalidProtocolBufferException {
+    if (cluster.hasTransportSocket() && "tls".equals(cluster.getTransportSocket().getName())) {
+      Any any = cluster.getTransportSocket().getTypedConfig();
+      return UpstreamTlsContext.parseFrom(any.getValue());
+    }
+    // TODO(sanjaypujare): remove when we move to envoy protos v3
+    return cluster.getTlsContext();
   }
 
   /**
@@ -1189,10 +1129,6 @@ final class XdsClientImpl extends XdsClient {
       }
       EndpointUpdate.Builder updateBuilder = EndpointUpdate.newBuilder();
       updateBuilder.setClusterName(clusterName);
-      if (assignment.getEndpointsCount() == 0) {
-        errorMessage = "ClusterLoadAssignment " + clusterName + " : no locality endpoints.";
-        break;
-      }
       Set<Integer> priorities = new HashSet<>();
       int maxPriority = -1;
       for (io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints localityLbEndpoints
@@ -1632,9 +1568,7 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       super.run();
       ldsRespTimer = null;
-      configWatcher.onError(
-          Status.NOT_FOUND
-              .withDescription("Listener resource for listener " + resourceName + " not found."));
+      configWatcher.onResourceDoesNotExist(resourceName);
     }
   }
 
@@ -1649,9 +1583,7 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       super.run();
       ldsRespTimer = null;
-      listenerWatcher.onError(
-          Status.NOT_FOUND
-              .withDescription("Listener resource for port " + resourceName + " not found."));
+      listenerWatcher.onResourceDoesNotExist(resourceName);
     }
   }
 
@@ -1666,9 +1598,7 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       super.run();
       rdsRespTimer = null;
-      configWatcher.onError(Status.NOT_FOUND
-          .withDescription(
-              "RouteConfiguration resource for route " + resourceName + " not found."));
+      configWatcher.onResourceDoesNotExist(resourceName);
     }
   }
 
@@ -1685,9 +1615,7 @@ final class XdsClientImpl extends XdsClient {
       cdsRespTimers.remove(resourceName);
       absentCdsResources.add(resourceName);
       for (ClusterWatcher wat : clusterWatchers.get(resourceName)) {
-        wat.onError(
-            Status.NOT_FOUND
-                .withDescription("Cluster resource " + resourceName + " not found."));
+        wat.onResourceDoesNotExist(resourceName);
       }
     }
   }
@@ -1705,10 +1633,7 @@ final class XdsClientImpl extends XdsClient {
       edsRespTimers.remove(resourceName);
       absentEdsResources.add(resourceName);
       for (EndpointWatcher wat : endpointWatchers.get(resourceName)) {
-        wat.onError(
-            Status.NOT_FOUND
-                .withDescription(
-                    "Endpoint resource for cluster " + resourceName + " not found."));
+        wat.onResourceDoesNotExist(resourceName);
       }
     }
   }
@@ -1803,6 +1728,15 @@ final class XdsClientImpl extends XdsClient {
         res = message + " (failed to pretty-print: " + e + ")";
       }
       return res;
+    }
+  }
+
+  @VisibleForTesting
+  static final class InvalidProtoDataException extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
+    private InvalidProtoDataException(String message) {
+      super(message, null, false, false);
     }
   }
 }

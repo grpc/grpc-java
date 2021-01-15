@@ -44,16 +44,15 @@ apply plugin: 'com.google.cloud.tools.appengine'  // App Engine tasks
 
 dependencies {
     providedCompile group: 'javax.servlet', name: 'servlet-api', version:'2.5'
-    compile 'com.google.appengine:appengine-api-1.0-sdk:1.9.59'
-    // Deps needed by all gRPC apps in GAE
-    compile libraries.google_api_protos
-    compile project(":grpc-okhttp")
-    compile project(":grpc-protobuf")
-    compile project(":grpc-stub")
-    compile (project(":grpc-interop-testing")) {
-        exclude group: "io.grpc", module: "grpc-netty-shaded"
+    runtimeOnly 'com.google.appengine:appengine-api-1.0-sdk:1.9.59'
+    implementation project(':grpc-netty')
+    implementation project(":grpc-stub")
+    implementation (project(':grpc-interop-testing')) {
+        exclude group: 'io.grpc', module: 'grpc-alts'
     }
-    compile libraries.netty_tcnative
+    implementation libraries.junit
+    implementation libraries.protobuf
+    runtimeOnly libraries.netty_tcnative
 }
 
 compileJava {

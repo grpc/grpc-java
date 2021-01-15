@@ -29,28 +29,14 @@ import java.util.Arrays;
  * Bagwell (2000). The rest of the implementation is ignorant of/ignores the
  * paper.
  */
-final class PersistentHashArrayMappedTrie<K,V> {
-  private final Node<K,V> root;
+final class PersistentHashArrayMappedTrie {
 
-  PersistentHashArrayMappedTrie() {
-    this(null);
-  }
-
-  private PersistentHashArrayMappedTrie(Node<K,V> root) {
-    this.root = root;
-  }
-
-  public int size() {
-    if (root == null) {
-      return 0;
-    }
-    return root.size();
-  }
+  private PersistentHashArrayMappedTrie() {}
 
   /**
    * Returns the value with the specified key, or {@code null} if it does not exist.
    */
-  public V get(K key) {
+  static <K,V> V get(Node<K,V> root, K key) {
     if (root == null) {
       return null;
     }
@@ -60,12 +46,11 @@ final class PersistentHashArrayMappedTrie<K,V> {
   /**
    * Returns a new trie where the key is set to the specified value.
    */
-  public PersistentHashArrayMappedTrie<K,V> put(K key, V value) {
+  static <K,V> Node<K,V> put(Node<K,V> root, K key, V value) {
     if (root == null) {
-      return new PersistentHashArrayMappedTrie<>(new Leaf<>(key, value));
-    } else {
-      return new PersistentHashArrayMappedTrie<>(root.put(key, value, key.hashCode(), 0));
+      return new Leaf<>(key, value);
     }
+    return root.put(key, value, key.hashCode(), 0);
   }
 
   // Not actually annotated to avoid depending on guava

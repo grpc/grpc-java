@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
@@ -3948,6 +3949,28 @@ public class ManagedChannelImplTest {
     }
   }
 
+  @Test
+  public void createResolvingOobChannel() throws Exception {
+    String oobTarget = "fake://second.example.com";
+    URI oobUri = new URI(oobTarget);
+    channelBuilder
+        .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri, oobUri).build());
+    createChannel();
+
+    ManagedChannel resolvedOobChannel = null;
+    try {
+      resolvedOobChannel = helper.createResolvingOobChannel(oobTarget);
+
+      assertWithMessage("resolving oob channel should have same authority")
+          .that(resolvedOobChannel.authority())
+          .isEqualTo(channel.authority());
+    } finally {
+      if (resolvedOobChannel != null) {
+        resolvedOobChannel.shutdownNow();
+      }
+    }
+  }
+
   private static final class ChannelBuilder
       extends AbstractManagedChannelImplBuilder<ChannelBuilder> {
 
@@ -3979,7 +4002,7 @@ public class ManagedChannelImplTest {
   }
 
   private static final class FakeNameResolverFactory extends NameResolver.Factory {
-    final URI expectedUri;
+    final List<URI> expectedUris;
     final List<EquivalentAddressGroup> servers;
     final boolean resolvedAtStart;
     final Status error;
@@ -3987,11 +4010,11 @@ public class ManagedChannelImplTest {
     final AtomicReference<ConfigOrError> nextConfigOrError = new AtomicReference<>();
 
     FakeNameResolverFactory(
-        URI expectedUri,
+        List<URI> expectedUris,
         List<EquivalentAddressGroup> servers,
         boolean resolvedAtStart,
         Status error) {
-      this.expectedUri = expectedUri;
+      this.expectedUris = expectedUris;
       this.servers = servers;
       this.resolvedAtStart = resolvedAtStart;
       this.error = error;
@@ -3999,12 +4022,12 @@ public class ManagedChannelImplTest {
 
     @Override
     public NameResolver newNameResolver(final URI targetUri, NameResolver.Args args) {
-      if (!expectedUri.equals(targetUri)) {
+      if (!expectedUris.contains(targetUri)) {
         return null;
       }
       assertEquals(DEFAULT_PORT, args.getDefaultPort());
       FakeNameResolverFactory.FakeNameResolver resolver =
-          new FakeNameResolverFactory.FakeNameResolver(error);
+          new FakeNameResolverFactory.FakeNameResolver(targetUri, error);
       resolvers.add(resolver);
       return resolver;
     }
@@ -4021,17 +4044,19 @@ public class ManagedChannelImplTest {
     }
 
     final class FakeNameResolver extends NameResolver {
+      final URI targetUri;
       Listener2 listener;
       boolean shutdown;
       int refreshCalled;
       Status error;
 
-      FakeNameResolver(Status error) {
+      FakeNameResolver(URI targetUri, Status error) {
+        this.targetUri = targetUri;
         this.error = error;
       }
 
       @Override public String getServiceAuthority() {
-        return expectedUri.getAuthority();
+        return targetUri.getAuthority();
       }
 
       @Override public void start(Listener2 listener) {
@@ -4072,13 +4097,13 @@ public class ManagedChannelImplTest {
     }
 
     static final class Builder {
-      final URI expectedUri;
+      List<URI> expectedUris;
       List<EquivalentAddressGroup> servers = ImmutableList.of();
       boolean resolvedAtStart = true;
       Status error = null;
 
-      Builder(URI expectedUri) {
-        this.expectedUri = expectedUri;
+      Builder(URI... expectedUris) {
+        this.expectedUris = Collections.unmodifiableList(Arrays.asList(expectedUris));
       }
 
       FakeNameResolverFactory.Builder setServers(List<EquivalentAddressGroup> servers) {
@@ -4097,7 +4122,7 @@ public class ManagedChannelImplTest {
       }
 
       FakeNameResolverFactory build() {
-        return new FakeNameResolverFactory(expectedUri, servers, resolvedAtStart, error);
+        return new FakeNameResolverFactory(expectedUris, servers, resolvedAtStart, error);
       }
     }
   }

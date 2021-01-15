@@ -88,8 +88,16 @@ if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
   ./gradlew grpc-compiler:build grpc-compiler:publish $GRADLE_FLAGS \
     -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
 else
-  ./gradlew publish $GRADLE_FLAGS \
+  ./gradlew publish :grpc-core:versionFile $GRADLE_FLAGS \
     -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
+  pushd examples/example-hostname
+  ../gradlew jibBuildTar $GRADLE_FLAGS
+  popd
+
+  readonly OTHER_ARTIFACT_DIR="${OTHER_ARTIFACT_DIR:-$GRPC_JAVA_DIR/artifacts}"
+  mkdir -p "$OTHER_ARTIFACT_DIR"
+  cp core/build/version "$OTHER_ARTIFACT_DIR"/
+  cp examples/example-hostname/build/example-hostname.* "$OTHER_ARTIFACT_DIR"/
 fi
 
 readonly MVN_ARTIFACT_DIR="${MVN_ARTIFACT_DIR:-$GRPC_JAVA_DIR/mvn-artifacts}"

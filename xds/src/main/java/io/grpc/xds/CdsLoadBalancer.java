@@ -35,9 +35,9 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
+import io.grpc.xds.EdsLoadBalancerProvider.EdsConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
-import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import io.grpc.xds.internal.sds.SslContextProvider;
@@ -287,13 +287,12 @@ public final class CdsLoadBalancer extends LoadBalancer {
       LoadBalancerProvider lbProvider = lbRegistry.getProvider(newUpdate.getLbPolicy());
       Object lbConfig =
           lbProvider.parseLoadBalancingPolicyConfig(ImmutableMap.<String, Object>of()).getConfig();
-      final XdsConfig edsConfig =
-          new XdsConfig(
-              /* cluster = */ newUpdate.getClusterName(),
-              new PolicySelection(lbProvider, ImmutableMap.<String, Object>of(), lbConfig),
-              /* fallbackPolicy = */ null,
+      final EdsConfig edsConfig =
+          new EdsConfig(
+              /* clusterName = */ newUpdate.getClusterName(),
               /* edsServiceName = */ newUpdate.getEdsServiceName(),
-              /* lrsServerName = */ newUpdate.getLrsServerName());
+              /* lrsServerName = */ newUpdate.getLrsServerName(),
+              new PolicySelection(lbProvider, ImmutableMap.<String, Object>of(), lbConfig));
       updateSslContextProvider(newUpdate.getUpstreamTlsContext());
       if (edsBalancer == null) {
         edsBalancer = lbRegistry.getProvider(EDS_POLICY_NAME).newLoadBalancer(helper);
@@ -324,6 +323,20 @@ public final class CdsLoadBalancer extends LoadBalancer {
     }
 
     @Override
+    public void onResourceDoesNotExist(String resourceName) {
+      logger.log(XdsLogLevel.INFO, "Resource {0} is unavailable", resourceName);
+      // TODO(chengyuanzhang): should unconditionally propagate to downstream instances and
+      //  go to TRANSIENT_FAILURE.
+      if (edsBalancer == null) {
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE,
+            new ErrorPicker(
+                Status.UNAVAILABLE.withDescription(
+                    "Resource " + resourceName + " is unavailable")));
+      }
+    }
+
+    @Override
     public void onError(Status error) {
       logger.log(
           XdsLogLevel.WARNING,
@@ -331,10 +344,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
           xdsClient,
           error.getCode(),
           error.getDescription());
-
-      // Go into TRANSIENT_FAILURE if we have not yet created the child
-      // policy (i.e., we have not yet received valid data for the cluster). Otherwise,
-      // we keep running with the data we had previously.
       if (edsBalancer == null) {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
       }

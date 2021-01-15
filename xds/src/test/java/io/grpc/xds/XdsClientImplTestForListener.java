@@ -36,6 +36,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.Value;
@@ -47,6 +48,7 @@ import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.CidrRange;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
+import io.envoyproxy.envoy.api.v2.core.TransportSocket;
 import io.envoyproxy.envoy.api.v2.listener.Filter;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
 import io.envoyproxy.envoy.api.v2.listener.FilterChainMatch;
@@ -338,12 +340,10 @@ public class XdsClientImplTestForListener {
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
+    verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
     verify(listenerWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(listenerWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(listenerWatcher).onResourceDoesNotExist(":" + PORT);
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -391,18 +391,16 @@ public class XdsClientImplTestForListener {
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
+    verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
     verify(listenerWatcher, never()).onError(any(Status.class));
     fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(listenerWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    verify(listenerWatcher).onResourceDoesNotExist(":" + PORT);
     assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
   /** Client receives a Listener with all match. */
   @Test
-  public void ldsResponseWith_matchingListenerFound() {
+  public void ldsResponseWith_matchingListenerFound() throws InvalidProtocolBufferException {
     xdsClient.watchListenerData(PORT, listenerWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -443,7 +441,6 @@ public class XdsClientImplTestForListener {
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
-    verify(listenerWatcher, never()).onError(any(Status.class));
     ArgumentCaptor<ListenerUpdate> listenerUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(listenerWatcher, times(1)).onListenerChanged(listenerUpdateCaptor.capture());
     ListenerUpdate configUpdate = listenerUpdateCaptor.getValue();
@@ -460,7 +457,7 @@ public class XdsClientImplTestForListener {
 
   /** Client receives LDS responses for updating Listener previously received. */
   @Test
-  public void notifyUpdatedListener() {
+  public void notifyUpdatedListener() throws InvalidProtocolBufferException {
     xdsClient.watchListenerData(PORT, listenerWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -501,7 +498,6 @@ public class XdsClientImplTestForListener {
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
-    verify(listenerWatcher, never()).onError(any(Status.class));
     ArgumentCaptor<ListenerUpdate> listenerUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(listenerWatcher, times(1)).onListenerChanged(listenerUpdateCaptor.capture());
 
@@ -632,8 +628,12 @@ public class XdsClientImplTestForListener {
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
-    verify(listenerWatcher, never()).onError(any(Status.class));
     verify(listenerWatcher, never()).onListenerChanged(any(ListenerUpdate.class));
+    verify(listenerWatcher, never()).onResourceDoesNotExist(":" + PORT);
+    verify(listenerWatcher, never()).onError(any(Status.class));
+    fakeClock.forwardTime(XdsClientImpl.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    verify(listenerWatcher).onResourceDoesNotExist(":" + PORT);
+    assertThat(fakeClock.getPendingTasks(LISTENER_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
   /**
@@ -796,8 +796,10 @@ public class XdsClientImplTestForListener {
     return
         FilterChain.newBuilder()
             .setFilterChainMatch(filterChainMatch)
-            .setTlsContext(tlsContext == null
-                ? DownstreamTlsContext.getDefaultInstance() : tlsContext)
+            .setTransportSocket(tlsContext == null
+                ? TransportSocket.getDefaultInstance()
+                : TransportSocket.newBuilder().setName("tls").setTypedConfig(Any.pack(tlsContext))
+                    .build())
             .addAllFilters(Arrays.asList(filters))
             .build();
   }
