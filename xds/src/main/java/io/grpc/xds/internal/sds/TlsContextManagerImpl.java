@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.BootstrapperImpl;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
@@ -65,7 +66,7 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   /** Gets the TlsContextManagerImpl singleton. */
   public static synchronized TlsContextManagerImpl getInstance() {
     if (instance == null) {
-      instance = new TlsContextManagerImpl(Bootstrapper.getInstance());
+      instance = new TlsContextManagerImpl(new BootstrapperImpl());
     }
     return instance;
   }
