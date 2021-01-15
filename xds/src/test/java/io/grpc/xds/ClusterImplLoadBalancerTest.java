@@ -154,10 +154,10 @@ public class ClusterImplLoadBalancerTest {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
     assertThat(Iterables.getOnlyElement(childBalancer.addresses)).isEqualTo(endpoint);
     assertThat(childBalancer.config).isSameInstanceAs(weightedTargetConfig);
-    assertThat(childBalancer.attributes.get(XdsAttributes.XDS_CLIENT_POOL))
+    assertThat(childBalancer.attributes.get(InternalXdsAttributes.XDS_CLIENT_POOL))
         .isSameInstanceAs(xdsClientPool);
-    assertThat(childBalancer.attributes.get(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE))
-        .isNotNull();
+    assertThat(childBalancer.attributes.get(
+        InternalXdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE)).isNotNull();
   }
 
   @Test
@@ -224,7 +224,9 @@ public class ClusterImplLoadBalancerTest {
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.singletonList(endpoint))
             .setAttributes(
-                Attributes.newBuilder().set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool).build())
+                Attributes.newBuilder()
+                    .set(InternalXdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+                    .build())
             .setLoadBalancingPolicyConfig(config)
             .build());
     result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
@@ -409,7 +411,7 @@ public class ClusterImplLoadBalancerTest {
     Subchannel subchannel = leafBalancer.helper.createSubchannel(args);
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       SslContextProviderSupplier supplier =
-          eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+          eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
       if (enableSecurity) {
         assertThat(supplier.getUpstreamTlsContext()).isEqualTo(upstreamTlsContext);
       } else {
@@ -425,7 +427,7 @@ public class ClusterImplLoadBalancerTest {
     assertThat(Iterables.getOnlyElement(downstreamBalancers)).isSameInstanceAs(leafBalancer);
     subchannel = leafBalancer.helper.createSubchannel(args);  // creates new connections
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER))
+      assertThat(eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER))
           .isNull();
     }
 
@@ -443,7 +445,7 @@ public class ClusterImplLoadBalancerTest {
     subchannel = leafBalancer.helper.createSubchannel(args);  // creates new connections
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       SslContextProviderSupplier supplier =
-          eag.getAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+          eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
       if (enableSecurity) {
         assertThat(supplier.getUpstreamTlsContext()).isEqualTo(upstreamTlsContext);
       } else {
@@ -459,8 +461,8 @@ public class ClusterImplLoadBalancerTest {
             .setAddresses(addresses)
             .setAttributes(
                 Attributes.newBuilder()
-                    .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-                    .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
+                    .set(InternalXdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+                    .set(InternalXdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
                     .build())
             .setLoadBalancingPolicyConfig(config)
             .build());

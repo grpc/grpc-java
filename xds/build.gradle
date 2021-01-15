@@ -94,6 +94,7 @@ javadoc {
     exclude 'io/grpc/xds/XdsInitializationException.java'
     exclude 'io/grpc/xds/XdsNameResolverProvider.java'
     exclude 'io/grpc/xds/internal/**'
+    exclude 'io/grpc/xds/Internal*'
 }
 
 shadowJar {

@@ -444,7 +444,7 @@ public class XdsNameResolverTest {
     assertThat(result.getAddresses()).isEmpty();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
-    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     assertCallSelectResult(call1, configSelector, cluster2, 20.0);
     assertCallSelectResult(call1, configSelector, cluster1, 20.0);
@@ -504,8 +504,8 @@ public class XdsNameResolverTest {
     assertThat(result.getAddresses()).isEmpty();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
-    assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
-    assertThat(result.getAttributes().get(XdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
+    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    assertThat(result.getAttributes().get(InternalXdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
     return result.getAttributes().get(InternalConfigSelector.KEY);
   }
 
