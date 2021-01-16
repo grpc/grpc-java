@@ -35,6 +35,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
+import java.nio.ByteBuffer;
 
 /**
  * Utility methods for using protobuf with grpc.
@@ -53,6 +54,19 @@ public final class ProtoLiteUtils {
    */
   @VisibleForTesting
   static final int DEFAULT_MAX_MESSAGE_SIZE = 4 * 1024 * 1024;
+
+  private static final ThreadLocal<Reference<byte[]>> bufs = new ThreadLocal<>();
+
+  // returned buf should not be used outside calling method.
+  private static byte[] getBuf(int minSize) {
+    Reference<byte[]> ref;
+    byte[] buf;
+    if ((ref = bufs.get()) == null || (buf = ref.get()) == null || buf.length < minSize) {
+      buf = new byte[minSize];
+      bufs.set(new WeakReference<>(buf));
+    }
+    return buf;
+  }
 
   /**
    * Sets the global registry for proto marshalling shared across all servers and clients.
@@ -99,7 +113,7 @@ public final class ProtoLiteUtils {
     // Copied from guava com.google.common.io.ByteStreams because its API is unstable (beta)
     checkNotNull(from, "inputStream cannot be null!");
     checkNotNull(to, "outputStream cannot be null!");
-    byte[] buf = new byte[BUF_SIZE];
+    byte[] buf = getBuf(BUF_SIZE);
     long total = 0;
     while (true) {
       int r = from.read(buf);
@@ -112,12 +126,28 @@ public final class ProtoLiteUtils {
     return total;
   }
 
+  /** Copies the data from input stream to {@link ByteBuffer}. */
+  static long copy(InputStream from, ByteBuffer to) throws IOException {
+    checkNotNull(from, "inputStream cannot be null!");
+    checkNotNull(to, "buffer cannot be null!");
+    byte[] buf = getBuf(BUF_SIZE);
+    long total = 0;
+    while (true) {
+      int r = from.read(buf);
+      if (r == -1) {
+        break;
+      }
+      to.put(buf, 0, r);
+      total += r;
+    }
+    return total;
+  }
+
   private ProtoLiteUtils() {
   }
 
   private static final class MessageMarshaller<T extends MessageLite>
       implements PrototypeMarshaller<T> {
-    private static final ThreadLocal<Reference<byte[]>> bufs = new ThreadLocal<>();
 
     private final Parser<T> parser;
     private final T defaultInstance;
@@ -160,7 +190,7 @@ public final class ProtoLiteUtils {
         if (protoStream.parser() == parser) {
           try {
             @SuppressWarnings("unchecked")
-            T message = (T) ((ProtoInputStream) stream).message();
+            T message = (T) protoStream.message();
             return message;
           } catch (IllegalStateException ignored) {
             // Stream must have been read from, which is a strange state. Since the point of this
@@ -174,13 +204,8 @@ public final class ProtoLiteUtils {
         if (stream instanceof KnownLength) {
           int size = stream.available();
           if (size > 0 && size <= DEFAULT_MAX_MESSAGE_SIZE) {
-            Reference<byte[]> ref;
             // buf should not be used after this method has returned.
-            byte[] buf;
-            if ((ref = bufs.get()) == null || (buf = ref.get()) == null || buf.length < size) {
-              buf = new byte[size];
-              bufs.set(new WeakReference<>(buf));
-            }
+            byte[] buf = getBuf(size);
 
             int remaining = size;
             while (remaining > 0) {

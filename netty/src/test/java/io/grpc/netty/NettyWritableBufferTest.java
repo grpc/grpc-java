@@ -40,7 +40,7 @@ public class NettyWritableBufferTest extends WritableBufferTestBase {
 
   @After
   public void teardown() {
-    buffer.release();
+    buffer.close();
   }
 
   @Override

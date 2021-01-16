@@ -227,7 +227,8 @@ public class MessageFramer implements Framer {
       buffer = bufferAllocator.allocate(header.position() + messageLength);
     }
     writeRaw(headerScratch, 0, header.position());
-    return writeToOutputStream(message, outputStreamAdapter);
+    return buffer.writableBytes() >= messageLength ? buffer.write(message)
+            : writeToOutputStream(message, outputStreamAdapter);
   }
 
   /**
@@ -341,7 +342,7 @@ public class MessageFramer implements Framer {
 
   private void releaseBuffer() {
     if (buffer != null) {
-      buffer.release();
+      buffer.close();
       buffer = null;
     }
   }
@@ -403,7 +404,7 @@ public class MessageFramer implements Framer {
 
     @Override
     public void write(byte[] b, int off, int len) {
-      if (current == null) {
+      if (current == null && len > 0) {
         // Request len bytes initially from the allocator, it may give us more.
         current = bufferAllocator.allocate(len);
         bufferList.add(current);

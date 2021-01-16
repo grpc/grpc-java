@@ -16,6 +16,9 @@
 
 package io.grpc.internal;
 
+import java.io.IOException;
+import java.io.InputStream;
+
 /**
  * An interface for a byte buffer that can only be written to.
  * {@link WritableBuffer}s are a generic way to transfer bytes to
@@ -38,7 +41,14 @@ public interface WritableBuffer {
   /**
    * Appends a single byte to the buffer.  This is slow so don't call it.
    */
-  void write(byte b);
+  void write(int b);
+
+  /**
+   * Write entire {@link InputStream} to the buffer.
+   *
+   * @return number of bytes written
+   */
+  int write(InputStream stream) throws IOException;
 
   /**
    * Returns the number of bytes one can write to the buffer.
@@ -54,5 +64,5 @@ public interface WritableBuffer {
    * Releases the buffer, indicating to the {@link WritableBufferAllocator} that
    * this buffer is no longer used and its resources can be reused.
    */
-  void release();
+  void close();
 }

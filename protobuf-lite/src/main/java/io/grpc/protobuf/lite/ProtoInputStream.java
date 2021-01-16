@@ -19,18 +19,23 @@ package io.grpc.protobuf.lite;
 import com.google.protobuf.CodedOutputStream;
 import com.google.protobuf.MessageLite;
 import com.google.protobuf.Parser;
+
+import io.grpc.BufferDrainable;
 import io.grpc.Drainable;
 import io.grpc.KnownLength;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.BufferOverflowException;
+import java.nio.ByteBuffer;
 import javax.annotation.Nullable;
 
 /**
  * An {@link InputStream} backed by a protobuf.
  */
-final class ProtoInputStream extends InputStream implements Drainable, KnownLength {
+final class ProtoInputStream extends InputStream
+        implements Drainable, KnownLength, BufferDrainable {
 
   // ProtoInputStream is first initialized with a *message*. *partial* is initially null.
   // Once there has been a read operation on this stream, *message* is serialized to *partial* and
@@ -61,6 +66,32 @@ final class ProtoInputStream extends InputStream implements Drainable, KnownLeng
   }
 
   @Override
+  public int drainTo(final ByteBuffer buffer) throws IOException {
+    if (message != null) {
+      int positionBefore = buffer.position();
+      try {
+        CodedOutputStream coded = CodedOutputStream.newInstance(buffer);
+        message.writeTo(coded);
+        coded.flush();
+        message = null;
+        return buffer.position() - positionBefore;
+      } catch (CodedOutputStream.OutOfSpaceException oos) {
+        throw new BufferOverflowException();
+      } finally {
+        if (message != null) {
+          buffer.position(positionBefore);
+        }
+      }
+    }
+    if (partial != null) {
+      int written = (int) ProtoLiteUtils.copy(partial, buffer);
+      partial = null;
+      return written;
+    }
+    return 0;
+  }
+
+  @Override
   public int read() {
     if (message != null) {
       partial = new ByteArrayInputStream(message.toByteArray());
@@ -82,7 +113,6 @@ final class ProtoInputStream extends InputStream implements Drainable, KnownLeng
         return -1;
       }
       if (len >= size) {
-        // This is the only case that is zero-copy.
         CodedOutputStream stream = CodedOutputStream.newInstance(b, off, size);
         message.writeTo(stream);
         stream.flush();

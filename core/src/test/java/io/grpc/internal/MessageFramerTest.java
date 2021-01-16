@@ -26,11 +26,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.io.ByteStreams;
 import io.grpc.Codec;
 import io.grpc.StreamTracer;
 import io.grpc.internal.testing.TestStreamTracer.TestBaseStreamTracer;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
@@ -408,8 +412,18 @@ public class MessageFramerTest {
     }
 
     @Override
-    public void write(byte b) {
-      data[writeIdx++] = b;
+    public void write(int b) {
+      data[writeIdx++] = (byte) b;
+    }
+
+    @Override
+    public int write(InputStream stream) throws IOException {
+      int written = ByteStreams.read(stream, data, writeIdx, writableBytes());
+      writeIdx += written;
+      if (writeIdx >= data.length && stream.available() != 0) {
+        throw new BufferOverflowException();
+      }
+      return written;
     }
 
     @Override
@@ -423,7 +437,7 @@ public class MessageFramerTest {
     }
 
     @Override
-    public void release() {
+    public void close() {
       data = null;
     }
 
