@@ -25,7 +25,6 @@ import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
-import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.EquivalentAddressGroup;
@@ -158,12 +157,11 @@ public final class NettyChannelBuilder extends
    */
   @CheckReturnValue
   public static NettyChannelBuilder forTarget(String target, ChannelCredentials creds) {
-    ProtocolNegotiators.FromChannelCredentialsResult result = ProtocolNegotiators.from(creds);
+    FromChannelCredentialsResult result = ProtocolNegotiators.from(creds);
     if (result.error != null) {
       throw new IllegalArgumentException(result.error);
     }
-    return new NettyChannelBuilder(
-        target, result.negotiator, result.callCredentials);
+    return new NettyChannelBuilder(target, creds);
   }
 
   private final class NettyChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
@@ -188,14 +186,13 @@ public final class NettyChannelBuilder extends
     this.freezeProtocolNegotiatorFactory = false;
   }
 
-  NettyChannelBuilder(
-      String target, ProtocolNegotiator.ClientFactory negotiator,
-      @Nullable CallCredentials callCreds) {
+  NettyChannelBuilder(String target, ChannelCredentials channelCreds) {
+    FromChannelCredentialsResult result = ProtocolNegotiators.from(channelCreds);
     managedChannelImplBuilder = new ManagedChannelImplBuilder(
-        target, NettyChannelCredentials.create(negotiator), callCreds,
+        target, channelCreds, result.callCredentials,
         new NettyChannelTransportFactoryBuilder(),
         new NettyChannelDefaultPortProvider());
-    this.protocolNegotiatorFactory = checkNotNull(negotiator, "negotiator");
+    this.protocolNegotiatorFactory = result.negotiator;
     this.freezeProtocolNegotiatorFactory = true;
   }
 
