@@ -195,18 +195,18 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      if (enableSecurity && sslContextProviderSupplier != null) {
-        List<EquivalentAddressGroup> addresses = new ArrayList<>();
-        for (EquivalentAddressGroup eag : args.getAddresses()) {
-          Attributes attributes =
-              eag.getAttributes().toBuilder()
-                  .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
-                      sslContextProviderSupplier)
-                  .build();
-          addresses.add(new EquivalentAddressGroup(eag.getAddresses(), attributes));
+      List<EquivalentAddressGroup> addresses = new ArrayList<>();
+      for (EquivalentAddressGroup eag : args.getAddresses()) {
+        Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
+            InternalXdsAttributes.ATTR_CLUSTER_NAME, cluster);
+        if (enableSecurity && sslContextProviderSupplier != null) {
+          attrBuilder.set(
+              InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+              sslContextProviderSupplier);
         }
-        args = args.toBuilder().setAddresses(addresses).build();
+        addresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
       }
+      args = args.toBuilder().setAddresses(addresses).build();
       return delegate().createSubchannel(args);
     }
 

@@ -36,17 +36,25 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.ssl.SslContext;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public final class GoogleDefaultProtocolNegotiatorTest {
+  @Parameterized.Parameter
+  public boolean withXds;
+
   private ProtocolNegotiator googleProtocolNegotiator;
 
+  // Same as io.grpc.xds.InternalXdsAttributes.ATTR_CLUSTER_NAME
+  private final Attributes.Key<String> clusterNameAttrKey =
+      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.clusterName");
   private final ObjectPool<Channel> handshakerChannelPool = new ObjectPool<Channel>() {
 
     @Override
@@ -61,6 +69,11 @@ public final class GoogleDefaultProtocolNegotiatorTest {
     }
   };
 
+  @Parameters(name = "Run with xDS : {0}")
+  public static Iterable<Boolean> data() {
+    return Arrays.asList(true, false);
+  }
+
   @Before
   public void setUp() throws Exception {
     SslContext sslContext = GrpcSslContexts.forClient().build();
@@ -68,7 +81,8 @@ public final class GoogleDefaultProtocolNegotiatorTest {
     googleProtocolNegotiator = new AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory(
         ImmutableList.<String>of(),
         handshakerChannelPool,
-        sslContext)
+        sslContext,
+        withXds ? clusterNameAttrKey : null)
         .newNegotiator();
   }
 
@@ -79,8 +93,14 @@ public final class GoogleDefaultProtocolNegotiatorTest {
 
   @Test
   public void altsHandler() {
-    Attributes eagAttributes =
-        Attributes.newBuilder().set(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND, true).build();
+    Attributes eagAttributes;
+    if (withXds) {
+      eagAttributes =
+          Attributes.newBuilder().set(clusterNameAttrKey, "api.googleapis.com").build();
+    } else {
+      eagAttributes =
+          Attributes.newBuilder().set(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND, true).build();
+    }
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
     when(mockHandler.getEagAttributes()).thenReturn(eagAttributes);
 
@@ -106,7 +126,12 @@ public final class GoogleDefaultProtocolNegotiatorTest {
 
   @Test
   public void tlsHandler() {
-    Attributes eagAttributes = Attributes.EMPTY;
+    Attributes eagAttributes;
+    if (withXds) {
+      eagAttributes = Attributes.newBuilder().set(clusterNameAttrKey, "google_cfe").build();
+    } else {
+      eagAttributes = Attributes.EMPTY;
+    }
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
     when(mockHandler.getEagAttributes()).thenReturn(eagAttributes);
     when(mockHandler.getAuthority()).thenReturn("authority");

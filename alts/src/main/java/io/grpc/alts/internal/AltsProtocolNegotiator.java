@@ -186,6 +186,8 @@ public final class AltsProtocolNegotiator {
     private final ImmutableList<String> targetServiceAccounts;
     private final ObjectPool<Channel> handshakerChannelPool;
     private final SslContext sslContext;
+    @Nullable
+    private final Attributes.Key<String> clusterNameAttrKey;
 
     /**
      * Creates Negotiator Factory, which will either use the targetServiceAccounts and
@@ -194,10 +196,12 @@ public final class AltsProtocolNegotiator {
     public GoogleDefaultProtocolNegotiatorFactory(
         List<String> targetServiceAccounts,
         ObjectPool<Channel> handshakerChannelPool,
-        SslContext sslContext) {
+        SslContext sslContext,
+        @Nullable Attributes.Key<String> clusterNameAttrKey) {
       this.targetServiceAccounts = ImmutableList.copyOf(targetServiceAccounts);
       this.handshakerChannelPool = checkNotNull(handshakerChannelPool, "handshakerChannelPool");
       this.sslContext = checkNotNull(sslContext, "sslContext");
+      this.clusterNameAttrKey = clusterNameAttrKey;
     }
 
     @Override
@@ -205,7 +209,8 @@ public final class AltsProtocolNegotiator {
       return new GoogleDefaultProtocolNegotiator(
           targetServiceAccounts,
           handshakerChannelPool,
-          sslContext);
+          sslContext,
+          clusterNameAttrKey);
     }
 
     @Override
@@ -218,15 +223,19 @@ public final class AltsProtocolNegotiator {
     private final TsiHandshakerFactory handshakerFactory;
     private final LazyChannel lazyHandshakerChannel;
     private final SslContext sslContext;
+    @Nullable
+    private final Attributes.Key<String> clusterNameAttrKey;
 
     GoogleDefaultProtocolNegotiator(
         ImmutableList<String> targetServiceAccounts,
         ObjectPool<Channel> handshakerChannelPool,
-        SslContext sslContext) {
+        SslContext sslContext,
+        @Nullable Attributes.Key<String> clusterNameAttrKey) {
       this.lazyHandshakerChannel = new LazyChannel(handshakerChannelPool);
       this.handshakerFactory =
           new ClientTsiHandshakerFactory(targetServiceAccounts, lazyHandshakerChannel);
       this.sslContext = checkNotNull(sslContext, "checkNotNull");
+      this.clusterNameAttrKey = clusterNameAttrKey;
     }
 
     @Override
@@ -238,9 +247,11 @@ public final class AltsProtocolNegotiator {
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
       ChannelHandler securityHandler;
+      boolean isXdsDirectPath = clusterNameAttrKey != null
+          && !"google_cfe".equals(grpcHandler.getEagAttributes().get(clusterNameAttrKey));
       if (grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY) != null
-          || grpcHandler.getEagAttributes().get(
-              GrpclbConstants.ATTR_LB_PROVIDED_BACKEND) != null) {
+          || grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND) != null
+          || isXdsDirectPath) {
         TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
         NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
         securityHandler =
