@@ -61,8 +61,7 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
 
   @Override
   public ClientTransportFactory withNewChannelCredentials(ChannelCredentials channelCreds) {
-    return new CallCredentialsApplyingTransportFactory(
-        delegate.withNewChannelCredentials(channelCreds), channelCallCredentials, appExecutor);
+    throw new UnsupportedOperationException();
   }
 
   @Override
