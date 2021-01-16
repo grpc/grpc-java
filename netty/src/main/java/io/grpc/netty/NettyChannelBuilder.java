@@ -704,7 +704,7 @@ public final class NettyChannelBuilder extends
     }
 
     @Override
-    public SwapChannelCredentialResult swapChannelCredentials(ChannelCredentials channelCreds) {
+    public SwapChannelCredentialsResult swapChannelCredentials(ChannelCredentials channelCreds) {
       checkNotNull(channelCreds, "channelCreds");
       FromChannelCredentialsResult result = ProtocolNegotiators.from(channelCreds);
       if (result.error != null) {
@@ -715,7 +715,7 @@ public final class NettyChannelBuilder extends
           autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize, keepAliveTimeNanos,
           keepAliveTimeoutNanos, keepAliveWithoutCalls, transportTracerFactory,  localSocketPicker,
           useGetForSafeMethods);
-      return new SwapChannelCredentialResult(factory, result.callCredentials);
+      return new SwapChannelCredentialsResult(factory, result.callCredentials);
     }
 
     @Override

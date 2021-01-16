@@ -25,7 +25,7 @@ import static org.mockito.Mockito.mock;
 import io.grpc.ChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.ClientTransportFactory;
-import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialResult;
+import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
 import io.grpc.netty.ProtocolNegotiators.PlaintextProtocolNegotiatorClientFactory;
 import io.netty.channel.Channel;
@@ -293,7 +293,7 @@ public class NettyChannelBuilderTest {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
     ClientTransportFactory transportFactory = builder.buildTransportFactory();
 
-    SwapChannelCredentialResult result = transportFactory.swapChannelCredentials(
+    SwapChannelCredentialsResult result = transportFactory.swapChannelCredentials(
         mock(ChannelCredentials.class));
     assertThat(result).isNull();
 

@@ -60,7 +60,7 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
   }
 
   @Override
-  public SwapChannelCredentialResult swapChannelCredentials(ChannelCredentials channelCreds) {
+  public SwapChannelCredentialsResult swapChannelCredentials(ChannelCredentials channelCreds) {
     throw new UnsupportedOperationException();
   }
 

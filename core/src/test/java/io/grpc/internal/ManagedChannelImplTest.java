@@ -108,7 +108,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
-import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialResult;
+import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
 import io.grpc.internal.ManagedChannelImpl.ScParser;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
@@ -1836,12 +1836,12 @@ public class ManagedChannelImplTest {
         Metadata.Key.of("token", Metadata.ASCII_STRING_MARSHALLER);
     String channelCredValue = "channel-provided call cred";
     when(mockTransportFactory.swapChannelCredentials(any(CompositeChannelCredentials.class)))
-        .thenAnswer(new Answer<SwapChannelCredentialResult>() {
+        .thenAnswer(new Answer<SwapChannelCredentialsResult>() {
           @Override
-          public SwapChannelCredentialResult answer(InvocationOnMock invocation) {
+          public SwapChannelCredentialsResult answer(InvocationOnMock invocation) {
             CompositeChannelCredentials c =
                 invocation.getArgument(0, CompositeChannelCredentials.class);
-            return new SwapChannelCredentialResult(mockTransportFactory, c.getCallCredentials());
+            return new SwapChannelCredentialsResult(mockTransportFactory, c.getCallCredentials());
           }
         });
     channelBuilder = new ManagedChannelImplBuilder(

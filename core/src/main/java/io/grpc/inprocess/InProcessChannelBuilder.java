@@ -248,7 +248,7 @@ public final class InProcessChannelBuilder extends
     }
 
     @Override
-    public SwapChannelCredentialResult swapChannelCredentials(ChannelCredentials channelCreds) {
+    public SwapChannelCredentialsResult swapChannelCredentials(ChannelCredentials channelCreds) {
       return null;
     }
 

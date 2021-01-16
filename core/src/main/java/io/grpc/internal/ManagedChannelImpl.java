@@ -78,7 +78,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
-import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialResult;
+import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
@@ -1594,7 +1594,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             transportFactory = originalTransportFactory;
             callCredentials = null;
           } else {
-            SwapChannelCredentialResult swapResult =
+            SwapChannelCredentialsResult swapResult =
                 originalTransportFactory.swapChannelCredentials(channelCreds);
             if (swapResult == null) {
               managedChannelImplBuilder = null;

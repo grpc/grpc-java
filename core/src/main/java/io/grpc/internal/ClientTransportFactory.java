@@ -62,7 +62,7 @@ public interface ClientTransportFactory extends Closeable {
    */
   @CheckReturnValue
   @Nullable
-  SwapChannelCredentialResult swapChannelCredentials(ChannelCredentials channelCreds);
+  SwapChannelCredentialsResult swapChannelCredentials(ChannelCredentials channelCreds);
 
   /**
    * Releases any resources.
@@ -155,11 +155,11 @@ public interface ClientTransportFactory extends Closeable {
     }
   }
 
-  final class SwapChannelCredentialResult {
+  final class SwapChannelCredentialsResult {
     final ClientTransportFactory transportFactory;
     @Nullable final CallCredentials callCredentials;
 
-    public SwapChannelCredentialResult(
+    public SwapChannelCredentialsResult(
         ClientTransportFactory transportFactory, @Nullable CallCredentials callCredentials) {
       this.transportFactory = transportFactory;
       this.callCredentials = callCredentials;

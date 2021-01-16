@@ -34,7 +34,7 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.ClientTransportFactory;
-import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialResult;
+import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
@@ -364,7 +364,7 @@ public class OkHttpChannelBuilderTest {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forTarget("foo");
     ClientTransportFactory transportFactory = builder.buildTransportFactory();
 
-    SwapChannelCredentialResult result = transportFactory.swapChannelCredentials(
+    SwapChannelCredentialsResult result = transportFactory.swapChannelCredentials(
         mock(ChannelCredentials.class));
     assertThat(result).isNull();
 
