@@ -249,7 +249,7 @@ public final class InProcessChannelBuilder extends
 
     @Override
     public ClientTransportFactory withChannelCredentials(ChannelCredentials channelCreds) {
-      throw new UnsupportedOperationException();
+      return null;
     }
 
     @Override

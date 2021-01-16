@@ -21,11 +21,7 @@ import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 import static org.junit.Assert.assertSame;
 import static org.mockito.Mockito.mock;
 
-import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
-import io.grpc.ChoiceChannelCredentials;
-import io.grpc.CompositeChannelCredentials;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.SharedResourceHolder;
@@ -69,33 +65,11 @@ public class InProcessChannelBuilderTest {
   }
 
   @Test
-  public void transportFactoryOnlySupportInsecureChannelCreds() {
+  public void transportFactoryDoesNotSupportChannelCreds() {
     InProcessChannelBuilder builder = InProcessChannelBuilder.forName("foo");
     ClientTransportFactory transportFactory = builder.buildTransportFactory();
-    ClientTransportFactory factoryWithInsecure =
-        transportFactory.withChannelCredentials(InsecureChannelCredentials.create());
-    assertThat(factoryWithInsecure).isSameInstanceAs(transportFactory);
-
-    ClientTransportFactory factoryWithChoice = transportFactory.withChannelCredentials(
-        ChoiceChannelCredentials.create(
-            mock(ChannelCredentials.class), mock(ChannelCredentials.class)));
-    assertThat(factoryWithChoice).isNull();
-    factoryWithChoice = transportFactory.withChannelCredentials(
-        ChoiceChannelCredentials.create(
-            mock(ChannelCredentials.class), InsecureChannelCredentials.create()));
-    assertThat(factoryWithChoice).isSameInstanceAs(transportFactory);
-
-    ClientTransportFactory factoryWithComposite = transportFactory.withChannelCredentials(
-        CompositeChannelCredentials.create(
-            mock(ChannelCredentials.class), mock(CallCredentials.class)));
-    assertThat(factoryWithComposite).isNull();
-    factoryWithComposite = transportFactory.withChannelCredentials(
-        CompositeChannelCredentials.create(
-            InsecureChannelCredentials.create(), mock(CallCredentials.class)));
-    assertThat(factoryWithComposite).isSameInstanceAs(transportFactory);
-
-    ClientTransportFactory factoryWithSecure = transportFactory.withChannelCredentials(
+    ClientTransportFactory newFactory = transportFactory.withChannelCredentials(
         mock(ChannelCredentials.class));
-    assertThat(factoryWithSecure).isNull();
+    assertThat(newFactory).isNull();
   }
 }
