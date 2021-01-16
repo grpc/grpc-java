@@ -36,7 +36,6 @@ import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
-import io.grpc.ChoiceChannelCredentials;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -79,6 +78,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
+import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialResult;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
@@ -1586,55 +1586,32 @@ final class ManagedChannelImpl extends ManagedChannel implements
           extends ForwardingChannelBuilder<ResolvingOobChannelBuilder> {
         @Nullable final ManagedChannelImplBuilder managedChannelImplBuilder;
         final ManagedChannelBuilder<?> delegate;
-        @Nullable ClientTransportFactory transportFactory;
-        @Nullable CallCredentials callCredentials;
+        ClientTransportFactory transportFactory;
 
-        ResolvingOobChannelBuilder(String target, @Nullable ChannelCredentials creds) {
-          if (creds == null) {
+        ResolvingOobChannelBuilder(String target, @Nullable ChannelCredentials channelCreds) {
+          CallCredentials callCredentials;
+          if (channelCreds == null) {
             transportFactory = originalTransportFactory;
+            callCredentials = null;
           } else {
-            createTransportFactory(creds);
-            if (transportFactory == null) {
-              this.delegate = Grpc.newChannelBuilder(target, creds);
+            SwapChannelCredentialResult swapResult =
+                originalTransportFactory.swapChannelCredentials(channelCreds);
+            if (swapResult == null) {
               managedChannelImplBuilder = null;
+              this.delegate = Grpc.newChannelBuilder(target, channelCreds);
               return;
             }
+            transportFactory = swapResult.transportFactory;
+            callCredentials = swapResult.callCredentials;
           }
-          managedChannelImplBuilder = new ManagedChannelImplBuilder(
+          this.delegate = managedChannelImplBuilder = new ManagedChannelImplBuilder(
               target,
-              creds,
+              channelCreds,
               callCredentials,
               new UnsupportedClientTransportFactoryBuilder(),
               new FixedPortProvider(nameResolverArgs.getDefaultPort()));
           managedChannelImplBuilder.executorPool = executorPool;
           managedChannelImplBuilder.offloadExecutorPool = offloadExecutorHolder.pool;
-          ManagedChannelBuilder<?> delegate = managedChannelImplBuilder;
-          this.delegate = delegate;
-        }
-
-        /**
-         * Tries to create a transport factory with the given channel creds based on the {@code
-         * originalTransportFactory}'s settings. The {@code
-         * transportFactory} may still be null if the channel creds does not suit the {@code
-         * originalTransportFactory}'s settings.
-         */
-        void createTransportFactory(ChannelCredentials creds) {
-          if (creds instanceof ChoiceChannelCredentials) {
-            for (ChannelCredentials c : ((ChoiceChannelCredentials) creds).getCredentialsList()) {
-              createTransportFactory(c);
-              if (transportFactory != null) {
-                return;
-              }
-            }
-          } else if (creds instanceof CompositeChannelCredentials) {
-            creds = ((CompositeChannelCredentials) creds).getChannelCredentials();
-            createTransportFactory(creds);
-            if (transportFactory != null) {
-              callCredentials = ((CompositeChannelCredentials) creds).getCallCredentials();
-            }
-          } else {
-            transportFactory = originalTransportFactory.withChannelCredentials(creds);
-          }
         }
 
         @Override
@@ -1646,17 +1623,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
         public ManagedChannel build() {
           // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
           // TODO(zdapeng) register the channel as a subchannel of the parent channel in channelz.
-          if (managedChannelImplBuilder == null) {
+          if (managedChannelImplBuilder != null) {
+            return new ManagedChannelImpl(
+                managedChannelImplBuilder,
+                transportFactory,
+                backoffPolicyProvider,
+                balancerRpcExecutorPool,
+                stopwatchSupplier,
+                Collections.<ClientInterceptor>emptyList(),
+                timeProvider);
+          } else {
             return delegate.build();
           }
-          return new ManagedChannelImpl(
-                  managedChannelImplBuilder,
-                  transportFactory,
-                  backoffPolicyProvider,
-                  balancerRpcExecutorPool,
-                  stopwatchSupplier,
-                  Collections.<ClientInterceptor>emptyList(),
-                  timeProvider);
         }
       }
 

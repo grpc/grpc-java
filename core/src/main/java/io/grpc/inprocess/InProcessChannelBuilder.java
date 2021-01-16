@@ -248,7 +248,7 @@ public final class InProcessChannelBuilder extends
     }
 
     @Override
-    public ClientTransportFactory withChannelCredentials(ChannelCredentials channelCreds) {
+    public SwapChannelCredentialResult swapChannelCredentials(ChannelCredentials channelCreds) {
       return null;
     }
 

@@ -19,6 +19,7 @@ package io.grpc.internal;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
+import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.HttpConnectProxiedSocketAddress;
@@ -61,7 +62,7 @@ public interface ClientTransportFactory extends Closeable {
    */
   @CheckReturnValue
   @Nullable
-  ClientTransportFactory withChannelCredentials(ChannelCredentials channelCreds);
+  SwapChannelCredentialResult swapChannelCredentials(ChannelCredentials channelCreds);
 
   /**
    * Releases any resources.
@@ -151,6 +152,17 @@ public interface ClientTransportFactory extends Closeable {
           && this.eagAttributes.equals(that.eagAttributes)
           && Objects.equal(this.userAgent, that.userAgent)
           && Objects.equal(this.connectProxiedSocketAddr, that.connectProxiedSocketAddr);
+    }
+  }
+
+  final class SwapChannelCredentialResult {
+    final ClientTransportFactory transportFactory;
+    @Nullable final CallCredentials callCredentials;
+
+    public SwapChannelCredentialResult(
+        ClientTransportFactory transportFactory, @Nullable CallCredentials callCredentials) {
+      this.transportFactory = transportFactory;
+      this.callCredentials = callCredentials;
     }
   }
 }

@@ -65,11 +65,9 @@ public class InProcessChannelBuilderTest {
   }
 
   @Test
-  public void transportFactoryDoesNotSupportChannelCreds() {
+  public void transportFactoryDoesNotSupportSwapChannelCreds() {
     InProcessChannelBuilder builder = InProcessChannelBuilder.forName("foo");
     ClientTransportFactory transportFactory = builder.buildTransportFactory();
-    ClientTransportFactory newFactory = transportFactory.withChannelCredentials(
-        mock(ChannelCredentials.class));
-    assertThat(newFactory).isNull();
+    assertThat(transportFactory.swapChannelCredentials(mock(ChannelCredentials.class))).isNull();
   }
 }

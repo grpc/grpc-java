@@ -20,8 +20,8 @@ import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.Attributes;
-import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallCredentials;
+import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallOptions;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
@@ -60,7 +60,7 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
   }
 
   @Override
-  public ClientTransportFactory withChannelCredentials(ChannelCredentials channelCreds) {
+  public SwapChannelCredentialResult swapChannelCredentials(ChannelCredentials channelCreds) {
     throw new UnsupportedOperationException();
   }
 

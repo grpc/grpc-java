@@ -736,12 +736,12 @@ public final class OkHttpChannelBuilder extends
     @Nullable
     @CheckReturnValue
     @Override
-    public ClientTransportFactory withChannelCredentials(ChannelCredentials channelCreds) {
+    public SwapChannelCredentialResult swapChannelCredentials(ChannelCredentials channelCreds) {
       SslSocketFactoryResult result = sslSocketFactoryFrom(channelCreds);
       if (result.error != null) {
         return null;
       }
-      return new OkHttpTransportFactory(
+      ClientTransportFactory factory = new OkHttpTransportFactory(
           executor,
           timeoutService,
           socketFactory,
@@ -757,6 +757,7 @@ public final class OkHttpChannelBuilder extends
           maxInboundMetadataSize,
           transportTracerFactory,
           useGetForSafeMethods);
+      return new SwapChannelCredentialResult(factory, result.callCredentials);
     }
 
     @Override

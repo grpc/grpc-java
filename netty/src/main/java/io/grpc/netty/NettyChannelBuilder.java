@@ -704,17 +704,18 @@ public final class NettyChannelBuilder extends
     }
 
     @Override
-    public ClientTransportFactory withChannelCredentials(ChannelCredentials channelCreds) {
+    public SwapChannelCredentialResult swapChannelCredentials(ChannelCredentials channelCreds) {
       checkNotNull(channelCreds, "channelCreds");
       FromChannelCredentialsResult result = ProtocolNegotiators.from(channelCreds);
       if (result.error != null) {
         return null;
       }
-      return new NettyTransportFactory(
+      ClientTransportFactory factory = new NettyTransportFactory(
           result.negotiator, channelFactory, channelOptions, groupPool,
           autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize, keepAliveTimeNanos,
           keepAliveTimeoutNanos, keepAliveWithoutCalls, transportTracerFactory,  localSocketPicker,
           useGetForSafeMethods);
+      return new SwapChannelCredentialResult(factory, result.callCredentials);
     }
 
     @Override
