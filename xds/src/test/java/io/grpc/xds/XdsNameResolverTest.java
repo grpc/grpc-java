@@ -243,7 +243,6 @@ public class XdsNameResolverTest {
             Collections.singletonList(route2)));
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void resolved_noTimeout() {
     resolver.start(mockListener);

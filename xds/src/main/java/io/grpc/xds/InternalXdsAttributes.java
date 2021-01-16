@@ -44,7 +44,7 @@ public final class InternalXdsAttributes {
    */
   @NameResolver.ResolutionResultAttr
   static final Attributes.Key<ObjectPool<XdsClient>> XDS_CLIENT_POOL =
-      Attributes.Key.create("io.grpc.xds.XdsAttributes.xdsClientPool");
+      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.xdsClientPool");
 
   /**
    * Attribute key for obtaining the global provider that provides atomics for aggregating
@@ -52,7 +52,7 @@ public final class InternalXdsAttributes {
    */
   @NameResolver.ResolutionResultAttr
   static final Attributes.Key<CallCounterProvider> CALL_COUNTER_PROVIDER =
-      Attributes.Key.create("io.grpc.xds.XdsAttributes.callCounterProvider");
+      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.callCounterProvider");
 
   /**
    * Name of the cluster that provides this EquivalentAddressGroup.
@@ -65,7 +65,7 @@ public final class InternalXdsAttributes {
   // TODO (chengyuanzhang): temporary solution for migrating to LRS policy. Should access
   //   stats object via XdsClient interface.
   static final Attributes.Key<LoadStatsStore> ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE =
-      Attributes.Key.create("io.grpc.xds.XdsAttributes.loadStatsStore");
+      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.loadStatsStore");
 
   private InternalXdsAttributes() {}
 }
