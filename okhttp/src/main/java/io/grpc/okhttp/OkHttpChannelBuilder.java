@@ -734,7 +734,7 @@ public final class OkHttpChannelBuilder extends
     @Nullable
     @CheckReturnValue
     @Override
-    public ClientTransportFactory withNewChannelCredentials(ChannelCredentials channelCreds) {
+    public ClientTransportFactory withChannelCredentials(ChannelCredentials channelCreds) {
       SslSocketFactoryResult result = sslSocketFactoryFrom(channelCreds);
       if (result.error != null) {
         return null;

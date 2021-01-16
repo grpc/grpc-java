@@ -62,7 +62,7 @@ public interface ClientTransportFactory extends Closeable {
    */
   @CheckReturnValue
   @Nullable
-  ClientTransportFactory withNewChannelCredentials(ChannelCredentials channelCreds);
+  ClientTransportFactory withChannelCredentials(ChannelCredentials channelCreds);
 
   /**
    * Releases any resources.

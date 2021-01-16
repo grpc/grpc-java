@@ -1633,7 +1633,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               callCredentials = ((CompositeChannelCredentials) creds).getCallCredentials();
             }
           } else {
-            transportFactory = originalTransportFactory.withNewChannelCredentials(creds);
+            transportFactory = originalTransportFactory.withChannelCredentials(creds);
           }
         }
 

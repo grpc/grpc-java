@@ -73,28 +73,28 @@ public class InProcessChannelBuilderTest {
     InProcessChannelBuilder builder = InProcessChannelBuilder.forName("foo");
     ClientTransportFactory transportFactory = builder.buildTransportFactory();
     ClientTransportFactory factoryWithInsecure =
-        transportFactory.withNewChannelCredentials(InsecureChannelCredentials.create());
+        transportFactory.withChannelCredentials(InsecureChannelCredentials.create());
     assertThat(factoryWithInsecure).isSameInstanceAs(transportFactory);
 
-    ClientTransportFactory factoryWithChoice = transportFactory.withNewChannelCredentials(
+    ClientTransportFactory factoryWithChoice = transportFactory.withChannelCredentials(
         ChoiceChannelCredentials.create(
             mock(ChannelCredentials.class), mock(ChannelCredentials.class)));
     assertThat(factoryWithChoice).isNull();
-    factoryWithChoice = transportFactory.withNewChannelCredentials(
+    factoryWithChoice = transportFactory.withChannelCredentials(
         ChoiceChannelCredentials.create(
             mock(ChannelCredentials.class), InsecureChannelCredentials.create()));
     assertThat(factoryWithChoice).isSameInstanceAs(transportFactory);
 
-    ClientTransportFactory factoryWithComposite = transportFactory.withNewChannelCredentials(
+    ClientTransportFactory factoryWithComposite = transportFactory.withChannelCredentials(
         CompositeChannelCredentials.create(
             mock(ChannelCredentials.class), mock(CallCredentials.class)));
     assertThat(factoryWithComposite).isNull();
-    factoryWithComposite = transportFactory.withNewChannelCredentials(
+    factoryWithComposite = transportFactory.withChannelCredentials(
         CompositeChannelCredentials.create(
             InsecureChannelCredentials.create(), mock(CallCredentials.class)));
     assertThat(factoryWithComposite).isSameInstanceAs(transportFactory);
 
-    ClientTransportFactory factoryWithSecure = transportFactory.withNewChannelCredentials(
+    ClientTransportFactory factoryWithSecure = transportFactory.withChannelCredentials(
         mock(ChannelCredentials.class));
     assertThat(factoryWithSecure).isNull();
   }
