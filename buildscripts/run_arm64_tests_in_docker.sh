@@ -17,5 +17,10 @@ else
   # The input device on kokoro is not a TTY, so -it does not work.
   DOCKER_ARGS=
 fi
-exec docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java:ro -w /grpc-java \
-  grpc-java-linux-arm64-tests /build_and_run_tests.sh
+
+# - run docker container under current user's UID to avoid polluting the workspace
+# - set the user.home property to avoid creating a "?" directory under grpc-java
+exec docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
+  --user "$(id -u):$(id -g)" -e "JAVA_OPTS=-Duser.home=/grpc-java/.current-user-home" \
+  grpc-java-linux-arm64-tests \
+  bash -c "./gradlew build -PskipAndroid=true -PskipCodegen=true"

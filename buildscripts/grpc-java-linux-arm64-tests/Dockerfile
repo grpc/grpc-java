@@ -8,6 +8,3 @@ FROM arm64v8/debian:buster
 COPY qemu-arm-static /usr/bin
 
 RUN apt-get update && apt-get install -y --no-install-recommends openjdk-11-jdk-headless && apt-get clean
-
-COPY build_and_run_tests.sh /
-
