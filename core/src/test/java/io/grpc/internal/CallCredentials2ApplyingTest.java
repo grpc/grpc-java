@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.any;
@@ -40,7 +39,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
-import io.grpc.internal.ManagedClientTransport.Listener;
 import java.net.SocketAddress;
 import java.util.concurrent.Executor;
 import org.junit.Before;
@@ -76,9 +74,6 @@ public class CallCredentials2ApplyingTest {
 
   @Mock
   private io.grpc.CallCredentials2 mockCreds;
-
-  @Mock
-  private Listener mockTransportListener;
 
   @Mock
   private Executor mockExecutor;
@@ -128,7 +123,6 @@ public class CallCredentials2ApplyingTest {
         mockTransportFactory, null, mockExecutor);
     transport = (ForwardingConnectionClientTransport)
         transportFactory.newClientTransport(address, clientTransportOptions, channelLogger);
-    transport.start(mockTransportListener);
     callOptions = CallOptions.DEFAULT.withCallCredentials(mockCreds);
     verify(mockTransportFactory).newClientTransport(address, clientTransportOptions, channelLogger);
     assertSame(mockTransport, transport.delegate());
@@ -209,11 +203,8 @@ public class CallCredentials2ApplyingTest {
     verify(mockTransport, never()).newStream(method, origHeaders, callOptions);
     assertEquals(Status.Code.UNAUTHENTICATED, stream.getError().getCode());
     assertSame(ex, stream.getError().getCause());
-
-    ArgumentCaptor<Listener> listenerCaptor = ArgumentCaptor.forClass(null);
-    verify(mockTransport).start(listenerCaptor.capture());
-    listenerCaptor.getValue().transportTerminated();
-    verify(mockTransportListener).transportTerminated();
+    transport.shutdown(Status.UNAVAILABLE);
+    verify(mockTransport).shutdown(Status.UNAVAILABLE);
   }
 
   @Test
@@ -238,10 +229,8 @@ public class CallCredentials2ApplyingTest {
     assertSame(mockStream, stream);
     assertEquals(CREDS_VALUE, origHeaders.get(CREDS_KEY));
     assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
-    ArgumentCaptor<Listener> listenerCaptor = ArgumentCaptor.forClass(null);
-    verify(mockTransport).start(listenerCaptor.capture());
-    listenerCaptor.getValue().transportTerminated();
-    verify(mockTransportListener).transportTerminated();
+    transport.shutdown(Status.UNAVAILABLE);
+    verify(mockTransport).shutdown(Status.UNAVAILABLE);
   }
 
   @Test
@@ -264,10 +253,8 @@ public class CallCredentials2ApplyingTest {
 
     verify(mockTransport, never()).newStream(method, origHeaders, callOptions);
     assertSame(error, stream.getError());
-    ArgumentCaptor<Listener> listenerCaptor = ArgumentCaptor.forClass(null);
-    verify(mockTransport).start(listenerCaptor.capture());
-    listenerCaptor.getValue().transportTerminated();
-    verify(mockTransportListener).transportTerminated();
+    transport.shutdown(Status.UNAVAILABLE);
+    verify(mockTransport).shutdown(Status.UNAVAILABLE);
   }
 
   @Test
@@ -282,6 +269,9 @@ public class CallCredentials2ApplyingTest {
         any(RequestInfo.class), same(mockExecutor), applierCaptor.capture());
     verify(mockTransport, never()).newStream(method, origHeaders, callOptions);
 
+    transport.shutdown(Status.UNAVAILABLE);
+    verify(mockTransport, never()).shutdown(Status.UNAVAILABLE);
+
     Metadata headers = new Metadata();
     headers.put(CREDS_KEY, CREDS_VALUE);
     applierCaptor.getValue().apply(headers);
@@ -290,6 +280,7 @@ public class CallCredentials2ApplyingTest {
     assertSame(mockStream, stream.getRealStream());
     assertEquals(CREDS_VALUE, origHeaders.get(CREDS_KEY));
     assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
+    verify(mockTransport).shutdown(Status.UNAVAILABLE);
   }
 
   @Test
@@ -309,10 +300,8 @@ public class CallCredentials2ApplyingTest {
     verify(mockTransport, never()).newStream(method, origHeaders, callOptions);
     FailingClientStream failingStream = (FailingClientStream) stream.getRealStream();
     assertSame(error, failingStream.getError());
-    ArgumentCaptor<Listener> listenerCaptor = ArgumentCaptor.forClass(null);
-    verify(mockTransport).start(listenerCaptor.capture());
-    listenerCaptor.getValue().transportTerminated();
-    verify(mockTransportListener).transportTerminated();
+    transport.shutdown(Status.UNAVAILABLE);
+    verify(mockTransport).shutdown(Status.UNAVAILABLE);
   }
 
   @Test
@@ -324,53 +313,7 @@ public class CallCredentials2ApplyingTest {
     assertSame(mockStream, stream);
     assertNull(origHeaders.get(CREDS_KEY));
     assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
-  }
-
-  @Test
-  public void applierTransportListenerTest_base() {
-    ArgumentCaptor<Listener> captureListener = ArgumentCaptor.forClass(null);
-    verify(mockTransport).start(captureListener.capture());
-    Listener applierTransportListener = captureListener.getValue();
-    assertNotSame(applierTransportListener, mockTransportListener);
-    applierTransportListener.transportShutdown(Status.UNKNOWN);
-    verify(mockTransportListener).transportShutdown(Status.UNKNOWN);
-    applierTransportListener.transportReady();
-    verify(mockTransportListener).transportReady();
-    applierTransportListener.transportInUse(true);
-    verify(mockTransportListener).transportInUse(true);
-    applierTransportListener.transportTerminated();
-    verify(mockTransportListener).transportTerminated();
-  }
-
-  @Test
-  public void applierTransportListenerTest_terminateThenApply() {
-    transport.newStream(method, origHeaders, callOptions);
-
-    ArgumentCaptor<Listener> captureListener = ArgumentCaptor.forClass(null);
-    verify(mockTransport).start(captureListener.capture());
-    captureListener.getValue().transportTerminated();
-    verify(mockTransportListener, never()).transportTerminated();
-
-    ArgumentCaptor<MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
-    verify(mockCreds).applyRequestMetadata(
-        any(RequestInfo.class), same(mockExecutor), applierCaptor.capture());
-    applierCaptor.getValue().apply(new Metadata());
-    verify(mockTransportListener).transportTerminated();
-  }
-
-  @Test
-  public void applierTransportListenerTest_applyThenTerminate() {
-    transport.newStream(method, origHeaders, callOptions);
-
-    ArgumentCaptor<MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
-    verify(mockCreds).applyRequestMetadata(
-        any(RequestInfo.class), same(mockExecutor), applierCaptor.capture());
-    applierCaptor.getValue().apply(new Metadata());
-    verify(mockTransportListener, never()).transportTerminated();
-
-    ArgumentCaptor<Listener> listenerCaptor = ArgumentCaptor.forClass(null);
-    verify(mockTransport).start(listenerCaptor.capture());
-    listenerCaptor.getValue().transportTerminated();
-    verify(mockTransportListener).transportTerminated();
+    transport.shutdown(Status.UNAVAILABLE);
+    verify(mockTransport).shutdown(Status.UNAVAILABLE);
   }
 }

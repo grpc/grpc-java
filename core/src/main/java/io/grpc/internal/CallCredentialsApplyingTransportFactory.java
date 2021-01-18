@@ -34,6 +34,7 @@ import java.net.SocketAddress;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.concurrent.GuardedBy;
 
 final class CallCredentialsApplyingTransportFactory implements ClientTransportFactory {
   private final ClientTransportFactory delegate;
@@ -69,7 +70,10 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     private final ConnectionClientTransport delegate;
     private final String authority;
     private final AtomicLong pendingApplier = new AtomicLong(0);
-    private volatile CallCredentialsApplyingTransportListener listener;
+    @GuardedBy("this")
+    private Status savedShutdownStatus;
+    @GuardedBy("this")
+    private Status savedShutdownNowStatus;
 
     CallCredentialsApplyingTransport(ConnectionClientTransport delegate, String authority) {
       this.delegate = checkNotNull(delegate, "delegate");
@@ -85,7 +89,6 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     @SuppressWarnings("deprecation")
     public ClientStream newStream(
         final MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions) {
-      checkNotNull(listener, "listener");
       CallCredentials creds = callOptions.getCredentials();
       if (creds == null) {
         creds = channelCallCredentials;
@@ -97,7 +100,7 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
           @Override
           public void onComplete() {
             if (pendingApplier.decrementAndGet() == 0) {
-              listener.maybeTerminated();
+              maybeShutdown();
             }
           }
         };
@@ -142,47 +145,47 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     }
 
     @Override
-    public Runnable start(Listener listener) {
-      this.listener = new CallCredentialsApplyingTransportListener(listener);
-      return super.start(this.listener);
-    }
-    // TODO(zivy@): cancel pending appliers when shutdownNow.
-
-    private class CallCredentialsApplyingTransportListener implements Listener {
-      private final Listener delegateListener;
-      private volatile boolean savedTransportTerminated;
-
-      public CallCredentialsApplyingTransportListener(Listener listener) {
-        this.delegateListener = listener;
-      }
-
-      @Override
-      public void transportShutdown(Status s) {
-        delegateListener.transportShutdown(s);
-      }
-
-      @Override
-      public void transportTerminated() {
-        savedTransportTerminated = true;
-        maybeTerminated();
-      }
-
-      @Override
-      public void transportReady() {
-        delegateListener.transportReady();
-      }
-
-      @Override
-      public void transportInUse(boolean inUse) {
-        delegateListener.transportInUse(inUse);
-      }
-
-      public void maybeTerminated() {
-        synchronized (this) {
-          if (pendingApplier.get() == 0 && savedTransportTerminated) {
-            delegateListener.transportTerminated();
-          }
+    public void shutdown(Status status) {
+      checkNotNull(status, "status");
+      synchronized (this) {
+        if (pendingApplier.get() != 0) {
+          savedShutdownStatus = status;
+          return;
         }
+      }
+      super.shutdown(status);
+    }
+
+    // TODO(zivy@): add cancel pending applier.
+    @Override
+    public void shutdownNow(Status status) {
+      checkNotNull(status, "status");
+      synchronized (this) {
+        if (pendingApplier.get() != 0) {
+          savedShutdownNowStatus = status;
+          return;
+        }
+      }
+      super.shutdownNow(status);
+    }
+
+    private void maybeShutdown() {
+      Status maybeShutdown;
+      Status maybeShutdownNow;
+      synchronized (this) {
+        maybeShutdown = savedShutdownStatus;
+        maybeShutdownNow = savedShutdownNowStatus;
+        if ((maybeShutdown == null && maybeShutdownNow == null) || pendingApplier.get() != 0) {
+          return;
+        }
+        savedShutdownStatus = null;
+        savedShutdownNowStatus = null;
+      }
+      if (maybeShutdown != null) {
+        super.shutdown(maybeShutdown);
+      }
+      if (maybeShutdownNow != null) {
+        super.shutdownNow(maybeShutdownNow);
       }
     }
   }
