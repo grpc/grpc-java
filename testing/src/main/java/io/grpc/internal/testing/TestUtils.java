@@ -180,6 +180,12 @@ public class TestUtils {
       conscryptInstallAttempted = true;
       return;
     }
+    // Concrypt native libraries are not available for ARM architectures.
+    String osArch = System.getProperty("os.arch", "");
+    if (osArch.startsWith("aarch") || osArch.startsWith("arm")) {
+      conscryptInstallAttempted = true;
+      return;
+    }
     if (!ConscryptLoader.isPresent()) {
       conscryptInstallAttempted = true;
       return;
