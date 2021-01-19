@@ -30,6 +30,7 @@ import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
 import io.grpc.ManagedChannel;
 import io.grpc.SecurityLevel;
+import io.grpc.alts.AltsAuthContext;
 import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
 import io.grpc.alts.internal.AltsProtocolNegotiator.ServerAltsProtocolNegotiator;
 import io.grpc.alts.internal.TsiFrameProtector.Consumer;

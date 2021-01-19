@@ -14,10 +14,14 @@
  * limitations under the License.
  */
 
-package io.grpc.alts.internal;
+package io.grpc.alts;
 
 import static org.junit.Assert.assertEquals;
 
+import io.grpc.alts.internal.HandshakerResult;
+import io.grpc.alts.internal.Identity;
+import io.grpc.alts.internal.RpcProtocolVersions;
+import io.grpc.alts.internal.SecurityLevel;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.Before;

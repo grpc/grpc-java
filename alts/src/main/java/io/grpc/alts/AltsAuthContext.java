@@ -14,14 +14,21 @@
  * limitations under the License.
  */
 
-package io.grpc.alts.internal;
+package io.grpc.alts;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.Any;
+import io.grpc.InternalChannelz.OtherSecurity;
+import io.grpc.InternalChannelz.Security;
+import io.grpc.alts.internal.AltsContext;
+import io.grpc.alts.internal.HandshakerResult;
+import io.grpc.alts.internal.RpcProtocolVersions;
+import io.grpc.alts.internal.SecurityLevel;
 import java.util.Map;
 
 /** AltsAuthContext contains security-related context information about an ALTs connection. */
 public final class AltsAuthContext {
-  final AltsContext context;
+  private final AltsContext context;
 
   /** Create a new AltsAuthContext. */
   public AltsAuthContext(HandshakerResult result) {
@@ -104,5 +111,14 @@ public final class AltsAuthContext {
    */
   public Map<String, String> getPeerAttributes() {
     return context.getPeerAttributesMap();
+  }
+
+  /**
+   * Generates a gRPC channel security.
+   *
+   * @return the generated gRPC channel security.
+   */
+  public Security toChannelSecurity() {
+    return new Security(new OtherSecurity("alts", Any.pack(context)));
   }
 }

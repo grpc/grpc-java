@@ -18,7 +18,6 @@ package io.grpc.alts;
 
 import io.grpc.ServerCall;
 import io.grpc.Status;
-import io.grpc.alts.internal.AltsAuthContext;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
 import java.util.Collection;
 

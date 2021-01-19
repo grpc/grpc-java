@@ -26,6 +26,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.protobuf.ByteString;
+import io.grpc.alts.AltsAuthContext;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import org.junit.Before;

@@ -19,6 +19,7 @@ package io.grpc.alts.internal;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.Preconditions;
+import io.grpc.alts.AltsAuthContext;
 import io.grpc.alts.internal.TsiPeer.Property;
 import io.netty.buffer.ByteBufAllocator;
 import java.nio.ByteBuffer;

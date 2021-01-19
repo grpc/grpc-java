@@ -24,7 +24,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.Status;
-import io.grpc.alts.internal.AltsAuthContext;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
 import io.grpc.alts.internal.HandshakerResult;
 import io.grpc.alts.internal.Identity;
