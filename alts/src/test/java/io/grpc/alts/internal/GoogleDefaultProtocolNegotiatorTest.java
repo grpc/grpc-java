@@ -36,110 +36,138 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.ssl.SslContext;
-import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
+import org.junit.runners.JUnit4;
 
-@RunWith(Parameterized.class)
+@RunWith(Enclosed.class)
 public final class GoogleDefaultProtocolNegotiatorTest {
-  @Parameterized.Parameter
-  public boolean withXds;
 
-  private ProtocolNegotiator googleProtocolNegotiator;
+  @RunWith(JUnit4.class)
+  public abstract static class HandlerSelectionTest {
+    private ProtocolNegotiator googleProtocolNegotiator;
+    private final ObjectPool<Channel> handshakerChannelPool = new ObjectPool<Channel>() {
 
-  // Same as io.grpc.xds.InternalXdsAttributes.ATTR_CLUSTER_NAME
-  private final Attributes.Key<String> clusterNameAttrKey =
-      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.clusterName");
-  private final ObjectPool<Channel> handshakerChannelPool = new ObjectPool<Channel>() {
-
-    @Override
-    public Channel getObject() {
-      return InProcessChannelBuilder.forName("test").build();
-    }
-
-    @Override
-    public Channel returnObject(Object object) {
-      ((ManagedChannel) object).shutdownNow();
-      return null;
-    }
-  };
-
-  @Parameters(name = "Run with xDS : {0}")
-  public static Iterable<Boolean> data() {
-    return Arrays.asList(true, false);
-  }
-
-  @Before
-  public void setUp() throws Exception {
-    SslContext sslContext = GrpcSslContexts.forClient().build();
-
-    googleProtocolNegotiator = new AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory(
-        ImmutableList.<String>of(),
-        handshakerChannelPool,
-        sslContext,
-        withXds ? clusterNameAttrKey : null)
-        .newNegotiator();
-  }
-
-  @After
-  public void tearDown() {
-    googleProtocolNegotiator.close();
-  }
-
-  @Test
-  public void altsHandler() {
-    Attributes eagAttributes;
-    if (withXds) {
-      eagAttributes =
-          Attributes.newBuilder().set(clusterNameAttrKey, "api.googleapis.com").build();
-    } else {
-      eagAttributes =
-          Attributes.newBuilder().set(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND, true).build();
-    }
-    GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
-    when(mockHandler.getEagAttributes()).thenReturn(eagAttributes);
-
-    final AtomicReference<Throwable> failure = new AtomicReference<>();
-    ChannelHandler exceptionCaught = new ChannelInboundHandlerAdapter() {
       @Override
-      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        failure.set(cause);
-        super.exceptionCaught(ctx, cause);
+      public Channel getObject() {
+        return InProcessChannelBuilder.forName("test").build();
+      }
+
+      @Override
+      public Channel returnObject(Object object) {
+        ((ManagedChannel) object).shutdownNow();
+        return null;
       }
     };
-    ChannelHandler h = googleProtocolNegotiator.newHandler(mockHandler);
-    EmbeddedChannel chan = new EmbeddedChannel(exceptionCaught);
-    // Add the negotiator handler last, but to the front.  Putting this in ctor above would make it
-    // throw early.
-    chan.pipeline().addFirst(h);
-    chan.pipeline().fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
 
-    // Check that the message complained about the ALTS code, rather than SSL.  ALTS throws on
-    // being added, so it's hard to catch it at the right time to make this assertion.
-    assertThat(failure.get()).hasMessageThat().contains("TsiHandshakeHandler");
+    @Before
+    public void setUp() throws Exception {
+      SslContext sslContext = GrpcSslContexts.forClient().build();
+
+      googleProtocolNegotiator = new AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory(
+          ImmutableList.<String>of(),
+          handshakerChannelPool,
+          sslContext,
+          getClusterNameAttrKey())
+          .newNegotiator();
+    }
+
+    @After
+    public void tearDown() {
+      googleProtocolNegotiator.close();
+    }
+
+    @Nullable
+    abstract Attributes.Key<String> getClusterNameAttrKey();
+
+    @Test
+    public void altsHandler_lbProvidedBackend() {
+      Attributes attrs =
+          Attributes.newBuilder().set(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND, true).build();
+      subtest_altsHandler(attrs);
+    }
+
+    @Test
+    public void tlsHandler_emptyAttributes() {
+      subtest_tlsHandler(Attributes.EMPTY);
+    }
+
+    void subtest_altsHandler(Attributes eagAttributes) {
+      GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
+      when(mockHandler.getEagAttributes()).thenReturn(eagAttributes);
+
+      final AtomicReference<Throwable> failure = new AtomicReference<>();
+      ChannelHandler exceptionCaught = new ChannelInboundHandlerAdapter() {
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+          failure.set(cause);
+          super.exceptionCaught(ctx, cause);
+        }
+      };
+      ChannelHandler h = googleProtocolNegotiator.newHandler(mockHandler);
+      EmbeddedChannel chan = new EmbeddedChannel(exceptionCaught);
+      // Add the negotiator handler last, but to the front. Putting this in ctor above would make
+      // it throw early.
+      chan.pipeline().addFirst(h);
+      chan.pipeline().fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+
+      // Check that the message complained about the ALTS code, rather than SSL.  ALTS throws on
+      // being added, so it's hard to catch it at the right time to make this assertion.
+      assertThat(failure.get()).hasMessageThat().contains("TsiHandshakeHandler");
+    }
+
+    void subtest_tlsHandler(Attributes eagAttributes) {
+      GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
+      when(mockHandler.getEagAttributes()).thenReturn(eagAttributes);
+      when(mockHandler.getAuthority()).thenReturn("authority");
+
+      ChannelHandler h = googleProtocolNegotiator.newHandler(mockHandler);
+      EmbeddedChannel chan = new EmbeddedChannel(h);
+      chan.pipeline().fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+
+      assertThat(chan.pipeline().first().getClass().getSimpleName()).isEqualTo("SslHandler");
+    }
   }
 
-  @Test
-  public void tlsHandler() {
-    Attributes eagAttributes;
-    if (withXds) {
-      eagAttributes = Attributes.newBuilder().set(clusterNameAttrKey, "google_cfe").build();
-    } else {
-      eagAttributes = Attributes.EMPTY;
+  @RunWith(JUnit4.class)
+  public static class WithoutXdsInClasspath extends HandlerSelectionTest {
+
+    @Nullable
+    @Override
+    Attributes.Key<String> getClusterNameAttrKey() {
+      return null;
     }
-    GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
-    when(mockHandler.getEagAttributes()).thenReturn(eagAttributes);
-    when(mockHandler.getAuthority()).thenReturn("authority");
+  }
 
-    ChannelHandler h = googleProtocolNegotiator.newHandler(mockHandler);
-    EmbeddedChannel chan = new EmbeddedChannel(h);
-    chan.pipeline().fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+  @RunWith(JUnit4.class)
+  public static class WithXdsInClasspath extends HandlerSelectionTest {
+    // Same as io.grpc.xds.InternalXdsAttributes.ATTR_CLUSTER_NAME
+    private static final Attributes.Key<String> XDS_CLUSTER_NAME_ATTR_KEY =
+        Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.clusterName");
 
-    assertThat(chan.pipeline().first().getClass().getSimpleName()).isEqualTo("SslHandler");
+    @Nullable
+    @Override
+    Attributes.Key<String> getClusterNameAttrKey() {
+      return XDS_CLUSTER_NAME_ATTR_KEY;
+    }
+
+    @Test
+    public void altsHandler_xdsCluster() {
+      Attributes attrs =
+          Attributes.newBuilder().set(XDS_CLUSTER_NAME_ATTR_KEY, "api.googleapis.com").build();
+      subtest_altsHandler(attrs);
+    }
+
+    @Test
+    public void tlsHandler_googleCfe() {
+      Attributes attrs =
+          Attributes.newBuilder().set(XDS_CLUSTER_NAME_ATTR_KEY, "google_cfe").build();
+      subtest_tlsHandler(attrs);
+    }
   }
 }

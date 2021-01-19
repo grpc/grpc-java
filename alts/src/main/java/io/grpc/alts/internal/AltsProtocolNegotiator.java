@@ -247,8 +247,13 @@ public final class AltsProtocolNegotiator {
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
       ChannelHandler securityHandler;
-      boolean isXdsDirectPath = clusterNameAttrKey != null
-          && !"google_cfe".equals(grpcHandler.getEagAttributes().get(clusterNameAttrKey));
+      boolean isXdsDirectPath = false;
+      if (clusterNameAttrKey != null) {
+        String clusterName = grpcHandler.getEagAttributes().get(clusterNameAttrKey);
+        if (clusterName != null && !clusterName.equals("google_cfe")) {
+          isXdsDirectPath = true;
+        }
+      }
       if (grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY) != null
           || grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND) != null
           || isXdsDirectPath) {
