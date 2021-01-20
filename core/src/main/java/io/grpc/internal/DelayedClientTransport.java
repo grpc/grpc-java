@@ -30,6 +30,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -238,7 +239,13 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
     if (savedReportTransportTerminated != null) {
       for (PendingStream stream : savedPendingStreams) {
-        stream.cancel(status);
+        Runnable runnable = stream.setStream(new FailingClientStream(status, RpcProgress.REFUSED));
+        if (runnable != null) {
+          // Drain in-line instead of using an executor as failing stream just throws everything
+          // away. This is essentially the same behavior as DelayedStream.cancel() but can be done
+          // before stream.start().
+          runnable.run();
+        }
       }
       syncContext.execute(savedReportTransportTerminated);
     }

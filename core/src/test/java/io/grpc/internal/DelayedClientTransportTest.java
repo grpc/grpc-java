@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
@@ -273,7 +274,8 @@ public class DelayedClientTransportTest {
     delayedTransport.shutdownNow(Status.UNAVAILABLE);
     verify(transportListener).transportShutdown(any(Status.class));
     verify(transportListener).transportTerminated();
-    verify(streamListener).closed(statusCaptor.capture(), any(Metadata.class));
+    verify(streamListener)
+        .closed(statusCaptor.capture(), eq(RpcProgress.REFUSED), any(Metadata.class));
     assertEquals(Status.Code.UNAVAILABLE, statusCaptor.getValue().getCode());
   }
 
