@@ -33,7 +33,8 @@ import io.grpc.internal.MetadataApplierImpl.MetadataApplierListener;
 import java.net.SocketAddress;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.concurrent.GuardedBy;
 
 final class CallCredentialsApplyingTransportFactory implements ClientTransportFactory {
@@ -69,11 +70,22 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
   private class CallCredentialsApplyingTransport extends ForwardingConnectionClientTransport {
     private final ConnectionClientTransport delegate;
     private final String authority;
-    private final AtomicLong pendingApplier = new AtomicLong(0);
+    // Negative value means transport active, non-negative value indicates shutdown invoked.
+    private final AtomicInteger pendingApplier = new AtomicInteger(Integer.MIN_VALUE + 1);
+    private final AtomicBoolean shutdownInvoked = new AtomicBoolean(false);
+    private final Status shutdownStatus = Status.UNAVAILABLE;
     @GuardedBy("this")
     private Status savedShutdownStatus;
     @GuardedBy("this")
     private Status savedShutdownNowStatus;
+    private final MetadataApplierListener applierListener = new MetadataApplierListener() {
+      @Override
+      public void onComplete() {
+        if (pendingApplier.decrementAndGet() == 0) {
+          maybeShutdown();
+        }
+      }
+    };
 
     CallCredentialsApplyingTransport(ConnectionClientTransport delegate, String authority) {
       this.delegate = checkNotNull(delegate, "delegate");
@@ -89,6 +101,9 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     @SuppressWarnings("deprecation")
     public ClientStream newStream(
         final MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions) {
+      if (shutdownInvoked.get()) {
+        return new FailingClientStream(shutdownStatus);
+      }
       CallCredentials creds = callOptions.getCredentials();
       if (creds == null) {
         creds = channelCallCredentials;
@@ -96,17 +111,12 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
         creds = new CompositeCallCredentials(channelCallCredentials, creds);
       }
       if (creds != null) {
-        MetadataApplierListener applierListener = new MetadataApplierListener() {
-          @Override
-          public void onComplete() {
-            if (pendingApplier.decrementAndGet() == 0) {
-              maybeShutdown();
-            }
-          }
-        };
         MetadataApplierImpl applier = new MetadataApplierImpl(
             delegate, method, headers, callOptions, applierListener);
-        pendingApplier.incrementAndGet();
+        if (pendingApplier.incrementAndGet() > 0) {
+          applierListener.onComplete();
+          return new FailingClientStream(shutdownStatus);
+        }
         RequestInfo requestInfo = new RequestInfo() {
             @Override
             public MethodDescriptor<?, ?> getMethodDescriptor() {
@@ -147,6 +157,9 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     @Override
     public void shutdown(Status status) {
       checkNotNull(status, "status");
+      if (shutdownInvoked.compareAndSet(false, true)) {
+        pendingApplier.addAndGet(Integer.MAX_VALUE);
+      }
       synchronized (this) {
         if (pendingApplier.get() != 0) {
           savedShutdownStatus = status;
@@ -156,10 +169,13 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
       super.shutdown(status);
     }
 
-    // TODO(zivy@): add cancel pending applier.
+    // TODO(zivy@): should call delegate shutdownNow asap. Maybe cancel pending applier.
     @Override
     public void shutdownNow(Status status) {
       checkNotNull(status, "status");
+      if (shutdownInvoked.compareAndSet(false, true)) {
+        pendingApplier.addAndGet(Integer.MAX_VALUE);
+      }
       synchronized (this) {
         if (pendingApplier.get() != 0) {
           savedShutdownNowStatus = status;
@@ -173,11 +189,11 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
       Status maybeShutdown;
       Status maybeShutdownNow;
       synchronized (this) {
-        maybeShutdown = savedShutdownStatus;
-        maybeShutdownNow = savedShutdownNowStatus;
-        if ((maybeShutdown == null && maybeShutdownNow == null) || pendingApplier.get() != 0) {
+        if (pendingApplier.get() != 0) {
           return;
         }
+        maybeShutdown = savedShutdownStatus;
+        maybeShutdownNow = savedShutdownNowStatus;
         savedShutdownStatus = null;
         savedShutdownNowStatus = null;
       }

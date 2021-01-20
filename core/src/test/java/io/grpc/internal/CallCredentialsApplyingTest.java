@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
@@ -182,6 +183,8 @@ public class CallCredentialsApplyingTest {
     assertSame(ex, stream.getError().getCause());
 
     transport.shutdown(Status.UNAVAILABLE);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
     verify(mockTransport).shutdown(Status.UNAVAILABLE);
   }
 
@@ -197,6 +200,8 @@ public class CallCredentialsApplyingTest {
     assertEquals(CREDS_VALUE, origHeaders.get(CREDS_KEY));
     assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
     transport.shutdown(Status.UNAVAILABLE);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
     verify(mockTransport).shutdown(Status.UNAVAILABLE);
   }
 
@@ -221,6 +226,8 @@ public class CallCredentialsApplyingTest {
     verify(mockTransport, never()).newStream(method, origHeaders, callOptions);
     assertSame(error, stream.getError());
     transport.shutdownNow(Status.UNAVAILABLE);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
     verify(mockTransport).shutdownNow(Status.UNAVAILABLE);
   }
 
@@ -238,6 +245,8 @@ public class CallCredentialsApplyingTest {
 
     transport.shutdown(Status.UNAVAILABLE);
     verify(mockTransport, never()).shutdown(Status.UNAVAILABLE);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
 
     Metadata headers = new Metadata();
     headers.put(CREDS_KEY, CREDS_VALUE);
@@ -258,11 +267,15 @@ public class CallCredentialsApplyingTest {
         same(mockExecutor), applierCaptor.capture());
     transport.shutdown(Status.UNAVAILABLE);
     transport.shutdownNow(Status.ABORTED);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
     verify(mockTransport, never()).shutdown(any(Status.class));
     verify(mockTransport, never()).shutdownNow(any(Status.class));
     Metadata headers = new Metadata();
     headers.put(CREDS_KEY, CREDS_VALUE);
     applierCaptor.getValue().apply(headers);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
     verify(mockTransport).shutdown(Status.UNAVAILABLE);
     verify(mockTransport).shutdownNow(Status.ABORTED);
   }
@@ -274,6 +287,8 @@ public class CallCredentialsApplyingTest {
     verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
         same(mockExecutor), applierCaptor.capture());
     transport.shutdown(Status.UNAVAILABLE);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
     verify(mockTransport, never()).shutdown(any(Status.class));
     Metadata headers = new Metadata();
     headers.put(CREDS_KEY, CREDS_VALUE);
@@ -296,12 +311,18 @@ public class CallCredentialsApplyingTest {
         same(mockExecutor), applierCaptor.capture());
     applierCaptor.getAllValues().get(1).apply(headers);
     transport.shutdown(Status.UNAVAILABLE);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
     verify(mockTransport, never()).shutdown(Status.UNAVAILABLE);
 
     applierCaptor.getAllValues().get(0).apply(headers);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
     verify(mockTransport, never()).shutdown(Status.UNAVAILABLE);
 
     applierCaptor.getAllValues().get(2).apply(headers);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
     verify(mockTransport).shutdown(Status.UNAVAILABLE);
   }
 
@@ -323,6 +344,8 @@ public class CallCredentialsApplyingTest {
     FailingClientStream failingStream = (FailingClientStream) stream.getRealStream();
     assertSame(error, failingStream.getError());
     transport.shutdown(Status.UNAVAILABLE);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
     verify(mockTransport).shutdown(Status.UNAVAILABLE);
   }
 
@@ -336,6 +359,8 @@ public class CallCredentialsApplyingTest {
     assertNull(origHeaders.get(CREDS_KEY));
     assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
     transport.shutdown(Status.UNAVAILABLE);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
     verify(mockTransport).shutdown(Status.UNAVAILABLE);
   }
 
