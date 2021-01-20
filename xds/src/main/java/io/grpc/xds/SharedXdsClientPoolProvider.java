@@ -48,7 +48,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private volatile ObjectPool<XdsClient> xdsClientPool;
 
   private SharedXdsClientPoolProvider() {
-    this(Bootstrapper.getInstance());
+    this(new BootstrapperImpl());
   }
 
   @VisibleForTesting
