@@ -35,7 +35,7 @@ JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.pro
     --path_to_server_binary=/java_server/grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-server \
     --gcp_suffix=$(date '+%s') \
     --verbose \
-    ${XDS_V3_OPT} \
+    ${XDS_V3_OPT-} \
     --client_cmd="grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-client \
       --server=xds:///{server_uri} \
       --stats_port={stats_port} \
