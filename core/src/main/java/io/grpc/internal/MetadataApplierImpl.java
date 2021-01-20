@@ -95,7 +95,11 @@ final class MetadataApplierImpl extends MetadataApplier {
     // returnStream() has been called before me, thus delayedStream must have been
     // created.
     checkState(delayedStream != null, "delayedStream is null");
-    delayedStream.setStream(stream);
+    Runnable slow = delayedStream.setStream(stream);
+    if (slow != null) {
+      // TODO(ejona): run this on a separate thread
+      slow.run();
+    }
   }
 
   /**

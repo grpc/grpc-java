@@ -30,6 +30,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -238,7 +239,13 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
     if (savedReportTransportTerminated != null) {
       for (PendingStream stream : savedPendingStreams) {
-        stream.cancel(status);
+        Runnable runnable = stream.setStream(new FailingClientStream(status, RpcProgress.REFUSED));
+        if (runnable != null) {
+          // Drain in-line instead of using an executor as failing stream just throws everything
+          // away. This is essentially the same behavior as DelayedStream.cancel() but can be done
+          // before stream.start().
+          runnable.run();
+        }
       }
       syncContext.execute(savedReportTransportTerminated);
     }
@@ -294,12 +301,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
         if (callOptions.getExecutor() != null) {
           executor = callOptions.getExecutor();
         }
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-              stream.createRealStream(transport);
-            }
-          });
+        Runnable runnable = stream.createRealStream(transport);
+        if (runnable != null) {
+          executor.execute(runnable);
+        }
         toRemove.add(stream);
       }  // else: stay pending
     }
@@ -346,7 +351,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
       this.args = args;
     }
 
-    private void createRealStream(ClientTransport transport) {
+    /** Runnable may be null. */
+    private Runnable createRealStream(ClientTransport transport) {
       ClientStream realStream;
       Context origContext = context.attach();
       try {
@@ -355,7 +361,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       } finally {
         context.detach(origContext);
       }
-      setStream(realStream);
+      return setStream(realStream);
     }
 
     @Override
