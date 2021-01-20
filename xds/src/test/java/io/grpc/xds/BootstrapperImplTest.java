@@ -18,6 +18,8 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -53,6 +55,8 @@ public class BootstrapperImplTest {
   private final BootstrapperImpl bootstrapper = new BootstrapperImpl();
   private String originalBootstrapPathFromEnvVar;
   private String originalBootstrapPathFromSysProp;
+  private String originalBootstrapConfigFromEnvVar;
+  private String originalBootstrapConfigFromSysProp;
   private boolean originalEnableV3Protocol;
 
   @Before
@@ -64,6 +68,8 @@ public class BootstrapperImplTest {
   private void saveEnvironment() {
     originalBootstrapPathFromEnvVar = BootstrapperImpl.bootstrapPathFromEnvVar;
     originalBootstrapPathFromSysProp = BootstrapperImpl.bootstrapPathFromSysProp;
+    originalBootstrapConfigFromEnvVar = BootstrapperImpl.bootstrapConfigFromEnvVar;
+    originalBootstrapConfigFromSysProp = BootstrapperImpl.bootstrapConfigFromSysProp;
     originalEnableV3Protocol = BootstrapperImpl.enableV3Protocol;
   }
 
@@ -71,6 +77,8 @@ public class BootstrapperImplTest {
   public void restoreEnvironment() {
     BootstrapperImpl.bootstrapPathFromEnvVar = originalBootstrapPathFromEnvVar;
     BootstrapperImpl.bootstrapPathFromSysProp = originalBootstrapPathFromSysProp;
+    BootstrapperImpl.bootstrapConfigFromEnvVar = originalBootstrapConfigFromEnvVar;
+    BootstrapperImpl.bootstrapConfigFromSysProp = originalBootstrapConfigFromSysProp;
     BootstrapperImpl.enableV3Protocol = originalEnableV3Protocol;
   }
 
@@ -614,6 +622,23 @@ public class BootstrapperImplTest {
   }
 
   @Test
+  public void notFound() {
+    BootstrapperImpl.bootstrapPathFromEnvVar = null;
+    BootstrapperImpl.bootstrapPathFromSysProp = null;
+    BootstrapperImpl.bootstrapConfigFromEnvVar = null;
+    BootstrapperImpl.bootstrapConfigFromSysProp = null;
+    BootstrapperImpl.FileReader reader = mock(BootstrapperImpl.FileReader.class);
+    bootstrapper.setFileReader(reader);
+    try {
+      bootstrapper.bootstrap();
+      fail("should fail");
+    } catch (XdsInitializationException expected) {
+      assertThat(expected).hasMessageThat().startsWith("Cannot find bootstrap configuration");
+    }
+    verifyNoInteractions(reader);
+  }
+
+  @Test
   public void fallbackToFilePathFromSystemProperty() throws XdsInitializationException {
     final String customPath = "/home/bootstrap.json";
     BootstrapperImpl.bootstrapPathFromEnvVar = null;
@@ -630,6 +655,47 @@ public class BootstrapperImplTest {
         + "}";
 
     bootstrapper.setFileReader(createFileReader(customPath, rawData));
+    bootstrapper.bootstrap();
+  }
+
+  @Test
+  public void fallbackToConfigFromEnvVar() throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    BootstrapperImpl.bootstrapPathFromEnvVar = null;
+    BootstrapperImpl.bootstrapPathFromSysProp = null;
+    BootstrapperImpl.bootstrapConfigFromEnvVar = rawData;
+    bootstrapper.setFileReader(mock(BootstrapperImpl.FileReader.class));
+    bootstrapper.bootstrap();
+  }
+
+  @Test
+  public void fallbackToConfigFromSysProp() throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+    
+    BootstrapperImpl.bootstrapPathFromEnvVar = null;
+    BootstrapperImpl.bootstrapPathFromSysProp = null;
+    BootstrapperImpl.bootstrapConfigFromEnvVar = null;
+    BootstrapperImpl.bootstrapConfigFromSysProp = rawData;
+    bootstrapper.setFileReader(mock(BootstrapperImpl.FileReader.class));
     bootstrapper.bootstrap();
   }
 
