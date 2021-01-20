@@ -33,11 +33,11 @@ public final class AuthorizationUtil {
    */
   public static Status clientAuthorizationCheck(
       ServerCall<?, ?> call, Collection<String> expectedServiceAccounts) {
-    AltsAuthContext altsContext =
-        (AltsAuthContext) call.getAttributes().get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY);
-    if (altsContext == null) {
+    Object authContext = call.getAttributes().get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY);
+    if (!(authContext instanceof AltsAuthContext)) {
       return Status.PERMISSION_DENIED.withDescription("Peer ALTS AuthContext not found");
     }
+    AltsAuthContext altsContext = (AltsAuthContext) authContext;
     if (expectedServiceAccounts.contains(altsContext.getPeerServiceAccount())) {
       return Status.OK;
     }

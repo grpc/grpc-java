@@ -37,37 +37,61 @@ import org.junit.runners.JUnit4;
 public final class AuthorizationUtilTest {
 
   @Test
-  public void altsAuthorizationCheck() throws Exception {
+  public void altsAuthorizationCheckWithoutAuthContext() throws Exception {
     Status status =
         AuthorizationUtil.clientAuthorizationCheck(
-            new FakeServerCall(null), Lists.newArrayList("Alice"));
+            fakeServerCallWithAuthContext(null), Lists.newArrayList("Alice"));
     assertThat(status.getCode()).isEqualTo(Status.Code.PERMISSION_DENIED);
     assertThat(status.getDescription()).startsWith("Peer ALTS AuthContext not found");
-    status =
+  }
+
+  @Test
+  public void altsAuthorizationCheckAllowed() throws Exception {
+    Status status =
         AuthorizationUtil.clientAuthorizationCheck(
-            new FakeServerCall("Alice"), Lists.newArrayList("Alice", "Bob"));
+            fakeServerCallForPeerServiceAccount("Alice"), Lists.newArrayList("Alice", "Bob"));
     assertThat(status.getCode()).isEqualTo(Status.Code.OK);
-    status =
+  }
+
+  @Test
+  public void altsAuthorizationCheckDenied() throws Exception {
+    Status status =
         AuthorizationUtil.clientAuthorizationCheck(
-            new FakeServerCall("Alice"), Lists.newArrayList("Bob", "Joe"));
+            fakeServerCallForPeerServiceAccount("Alice"), Lists.newArrayList("Bob", "Joe"));
     assertThat(status.getCode()).isEqualTo(Status.Code.PERMISSION_DENIED);
     assertThat(status.getDescription()).endsWith("not authorized");
+  }
+
+  @Test
+  public void altsAuthorizationCheckNoAltsAuthContext() throws Exception {
+    Status status =
+        AuthorizationUtil.clientAuthorizationCheck(
+            fakeServerCallWithAuthContext(new Object()), Lists.newArrayList("Alice"));
+    assertThat(status.getCode()).isEqualTo(Status.Code.PERMISSION_DENIED);
+    assertThat(status.getDescription()).startsWith("Peer ALTS AuthContext not found");
+  }
+
+  static FakeServerCall fakeServerCallForPeerServiceAccount(String peerServiceAccount) {
+    HandshakerResult handshakerResult =
+              HandshakerResult.newBuilder()
+              .setPeerIdentity(Identity.newBuilder().setServiceAccount(peerServiceAccount))
+              .build();
+    return fakeServerCallWithAuthContext(new AltsAuthContext(handshakerResult));
+  }
+
+  static FakeServerCall fakeServerCallWithAuthContext(@Nullable Object authContext) {
+    Attributes.Builder attrsBuilder = Attributes.newBuilder();
+    if (authContext != null) {
+      attrsBuilder.set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY, authContext);
+    }
+    return new FakeServerCall(attrsBuilder.build());
   }
 
   private static class FakeServerCall extends ServerCall<String, String> {
     final Attributes attrs;
 
-    FakeServerCall(@Nullable String peerServiceAccount) {
-      Attributes.Builder attrsBuilder = Attributes.newBuilder();
-      if (peerServiceAccount != null) {
-        HandshakerResult handshakerResult =
-            HandshakerResult.newBuilder()
-                .setPeerIdentity(Identity.newBuilder().setServiceAccount(peerServiceAccount))
-                .build();
-        AltsAuthContext altsAuthContext = new AltsAuthContext(handshakerResult);
-        attrsBuilder.set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY, altsAuthContext);
-      }
-      attrs = attrsBuilder.build();
+    FakeServerCall(Attributes attrs) {
+      this.attrs = attrs;
     }
 
     @Override
