@@ -44,7 +44,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class BootstrapperImplTest {
 
-  private static final String BOOTSTRAP_FILE_PATH = "/home/grpc-java/xds/src/test/bootstrap.json";
+  private static final String BOOTSTRAP_FILE_PATH = "/fake/fs/path/bootstrap.json";
   private static final String SERVER_URI = "trafficdirector.googleapis.com:443";
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
