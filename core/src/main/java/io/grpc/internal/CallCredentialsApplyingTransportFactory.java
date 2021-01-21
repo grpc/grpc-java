@@ -145,6 +145,9 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
         }
         return applier.returnStream();
       } else {
+        if (pendingApplier.get() >= 0) {
+          return new FailingClientStream(shutdownStatus);
+        }
         return delegate.newStream(method, headers, callOptions);
       }
     }
