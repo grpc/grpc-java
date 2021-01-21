@@ -16,7 +16,7 @@
 # Update VERSION then in this directory run ./import.sh
 
 set -e
-BRANCH=master
+BRANCH=main
 # import VERSION from one of the google internal CLs
 VERSION=af17f954653afcab6a189673e3500b2e988f1aef
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
@@ -114,6 +114,8 @@ envoy/config/trace/v3/service.proto
 envoy/config/trace/v3/zipkin.proto
 envoy/config/rbac/v2/rbac.proto
 envoy/extensions/clusters/aggregate/v3/cluster.proto
+envoy/extensions/filters/common/fault/v3/fault.proto
+envoy/extensions/filters/http/fault/v3/fault.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
 envoy/extensions/transport_sockets/tls/v3/cert.proto
 envoy/extensions/transport_sockets/tls/v3/common.proto
