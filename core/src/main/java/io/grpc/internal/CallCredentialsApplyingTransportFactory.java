@@ -71,7 +71,7 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     private final String authority;
     // Negative value means transport active, non-negative value indicates shutdown invoked.
     private final AtomicInteger pendingApplier = new AtomicInteger(Integer.MIN_VALUE + 1);
-    private final Status shutdownStatus = Status.UNAVAILABLE;
+    private volatile Status shutdownStatus;
     @GuardedBy("this")
     private Status savedShutdownStatus;
     @GuardedBy("this")
@@ -157,7 +157,10 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
       checkNotNull(status, "status");
       synchronized (this) {
         if (pendingApplier.get() < 0) {
+          shutdownStatus = status;
           pendingApplier.addAndGet(Integer.MAX_VALUE);
+        } else {
+          return;
         }
         if (pendingApplier.get() != 0) {
           savedShutdownStatus = status;
@@ -167,16 +170,23 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
       super.shutdown(status);
     }
 
-    // TODO(zivy@): should call delegate shutdownNow asap. Maybe cancel pending applier.
+    // TODO(zivy): cancel pending applier here.
     @Override
     public void shutdownNow(Status status) {
       checkNotNull(status, "status");
       synchronized (this) {
         if (pendingApplier.get() < 0) {
+          shutdownStatus = status;
+          if (savedShutdownStatus == null) {
+            savedShutdownStatus = status;
+          }
           pendingApplier.addAndGet(Integer.MAX_VALUE);
+        } else if (savedShutdownNowStatus != null) {
+          return;
         }
         if (pendingApplier.get() != 0) {
           savedShutdownNowStatus = status;
+          // TODO(zivy): propagate shutdownNow to the delegate immediately.
           return;
         }
       }

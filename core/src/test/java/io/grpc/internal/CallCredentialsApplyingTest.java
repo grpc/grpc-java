@@ -296,6 +296,28 @@ public class CallCredentialsApplyingTest {
     verify(mockTransport).shutdown(Status.UNAVAILABLE);
     transport.shutdownNow(Status.ABORTED);
     verify(mockTransport).shutdownNow(Status.ABORTED);
+
+    transport.shutdown(Status.UNAVAILABLE);
+    verify(mockTransport).shutdown(Status.UNAVAILABLE);
+    transport.shutdownNow(Status.ABORTED);
+    verify(mockTransport, times(2)).shutdownNow(Status.ABORTED);
+  }
+
+  @Test
+  public void delayedShutdownNow() {
+    transport.newStream(method, origHeaders, callOptions);
+    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
+        same(mockExecutor), applierCaptor.capture());
+    transport.shutdownNow(Status.ABORTED);
+    assertTrue(transport.newStream(method, origHeaders, callOptions)
+        instanceof FailingClientStream);
+    verify(mockTransport, never()).shutdown(any(Status.class));
+    Metadata headers = new Metadata();
+    headers.put(CREDS_KEY, CREDS_VALUE);
+    applierCaptor.getValue().apply(headers);
+    verify(mockTransport).shutdown(Status.ABORTED);
+    verify(mockTransport).shutdownNow(Status.ABORTED);
   }
 
   @Test
