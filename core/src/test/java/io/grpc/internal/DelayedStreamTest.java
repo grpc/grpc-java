@@ -72,7 +72,7 @@ public class DelayedStreamTest {
     final String authority = "becauseIsaidSo";
     stream.setAuthority(authority);
     stream.start(listener);
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
     InOrder inOrder = inOrder(realStream);
     inOrder.verify(realStream).setAuthority(authority);
     inOrder.verify(realStream).start(any(ClientStreamListener.class));
@@ -92,9 +92,9 @@ public class DelayedStreamTest {
 
   @Test
   public void setStream_sendsAllMessages() {
-    stream.start(listener);
     stream.setCompressor(Codec.Identity.NONE);
     stream.setDecompressorRegistry(DecompressorRegistry.getDefaultInstance());
+    stream.start(listener);
 
     stream.setMessageCompression(true);
     InputStream message = new ByteArrayInputStream(new byte[]{'a'});
@@ -102,7 +102,7 @@ public class DelayedStreamTest {
     stream.setMessageCompression(false);
     stream.writeMessage(message);
 
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
 
     verify(realStream).setCompressor(Codec.Identity.NONE);
     verify(realStream).setDecompressorRegistry(DecompressorRegistry.getDefaultInstance());
@@ -125,7 +125,7 @@ public class DelayedStreamTest {
   public void setStream_halfClose() {
     stream.start(listener);
     stream.halfClose();
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
 
     verify(realStream).halfClose();
   }
@@ -134,7 +134,7 @@ public class DelayedStreamTest {
   public void setStream_flush() {
     stream.start(listener);
     stream.flush();
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
     verify(realStream).flush();
 
     stream.flush();
@@ -146,7 +146,7 @@ public class DelayedStreamTest {
     stream.start(listener);
     stream.request(1);
     stream.request(2);
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
     verify(realStream).request(1);
     verify(realStream).request(2);
 
@@ -158,7 +158,7 @@ public class DelayedStreamTest {
   public void setStream_setMessageCompression() {
     stream.start(listener);
     stream.setMessageCompression(false);
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
     verify(realStream).setMessageCompression(false);
 
     stream.setMessageCompression(true);
@@ -169,7 +169,7 @@ public class DelayedStreamTest {
   public void setStream_isReady() {
     stream.start(listener);
     assertFalse(stream.isReady());
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
     verify(realStream, never()).isReady();
 
     assertFalse(stream.isReady());
@@ -190,7 +190,7 @@ public class DelayedStreamTest {
 
     assertEquals(Attributes.EMPTY, stream.getAttributes());
 
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
     assertEquals(attributes, stream.getAttributes());
   }
 
@@ -204,7 +204,7 @@ public class DelayedStreamTest {
   @Test
   public void startThenSetStreamThenCancelled() {
     stream.start(listener);
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
     stream.cancel(Status.CANCELLED);
     verify(realStream).start(any(ClientStreamListener.class));
     verify(realStream).cancel(same(Status.CANCELLED));
@@ -212,7 +212,7 @@ public class DelayedStreamTest {
 
   @Test
   public void setStreamThenStartThenCancelled() {
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
     stream.start(listener);
     stream.cancel(Status.CANCELLED);
     verify(realStream).start(same(listener));
@@ -220,44 +220,28 @@ public class DelayedStreamTest {
   }
 
   @Test
-  public void setStreamThenCancelled() {
-    stream.setStream(realStream);
-    stream.cancel(Status.CANCELLED);
-    verify(realStream).cancel(same(Status.CANCELLED));
-  }
-
-  @Test
   public void setStreamTwice() {
     stream.start(listener);
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
     verify(realStream).start(any(ClientStreamListener.class));
-    stream.setStream(mock(ClientStream.class));
+    callMeMaybe(stream.setStream(mock(ClientStream.class)));
     stream.flush();
     verify(realStream).flush();
   }
 
   @Test
   public void cancelThenSetStream() {
-    stream.cancel(Status.CANCELLED);
-    stream.setStream(realStream);
     stream.start(listener);
+    stream.cancel(Status.CANCELLED);
+    callMeMaybe(stream.setStream(realStream));
     stream.isReady();
     verifyNoMoreInteractions(realStream);
   }
 
-  @Test
+  @Test(expected = IllegalStateException.class)
   public void cancel_beforeStart() {
     Status status = Status.CANCELLED.withDescription("that was quick");
     stream.cancel(status);
-    stream.start(listener);
-    verify(listener).closed(same(status), any(Metadata.class));
-  }
-
-  @Test
-  public void cancelledThenStart() {
-    stream.cancel(Status.CANCELLED);
-    stream.start(listener);
-    verify(listener).closed(eq(Status.CANCELLED), any(Metadata.class));
   }
 
   @Test
@@ -275,7 +259,7 @@ public class DelayedStreamTest {
 
     IsReadyListener isReadyListener = new IsReadyListener();
     stream.start(isReadyListener);
-    stream.setStream(new NoopClientStream() {
+    callMeMaybe(stream.setStream(new NoopClientStream() {
       @Override
       public void start(ClientStreamListener listener) {
         // This call to the listener should end up being delayed.
@@ -286,7 +270,7 @@ public class DelayedStreamTest {
       public boolean isReady() {
         return true;
       }
-    });
+    }));
     assertTrue(isReadyListener.onReadyCalled);
   }
 
@@ -302,7 +286,7 @@ public class DelayedStreamTest {
 
     final InOrder inOrder = inOrder(listener);
     stream.start(listener);
-    stream.setStream(new NoopClientStream() {
+    callMeMaybe(stream.setStream(new NoopClientStream() {
       @Override
       public void start(ClientStreamListener passedListener) {
         passedListener.onReady();
@@ -314,7 +298,7 @@ public class DelayedStreamTest {
 
         verifyNoMoreInteractions(listener);
       }
-    });
+    }));
     inOrder.verify(listener).onReady();
     inOrder.verify(listener).headersRead(headers);
     inOrder.verify(listener).messagesAvailable(producer1);
@@ -332,7 +316,7 @@ public class DelayedStreamTest {
     final Status status = Status.UNKNOWN.withDescription("unique status");
 
     stream.start(listener);
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
     verify(realStream).start(listenerCaptor.capture());
     ClientStreamListener delayedListener = listenerCaptor.getValue();
     delayedListener.onReady();
@@ -371,11 +355,17 @@ public class DelayedStreamTest {
         }
       }).when(realStream).appendTimeoutInsight(any(InsightBuilder.class));
     stream.start(listener);
-    stream.setStream(realStream);
+    callMeMaybe(stream.setStream(realStream));
 
     InsightBuilder insight = new InsightBuilder();
     stream.appendTimeoutInsight(insight);
     assertThat(insight.toString())
         .matches("\\[buffered_nanos=[0-9]+, remote_addr=127\\.0\\.0\\.1:443\\]");
+  }
+
+  private void callMeMaybe(Runnable r) {
+    if (r != null) {
+      r.run();
+    }
   }
 }

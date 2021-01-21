@@ -29,6 +29,7 @@ import io.grpc.Status;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.CheckReturnValue;
 import javax.annotation.concurrent.GuardedBy;
 
 /**
@@ -59,38 +60,35 @@ class DelayedStream implements ClientStream {
   private long startTimeNanos;
   @GuardedBy("this")
   private long streamSetTimeNanos;
+  // No need to synchronize; start() synchronization provides a happens-before
+  private List<Runnable> preStartPendingCalls = new ArrayList<>();
 
   @Override
   public void setMaxInboundMessageSize(final int maxSize) {
-    if (passThrough) {
-      realStream.setMaxInboundMessageSize(maxSize);
-    } else {
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realStream.setMaxInboundMessageSize(maxSize);
-        }
-      });
-    }
+    checkState(listener == null, "May only be called before start");
+    preStartPendingCalls.add(new Runnable() {
+      @Override
+      public void run() {
+        realStream.setMaxInboundMessageSize(maxSize);
+      }
+    });
   }
 
   @Override
   public void setMaxOutboundMessageSize(final int maxSize) {
-    if (passThrough) {
-      realStream.setMaxOutboundMessageSize(maxSize);
-    } else {
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realStream.setMaxOutboundMessageSize(maxSize);
-        }
-      });
-    }
+    checkState(listener == null, "May only be called before start");
+    preStartPendingCalls.add(new Runnable() {
+      @Override
+      public void run() {
+        realStream.setMaxOutboundMessageSize(maxSize);
+      }
+    });
   }
 
   @Override
   public void setDeadline(final Deadline deadline) {
-    delayOrExecute(new Runnable() {
+    checkState(listener == null, "May only be called before start");
+    preStartPendingCalls.add(new Runnable() {
       @Override
       public void run() {
         realStream.setDeadline(deadline);
@@ -115,21 +113,41 @@ class DelayedStream implements ClientStream {
   }
 
   /**
-   * Transfers all pending and future requests and mutations to the given stream.
+   * Transfers all pending and future requests and mutations to the given stream. Method will return
+   * quickly, but if the returned Runnable is non-null it must be called to complete the process.
+   * The Runnable may take a while to execute.
    *
    * <p>No-op if either this method or {@link #cancel} have already been called.
    */
-  // When this method returns, passThrough is guaranteed to be true
-  final void setStream(ClientStream stream) {
+  // When this method returns, start() has been called on realStream or passThrough is guaranteed to
+  // be true
+  @CheckReturnValue
+  final Runnable setStream(ClientStream stream) {
+    ClientStreamListener savedListener;
     synchronized (this) {
       // If realStream != null, then either setStream() or cancel() has been called.
       if (realStream != null) {
-        return;
+        return null;
       }
       setRealStream(checkNotNull(stream, "stream"));
+      savedListener = listener;
+      if (savedListener == null) {
+        assert pendingCalls.isEmpty();
+        pendingCalls = null;
+        passThrough = true;
+      }
     }
-
-    drainPendingCalls();
+    if (savedListener == null) {
+      return null;
+    } else {
+      internalStart(savedListener);
+      return new Runnable() {
+        @Override
+        public void run() {
+          drainPendingCalls();
+        }
+      };
+    }
   }
 
   /**
@@ -177,6 +195,7 @@ class DelayedStream implements ClientStream {
    * only if {@code runnable} is thread-safe.
    */
   private void delayOrExecute(Runnable runnable) {
+    checkState(listener != null, "May only be called after start");
     synchronized (this) {
       if (!passThrough) {
         pendingCalls.add(runnable);
@@ -190,7 +209,7 @@ class DelayedStream implements ClientStream {
   public void setAuthority(final String authority) {
     checkState(listener == null, "May only be called before start");
     checkNotNull(authority, "authority");
-    delayOrExecute(new Runnable() {
+    preStartPendingCalls.add(new Runnable() {
       @Override
       public void run() {
         realStream.setAuthority(authority);
@@ -200,18 +219,19 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void start(ClientStreamListener listener) {
+    checkNotNull(listener, "listener");
     checkState(this.listener == null, "already started");
 
     Status savedError;
     boolean savedPassThrough;
     synchronized (this) {
-      this.listener = checkNotNull(listener, "listener");
       // If error != null, then cancel() has been called and was unable to close the listener
       savedError = error;
       savedPassThrough = passThrough;
       if (!savedPassThrough) {
         listener = delayedListener = new DelayedStreamListener(listener);
       }
+      this.listener = listener;
       startTimeNanos = System.nanoTime();
     }
     if (savedError != null) {
@@ -220,16 +240,20 @@ class DelayedStream implements ClientStream {
     }
 
     if (savedPassThrough) {
-      realStream.start(listener);
-    } else {
-      final ClientStreamListener finalListener = listener;
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realStream.start(finalListener);
-        }
-      });
+      internalStart(listener);
+    } // else internalStart() will be called by setStream
+  }
+
+  /**
+   * Starts stream without synchronization. {@code listener} should be same instance as {@link
+   * #listener}.
+   */
+  private void internalStart(ClientStreamListener listener) {
+    for (Runnable runnable : preStartPendingCalls) {
+      runnable.run();
     }
+    preStartPendingCalls = null;
+    realStream.start(listener);
   }
 
   @Override
@@ -247,6 +271,7 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void writeMessage(final InputStream message) {
+    checkState(listener != null, "May only be called after start");
     checkNotNull(message, "message");
     if (passThrough) {
       realStream.writeMessage(message);
@@ -262,6 +287,7 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void flush() {
+    checkState(listener != null, "May only be called after start");
     if (passThrough) {
       realStream.flush();
     } else {
@@ -277,16 +303,14 @@ class DelayedStream implements ClientStream {
   // When this method returns, passThrough is guaranteed to be true
   @Override
   public void cancel(final Status reason) {
+    checkState(listener != null, "May only be called after start");
     checkNotNull(reason, "reason");
     boolean delegateToRealStream = true;
-    ClientStreamListener listenerToClose = null;
     synchronized (this) {
       // If realStream != null, then either setStream() or cancel() has been called
       if (realStream == null) {
         setRealStream(NoopClientStream.INSTANCE);
         delegateToRealStream = false;
-        // If listener == null, then start() will later call listener with 'error'
-        listenerToClose = listener;
         error = reason;
       }
     }
@@ -298,10 +322,9 @@ class DelayedStream implements ClientStream {
         }
       });
     } else {
-      if (listenerToClose != null) {
-        listenerToClose.closed(reason, new Metadata());
-      }
       drainPendingCalls();
+      // Note that listener is a DelayedStreamListener
+      listener.closed(reason, new Metadata());
     }
   }
 
@@ -314,6 +337,7 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void halfClose() {
+    checkState(listener != null, "May only be called after start");
     delayOrExecute(new Runnable() {
       @Override
       public void run() {
@@ -324,6 +348,7 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void request(final int numMessages) {
+    checkState(listener != null, "May only be called after start");
     if (passThrough) {
       realStream.request(numMessages);
     } else {
@@ -338,7 +363,8 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void optimizeForDirectExecutor() {
-    delayOrExecute(new Runnable() {
+    checkState(listener == null, "May only be called before start");
+    preStartPendingCalls.add(new Runnable() {
       @Override
       public void run() {
         realStream.optimizeForDirectExecutor();
@@ -348,8 +374,9 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void setCompressor(final Compressor compressor) {
+    checkState(listener == null, "May only be called before start");
     checkNotNull(compressor, "compressor");
-    delayOrExecute(new Runnable() {
+    preStartPendingCalls.add(new Runnable() {
       @Override
       public void run() {
         realStream.setCompressor(compressor);
@@ -359,7 +386,8 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void setFullStreamDecompression(final boolean fullStreamDecompression) {
-    delayOrExecute(
+    checkState(listener == null, "May only be called before start");
+    preStartPendingCalls.add(
         new Runnable() {
           @Override
           public void run() {
@@ -370,8 +398,9 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void setDecompressorRegistry(final DecompressorRegistry decompressorRegistry) {
+    checkState(listener == null, "May only be called before start");
     checkNotNull(decompressorRegistry, "decompressorRegistry");
-    delayOrExecute(new Runnable() {
+    preStartPendingCalls.add(new Runnable() {
       @Override
       public void run() {
         realStream.setDecompressorRegistry(decompressorRegistry);
@@ -390,6 +419,7 @@ class DelayedStream implements ClientStream {
 
   @Override
   public void setMessageCompression(final boolean enable) {
+    checkState(listener != null, "May only be called after start");
     if (passThrough) {
       realStream.setMessageCompression(enable);
     } else {

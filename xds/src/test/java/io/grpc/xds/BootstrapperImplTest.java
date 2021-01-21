@@ -29,8 +29,11 @@ import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.Node;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -39,12 +42,37 @@ import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link Bootstrapper}. */
 @RunWith(JUnit4.class)
-public class BootstrapperTest {
+public class BootstrapperImplTest {
 
+  private static final String BOOTSTRAP_FILE_PATH = "/fake/fs/path/bootstrap.json";
   private static final String SERVER_URI = "trafficdirector.googleapis.com:443";
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
+
+  private final BootstrapperImpl bootstrapper = new BootstrapperImpl();
+  private String originalBootstrapPathFromEnvVar;
+  private String originalBootstrapPathFromSysProp;
+  private boolean originalEnableV3Protocol;
+
+  @Before
+  public void setUp() {
+    saveEnvironment();
+    BootstrapperImpl.bootstrapPathFromEnvVar = BOOTSTRAP_FILE_PATH;
+  }
+
+  private void saveEnvironment() {
+    originalBootstrapPathFromEnvVar = BootstrapperImpl.bootstrapPathFromEnvVar;
+    originalBootstrapPathFromSysProp = BootstrapperImpl.bootstrapPathFromSysProp;
+    originalEnableV3Protocol = BootstrapperImpl.enableV3Protocol;
+  }
+
+  @After
+  public void restoreEnvironment() {
+    BootstrapperImpl.bootstrapPathFromEnvVar = originalBootstrapPathFromEnvVar;
+    BootstrapperImpl.bootstrapPathFromSysProp = originalBootstrapPathFromSysProp;
+    BootstrapperImpl.enableV3Protocol = originalEnableV3Protocol;
+  }
 
   @Test
   public void parseBootstrap_singleXdsServer() throws XdsInitializationException {
@@ -72,7 +100,8 @@ public class BootstrapperTest {
         + "  ]\n"
         + "}";
 
-    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
     assertThat(info.getServers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
     assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
@@ -123,7 +152,8 @@ public class BootstrapperTest {
         + "  ]\n"
         + "}";
 
-    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
     assertThat(info.getServers()).hasSize(2);
     List<ServerInfo> serverInfoList = info.getServers();
     assertThat(serverInfoList.get(0).getTarget())
@@ -176,7 +206,8 @@ public class BootstrapperTest {
         + "  \"ignore\": \"something irrelevant\"\n"
         + "}";
 
-    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
     assertThat(info.getServers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
     assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
@@ -205,9 +236,10 @@ public class BootstrapperTest {
         + "  ]\n"
         + "}";
 
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     thrown.expect(XdsInitializationException.class);
     thrown.expectMessage("Invalid bootstrap: server " + SERVER_URI + " 'channel_creds' required");
-    Bootstrapper.parseConfig(rawData);
+    bootstrapper.bootstrap();
   }
 
   @Test
@@ -223,9 +255,10 @@ public class BootstrapperTest {
         + "  ]\n"
         + "}";
 
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     thrown.expect(XdsInitializationException.class);
     thrown.expectMessage("Server " + SERVER_URI + ": no supported channel credentials found");
-    Bootstrapper.parseConfig(rawData);
+    bootstrapper.bootstrap();
   }
 
   @Test
@@ -242,7 +275,8 @@ public class BootstrapperTest {
         + "  ]\n"
         + "}";
 
-    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
     assertThat(info.getServers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
     assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
@@ -268,9 +302,10 @@ public class BootstrapperTest {
         + "  }\n"
         + "}";
 
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     thrown.expect(XdsInitializationException.class);
     thrown.expectMessage("Invalid bootstrap: 'xds_servers' does not exist.");
-    Bootstrapper.parseConfig(rawData);
+    bootstrapper.bootstrap();
   }
 
   @Test
@@ -298,9 +333,9 @@ public class BootstrapperTest {
         + "  ]\n "
         + "}";
 
-    thrown.expect(XdsInitializationException.class);
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     thrown.expectMessage("Invalid bootstrap: missing 'server_uri'");
-    Bootstrapper.parseConfig(rawData);
+    bootstrapper.bootstrap();
   }
 
   @Test
@@ -342,7 +377,8 @@ public class BootstrapperTest {
             + "  }\n"
             + "}";
 
-    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
     assertThat(info.getServers()).isEmpty();
     assertThat(info.getNode()).isEqualTo(getNodeBuilder().build());
     Map<String, Bootstrapper.CertificateProviderInfo> certProviders = info.getCertProviders();
@@ -396,8 +432,9 @@ public class BootstrapperTest {
             + "  }\n"
             + "}";
 
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     try {
-      Bootstrapper.parseConfig(rawData);
+      bootstrapper.bootstrap();
       fail("exception expected");
     } catch (ClassCastException expected) {
       assertThat(expected).hasMessageThat().contains("value '234.0' for key 'plugin_name' in");
@@ -421,8 +458,9 @@ public class BootstrapperTest {
             + "  }\n"
             + "}";
 
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     try {
-      Bootstrapper.parseConfig(rawData);
+      bootstrapper.bootstrap();
       fail("exception expected");
     } catch (ClassCastException expected) {
       assertThat(expected).hasMessageThat().contains("value 'badValue' for key 'config' in");
@@ -445,8 +483,9 @@ public class BootstrapperTest {
             + "  }\n"
             + "}";
 
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     try {
-      Bootstrapper.parseConfig(rawData);
+      bootstrapper.bootstrap();
       fail("exception expected");
     } catch (XdsInitializationException expected) {
       assertThat(expected)
@@ -493,8 +532,9 @@ public class BootstrapperTest {
             + "  }\n"
             + "}";
 
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     try {
-      Bootstrapper.parseConfig(rawData);
+      bootstrapper.bootstrap();
       fail("exception expected");
     } catch (XdsInitializationException expected) {
       assertThat(expected)
@@ -510,7 +550,8 @@ public class BootstrapperTest {
             + "  \"grpc_server_resource_name_id\": \"grpc/serverx\"\n"
             + "}";
 
-    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
     assertThat(info.getGrpcServerResourceId()).isEqualTo("grpc/serverx");
   }
 
@@ -527,7 +568,9 @@ public class BootstrapperTest {
         + "    }\n"
         + "  ]\n"
         + "}";
-    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
     assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
     assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
@@ -541,10 +584,8 @@ public class BootstrapperTest {
 
   @Test
   public void supportV3Protocol_enabled() throws XdsInitializationException {
-    boolean originalEnableV3Protocol = Bootstrapper.enableV3Protocol;
-    Bootstrapper.enableV3Protocol = true;
+    BootstrapperImpl.enableV3Protocol = true;
     subtestSupportV3Protocol(true);
-    Bootstrapper.enableV3Protocol = originalEnableV3Protocol;
   }
 
   private void subtestSupportV3Protocol(boolean enabled) throws XdsInitializationException {
@@ -560,7 +601,8 @@ public class BootstrapperTest {
         + "  ]\n"
         + "}";
 
-    BootstrapInfo info = Bootstrapper.parseConfig(rawData);
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
     assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
     assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
@@ -571,6 +613,37 @@ public class BootstrapperTest {
     }
   }
 
+  @Test
+  public void fallbackToFilePathFromSystemProperty() throws XdsInitializationException {
+    final String customPath = "/home/bootstrap.json";
+    BootstrapperImpl.bootstrapPathFromEnvVar = null;
+    BootstrapperImpl.bootstrapPathFromSysProp = customPath;
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(customPath, rawData));
+    bootstrapper.bootstrap();
+  }
+
+  private static BootstrapperImpl.FileReader createFileReader(
+      final String expectedPath, final String rawData) {
+    return new BootstrapperImpl.FileReader() {
+      @Override
+      public String readFile(String path) throws IOException {
+        assertThat(path).isEqualTo(expectedPath);
+        return rawData;
+      }
+    };
+  }
+
   private static Node.Builder getNodeBuilder() {
     GrpcBuildVersion buildVersion = GrpcUtil.getGrpcBuildVersion();
     return
@@ -578,6 +651,6 @@ public class BootstrapperTest {
             .setBuildVersion(buildVersion.toString())
             .setUserAgentName(buildVersion.getUserAgent())
             .setUserAgentVersion(buildVersion.getImplementationVersion())
-            .addClientFeatures(Bootstrapper.CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
+            .addClientFeatures(BootstrapperImpl.CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
   }
 }

@@ -877,8 +877,8 @@ public class ManagedChannelImplTest {
     verifyNoMoreInteractions(stateListener1, stateListener2);
 
     // LoadBalancer will normally shutdown all subchannels
-    subchannel1.shutdown();
-    subchannel2.shutdown();
+    shutdownSafely(helper, subchannel1);
+    shutdownSafely(helper, subchannel2);
 
     // Since subchannels are shutdown, SubchannelStateListeners will only get SHUTDOWN regardless of
     // the transport states.

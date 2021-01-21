@@ -1105,6 +1105,49 @@ public class GrpclbLoadBalancerTest {
   }
 
   @Test
+  public void roundRobinMode_subchannelStayTransientFailureUntilReady() {
+    InOrder inOrder = inOrder(helper);
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
+    deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList);
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+
+    // Simulate receiving LB response
+    List<ServerEntry> backends1 = Arrays.asList(
+        new ServerEntry("127.0.0.1", 2000, "token0001"),
+        new ServerEntry("127.0.0.1", 2010, "token0002"));
+    lbResponseObserver.onNext(buildInitialResponse());
+    lbResponseObserver.onNext(buildLbResponse(backends1));
+    assertEquals(2, mockSubchannels.size());
+    Subchannel subchannel1 = mockSubchannels.poll();
+    Subchannel subchannel2 = mockSubchannels.poll();
+
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
+    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(CONNECTING));
+    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+
+    // Switch subchannel1 to TRANSIENT_FAILURE, making the general state TRANSIENT_FAILURE too.
+    Status error = Status.UNAVAILABLE.withDescription("error1");
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertThat(((RoundRobinPicker) pickerCaptor.getValue()).pickList)
+        .containsExactly(new ErrorEntry(error));
+
+    // Switch subchannel1 to IDLE, then to CONNECTING, which are ignored since the previous
+    // subchannel state is TRANSIENT_FAILURE. General state is unchanged.
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(IDLE));
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
+    inOrder.verifyNoMoreInteractions();
+
+    // Switch subchannel1 to READY, which will affect the general state
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    assertThat(((RoundRobinPicker) pickerCaptor.getValue()).pickList)
+        .containsExactly(new BackendEntry(subchannel1, getLoadRecorder(), "token0001"));
+    inOrder.verifyNoMoreInteractions();
+  }
+
+  @Test
   public void grpclbFallback_initialTimeout_serverListReceivedBeforeTimerExpires() {
     subtestGrpclbFallbackInitialTimeout(false);
   }

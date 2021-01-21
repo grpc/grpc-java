@@ -190,8 +190,8 @@ final class XdsNameResolver extends NameResolver {
     ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
     Attributes attrs =
         Attributes.newBuilder()
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-            .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
+            .set(InternalXdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+            .set(InternalXdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
             .set(InternalConfigSelector.KEY, configSelector)
             .build();
     ResolutionResult result =

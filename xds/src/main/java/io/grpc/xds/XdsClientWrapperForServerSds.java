@@ -98,7 +98,7 @@ public final class XdsClientWrapperForServerSds {
     checkState(xdsClient == null, "start() called more than once");
     Bootstrapper.BootstrapInfo bootstrapInfo;
     try {
-      bootstrapInfo = Bootstrapper.getInstance().bootstrap();
+      bootstrapInfo = new BootstrapperImpl().bootstrap();
       List<Bootstrapper.ServerInfo> serverList = bootstrapInfo.getServers();
       if (serverList.isEmpty()) {
         throw new XdsInitializationException("No management server provided by bootstrap");

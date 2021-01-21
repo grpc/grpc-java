@@ -158,7 +158,7 @@ public class LrsLoadBalancerTest {
             .setAddresses(addresses)
             .setAttributes(
                 Attributes.newBuilder()
-                    .set(XdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadRecorder)
+                    .set(InternalXdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadRecorder)
                     .build())
             .setLoadBalancingPolicyConfig(config)
             .build();
