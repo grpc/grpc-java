@@ -33,7 +33,6 @@ import io.grpc.internal.MetadataApplierImpl.MetadataApplierListener;
 import java.net.SocketAddress;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -72,7 +71,6 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     private final String authority;
     // Negative value means transport active, non-negative value indicates shutdown invoked.
     private final AtomicInteger pendingApplier = new AtomicInteger(Integer.MIN_VALUE + 1);
-    private final AtomicBoolean shutdownInvoked = new AtomicBoolean(false);
     private final Status shutdownStatus = Status.UNAVAILABLE;
     @GuardedBy("this")
     private Status savedShutdownStatus;
@@ -101,9 +99,6 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     @SuppressWarnings("deprecation")
     public ClientStream newStream(
         final MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions) {
-      if (shutdownInvoked.get()) {
-        return new FailingClientStream(shutdownStatus);
-      }
       CallCredentials creds = callOptions.getCredentials();
       if (creds == null) {
         creds = channelCallCredentials;
@@ -157,10 +152,10 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     @Override
     public void shutdown(Status status) {
       checkNotNull(status, "status");
-      if (shutdownInvoked.compareAndSet(false, true)) {
-        pendingApplier.addAndGet(Integer.MAX_VALUE);
-      }
       synchronized (this) {
+        if (pendingApplier.get() < 0) {
+          pendingApplier.addAndGet(Integer.MAX_VALUE);
+        }
         if (pendingApplier.get() != 0) {
           savedShutdownStatus = status;
           return;
@@ -173,10 +168,10 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     @Override
     public void shutdownNow(Status status) {
       checkNotNull(status, "status");
-      if (shutdownInvoked.compareAndSet(false, true)) {
-        pendingApplier.addAndGet(Integer.MAX_VALUE);
-      }
       synchronized (this) {
+        if (pendingApplier.get() < 0) {
+          pendingApplier.addAndGet(Integer.MAX_VALUE);
+        }
         if (pendingApplier.get() != 0) {
           savedShutdownNowStatus = status;
           return;

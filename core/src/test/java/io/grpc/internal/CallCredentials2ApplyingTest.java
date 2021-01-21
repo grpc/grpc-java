@@ -325,8 +325,5 @@ public class CallCredentials2ApplyingTest {
     assertNull(origHeaders.get(CREDS_KEY));
     assertEquals(ORIG_HEADER_VALUE, origHeaders.get(ORIG_HEADER_KEY));
     transport.shutdown(Status.UNAVAILABLE);
-    assertTrue(transport.newStream(method, origHeaders, callOptions)
-        instanceof FailingClientStream);
-    verify(mockTransport).shutdown(Status.UNAVAILABLE);
   }
 }
