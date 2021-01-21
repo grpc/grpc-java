@@ -24,9 +24,9 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.Status;
-import io.grpc.alts.internal.AltsProtocolNegotiator;
 import io.grpc.alts.internal.HandshakerResult;
 import io.grpc.alts.internal.Identity;
+import io.grpc.alts.internal.TsiHandshakeHandler;
 import javax.annotation.Nullable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -82,7 +82,7 @@ public final class AuthorizationUtilTest {
   static FakeServerCall fakeServerCallWithAuthContext(@Nullable Object authContext) {
     Attributes.Builder attrsBuilder = Attributes.newBuilder();
     if (authContext != null) {
-      attrsBuilder.set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY, authContext);
+      attrsBuilder.set(TsiHandshakeHandler.AUTH_CONTEXT_KEY, authContext);
     }
     return new FakeServerCall(attrsBuilder.build());
   }

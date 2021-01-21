@@ -18,11 +18,10 @@ package io.grpc.alts.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.alts.internal.AltsProtocolNegotiator.AUTH_CONTEXT_KEY;
-import static io.grpc.alts.internal.AltsProtocolNegotiator.TSI_PEER_KEY;
 
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.Grpc;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
 import io.grpc.alts.internal.TsiHandshakeHandler.HandshakeValidator.SecurityDetails;
@@ -47,6 +46,13 @@ import javax.annotation.Nullable;
  * Performs The TSI Handshake.
  */
 public final class TsiHandshakeHandler extends ByteToMessageDecoder {
+
+  @Grpc.TransportAttr
+  public static final Attributes.Key<TsiPeer> TSI_PEER_KEY = Attributes.Key.create("TSI_PEER");
+  @Grpc.TransportAttr
+  public static final Attributes.Key<Object> AUTH_CONTEXT_KEY =
+      Attributes.Key.create("AUTH_CONTEXT_KEY");
+
   /**
    * Validates a Tsi Peer object.
    */

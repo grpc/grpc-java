@@ -22,7 +22,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.Channel;
-import io.grpc.Grpc;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.alts.AltsAuthContext;
@@ -48,13 +47,6 @@ import javax.annotation.Nullable;
 // TODO(carl-mastrangelo): rename this AltsProtocolNegotiators.
 public final class AltsProtocolNegotiator {
   private static final Logger logger = Logger.getLogger(AltsProtocolNegotiator.class.getName());
-
-  @Grpc.TransportAttr
-  public static final Attributes.Key<TsiPeer> TSI_PEER_KEY = Attributes.Key.create("TSI_PEER");
-  @Grpc.TransportAttr
-  public static final Attributes.Key<Object> AUTH_CONTEXT_KEY =
-      Attributes.Key.create("AUTH_CONTEXT_KEY");
-
   private static final AsciiString SCHEME = AsciiString.of("https");
 
   /**

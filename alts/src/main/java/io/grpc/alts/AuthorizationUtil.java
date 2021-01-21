@@ -18,7 +18,7 @@ package io.grpc.alts;
 
 import io.grpc.ServerCall;
 import io.grpc.Status;
-import io.grpc.alts.internal.AltsProtocolNegotiator;
+import io.grpc.alts.internal.TsiHandshakeHandler;
 import java.util.Collection;
 
 /** Utility class for ALTS client authorization. */
@@ -33,7 +33,7 @@ public final class AuthorizationUtil {
    */
   public static Status clientAuthorizationCheck(
       ServerCall<?, ?> call, Collection<String> expectedServiceAccounts) {
-    Object authContext = call.getAttributes().get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY);
+    Object authContext = call.getAttributes().get(TsiHandshakeHandler.AUTH_CONTEXT_KEY);
     if (!(authContext instanceof AltsAuthContext)) {
       return Status.PERMISSION_DENIED.withDescription("Peer ALTS AuthContext not found");
     }
