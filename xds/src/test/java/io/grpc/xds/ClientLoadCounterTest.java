@@ -32,6 +32,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.FakeClock;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingStreamTracerFactory;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
@@ -40,8 +41,8 @@ import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.ClientLoadCounter.TracerWrappingSubchannelPicker;
 import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
-import java.util.concurrent.ThreadLocalRandom;
-import org.junit.Before;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -60,78 +61,66 @@ public class ClientLoadCounterTest {
           };
         }
       };
-  private ClientLoadCounter counter;
 
-  @Before
-  public void setUp() {
-    counter = new ClientLoadCounter();
-    ClientLoadSnapshot emptySnapshot = counter.snapshot();
-    assertQueryCounts(emptySnapshot, 0, 0, 0, 0);
-    assertThat(emptySnapshot.getMetricValues()).isEmpty();
-  }
+  private final FakeClock fakeClock = new FakeClock();
+  private ClientLoadCounter counter =
+      new ClientLoadCounter(fakeClock.getStopwatchSupplier().get());
 
   @Test
-  public void snapshotContainsDataInCounter() {
-    long numSucceededCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
-    long numInProgressCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
-    long numFailedCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
-    long numIssuedCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
-    counter = new ClientLoadCounter();
-    counter.setCallsSucceeded(numSucceededCalls);
-    counter.setCallsInProgress(numInProgressCalls);
-    counter.setCallsFailed(numFailedCalls);
-    counter.setCallsIssued(numIssuedCalls);
-    ClientLoadSnapshot snapshot = counter.snapshot();
-    assertQueryCounts(snapshot, numSucceededCalls, numInProgressCalls, numFailedCalls,
-        numIssuedCalls);
-    String snapshotStr = snapshot.toString();
-    assertThat(snapshotStr).contains("callsSucceeded=" + numSucceededCalls);
-    assertThat(snapshotStr).contains("callsInProgress=" + numInProgressCalls);
-    assertThat(snapshotStr).contains("callsFailed=" + numFailedCalls);
-    assertThat(snapshotStr).contains("callsIssued=" + numIssuedCalls);
-    assertThat(snapshotStr).contains("metricValues={}");
-
-    // Snapshot only accounts for stats happening after previous snapshot.
-    snapshot = counter.snapshot();
-    assertQueryCounts(snapshot, 0, numInProgressCalls, 0, 0);
-
-    snapshotStr = snapshot.toString();
-    assertThat(snapshotStr).contains("callsSucceeded=0");
-    assertThat(snapshotStr).contains("callsInProgress=" + numInProgressCalls);
-    assertThat(snapshotStr).contains("callsFailed=0");
-    assertThat(snapshotStr).contains("callsIssued=0");
-    assertThat(snapshotStr).contains("metricValues={}");
-  }
-
-  @Test
-  public void normalRecordingOperations() {
+  public void recordAndSnapshot() {
+    for (int i = 0; i < 52; i++) {
+      counter.recordCallStarted();
+    }
+    fakeClock.forwardTime(10L, TimeUnit.SECONDS);
+    for (int i = 0; i < 31; i++) {
+      counter.recordCallFinished(Status.OK);
+    }
+    fakeClock.forwardTime(5L, TimeUnit.SECONDS);
+    for (int i = 0; i < 7; i++) {
+      counter.recordCallFinished(Status.PERMISSION_DENIED);
+    }
+    fakeClock.forwardTime(1L, TimeUnit.SECONDS);
     counter.recordCallStarted();
     ClientLoadSnapshot snapshot = counter.snapshot();
-    assertQueryCounts(snapshot, 0, 1, 0, 1);
+    assertThat(snapshot.getCallsIssued()).isEqualTo(52L + 1L);
+    assertThat(snapshot.getCallsSucceeded()).isEqualTo(31L);
+    assertThat(snapshot.getCallsInProgress()).isEqualTo(52L + 1L - 31L - 7L);  // 15
+    assertThat(snapshot.getCallsFailed()).isEqualTo(7L);
+    assertThat(snapshot.getMetricValues()).isEmpty();
+    assertThat(snapshot.getDurationNano()).isEqualTo(TimeUnit.SECONDS.toNanos(10L + 5L + 1L));
 
+    fakeClock.forwardTime(3L, TimeUnit.MILLISECONDS);
     counter.recordCallFinished(Status.OK);
-    snapshot = counter.snapshot();
-    assertQueryCounts(snapshot, 1, 0, 0, 0);
-
-    counter.recordCallStarted();
-    counter.recordCallFinished(Status.CANCELLED);
-    snapshot = counter.snapshot();
-    assertQueryCounts(snapshot, 0, 0, 1, 1);
-
     counter.recordMetric("test-metric-1", 0.75);
     counter.recordMetric("test-metric-2", 0.342);
     counter.recordMetric("test-metric-3", 0.512);
     counter.recordMetric("test-metric-1", 0.543);
     counter.recordMetric("test-metric-1", 4.412);
     counter.recordMetric("test-metric-1", 100.353);
+    fakeClock.forwardTime(3L, TimeUnit.MILLISECONDS);
     snapshot = counter.snapshot();
-    assertThat(snapshot.getMetricValues().get("test-metric-1").getNumReports()).isEqualTo(4);
-    assertThat(snapshot.getMetricValues().get("test-metric-1").getTotalValue())
+    assertThat(snapshot.getCallsIssued()).isEqualTo(0L);
+    assertThat(snapshot.getCallsSucceeded()).isEqualTo(1L);
+    assertThat(snapshot.getCallsInProgress()).isEqualTo(15L - 1L);
+    assertThat(snapshot.getCallsFailed()).isEqualTo(0L);
+    Map<String, MetricValue> metrics = snapshot.getMetricValues();
+    assertThat(metrics.get("test-metric-1").getNumReports()).isEqualTo(4L);
+    assertThat(metrics.get("test-metric-1").getTotalValue())
         .isEqualTo(0.75 + 0.543 + 4.412 + 100.353);
-    assertThat(snapshot.getMetricValues().get("test-metric-2").getNumReports()).isEqualTo(1);
-    assertThat(snapshot.getMetricValues().get("test-metric-2").getTotalValue()).isEqualTo(0.342);
-    assertThat(snapshot.getMetricValues().get("test-metric-3").getNumReports()).isEqualTo(1);
-    assertThat(snapshot.getMetricValues().get("test-metric-3").getTotalValue()).isEqualTo(0.512);
+    assertThat(metrics.get("test-metric-2").getNumReports()).isEqualTo(1L);
+    assertThat(metrics.get("test-metric-2").getTotalValue()).isEqualTo(0.342);
+    assertThat(metrics.get("test-metric-3").getNumReports()).isEqualTo(1L);
+    assertThat(metrics.get("test-metric-3").getTotalValue()).isEqualTo(0.512);
+    assertThat(snapshot.getDurationNano()).isEqualTo(TimeUnit.MILLISECONDS.toNanos(3L + 3L));
+
+    fakeClock.forwardTime(5L, TimeUnit.SECONDS);
+    snapshot = counter.snapshot();
+    assertThat(snapshot.getCallsIssued()).isEqualTo(0L);
+    assertThat(snapshot.getCallsSucceeded()).isEqualTo(0L);
+    assertThat(snapshot.getCallsInProgress()).isEqualTo(14L);
+    assertThat(snapshot.getCallsFailed()).isEqualTo(0L);
+    assertThat(snapshot.getMetricValues()).isEmpty();
+    assertThat(snapshot.getDurationNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L));
   }
 
   @Test
@@ -140,10 +129,17 @@ public class ClientLoadCounterTest {
         new LoadRecordingStreamTracerFactory(counter, NOOP_CLIENT_STREAM_TRACER_FACTORY);
     ClientStreamTracer tracer = factory1.newClientStreamTracer(STREAM_INFO, new Metadata());
     ClientLoadSnapshot snapshot = counter.snapshot();
-    assertQueryCounts(snapshot, 0, 1, 0, 1);
+    assertThat(snapshot.getCallsIssued()).isEqualTo(1L);
+    assertThat(snapshot.getCallsSucceeded()).isEqualTo(0L);
+    assertThat(snapshot.getCallsInProgress()).isEqualTo(1L);
+    assertThat(snapshot.getCallsFailed()).isEqualTo(0L);
+
     tracer.streamClosed(Status.OK);
     snapshot = counter.snapshot();
-    assertQueryCounts(snapshot, 1, 0, 0, 0);
+    assertThat(snapshot.getCallsIssued()).isEqualTo(0L);
+    assertThat(snapshot.getCallsSucceeded()).isEqualTo(1L);
+    assertThat(snapshot.getCallsInProgress()).isEqualTo(0L);
+    assertThat(snapshot.getCallsFailed()).isEqualTo(0L);
 
     // Create a second LoadRecordingStreamTracerFactory with the same counter, stats are aggregated
     // together.
@@ -152,7 +148,10 @@ public class ClientLoadCounterTest {
     factory1.newClientStreamTracer(STREAM_INFO, new Metadata()).streamClosed(Status.ABORTED);
     factory2.newClientStreamTracer(STREAM_INFO, new Metadata()).streamClosed(Status.CANCELLED);
     snapshot = counter.snapshot();
-    assertQueryCounts(snapshot, 0, 0, 2, 2);
+    assertThat(snapshot.getCallsIssued()).isEqualTo(2L);
+    assertThat(snapshot.getCallsSucceeded()).isEqualTo(0L);
+    assertThat(snapshot.getCallsInProgress()).isEqualTo(0L);
+    assertThat(snapshot.getCallsFailed()).isEqualTo(2L);
   }
 
   @Test
@@ -254,8 +253,10 @@ public class ClientLoadCounterTest {
         .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
         .thenReturn(mockTracer);
 
-    ClientLoadCounter localityCounter1 = new ClientLoadCounter();
-    ClientLoadCounter localityCounter2 = new ClientLoadCounter();
+    ClientLoadCounter localityCounter1 =
+        new ClientLoadCounter(fakeClock.getStopwatchSupplier().get());
+    ClientLoadCounter localityCounter2 =
+        new ClientLoadCounter(fakeClock.getStopwatchSupplier().get());
     final PickResult pickResult1 = PickResult.withSubchannel(mock(Subchannel.class), mockFactory);
     final PickResult pickResult2 = PickResult.withSubchannel(mock(Subchannel.class));
     SubchannelPicker picker1 = new SubchannelPicker() {
@@ -338,16 +339,5 @@ public class ClientLoadCounterTest {
         .newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class), same(listener2));
     assertThat(interceptedPickResult1.getStreamTracerFactory()).isSameInstanceAs(metricsRecorder1);
     assertThat(interceptedPickResult2.getStreamTracerFactory()).isSameInstanceAs(metricsRecorder2);
-  }
-
-  private void assertQueryCounts(ClientLoadSnapshot snapshot,
-      long callsSucceeded,
-      long callsInProgress,
-      long callsFailed,
-      long callsIssued) {
-    assertThat(snapshot.getCallsSucceeded()).isEqualTo(callsSucceeded);
-    assertThat(snapshot.getCallsInProgress()).isEqualTo(callsInProgress);
-    assertThat(snapshot.getCallsFailed()).isEqualTo(callsFailed);
-    assertThat(snapshot.getCallsIssued()).isEqualTo(callsIssued);
   }
 }

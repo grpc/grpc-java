@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Stopwatch;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
@@ -28,12 +29,14 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -42,6 +45,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * Client side load stats recorder that provides RPC counting and metrics recording as name-value
  * pairs.
  */
+// TODO(chengyuanzhang): this class can be moved into LoadStatsManager.
 @ThreadSafe
 final class ClientLoadCounter {
 
@@ -51,11 +55,19 @@ final class ClientLoadCounter {
   private final AtomicLong callsFailed = new AtomicLong();
   private final AtomicLong callsIssued = new AtomicLong();
   private final MetricRecorder[] metricRecorders = new MetricRecorder[THREAD_BALANCING_FACTOR];
+  private final Stopwatch stopwatch;
 
+  // TODO(chengyuanzhang): should not use this after eliminating LoadStatsStore.
   ClientLoadCounter() {
+    this(GrpcUtil.STOPWATCH_SUPPLIER.get());
+  }
+
+  ClientLoadCounter(Stopwatch stopwatch) {
     for (int i = 0; i < THREAD_BALANCING_FACTOR; i++) {
       metricRecorders[i] = new MetricRecorder();
     }
+    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+    stopwatch.reset().start();
   }
 
   void recordCallStarted() {
@@ -97,13 +109,13 @@ final class ClientLoadCounter {
         curr.totalValue += diff.totalValue;
       }
     }
-    return new ClientLoadSnapshot(callsSucceeded.getAndSet(0),
-        callsInProgress.get(),
-        callsFailed.getAndSet(0),
-        callsIssued.getAndSet(0),
-        aggregatedValues);
+    long duration = stopwatch.elapsed(TimeUnit.NANOSECONDS);
+    stopwatch.reset().start();
+    return new ClientLoadSnapshot(callsSucceeded.getAndSet(0), callsInProgress.get(),
+        callsFailed.getAndSet(0), callsIssued.getAndSet(0), aggregatedValues, duration);
   }
 
+  // TODO(chengyuanzhang): delete me after eliminating LoadStatsStore.
   @VisibleForTesting
   void setCallsIssued(long callsIssued) {
     this.callsIssued.set(callsIssued);
@@ -135,21 +147,20 @@ final class ClientLoadCounter {
     private final long callsFailed;
     private final long callsIssued;
     private final Map<String, MetricValue> metricValues;
+    private final long durationNano;
 
     /**
      * External usage must only be for testing.
      */
     @VisibleForTesting
-    ClientLoadSnapshot(long callsSucceeded,
-        long callsInProgress,
-        long callsFailed,
-        long callsIssued,
-        Map<String, MetricValue> metricValues) {
+    ClientLoadSnapshot(long callsSucceeded, long callsInProgress, long callsFailed,
+        long callsIssued, Map<String, MetricValue> metricValues, long durationNano) {
       this.callsSucceeded = callsSucceeded;
       this.callsInProgress = callsInProgress;
       this.callsFailed = callsFailed;
       this.callsIssued = callsIssued;
       this.metricValues = checkNotNull(metricValues, "metricValues");
+      this.durationNano = durationNano;
     }
 
     long getCallsSucceeded() {
@@ -172,6 +183,10 @@ final class ClientLoadCounter {
       return Collections.unmodifiableMap(metricValues);
     }
 
+    long getDurationNano() {
+      return durationNano;
+    }
+
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
@@ -180,6 +195,7 @@ final class ClientLoadCounter {
           .add("callsFailed", callsFailed)
           .add("callsIssued", callsIssued)
           .add("metricValues", metricValues)
+          .add("durationNano", durationNano)
           .toString();
     }
   }

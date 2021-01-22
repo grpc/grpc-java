@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.FakeClock;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
@@ -53,8 +52,7 @@ public class LoadStatsStoreImplTest {
 
   @Before
   public void setUp() {
-    Stopwatch stopwatch = fakeClock.getStopwatchSupplier().get();
-    loadStatsStore = new LoadStatsStoreImpl(CLUSTER_NAME, null, stopwatch);
+    loadStatsStore = new LoadStatsStoreImpl(CLUSTER_NAME, null, fakeClock.getStopwatchSupplier());
   }
 
   private static List<EndpointLoadMetricStats> buildEndpointLoadMetricStatsList(

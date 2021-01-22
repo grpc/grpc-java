@@ -21,6 +21,7 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
@@ -58,18 +59,20 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   private final AtomicLong uncategorizedDrops = new AtomicLong();
   // Cluster level dropped request counts for each category decision.
   private final ConcurrentMap<String, AtomicLong> dropCounters = new ConcurrentHashMap<>();
+  private final Supplier<Stopwatch> stopwatchSupplier;
   private final Stopwatch stopwatch;
 
   LoadStatsStoreImpl(String clusterName, @Nullable String clusterServiceName) {
-    this(clusterName, clusterServiceName, GrpcUtil.STOPWATCH_SUPPLIER.get());
+    this(clusterName, clusterServiceName, GrpcUtil.STOPWATCH_SUPPLIER);
   }
 
   @VisibleForTesting
   LoadStatsStoreImpl(String clusterName, @Nullable String clusterServiceName,
-      Stopwatch stopwatch) {
+      Supplier<Stopwatch> stopwatchSupplier) {
     this.clusterName = checkNotNull(clusterName, "clusterName");
     this.clusterServiceName = clusterServiceName;
-    this.stopwatch =  checkNotNull(stopwatch, "stopwatch");
+    this.stopwatchSupplier =  checkNotNull(stopwatchSupplier, "stopwatchSupplier");
+    stopwatch = stopwatchSupplier.get();
     stopwatch.reset().start();
   }
 
@@ -121,7 +124,7 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   public synchronized ClientLoadCounter addLocality(final Locality locality) {
     ReferenceCounted<ClientLoadCounter> counter = localityLoadCounters.get(locality);
     if (counter == null) {
-      counter = ReferenceCounted.wrap(new ClientLoadCounter());
+      counter = ReferenceCounted.wrap(new ClientLoadCounter(stopwatchSupplier.get()));
       localityLoadCounters.put(locality, counter);
     }
     counter.retain();
