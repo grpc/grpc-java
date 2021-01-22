@@ -55,7 +55,7 @@ public class BootstrapperImpl implements Bootstrapper {
   private static final String BOOTSTRAP_CONFIG_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP_CONFIG";
   @VisibleForTesting
   static String bootstrapConfigFromEnvVar = System.getenv(BOOTSTRAP_CONFIG_SYS_ENV_VAR);
-  private static final String BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR = "io.grpc.xds.bootstrap_value";
+  private static final String BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR = "io.grpc.xds.bootstrapValue";
   @VisibleForTesting
   static String bootstrapConfigFromSysProp = System.getProperty(BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR);
   private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
