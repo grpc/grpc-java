@@ -304,23 +304,6 @@ public class CallCredentialsApplyingTest {
   }
 
   @Test
-  public void delayedShutdownNow() {
-    transport.newStream(method, origHeaders, callOptions);
-    ArgumentCaptor<CallCredentials.MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
-    verify(mockCreds).applyRequestMetadata(any(RequestInfo.class),
-        same(mockExecutor), applierCaptor.capture());
-    transport.shutdownNow(Status.ABORTED);
-    assertTrue(transport.newStream(method, origHeaders, callOptions)
-        instanceof FailingClientStream);
-    verify(mockTransport, never()).shutdown(any(Status.class));
-    Metadata headers = new Metadata();
-    headers.put(CREDS_KEY, CREDS_VALUE);
-    applierCaptor.getValue().apply(headers);
-    verify(mockTransport).shutdown(Status.ABORTED);
-    verify(mockTransport).shutdownNow(Status.ABORTED);
-  }
-
-  @Test
   public void delayedShutdown_shutdownMulti() {
     Metadata headers = new Metadata();
     headers.put(CREDS_KEY, CREDS_VALUE);

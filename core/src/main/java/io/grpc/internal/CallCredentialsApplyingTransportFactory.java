@@ -177,9 +177,6 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
       synchronized (this) {
         if (pendingApplier.get() < 0) {
           shutdownStatus = status;
-          if (savedShutdownStatus == null) {
-            savedShutdownStatus = status;
-          }
           pendingApplier.addAndGet(Integer.MAX_VALUE);
         } else if (savedShutdownNowStatus != null) {
           return;
