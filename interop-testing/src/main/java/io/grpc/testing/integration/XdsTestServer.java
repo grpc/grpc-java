@@ -291,8 +291,9 @@ public final class XdsTestServer {
       Context newContext = Context.current().withValue(CALL_BEHAVIOR_KEY, callBehavior);
       if (callBehavior != null && callBehavior.startsWith(CALL_BEHAVIOR_SLEEP_VALUE)) {
         try {
-          int timeout = Integer.parseInt(callBehavior.substring(CALL_BEHAVIOR_SLEEP_VALUE.length()));
-          Thread.sleep(timeout*1000);
+          int timeout = Integer.parseInt(
+              callBehavior.substring(CALL_BEHAVIOR_SLEEP_VALUE.length()));
+          Thread.sleep(timeout * 1000);
         } catch (NumberFormatException e) {
           throw new StatusRuntimeException(
               Status.INVALID_ARGUMENT.withDescription(
