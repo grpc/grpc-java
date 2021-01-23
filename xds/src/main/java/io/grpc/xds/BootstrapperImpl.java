@@ -52,6 +52,12 @@ public class BootstrapperImpl implements Bootstrapper {
   private static final String BOOTSTRAP_PATH_SYS_PROPERTY = "io.grpc.xds.bootstrap";
   @VisibleForTesting
   static String bootstrapPathFromSysProp = System.getProperty(BOOTSTRAP_PATH_SYS_PROPERTY);
+  private static final String BOOTSTRAP_CONFIG_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP_CONFIG";
+  @VisibleForTesting
+  static String bootstrapConfigFromEnvVar = System.getenv(BOOTSTRAP_CONFIG_SYS_ENV_VAR);
+  private static final String BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR = "io.grpc.xds.bootstrapValue";
+  @VisibleForTesting
+  static String bootstrapConfigFromSysProp = System.getProperty(BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR);
   private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
   @VisibleForTesting
   static boolean enableV3Protocol = Boolean.parseBoolean(
@@ -67,23 +73,44 @@ public class BootstrapperImpl implements Bootstrapper {
     logger = XdsLogger.withLogId(InternalLogId.allocate("bootstrapper", null));
   }
 
+  /**
+   * Reads and parses bootstrap config. Searches the config (or file of config) with the
+   * following order:
+   *
+   * <ol>
+   *   <li>A filesystem path defined by environment variable "GRPC_XDS_BOOTSTRAP"</li>
+   *   <li>A filesystem path defined by Java System Property "io.grpc.xds.bootstrap"</li>
+   *   <li>Environment variable value of "GRPC_XDS_BOOTSTRAP_CONFIG"</li>
+   *   <li>Java System Property value of "io.grpc.xds.bootstrap_value"</li>
+   * </ol>
+   */
   @Override
   public BootstrapInfo bootstrap() throws XdsInitializationException {
     String filePath =
         bootstrapPathFromEnvVar != null ? bootstrapPathFromEnvVar : bootstrapPathFromSysProp;
-    if (filePath == null) {
-      throw new XdsInitializationException(
-          "Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR
-              + " or Java System Property " + BOOTSTRAP_PATH_SYS_PROPERTY + " not defined.");
+    String rawBootstrap;
+    if (filePath != null) {
+      logger.log(XdsLogLevel.INFO, "Reading bootstrap file from {0}", filePath);
+      try {
+        rawBootstrap = reader.readFile(filePath);
+      } catch (IOException e) {
+        throw new XdsInitializationException("Fail to read bootstrap file", e);
+      }
+    } else {
+      rawBootstrap = bootstrapConfigFromEnvVar != null
+          ? bootstrapConfigFromEnvVar : bootstrapConfigFromSysProp;
     }
-    logger.log(XdsLogLevel.INFO, "Reading bootstrap file from {0}", filePath);
-    String fileContent;
-    try {
-      fileContent = reader.readFile(filePath);
-    } catch (IOException e) {
-      throw new XdsInitializationException("Fail to read bootstrap file", e);
+    if (rawBootstrap != null) {
+      return parseConfig(rawBootstrap);
     }
-    return parseConfig(fileContent);
+    throw new XdsInitializationException(
+        "Cannot find bootstrap configuration\n"
+            + "Environment variables searched:\n"
+            + "- " + BOOTSTRAP_PATH_SYS_ENV_VAR + "\n"
+            + "- " + BOOTSTRAP_CONFIG_SYS_ENV_VAR + "\n\n"
+            + "Java System Properties searched:\n"
+            + "- " + BOOTSTRAP_PATH_SYS_PROPERTY + "\n"
+            + "- " + BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR + "\n\n");
   }
 
   @VisibleForTesting
