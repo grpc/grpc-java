@@ -402,7 +402,7 @@ public class EnvoyProtoDataTest {
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct().getCluster()).isNull();
     assertThat(struct.getStruct().getWeightedCluster()).containsExactly(
-        new ClusterWeight("cluster-foo", 30), new ClusterWeight("cluster-bar", 70));
+        new ClusterWeight("cluster-foo", 30, null), new ClusterWeight("cluster-bar", 70, null));
   }
 
   @Test
@@ -547,7 +547,7 @@ public class EnvoyProtoDataTest {
         io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight.newBuilder()
             .setName("cluster-foo")
             .setWeight(UInt32Value.newBuilder().setValue(30)).build();
-    ClusterWeight struct = ClusterWeight.fromEnvoyProtoClusterWeight(proto);
+    ClusterWeight struct = ClusterWeight.fromEnvoyProtoClusterWeight(proto).getStruct();
     assertThat(struct.getName()).isEqualTo("cluster-foo");
     assertThat(struct.getWeight()).isEqualTo(30);
   }

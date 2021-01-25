@@ -23,6 +23,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import io.grpc.Status;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.HttpFault;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.VirtualHost;
@@ -54,26 +55,39 @@ abstract class XdsClient {
     // The list virtual hosts that make up the route table.
     @Nullable
     final List<VirtualHost> virtualHosts;
+    // Listener contains the HttpFault filter.
+    final boolean hasFaultInjection;
+    @Nullable // Can be null even if hasFaultInjection is true.
+    final HttpFault httpFault;
 
-    LdsUpdate(long httpMaxStreamDurationNano, String rdsName) {
-      this(httpMaxStreamDurationNano, rdsName, null);
+    LdsUpdate(
+        long httpMaxStreamDurationNano, String rdsName, boolean hasFaultInjection,
+        @Nullable HttpFault httpFault) {
+      this(httpMaxStreamDurationNano, rdsName, null, hasFaultInjection, httpFault);
     }
 
-    LdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
-      this(httpMaxStreamDurationNano, null, virtualHosts);
+    LdsUpdate(
+        long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts,
+        boolean hasFaultInjection, @Nullable HttpFault httpFault) {
+      this(httpMaxStreamDurationNano, null, virtualHosts, hasFaultInjection, httpFault);
     }
 
-    private LdsUpdate(long httpMaxStreamDurationNano, @Nullable String rdsName,
-        @Nullable List<VirtualHost> virtualHosts) {
+    private LdsUpdate(
+        long httpMaxStreamDurationNano, @Nullable String rdsName,
+        @Nullable List<VirtualHost> virtualHosts, boolean hasFaultInjection,
+        @Nullable HttpFault httpFault) {
       this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
       this.rdsName = rdsName;
       this.virtualHosts = virtualHosts == null
           ? null : Collections.unmodifiableList(new ArrayList<>(virtualHosts));
+      this.hasFaultInjection = hasFaultInjection;
+      this.httpFault = httpFault;
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(httpMaxStreamDurationNano, rdsName, virtualHosts);
+      return Objects.hash(
+          httpMaxStreamDurationNano, rdsName, virtualHosts, hasFaultInjection, httpFault);
     }
 
     @Override
@@ -87,7 +101,9 @@ abstract class XdsClient {
       LdsUpdate that = (LdsUpdate) o;
       return httpMaxStreamDurationNano == that.httpMaxStreamDurationNano
           && Objects.equals(rdsName, that.rdsName)
-          && Objects.equals(virtualHosts, that.virtualHosts);
+          && Objects.equals(virtualHosts, that.virtualHosts)
+          && hasFaultInjection == that.hasFaultInjection
+          && Objects.equals(httpFault, that.httpFault);
     }
 
     @Override
@@ -98,6 +114,10 @@ abstract class XdsClient {
         toStringHelper.add("rdsName", rdsName);
       } else {
         toStringHelper.add("virtualHosts", virtualHosts);
+      }
+      if (hasFaultInjection) {
+        toStringHelper.add("faultInjectionEnabled", true)
+            .add("httpFault", httpFault);
       }
       return toStringHelper.toString();
     }
