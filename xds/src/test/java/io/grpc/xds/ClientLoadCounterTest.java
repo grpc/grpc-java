@@ -63,8 +63,7 @@ public class ClientLoadCounterTest {
       };
 
   private final FakeClock fakeClock = new FakeClock();
-  private ClientLoadCounter counter =
-      new ClientLoadCounter(fakeClock.getStopwatchSupplier().get());
+  private ClientLoadCounter counter = new ClientLoadCounter(fakeClock.getStopwatchSupplier());
 
   @Test
   public void recordAndSnapshot() {
@@ -254,9 +253,9 @@ public class ClientLoadCounterTest {
         .thenReturn(mockTracer);
 
     ClientLoadCounter localityCounter1 =
-        new ClientLoadCounter(fakeClock.getStopwatchSupplier().get());
+        new ClientLoadCounter(fakeClock.getStopwatchSupplier());
     ClientLoadCounter localityCounter2 =
-        new ClientLoadCounter(fakeClock.getStopwatchSupplier().get());
+        new ClientLoadCounter(fakeClock.getStopwatchSupplier());
     final PickResult pickResult1 = PickResult.withSubchannel(mock(Subchannel.class), mockFactory);
     final PickResult pickResult2 = PickResult.withSubchannel(mock(Subchannel.class));
     SubchannelPicker picker1 = new SubchannelPicker() {

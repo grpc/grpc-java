@@ -22,6 +22,7 @@ import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
@@ -59,14 +60,14 @@ final class ClientLoadCounter {
 
   // TODO(chengyuanzhang): should not use this after eliminating LoadStatsStore.
   ClientLoadCounter() {
-    this(GrpcUtil.STOPWATCH_SUPPLIER.get());
+    this(GrpcUtil.STOPWATCH_SUPPLIER);
   }
 
-  ClientLoadCounter(Stopwatch stopwatch) {
+  ClientLoadCounter(Supplier<Stopwatch> stopwatchSupplier) {
     for (int i = 0; i < THREAD_BALANCING_FACTOR; i++) {
       metricRecorders[i] = new MetricRecorder();
     }
-    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+    this.stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
     stopwatch.reset().start();
   }
 

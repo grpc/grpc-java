@@ -72,7 +72,7 @@ final class LoadStatsManager2 {
     Map<String, ReferenceCounted<DropStatsCounter>> clusterDropStats = dropStats.get(cluster);
     if (!clusterDropStats.containsKey(edsServiceName)) {
       clusterDropStats.put(
-          edsServiceName, ReferenceCounted.wrap(new DropStatsCounter(stopwatchSupplier.get())));
+          edsServiceName, ReferenceCounted.wrap(new DropStatsCounter(stopwatchSupplier)));
     }
     ReferenceCounted<DropStatsCounter> ref = clusterDropStats.get(edsServiceName);
     ref.retain();
@@ -115,7 +115,7 @@ final class LoadStatsManager2 {
         clusterLoadStats.get(edsServiceName);
     if (!localityLoadStats.containsKey(locality)) {
       localityLoadStats.put(
-          locality, ReferenceCounted.wrap(new ClientLoadCounter(stopwatchSupplier.get())));
+          locality, ReferenceCounted.wrap(new ClientLoadCounter(stopwatchSupplier)));
     }
     ReferenceCounted<ClientLoadCounter> ref = localityLoadStats.get(locality);
     ref.retain();

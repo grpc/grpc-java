@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -41,8 +42,8 @@ final class DropStatsCounter {
   private volatile ConcurrentMap<String, AtomicLong> categorizedDrops = new ConcurrentHashMap<>();
   private final Stopwatch stopwatch;
 
-  DropStatsCounter(Stopwatch stopwatch) {
-    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+  DropStatsCounter(Supplier<Stopwatch> stopwatchSupplier) {
+    this.stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
     stopwatch.reset().start();
   }
 

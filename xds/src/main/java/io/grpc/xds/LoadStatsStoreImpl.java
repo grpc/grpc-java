@@ -124,7 +124,7 @@ final class LoadStatsStoreImpl implements LoadStatsStore {
   public synchronized ClientLoadCounter addLocality(final Locality locality) {
     ReferenceCounted<ClientLoadCounter> counter = localityLoadCounters.get(locality);
     if (counter == null) {
-      counter = ReferenceCounted.wrap(new ClientLoadCounter(stopwatchSupplier.get()));
+      counter = ReferenceCounted.wrap(new ClientLoadCounter(stopwatchSupplier));
       localityLoadCounters.put(locality, counter);
     }
     counter.retain();

@@ -30,7 +30,7 @@ public class DropStatsCounterTest {
 
   private final FakeClock fakeClock = new FakeClock();
   private final DropStatsCounter dropStatsCounter =
-      new DropStatsCounter(fakeClock.getStopwatchSupplier().get());
+      new DropStatsCounter(fakeClock.getStopwatchSupplier());
 
   @Test
   public void recordAndSnapshot() {
