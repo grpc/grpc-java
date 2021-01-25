@@ -1,8 +1,6 @@
 plugins {
     id "maven-publish"
-
     id "com.android.library"
-    id "digital.wup.android-maven-publish"
 }
 
 description = "gRPC: Cronet Android"
@@ -75,13 +73,15 @@ task sourcesJar(type: Jar) {
     from android.sourceSets.main.java.srcDirs
 }
 
-publishing {
-    publications {
-        maven {
-            from components.android
+afterEvaluate {
+    publishing {
+        publications {
+            maven {
+                from components.release
 
-            artifact javadocJar
-            artifact sourcesJar
+                artifact javadocJar
+                artifact sourcesJar
+            }
         }
     }
 }
