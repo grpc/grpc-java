@@ -461,6 +461,8 @@ public final class XdsTestClient {
         configs.add(new RpcConfig(type, md, timeout));
       }
       rpcConfigs = Collections.unmodifiableList(configs);
+      responseObserver.onNext(ClientConfigureResponse.getDefaultInstance());
+      responseObserver.onCompleted();
     }
   }
 
