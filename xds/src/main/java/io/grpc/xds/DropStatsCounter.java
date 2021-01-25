@@ -47,10 +47,9 @@ final class DropStatsCounter {
   }
 
   void recordDroppedRequest(String category) {
+    // There is a race between this method and snapshot(), causing one drop recorded but may not
+    // be included in any snapshot. This is acceptable and the race window is extremely small.
     AtomicLong counter = categorizedDrops.putIfAbsent(category, new AtomicLong(1L));
-    // There is a race between incrementing an existing atomic and snapshot, causing the one
-    // drop recorded but not included in the snapshot. This is acceptable and the race window is
-    // extremely small.
     if (counter != null) {
       counter.getAndIncrement();
     }
