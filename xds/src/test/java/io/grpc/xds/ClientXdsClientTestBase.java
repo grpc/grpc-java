@@ -25,9 +25,11 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
+import com.google.protobuf.StringValue;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
@@ -42,6 +44,7 @@ import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.HttpFault;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -65,6 +68,7 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -169,9 +173,11 @@ public abstract class ClientXdsClientTestBase {
 
   private ManagedChannel channel;
   private ClientXdsClient xdsClient;
+  private boolean originalIsFaultInjectionEnabled;
 
   @Before
   public void setUp() throws IOException {
+    originalIsFaultInjectionEnabled = EnvoyProtoData.enableFaultInjection;
     MockitoAnnotations.initMocks(this);
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
@@ -204,6 +210,7 @@ public abstract class ClientXdsClientTestBase {
 
   @After
   public void tearDown() {
+    EnvoyProtoData.enableFaultInjection = originalIsFaultInjectionEnabled;
     xdsClient.shutdown();
     channel.shutdown();  // channel not owned by XdsClient
     assertThat(adsEnded.get()).isTrue();
@@ -326,6 +333,55 @@ public abstract class ClientXdsClientTestBase {
         "0001");
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
+  }
+
+  @Test
+  public void ldsResourceUpdate_withFaultInjection() {
+    EnvoyProtoData.enableFaultInjection = true;
+
+    DiscoveryRpcCall call =
+        startResourceWatcher(ResourceType.LDS, LDS_RESOURCE, ldsResourceWatcher);
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(mf.buildListener(
+            LDS_RESOURCE,
+            mf.buildRouteConfiguration(
+                "do not care",
+                ImmutableList.of(
+                    mf.buildVirtualHost(
+                        mf.buildOpaqueRoutes(1),
+                        ImmutableMap.of(
+                            "irrelevant",
+                            Any.pack(StringValue.of("irrelevant")),
+                            "envoy.fault",
+                            mf.buildHttpFaultTypedConfig(300L, 1000, null, null, null))),
+                    mf.buildVirtualHost(
+                        mf.buildOpaqueRoutes(2),
+                        ImmutableMap.of(
+                            "envoy.fault",
+                            mf.buildHttpFaultTypedConfig(null, null, null, 503, 2000)))
+                )),
+            ImmutableList.of(
+                mf.buildHttpFilter("irrelevant", null),
+                mf.buildHttpFilter("envoy.fault", null)
+            ))));
+    call.sendResponse("0", listeners, ResourceType.LDS, "0000");
+
+    // Client sends an ACK LDS request.
+    call.verifyRequest(NODE, "0", Collections.singletonList(LDS_RESOURCE), ResourceType.LDS,
+        "0000");
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    LdsUpdate ldsUpdate = ldsUpdateCaptor.getValue();
+    assertThat(ldsUpdate.virtualHosts).hasSize(2);
+    assertThat(ldsUpdate.hasFaultInjection).isTrue();
+    assertThat(ldsUpdate.httpFault).isNull();
+    HttpFault httpFault = ldsUpdate.virtualHosts.get(0).getHttpFault();
+    assertThat(httpFault.faultDelay.delayNanos).isEqualTo(300);
+    assertThat(httpFault.faultDelay.ratePerMillion).isEqualTo(1000);
+    assertThat(httpFault.faultAbort).isNull();
+    httpFault = ldsUpdate.virtualHosts.get(1).getHttpFault();
+    assertThat(httpFault.faultDelay).isNull();
+    assertThat(httpFault.faultAbort.status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(httpFault.faultAbort.ratePerMillion).isEqualTo(2000);
   }
 
   @Test
@@ -1445,14 +1501,31 @@ public abstract class ClientXdsClientTestBase {
 
   protected abstract static class MessageFactory {
 
-    protected abstract Message buildListener(String name, Message routeConfiguration);
+    protected final Message buildListener(String name, Message routeConfiguration) {
+      return buildListener(name, routeConfiguration, Collections.<Message>emptyList());
+    }
+
+    @SuppressWarnings("unchecked")
+    protected abstract Message buildListener(
+        String name, Message routeConfiguration, List<? extends Message> httpFilters);
 
     protected abstract Message buildListenerForRds(String name, String rdsResourceName);
+
+    protected abstract Message buildHttpFilter(String name, @Nullable Any typedConfig);
+
+    protected abstract Any buildHttpFaultTypedConfig(
+        @Nullable Long delayNanos, @Nullable Integer delayRate,
+        @Nullable Status status, @Nullable Integer httpCode, @Nullable Integer abortRate);
 
     protected abstract Message buildRouteConfiguration(String name,
         List<Message> virtualHostList);
 
     protected abstract List<Message> buildOpaqueVirtualHosts(int num);
+
+    protected abstract Message buildVirtualHost(
+        List<? extends Message> routes, Map<String, Any> typedConfigMap);
+
+    protected abstract List<? extends Message> buildOpaqueRoutes(int num);
 
     protected abstract Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
         boolean enableLrs, @Nullable Message upstreamTlsContext,

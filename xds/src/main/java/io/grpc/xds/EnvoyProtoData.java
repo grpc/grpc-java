@@ -1142,10 +1142,10 @@ final class EnvoyProtoData {
     if (rawFaultFilterConfig.getTypeUrl().equals(
         "type.googleapis.com/envoy.config.filter.http.fault.v2.HTTPFault")) {
       rawFaultFilterConfig = rawFaultFilterConfig.toBuilder().setTypeUrl(
-          "type.googleapis.com/envoy.extensions.filter.http.fault.v3.HTTPFault").build();
+          "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault").build();
     }
     if (rawFaultFilterConfig.getTypeUrl().equals(
-        "type.googleapis.com/envoy.extensions.filter.http.fault.v3.HTTPFault")) {
+        "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault")) {
       HTTPFault httpFaultProto;
       try {
         httpFaultProto = rawFaultFilterConfig.unpack(HTTPFault.class);
