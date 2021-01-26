@@ -39,7 +39,7 @@ import javax.annotation.concurrent.ThreadSafe;
 final class DropStatsCounter {
 
   private final AtomicLong uncategorizedDrops = new AtomicLong();
-  private volatile ConcurrentMap<String, AtomicLong> categorizedDrops = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, AtomicLong> categorizedDrops = new ConcurrentHashMap<>();
   private final Stopwatch stopwatch;
 
   DropStatsCounter(Supplier<Stopwatch> stopwatchSupplier) {
@@ -61,12 +61,11 @@ final class DropStatsCounter {
   }
 
   synchronized DropStatsSnapshot snapshot() {
-    Map<String, AtomicLong> categorizedDropsCopy = categorizedDrops;
-    categorizedDrops = new ConcurrentHashMap<>();
     Map<String, Long> drops = new HashMap<>();
-    for (Map.Entry<String, AtomicLong> entry : categorizedDropsCopy.entrySet()) {
+    for (Map.Entry<String, AtomicLong> entry : categorizedDrops.entrySet()) {
       drops.put(entry.getKey(), entry.getValue().get());
     }
+    categorizedDrops.clear();
     long duration = stopwatch.elapsed(TimeUnit.NANOSECONDS);
     stopwatch.reset().start();
     return new DropStatsSnapshot(drops, uncategorizedDrops.getAndSet(0), duration);
