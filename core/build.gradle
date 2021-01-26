@@ -73,16 +73,16 @@ def replaceBytes(byte[] haystack, byte[] needle, byte[] replacement) {
     return result;
 }
 
-def bigEndian(int value) {
+def bigEndianShortBytes(int value) {
     return [value >> 8, value & 0xFF] as byte[];
 }
 
 def replaceConstant(File file, String needle, String replacement) {
     // CONSTANT_Utf8_info. https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.4.7
     byte[] needleBytes = Bytes.concat(
-        [1] as byte[], bigEndian(needle.length()), needle.getBytes(US_ASCII));
+        [1] as byte[], bigEndianShortBytes(needle.length()), needle.getBytes(US_ASCII));
     byte[] replacementBytes = Bytes.concat(
-        [1] as byte[], bigEndian(replacement.length()), replacement.getBytes(US_ASCII));
+        [1] as byte[], bigEndianShortBytes(replacement.length()), replacement.getBytes(US_ASCII));
     file.setBytes(replaceBytes(file.getBytes(), needleBytes, replacementBytes));
 }
 
@@ -91,6 +91,11 @@ plugins.withId("java") {
         doLast {
             // Replace value of Signature Attribute.
             // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.7.9
+	    //
+	    // Have new compilations compile against a public class, without breaking the internal
+	    // ABI for the moment. After giving users some time to recompile, this should be removed
+	    // and #7211 can continue. When this is removed, at the very least the generics need to
+	    // be changed to avoid <? extends io.grpc.internal.*>.
             project.replaceConstant(
                 destinationDirectory.file(
                     "io/grpc/internal/AbstractManagedChannelImplBuilder.class").get().getAsFile(),
