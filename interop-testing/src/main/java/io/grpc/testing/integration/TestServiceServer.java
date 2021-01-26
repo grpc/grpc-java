@@ -70,6 +70,8 @@ public class TestServiceServer {
 
   private ScheduledExecutorService executor;
   private Server server;
+  private boolean localHandshakerForTesting;
+  private int localHandshakerPort = 8000;
 
   @VisibleForTesting
   void parseArgs(String[] args) {
@@ -98,6 +100,8 @@ public class TestServiceServer {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_alts".equals(key)) {
         useAlts = Boolean.parseBoolean(value);
+      } else if ("use_test_handshaker".equals(key)) {
+        localHandshakerForTesting = Boolean.parseBoolean(value);
       } else if ("grpc_version".equals(key)) {
         if (!"2".equals(value)) {
           System.err.println("Only grpc version 2 is supported");
@@ -122,6 +126,9 @@ public class TestServiceServer {
               + "\n  --use_tls=true|false  Whether to use TLS. Default " + s.useTls
               + "\n  --use_alts=true|false Whether to use ALTS. Enable ALTS will disable TLS."
               + "\n                        Default " + s.useAlts
+              + "\n  --use_test_handshaker Whether to use local ALTS handshaker service for "
+              + "\n                        testing. Only effective when --use_alts=true. Default "
+                + s.localHandshakerForTesting
       );
       System.exit(1);
     }
@@ -132,7 +139,13 @@ public class TestServiceServer {
     executor = Executors.newSingleThreadScheduledExecutor();
     ServerCredentials serverCreds;
     if (useAlts) {
-      serverCreds = AltsServerCredentials.create();
+      if (localHandshakerForTesting) {
+        serverCreds = AltsServerCredentials.newBuilder()
+            .enableUntrustedAltsForTesting()
+            .setHandshakerAddressForTesting("localhost:" + localHandshakerPort).build();
+      } else {
+        serverCreds = AltsServerCredentials.create();
+      }
     } else if (useTls) {
       serverCreds = TlsServerCredentials.create(
           TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
