@@ -194,7 +194,7 @@ public final class NettyChannelBuilder extends
         target, channelCreds, callCreds,
         new NettyChannelTransportFactoryBuilder(),
         new NettyChannelDefaultPortProvider());
-    this.protocolNegotiatorFactory = negotiator;
+    this.protocolNegotiatorFactory = checkNotNull(negotiator, "negotiator");
     this.freezeProtocolNegotiatorFactory = true;
   }
 
@@ -497,8 +497,9 @@ public final class NettyChannelBuilder extends
   ClientTransportFactory buildTransportFactory() {
     assertEventLoopAndChannelType();
 
+    ProtocolNegotiator negotiator = protocolNegotiatorFactory.newNegotiator();
     return new NettyTransportFactory(
-        protocolNegotiatorFactory.newNegotiator(), channelFactory, channelOptions,
+        negotiator, channelFactory, channelOptions,
         eventLoopGroupPool, autoFlowControl, flowControlWindow, maxInboundMessageSize,
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
         transportTracerFactory, localSocketPicker, useGetForSafeMethods);
