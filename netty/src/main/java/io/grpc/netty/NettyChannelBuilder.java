@@ -498,7 +498,7 @@ public final class NettyChannelBuilder extends
     assertEventLoopAndChannelType();
 
     return new NettyTransportFactory(
-        protocolNegotiatorFactory, channelFactory, channelOptions,
+        protocolNegotiatorFactory.newNegotiator(), channelFactory, channelOptions,
         eventLoopGroupPool, autoFlowControl, flowControlWindow, maxInboundMessageSize,
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
         transportTracerFactory, localSocketPicker, useGetForSafeMethods);
@@ -638,14 +638,14 @@ public final class NettyChannelBuilder extends
     private boolean closed;
 
     NettyTransportFactory(
-        ProtocolNegotiator.ClientFactory protocolNegotiator,
+        ProtocolNegotiator protocolNegotiator,
         ChannelFactory<? extends Channel> channelFactory,
         Map<ChannelOption<?>, ?> channelOptions, ObjectPool<? extends EventLoopGroup> groupPool,
         boolean autoFlowControl, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
         TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker,
         boolean useGetForSafeMethods) {
-      this.protocolNegotiator = protocolNegotiator.newNegotiator();
+      this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
       this.channelFactory = channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.groupPool = groupPool;
@@ -712,7 +712,7 @@ public final class NettyChannelBuilder extends
         return null;
       }
       ClientTransportFactory factory = new NettyTransportFactory(
-          result.negotiator, channelFactory, channelOptions, groupPool,
+          result.negotiator.newNegotiator(), channelFactory, channelOptions, groupPool,
           autoFlowControl, flowControlWindow, maxMessageSize, maxHeaderListSize, keepAliveTimeNanos,
           keepAliveTimeoutNanos, keepAliveWithoutCalls, transportTracerFactory,  localSocketPicker,
           useGetForSafeMethods);
