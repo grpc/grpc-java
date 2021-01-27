@@ -40,7 +40,6 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
-import io.grpc.CompositeChannelCredentials;
 import io.grpc.CompressorRegistry;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -160,8 +159,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final ClientTransportFactory originalTransportFactory;
   @Nullable
   private final ChannelCredentials originalChannelCreds;
-  @Nullable
-  private final CallCredentials originalCallCreds;
   private final ClientTransportFactory transportFactory;
   private final ClientTransportFactory oobTransportFactory;
   private final RestrictedScheduledExecutor scheduledExecutor;
@@ -603,7 +600,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.originalChannelCreds = builder.channelCredentials;
-    this.originalCallCreds = builder.callCredentials;
     this.originalTransportFactory = clientTransportFactory;
     this.transportFactory = new CallCredentialsApplyingTransportFactory(
         clientTransportFactory, builder.callCredentials, this.executor);
@@ -1645,13 +1641,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public ChannelCredentials getUnsafeChannelCredentials() {
-      if (originalChannelCreds == null) {
-        return null;
-      }
-      if (originalCallCreds == null) {
-        return originalChannelCreds;
-      }
-      return CompositeChannelCredentials.create(originalChannelCreds, originalCallCreds);
+      return originalChannelCreds;
     }
 
     @Override
