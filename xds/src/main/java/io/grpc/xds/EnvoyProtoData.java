@@ -1271,10 +1271,12 @@ final class EnvoyProtoData {
   static final class FaultDelay {
     @Nullable
     final Long delayNanos;
+    final boolean headerDelay;
     final int ratePerMillion;
 
-    private FaultDelay(@Nullable Long delayNanos, int ratePerMillion) {
+    private FaultDelay(@Nullable Long delayNanos, boolean headerDelay, int ratePerMillion) {
       this.delayNanos = delayNanos;
+      this.headerDelay = headerDelay;
       this.ratePerMillion = ratePerMillion;
     }
 
@@ -1288,23 +1290,24 @@ final class EnvoyProtoData {
       }
       FaultDelay that = (FaultDelay) o;
       return ratePerMillion == that.ratePerMillion
+          && headerDelay == that.headerDelay
           && Objects.equals(delayNanos, that.delayNanos);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(delayNanos, ratePerMillion);
+      return Objects.hash(delayNanos, headerDelay, ratePerMillion);
     }
 
     @Override
     public String toString() {
       ToStringHelper toStringHelper = MoreObjects.toStringHelper(this)
           .add("ratePerMillion", ratePerMillion);
-      if (delayNanos != null) {
+      if (headerDelay) {
+        toStringHelper.add("type", "header delay");
+      } else {
         toStringHelper.add("type", "fixed delay");
         toStringHelper.add("delayNanos", delayNanos);
-      } else {
-        toStringHelper.add("type", "header delay");
       }
       return toStringHelper.toString();
     }
@@ -1313,10 +1316,10 @@ final class EnvoyProtoData {
         io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay faultDelay) {
       int rate = getRatePerMillion(faultDelay.getPercentage());
       if (faultDelay.hasHeaderDelay()) {
-        return new FaultDelay(null, rate);
+        return new FaultDelay(null, true, rate);
       }
       long delay = Durations.toNanos(faultDelay.getFixedDelay());
-      return new FaultDelay(delay, rate);
+      return new FaultDelay(delay, false, rate);
     }
   }
 
@@ -1327,10 +1330,12 @@ final class EnvoyProtoData {
   static final class FaultAbort {
     @Nullable
     final Status status;
+    final boolean headerAbort;
     final int ratePerMillion;
 
-    private FaultAbort(@Nullable Status status, int ratePerMillion) {
+    private FaultAbort(@Nullable Status status, boolean headerAbort, int ratePerMillion) {
       this.status = status;
+      this.headerAbort = headerAbort;
       this.ratePerMillion = ratePerMillion;
     }
 
@@ -1344,23 +1349,24 @@ final class EnvoyProtoData {
       }
       FaultAbort that = (FaultAbort) o;
       return ratePerMillion == that.ratePerMillion
+          && headerAbort == that.headerAbort
           && Objects.equals(status, that.status);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(status, ratePerMillion);
+      return Objects.hash(status, headerAbort, ratePerMillion);
     }
 
     @Override
     public String toString() {
       ToStringHelper toStringHelper = MoreObjects.toStringHelper(this)
           .add("ratePerMillion", ratePerMillion);
-      if (status != null) {
+      if (headerAbort) {
+        toStringHelper.add("type", "header abort");
+      } else {
         toStringHelper.add("type", "fixed status");
         toStringHelper.add("status", status);
-      } else {
-        toStringHelper.add("type", "header abort");
       }
       return toStringHelper.toString();
     }
@@ -1368,10 +1374,11 @@ final class EnvoyProtoData {
     private static StructOrError<FaultAbort> fromEnvoyProtoFaultAbort(
         io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
       int rate = getRatePerMillion(faultAbort.getPercentage());
-      Status status;
+      boolean headerAbort = false;
+      Status status = null;
       switch (faultAbort.getErrorTypeCase()) {
         case HEADER_ABORT:
-          status = null;
+          headerAbort = true;
           break;
         case HTTP_STATUS:
           status = convertHttpStatus(faultAbort.getHttpStatus());
@@ -1384,7 +1391,7 @@ final class EnvoyProtoData {
           return StructOrError.fromError(
               "Unknown error type case: " + faultAbort.getErrorTypeCase());
       }
-      return StructOrError.fromStruct(new FaultAbort(status, rate));
+      return StructOrError.fromStruct(new FaultAbort(status, headerAbort, rate));
     }
 
     private static Status convertHttpStatus(int httpCode) {
