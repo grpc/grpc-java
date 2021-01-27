@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.Sets;
@@ -250,8 +249,8 @@ final class LoadStatsManager2 {
     private final ConcurrentMap<String, AtomicLong> categorizedDrops = new ConcurrentHashMap<>();
     private final Stopwatch stopwatch;
 
-    @VisibleForTesting
-    ClusterDropStats(String clusterName, @Nullable String edsServiceName, Stopwatch stopwatch) {
+    private ClusterDropStats(
+        String clusterName, @Nullable String edsServiceName, Stopwatch stopwatch) {
       this.clusterName = checkNotNull(clusterName, "clusterName");
       this.edsServiceName = edsServiceName;
       this.stopwatch = checkNotNull(stopwatch, "stopwatch");
@@ -327,7 +326,6 @@ final class LoadStatsManager2 {
     private final AtomicLong callsFailed = new AtomicLong();
     private final AtomicLong callsIssued = new AtomicLong();
 
-    @VisibleForTesting
     private ClusterLocalityStats(
         String clusterName, @Nullable String edsServiceName, Locality locality,
         Stopwatch stopwatch) {
