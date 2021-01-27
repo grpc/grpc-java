@@ -874,7 +874,8 @@ final class EnvoyProtoData {
         Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
         if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
           Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
-          StructOrError<HttpFault> httpFaultOrError = decodeFaultFilterConfig(rawFaultFilterConfig);
+          StructOrError<HttpFault> httpFaultOrError =
+              HttpFault.decodeFaultFilterConfig(rawFaultFilterConfig);
           if (httpFaultOrError.getErrorDetail() != null) {
             return StructOrError.fromError(
                 "Virtual host [" + name + "] contains invalid HttpFault filter : "
@@ -992,7 +993,8 @@ final class EnvoyProtoData {
         Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
         if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
           Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
-          StructOrError<HttpFault> httpFaultOrError = decodeFaultFilterConfig(rawFaultFilterConfig);
+          StructOrError<HttpFault> httpFaultOrError =
+              HttpFault.decodeFaultFilterConfig(rawFaultFilterConfig);
           if (httpFaultOrError.getErrorDetail() != null) {
             return StructOrError.fromError(
                 "Route [" + proto.getName() + "] contains invalid HttpFault filter: "
@@ -1137,26 +1139,6 @@ final class EnvoyProtoData {
     }
   }
 
-  static StructOrError<HttpFault> decodeFaultFilterConfig(Any rawFaultFilterConfig) {
-    if (rawFaultFilterConfig.getTypeUrl().equals(
-        "type.googleapis.com/envoy.config.filter.http.fault.v2.HTTPFault")) {
-      rawFaultFilterConfig = rawFaultFilterConfig.toBuilder().setTypeUrl(
-          "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault").build();
-    }
-    if (rawFaultFilterConfig.getTypeUrl().equals(
-        "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault")) {
-      HTTPFault httpFaultProto;
-      try {
-        httpFaultProto = rawFaultFilterConfig.unpack(HTTPFault.class);
-      } catch (InvalidProtocolBufferException e) {
-        return StructOrError.fromError("Invalid proto: " + e);
-      }
-      return HttpFault.fromEnvoyProtoHttpFault(httpFaultProto);
-    }
-    return StructOrError.fromError(
-        "Invalid type url for envoy.fault filter: " + rawFaultFilterConfig.getTypeUrl());
-  }
-
   static boolean parseHttpFaultFilter() {
     return enableFaultInjection;
   }
@@ -1223,7 +1205,22 @@ final class EnvoyProtoData {
           .toString();
     }
 
-    static StructOrError<HttpFault> fromEnvoyProtoHttpFault(HTTPFault httpFault) {
+    static StructOrError<HttpFault> decodeFaultFilterConfig(Any rawFaultFilterConfig) {
+      if (rawFaultFilterConfig.getTypeUrl().equals(
+          "type.googleapis.com/envoy.config.filter.http.fault.v2.HTTPFault")) {
+        rawFaultFilterConfig = rawFaultFilterConfig.toBuilder().setTypeUrl(
+            "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault").build();
+      }
+      HTTPFault httpFaultProto;
+      try {
+        httpFaultProto = rawFaultFilterConfig.unpack(HTTPFault.class);
+      } catch (InvalidProtocolBufferException e) {
+        return StructOrError.fromError("Invalid proto: " + e);
+      }
+      return fromEnvoyProtoHttpFault(httpFaultProto);
+    }
+
+    private static StructOrError<HttpFault> fromEnvoyProtoHttpFault(HTTPFault httpFault) {
       FaultDelay faultDelay = null;
       FaultAbort faultAbort = null;
       if (httpFault.hasDelay()) {
@@ -1627,7 +1624,8 @@ final class EnvoyProtoData {
         Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
         if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
           Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
-          StructOrError<HttpFault> httpFaultOrError = decodeFaultFilterConfig(rawFaultFilterConfig);
+          StructOrError<HttpFault> httpFaultOrError =
+              HttpFault.decodeFaultFilterConfig(rawFaultFilterConfig);
           if (httpFaultOrError.getErrorDetail() != null) {
             return StructOrError.fromError(
                 "ClusterWeight [" + proto.getName() + "] contains invalid HttpFault filter: "
