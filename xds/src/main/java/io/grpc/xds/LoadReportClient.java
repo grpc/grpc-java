@@ -59,7 +59,7 @@ final class LoadReportClient {
   private final ScheduledExecutorService timerService;
   private final Stopwatch retryStopwatch;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final LoadStatsManager loadStatsManager;
+  private final LoadStatsManager2 loadStatsManager;
 
   private boolean started;
   @Nullable
@@ -70,7 +70,7 @@ final class LoadReportClient {
   private LrsStream lrsStream;
 
   LoadReportClient(
-      LoadStatsManager loadStatsManager,
+      LoadStatsManager2 loadStatsManager,
       ManagedChannel channel,
       boolean useProtocolV3,
       Node node,
@@ -213,11 +213,11 @@ final class LoadReportClient {
       }
       List<ClusterStats> clusterStatsList;
       if (reportAllClusters) {
-        clusterStatsList = loadStatsManager.getAllLoadReports();
+        clusterStatsList = loadStatsManager.getAllClusterStatsReports();
       } else {
         clusterStatsList = new ArrayList<>();
         for (String name : clusterNames) {
-          clusterStatsList.addAll(loadStatsManager.getClusterLoadReports(name));
+          clusterStatsList.addAll(loadStatsManager.getClusterStatsReports(name));
         }
       }
       sendLoadStatsRequest(clusterStatsList);

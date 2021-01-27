@@ -49,7 +49,8 @@ import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.StructOrError;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.LoadStatsManager.LoadStatsStore;
+import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
+import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.XdsClient.CdsUpdate.AggregateClusterConfig;
 import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsClient.CdsUpdate.EdsClusterConfig;
@@ -97,7 +98,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final Map<String, ResourceSubscriber> rdsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> cdsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> edsResourceSubscribers = new HashMap<>();
-  private final LoadStatsManager loadStatsManager = new LoadStatsManager();
+  private final LoadStatsManager2 loadStatsManager;
   private final LoadReportClient lrsClient;
   private boolean reportingLoad;
 
@@ -105,6 +106,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     super(channel, useProtocolV3, node, timeService, backoffPolicyProvider, stopwatchSupplier);
+    loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
     lrsClient = new LoadReportClient(loadStatsManager, channel, useProtocolV3, node,
         getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
   }
@@ -731,11 +733,9 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  LoadStatsStore addClientStats(String clusterName, @Nullable String clusterServiceName) {
-    LoadStatsStore loadStatsStore;
-    synchronized (this) {
-      loadStatsStore = loadStatsManager.addLoadStats(clusterName, clusterServiceName);
-    }
+  ClusterDropStats addClusterDropStats(String clusterName, @Nullable String edsServiceName) {
+    ClusterDropStats dropCounter =
+        loadStatsManager.getClusterDropStats(clusterName, edsServiceName);
     getSyncContext().execute(new Runnable() {
       @Override
       public void run() {
@@ -745,14 +745,24 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
     });
-    return loadStatsStore;
+    return dropCounter;
   }
 
   @Override
-  void removeClientStats(String clusterName, @Nullable String clusterServiceName) {
-    synchronized (this) {
-      loadStatsManager.removeLoadStats(clusterName, clusterServiceName);
-    }
+  ClusterLocalityStats addClusterLocalityStats(String clusterName,
+      @Nullable String edsServiceName, Locality locality) {
+    ClusterLocalityStats loadCounter =
+        loadStatsManager.getClusterLocalityStats(clusterName, edsServiceName, locality);
+    getSyncContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        if (!reportingLoad) {
+          lrsClient.startLoadReporting();
+          reportingLoad = true;
+        }
+      }
+    });
+    return loadCounter;
   }
 
   private void cleanUpResourceTimers() {

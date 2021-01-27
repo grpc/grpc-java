@@ -47,6 +47,7 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
 import io.grpc.xds.XdsClient.CdsUpdate;
 import io.grpc.xds.XdsClient.CdsUpdate.AggregateClusterConfig;
@@ -1364,13 +1365,10 @@ public abstract class ClientXdsClientTestBase {
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
   }
 
-  /**
-   * Tests sending a streaming LRS RPC for each cluster to report loads for.
-   */
   @Test
   public void reportLoadStatsToServer() {
     String clusterName = "cluster-foo.googleapis.com";
-    xdsClient.addClientStats(clusterName, null);
+    ClusterDropStats dropStats = xdsClient.addClusterDropStats(clusterName, null);
     LrsRpcCall lrsCall = loadReportCalls.poll();
     lrsCall.verifyNextReportClusters(Collections.<String[]>emptyList()); // initial LRS request
 
@@ -1378,7 +1376,7 @@ public abstract class ClientXdsClientTestBase {
     fakeClock.forwardNanos(1000L);
     lrsCall.verifyNextReportClusters(Collections.singletonList(new String[] {clusterName, null}));
 
-    xdsClient.removeClientStats(clusterName, null);
+    dropStats.release();
     fakeClock.forwardNanos(1000L);
     lrsCall.verifyNextReportClusters(Collections.<String[]>emptyList());  // no more stats reported
 
