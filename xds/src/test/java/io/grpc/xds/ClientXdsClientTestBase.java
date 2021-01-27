@@ -353,12 +353,16 @@ public abstract class ClientXdsClientTestBase {
                             "irrelevant",
                             Any.pack(StringValue.of("irrelevant")),
                             "envoy.fault",
-                            mf.buildHttpFaultTypedConfig(300L, 1000, null, null, null))),
+                            mf.buildHttpFaultTypedConfig(
+                                300L, 1000, "cluster1", ImmutableList.<String>of(), 100, null, null,
+                                null))),
                     mf.buildVirtualHost(
                         mf.buildOpaqueRoutes(2),
                         ImmutableMap.of(
                             "envoy.fault",
-                            mf.buildHttpFaultTypedConfig(null, null, null, 503, 2000)))
+                            mf.buildHttpFaultTypedConfig(
+                                null, null, "cluster2", ImmutableList.<String>of(), 101, null, 503,
+                                2000)))
                 )),
             ImmutableList.of(
                 mf.buildHttpFilter("irrelevant", null),
@@ -378,10 +382,14 @@ public abstract class ClientXdsClientTestBase {
     assertThat(httpFault.faultDelay.delayNanos).isEqualTo(300);
     assertThat(httpFault.faultDelay.ratePerMillion).isEqualTo(1000);
     assertThat(httpFault.faultAbort).isNull();
+    assertThat(httpFault.upstreamCluster).isEqualTo("cluster1");
+    assertThat(httpFault.maxActiveFaults).isEqualTo(100);
     httpFault = ldsUpdate.virtualHosts.get(1).getHttpFault();
     assertThat(httpFault.faultDelay).isNull();
     assertThat(httpFault.faultAbort.status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(httpFault.faultAbort.ratePerMillion).isEqualTo(2000);
+    assertThat(httpFault.upstreamCluster).isEqualTo("cluster2");
+    assertThat(httpFault.maxActiveFaults).isEqualTo(101);
   }
 
   @Test
@@ -1514,8 +1522,9 @@ public abstract class ClientXdsClientTestBase {
     protected abstract Message buildHttpFilter(String name, @Nullable Any typedConfig);
 
     protected abstract Any buildHttpFaultTypedConfig(
-        @Nullable Long delayNanos, @Nullable Integer delayRate,
-        @Nullable Status status, @Nullable Integer httpCode, @Nullable Integer abortRate);
+        @Nullable Long delayNanos, @Nullable Integer delayRate, String upstreamCluster,
+        List<String> downstreamNodes, @Nullable Integer maxActiveFaults, @Nullable Status status,
+        @Nullable Integer httpCode, @Nullable Integer abortRate);
 
     protected abstract Message buildRouteConfiguration(String name,
         List<Message> virtualHostList);

@@ -1171,10 +1171,22 @@ final class EnvoyProtoData {
     final FaultDelay faultDelay;
     @Nullable
     final FaultAbort faultAbort;
+    String upstreamCluster;
+    List<String> downstreamNodes;
+    List<HeaderMatcher> headers;
+    @Nullable
+    Integer maxActiveFaults;
 
-    HttpFault(@Nullable FaultDelay faultDelay, @Nullable FaultAbort faultAbort) {
+    private HttpFault(
+        @Nullable FaultDelay faultDelay, @Nullable FaultAbort faultAbort, String upstreamCluster,
+        List<String> downstreamNodes, List<HeaderMatcher> headers,
+        @Nullable Integer maxActiveFaults) {
       this.faultDelay = faultDelay;
       this.faultAbort = faultAbort;
+      this.upstreamCluster = upstreamCluster;
+      this.downstreamNodes = downstreamNodes;
+      this.headers = headers;
+      this.maxActiveFaults = maxActiveFaults;
     }
 
     @Override
@@ -1187,12 +1199,17 @@ final class EnvoyProtoData {
       }
       HttpFault httpFault = (HttpFault) o;
       return Objects.equals(faultDelay, httpFault.faultDelay)
-          && Objects.equals(faultAbort, httpFault.faultAbort);
+          && Objects.equals(faultAbort, httpFault.faultAbort)
+          && Objects.equals(upstreamCluster, httpFault.upstreamCluster)
+          && Objects.equals(downstreamNodes, httpFault.downstreamNodes)
+          && Objects.equals(headers, httpFault.headers)
+          && Objects.equals(maxActiveFaults, httpFault.maxActiveFaults);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(faultDelay, faultAbort);
+      return Objects.hash(
+          faultDelay, faultAbort, upstreamCluster, downstreamNodes, headers, maxActiveFaults);
     }
 
     @Override
@@ -1200,6 +1217,10 @@ final class EnvoyProtoData {
       return MoreObjects.toStringHelper(this)
           .add("faultDelay", faultDelay)
           .add("faultAbort", faultAbort)
+          .add("upstreamCluster", upstreamCluster)
+          .add("downstreamNodes", downstreamNodes)
+          .add("headers", headers)
+          .add("maxActiveFaults", maxActiveFaults)
           .toString();
     }
 
@@ -1222,7 +1243,28 @@ final class EnvoyProtoData {
         return StructOrError.fromError(
             "Invalid HttpFault: neither fault_delay nor fault_abort is specified");
       }
-      return StructOrError.fromStruct(new HttpFault(faultDelay, faultAbort));
+      String upstreamCluster = httpFault.getUpstreamCluster();
+      List<String> downstreamNodes = httpFault.getDownstreamNodesList();
+      List<HeaderMatcher> headers = new ArrayList<>();
+      for (io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto : httpFault.getHeadersList()) {
+        StructOrError<HeaderMatcher> headerMatcherOrError =
+            Route.convertEnvoyProtoHeaderMatcher(proto);
+        if (headerMatcherOrError.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "HttpFault contains invalid header matcher: "
+                  + headerMatcherOrError.getErrorDetail());
+        }
+        headers.add(headerMatcherOrError.getStruct());
+      }
+      Integer maxActiveFaults = null;
+      if (httpFault.hasMaxActiveFaults()) {
+        maxActiveFaults = httpFault.getMaxActiveFaults().getValue();
+        if (maxActiveFaults < 0) {
+          maxActiveFaults = Integer.MAX_VALUE;
+        }
+      }
+      return StructOrError.fromStruct(new HttpFault(
+          faultDelay, faultAbort, upstreamCluster, downstreamNodes, headers, maxActiveFaults));
     }
   }
 
@@ -1235,7 +1277,7 @@ final class EnvoyProtoData {
     final Long delayNanos;
     final int ratePerMillion;
 
-    FaultDelay(@Nullable Long delayNanos, int ratePerMillion) {
+    private FaultDelay(@Nullable Long delayNanos, int ratePerMillion) {
       this.delayNanos = delayNanos;
       this.ratePerMillion = ratePerMillion;
     }
@@ -1291,7 +1333,7 @@ final class EnvoyProtoData {
     final Status status;
     final int ratePerMillion;
 
-    FaultAbort(@Nullable Status status, int ratePerMillion) {
+    private FaultAbort(@Nullable Status status, int ratePerMillion) {
       this.status = status;
       this.ratePerMillion = ratePerMillion;
     }

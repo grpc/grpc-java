@@ -288,8 +288,9 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
 
     @Override
     protected Any buildHttpFaultTypedConfig(
-        @Nullable Long delayNanos, @Nullable Integer delayRate,
-        @Nullable Status status, @Nullable Integer httpCode, @Nullable Integer abortRate) {
+        @Nullable Long delayNanos, @Nullable Integer delayRate, String upstreamCluster,
+        List<String> downstreamNodes, @Nullable Integer maxActiveFaults, @Nullable Status status,
+        @Nullable Integer httpCode, @Nullable Integer abortRate) {
       HTTPFault.Builder builder = HTTPFault.newBuilder();
       if (delayRate != null) {
         FaultDelay.Builder delayBuilder = FaultDelay.newBuilder();
@@ -316,6 +317,11 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
           abortBuilder.setHeaderAbort(HeaderAbort.newBuilder());
         }
         builder.setAbort(abortBuilder);
+      }
+      builder.setUpstreamCluster(upstreamCluster);
+      builder.addAllDownstreamNodes(downstreamNodes);
+      if (maxActiveFaults != null) {
+        builder.setMaxActiveFaults(UInt32Value.of(maxActiveFaults));
       }
       return Any.pack(builder.build());
     }
