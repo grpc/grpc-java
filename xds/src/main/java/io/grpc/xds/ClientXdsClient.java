@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static io.grpc.xds.EnvoyProtoData.HTTP_FAULT_FILTER_NAME;
 import static io.grpc.xds.EnvoyProtoData.TRANSPORT_SOCKET_NAME_TLS;
-import static io.grpc.xds.EnvoyProtoData.parseHttpFaultFilter;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -170,23 +169,21 @@ final class ClientXdsClient extends AbstractXdsClient {
       boolean hasFaultInjection = false;
       HttpFault httpFault = null;
       List<HttpFilter> httpFilters = hcm.getHttpFiltersList();
-      if (parseHttpFaultFilter()) {
-        for (HttpFilter httpFilter : httpFilters) {
-          if (HTTP_FAULT_FILTER_NAME.equals(httpFilter.getName())) {
-            hasFaultInjection = true;
-            if (httpFilter.hasTypedConfig()) {
-              StructOrError<HttpFault> httpFaultOrError =
-                  HttpFault.decodeFaultFilterConfig(httpFilter.getTypedConfig());
-              if (httpFaultOrError.getErrorDetail() != null) {
-                nackResponse(ResourceType.LDS, nonce,
-                    "Listener " + listenerName + " contains invalid HttpFault filter: "
-                        + httpFaultOrError.getErrorDetail());
-                return;
-              }
-              httpFault = httpFaultOrError.getStruct();
+      for (HttpFilter httpFilter : httpFilters) {
+        if (HTTP_FAULT_FILTER_NAME.equals(httpFilter.getName())) {
+          hasFaultInjection = true;
+          if (httpFilter.hasTypedConfig()) {
+            StructOrError<HttpFault> httpFaultOrError =
+                HttpFault.decodeFaultFilterConfig(httpFilter.getTypedConfig());
+            if (httpFaultOrError.getErrorDetail() != null) {
+              nackResponse(ResourceType.LDS, nonce,
+                  "Listener " + listenerName + " contains invalid HttpFault filter: "
+                      + httpFaultOrError.getErrorDetail());
+              return;
             }
-            break;
+            httpFault = httpFaultOrError.getStruct();
           }
+          break;
         }
       }
       if (hcm.hasRouteConfig()) {

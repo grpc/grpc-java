@@ -66,9 +66,6 @@ import javax.annotation.Nullable;
 final class EnvoyProtoData {
   static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
   static final String HTTP_FAULT_FILTER_NAME = "envoy.fault";
-  @VisibleForTesting
-  static boolean enableFaultInjection =
-      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"));
 
   // Prevent instantiation.
   private EnvoyProtoData() {
@@ -870,19 +867,17 @@ final class EnvoyProtoData {
         routes.add(route.getStruct());
       }
       HttpFault httpFault = null;
-      if (parseHttpFaultFilter()) {
-        Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
-        if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
-          Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
-          StructOrError<HttpFault> httpFaultOrError =
-              HttpFault.decodeFaultFilterConfig(rawFaultFilterConfig);
-          if (httpFaultOrError.getErrorDetail() != null) {
-            return StructOrError.fromError(
-                "Virtual host [" + name + "] contains invalid HttpFault filter : "
-                    + httpFaultOrError.getErrorDetail());
-          }
-          httpFault = httpFaultOrError.getStruct();
+      Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
+      if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
+        Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
+        StructOrError<HttpFault> httpFaultOrError =
+            HttpFault.decodeFaultFilterConfig(rawFaultFilterConfig);
+        if (httpFaultOrError.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "Virtual host [" + name + "] contains invalid HttpFault filter : "
+                  + httpFaultOrError.getErrorDetail());
         }
+        httpFault = httpFaultOrError.getStruct();
       }
       return StructOrError.fromStruct(
           new VirtualHost(
@@ -989,19 +984,17 @@ final class EnvoyProtoData {
       }
 
       HttpFault httpFault = null;
-      if (parseHttpFaultFilter()) {
-        Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
-        if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
-          Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
-          StructOrError<HttpFault> httpFaultOrError =
-              HttpFault.decodeFaultFilterConfig(rawFaultFilterConfig);
-          if (httpFaultOrError.getErrorDetail() != null) {
-            return StructOrError.fromError(
-                "Route [" + proto.getName() + "] contains invalid HttpFault filter: "
-                    + httpFaultOrError.getErrorDetail());
-          }
-          httpFault = httpFaultOrError.getStruct();
+      Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
+      if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
+        Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
+        StructOrError<HttpFault> httpFaultOrError =
+            HttpFault.decodeFaultFilterConfig(rawFaultFilterConfig);
+        if (httpFaultOrError.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "Route [" + proto.getName() + "] contains invalid HttpFault filter: "
+                  + httpFaultOrError.getErrorDetail());
         }
+        httpFault = httpFaultOrError.getStruct();
       }
       return StructOrError.fromStruct(
           new Route(routeMatch.getStruct(), routeAction.getStruct(), httpFault));
@@ -1137,10 +1130,6 @@ final class EnvoyProtoData {
               proto.getName(), exactMatch, safeRegExMatch, rangeMatch, presentMatch,
               prefixMatch, suffixMatch, proto.getInvertMatch()));
     }
-  }
-
-  static boolean parseHttpFaultFilter() {
-    return enableFaultInjection;
   }
 
   /**
@@ -1627,19 +1616,17 @@ final class EnvoyProtoData {
     static StructOrError<ClusterWeight> fromEnvoyProtoClusterWeight(
         io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto) {
       HttpFault httpFault = null;
-      if (parseHttpFaultFilter()) {
-        Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
-        if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
-          Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
-          StructOrError<HttpFault> httpFaultOrError =
-              HttpFault.decodeFaultFilterConfig(rawFaultFilterConfig);
-          if (httpFaultOrError.getErrorDetail() != null) {
-            return StructOrError.fromError(
-                "ClusterWeight [" + proto.getName() + "] contains invalid HttpFault filter: "
-                    + httpFaultOrError.getErrorDetail());
-          }
-          httpFault = httpFaultOrError.getStruct();
+      Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
+      if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
+        Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
+        StructOrError<HttpFault> httpFaultOrError =
+            HttpFault.decodeFaultFilterConfig(rawFaultFilterConfig);
+        if (httpFaultOrError.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "ClusterWeight [" + proto.getName() + "] contains invalid HttpFault filter: "
+                  + httpFaultOrError.getErrorDetail());
         }
+        httpFault = httpFaultOrError.getStruct();
       }
       return StructOrError.fromStruct(
           new ClusterWeight(proto.getName(), proto.getWeight().getValue(), httpFault));
