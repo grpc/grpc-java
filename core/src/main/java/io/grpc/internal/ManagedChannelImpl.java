@@ -1577,6 +1577,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
         String target, ChannelCredentials creds) {
+      checkNotNull(creds, "creds");
       return createBuilder(target, creds);
     }
 

@@ -643,8 +643,7 @@ public final class NettyChannelBuilder extends
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
         TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker,
         boolean useGetForSafeMethods) {
-      this.protocolNegotiator =
-          checkNotNull(protocolNegotiator, "protocolNegotiator").newNegotiator();
+      this.protocolNegotiator = protocolNegotiator.newNegotiator();
       this.channelFactory = channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.groupPool = groupPool;

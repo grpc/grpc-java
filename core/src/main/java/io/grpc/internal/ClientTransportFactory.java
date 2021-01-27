@@ -161,7 +161,7 @@ public interface ClientTransportFactory extends Closeable {
 
     public SwapChannelCredentialsResult(
         ClientTransportFactory transportFactory, @Nullable CallCredentials callCredentials) {
-      this.transportFactory = transportFactory;
+      this.transportFactory = Preconditions.checkNotNull(transportFactory, "transportFactory");
       this.callCredentials = callCredentials;
     }
   }
