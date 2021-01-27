@@ -235,6 +235,9 @@ public final class ManagedChannelImplBuilder
    * Creates a new managed channel builder with a target string, which can be either a valid {@link
    * io.grpc.NameResolver}-compliant URI, or an authority string. Transport implementors must
    * provide client transport factory builder, and may set custom channel default port provider.
+   *
+   * @param channelCreds The ChannelCredentials provided for creating the {@link
+   *     ManagedChannelBuilder} instance.
    */
   public ManagedChannelImplBuilder(
       String target, @Nullable ChannelCredentials channelCreds, @Nullable CallCredentials callCreds,
