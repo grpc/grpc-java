@@ -36,7 +36,6 @@ import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import io.grpc.xds.RouteMatch.FractionMatcher;
 import io.grpc.xds.RouteMatch.HeaderMatcher;
 import io.grpc.xds.RouteMatch.PathMatcher;
@@ -1372,25 +1371,23 @@ final class EnvoyProtoData {
     private static StructOrError<FaultAbort> fromEnvoyProtoFaultAbort(
         io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
       int rate = getRatePerMillion(faultAbort.getPercentage());
+      Status status;
       switch (faultAbort.getErrorTypeCase()) {
         case HEADER_ABORT:
-          return StructOrError.fromStruct(new FaultAbort(null, rate));
+          status = null;
+          break;
         case HTTP_STATUS:
-          Status status = convertHttpStatus(faultAbort.getHttpStatus());
-          return StructOrError.fromStruct(new FaultAbort(status, rate));
+          status = convertHttpStatus(faultAbort.getHttpStatus());
+          break;
         case GRPC_STATUS:
-          Code code;
-          try {
-            code = Code.values()[faultAbort.getGrpcStatus()];
-          } catch (ArrayIndexOutOfBoundsException e) {
-            return StructOrError.fromError("Unknown GRPC_STATUS: " + faultAbort.getGrpcStatus());
-          }
-          return StructOrError.fromStruct(new FaultAbort(code.toStatus(), rate));
+          status = Status.fromCodeValue(faultAbort.getGrpcStatus());
+          break;
         case ERRORTYPE_NOT_SET:
         default:
           return StructOrError.fromError(
               "Unknown error type case: " + faultAbort.getErrorTypeCase());
       }
+      return StructOrError.fromStruct(new FaultAbort(status, rate));
     }
 
     private static Status convertHttpStatus(int httpCode) {
