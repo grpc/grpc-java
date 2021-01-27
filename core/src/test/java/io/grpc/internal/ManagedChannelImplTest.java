@@ -1825,7 +1825,8 @@ public class ManagedChannelImplTest {
     call = oob.newCall(method, callOptions);
     call.start(mockCallListener2, headers);
 
-    verify(transportInfo.transport).newStream(same(method), same(headers), same(callOptions));
+    // CallOptions may contain StreamTracerFactory for census that is added by default.
+    verify(transportInfo.transport).newStream(same(method), same(headers), any(CallOptions.class));
     assertThat(headers.getAll(metadataKey)).containsExactly(callCredValue);
     oob.shutdownNow();
   }
@@ -1902,7 +1903,8 @@ public class ManagedChannelImplTest {
     call = oob.newCall(method, callOptions);
     call.start(mockCallListener2, headers);
 
-    verify(transportInfo.transport).newStream(same(method), same(headers), same(callOptions));
+    // CallOptions may contain StreamTracerFactory for census that is added by default.
+    verify(transportInfo.transport).newStream(same(method), same(headers), any(CallOptions.class));
     assertThat(headers.getAll(metadataKey))
         .containsExactly(oobChannelCredValue, callCredValue).inOrder();
     oob.shutdownNow();

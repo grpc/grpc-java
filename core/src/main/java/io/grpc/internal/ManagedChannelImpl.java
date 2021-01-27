@@ -79,8 +79,8 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
 import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
+import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
-import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.ManagedChannelServiceConfig.ServiceConfigConvertedSelector;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
@@ -1580,15 +1580,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
       return createBuilder(target, creds);
     }
 
+    // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
+    // TODO(zdapeng) register the channel as a subchannel of the parent channel in channelz.
     private ManagedChannelBuilder<?> createBuilder(
         String target, @Nullable ChannelCredentials creds) {
       final class ResolvingOobChannelBuilder
           extends ForwardingChannelBuilder<ResolvingOobChannelBuilder> {
-        @Nullable final ManagedChannelImplBuilder managedChannelImplBuilder;
         final ManagedChannelBuilder<?> delegate;
-        ClientTransportFactory transportFactory;
 
         ResolvingOobChannelBuilder(String target, @Nullable ChannelCredentials channelCreds) {
+          final ClientTransportFactory transportFactory;
           CallCredentials callCredentials;
           if (channelCreds == null) {
             transportFactory = originalTransportFactory;
@@ -1597,44 +1598,31 @@ final class ManagedChannelImpl extends ManagedChannel implements
             SwapChannelCredentialsResult swapResult =
                 originalTransportFactory.swapChannelCredentials(channelCreds);
             if (swapResult == null) {
-              managedChannelImplBuilder = null;
               this.delegate = Grpc.newChannelBuilder(target, channelCreds);
               return;
+            } else {
+              transportFactory = swapResult.transportFactory;
+              callCredentials = swapResult.callCredentials;
             }
-            transportFactory = swapResult.transportFactory;
-            callCredentials = swapResult.callCredentials;
           }
-          this.delegate = managedChannelImplBuilder = new ManagedChannelImplBuilder(
+          ClientTransportFactoryBuilder transportFactoryBuilder =
+              new ClientTransportFactoryBuilder() {
+                @Override
+                public ClientTransportFactory buildClientTransportFactory() {
+                  return transportFactory;
+                }
+              };
+          delegate = new ManagedChannelImplBuilder(
               target,
               channelCreds,
               callCredentials,
-              new UnsupportedClientTransportFactoryBuilder(),
+              transportFactoryBuilder,
               new FixedPortProvider(nameResolverArgs.getDefaultPort()));
-          managedChannelImplBuilder.executorPool = executorPool;
-          managedChannelImplBuilder.offloadExecutorPool = offloadExecutorHolder.pool;
         }
 
         @Override
         protected ManagedChannelBuilder<?> delegate() {
           return delegate;
-        }
-
-        @Override
-        public ManagedChannel build() {
-          // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
-          // TODO(zdapeng) register the channel as a subchannel of the parent channel in channelz.
-          if (managedChannelImplBuilder != null) {
-            return new ManagedChannelImpl(
-                managedChannelImplBuilder,
-                transportFactory,
-                backoffPolicyProvider,
-                balancerRpcExecutorPool,
-                stopwatchSupplier,
-                Collections.<ClientInterceptor>emptyList(),
-                timeProvider);
-          } else {
-            return delegate.build();
-          }
         }
       }
 
@@ -1646,6 +1634,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       return builder
           .overrideAuthority(ManagedChannelImpl.this.authority())
+          // TODO(zdapeng): executors should not outlive the parent channel.
+          .executor(executor)
+          .offloadExecutor(offloadExecutorHolder.getExecutor())
           .maxTraceEvents(maxTraceEvents)
           .proxyDetector(nameResolverArgs.getProxyDetector())
           .userAgent(userAgent);
