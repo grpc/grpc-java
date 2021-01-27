@@ -146,7 +146,7 @@ public final class OkHttpChannelBuilder extends
     if (result.error != null) {
       throw new IllegalArgumentException(result.error);
     }
-    return new OkHttpChannelBuilder(target, creds);
+    return new OkHttpChannelBuilder(target, creds, result.callCredentials, result.factory);
   }
 
   private Executor transportExecutor;
@@ -183,15 +183,14 @@ public final class OkHttpChannelBuilder extends
   }
 
   OkHttpChannelBuilder(
-      String target, ChannelCredentials channelCreds) {
-    OkHttpChannelBuilder.SslSocketFactoryResult result =
-        OkHttpChannelBuilder.sslSocketFactoryFrom(channelCreds);
+      String target, ChannelCredentials channelCreds, CallCredentials callCreds,
+      SSLSocketFactory factory) {
     managedChannelImplBuilder = new ManagedChannelImplBuilder(
-        target, channelCreds, result.callCredentials,
+        target, channelCreds, callCreds,
         new OkHttpChannelTransportFactoryBuilder(),
         new OkHttpChannelDefaultPortProvider());
-    this.sslSocketFactory = result.factory;
-    this.negotiationType = result.factory == null ? NegotiationType.PLAINTEXT : NegotiationType.TLS;
+    this.sslSocketFactory = factory;
+    this.negotiationType = factory == null ? NegotiationType.PLAINTEXT : NegotiationType.TLS;
     this.freezeSecurityConfiguration = true;
   }
 

@@ -49,6 +49,7 @@ public final class NettyChannelProvider extends ManagedChannelProvider {
     if (result.error != null) {
       return NewChannelBuilderResult.error(result.error);
     }
-    return NewChannelBuilderResult.channelBuilder(new NettyChannelBuilder(target, creds));
+    return NewChannelBuilderResult.channelBuilder(
+        new NettyChannelBuilder(target, creds, result.callCredentials, result.negotiator));
   }
 }
