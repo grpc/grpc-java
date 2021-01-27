@@ -19,15 +19,13 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.Sets;
-import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
-import io.grpc.xds.ClientLoadCounter.MetricValue;
-import io.grpc.xds.DropStatsCounter.DropStatsSnapshot;
+import io.grpc.Status;
 import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.ClusterStats.DroppedRequests;
-import io.grpc.xds.EnvoyProtoData.EndpointLoadMetricStats;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
 import java.util.ArrayList;
@@ -37,6 +35,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -48,11 +50,11 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 final class LoadStatsManager2 {
   // Recorders for drops of each cluster:edsServiceName.
-  private final Map<String, Map<String, ReferenceCounted<DropStatsCounter>>> dropStats =
+  private final Map<String, Map<String, ReferenceCounted<ClusterDropStats>>> allDropStats =
       new HashMap<>();
   // Recorders for loads of each cluster:edsServiceName:locality.
   private final Map<String, Map<String,
-      Map<Locality, ReferenceCounted<ClientLoadCounter>>>> loadStats = new HashMap<>();
+      Map<Locality, ReferenceCounted<ClusterLocalityStats>>>> allLoadStats = new HashMap<>();
   private final Supplier<Stopwatch> stopwatchSupplier;
 
   LoadStatsManager2(Supplier<Stopwatch> stopwatchSupplier) {
@@ -60,83 +62,78 @@ final class LoadStatsManager2 {
   }
 
   /**
-   * Gets the counter for recording drops for the specified cluster with edsServiceName.
-   * The returned counter is reference counted and the caller should use {@link
-   * #releaseDropCounter} to release its <i>hard</i> reference when it is safe to discard the
-   * counter in the future.
+   * Gets or creates the stats object for recording drops for the specified cluster with
+   * edsServiceName. The returned object is reference counted and the caller should use {@link
+   * ClusterDropStats#release()} to release its <i>hard</i> reference when it is safe to discard
+   * future stats for the cluster.
    */
-  synchronized DropStatsCounter getDropCounter(String cluster, @Nullable String edsServiceName) {
-    if (!dropStats.containsKey(cluster)) {
-      dropStats.put(cluster, new HashMap<String, ReferenceCounted<DropStatsCounter>>());
+  synchronized ClusterDropStats getClusterDropStats(
+      String cluster, @Nullable String edsServiceName) {
+    if (!allDropStats.containsKey(cluster)) {
+      allDropStats.put(cluster, new HashMap<String, ReferenceCounted<ClusterDropStats>>());
     }
-    Map<String, ReferenceCounted<DropStatsCounter>> clusterDropStats = dropStats.get(cluster);
-    if (!clusterDropStats.containsKey(edsServiceName)) {
-      clusterDropStats.put(
-          edsServiceName, ReferenceCounted.wrap(new DropStatsCounter(stopwatchSupplier)));
+    Map<String, ReferenceCounted<ClusterDropStats>> perClusterCounters = allDropStats.get(cluster);
+    if (!perClusterCounters.containsKey(edsServiceName)) {
+      perClusterCounters.put(
+          edsServiceName,
+          ReferenceCounted.wrap(new ClusterDropStats(
+              cluster, edsServiceName, stopwatchSupplier.get())));
     }
-    ReferenceCounted<DropStatsCounter> ref = clusterDropStats.get(edsServiceName);
+    ReferenceCounted<ClusterDropStats> ref = perClusterCounters.get(edsServiceName);
     ref.retain();
     return ref.get();
   }
 
-  /**
-   * Release the <i>hard</i> reference for the counter previously obtained from {@link
-   * #getDropCounter} for the specified cluster with edsServiceName. The counter released may
-   * still be recording drops after this method, but there is no guarantee drops recorded after
-   * this point will be included in load reports.
-   */
-  synchronized void releaseDropCounter(String cluster, @Nullable String edsServiceName) {
-    checkState(dropStats.containsKey(cluster)
-            && dropStats.get(cluster).containsKey(edsServiceName),
+  private synchronized void releaseClusterDropCounter(
+      String cluster, @Nullable String edsServiceName) {
+    checkState(allDropStats.containsKey(cluster)
+            && allDropStats.get(cluster).containsKey(edsServiceName),
         "stats for cluster %s, edsServiceName %s not exits", cluster, edsServiceName);
-    ReferenceCounted<DropStatsCounter> ref = dropStats.get(cluster).get(edsServiceName);
+    ReferenceCounted<ClusterDropStats> ref = allDropStats.get(cluster).get(edsServiceName);
     ref.release();
   }
 
   /**
-   * Gets the counter for recording loads for the specified locality (in the specified cluster
-   * with edsServiceName). The returned counter is reference counted and the caller should use
-   * {@link #releaseLoadCounter} to release its <i>hard</i> reference when it is safe to discard
-   * the counter in the future.
+   * Gets or creates the stats object for recording loads for the specified locality (in the
+   * specified cluster with edsServiceName). The returned object is reference counted and the
+   * caller should use {@link ClusterLocalityStats#release} to release its <i>hard</i> reference
+   * when it is safe to discard the future stats for the locality.
    */
-  synchronized ClientLoadCounter getLoadCounter(
+  synchronized ClusterLocalityStats getClusterLocalityStats(
       String cluster, @Nullable String edsServiceName, Locality locality) {
-    if (!loadStats.containsKey(cluster)) {
-      loadStats.put(
-          cluster, new HashMap<String, Map<Locality, ReferenceCounted<ClientLoadCounter>>>());
+    if (!allLoadStats.containsKey(cluster)) {
+      allLoadStats.put(
+          cluster,
+          new HashMap<String, Map<Locality, ReferenceCounted<ClusterLocalityStats>>>());
     }
-    Map<String, Map<Locality, ReferenceCounted<ClientLoadCounter>>> clusterLoadStats =
-        loadStats.get(cluster);
-    if (!clusterLoadStats.containsKey(edsServiceName)) {
-      clusterLoadStats.put(
-          edsServiceName, new HashMap<Locality, ReferenceCounted<ClientLoadCounter>>());
+    Map<String, Map<Locality, ReferenceCounted<ClusterLocalityStats>>> perClusterCounters =
+        allLoadStats.get(cluster);
+    if (!perClusterCounters.containsKey(edsServiceName)) {
+      perClusterCounters.put(
+          edsServiceName, new HashMap<Locality, ReferenceCounted<ClusterLocalityStats>>());
     }
-    Map<Locality, ReferenceCounted<ClientLoadCounter>> localityLoadStats =
-        clusterLoadStats.get(edsServiceName);
-    if (!localityLoadStats.containsKey(locality)) {
-      localityLoadStats.put(
-          locality, ReferenceCounted.wrap(new ClientLoadCounter(stopwatchSupplier)));
+    Map<Locality, ReferenceCounted<ClusterLocalityStats>> localityStats =
+        perClusterCounters.get(edsServiceName);
+    if (!localityStats.containsKey(locality)) {
+      localityStats.put(
+          locality,
+          ReferenceCounted.wrap(new ClusterLocalityStats(
+              cluster, edsServiceName, locality, stopwatchSupplier.get())));
     }
-    ReferenceCounted<ClientLoadCounter> ref = localityLoadStats.get(locality);
+    ReferenceCounted<ClusterLocalityStats> ref = localityStats.get(locality);
     ref.retain();
     return ref.get();
   }
 
-  /**
-   * Release the <i>hard</i> reference for the counter previously obtained from {@link
-   * #getLoadCounter} for the specified locality. The counter released may still be recording
-   * loads after this method, but there is no guarantee loads recorded after this point will be
-   * included in load reports.
-   */
-  synchronized void releaseLoadCounter(
+  private synchronized void releaseClusterLocalityLoadCounter(
       String cluster, @Nullable String edsServiceName, Locality locality) {
-    checkState(loadStats.containsKey(cluster)
-            && loadStats.get(cluster).containsKey(edsServiceName)
-            && loadStats.get(cluster).get(edsServiceName).containsKey(locality),
+    checkState(allLoadStats.containsKey(cluster)
+            && allLoadStats.get(cluster).containsKey(edsServiceName)
+            && allLoadStats.get(cluster).get(edsServiceName).containsKey(locality),
         "stats for cluster %s, edsServiceName %s, locality %s not exits",
         cluster, edsServiceName, locality);
-    ReferenceCounted<ClientLoadCounter> ref =
-        loadStats.get(cluster).get(edsServiceName).get(locality);
+    ReferenceCounted<ClusterLocalityStats> ref =
+        allLoadStats.get(cluster).get(edsServiceName).get(locality);
     ref.release();
   }
 
@@ -147,13 +144,14 @@ final class LoadStatsManager2 {
    * edsServiceName.
    */
   synchronized List<ClusterStats> getClusterStatsReports(String cluster) {
-    if (!dropStats.containsKey(cluster) && !loadStats.containsKey(cluster)) {
+    if (!allDropStats.containsKey(cluster) && !allLoadStats.containsKey(cluster)) {
       return Collections.emptyList();
     }
-    Map<String, ReferenceCounted<DropStatsCounter>> clusterDropStats = dropStats.get(cluster);
-    Map<String, Map<Locality, ReferenceCounted<ClientLoadCounter>>> clusterLoadStats =
-        loadStats.get(cluster);
+    Map<String, ReferenceCounted<ClusterDropStats>> clusterDropStats = allDropStats.get(cluster);
+    Map<String, Map<Locality, ReferenceCounted<ClusterLocalityStats>>> clusterLoadStats =
+        allLoadStats.get(cluster);
     Map<String, ClusterStats.Builder> statsReportBuilders = new HashMap<>();
+    // Populate drop stats.
     if (clusterDropStats != null) {
       Set<String> toDiscard = new HashSet<>();
       for (String edsServiceName : clusterDropStats.keySet()) {
@@ -161,23 +159,24 @@ final class LoadStatsManager2 {
         if (edsServiceName != null) {
           builder.setClusterServiceName(edsServiceName);
         }
-        ReferenceCounted<DropStatsCounter> ref = clusterDropStats.get(edsServiceName);
-        if (ref.getReferenceCount() == 0) {  // counter no longer needed after snapshot
+        ReferenceCounted<ClusterDropStats> ref = clusterDropStats.get(edsServiceName);
+        if (ref.getReferenceCount() == 0) {  // stats object no longer needed after snapshot
           toDiscard.add(edsServiceName);
         }
-        DropStatsSnapshot dropStatsSnapshot = ref.get().snapshot();
+        ClusterDropStatsSnapshot dropStatsSnapshot = ref.get().snapshot();
         long totalCategorizedDrops = 0L;
-        for (Map.Entry<String, Long> entry : dropStatsSnapshot.getCategorizedDrops().entrySet()) {
+        for (Map.Entry<String, Long> entry : dropStatsSnapshot.categorizedDrops.entrySet()) {
           builder.addDroppedRequests(new DroppedRequests(entry.getKey(), entry.getValue()));
           totalCategorizedDrops += entry.getValue();
         }
         builder.setTotalDroppedRequests(
-            totalCategorizedDrops + dropStatsSnapshot.getUncategorizedDrops());
-        builder.setLoadReportIntervalNanos(dropStatsSnapshot.getDurationNano());
+            totalCategorizedDrops + dropStatsSnapshot.uncategorizedDrops);
+        builder.setLoadReportIntervalNanos(dropStatsSnapshot.durationNano);
         statsReportBuilders.put(edsServiceName, builder);
       }
       clusterDropStats.keySet().removeAll(toDiscard);
     }
+    // Populate load stats for all localities in the cluster.
     if (clusterLoadStats != null) {
       Set<String> toDiscard = new HashSet<>();
       for (String edsServiceName : clusterLoadStats.keySet()) {
@@ -189,21 +188,27 @@ final class LoadStatsManager2 {
           }
           statsReportBuilders.put(edsServiceName, builder);
         }
-        Map<Locality, ReferenceCounted<ClientLoadCounter>> localityStats =
+        Map<Locality, ReferenceCounted<ClusterLocalityStats>> localityStats =
             clusterLoadStats.get(edsServiceName);
         Set<Locality> localitiesToDiscard = new HashSet<>();
         for (Locality locality : localityStats.keySet()) {
-          ReferenceCounted<ClientLoadCounter> ref = localityStats.get(locality);
-          ClientLoadSnapshot snapshot = ref.get().snapshot();
-          // may still want to report all in-flight requests
-          if (ref.getReferenceCount() == 0 && snapshot.getCallsInProgress() == 0) {
+          ReferenceCounted<ClusterLocalityStats> ref = localityStats.get(locality);
+          ClusterLocalityStatsSnapshot snapshot = ref.get().snapshot();
+          // Only discard stats object after all in-flight calls under recording had finished.
+          if (ref.getReferenceCount() == 0 && snapshot.callsInProgress == 0) {
             localitiesToDiscard.add(locality);
           }
-          builder.addUpstreamLocalityStats(buildUpstreamLocalityStats(locality, snapshot));
+          UpstreamLocalityStats.Builder localityStatsBuilder = UpstreamLocalityStats.newBuilder();
+          localityStatsBuilder.setLocality(locality);
+          localityStatsBuilder.setTotalIssuedRequests(snapshot.callsIssued);
+          localityStatsBuilder.setTotalSuccessfulRequests(snapshot.callsSucceeded);
+          localityStatsBuilder.setTotalErrorRequests(snapshot.callsFailed);
+          localityStatsBuilder.setTotalRequestsInProgress(snapshot.callsInProgress);
+          builder.addUpstreamLocalityStats(localityStatsBuilder.build());
           // Use the max (drops/loads) recording interval as the overall interval for the
-          // cluster's stats.
+          // cluster's stats. In general, they should be mostly identical.
           builder.setLoadReportIntervalNanos(
-              Math.max(builder.getLoadReportIntervalNanos(), snapshot.getDurationNano()));
+              Math.max(builder.getLoadReportIntervalNanos(), snapshot.durationNano));
         }
         localityStats.keySet().removeAll(localitiesToDiscard);
         if (localityStats.isEmpty()) {
@@ -226,7 +231,7 @@ final class LoadStatsManager2 {
    * edsServiceName.
    */
   synchronized List<ClusterStats> getAllClusterStatsReports() {
-    Set<String> allClusters = Sets.union(dropStats.keySet(), loadStats.keySet());
+    Set<String> allClusters = Sets.union(allDropStats.keySet(), allLoadStats.keySet());
     List<ClusterStats> res = new ArrayList<>();
     for (String cluster : allClusters) {
       res.addAll(getClusterStatsReports(cluster));
@@ -234,23 +239,159 @@ final class LoadStatsManager2 {
     return Collections.unmodifiableList(res);
   }
 
-  private static UpstreamLocalityStats buildUpstreamLocalityStats(
-      Locality locality, ClientLoadSnapshot snapshot) {
-    UpstreamLocalityStats.Builder builder = UpstreamLocalityStats.newBuilder();
-    builder.setLocality(locality);
-    builder.setTotalIssuedRequests(snapshot.getCallsIssued());
-    builder.setTotalSuccessfulRequests(snapshot.getCallsSucceeded());
-    builder.setTotalErrorRequests(snapshot.getCallsFailed());
-    builder.setTotalRequestsInProgress(snapshot.getCallsInProgress());
-    for (Map.Entry<String, MetricValue> metric : snapshot.getMetricValues().entrySet()) {
-      EndpointLoadMetricStats metrics =
-          EndpointLoadMetricStats.newBuilder()
-              .setMetricName(metric.getKey())
-              .setNumRequestsFinishedWithMetric(metric.getValue().getNumReports())
-              .setTotalMetricValue(metric.getValue().getTotalValue())
-              .build();
-      builder.addLoadMetricStats(metrics);
+  /**
+   * Recorder for dropped requests. One instance per cluster with edsServiceName.
+   */
+  class ClusterDropStats {
+    private final String clusterName;
+    @Nullable
+    private final String edsServiceName;
+    private final AtomicLong uncategorizedDrops = new AtomicLong();
+    private final ConcurrentMap<String, AtomicLong> categorizedDrops = new ConcurrentHashMap<>();
+    private final Stopwatch stopwatch;
+
+    @VisibleForTesting
+    ClusterDropStats(String clusterName, @Nullable String edsServiceName, Stopwatch stopwatch) {
+      this.clusterName = checkNotNull(clusterName, "clusterName");
+      this.edsServiceName = edsServiceName;
+      this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+      stopwatch.reset().start();
     }
-    return builder.build();
+
+    /**
+     * Records a dropped request with the specified category.
+     */
+    void recordDroppedRequest(String category) {
+      // There is a race between this method and snapshot(), causing one drop recorded but may not
+      // be included in any snapshot. This is acceptable and the race window is extremely small.
+      AtomicLong counter = categorizedDrops.putIfAbsent(category, new AtomicLong(1L));
+      if (counter != null) {
+        counter.getAndIncrement();
+      }
+    }
+
+    /**
+     * Records a dropped request without category.
+     */
+    void recordDroppedRequest() {
+      uncategorizedDrops.getAndIncrement();
+    }
+
+    /**
+     * Release the <i>hard</i> reference for this stats object (previously obtained via {@link
+     * LoadStatsManager2#getClusterDropStats}). The object may still be recording
+     * drops after this method, but there is no guarantee drops recorded after this point will
+     * be included in load reports.
+     */
+    void release() {
+      LoadStatsManager2.this.releaseClusterDropCounter(clusterName, edsServiceName);
+    }
+
+    private synchronized ClusterDropStatsSnapshot snapshot() {
+      Map<String, Long> drops = new HashMap<>();
+      for (Map.Entry<String, AtomicLong> entry : categorizedDrops.entrySet()) {
+        drops.put(entry.getKey(), entry.getValue().get());
+      }
+      categorizedDrops.clear();
+      long duration = stopwatch.elapsed(TimeUnit.NANOSECONDS);
+      stopwatch.reset().start();
+      return new ClusterDropStatsSnapshot(drops, uncategorizedDrops.getAndSet(0), duration);
+    }
+  }
+
+  private static final class ClusterDropStatsSnapshot {
+    private final Map<String, Long> categorizedDrops;
+    private final long uncategorizedDrops;
+    private final long durationNano;
+
+    private ClusterDropStatsSnapshot(
+        Map<String, Long> categorizedDrops, long uncategorizedDrops, long durationNano) {
+      this.categorizedDrops = Collections.unmodifiableMap(
+          checkNotNull(categorizedDrops, "categorizedDrops"));
+      this.uncategorizedDrops = uncategorizedDrops;
+      this.durationNano = durationNano;
+    }
+  }
+
+  /**
+   * Recorder for client loads. One instance per locality (in cluster with edsService).
+   */
+  class ClusterLocalityStats {
+    private final String clusterName;
+    @Nullable
+    private final String edsServiceName;
+    private final Locality locality;
+    private final Stopwatch stopwatch;
+    private final AtomicLong callsInProgress = new AtomicLong();
+    private final AtomicLong callsSucceeded = new AtomicLong();
+    private final AtomicLong callsFailed = new AtomicLong();
+    private final AtomicLong callsIssued = new AtomicLong();
+
+    @VisibleForTesting
+    private ClusterLocalityStats(
+        String clusterName, @Nullable String edsServiceName, Locality locality,
+        Stopwatch stopwatch) {
+      this.clusterName = checkNotNull(clusterName, "clusterName");
+      this.edsServiceName = edsServiceName;
+      this.locality = checkNotNull(locality, "locality");
+      this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+      stopwatch.reset().start();
+    }
+
+    /**
+     * Records a request being issued.
+     */
+    void recordCallStarted() {
+      callsIssued.getAndIncrement();
+      callsInProgress.getAndIncrement();
+    }
+
+    /**
+     * Records a request finished with the given status.
+     */
+    void recordCallFinished(Status status) {
+      callsInProgress.getAndDecrement();
+      if (status.isOk()) {
+        callsSucceeded.getAndIncrement();
+      } else {
+        callsFailed.getAndIncrement();
+      }
+    }
+
+    /**
+     * Release the <i>hard</i> reference for this stats object (previously obtained via {@link
+     * LoadStatsManager2#getClusterLocalityStats}). The object may still be
+     * recording loads after this method, but there is no guarantee loads recorded after this
+     * point will be included in load reports.
+     */
+    void release() {
+      LoadStatsManager2.this.releaseClusterLocalityLoadCounter(
+          clusterName, edsServiceName, locality);
+    }
+
+    private synchronized ClusterLocalityStatsSnapshot snapshot() {
+      long duration = stopwatch.elapsed(TimeUnit.NANOSECONDS);
+      stopwatch.reset().start();
+      return new ClusterLocalityStatsSnapshot(callsSucceeded.getAndSet(0), callsInProgress.get(),
+          callsFailed.getAndSet(0), callsIssued.getAndSet(0), duration);
+    }
+  }
+
+  private static final class ClusterLocalityStatsSnapshot {
+    private final long callsSucceeded;
+    private final long callsInProgress;
+    private final long callsFailed;
+    private final long callsIssued;
+    private final long durationNano;
+
+    private ClusterLocalityStatsSnapshot(
+        long callsSucceeded, long callsInProgress, long callsFailed, long callsIssued,
+        long durationNano) {
+      this.callsSucceeded = callsSucceeded;
+      this.callsInProgress = callsInProgress;
+      this.callsFailed = callsFailed;
+      this.callsIssued = callsIssued;
+      this.durationNano = durationNano;
+    }
   }
 }

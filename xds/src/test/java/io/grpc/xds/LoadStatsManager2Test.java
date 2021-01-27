@@ -25,6 +25,8 @@ import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.ClusterStats.DroppedRequests;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
+import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
+import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -55,16 +57,16 @@ public class LoadStatsManager2Test {
 
   @Test
   public void recordAndGetReport() {
-    DropStatsCounter dropCounter1 =
-        loadStatsManager.getDropCounter(CLUSTER_NAME1, EDS_SERVICE_NAME1);
-    DropStatsCounter dropCounter2 =
-        loadStatsManager.getDropCounter(CLUSTER_NAME1, EDS_SERVICE_NAME2);
-    ClientLoadCounter loadCounter1 =
-        loadStatsManager.getLoadCounter(CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
-    ClientLoadCounter loadCounter2 =
-        loadStatsManager.getLoadCounter(CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY2);
-    ClientLoadCounter loadCounter3 =
-        loadStatsManager.getLoadCounter(CLUSTER_NAME2, null, LOCALITY3);
+    ClusterDropStats dropCounter1 = loadStatsManager.getClusterDropStats(
+        CLUSTER_NAME1, EDS_SERVICE_NAME1);
+    ClusterDropStats dropCounter2 = loadStatsManager.getClusterDropStats(
+        CLUSTER_NAME1, EDS_SERVICE_NAME2);
+    ClusterLocalityStats loadCounter1 = loadStatsManager.getClusterLocalityStats(
+        CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
+    ClusterLocalityStats loadCounter2 = loadStatsManager.getClusterLocalityStats(
+        CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY2);
+    ClusterLocalityStats loadCounter3 = loadStatsManager.getClusterLocalityStats(
+        CLUSTER_NAME2, null, LOCALITY3);
     dropCounter1.recordDroppedRequest("lb");
     dropCounter1.recordDroppedRequest("throttle");
     for (int i = 0; i < 19; i++) {
@@ -149,8 +151,10 @@ public class LoadStatsManager2Test {
 
   @Test
   public void sharedDropCounterStatsAggregation() {
-    DropStatsCounter ref1 = loadStatsManager.getDropCounter(CLUSTER_NAME1, EDS_SERVICE_NAME1);
-    DropStatsCounter ref2 = loadStatsManager.getDropCounter(CLUSTER_NAME1, EDS_SERVICE_NAME1);
+    ClusterDropStats ref1 = loadStatsManager.getClusterDropStats(
+        CLUSTER_NAME1, EDS_SERVICE_NAME1);
+    ClusterDropStats ref2 = loadStatsManager.getClusterDropStats(
+        CLUSTER_NAME1, EDS_SERVICE_NAME1);
     ref1.recordDroppedRequest("lb");
     ref2.recordDroppedRequest("throttle");
     ref1.recordDroppedRequest();
@@ -166,7 +170,8 @@ public class LoadStatsManager2Test {
 
   @Test
   public void dropCounterDelayedDeletionAfterReported() {
-    DropStatsCounter counter = loadStatsManager.getDropCounter(CLUSTER_NAME1, EDS_SERVICE_NAME1);
+    ClusterDropStats counter = loadStatsManager.getClusterDropStats(
+        CLUSTER_NAME1, EDS_SERVICE_NAME1);
     counter.recordDroppedRequest("lb");
     ClusterStats stats = Iterables.getOnlyElement(
         loadStatsManager.getClusterStatsReports(CLUSTER_NAME1));
@@ -175,7 +180,7 @@ public class LoadStatsManager2Test {
         .isEqualTo(1L);
     assertThat(stats.getTotalDroppedRequests()).isEqualTo(1L);
 
-    loadStatsManager.releaseDropCounter(CLUSTER_NAME1, EDS_SERVICE_NAME1);
+    counter.release();
     stats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER_NAME1));
     assertThat(stats.getDroppedRequestsList()).isEmpty();
     assertThat(stats.getTotalDroppedRequests()).isEqualTo(0L);
@@ -185,10 +190,10 @@ public class LoadStatsManager2Test {
 
   @Test
   public void sharedLoadCounterStatsAggregation() {
-    ClientLoadCounter ref1 =
-        loadStatsManager.getLoadCounter(CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
-    ClientLoadCounter ref2 =
-        loadStatsManager.getLoadCounter(CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
+    ClusterLocalityStats ref1 = loadStatsManager.getClusterLocalityStats(
+        CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
+    ClusterLocalityStats ref2 = loadStatsManager.getClusterLocalityStats(
+        CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
     ref1.recordCallStarted();
     ref1.recordCallFinished(Status.OK);
     ref2.recordCallStarted();
@@ -207,8 +212,8 @@ public class LoadStatsManager2Test {
 
   @Test
   public void loadCounterDelayedDeletionAfterAllInProgressRequestsReported() {
-    ClientLoadCounter counter =
-        loadStatsManager.getLoadCounter(CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
+    ClusterLocalityStats counter = loadStatsManager.getClusterLocalityStats(
+        CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
     counter.recordCallStarted();
     counter.recordCallStarted();
 
@@ -222,7 +227,7 @@ public class LoadStatsManager2Test {
     assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(2L);
 
     // release the counter, but requests still in-flight
-    loadStatsManager.releaseLoadCounter(CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1);
+    counter.release();
     stats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER_NAME1));
     localityStats = Iterables.getOnlyElement(stats.getUpstreamLocalityStatsList());
     assertThat(localityStats.getTotalIssuedRequests()).isEqualTo(0L);
