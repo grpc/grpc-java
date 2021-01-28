@@ -419,7 +419,7 @@ public class ManagedChannelImplTest {
             .build());
     createChannel();
 
-    Subchannel subchannel =
+    final Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
     requestConnectionSafely(helper, subchannel);
     ArgumentCaptor<ClientTransportOptions> transportOptionCaptor = ArgumentCaptor.forClass(null);
@@ -428,6 +428,15 @@ public class ManagedChannelImplTest {
             any(SocketAddress.class), transportOptionCaptor.capture(), any(ChannelLogger.class));
     assertThat(transportOptionCaptor.getValue().getAuthority())
         .isEqualTo("channel-builder.override.authority");
+    final List<EquivalentAddressGroup> subchannelEags = new ArrayList<>();
+    helper.getSynchronizationContext().execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            subchannelEags.addAll(subchannel.getAllAddresses());
+          }
+        });
+    assertThat(subchannelEags).isEqualTo(ImmutableList.of(addressGroup));
   }
 
   @Test

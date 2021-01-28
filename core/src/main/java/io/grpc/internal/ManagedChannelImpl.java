@@ -1848,6 +1848,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   private final class SubchannelImpl extends AbstractSubchannel {
+    final List<EquivalentAddressGroup> addressGroups;
     final CreateSubchannelArgs args;
     final LbHelperImpl helper;
     final InternalLogId subchannelLogId;
@@ -1859,6 +1860,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     ScheduledHandle delayedShutdownTask;
 
     SubchannelImpl(CreateSubchannelArgs args, LbHelperImpl helper) {
+      addressGroups = args.getAddresses();
       if (isAuthorityOverridden) {
         List<EquivalentAddressGroup> eags = args.getAddresses();
         List<EquivalentAddressGroup> eagsWithoutOverrideAttr = new ArrayList<>();
@@ -2006,7 +2008,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     public List<EquivalentAddressGroup> getAllAddresses() {
       syncContext.throwIfNotInThisSynchronizationContext();
       checkState(started, "not started");
-      return subchannel.getAddressGroups();
+      return addressGroups;
     }
 
     @Override
