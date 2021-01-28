@@ -1403,17 +1403,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.throwIfNotInThisSynchronizationContext();
       // No new subchannel should be created after load balancer has been shutdown.
       checkState(!terminating, "Channel is being terminated");
-      if (isAuthorityOverridden) {
-        List<EquivalentAddressGroup> eags = args.getAddresses();
-        List<EquivalentAddressGroup> eagsWithoutOverrideAttr = new ArrayList<>();
-        for (EquivalentAddressGroup eag : eags) {
-          EquivalentAddressGroup eagWithoutOverrideAttr = new EquivalentAddressGroup(
-              eag.getAddresses(),
-              eag.getAttributes().toBuilder().discard(ATTR_AUTHORITY_OVERRIDE).build());
-          eagsWithoutOverrideAttr.add(eagWithoutOverrideAttr);
-        }
-        args = args.toBuilder().setAddresses(eagsWithoutOverrideAttr).build();
-      }
       return new SubchannelImpl(args, this);
     }
 
@@ -1870,6 +1859,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
     ScheduledHandle delayedShutdownTask;
 
     SubchannelImpl(CreateSubchannelArgs args, LbHelperImpl helper) {
+      if (isAuthorityOverridden) {
+        List<EquivalentAddressGroup> eags = args.getAddresses();
+        List<EquivalentAddressGroup> eagsWithoutOverrideAttr = new ArrayList<>();
+        for (EquivalentAddressGroup eag : eags) {
+          EquivalentAddressGroup eagWithoutOverrideAttr = new EquivalentAddressGroup(
+              eag.getAddresses(),
+              eag.getAttributes().toBuilder().discard(ATTR_AUTHORITY_OVERRIDE).build());
+          eagsWithoutOverrideAttr.add(eagWithoutOverrideAttr);
+        }
+        args = args.toBuilder().setAddresses(eagsWithoutOverrideAttr).build();
+      }
       this.args = checkNotNull(args, "args");
       this.helper = checkNotNull(helper, "helper");
       subchannelLogId = InternalLogId.allocate("Subchannel", /*details=*/ authority());
