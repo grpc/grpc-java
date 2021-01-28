@@ -1567,35 +1567,31 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
-      return createBuilder(target, null);
-    }
-
-    @Override
-    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
-        String target, ChannelCredentials creds) {
-      checkNotNull(creds, "creds");
-      return createBuilder(target, creds);
+      return createResolvingOobChannelBuilder(target, new DefaultChannelCreds());
     }
 
     // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
     // TODO(zdapeng) register the channel as a subchannel of the parent channel in channelz.
-    private ManagedChannelBuilder<?> createBuilder(
-        String target, @Nullable ChannelCredentials creds) {
+    @Override
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
+        final String target, final ChannelCredentials channelCreds) {
+      checkNotNull(channelCreds, "channelCreds");
+
       final class ResolvingOobChannelBuilder
           extends ForwardingChannelBuilder<ResolvingOobChannelBuilder> {
         final ManagedChannelBuilder<?> delegate;
 
-        ResolvingOobChannelBuilder(String target, @Nullable ChannelCredentials channelCreds) {
+        ResolvingOobChannelBuilder() {
           final ClientTransportFactory transportFactory;
           CallCredentials callCredentials;
-          if (channelCreds == null || channelCreds instanceof DefaultChannelCreds) {
+          if (channelCreds instanceof DefaultChannelCreds) {
             transportFactory = originalTransportFactory;
             callCredentials = null;
           } else {
             SwapChannelCredentialsResult swapResult =
                 originalTransportFactory.swapChannelCredentials(channelCreds);
             if (swapResult == null) {
-              this.delegate = Grpc.newChannelBuilder(target, channelCreds);
+              delegate = Grpc.newChannelBuilder(target, channelCreds);
               return;
             } else {
               transportFactory = swapResult.transportFactory;
@@ -1626,7 +1622,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkState(!terminated, "Channel is terminated");
 
       @SuppressWarnings("deprecation")
-      ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder(target, creds)
+      ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder()
           .nameResolverFactory(nameResolverFactory);
 
       return builder
