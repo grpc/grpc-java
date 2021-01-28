@@ -1378,6 +1378,13 @@ public abstract class ClientXdsClientTestBase {
 
     dropStats.release();
     fakeClock.forwardNanos(1000L);
+    // In case of having unreported cluster stats, one last report will be sent after corresponding
+    // stats object released.
+    lrsCall.verifyNextReportClusters(Collections.singletonList(new String[] {clusterName, null}));
+
+    fakeClock.forwardNanos(1000L);
+    // Currently load reporting continues (with empty stats) even if all stats objects have been
+    // released.
     lrsCall.verifyNextReportClusters(Collections.<String[]>emptyList());  // no more stats reported
 
     // See more test on LoadReportClientTest.java
