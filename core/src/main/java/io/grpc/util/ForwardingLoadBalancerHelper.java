@@ -55,6 +55,7 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
     delegate().updateOobChannelAddresses(channel, eag);
   }
 
+  @Deprecated
   @Override
   public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
     return delegate().createResolvingOobChannelBuilder(target);

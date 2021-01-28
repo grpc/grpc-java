@@ -1521,9 +1521,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
       return oobChannel;
     }
 
+    @Deprecated
     @Override
     public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
       return createResolvingOobChannelBuilder(target, new DefaultChannelCreds())
+          // Override authority to keep the old behavior.
+          // createResolvingOobChannelBuilder(String target) will be deleted soon.
           .overrideAuthority(getAuthority());
     }
 

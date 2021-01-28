@@ -977,8 +977,11 @@ public abstract class LoadBalancer {
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
      *
+     * @deprecated Use {@link #createResolvingOobChannelBuilder(String, ChannelCredentials)}
+     *     instead.
      * @since 1.31.0
      */
+    @Deprecated
     public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
       throw new UnsupportedOperationException("Not implemented");
     }
