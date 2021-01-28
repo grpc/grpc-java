@@ -437,7 +437,8 @@ public class XdsNameResolverTest {
                 new RouteAction(
                     TimeUnit.SECONDS.toNanos(20L), null,
                     Arrays.asList(
-                        new ClusterWeight(cluster1, 20), new ClusterWeight(cluster2, 80))))));
+                        new ClusterWeight(cluster1, 20, null),
+                        new ClusterWeight(cluster2, 80, null))))));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
@@ -744,7 +745,7 @@ public class XdsNameResolverTest {
           if (!resourceName.equals(ldsResource)) {
             return;
           }
-          ldsWatcher.onChanged(new LdsUpdate(httpMaxStreamDurationNano, virtualHosts));
+          ldsWatcher.onChanged(new LdsUpdate(httpMaxStreamDurationNano, virtualHosts, false, null));
         }
       });
     }
@@ -758,7 +759,8 @@ public class XdsNameResolverTest {
           }
           VirtualHost virtualHost =
               new VirtualHost("virtual-host", Collections.singletonList(AUTHORITY), routes);
-          ldsWatcher.onChanged(new LdsUpdate(0, Collections.singletonList(virtualHost)));
+          ldsWatcher.onChanged(
+              new LdsUpdate(0, Collections.singletonList(virtualHost), false, null));
         }
       });
     }
@@ -770,7 +772,7 @@ public class XdsNameResolverTest {
           if (!resourceName.equals(ldsResource)) {
             return;
           }
-          ldsWatcher.onChanged(new LdsUpdate(0, rdsName));
+          ldsWatcher.onChanged(new LdsUpdate(0, rdsName, false, null));
         }
       });
     }

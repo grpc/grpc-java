@@ -65,9 +65,16 @@ import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.RouteAction;
+import io.envoyproxy.envoy.api.v2.route.RouteMatch;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.cluster.aggregate.v2alpha.ClusterConfig;
+import io.envoyproxy.envoy.config.filter.fault.v2.FaultDelay;
+import io.envoyproxy.envoy.config.filter.fault.v2.FaultDelay.HeaderDelay;
+import io.envoyproxy.envoy.config.filter.http.fault.v2.FaultAbort;
+import io.envoyproxy.envoy.config.filter.http.fault.v2.FaultAbort.HeaderAbort;
+import io.envoyproxy.envoy.config.filter.http.fault.v2.HTTPFault;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
+import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpFilter;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
 import io.envoyproxy.envoy.config.listener.v2.ApiListener;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
@@ -79,12 +86,14 @@ import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
+import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
 import org.junit.runner.RunWith;
@@ -232,8 +241,10 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
 
   private static class MessageFactoryV2 extends MessageFactory {
 
+    @SuppressWarnings("unchecked")
     @Override
-    protected Message buildListener(String name, Message routeConfiguration) {
+    protected Message buildListener(
+        String name, Message routeConfiguration, List<? extends Message> httpFilters) {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(Address.getDefaultInstance())
@@ -241,7 +252,9 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
           .setApiListener(
               ApiListener.newBuilder().setApiListener(Any.pack(
                   HttpConnectionManager.newBuilder()
-                      .setRouteConfig((RouteConfiguration) routeConfiguration).build())))
+                      .setRouteConfig((RouteConfiguration) routeConfiguration)
+                      .addAllHttpFilters((List<HttpFilter>) httpFilters)
+                      .build())))
           .build();
     }
 
@@ -265,6 +278,56 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
+    protected Message buildHttpFilter(String name, @Nullable Any typedConfig) {
+      HttpFilter.Builder builder = HttpFilter.newBuilder().setName(name);
+      if (typedConfig != null) {
+        builder.setTypedConfig(typedConfig);
+      }
+      return builder.build();
+    }
+
+    @Override
+    protected Any buildHttpFaultTypedConfig(
+        @Nullable Long delayNanos, @Nullable Integer delayRate, String upstreamCluster,
+        List<String> downstreamNodes, @Nullable Integer maxActiveFaults, @Nullable Status status,
+        @Nullable Integer httpCode, @Nullable Integer abortRate) {
+      HTTPFault.Builder builder = HTTPFault.newBuilder();
+      if (delayRate != null) {
+        FaultDelay.Builder delayBuilder
+            = FaultDelay.newBuilder();
+        delayBuilder.setPercentage(
+            FractionalPercent.newBuilder()
+                .setNumerator(delayRate).setDenominator(DenominatorType.MILLION));
+        if (delayNanos != null) {
+          delayBuilder.setFixedDelay(Durations.fromNanos(delayNanos));
+        } else {
+          delayBuilder.setHeaderDelay(HeaderDelay.newBuilder());
+        }
+        builder.setDelay(delayBuilder);
+      }
+      if (abortRate != null) {
+        FaultAbort.Builder abortBuilder = FaultAbort.newBuilder();
+        abortBuilder.setPercentage(
+            FractionalPercent.newBuilder()
+                .setNumerator(abortRate).setDenominator(DenominatorType.MILLION));
+        if (status != null) {
+          throw new UnsupportedOperationException();
+        } else if (httpCode != null) {
+          abortBuilder.setHttpStatus(httpCode);
+        } else {
+          abortBuilder.setHeaderAbort(HeaderAbort.newBuilder());
+        }
+        builder.setAbort(abortBuilder);
+      }
+      builder.setUpstreamCluster(upstreamCluster);
+      builder.addAllDownstreamNodes(downstreamNodes);
+      if (maxActiveFaults != null) {
+        builder.setMaxActiveFaults(UInt32Value.of(maxActiveFaults));
+      }
+      return Any.pack(builder.build());
+    }
+
+    @Override
     protected Message buildRouteConfiguration(String name, List<Message> virtualHostList) {
       RouteConfiguration.Builder builder = RouteConfiguration.newBuilder();
       builder.setName(name);
@@ -285,12 +348,38 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
                 .addRoutes(
                     Route.newBuilder()
                         .setRoute(RouteAction.newBuilder().setCluster("do not care"))
-                        .setMatch(io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
+                        .setMatch(RouteMatch.newBuilder()
                             .setPrefix("do not care")))
                 .build();
         virtualHosts.add(virtualHost);
       }
       return virtualHosts;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    protected Message buildVirtualHost(
+        List<? extends Message> routes, Map<String, Any> typedConfigMap) {
+      return VirtualHost.newBuilder()
+          .setName("do not care")
+          .addDomains("do not care")
+          .addAllRoutes((List<Route>) routes)
+          .putAllTypedPerFilterConfig(typedConfigMap)
+          .build();
+    }
+
+    @Override
+    protected List<? extends Message> buildOpaqueRoutes(int num) {
+      List<Route> routes = new ArrayList<>(num);
+      for (int i = 0; i < num; i++) {
+        Route route =
+            Route.newBuilder()
+                .setRoute(RouteAction.newBuilder().setCluster("do not care"))
+                .setMatch(RouteMatch.newBuilder().setPrefix("do not care"))
+                .build();
+        routes.add(route);
+      }
+      return routes;
     }
 
     @Override

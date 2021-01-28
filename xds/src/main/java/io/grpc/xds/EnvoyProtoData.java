@@ -22,6 +22,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.ListValue;
 import com.google.protobuf.NullValue;
 import com.google.protobuf.Struct;
@@ -29,9 +31,11 @@ import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
+import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Status;
 import io.grpc.xds.RouteMatch.FractionMatcher;
 import io.grpc.xds.RouteMatch.HeaderMatcher;
 import io.grpc.xds.RouteMatch.PathMatcher;
@@ -61,6 +65,7 @@ import javax.annotation.Nullable;
 // TODO(chengyuanzhang): put data types into smaller categories.
 final class EnvoyProtoData {
   static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
+  static final String HTTP_FAULT_FILTER_NAME = "envoy.fault";
 
   // Prevent instantiation.
   private EnvoyProtoData() {
@@ -756,54 +761,7 @@ final class EnvoyProtoData {
     static DropOverload fromEnvoyProtoDropOverload(
         io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment.Policy.DropOverload proto) {
       FractionalPercent percent = proto.getDropPercentage();
-      int numerator = percent.getNumerator();
-      DenominatorType type = percent.getDenominator();
-      switch (type) {
-        case TEN_THOUSAND:
-          numerator *= 100;
-          break;
-        case HUNDRED:
-          numerator *= 10_000;
-          break;
-        case MILLION:
-          break;
-        case UNRECOGNIZED:
-        default:
-          throw new IllegalArgumentException("Unknown denominator type of " + percent);
-      }
-
-      if (numerator > 1_000_000) {
-        numerator = 1_000_000;
-      }
-
-      return new DropOverload(proto.getCategory(), numerator);
-    }
-
-    @VisibleForTesting
-    static DropOverload fromEnvoyProtoDropOverloadV2(
-        io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload proto) {
-      io.envoyproxy.envoy.type.FractionalPercent percent = proto.getDropPercentage();
-      int numerator = percent.getNumerator();
-      io.envoyproxy.envoy.type.FractionalPercent.DenominatorType type = percent.getDenominator();
-      switch (type) {
-        case TEN_THOUSAND:
-          numerator *= 100;
-          break;
-        case HUNDRED:
-          numerator *= 10_000;
-          break;
-        case MILLION:
-          break;
-        case UNRECOGNIZED:
-        default:
-          throw new IllegalArgumentException("Unknown denominator type of " + percent);
-      }
-
-      if (numerator > 1_000_000) {
-        numerator = 1_000_000;
-      }
-
-      return new DropOverload(proto.getCategory(), numerator);
+      return new DropOverload(proto.getCategory(), getRatePerMillion(percent));
     }
 
     String getCategory() {
@@ -849,12 +807,19 @@ final class EnvoyProtoData {
     private final List<String> domains;
     // The list of routes that will be matched, in order, for incoming requests.
     private final List<Route> routes;
+    @Nullable
+    private final HttpFault httpFault;
 
     @VisibleForTesting
     VirtualHost(String name, List<String> domains, List<Route> routes) {
+      this(name, domains, routes, null);
+    }
+
+    VirtualHost(String name, List<String> domains, List<Route> routes, HttpFault httpFault) {
       this.name = name;
       this.domains = domains;
       this.routes = routes;
+      this.httpFault = httpFault;
     }
 
     String getName() {
@@ -869,13 +834,21 @@ final class EnvoyProtoData {
       return routes;
     }
 
+    @Nullable
+    HttpFault getHttpFault() {
+      return httpFault;
+    }
+
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this)
           .add("name", name)
           .add("domains", domains)
-          .add("routes", routes)
-          .toString();
+          .add("routes", routes);
+      if (httpFault != null) {
+        toStringHelper.add("httpFault", httpFault);
+      }
+      return toStringHelper.toString();
     }
 
     static StructOrError<VirtualHost> fromEnvoyProtoVirtualHost(
@@ -893,9 +866,24 @@ final class EnvoyProtoData {
         }
         routes.add(route.getStruct());
       }
+      HttpFault httpFault = null;
+      Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
+      if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
+        Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
+        StructOrError<HttpFault> httpFaultOrError =
+            HttpFault.decodeFaultFilterConfig(rawFaultFilterConfig);
+        if (httpFaultOrError.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "Virtual host [" + name + "] contains invalid HttpFault filter : "
+                  + httpFaultOrError.getErrorDetail());
+        }
+        httpFault = httpFaultOrError.getStruct();
+      }
       return StructOrError.fromStruct(
-          new VirtualHost(name, Collections.unmodifiableList(proto.getDomainsList()),
-              Collections.unmodifiableList(routes)));
+          new VirtualHost(
+              name, Collections.unmodifiableList(proto.getDomainsList()),
+              Collections.unmodifiableList(routes),
+              httpFault));
     }
   }
 
@@ -903,11 +891,18 @@ final class EnvoyProtoData {
   static final class Route {
     private final RouteMatch routeMatch;
     private final RouteAction routeAction;
+    @Nullable
+    private final HttpFault httpFault;
 
     @VisibleForTesting
-    Route(RouteMatch routeMatch, @Nullable RouteAction routeAction) {
+    Route(RouteMatch routeMatch, RouteAction routeAction) {
+      this(routeMatch, routeAction, null);
+    }
+
+    Route(RouteMatch routeMatch, RouteAction routeAction, @Nullable HttpFault httpFault) {
       this.routeMatch = routeMatch;
       this.routeAction = routeAction;
+      this.httpFault = httpFault;
     }
 
     RouteMatch getRouteMatch() {
@@ -916,6 +911,11 @@ final class EnvoyProtoData {
 
     RouteAction getRouteAction() {
       return routeAction;
+    }
+
+    @Nullable
+    HttpFault getHttpFault() {
+      return httpFault;
     }
 
     @Override
@@ -928,20 +928,24 @@ final class EnvoyProtoData {
       }
       Route route = (Route) o;
       return Objects.equals(routeMatch, route.routeMatch)
-          && Objects.equals(routeAction, route.routeAction);
+          && Objects.equals(routeAction, route.routeAction)
+          && Objects.equals(httpFault, route.httpFault);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(routeMatch, routeAction);
+      return Objects.hash(routeMatch, routeAction, httpFault);
     }
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this)
           .add("routeMatch", routeMatch)
-          .add("routeAction", routeAction)
-          .toString();
+          .add("routeAction", routeAction);
+      if (httpFault != null) {
+        toStringHelper.add("httpFault", httpFault);
+      }
+      return toStringHelper.toString();
     }
 
     @Nullable
@@ -978,7 +982,22 @@ final class EnvoyProtoData {
         return StructOrError.fromError(
             "Invalid route [" + proto.getName() + "]: " + routeAction.getErrorDetail());
       }
-      return StructOrError.fromStruct(new Route(routeMatch.getStruct(), routeAction.getStruct()));
+
+      HttpFault httpFault = null;
+      Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
+      if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
+        Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
+        StructOrError<HttpFault> httpFaultOrError =
+            HttpFault.decodeFaultFilterConfig(rawFaultFilterConfig);
+        if (httpFaultOrError.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "Route [" + proto.getName() + "] contains invalid HttpFault filter: "
+                  + httpFaultOrError.getErrorDetail());
+        }
+        httpFault = httpFaultOrError.getStruct();
+      }
+      return StructOrError.fromStruct(
+          new Route(routeMatch.getStruct(), routeAction.getStruct(), httpFault));
     }
 
     @VisibleForTesting
@@ -1114,6 +1133,308 @@ final class EnvoyProtoData {
   }
 
   /**
+   * See corresponding Envoy proto message {@link
+   * io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault}.
+   */
+  static final class HttpFault {
+    @Nullable
+    final FaultDelay faultDelay;
+    @Nullable
+    final FaultAbort faultAbort;
+    String upstreamCluster;
+    List<String> downstreamNodes;
+    List<HeaderMatcher> headers;
+    @Nullable
+    Integer maxActiveFaults;
+
+    private HttpFault(
+        @Nullable FaultDelay faultDelay, @Nullable FaultAbort faultAbort, String upstreamCluster,
+        List<String> downstreamNodes, List<HeaderMatcher> headers,
+        @Nullable Integer maxActiveFaults) {
+      this.faultDelay = faultDelay;
+      this.faultAbort = faultAbort;
+      this.upstreamCluster = upstreamCluster;
+      this.downstreamNodes = downstreamNodes;
+      this.headers = headers;
+      this.maxActiveFaults = maxActiveFaults;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      HttpFault httpFault = (HttpFault) o;
+      return Objects.equals(faultDelay, httpFault.faultDelay)
+          && Objects.equals(faultAbort, httpFault.faultAbort)
+          && Objects.equals(upstreamCluster, httpFault.upstreamCluster)
+          && Objects.equals(downstreamNodes, httpFault.downstreamNodes)
+          && Objects.equals(headers, httpFault.headers)
+          && Objects.equals(maxActiveFaults, httpFault.maxActiveFaults);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(
+          faultDelay, faultAbort, upstreamCluster, downstreamNodes, headers, maxActiveFaults);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("faultDelay", faultDelay)
+          .add("faultAbort", faultAbort)
+          .add("upstreamCluster", upstreamCluster)
+          .add("downstreamNodes", downstreamNodes)
+          .add("headers", headers)
+          .add("maxActiveFaults", maxActiveFaults)
+          .toString();
+    }
+
+    static StructOrError<HttpFault> decodeFaultFilterConfig(Any rawFaultFilterConfig) {
+      if (rawFaultFilterConfig.getTypeUrl().equals(
+          "type.googleapis.com/envoy.config.filter.http.fault.v2.HTTPFault")) {
+        rawFaultFilterConfig = rawFaultFilterConfig.toBuilder().setTypeUrl(
+            "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault").build();
+      }
+      HTTPFault httpFaultProto;
+      try {
+        httpFaultProto = rawFaultFilterConfig.unpack(HTTPFault.class);
+      } catch (InvalidProtocolBufferException e) {
+        return StructOrError.fromError("Invalid proto: " + e);
+      }
+      return fromEnvoyProtoHttpFault(httpFaultProto);
+    }
+
+    private static StructOrError<HttpFault> fromEnvoyProtoHttpFault(HTTPFault httpFault) {
+      FaultDelay faultDelay = null;
+      FaultAbort faultAbort = null;
+      if (httpFault.hasDelay()) {
+        faultDelay = FaultDelay.fromEnvoyProtoFaultDelay(httpFault.getDelay());
+      }
+      if (httpFault.hasAbort()) {
+        StructOrError<FaultAbort> faultAbortOrError =
+            FaultAbort.fromEnvoyProtoFaultAbort(httpFault.getAbort());
+        if (faultAbortOrError.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "HttpFault contains invalid FaultAbort: " + faultAbortOrError.getErrorDetail());
+        }
+        faultAbort = faultAbortOrError.getStruct();
+      }
+      if (faultDelay == null && faultAbort == null) {
+        return StructOrError.fromError(
+            "Invalid HttpFault: neither fault_delay nor fault_abort is specified");
+      }
+      String upstreamCluster = httpFault.getUpstreamCluster();
+      List<String> downstreamNodes = httpFault.getDownstreamNodesList();
+      List<HeaderMatcher> headers = new ArrayList<>();
+      for (io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto : httpFault.getHeadersList()) {
+        StructOrError<HeaderMatcher> headerMatcherOrError =
+            Route.convertEnvoyProtoHeaderMatcher(proto);
+        if (headerMatcherOrError.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "HttpFault contains invalid header matcher: "
+                  + headerMatcherOrError.getErrorDetail());
+        }
+        headers.add(headerMatcherOrError.getStruct());
+      }
+      Integer maxActiveFaults = null;
+      if (httpFault.hasMaxActiveFaults()) {
+        maxActiveFaults = httpFault.getMaxActiveFaults().getValue();
+        if (maxActiveFaults < 0) {
+          maxActiveFaults = Integer.MAX_VALUE;
+        }
+      }
+      return StructOrError.fromStruct(new HttpFault(
+          faultDelay, faultAbort, upstreamCluster, downstreamNodes, headers, maxActiveFaults));
+    }
+  }
+
+  /**
+   * See corresponding Envoy proto message {@link
+   * io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay}.
+   */
+  static final class FaultDelay {
+    @Nullable
+    final Long delayNanos;
+    final boolean headerDelay;
+    final int ratePerMillion;
+
+    private FaultDelay(@Nullable Long delayNanos, boolean headerDelay, int ratePerMillion) {
+      this.delayNanos = delayNanos;
+      this.headerDelay = headerDelay;
+      this.ratePerMillion = ratePerMillion;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      FaultDelay that = (FaultDelay) o;
+      return ratePerMillion == that.ratePerMillion
+          && headerDelay == that.headerDelay
+          && Objects.equals(delayNanos, that.delayNanos);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(delayNanos, headerDelay, ratePerMillion);
+    }
+
+    @Override
+    public String toString() {
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this)
+          .add("ratePerMillion", ratePerMillion);
+      if (headerDelay) {
+        toStringHelper.add("type", "header delay");
+      } else {
+        toStringHelper.add("type", "fixed delay");
+        toStringHelper.add("delayNanos", delayNanos);
+      }
+      return toStringHelper.toString();
+    }
+
+    private static FaultDelay fromEnvoyProtoFaultDelay(
+        io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay faultDelay) {
+      int rate = getRatePerMillion(faultDelay.getPercentage());
+      if (faultDelay.hasHeaderDelay()) {
+        return new FaultDelay(null, true, rate);
+      }
+      long delay = Durations.toNanos(faultDelay.getFixedDelay());
+      return new FaultDelay(delay, false, rate);
+    }
+  }
+
+  /**
+   * See corresponding Envoy proto message {@link
+   * io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort}.
+   */
+  static final class FaultAbort {
+    @Nullable
+    final Status status;
+    final boolean headerAbort;
+    final int ratePerMillion;
+
+    private FaultAbort(@Nullable Status status, boolean headerAbort, int ratePerMillion) {
+      this.status = status;
+      this.headerAbort = headerAbort;
+      this.ratePerMillion = ratePerMillion;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      FaultAbort that = (FaultAbort) o;
+      return ratePerMillion == that.ratePerMillion
+          && headerAbort == that.headerAbort
+          && Objects.equals(status, that.status);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(status, headerAbort, ratePerMillion);
+    }
+
+    @Override
+    public String toString() {
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this)
+          .add("ratePerMillion", ratePerMillion);
+      if (headerAbort) {
+        toStringHelper.add("type", "header abort");
+      } else {
+        toStringHelper.add("type", "fixed status");
+        toStringHelper.add("status", status);
+      }
+      return toStringHelper.toString();
+    }
+
+    private static StructOrError<FaultAbort> fromEnvoyProtoFaultAbort(
+        io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
+      int rate = getRatePerMillion(faultAbort.getPercentage());
+      boolean headerAbort = false;
+      Status status = null;
+      switch (faultAbort.getErrorTypeCase()) {
+        case HEADER_ABORT:
+          headerAbort = true;
+          break;
+        case HTTP_STATUS:
+          status = convertHttpStatus(faultAbort.getHttpStatus());
+          break;
+        case GRPC_STATUS:
+          status = Status.fromCodeValue(faultAbort.getGrpcStatus());
+          break;
+        case ERRORTYPE_NOT_SET:
+        default:
+          return StructOrError.fromError(
+              "Unknown error type case: " + faultAbort.getErrorTypeCase());
+      }
+      return StructOrError.fromStruct(new FaultAbort(status, headerAbort, rate));
+    }
+
+    private static Status convertHttpStatus(int httpCode) {
+      Status status;
+      switch (httpCode) {
+        case 400:
+          status = Status.INTERNAL;
+          break;
+        case 401:
+          status = Status.UNAUTHENTICATED;
+          break;
+        case 403:
+          status = Status.PERMISSION_DENIED;
+          break;
+        case 404:
+          status = Status.UNIMPLEMENTED;
+          break;
+        case 429:
+        case 502:
+        case 503:
+        case 504:
+          status = Status.UNAVAILABLE;
+          break;
+        default:
+          status = Status.UNKNOWN;
+      }
+      return status.withDescription("HTTP code: " + httpCode);
+    }
+  }
+
+  private static int getRatePerMillion(FractionalPercent percent) {
+    int numerator = percent.getNumerator();
+    DenominatorType type = percent.getDenominator();
+    switch (type) {
+      case TEN_THOUSAND:
+        numerator *= 100;
+        break;
+      case HUNDRED:
+        numerator *= 10_000;
+        break;
+      case MILLION:
+        break;
+      case UNRECOGNIZED:
+      default:
+        throw new IllegalArgumentException("Unknown denominator type of " + percent);
+    }
+
+    if (numerator > 1_000_000 || numerator < 0) {
+      numerator = 1_000_000;
+    }
+    return numerator;
+  }
+
+  /**
    * See corresponding Envoy proto message {@link io.envoyproxy.envoy.config.route.v3.RouteAction}.
    */
   static final class RouteAction {
@@ -1203,7 +1524,13 @@ final class EnvoyProtoData {
           weightedClusters = new ArrayList<>();
           for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
               : clusterWeights) {
-            weightedClusters.add(ClusterWeight.fromEnvoyProtoClusterWeight(clusterWeight));
+            StructOrError<ClusterWeight> clusterWeightOrError =
+                ClusterWeight.fromEnvoyProtoClusterWeight(clusterWeight);
+            if (clusterWeightOrError.getErrorDetail() != null) {
+              return StructOrError.fromError("RouteAction contains invalid ClusterWeight: "
+                  + clusterWeightOrError.getErrorDetail());
+            }
+            weightedClusters.add(clusterWeightOrError.getStruct());
           }
           // TODO(chengyuanzhang): validate if the sum of weights equals to total weight.
           break;
@@ -1233,11 +1560,14 @@ final class EnvoyProtoData {
   static final class ClusterWeight {
     private final String name;
     private final int weight;
+    @Nullable
+    private final HttpFault httpFault;
 
     @VisibleForTesting
-    ClusterWeight(String name, int weight) {
+    ClusterWeight(String name, int weight, @Nullable HttpFault httpFault) {
       this.name = name;
       this.weight = weight;
+      this.httpFault = httpFault;
     }
 
     String getName() {
@@ -1246,6 +1576,11 @@ final class EnvoyProtoData {
 
     int getWeight() {
       return weight;
+    }
+
+    @Nullable
+    HttpFault getHttpFault() {
+      return httpFault;
     }
 
     @Override
@@ -1257,26 +1592,44 @@ final class EnvoyProtoData {
         return false;
       }
       ClusterWeight that = (ClusterWeight) o;
-      return weight == that.weight && Objects.equals(name, that.name);
+      return weight == that.weight && Objects.equals(name, that.name)
+          && Objects.equals(httpFault, that.httpFault);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(name, weight);
+      return Objects.hash(name, weight, httpFault);
     }
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this)
           .add("name", name)
-          .add("weight", weight)
-          .toString();
+          .add("weight", weight);
+      if (httpFault != null) {
+        toStringHelper.add("httpFault", httpFault);
+      }
+      return toStringHelper.toString();
     }
 
     @VisibleForTesting
-    static ClusterWeight fromEnvoyProtoClusterWeight(
+    static StructOrError<ClusterWeight> fromEnvoyProtoClusterWeight(
         io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto) {
-      return new ClusterWeight(proto.getName(), proto.getWeight().getValue());
+      HttpFault httpFault = null;
+      Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
+      if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
+        Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
+        StructOrError<HttpFault> httpFaultOrError =
+            HttpFault.decodeFaultFilterConfig(rawFaultFilterConfig);
+        if (httpFaultOrError.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "ClusterWeight [" + proto.getName() + "] contains invalid HttpFault filter: "
+                  + httpFaultOrError.getErrorDetail());
+        }
+        httpFault = httpFaultOrError.getStruct();
+      }
+      return StructOrError.fromStruct(
+          new ClusterWeight(proto.getName(), proto.getWeight().getValue(), httpFault));
     }
   }
 

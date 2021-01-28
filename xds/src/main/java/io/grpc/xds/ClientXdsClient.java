@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static io.grpc.xds.EnvoyProtoData.HTTP_FAULT_FILTER_NAME;
 import static io.grpc.xds.EnvoyProtoData.TRANSPORT_SOCKET_NAME_TLS;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -38,12 +39,14 @@ import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.HttpFault;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
@@ -163,6 +166,26 @@ final class ClientXdsClient extends AbstractXdsClient {
           maxStreamDuration = Durations.toNanos(options.getMaxStreamDuration());
         }
       }
+      boolean hasFaultInjection = false;
+      HttpFault httpFault = null;
+      List<HttpFilter> httpFilters = hcm.getHttpFiltersList();
+      for (HttpFilter httpFilter : httpFilters) {
+        if (HTTP_FAULT_FILTER_NAME.equals(httpFilter.getName())) {
+          hasFaultInjection = true;
+          if (httpFilter.hasTypedConfig()) {
+            StructOrError<HttpFault> httpFaultOrError =
+                HttpFault.decodeFaultFilterConfig(httpFilter.getTypedConfig());
+            if (httpFaultOrError.getErrorDetail() != null) {
+              nackResponse(ResourceType.LDS, nonce,
+                  "Listener " + listenerName + " contains invalid HttpFault filter: "
+                      + httpFaultOrError.getErrorDetail());
+              return;
+            }
+            httpFault = httpFaultOrError.getStruct();
+          }
+          break;
+        }
+      }
       if (hcm.hasRouteConfig()) {
         List<EnvoyProtoData.VirtualHost> virtualHosts = new ArrayList<>();
         for (VirtualHost virtualHostProto : hcm.getRouteConfig().getVirtualHostsList()) {
@@ -176,7 +199,7 @@ final class ClientXdsClient extends AbstractXdsClient {
           }
           virtualHosts.add(virtualHost.getStruct());
         }
-        update = new LdsUpdate(maxStreamDuration, virtualHosts);
+        update = new LdsUpdate(maxStreamDuration, virtualHosts, hasFaultInjection, httpFault);
       } else if (hcm.hasRds()) {
         Rds rds = hcm.getRds();
         if (!rds.getConfigSource().hasAds()) {
@@ -184,7 +207,8 @@ final class ClientXdsClient extends AbstractXdsClient {
               "Listener " + listenerName + " with RDS config_source not set to ADS");
           return;
         }
-        update = new LdsUpdate(maxStreamDuration, rds.getRouteConfigName());
+        update = new LdsUpdate(
+            maxStreamDuration, rds.getRouteConfigName(), hasFaultInjection, httpFault);
         rdsNames.add(rds.getRouteConfigName());
       } else {
         nackResponse(ResourceType.LDS, nonce,
