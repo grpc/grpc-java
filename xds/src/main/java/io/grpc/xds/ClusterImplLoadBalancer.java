@@ -207,13 +207,20 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         }
         addresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
       }
+      Attributes subchannelAttrs = args.getAttributes();
       Locality locality =
           args.getAddresses().get(0).getAttributes().get(InternalXdsAttributes.ATTR_LOCALITY);
+      // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
+      // attributes with its locality, including endpoints in LOGICAL_DNS clusters.
+      // In case of not (which really shouldn't), loads are aggregated under an empty locality.
+      if (locality == null) {
+        locality = new Locality("", "", "");
+      }
       ClusterLocalityStats loadStats =
           xdsClient.addClusterLocalityStats(cluster, edsServiceName, locality);
-      Attributes subchannelAttr =
-          args.getAttributes().toBuilder().set(ATTR_CLUSTER_LOCALITY_STATS, loadStats).build();
-      args = args.toBuilder().setAddresses(addresses).setAttributes(subchannelAttr).build();
+      subchannelAttrs =
+          subchannelAttrs.toBuilder().set(ATTR_CLUSTER_LOCALITY_STATS, loadStats).build();
+      args = args.toBuilder().setAddresses(addresses).setAttributes(subchannelAttrs).build();
       return delegate().createSubchannel(args);
     }
 
@@ -286,7 +293,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         final PickResult result = delegate.pickSubchannel(args);
         if (result.getStatus().isOk() && result.getSubchannel() != null) {
           if (enableCircuitBreaking) {
-            if (inFlights.get() > maxConcurrentRequests) {
+            if (inFlights.get() >= maxConcurrentRequests) {
               if (dropStats != null) {
                 dropStats.recordDroppedRequest();
               }

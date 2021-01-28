@@ -251,7 +251,6 @@ public class ClusterImplLoadBalancerTest {
 
     result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getStatus().isOk()).isTrue();
-    assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
   }
 
   @Test
@@ -289,29 +288,27 @@ public class ClusterImplLoadBalancerTest {
     for (int i = 0; i < maxConcurrentRequests; i++) {
       PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
       assertThat(result.getStatus().isOk()).isTrue();
-      assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
-      assertThat(result.getStreamTracerFactory()).isNotNull();
       ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
       streamTracerFactory.newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(),
           new Metadata());
     }
-    assertThat(loadStatsManager.getClusterStatsReports(CLUSTER)).isEmpty();
+    ClusterStats clusterStats =
+        Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
+    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
+    assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
 
     PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
+    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     if (enableCircuitBreaking) {
       assertThat(result.getStatus().isOk()).isFalse();
       assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
       assertThat(result.getStatus().getDescription())
           .isEqualTo("Cluster max concurrent requests limit exceeded");
-      ClusterStats clusterStats =
-          Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-      assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
-      assertThat(clusterStats.getDroppedRequestsList()).isEmpty();
       assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(1L);
     } else {
       assertThat(result.getStatus().isOk()).isTrue();
-      assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
-      assertThat(loadStatsManager.getClusterStatsReports(CLUSTER)).isEmpty();
+      assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
     }
 
     // Config update increments circuit breakers max_concurrent_requests threshold.
@@ -323,15 +320,24 @@ public class ClusterImplLoadBalancerTest {
 
     result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getStatus().isOk()).isTrue();
-    assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+    result.getStreamTracerFactory().newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // 101th request
+    clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
+    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
+    assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
+
+    result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));  // 102th request
+    clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
+    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     if (enableCircuitBreaking) {
-      ClusterStats clusterStats =
-          Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-      assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
-      assertThat(clusterStats.getDroppedRequestsList()).isEmpty();
+      assertThat(result.getStatus().isOk()).isFalse();
+      assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+      assertThat(result.getStatus().getDescription())
+          .isEqualTo("Cluster max concurrent requests limit exceeded");
       assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(1L);
     } else {
-      assertThat(loadStatsManager.getClusterStatsReports(CLUSTER)).isEmpty();
+      assertThat(result.getStatus().isOk()).isTrue();
+      assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
     }
   }
 
@@ -370,29 +376,27 @@ public class ClusterImplLoadBalancerTest {
     for (int i = 0; i < ClusterImplLoadBalancer.DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS; i++) {
       PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
       assertThat(result.getStatus().isOk()).isTrue();
-      assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
-      assertThat(result.getStreamTracerFactory()).isNotNull();
       ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
       streamTracerFactory.newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(),
           new Metadata());
     }
-    assertThat(loadStatsManager.getClusterStatsReports(CLUSTER)).isEmpty();
+    ClusterStats clusterStats =
+        Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
+    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
+    assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
 
     PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
+    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     if (enableCircuitBreaking) {
       assertThat(result.getStatus().isOk()).isFalse();
       assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
       assertThat(result.getStatus().getDescription())
           .isEqualTo("Cluster max concurrent requests limit exceeded");
-      ClusterStats clusterStats =
-          Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-      assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
-      assertThat(clusterStats.getDroppedRequestsList()).isEmpty();
       assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(1L);
     } else {
       assertThat(result.getStatus().isOk()).isTrue();
-      assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
-      assertThat(loadStatsManager.getClusterStatsReports(CLUSTER)).isEmpty();
+      assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
     }
   }
 
@@ -565,8 +569,9 @@ public class ClusterImplLoadBalancerTest {
       }
     }
 
-    return AddressFilter.setPathFilter(new EquivalentAddressGroup(new FakeSocketAddress(name)),
-        Collections.singletonList(locality.toString()));
+    EquivalentAddressGroup eag = new EquivalentAddressGroup(new FakeSocketAddress(name),
+        Attributes.newBuilder().set(InternalXdsAttributes.ATTR_LOCALITY, locality).build());
+    return AddressFilter.setPathFilter(eag, Collections.singletonList(locality.toString()));
   }
 
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {
@@ -656,7 +661,7 @@ public class ClusterImplLoadBalancerTest {
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
-      return new FakeSubchannel(args.getAddresses());
+      return new FakeSubchannel(args.getAddresses(), args.getAttributes());
     }
 
     @Override
@@ -672,9 +677,11 @@ public class ClusterImplLoadBalancerTest {
 
   private static final class FakeSubchannel extends Subchannel {
     private final List<EquivalentAddressGroup> eags;
+    private final Attributes attrs;
 
-    private FakeSubchannel(List<EquivalentAddressGroup> eags) {
+    private FakeSubchannel(List<EquivalentAddressGroup> eags, Attributes attrs) {
       this.eags = eags;
+      this.attrs = attrs;
     }
 
     @Override
@@ -692,7 +699,7 @@ public class ClusterImplLoadBalancerTest {
 
     @Override
     public Attributes getAttributes() {
-      return Attributes.EMPTY;
+      return attrs;
     }
   }
 
