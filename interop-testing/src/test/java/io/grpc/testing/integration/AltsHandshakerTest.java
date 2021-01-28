@@ -42,22 +42,16 @@ import org.junit.runners.JUnit4;
 public class AltsHandshakerTest {
   @Rule
   public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
-  private Server handshakeServer;
+  private Server handshakerServer;
   private Server testServer;
   private ManagedChannel channel;
 
-  private Server registerHandshakeServer() {
-    return grpcCleanup.register(ServerBuilder.forPort(0)
-            .addService(new AltsHandshakerTestService())
-            .build());
-  }
-
-  private Server registerTestServer() {
+  private void startAltsServer() throws Exception {
     ServerCredentials serverCredentials = AltsServerCredentials.newBuilder()
         .enableUntrustedAltsForTesting()
-        .setHandshakerAddressForTesting("localhost:" + handshakeServer.getPort())
+        .setHandshakerAddressForTesting("localhost:" + handshakerServer.getPort())
         .build();
-    return grpcCleanup.register(
+    testServer = grpcCleanup.register(
         Grpc.newServerBuilderForPort(0, serverCredentials)
             .addService(new TestServiceGrpc.TestServiceImplBase() {
               @Override
@@ -65,25 +59,23 @@ public class AltsHandshakerTest {
                 so.onNext(SimpleResponse.getDefaultInstance());
                 so.onCompleted();
               }
-            }).build());
-  }
-
-  private ManagedChannel registerChannel() {
-    ChannelCredentials channelCredentials = AltsChannelCredentials.newBuilder()
-        .enableUntrustedAltsForTesting()
-        .setHandshakerAddressForTesting("localhost:" + handshakeServer.getPort()).build();
-    return grpcCleanup.register(
-        Grpc.newChannelBuilderForAddress("localhost", testServer.getPort(), channelCredentials)
-            .build());
+            })
+            .build())
+        .start();
   }
 
   @Before
   public void setup() throws Exception {
-    handshakeServer = registerHandshakeServer();
-    handshakeServer.start();
-    testServer = registerTestServer();
-    testServer.start();
-    channel = registerChannel();
+    handshakerServer = grpcCleanup.register(ServerBuilder.forPort(0)
+        .addService(new AltsHandshakerTestService()).build()).start();
+    startAltsServer();
+
+    ChannelCredentials channelCredentials = AltsChannelCredentials.newBuilder()
+        .enableUntrustedAltsForTesting()
+        .setHandshakerAddressForTesting("localhost:" + handshakerServer.getPort()).build();
+    channel = grpcCleanup.register(
+        Grpc.newChannelBuilderForAddress("localhost", testServer.getPort(), channelCredentials)
+            .build());
   }
 
   @Test
