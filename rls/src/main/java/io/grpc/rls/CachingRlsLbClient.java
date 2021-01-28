@@ -139,8 +139,9 @@ final class CachingRlsLbClient {
             timeProvider);
     RlsRequestFactory requestFactory = new RlsRequestFactory(lbPolicyConfig.getRouteLookupConfig());
     rlsPicker = new RlsPicker(requestFactory);
-    ManagedChannelBuilder<?> rlsChannelBuilder =
-        helper.createResolvingOobChannelBuilder(rlsConfig.getLookupService());
+    ManagedChannelBuilder<?> rlsChannelBuilder = helper.createResolvingOobChannelBuilder(
+        rlsConfig.getLookupService(), helper.getUnsafeChannelCredentials());
+    rlsChannelBuilder.overrideAuthority(helper.getAuthority());
     logger = helper.getChannelLogger();
     if (enableOobChannelDirectPath) {
       logger.log(
