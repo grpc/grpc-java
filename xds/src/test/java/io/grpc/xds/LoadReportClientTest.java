@@ -201,8 +201,9 @@ public class LoadReportClientTest {
     ClusterLocalityStats localityStats2 =
         loadStatsManager.getClusterLocalityStats(CLUSTER2, EDS_SERVICE_NAME2, LOCALITY2);
     for (int i = 0; i < 45; i++) {
-      localityStats2.recordCallFinished(Status.OK);
+      localityStats2.recordCallStarted();
     }
+    localityStats2.recordCallFinished(Status.OK);
   }
 
   @After
@@ -224,7 +225,7 @@ public class LoadReportClientTest {
         .setLoadReportingInterval(Durations.fromSeconds(10L)).build());
 
     fakeClock.forwardTime(10L, TimeUnit.SECONDS);
-    verify(requestObserver).onNext(requestCaptor.capture());
+    verify(requestObserver, times(2)).onNext(requestCaptor.capture());
     LoadStatsRequest request = requestCaptor.getValue();
     ClusterStats clusterStats = Iterables.getOnlyElement(request.getClusterStatsList());
     assertThat(clusterStats.getClusterName()).isEqualTo(CLUSTER1);
@@ -245,8 +246,8 @@ public class LoadReportClientTest {
     assertThat(localityStats.getTotalErrorRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(31L);
 
-    fakeClock.forwardNanos(10L);
-    verify(requestObserver, times(2)).onNext(requestCaptor.capture());
+    fakeClock.forwardTime(10L, TimeUnit.SECONDS);
+    verify(requestObserver, times(3)).onNext(requestCaptor.capture());
     request = requestCaptor.getValue();
     clusterStats = Iterables.getOnlyElement(request.getClusterStatsList());
     assertThat(clusterStats.getClusterName()).isEqualTo(CLUSTER1);
@@ -271,7 +272,7 @@ public class LoadReportClientTest {
     fakeClock.forwardTime(10L, TimeUnit.SECONDS);
     verifyNoMoreInteractions(requestObserver);
     fakeClock.forwardTime(10L, TimeUnit.SECONDS);
-    verify(requestObserver, times(3)).onNext(requestCaptor.capture());
+    verify(requestObserver, times(4)).onNext(requestCaptor.capture());
     request = requestCaptor.getValue();
     clusterStats = Iterables.getOnlyElement(request.getClusterStatsList());
     assertThat(clusterStats.getClusterName()).isEqualTo(CLUSTER1);
@@ -292,7 +293,7 @@ public class LoadReportClientTest {
         .setLoadReportingInterval(Durations.fromSeconds(20L)).build());
 
     fakeClock.forwardTime(20L, TimeUnit.SECONDS);
-    verify(requestObserver, times(4)).onNext(requestCaptor.capture());
+    verify(requestObserver, times(5)).onNext(requestCaptor.capture());
     request = requestCaptor.getValue();
     assertThat(request.getClusterStatsCount()).isEqualTo(2);
     ClusterStats clusterStats1 = findClusterStats(request.getClusterStatsList(), CLUSTER1);
@@ -313,42 +314,24 @@ public class LoadReportClientTest {
         .isEqualTo(10L + 10L + 20L + 20L);
     assertThat(Iterables.getOnlyElement(clusterStats2.getDroppedRequestsList()).getCategory())
         .isEqualTo("throttle");
-    assertThat(Iterables.getOnlyElement(clusterStats.getDroppedRequestsList()).getDroppedCount())
+    assertThat(Iterables.getOnlyElement(clusterStats2.getDroppedRequestsList()).getDroppedCount())
         .isEqualTo(23L);
-    assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(23L);
+    assertThat(clusterStats2.getTotalDroppedRequests()).isEqualTo(23L);
     UpstreamLocalityStats localityStats2 =
         Iterables.getOnlyElement(clusterStats2.getUpstreamLocalityStatsList());
     assertThat(localityStats2.getLocality().getRegion()).isEqualTo("region2");
     assertThat(localityStats2.getLocality().getZone()).isEqualTo("zone2");
     assertThat(localityStats2.getLocality().getSubZone()).isEqualTo("subZone2");
-    assertThat(localityStats2.getTotalIssuedRequests()).isEqualTo(0L);
-    assertThat(localityStats2.getTotalSuccessfulRequests()).isEqualTo(45L);
+    assertThat(localityStats2.getTotalIssuedRequests()).isEqualTo(45L);
+    assertThat(localityStats2.getTotalSuccessfulRequests()).isEqualTo(1L);
     assertThat(localityStats2.getTotalErrorRequests()).isEqualTo(0L);
-    assertThat(localityStats2.getTotalRequestsInProgress()).isEqualTo(0L);
+    assertThat(localityStats2.getTotalRequestsInProgress()).isEqualTo(45L - 1L);
 
     // Load reports for cluster1 is no longer wanted.
     responseObserver.onNext(LoadStatsResponse.newBuilder().addClusters(CLUSTER2)
         .setLoadReportingInterval(Durations.fromSeconds(10L)).build());
 
     fakeClock.forwardTime(10L, TimeUnit.SECONDS);
-    verify(requestObserver, times(5)).onNext(requestCaptor.capture());
-    request = requestCaptor.getValue();
-    clusterStats = Iterables.getOnlyElement(request.getClusterStatsList());
-    assertThat(clusterStats.getClusterName()).isEqualTo(CLUSTER2);
-    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME2);
-    assertThat(Durations.toSeconds(clusterStats.getLoadReportInterval())).isEqualTo(10L);
-    assertThat(clusterStats.getDroppedRequestsCount()).isEqualTo(0L);
-    assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
-    localityStats = Iterables.getOnlyElement(clusterStats.getUpstreamLocalityStatsList());
-    assertThat(localityStats.getLocality().getRegion()).isEqualTo("region2");
-    assertThat(localityStats.getLocality().getZone()).isEqualTo("zone2");
-    assertThat(localityStats.getLocality().getSubZone()).isEqualTo("subZone2");
-    assertThat(localityStats.getTotalIssuedRequests()).isEqualTo(0L);
-    assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(0L);
-    assertThat(localityStats.getTotalErrorRequests()).isEqualTo(0L);
-    assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(0L);
-
-    fakeClock.forwardTime(10L, TimeUnit.SECONDS);
     verify(requestObserver, times(6)).onNext(requestCaptor.capture());
     request = requestCaptor.getValue();
     clusterStats = Iterables.getOnlyElement(request.getClusterStatsList());
@@ -364,14 +347,32 @@ public class LoadReportClientTest {
     assertThat(localityStats.getTotalIssuedRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(0L);
     assertThat(localityStats.getTotalErrorRequests()).isEqualTo(0L);
-    assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(0L);
+    assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(44L);
+
+    fakeClock.forwardTime(10L, TimeUnit.SECONDS);
+    verify(requestObserver, times(7)).onNext(requestCaptor.capture());
+    request = requestCaptor.getValue();
+    clusterStats = Iterables.getOnlyElement(request.getClusterStatsList());
+    assertThat(clusterStats.getClusterName()).isEqualTo(CLUSTER2);
+    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME2);
+    assertThat(Durations.toSeconds(clusterStats.getLoadReportInterval())).isEqualTo(10L);
+    assertThat(clusterStats.getDroppedRequestsCount()).isEqualTo(0L);
+    assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
+    localityStats = Iterables.getOnlyElement(clusterStats.getUpstreamLocalityStatsList());
+    assertThat(localityStats.getLocality().getRegion()).isEqualTo("region2");
+    assertThat(localityStats.getLocality().getZone()).isEqualTo("zone2");
+    assertThat(localityStats.getLocality().getSubZone()).isEqualTo("subZone2");
+    assertThat(localityStats.getTotalIssuedRequests()).isEqualTo(0L);
+    assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(0L);
+    assertThat(localityStats.getTotalErrorRequests()).isEqualTo(0L);
+    assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(44L);
 
     // Management server asks loads for a cluster that client has no load data.
     responseObserver.onNext(LoadStatsResponse.newBuilder().addClusters("unknown.googleapis.com")
         .setLoadReportingInterval(Durations.fromSeconds(20L)).build());
 
     fakeClock.forwardTime(20L, TimeUnit.SECONDS);
-    verify(requestObserver, times(6)).onNext(requestCaptor.capture());
+    verify(requestObserver, times(8)).onNext(requestCaptor.capture());
     assertThat(requestCaptor.getValue().getClusterStatsCount()).isEqualTo(0);
   }
 
@@ -466,12 +467,12 @@ public class LoadReportClientTest {
     responseObserver.onNext(LoadStatsResponse.newBuilder().addClusters(CLUSTER1)
         .setLoadReportingInterval(Durations.fromNanos(10L)).build());
     fakeClock.forwardNanos(10);
-    verify(requestObserver).onNext(requestCaptor.capture());
+    verify(requestObserver, times(2)).onNext(requestCaptor.capture());
     LoadStatsRequest request = requestCaptor.getValue();
     ClusterStats clusterStats = Iterables.getOnlyElement(request.getClusterStatsList());
     assertThat(clusterStats.getClusterName()).isEqualTo(CLUSTER1);
     assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME1);
-    assertThat(Durations.toSeconds(clusterStats.getLoadReportInterval())).isEqualTo(10L);
+    assertThat(Durations.toSeconds(clusterStats.getLoadReportInterval())).isEqualTo(1L + 10L + 2L);
     assertThat(Iterables.getOnlyElement(clusterStats.getDroppedRequestsList()).getCategory())
         .isEqualTo("lb");
     assertThat(Iterables.getOnlyElement(clusterStats.getDroppedRequestsList()).getDroppedCount())
