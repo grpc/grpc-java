@@ -48,6 +48,7 @@ import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
@@ -188,6 +189,69 @@ public class ClusterImplLoadBalancerTest {
     assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(childBalancer.upstreamError.getDescription())
         .isEqualTo("cannot reach server");
+  }
+
+  @Test
+  public void recordLoadStats() {
+    LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
+    WeightedTargetConfig weightedTargetConfig =
+        buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
+    ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
+        null, Collections.<DropOverload>emptyList(),
+        new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
+    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
+    FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
+    Subchannel subchannel = leafBalancer.helper.createSubchannel(
+        CreateSubchannelArgs.newBuilder().setAddresses(leafBalancer.addresses).build());
+    leafBalancer.deliverSubchannelState(subchannel, ConnectivityState.READY);
+    assertThat(currentState).isEqualTo(ConnectivityState.READY);
+    PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().isOk()).isTrue();
+    ClientStreamTracer streamTracer1 = result.getStreamTracerFactory().newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // first RPC call
+    ClientStreamTracer streamTracer2 = result.getStreamTracerFactory().newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // second RPC call
+    ClientStreamTracer streamTracer3 = result.getStreamTracerFactory().newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // third RPC call
+    streamTracer1.streamClosed(Status.OK);
+    streamTracer2.streamClosed(Status.UNAVAILABLE);
+    ClusterStats clusterStats =
+        Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
+    UpstreamLocalityStats localityStats =
+        Iterables.getOnlyElement(clusterStats.getUpstreamLocalityStatsList());
+    assertThat(localityStats.getLocality()).isEqualTo(locality);
+    assertThat(localityStats.getTotalIssuedRequests()).isEqualTo(3L);
+    assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(1L);
+    assertThat(localityStats.getTotalErrorRequests()).isEqualTo(1L);
+    assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(1L);
+
+    streamTracer3.streamClosed(Status.OK);
+    subchannel.shutdown();  // stats recorder released
+    clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
+    // Locality load is reported for one last time in case of loads occurred since the previous
+    // load report.
+    localityStats = Iterables.getOnlyElement(clusterStats.getUpstreamLocalityStatsList());
+    assertThat(localityStats.getLocality()).isEqualTo(locality);
+    assertThat(localityStats.getTotalIssuedRequests()).isEqualTo(0L);
+    assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(1L);
+    assertThat(localityStats.getTotalErrorRequests()).isEqualTo(0L);
+    assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(0L);
+
+    clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
+    assertThat(clusterStats.getUpstreamLocalityStatsList()).isEmpty();  // no longer reported
+  }
+
+  private static FakeLoadBalancer findLocalityLeafLoadBalancer(
+      List<FakeLoadBalancer> loadBalancers, EquivalentAddressGroup addr) {
+    for (FakeLoadBalancer loadBalancer : loadBalancers) {
+      SocketAddress sockAddr = Iterables.getOnlyElement(Iterables.getOnlyElement(
+          loadBalancer.addresses).getAddresses());
+      if (addr.getAddresses().equals(sockAddr)) {
+        return loadBalancer;
+      }
+    }
+    return null;
   }
 
   @Test
