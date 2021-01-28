@@ -1848,12 +1848,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   private final class SubchannelImpl extends AbstractSubchannel {
-    final List<EquivalentAddressGroup> addressGroups;
     final CreateSubchannelArgs args;
     final LbHelperImpl helper;
     final InternalLogId subchannelLogId;
     final ChannelLoggerImpl subchannelLogger;
     final ChannelTracer subchannelTracer;
+    List<EquivalentAddressGroup> addressGroups;
     InternalSubchannel subchannel;
     boolean started;
     boolean shutdown;
@@ -1862,14 +1862,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     SubchannelImpl(CreateSubchannelArgs args, LbHelperImpl helper) {
       addressGroups = args.getAddresses();
       if (isAuthorityOverridden) {
-        List<EquivalentAddressGroup> eags = args.getAddresses();
-        List<EquivalentAddressGroup> eagsWithoutOverrideAttr = new ArrayList<>();
-        for (EquivalentAddressGroup eag : eags) {
-          EquivalentAddressGroup eagWithoutOverrideAttr = new EquivalentAddressGroup(
-              eag.getAddresses(),
-              eag.getAttributes().toBuilder().discard(ATTR_AUTHORITY_OVERRIDE).build());
-          eagsWithoutOverrideAttr.add(eagWithoutOverrideAttr);
-        }
+        List<EquivalentAddressGroup> eagsWithoutOverrideAttr =
+            stripOverrideAuthorityAttributes(args.getAddresses());
         args = args.toBuilder().setAddresses(eagsWithoutOverrideAttr).build();
       }
       this.args = checkNotNull(args, "args");
@@ -2045,7 +2039,23 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void updateAddresses(List<EquivalentAddressGroup> addrs) {
       syncContext.throwIfNotInThisSynchronizationContext();
+      addressGroups = addrs;
+      if (isAuthorityOverridden) {
+        addrs = stripOverrideAuthorityAttributes(addrs);
+      }
       subchannel.updateAddresses(addrs);
+    }
+
+    private List<EquivalentAddressGroup> stripOverrideAuthorityAttributes(
+        List<EquivalentAddressGroup> eags) {
+      List<EquivalentAddressGroup> eagsWithoutOverrideAttr = new ArrayList<>();
+      for (EquivalentAddressGroup eag : eags) {
+        EquivalentAddressGroup eagWithoutOverrideAttr = new EquivalentAddressGroup(
+            eag.getAddresses(),
+            eag.getAttributes().toBuilder().discard(ATTR_AUTHORITY_OVERRIDE).build());
+        eagsWithoutOverrideAttr.add(eagWithoutOverrideAttr);
+      }
+      return Collections.unmodifiableList(eagsWithoutOverrideAttr);
     }
   }
 
