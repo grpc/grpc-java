@@ -101,6 +101,7 @@ public class AltsHandshakerTestService extends HandshakerServiceImplBase {
 
       @Override
       public void onCompleted() {
+        responseObserver.onCompleted();
       }
     };
   }

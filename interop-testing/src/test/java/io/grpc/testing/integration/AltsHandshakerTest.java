@@ -16,91 +16,82 @@
 
 package io.grpc.testing.integration;
 
-import static io.grpc.testing.integration.AbstractInteropTest.EMPTY;
 import static org.junit.Assert.assertEquals;
 
-import com.google.common.util.concurrent.MoreExecutors;
+import com.google.protobuf.ByteString;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
-import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
-import io.grpc.ServerInterceptors;
 import io.grpc.alts.AltsChannelCredentials;
 import io.grpc.alts.AltsServerCredentials;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import org.junit.After;
+import io.grpc.stub.StreamObserver;
+import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.testing.integration.Messages.Payload;
+import io.grpc.testing.integration.Messages.SimpleRequest;
+import io.grpc.testing.integration.Messages.SimpleResponse;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class AltsHandshakerTest {
-  private ScheduledExecutorService executor;
-  private Server testServer;
+  @Rule
+  public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
   private Server handshakeServer;
+  private Server testServer;
   private ManagedChannel channel;
 
-  private final int handshakerServerPort = 8000;
-  private final int testServerPort = 8080;
-  private final String serverHost = "localhost";
-
-  private void startHandshakerServer() throws Exception {
-    handshakeServer = Grpc.newServerBuilderForPort(handshakerServerPort,
-        InsecureServerCredentials.create())
-        .addService(ServerInterceptors.intercept(new AltsHandshakerTestService()))
-        .build()
-        .start();
+  private Server registerHandshakeServer() {
+    return grpcCleanup.register(ServerBuilder.forPort(0)
+            .addService(new AltsHandshakerTestService())
+            .build());
   }
 
-  private void startAltsServer() throws Exception {
-    executor = Executors.newSingleThreadScheduledExecutor();
-    ServerCredentials serverCreds = AltsServerCredentials.newBuilder()
+  private Server registerTestServer() {
+    ServerCredentials serverCredentials = AltsServerCredentials.newBuilder()
         .enableUntrustedAltsForTesting()
-        .setHandshakerAddressForTesting(serverHost + ":" + handshakerServerPort)
+        .setHandshakerAddressForTesting("localhost:" + handshakeServer.getPort())
         .build();
-    testServer = Grpc.newServerBuilderForPort(testServerPort, serverCreds)
-        .addService(ServerInterceptors.intercept(new TestServiceImpl(executor)))
-        .build()
-        .start();
+    return grpcCleanup.register(
+        Grpc.newServerBuilderForPort(0, serverCredentials)
+            .addService(new TestServiceGrpc.TestServiceImplBase() {
+              @Override
+              public void unaryCall(SimpleRequest request, StreamObserver<SimpleResponse> so) {
+                so.onNext(SimpleResponse.getDefaultInstance());
+                so.onCompleted();
+              }
+            }).build());
+  }
+
+  private ManagedChannel registerChannel() {
+    ChannelCredentials channelCredentials = AltsChannelCredentials.newBuilder()
+        .enableUntrustedAltsForTesting()
+        .setHandshakerAddressForTesting("localhost:" + handshakeServer.getPort()).build();
+    return grpcCleanup.register(
+        Grpc.newChannelBuilderForAddress("localhost", testServer.getPort(), channelCredentials)
+            .build());
   }
 
   @Before
   public void setup() throws Exception {
-    startHandshakerServer();
-    startAltsServer();
-
-    ChannelCredentials channelCredentials = AltsChannelCredentials.newBuilder()
-        .enableUntrustedAltsForTesting()
-        .setHandshakerAddressForTesting(serverHost + ":" + handshakerServerPort).build();
-    channel = Grpc.newChannelBuilderForAddress(serverHost, testServerPort, channelCredentials)
-        .build();
-  }
-
-  @After
-  public void stop() throws Exception {
-    if (testServer != null) {
-      testServer.shutdown();
-      testServer.awaitTermination();
-    }
-    if (handshakeServer != null) {
-      handshakeServer.shutdown();
-      handshakeServer.awaitTermination();
-    }
-    if (channel != null) {
-      channel.shutdown();
-      channel.awaitTermination(1, TimeUnit.SECONDS);
-    }
-    MoreExecutors.shutdownAndAwaitTermination(executor, 10, TimeUnit.SECONDS);
+    handshakeServer = registerHandshakeServer();
+    handshakeServer.start();
+    testServer = registerTestServer();
+    testServer.start();
+    channel = registerChannel();
   }
 
   @Test
   public void testAlts() {
     TestServiceGrpc.TestServiceBlockingStub blockingStub = TestServiceGrpc.newBlockingStub(channel);
-    assertEquals(EMPTY, blockingStub.emptyCall(EMPTY));
+    final SimpleRequest request = SimpleRequest.newBuilder()
+            .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[10])))
+            .build();
+    assertEquals(SimpleResponse.getDefaultInstance(), blockingStub.unaryCall(request));
   }
 }
