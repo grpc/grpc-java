@@ -1588,7 +1588,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         ResolvingOobChannelBuilder(String target, @Nullable ChannelCredentials channelCreds) {
           final ClientTransportFactory transportFactory;
           CallCredentials callCredentials;
-          if (channelCreds == null) {
+          if (channelCreds == null || channelCreds instanceof DefaultChannelCreds) {
             transportFactory = originalTransportFactory;
             callCredentials = null;
           } else {
@@ -1641,6 +1641,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public ChannelCredentials getUnsafeChannelCredentials() {
+      if (originalChannelCreds == null) {
+        return new DefaultChannelCreds();
+      }
       return originalChannelCreds;
     }
 
@@ -1685,6 +1688,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public NameResolverRegistry getNameResolverRegistry() {
       return nameResolverRegistry;
+    }
+
+    /**
+     * A placeholder for channel creds if user did not specify channel creds for the channel.
+     */
+    // TODO(zdapeng): get rid of this class and let all ChannelBuilders always provide a non-null
+    //     channel creds.
+    final class DefaultChannelCreds extends ChannelCredentials {
+      @Override
+      public ChannelCredentials withoutBearerTokens() {
+        return this;
+      }
     }
   }
 
