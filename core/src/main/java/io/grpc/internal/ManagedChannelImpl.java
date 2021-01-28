@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -202,6 +203,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    */
   private final Channel interceptorChannel;
   @Nullable private final String userAgent;
+  private final boolean isAuthorityOverridden;
 
   // Only null after channel is terminated. Must be assigned from the syncContext.
   private NameResolver nameResolver;
@@ -645,6 +647,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 })
             .build();
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
+    this.isAuthorityOverridden = builder.getOverrideAuthority() != null;
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);
     this.delayedTransport = new DelayedClientTransport(this.executor, this.syncContext);
@@ -1400,6 +1403,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.throwIfNotInThisSynchronizationContext();
       // No new subchannel should be created after load balancer has been shutdown.
       checkState(!terminating, "Channel is being terminated");
+      if (isAuthorityOverridden) {
+        List<EquivalentAddressGroup> eags = args.getAddresses();
+        List<EquivalentAddressGroup> eagsWithoutOverrideAttr = new ArrayList<>();
+        for (EquivalentAddressGroup eag : eags) {
+          EquivalentAddressGroup eagWithoutOverrideAttr = new EquivalentAddressGroup(
+              eag.getAddresses(),
+              eag.getAttributes().toBuilder().discard(ATTR_AUTHORITY_OVERRIDE).build());
+          eagsWithoutOverrideAttr.add(eagWithoutOverrideAttr);
+        }
+        args = args.toBuilder().setAddresses(eagsWithoutOverrideAttr).build();
+      }
       return new SubchannelImpl(args, this);
     }
 
