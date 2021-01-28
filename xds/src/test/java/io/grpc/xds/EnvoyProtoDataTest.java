@@ -557,6 +557,7 @@ public class EnvoyProtoDataTest {
     ClusterStats clusterStats =
         ClusterStats.newBuilder()
             .setClusterName("cluster1")
+            .setClusterServiceName("backend-service1")
             .setLoadReportIntervalNanos(1234)
             .setTotalDroppedRequests(123)
             .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
@@ -579,6 +580,7 @@ public class EnvoyProtoDataTest {
     assertThat(clusterStatsProto).isEqualTo(
         io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.newBuilder()
             .setClusterName("cluster1")
+            .setClusterServiceName("backend-service1")
             .setLoadReportInterval(Durations.fromNanos(1234))
             .setTotalDroppedRequests(123)
             .addUpstreamLocalityStats(
@@ -605,6 +607,7 @@ public class EnvoyProtoDataTest {
     assertThat(clusterStatsProtoV2).isEqualTo(
         io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.newBuilder()
             .setClusterName("cluster1")
+            .setClusterServiceName("backend-service1")
             .setLoadReportInterval(Durations.fromNanos(1234))
             .setTotalDroppedRequests(123)
             .addUpstreamLocalityStats(
