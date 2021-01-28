@@ -242,18 +242,6 @@ public class ClusterImplLoadBalancerTest {
     assertThat(clusterStats.getUpstreamLocalityStatsList()).isEmpty();  // no longer reported
   }
 
-  private static FakeLoadBalancer findLocalityLeafLoadBalancer(
-      List<FakeLoadBalancer> loadBalancers, EquivalentAddressGroup addr) {
-    for (FakeLoadBalancer loadBalancer : loadBalancers) {
-      SocketAddress sockAddr = Iterables.getOnlyElement(Iterables.getOnlyElement(
-          loadBalancer.addresses).getAddresses());
-      if (addr.getAddresses().equals(sockAddr)) {
-        return loadBalancer;
-      }
-    }
-    return null;
-  }
-
   @Test
   public void dropRpcsWithRespectToLbConfigDropCategories() {
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
