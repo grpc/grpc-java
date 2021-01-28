@@ -24,6 +24,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
+import io.grpc.ChannelCredentials;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
@@ -110,6 +111,8 @@ public final class ManagedChannelImplBuilder
   private NameResolver.Factory nameResolverFactory = nameResolverRegistry.asFactory();
 
   final String target;
+  @Nullable
+  final ChannelCredentials channelCredentials;
   @Nullable
   final CallCredentials callCredentials;
 
@@ -225,18 +228,23 @@ public final class ManagedChannelImplBuilder
   public ManagedChannelImplBuilder(String target,
       ClientTransportFactoryBuilder clientTransportFactoryBuilder,
       @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
-    this(target, null, clientTransportFactoryBuilder, channelBuilderDefaultPortProvider);
+    this(target, null, null, clientTransportFactoryBuilder, channelBuilderDefaultPortProvider);
   }
 
   /**
    * Creates a new managed channel builder with a target string, which can be either a valid {@link
    * io.grpc.NameResolver}-compliant URI, or an authority string. Transport implementors must
    * provide client transport factory builder, and may set custom channel default port provider.
+   *
+   * @param channelCreds The ChannelCredentials provided by the user. These may be used when
+   *     creating derivative channels.
    */
-  public ManagedChannelImplBuilder(String target, @Nullable CallCredentials callCreds,
+  public ManagedChannelImplBuilder(
+      String target, @Nullable ChannelCredentials channelCreds, @Nullable CallCredentials callCreds,
       ClientTransportFactoryBuilder clientTransportFactoryBuilder,
       @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
     this.target = Preconditions.checkNotNull(target, "target");
+    this.channelCredentials = channelCreds;
     this.callCredentials = callCreds;
     this.clientTransportFactoryBuilder = Preconditions
         .checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");
@@ -273,6 +281,7 @@ public final class ManagedChannelImplBuilder
       ClientTransportFactoryBuilder clientTransportFactoryBuilder,
       @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
     this.target = makeTargetStringForDirectAddress(directServerAddress);
+    this.channelCredentials = null;
     this.callCredentials = null;
     this.clientTransportFactoryBuilder = Preconditions
         .checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");

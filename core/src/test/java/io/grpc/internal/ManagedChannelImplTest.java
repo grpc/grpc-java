@@ -63,15 +63,18 @@ import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.IntegerMarshaller;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
@@ -105,6 +108,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
+import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
 import io.grpc.internal.ManagedChannelImpl.ScParser;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
@@ -1662,7 +1666,8 @@ public class ManagedChannelImplTest {
     Metadata.Key<String> metadataKey =
         Metadata.Key.of("token", Metadata.ASCII_STRING_MARSHALLER);
     String channelCredValue = "channel-provided call cred";
-    channelBuilder = new ManagedChannelImplBuilder(TARGET,
+    channelBuilder = new ManagedChannelImplBuilder(
+        TARGET, InsecureChannelCredentials.create(),
         new FakeCallCredentials(metadataKey, channelCredValue),
         new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
     configureBuilder(channelBuilder);
@@ -1733,8 +1738,88 @@ public class ManagedChannelImplTest {
     call = oob.newCall(method, callOptions);
     call.start(mockCallListener2, headers);
 
-    verify(transportInfo.transport).newStream(same(method), same(headers), same(callOptions));
+    // CallOptions may contain StreamTracerFactory for census that is added by default.
+    verify(transportInfo.transport).newStream(same(method), same(headers), any(CallOptions.class));
     assertThat(headers.getAll(metadataKey)).containsExactly(callCredValue);
+    oob.shutdownNow();
+  }
+
+  @Test
+  public void oobChannelWithOobChannelCredsHasChannelCallCredentials() {
+    Metadata.Key<String> metadataKey =
+        Metadata.Key.of("token", Metadata.ASCII_STRING_MARSHALLER);
+    String channelCredValue = "channel-provided call cred";
+    when(mockTransportFactory.swapChannelCredentials(any(CompositeChannelCredentials.class)))
+        .thenAnswer(new Answer<SwapChannelCredentialsResult>() {
+          @Override
+          public SwapChannelCredentialsResult answer(InvocationOnMock invocation) {
+            CompositeChannelCredentials c =
+                invocation.getArgument(0, CompositeChannelCredentials.class);
+            return new SwapChannelCredentialsResult(mockTransportFactory, c.getCallCredentials());
+          }
+        });
+    channelBuilder = new ManagedChannelImplBuilder(
+        TARGET, InsecureChannelCredentials.create(),
+        new FakeCallCredentials(metadataKey, channelCredValue),
+        new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
+    configureBuilder(channelBuilder);
+    createChannel();
+
+    // Verify that the normal channel has call creds, to validate configuration
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel);
+    MockClientTransportInfo transportInfo = transports.poll();
+    transportInfo.listener.transportReady();
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(
+        PickResult.withSubchannel(subchannel));
+    updateBalancingStateSafely(helper, READY, mockPicker);
+
+    String callCredValue = "per-RPC call cred";
+    CallOptions callOptions = CallOptions.DEFAULT
+        .withCallCredentials(new FakeCallCredentials(metadataKey, callCredValue));
+    Metadata headers = new Metadata();
+    ClientCall<String, Integer> call = channel.newCall(method, callOptions);
+    call.start(mockCallListener, headers);
+
+    verify(transportInfo.transport).newStream(same(method), same(headers), same(callOptions));
+    assertThat(headers.getAll(metadataKey))
+        .containsExactly(channelCredValue, callCredValue).inOrder();
+
+    // Verify that resolving oob channel with oob channel creds provides call creds
+    String oobChannelCredValue = "oob-channel-provided call cred";
+    ChannelCredentials oobChannelCreds = CompositeChannelCredentials.create(
+        InsecureChannelCredentials.create(),
+        new FakeCallCredentials(metadataKey, oobChannelCredValue));
+    ManagedChannel oob = helper.createResolvingOobChannelBuilder("oobauthority", oobChannelCreds)
+        .nameResolverFactory(
+            new FakeNameResolverFactory.Builder(URI.create("oobauthority")).build())
+        .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
+        .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
+        .build();
+    oob.getState(true);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+    verify(mockLoadBalancerProvider, times(2)).newLoadBalancer(helperCaptor.capture());
+    Helper oobHelper = helperCaptor.getValue();
+
+    subchannel =
+        createSubchannelSafely(oobHelper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(oobHelper, subchannel);
+    transportInfo = transports.poll();
+    transportInfo.listener.transportReady();
+    SubchannelPicker mockPicker2 = mock(SubchannelPicker.class);
+    when(mockPicker2.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(
+        PickResult.withSubchannel(subchannel));
+    updateBalancingStateSafely(oobHelper, READY, mockPicker2);
+
+    headers = new Metadata();
+    call = oob.newCall(method, callOptions);
+    call.start(mockCallListener2, headers);
+
+    // CallOptions may contain StreamTracerFactory for census that is added by default.
+    verify(transportInfo.transport).newStream(same(method), same(headers), any(CallOptions.class));
+    assertThat(headers.getAll(metadataKey))
+        .containsExactly(oobChannelCredValue, callCredValue).inOrder();
     oob.shutdownNow();
   }
 

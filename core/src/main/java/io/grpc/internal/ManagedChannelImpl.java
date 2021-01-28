@@ -30,8 +30,10 @@ import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientCall;
@@ -46,6 +48,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ForwardingClientCall;
+import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
@@ -74,8 +77,9 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
+import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
+import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
-import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.ManagedChannelServiceConfig.ServiceConfigConvertedSelector;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
@@ -153,6 +157,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final NameResolver.Args nameResolverArgs;
   private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
   private final ClientTransportFactory originalTransportFactory;
+  @Nullable
+  private final ChannelCredentials originalChannelCreds;
   private final ClientTransportFactory transportFactory;
   private final ClientTransportFactory oobTransportFactory;
   private final RestrictedScheduledExecutor scheduledExecutor;
@@ -593,6 +599,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
+    this.originalChannelCreds = builder.channelCredentials;
     this.originalTransportFactory = clientTransportFactory;
     this.transportFactory = new CallCredentialsApplyingTransportFactory(
         clientTransportFactory, builder.callCredentials, this.executor);
@@ -1516,48 +1523,80 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
+      return createResolvingOobChannelBuilder(target, new DefaultChannelCreds());
+    }
+
+    // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
+    // TODO(zdapeng) register the channel as a subchannel of the parent channel in channelz.
+    @Override
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
+        final String target, final ChannelCredentials channelCreds) {
+      checkNotNull(channelCreds, "channelCreds");
+
       final class ResolvingOobChannelBuilder
           extends ForwardingChannelBuilder<ResolvingOobChannelBuilder> {
-        private final ManagedChannelImplBuilder managedChannelImplBuilder;
+        final ManagedChannelBuilder<?> delegate;
 
-        ResolvingOobChannelBuilder(String target) {
-          managedChannelImplBuilder = new ManagedChannelImplBuilder(target,
-              new UnsupportedClientTransportFactoryBuilder(),
+        ResolvingOobChannelBuilder() {
+          final ClientTransportFactory transportFactory;
+          CallCredentials callCredentials;
+          if (channelCreds instanceof DefaultChannelCreds) {
+            transportFactory = originalTransportFactory;
+            callCredentials = null;
+          } else {
+            SwapChannelCredentialsResult swapResult =
+                originalTransportFactory.swapChannelCredentials(channelCreds);
+            if (swapResult == null) {
+              delegate = Grpc.newChannelBuilder(target, channelCreds);
+              return;
+            } else {
+              transportFactory = swapResult.transportFactory;
+              callCredentials = swapResult.callCredentials;
+            }
+          }
+          ClientTransportFactoryBuilder transportFactoryBuilder =
+              new ClientTransportFactoryBuilder() {
+                @Override
+                public ClientTransportFactory buildClientTransportFactory() {
+                  return transportFactory;
+                }
+              };
+          delegate = new ManagedChannelImplBuilder(
+              target,
+              channelCreds,
+              callCredentials,
+              transportFactoryBuilder,
               new FixedPortProvider(nameResolverArgs.getDefaultPort()));
-          managedChannelImplBuilder.executorPool = executorPool;
-          managedChannelImplBuilder.offloadExecutorPool = offloadExecutorHolder.pool;
         }
 
         @Override
         protected ManagedChannelBuilder<?> delegate() {
-          return managedChannelImplBuilder;
-        }
-
-        @Override
-        public ManagedChannel build() {
-          // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
-          return new ManagedChannelImpl(
-                  managedChannelImplBuilder,
-                  originalTransportFactory,
-                  backoffPolicyProvider,
-                  balancerRpcExecutorPool,
-                  stopwatchSupplier,
-                  Collections.<ClientInterceptor>emptyList(),
-                  timeProvider);
+          return delegate;
         }
       }
 
       checkState(!terminated, "Channel is terminated");
 
       @SuppressWarnings("deprecation")
-      ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder(target)
+      ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder()
           .nameResolverFactory(nameResolverFactory);
 
       return builder
-          .overrideAuthority(getAuthority())
+          .overrideAuthority(ManagedChannelImpl.this.authority())
+          // TODO(zdapeng): executors should not outlive the parent channel.
+          .executor(executor)
+          .offloadExecutor(offloadExecutorHolder.getExecutor())
           .maxTraceEvents(maxTraceEvents)
           .proxyDetector(nameResolverArgs.getProxyDetector())
           .userAgent(userAgent);
+    }
+
+    @Override
+    public ChannelCredentials getUnsafeChannelCredentials() {
+      if (originalChannelCreds == null) {
+        return new DefaultChannelCreds();
+      }
+      return originalChannelCreds;
     }
 
     @Override
@@ -1595,6 +1634,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public NameResolverRegistry getNameResolverRegistry() {
       return nameResolverRegistry;
+    }
+
+    /**
+     * A placeholder for channel creds if user did not specify channel creds for the channel.
+     */
+    // TODO(zdapeng): get rid of this class and let all ChannelBuilders always provide a non-null
+    //     channel creds.
+    final class DefaultChannelCreds extends ChannelCredentials {
+      @Override
+      public ChannelCredentials withoutBearerTokens() {
+        return this;
+      }
     }
   }
 

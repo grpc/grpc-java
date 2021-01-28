@@ -19,11 +19,14 @@ package io.grpc.internal;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
+import io.grpc.CallCredentials;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import java.io.Closeable;
 import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
+import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
 /** Pre-configured factory for creating {@link ConnectionClientTransport} instances. */
@@ -52,6 +55,14 @@ public interface ClientTransportFactory extends Closeable {
    * usage.
    */
   ScheduledExecutorService getScheduledExecutorService();
+
+  /**
+   * Swaps to a new ChannelCredentials with all other settings unchanged. Returns null if the
+   * ChannelCredentials is not supported by the current ClientTransportFactory settings.
+   */
+  @CheckReturnValue
+  @Nullable
+  SwapChannelCredentialsResult swapChannelCredentials(ChannelCredentials channelCreds);
 
   /**
    * Releases any resources.
@@ -141,6 +152,17 @@ public interface ClientTransportFactory extends Closeable {
           && this.eagAttributes.equals(that.eagAttributes)
           && Objects.equal(this.userAgent, that.userAgent)
           && Objects.equal(this.connectProxiedSocketAddr, that.connectProxiedSocketAddr);
+    }
+  }
+
+  final class SwapChannelCredentialsResult {
+    final ClientTransportFactory transportFactory;
+    @Nullable final CallCredentials callCredentials;
+
+    public SwapChannelCredentialsResult(
+        ClientTransportFactory transportFactory, @Nullable CallCredentials callCredentials) {
+      this.transportFactory = Preconditions.checkNotNull(transportFactory, "transportFactory");
+      this.callCredentials = callCredentials;
     }
   }
 }
