@@ -240,6 +240,7 @@ final class LoadStatsManager2 {
   /**
    * Recorder for dropped requests. One instance per cluster with edsServiceName.
    */
+  @ThreadSafe
   class ClusterDropStats {
     private final String clusterName;
     @Nullable
@@ -314,6 +315,7 @@ final class LoadStatsManager2 {
   /**
    * Recorder for client loads. One instance per locality (in cluster with edsService).
    */
+  @ThreadSafe
   class ClusterLocalityStats {
     private final String clusterName;
     @Nullable
