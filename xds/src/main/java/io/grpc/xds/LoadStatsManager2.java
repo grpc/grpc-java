@@ -43,8 +43,7 @@ import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Manages client side traffic stats. Drop stats are maintained in cluster (with edsServiceName)
- * granularity and load stats (request counts and backend metrics) are maintained in locality
- * granularity.
+ * granularity and load stats (request counts) are maintained in locality granularity.
  */
 @ThreadSafe
 final class LoadStatsManager2 {
