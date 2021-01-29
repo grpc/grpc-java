@@ -139,8 +139,13 @@ final class CachingRlsLbClient {
             timeProvider);
     RlsRequestFactory requestFactory = new RlsRequestFactory(lbPolicyConfig.getRouteLookupConfig());
     rlsPicker = new RlsPicker(requestFactory);
-    ManagedChannelBuilder<?> rlsChannelBuilder =
-        helper.createResolvingOobChannelBuilder(rlsConfig.getLookupService());
+    // It is safe to use helper.getUnsafeChannelCredentials() because the client authenticates the
+    // RLS server using the same authority as the backends, even though the RLS server’s addresses
+    // will be looked up differently than the backends; overrideAuthority(helper.getAuthority()) is
+    // called to impose the authority security restrictions.
+    ManagedChannelBuilder<?> rlsChannelBuilder = helper.createResolvingOobChannelBuilder(
+        rlsConfig.getLookupService(), helper.getUnsafeChannelCredentials());
+    rlsChannelBuilder.overrideAuthority(helper.getAuthority());
     logger = helper.getChannelLogger();
     if (enableOobChannelDirectPath) {
       logger.log(

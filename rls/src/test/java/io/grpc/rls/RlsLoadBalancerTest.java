@@ -32,6 +32,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -376,7 +377,7 @@ public class RlsLoadBalancerTest {
         .setAddresses(ImmutableList.of(new EquivalentAddressGroup(mock(SocketAddress.class))))
         .setLoadBalancingPolicyConfig(parsedConfigOrError.getConfig())
         .build());
-    verify(helper).createResolvingOobChannelBuilder(anyString());
+    verify(helper).createResolvingOobChannelBuilder(anyString(), any(ChannelCredentials.class));
   }
 
   @SuppressWarnings("unchecked")
@@ -429,7 +430,8 @@ public class RlsLoadBalancerTest {
     }
 
     @Override
-    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
+        String target, ChannelCredentials creds) {
       try {
         grpcCleanupRule.register(
             InProcessServerBuilder.forName(target)
@@ -474,6 +476,18 @@ public class RlsLoadBalancerTest {
     public String getAuthority() {
       return "fake-bigtable.googleapis.com";
     }
+
+    @Override
+    public ChannelCredentials getUnsafeChannelCredentials() {
+      // In test we don't do any authentication.
+      return new ChannelCredentials() {
+        @Override
+        public ChannelCredentials withoutBearerTokens() {
+          return this;
+        }
+      };
+    }
+
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
