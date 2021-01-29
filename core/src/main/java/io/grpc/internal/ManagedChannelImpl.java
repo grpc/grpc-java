@@ -153,6 +153,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private final InternalLogId logId;
   private final String target;
+  @Nullable
+  private final String authorityOverride;
   private final NameResolverRegistry nameResolverRegistry;
   private final NameResolver.Factory nameResolverFactory;
   private final NameResolver.Args nameResolverArgs;
@@ -203,7 +205,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
    */
   private final Channel interceptorChannel;
   @Nullable private final String userAgent;
-  private final boolean isAuthorityOverridden;
 
   // Only null after channel is terminated. Must be assigned from the syncContext.
   private NameResolver nameResolver;
@@ -363,7 +364,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       nameResolver.shutdown();
       nameResolverStarted = false;
       if (channelIsActive) {
-        nameResolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
+        nameResolver = getNameResolver(
+            target, authorityOverride, nameResolverFactory, nameResolverArgs);
       } else {
         nameResolver = null;
       }
@@ -614,7 +616,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         logId, builder.maxTraceEvents, timeProvider.currentTimeNanos(),
         "Channel for '" + target + "'");
     channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
-    this.nameResolverFactory = builder.getNameResolverFactory();
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
@@ -646,8 +647,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   }
                 })
             .build();
-    this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
-    this.isAuthorityOverridden = builder.getOverrideAuthority() != null;
+    this.authorityOverride = builder.authorityOverride;
+    this.nameResolverFactory = builder.nameResolverFactory;
+    this.nameResolver = getNameResolver(
+        target, authorityOverride, nameResolverFactory, nameResolverArgs);
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);
     this.delayedTransport = new DelayedClientTransport(this.executor, this.syncContext);
@@ -761,6 +764,21 @@ final class ManagedChannelImpl extends ManagedChannel implements
     throw new IllegalArgumentException(String.format(
         "cannot find a NameResolver for %s%s",
         target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
+  }
+
+  static NameResolver getNameResolver(
+      String target, @Nullable final String overrideAuthority,
+      NameResolver.Factory nameResolverFactory, NameResolver.Args nameResolverArgs) {
+    NameResolver resolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
+    if (overrideAuthority == null) {
+      return resolver;
+    }
+    return new ForwardingNameResolver(resolver) {
+      @Override
+      public String getServiceAuthority() {
+        return overrideAuthority;
+      }
+    };
   }
 
   @VisibleForTesting
@@ -1861,7 +1879,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     SubchannelImpl(CreateSubchannelArgs args, LbHelperImpl helper) {
       addressGroups = args.getAddresses();
-      if (isAuthorityOverridden) {
+      if (authorityOverride != null) {
         List<EquivalentAddressGroup> eagsWithoutOverrideAttr =
             stripOverrideAuthorityAttributes(args.getAddresses());
         args = args.toBuilder().setAddresses(eagsWithoutOverrideAttr).build();
@@ -2040,7 +2058,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     public void updateAddresses(List<EquivalentAddressGroup> addrs) {
       syncContext.throwIfNotInThisSynchronizationContext();
       addressGroups = addrs;
-      if (isAuthorityOverridden) {
+      if (authorityOverride != null) {
         addrs = stripOverrideAuthorityAttributes(addrs);
       }
       subchannel.updateAddresses(addrs);

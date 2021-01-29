@@ -108,7 +108,7 @@ public final class ManagedChannelImplBuilder
   final NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
 
   // Access via getter, which may perform authority override as needed
-  private NameResolver.Factory nameResolverFactory = nameResolverRegistry.asFactory();
+  NameResolver.Factory nameResolverFactory = nameResolverRegistry.asFactory();
 
   final String target;
   @Nullable
@@ -123,7 +123,7 @@ public final class ManagedChannelImplBuilder
   String userAgent;
 
   @Nullable
-  private String authorityOverride;
+  String authorityOverride;
 
   String defaultLbPolicy = GrpcUtil.DEFAULT_LB_POLICY;
 
@@ -697,17 +697,6 @@ public final class ManagedChannelImplBuilder
    */
   int getDefaultPort() {
     return channelBuilderDefaultPortProvider.getDefaultPort();
-  }
-
-  /**
-   * Returns a {@link NameResolver.Factory} for the channel.
-   */
-  NameResolver.Factory getNameResolverFactory() {
-    if (authorityOverride == null) {
-      return nameResolverFactory;
-    } else {
-      return new OverrideAuthorityNameResolverFactory(nameResolverFactory, authorityOverride);
-    }
   }
 
   private static class DirectAddressNameResolverFactory extends NameResolver.Factory {
