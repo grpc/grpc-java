@@ -163,6 +163,9 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * Overrides the authority used with TLS and HTTP virtual hosting. It does not change what host is
    * actually connected to. Is commonly in the form {@code host:port}.
    *
+   * <p>If the channel builder overrides authority, any authority override from name resolution
+   * result (via {@link EquivalentAddressGroup#ATTR_AUTHORITY_OVERRIDE}) will be discarded.
+   *
    * <p>This method is intended for testing, but may safely be used outside of tests as an
    * alternative to DNS overrides.
    *

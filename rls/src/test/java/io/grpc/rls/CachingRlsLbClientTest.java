@@ -34,6 +34,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -536,7 +537,8 @@ public class CachingRlsLbClientTest {
   private final class FakeHelper extends Helper {
 
     @Override
-    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
+        String target, ChannelCredentials creds) {
       try {
         grpcCleanupRule.register(
             InProcessServerBuilder.forName(target)
@@ -579,7 +581,18 @@ public class CachingRlsLbClientTest {
 
     @Override
     public String getAuthority() {
-      throw new UnsupportedOperationException();
+      return DEFAULT_TARGET;
+    }
+
+    @Override
+    public ChannelCredentials getUnsafeChannelCredentials() {
+      // In test we don't do any authentication.
+      return new ChannelCredentials() {
+        @Override
+        public ChannelCredentials withoutBearerTokens() {
+          return this;
+        }
+      };
     }
 
     @Override
