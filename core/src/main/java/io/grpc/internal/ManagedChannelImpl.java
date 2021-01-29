@@ -721,9 +721,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  @VisibleForTesting
-  static NameResolver getNameResolver(String target, NameResolver.Factory nameResolverFactory,
-      NameResolver.Args nameResolverArgs) {
+  private static NameResolver getNameResolver(
+      String target, NameResolver.Factory nameResolverFactory, NameResolver.Args nameResolverArgs) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     URI targetUri = null;
@@ -766,6 +765,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
   }
 
+  @VisibleForTesting
   static NameResolver getNameResolver(
       String target, @Nullable final String overrideAuthority,
       NameResolver.Factory nameResolverFactory, NameResolver.Args nameResolverArgs) {
