@@ -974,11 +974,18 @@ public abstract class LoadBalancer {
      * <p>The target string will be resolved by a {@link NameResolver} created according to the
      * target string.
      *
+     * <p>The returned oob-channel builder defaults to use the same authority and ChannelCredentials
+     * (without bearer tokens) as the parent channel's for authentication. This is different from
+     * {@link #createResolvingOobChannelBuilder(String, ChannelCredentials)}.
+     *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
      *
+     * @deprecated Use {@link #createResolvingOobChannelBuilder(String, ChannelCredentials)}
+     *     instead.
      * @since 1.31.0
      */
+    @Deprecated
     public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
       throw new UnsupportedOperationException("Not implemented");
     }

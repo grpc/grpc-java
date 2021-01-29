@@ -1413,7 +1413,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private class LbHelperImpl extends LoadBalancer.Helper {
+  private final class LbHelperImpl extends LoadBalancer.Helper {
     AutoConfiguredLoadBalancer lb;
 
     @Override
@@ -1542,9 +1542,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
       return oobChannel;
     }
 
+    @Deprecated
     @Override
     public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
-      return createResolvingOobChannelBuilder(target, new DefaultChannelCreds());
+      return createResolvingOobChannelBuilder(target, new DefaultChannelCreds())
+          // Override authority to keep the old behavior.
+          // createResolvingOobChannelBuilder(String target) will be deleted soon.
+          .overrideAuthority(getAuthority());
     }
 
     // TODO(creamsoup) prevent main channel to shutdown if oob channel is not terminated
@@ -1603,7 +1607,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           .nameResolverFactory(nameResolverFactory);
 
       return builder
-          .overrideAuthority(ManagedChannelImpl.this.authority())
           // TODO(zdapeng): executors should not outlive the parent channel.
           .executor(executor)
           .offloadExecutor(offloadExecutorHolder.getExecutor())

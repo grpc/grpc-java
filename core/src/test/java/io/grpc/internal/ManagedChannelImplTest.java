@@ -1850,9 +1850,10 @@ public class ManagedChannelImplTest {
     ChannelCredentials oobChannelCreds = CompositeChannelCredentials.create(
         InsecureChannelCredentials.create(),
         new FakeCallCredentials(metadataKey, oobChannelCredValue));
-    ManagedChannel oob = helper.createResolvingOobChannelBuilder("oobauthority", oobChannelCreds)
+    ManagedChannel oob = helper.createResolvingOobChannelBuilder(
+            "fake://oobauthority/", oobChannelCreds)
         .nameResolverFactory(
-            new FakeNameResolverFactory.Builder(URI.create("oobauthority")).build())
+            new FakeNameResolverFactory.Builder(URI.create("fake://oobauthority/")).build())
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
         .build();
