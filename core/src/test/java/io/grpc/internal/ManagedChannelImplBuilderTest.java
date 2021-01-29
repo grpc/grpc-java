@@ -334,14 +334,14 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void overrideAuthority_default() {
-    assertNull(builder.getOverrideAuthority());
+    assertNull(builder.authorityOverride);
   }
 
   @Test
   public void overrideAuthority_normal() {
     String overrideAuthority = "best-authority";
     assertEquals(builder, builder.overrideAuthority(overrideAuthority));
-    assertEquals(overrideAuthority, builder.getOverrideAuthority());
+    assertEquals(overrideAuthority, builder.authorityOverride);
   }
 
   @Test(expected = NullPointerException.class)

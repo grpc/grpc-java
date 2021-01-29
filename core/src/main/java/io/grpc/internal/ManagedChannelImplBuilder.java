@@ -393,12 +393,6 @@ public final class ManagedChannelImplBuilder
     return this;
   }
 
-  @Nullable
-  @VisibleForTesting
-  String getOverrideAuthority() {
-    return authorityOverride;
-  }
-
   @Override
   public ManagedChannelImplBuilder idleTimeout(long value, TimeUnit unit) {
     checkArgument(value > 0, "idle timeout is %s, but must be positive", value);
