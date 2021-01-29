@@ -24,6 +24,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE;
 import static junit.framework.TestCase.assertNotSame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -378,6 +379,64 @@ public class ManagedChannelImplTest {
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().isEqualTo("Not called from the SynchronizationContext");
     }
+  }
+
+  @Test
+  public void createSubchannel_resolverOverrideAuthority() {
+    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(
+        socketAddress,
+        Attributes.newBuilder()
+            .set(ATTR_AUTHORITY_OVERRIDE, "resolver.override.authority")
+            .build());
+    channelBuilder.nameResolverFactory(
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(addressGroup))
+            .build());
+    createChannel();
+
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel);
+    ArgumentCaptor<ClientTransportOptions> transportOptionCaptor = ArgumentCaptor.forClass(null);
+    verify(mockTransportFactory)
+        .newClientTransport(
+            any(SocketAddress.class), transportOptionCaptor.capture(), any(ChannelLogger.class));
+    assertThat(transportOptionCaptor.getValue().getAuthority())
+        .isEqualTo("resolver.override.authority");
+  }
+
+  @Test
+  public void createSubchannel_channelBuilderOverrideAuthority() {
+    channelBuilder.overrideAuthority("channel-builder.override.authority");
+    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(
+        socketAddress,
+        Attributes.newBuilder()
+            .set(ATTR_AUTHORITY_OVERRIDE, "resolver.override.authority")
+            .build());
+    channelBuilder.nameResolverFactory(
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(addressGroup))
+            .build());
+    createChannel();
+
+    final Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel);
+    ArgumentCaptor<ClientTransportOptions> transportOptionCaptor = ArgumentCaptor.forClass(null);
+    verify(mockTransportFactory)
+        .newClientTransport(
+            any(SocketAddress.class), transportOptionCaptor.capture(), any(ChannelLogger.class));
+    assertThat(transportOptionCaptor.getValue().getAuthority())
+        .isEqualTo("channel-builder.override.authority");
+    final List<EquivalentAddressGroup> subchannelEags = new ArrayList<>();
+    helper.getSynchronizationContext().execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            subchannelEags.addAll(subchannel.getAllAddresses());
+          }
+        });
+    assertThat(subchannelEags).isEqualTo(ImmutableList.of(addressGroup));
   }
 
   @Test

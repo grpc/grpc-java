@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -152,6 +153,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private final InternalLogId logId;
   private final String target;
+  @Nullable
+  private final String authorityOverride;
   private final NameResolverRegistry nameResolverRegistry;
   private final NameResolver.Factory nameResolverFactory;
   private final NameResolver.Args nameResolverArgs;
@@ -361,7 +364,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       nameResolver.shutdown();
       nameResolverStarted = false;
       if (channelIsActive) {
-        nameResolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
+        nameResolver = getNameResolver(
+            target, authorityOverride, nameResolverFactory, nameResolverArgs);
       } else {
         nameResolver = null;
       }
@@ -612,7 +616,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         logId, builder.maxTraceEvents, timeProvider.currentTimeNanos(),
         "Channel for '" + target + "'");
     channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
-    this.nameResolverFactory = builder.getNameResolverFactory();
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
@@ -644,7 +647,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   }
                 })
             .build();
-    this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
+    this.authorityOverride = builder.authorityOverride;
+    this.nameResolverFactory = builder.nameResolverFactory;
+    this.nameResolver = getNameResolver(
+        target, authorityOverride, nameResolverFactory, nameResolverArgs);
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);
     this.delayedTransport = new DelayedClientTransport(this.executor, this.syncContext);
@@ -715,9 +721,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  @VisibleForTesting
-  static NameResolver getNameResolver(String target, NameResolver.Factory nameResolverFactory,
-      NameResolver.Args nameResolverArgs) {
+  private static NameResolver getNameResolver(
+      String target, NameResolver.Factory nameResolverFactory, NameResolver.Args nameResolverArgs) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     URI targetUri = null;
@@ -758,6 +763,22 @@ final class ManagedChannelImpl extends ManagedChannel implements
     throw new IllegalArgumentException(String.format(
         "cannot find a NameResolver for %s%s",
         target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
+  }
+
+  @VisibleForTesting
+  static NameResolver getNameResolver(
+      String target, @Nullable final String overrideAuthority,
+      NameResolver.Factory nameResolverFactory, NameResolver.Args nameResolverArgs) {
+    NameResolver resolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
+    if (overrideAuthority == null) {
+      return resolver;
+    }
+    return new ForwardingNameResolver(resolver) {
+      @Override
+      public String getServiceAuthority() {
+        return overrideAuthority;
+      }
+    };
   }
 
   @VisibleForTesting
@@ -1850,12 +1871,19 @@ final class ManagedChannelImpl extends ManagedChannel implements
     final InternalLogId subchannelLogId;
     final ChannelLoggerImpl subchannelLogger;
     final ChannelTracer subchannelTracer;
+    List<EquivalentAddressGroup> addressGroups;
     InternalSubchannel subchannel;
     boolean started;
     boolean shutdown;
     ScheduledHandle delayedShutdownTask;
 
     SubchannelImpl(CreateSubchannelArgs args, LbHelperImpl helper) {
+      addressGroups = args.getAddresses();
+      if (authorityOverride != null) {
+        List<EquivalentAddressGroup> eagsWithoutOverrideAttr =
+            stripOverrideAuthorityAttributes(args.getAddresses());
+        args = args.toBuilder().setAddresses(eagsWithoutOverrideAttr).build();
+      }
       this.args = checkNotNull(args, "args");
       this.helper = checkNotNull(helper, "helper");
       subchannelLogId = InternalLogId.allocate("Subchannel", /*details=*/ authority());
@@ -1992,7 +2020,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     public List<EquivalentAddressGroup> getAllAddresses() {
       syncContext.throwIfNotInThisSynchronizationContext();
       checkState(started, "not started");
-      return subchannel.getAddressGroups();
+      return addressGroups;
     }
 
     @Override
@@ -2029,7 +2057,23 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void updateAddresses(List<EquivalentAddressGroup> addrs) {
       syncContext.throwIfNotInThisSynchronizationContext();
+      addressGroups = addrs;
+      if (authorityOverride != null) {
+        addrs = stripOverrideAuthorityAttributes(addrs);
+      }
       subchannel.updateAddresses(addrs);
+    }
+
+    private List<EquivalentAddressGroup> stripOverrideAuthorityAttributes(
+        List<EquivalentAddressGroup> eags) {
+      List<EquivalentAddressGroup> eagsWithoutOverrideAttr = new ArrayList<>();
+      for (EquivalentAddressGroup eag : eags) {
+        EquivalentAddressGroup eagWithoutOverrideAttr = new EquivalentAddressGroup(
+            eag.getAddresses(),
+            eag.getAttributes().toBuilder().discard(ATTR_AUTHORITY_OVERRIDE).build());
+        eagsWithoutOverrideAttr.add(eagWithoutOverrideAttr);
+      }
+      return Collections.unmodifiableList(eagsWithoutOverrideAttr);
     }
   }
 

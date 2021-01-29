@@ -37,6 +37,9 @@ public final class EquivalentAddressGroup {
 
   /**
    * The authority to be used when constructing Subchannels for this EquivalentAddressGroup.
+   * However, if the channel has overridden authority via
+   * {@link ManagedChannelBuilder#overrideAuthority(String)}, the transport will use the channel's
+   * authority override.
    */
   @Attr
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6138")
