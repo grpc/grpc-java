@@ -88,6 +88,7 @@ public class AltsHandshakerTestService extends HandshakerServiceImplBase {
                   .build();
             log.log(Level.FINE, "server finished response " + resp);
             responseObserver.onNext(resp);
+            expectState = State.CLIENT_INIT;
             break;
           default:
             throw new RuntimeException("unknown state");
