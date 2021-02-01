@@ -50,6 +50,7 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
+import io.grpc.xds.EnvoyProtoData.HashPolicy;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
 import io.grpc.xds.EnvoyProtoData.VirtualHost;
@@ -233,9 +234,11 @@ public class XdsNameResolverTest {
 
   private List<VirtualHost> buildUnmatchedVirtualHosts() {
     Route route1 = new Route(RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-        new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null));
+        new RouteAction(TimeUnit.SECONDS.toNanos(15L), Collections.<HashPolicy>emptyList(),
+            cluster2, null));
     Route route2 = new Route(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-        new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster1, null));
+        new RouteAction(TimeUnit.SECONDS.toNanos(15L), Collections.<HashPolicy>emptyList(),
+            cluster1, null));
     return Arrays.asList(
         new VirtualHost("virtualhost-foo", Collections.singletonList("hello.googleapis.com"),
             Collections.singletonList(route1)),
@@ -248,7 +251,8 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     Route route = new Route(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-        new RouteAction(null, cluster1, null));  // per-route timeout unset
+        new RouteAction(null, Collections.<HashPolicy>emptyList(), cluster1,
+            null));  // per-route timeout unset
     VirtualHost virtualHost = new VirtualHost("does not matter",
         Collections.singletonList(AUTHORITY), Collections.singletonList(route));
     xdsClient.deliverLdsUpdate(AUTHORITY, 0L, Collections.singletonList(virtualHost));
@@ -263,7 +267,8 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     Route route = new Route(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-        new RouteAction(null, cluster1, null));  // per-route timeout unset
+        new RouteAction(null, Collections.<HashPolicy>emptyList(), cluster1,
+            null));  // per-route timeout unset
     VirtualHost virtualHost = new VirtualHost("does not matter",
         Collections.singletonList(AUTHORITY), Collections.singletonList(route));
     xdsClient.deliverLdsUpdate(AUTHORITY, TimeUnit.SECONDS.toNanos(5L),
@@ -309,10 +314,12 @@ public class XdsNameResolverTest {
         Arrays.asList(
             new Route(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(20L), "another-cluster", null)),
+                new RouteAction(TimeUnit.SECONDS.toNanos(20L), Collections.<HashPolicy>emptyList(),
+                    "another-cluster", null)),
             new Route(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), Collections.<HashPolicy>emptyList(),
+                    cluster2, null))));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     // Updated service config still contains cluster1 while it is removed resource. New calls no
@@ -344,10 +351,12 @@ public class XdsNameResolverTest {
         Arrays.asList(
             new Route(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(20L), "another-cluster", null)),
+                new RouteAction(TimeUnit.SECONDS.toNanos(20L), Collections.<HashPolicy>emptyList(),
+                    "another-cluster", null)),
             new Route(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), Collections.<HashPolicy>emptyList(),
+                    cluster2, null))));
     // Two consecutive service config updates: one for removing clcuster1,
     // one for adding "another=cluster".
     verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
@@ -375,10 +384,12 @@ public class XdsNameResolverTest {
         Arrays.asList(
             new Route(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(20L), "another-cluster", null)),
+                new RouteAction(TimeUnit.SECONDS.toNanos(20L), Collections.<HashPolicy>emptyList(),
+                    "another-cluster", null)),
             new Route(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), Collections.<HashPolicy>emptyList(),
+                    cluster2, null))));
 
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -391,10 +402,12 @@ public class XdsNameResolverTest {
         Arrays.asList(
             new Route(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), "another-cluster", null)),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), Collections.<HashPolicy>emptyList(),
+                    "another-cluster", null)),
             new Route(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), Collections.<HashPolicy>emptyList(),
+                    cluster2, null))));
     verifyNoMoreInteractions(mockListener);  // no cluster added/deleted
     assertCallSelectResult(call1, configSelector, "another-cluster", 15.0);
   }
@@ -409,16 +422,19 @@ public class XdsNameResolverTest {
         Collections.singletonList(
             new Route(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), Collections.<HashPolicy>emptyList(),
+                    cluster2, null))));
     xdsClient.deliverLdsUpdate(
         AUTHORITY,
         Arrays.asList(
             new Route(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster1, null)),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), Collections.<HashPolicy>emptyList(),
+                    cluster1, null)),
             new Route(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), Collections.<HashPolicy>emptyList(),
+                    cluster2, null))));
     testCall.deliverErrorStatus();
     verifyNoMoreInteractions(mockListener);
   }
@@ -435,7 +451,7 @@ public class XdsNameResolverTest {
             new Route(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
                 new RouteAction(
-                    TimeUnit.SECONDS.toNanos(20L), null,
+                    TimeUnit.SECONDS.toNanos(20L), Collections.<HashPolicy>emptyList(), null,
                     Arrays.asList(
                         new ClusterWeight(cluster1, 20, null),
                         new ClusterWeight(cluster2, 80, null))))));
@@ -495,10 +511,12 @@ public class XdsNameResolverTest {
         Arrays.asList(
             new Route(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster1, null)),
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), Collections.<HashPolicy>emptyList(),
+                    cluster1, null)),
             new Route(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                new RouteAction(TimeUnit.SECONDS.toNanos(15L), Collections.<HashPolicy>emptyList(),
+                    cluster2, null))));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();

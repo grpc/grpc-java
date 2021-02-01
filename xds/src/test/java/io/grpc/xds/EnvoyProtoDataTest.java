@@ -39,6 +39,7 @@ import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.ClusterStats.DroppedRequests;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
 import io.grpc.xds.EnvoyProtoData.EndpointLoadMetricStats;
+import io.grpc.xds.EnvoyProtoData.HashPolicy;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyProtoData.Route;
@@ -213,7 +214,7 @@ public class EnvoyProtoDataTest {
             new Route(
                 new RouteMatch(PathMatcher.fromPath("/service/method", false),
                     Collections.<HeaderMatcher>emptyList(), null),
-                new RouteAction(null, "cluster-foo", null)));
+                new RouteAction(null, Collections.<HashPolicy>emptyList(), "cluster-foo", null)));
 
     io.envoyproxy.envoy.config.route.v3.Route unsupportedProto =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()

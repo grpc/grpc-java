@@ -1440,6 +1440,8 @@ final class EnvoyProtoData {
   static final class RouteAction {
     @Nullable
     private final Long timeoutNano;
+    // List of hash policies to use for ring hash load balancing.
+    private final List<HashPolicy> hashPolicies;
     // Exactly one of the following fields is non-null.
     @Nullable
     private final String cluster;
@@ -1447,9 +1449,11 @@ final class EnvoyProtoData {
     private final List<ClusterWeight> weightedClusters;
 
     @VisibleForTesting
-    RouteAction(@Nullable Long timeoutNano, @Nullable String cluster,
-        @Nullable List<ClusterWeight> weightedClusters) {
+    RouteAction(@Nullable Long timeoutNano, List<HashPolicy> hashPolicies,
+        @Nullable String cluster, @Nullable List<ClusterWeight> weightedClusters) {
       this.timeoutNano = timeoutNano;
+      this.hashPolicies = Collections.unmodifiableList(new ArrayList<>(
+          checkNotNull(hashPolicies, "hashPolicies")));
       this.cluster = cluster;
       this.weightedClusters = weightedClusters;
     }
@@ -1457,6 +1461,10 @@ final class EnvoyProtoData {
     @Nullable
     Long getTimeoutNano() {
       return timeoutNano;
+    }
+
+    List<HashPolicy> getHashPolicies() {
+      return hashPolicies;
     }
 
     @Nullable
@@ -1479,18 +1487,20 @@ final class EnvoyProtoData {
       }
       RouteAction that = (RouteAction) o;
       return Objects.equals(timeoutNano, that.timeoutNano)
+          && Objects.equals(hashPolicies, that.hashPolicies)
           && Objects.equals(cluster, that.cluster)
           && Objects.equals(weightedClusters, that.weightedClusters);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(timeoutNano, cluster, weightedClusters);
+      return Objects.hash(timeoutNano, hashPolicies, cluster, weightedClusters);
     }
 
     @Override
     public String toString() {
-      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this)
+          .add("hashPolicies", hashPolicies);
       if (timeoutNano != null) {
         toStringHelper.add("timeout", timeoutNano + "ns");
       }
@@ -1549,7 +1559,126 @@ final class EnvoyProtoData {
           timeoutNano = Durations.toNanos(maxStreamDuration.getMaxStreamDuration());
         }
       }
-      return StructOrError.fromStruct(new RouteAction(timeoutNano, cluster, weightedClusters));
+      List<HashPolicy> hashPolicies = new ArrayList<>();
+      for (io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy config
+          : proto.getHashPolicyList()) {
+        HashPolicy policy = null;
+        boolean terminal = config.getTerminal();
+        switch (config.getPolicySpecifierCase()) {
+          case HEADER:
+            io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.Header headerCfg =
+                config.getHeader();
+            Pattern regEx = null;
+            String regExSubstitute = null;
+            if (headerCfg.hasRegexRewrite() && headerCfg.getRegexRewrite().hasPattern()
+                && headerCfg.getRegexRewrite().getPattern().hasGoogleRe2()) {
+              regEx = Pattern.compile(headerCfg.getRegexRewrite().getPattern().getRegex());
+              regExSubstitute = headerCfg.getRegexRewrite().getSubstitution();
+            }
+            policy = HashPolicy.forHeader(
+                terminal, headerCfg.getHeaderName(), regEx, regExSubstitute);
+            break;
+          case CONNECTION_PROPERTIES:
+            if (config.getConnectionProperties().getSourceIp()) {
+              policy = HashPolicy.forSourceIp(terminal);
+            }
+            break;
+          case FILTER_STATE:
+            if (config.getFilterState().getKey().equals("io.grpc.channel_id")) {
+              policy = HashPolicy.forChannelId(terminal);
+            }
+            break;
+          default:
+            // Ignore
+        }
+        hashPolicies.add(policy);
+      }
+      return StructOrError.fromStruct(new RouteAction(
+          timeoutNano, hashPolicies, cluster, weightedClusters));
+    }
+  }
+
+  // Configuration for the route's hashing policy if the upstream cluster uses a hashing load
+  // balancer.
+  static final class HashPolicy {
+    // The specifier that indicates the component of the request to be hashed on.
+    private final Type type;
+    // The flag that short-circuits the hash computing.
+    private final boolean terminal;
+    // The name of the request header that will be used to obtain the hash key.
+    // Only valid if type is HEADER.
+    @Nullable
+    private final String headerName;
+    // The regular expression used to find portions to be replaced in the header value.
+    // Only valid if type is HEADER.
+    @Nullable
+    private final Pattern regEx;
+    // The string that should be substituted into matching portions of the header value.
+    // Only valid if type is HEADER.
+    @Nullable
+    private final String regExSubstitution;
+
+    private HashPolicy(Type type, boolean terminal, @Nullable String headerName,
+        @Nullable Pattern regEx, @Nullable String regExSubstitution) {
+      this.type = checkNotNull(type, "type");
+      this.terminal = terminal;
+      this.headerName = headerName;
+      this.regEx = regEx;
+      this.regExSubstitution = regExSubstitution;
+    }
+
+    static HashPolicy forHeader(boolean terminal, String headerName, @Nullable Pattern regEx,
+        @Nullable String regExSubstitution) {
+      return new HashPolicy(Type.HEADER, terminal, checkNotNull(headerName, "headerName"),
+          regEx, regExSubstitution);
+    }
+
+    static HashPolicy forSourceIp(boolean terminal) {
+      return new HashPolicy(Type.SOURCE_IP, terminal, null, null, null);
+    }
+
+    static HashPolicy forChannelId(boolean terminal) {
+      return new HashPolicy(Type.CHANNEL_ID, terminal, null, null, null);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(type, terminal, headerName, regEx, regExSubstitution);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      HashPolicy that = (HashPolicy) o;
+      return type == that.type
+          && terminal == that.terminal
+          && Objects.equals(headerName, that.headerName)
+          && Objects.equals(
+          regEx == null ? null : regEx.pattern(),
+          that.regEx == null ? null : that.regEx.pattern())
+          && Objects.equals(regExSubstitution, that.regExSubstitution);
+    }
+
+    @Override
+    public String toString() {
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this)
+          .add("type", type)
+          .add("terminal", terminal)
+          .add("headerName", headerName)
+          .add("regExSubstitution", regExSubstitution);
+      if (regEx != null) {
+        toStringHelper.add("regEx", regEx.pattern());
+      }
+      return toStringHelper.toString();
+    }
+
+    enum Type {
+      HEADER, SOURCE_IP, CHANNEL_ID
     }
   }
 
