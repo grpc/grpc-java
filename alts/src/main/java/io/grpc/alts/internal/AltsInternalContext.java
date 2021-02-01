@@ -19,12 +19,12 @@ package io.grpc.alts.internal;
 import com.google.common.annotations.VisibleForTesting;
 import java.util.Map;
 
-/** AltsAuthContext contains security-related context information about an ALTs connection. */
-public final class AltsAuthContext {
+/** AltsInternalContext contains security-related context information about an ALTs connection. */
+public final class AltsInternalContext {
   final AltsContext context;
 
-  /** Create a new AltsAuthContext. */
-  public AltsAuthContext(HandshakerResult result) {
+  /** Create a new AltsInternalContext. */
+  public AltsInternalContext(HandshakerResult result) {
     context =
         AltsContext.newBuilder()
             .setApplicationProtocol(result.getApplicationProtocol())
@@ -39,8 +39,8 @@ public final class AltsAuthContext {
   }
 
   @VisibleForTesting
-  public static AltsAuthContext getDefaultInstance() {
-    return new AltsAuthContext(HandshakerResult.newBuilder().build());
+  public static AltsInternalContext getDefaultInstance() {
+    return new AltsInternalContext(HandshakerResult.newBuilder().build());
   }
 
   /**

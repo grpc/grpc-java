@@ -18,7 +18,7 @@ package io.grpc.alts;
 
 import io.grpc.ServerCall;
 import io.grpc.Status;
-import io.grpc.alts.internal.AltsAuthContext;
+import io.grpc.alts.internal.AltsInternalContext;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
 import java.util.Collection;
 
@@ -34,8 +34,8 @@ public final class AuthorizationUtil {
    */
   public static Status clientAuthorizationCheck(
       ServerCall<?, ?> call, Collection<String> expectedServiceAccounts) {
-    AltsAuthContext altsContext =
-        (AltsAuthContext) call.getAttributes().get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY);
+    AltsInternalContext altsContext =
+        (AltsInternalContext) call.getAttributes().get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY);
     if (altsContext == null) {
       return Status.PERMISSION_DENIED.withDescription("Peer ALTS AuthContext not found");
     }
