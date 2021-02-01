@@ -20,6 +20,7 @@ import static org.junit.Assert.assertEquals;
 
 import com.google.protobuf.ByteString;
 import io.grpc.ChannelCredentials;
+import io.grpc.Deadline;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
@@ -32,7 +33,9 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -79,8 +82,10 @@ public class AltsHandshakerTest {
   }
 
   @Test
+  @Ignore // flaky. Latency high and handshake often exceeds deadline.
   public void testAlts() {
-    TestServiceGrpc.TestServiceBlockingStub blockingStub = TestServiceGrpc.newBlockingStub(channel);
+    TestServiceGrpc.TestServiceBlockingStub blockingStub = TestServiceGrpc.newBlockingStub(channel)
+        .withDeadline(Deadline.after(200, TimeUnit.SECONDS));
     final SimpleRequest request = SimpleRequest.newBuilder()
             .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[10])))
             .build();
