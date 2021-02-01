@@ -241,7 +241,7 @@ final class LoadStatsManager2 {
    * Recorder for dropped requests. One instance per cluster with edsServiceName.
    */
   @ThreadSafe
-  class ClusterDropStats {
+  final class ClusterDropStats {
     private final String clusterName;
     @Nullable
     private final String edsServiceName;
@@ -286,7 +286,7 @@ final class LoadStatsManager2 {
       LoadStatsManager2.this.releaseClusterDropCounter(clusterName, edsServiceName);
     }
 
-    private synchronized ClusterDropStatsSnapshot snapshot() {
+    private ClusterDropStatsSnapshot snapshot() {
       Map<String, Long> drops = new HashMap<>();
       for (Map.Entry<String, AtomicLong> entry : categorizedDrops.entrySet()) {
         drops.put(entry.getKey(), entry.getValue().get());
@@ -316,7 +316,7 @@ final class LoadStatsManager2 {
    * Recorder for client loads. One instance per locality (in cluster with edsService).
    */
   @ThreadSafe
-  class ClusterLocalityStats {
+  final class ClusterLocalityStats {
     private final String clusterName;
     @Nullable
     private final String edsServiceName;
@@ -368,7 +368,7 @@ final class LoadStatsManager2 {
           clusterName, edsServiceName, locality);
     }
 
-    private synchronized ClusterLocalityStatsSnapshot snapshot() {
+    private ClusterLocalityStatsSnapshot snapshot() {
       long duration = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       stopwatch.reset().start();
       return new ClusterLocalityStatsSnapshot(callsSucceeded.getAndSet(0), callsInProgress.get(),
