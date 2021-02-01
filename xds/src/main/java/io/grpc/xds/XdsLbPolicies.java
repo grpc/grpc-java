@@ -19,7 +19,6 @@ package io.grpc.xds;
 final class XdsLbPolicies {
   static final String CLUSTER_MANAGER_POLICY_NAME = "cluster_manager_experimental";
   static final String CDS_POLICY_NAME = "cds_experimental";
-  static final String EDS_POLICY_NAME = "eds_experimental";
   static final String CLUSTER_RESOLVER_POLICY_NAME = "cluster_resolver_experimental";
   static final String PRIORITY_POLICY_NAME = "priority_experimental";
   static final String CLUSTER_IMPL_POLICY_NAME = "cluster_impl_experimental";
