@@ -232,7 +232,7 @@ public class AltsTsiHandshakerTest {
         TEST_SERVER_SERVICE_ACCOUNT,
         clientPeer.getProperty(AltsTsiHandshaker.TSI_SERVICE_ACCOUNT_PEER_PROPERTY).getValue());
 
-    AltsAuthContext clientContext = (AltsAuthContext) handshakerClient.extractPeerObject();
+    AltsInternalContext clientContext = (AltsInternalContext) handshakerClient.extractPeerObject();
     assertEquals(TEST_APPLICATION_PROTOCOL, clientContext.getApplicationProtocol());
     assertEquals(TEST_RECORD_PROTOCOL, clientContext.getRecordProtocol());
     assertEquals(TEST_SERVER_SERVICE_ACCOUNT, clientContext.getPeerServiceAccount());
@@ -258,7 +258,7 @@ public class AltsTsiHandshakerTest {
         TEST_CLIENT_SERVICE_ACCOUNT,
         serverPeer.getProperty(AltsTsiHandshaker.TSI_SERVICE_ACCOUNT_PEER_PROPERTY).getValue());
 
-    AltsAuthContext serverContext = (AltsAuthContext) handshakerServer.extractPeerObject();
+    AltsInternalContext serverContext = (AltsInternalContext) handshakerServer.extractPeerObject();
     assertEquals(TEST_APPLICATION_PROTOCOL, serverContext.getApplicationProtocol());
     assertEquals(TEST_RECORD_PROTOCOL, serverContext.getRecordProtocol());
     assertEquals(TEST_CLIENT_SERVICE_ACCOUNT, serverContext.getPeerServiceAccount());
