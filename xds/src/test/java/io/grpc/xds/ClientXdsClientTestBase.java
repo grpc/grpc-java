@@ -44,7 +44,6 @@ import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
-import io.grpc.xds.EnvoyProtoData.HttpFault;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -373,18 +372,18 @@ public abstract class ClientXdsClientTestBase {
     assertThat(ldsUpdate.virtualHosts).hasSize(2);
     assertThat(ldsUpdate.hasFaultInjection).isTrue();
     assertThat(ldsUpdate.httpFault).isNull();
-    HttpFault httpFault = ldsUpdate.virtualHosts.get(0).getHttpFault();
-    assertThat(httpFault.faultDelay.delayNanos).isEqualTo(300);
-    assertThat(httpFault.faultDelay.ratePerMillion).isEqualTo(1000);
-    assertThat(httpFault.faultAbort).isNull();
-    assertThat(httpFault.upstreamCluster).isEqualTo("cluster1");
-    assertThat(httpFault.maxActiveFaults).isEqualTo(100);
-    httpFault = ldsUpdate.virtualHosts.get(1).getHttpFault();
-    assertThat(httpFault.faultDelay).isNull();
-    assertThat(httpFault.faultAbort.status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(httpFault.faultAbort.ratePerMillion).isEqualTo(2000);
-    assertThat(httpFault.upstreamCluster).isEqualTo("cluster2");
-    assertThat(httpFault.maxActiveFaults).isEqualTo(101);
+    HttpFault httpFault = ldsUpdate.virtualHosts.get(0).httpFault();
+    assertThat(httpFault.faultDelay().delayNanos()).isEqualTo(300);
+    assertThat(httpFault.faultDelay().ratePerMillion()).isEqualTo(1000);
+    assertThat(httpFault.faultAbort()).isNull();
+    assertThat(httpFault.upstreamCluster()).isEqualTo("cluster1");
+    assertThat(httpFault.maxActiveFaults()).isEqualTo(100);
+    httpFault = ldsUpdate.virtualHosts.get(1).httpFault();
+    assertThat(httpFault.faultDelay()).isNull();
+    assertThat(httpFault.faultAbort().status().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(httpFault.faultAbort().ratePerMillion()).isEqualTo(2000);
+    assertThat(httpFault.upstreamCluster()).isEqualTo("cluster2");
+    assertThat(httpFault.maxActiveFaults()).isEqualTo(101);
   }
 
   @Test
