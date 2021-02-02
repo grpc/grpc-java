@@ -92,8 +92,8 @@ public class TestServiceServer {
         break;
       }
       String value = parts[1];
-      if ("port".equals(value)) {
-        port = Integer.parseInt(key);
+      if ("port".equals(key)) {
+        port = Integer.parseInt(value);
       } else if ("use_tls".equals(key)) {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_alts".equals(key)) {
