@@ -129,8 +129,8 @@ For protobuf-based codegen integrated with the Maven build system, you can use
 
 [protobuf-maven-plugin]: https://www.xolstice.org/protobuf-maven-plugin/
 
-For protobuf-based codegen integrated with the Gradle build system, you can use
-[protobuf-gradle-plugin][]:
+For non-Android protobuf-based codegen integrated with the Gradle build system,
+you can use [protobuf-gradle-plugin][]:
 ```gradle
 plugins {
     id 'com.google.protobuf' version '0.8.14'
@@ -160,6 +160,37 @@ compiling on Alpine Linux, you may want to use the [Alpine grpc-java package][]
 which uses musl instead.
 
 [Alpine grpc-java package]: https://pkgs.alpinelinux.org/package/edge/testing/x86_64/grpc-java
+
+For Android protobuf-based codegen integrated with the Gradle build system, also
+use protobuf-gradle-plugin but specify the 'lite' options:
+
+```gradle
+plugins {
+    id 'com.google.protobuf' version '0.8.14'
+}
+
+protobuf {
+  protoc {
+    artifact = "com.google.protobuf:protoc:3.12.0"
+  }
+  plugins {
+    grpc {
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.35.0'
+    }
+  }
+  generateProtoTasks {
+    all().each { task ->
+      task.builtins {
+        java { option 'lite' }
+      }
+      task.plugins {
+        grpc { option 'lite' }
+      }
+    }
+  }
+}
+
+```
 
 API Stability
 -------------
