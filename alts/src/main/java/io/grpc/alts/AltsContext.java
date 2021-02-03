@@ -17,11 +17,15 @@
 package io.grpc.alts;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.ExperimentalApi;
 import io.grpc.alts.internal.AltsInternalContext;
+import io.grpc.alts.internal.HandshakerResult;
+import io.grpc.alts.internal.Identity;
 import io.grpc.alts.internal.SecurityLevel;
 
 /** {@code AltsContext} contains security-related information on the ALTS channel. */
-public class AltsContext {
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7864")
+public final class AltsContext {
 
   private final AltsInternalContext wrapped;
 
@@ -29,9 +33,19 @@ public class AltsContext {
     this.wrapped = wrapped;
   }
 
+  /**
+   * Creates an {@code AltsContext} for testing purposes.
+   * @param peerServiceAccount the peer service account of the to be created {@code AltsContext}
+   * @param localServiceAccount the local service account of the to be created {@code AltsContext}
+   * @return the created {@code AltsContext}
+   */
   @VisibleForTesting
-  public static AltsContext getDefaultInstance() {
-    return new AltsContext(AltsInternalContext.getDefaultInstance());
+  public static AltsContext createTestInstance(String peerServiceAccount,
+      String localServiceAccount) {
+    return new AltsContext(new AltsInternalContext(HandshakerResult.newBuilder()
+        .setPeerIdentity(Identity.newBuilder().setServiceAccount(peerServiceAccount).build())
+        .setLocalIdentity(Identity.newBuilder().setServiceAccount(localServiceAccount).build())
+        .build()));
   }
 
   /**

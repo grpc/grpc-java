@@ -17,12 +17,16 @@
 
 package io.grpc.alts;
 
+import io.grpc.ExperimentalApi;
 import io.grpc.ServerCall;
 import io.grpc.alts.internal.AltsInternalContext;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
 
 /** Utility class for {@link AltsContext}. */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7864")
 public final class AltsContextUtil {
+
+  private AltsContextUtil(){}
 
   /**
    * Creates a {@link AltsContext} from ALTS context information in the {@link ServerCall}.
