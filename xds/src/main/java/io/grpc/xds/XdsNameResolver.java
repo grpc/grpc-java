@@ -444,73 +444,76 @@ final class XdsNameResolver extends NameResolver {
         });
       }
     }
+  }
 
-    private boolean matchRoute(RouteMatch routeMatch, String fullMethodName,
-        Map<String, Iterable<String>> headers, ThreadSafeRandom random) {
-      if (!matchPath(routeMatch.pathMatcher(), fullMethodName)) {
+  @VisibleForTesting
+  static boolean matchRoute(RouteMatch routeMatch, String fullMethodName,
+      Map<String, Iterable<String>> headers, ThreadSafeRandom random) {
+    if (!matchPath(routeMatch.pathMatcher(), fullMethodName)) {
+      return false;
+    }
+    for (HeaderMatcher headerMatcher : routeMatch.headerMatchers()) {
+      Iterable<String> headerValues = headers.get(headerMatcher.name());
+      // Special cases for hiding headers: "grpc-previous-rpc-attempts".
+      if (headerMatcher.name().equals("grpc-previous-rpc-attempts")) {
+        headerValues = null;
+      }
+      // Special case for exposing headers: "content-type".
+      if (headerMatcher.name().equals("content-type")) {
+        headerValues = Collections.singletonList("application/grpc");
+      }
+      if (!matchHeader(headerMatcher, headerValues)) {
         return false;
       }
-      for (HeaderMatcher headerMatcher : routeMatch.headerMatchers()) {
-        Iterable<String> headerValues = headers.get(headerMatcher.name());
-        // Special cases for hiding headers: "grpc-previous-rpc-attempts".
-        if (headerMatcher.name().equals("grpc-previous-rpc-attempts")) {
-          headerValues = null;
-        }
-        // Special case for exposing headers: "content-type".
-        if (headerMatcher.name().equals("content-type")) {
-          headerValues = Collections.singletonList("application/grpc");
-        }
-        if (!matchHeader(headerMatcher, headerValues)) {
-          return false;
-        }
-      }
-      FractionMatcher fraction = routeMatch.fractionMatcher();
-      return fraction == null || random.nextInt(fraction.denominator()) < fraction.numerator();
     }
+    FractionMatcher fraction = routeMatch.fractionMatcher();
+    return fraction == null || random.nextInt(fraction.denominator()) < fraction.numerator();
+  }
 
-    private boolean matchPath(PathMatcher pathMatcher, String fullMethodName) {
-      if (pathMatcher.path() != null) {
-        return pathMatcher.caseSensitive()
-            ? pathMatcher.path().equals(fullMethodName)
-            : pathMatcher.path().equalsIgnoreCase(fullMethodName);
-      } else if (pathMatcher.prefix() != null) {
-        return pathMatcher.caseSensitive()
-            ? fullMethodName.startsWith(pathMatcher.prefix())
-            : fullMethodName.toLowerCase().startsWith(pathMatcher.prefix().toLowerCase());
-      }
-      return pathMatcher.regEx().matches(fullMethodName);
+  @VisibleForTesting
+  static boolean matchPath(PathMatcher pathMatcher, String fullMethodName) {
+    if (pathMatcher.path() != null) {
+      return pathMatcher.caseSensitive()
+          ? pathMatcher.path().equals(fullMethodName)
+          : pathMatcher.path().equalsIgnoreCase(fullMethodName);
+    } else if (pathMatcher.prefix() != null) {
+      return pathMatcher.caseSensitive()
+          ? fullMethodName.startsWith(pathMatcher.prefix())
+          : fullMethodName.toLowerCase().startsWith(pathMatcher.prefix().toLowerCase());
     }
+    return pathMatcher.regEx().matches(fullMethodName);
+  }
 
-    private boolean matchHeader(HeaderMatcher headerMatcher,
-        @Nullable Iterable<String> headerValues) {
-      if (headerMatcher.present() != null) {
-        return (headerValues == null) == headerMatcher.present().equals(headerMatcher.inverted());
-      }
-      if (headerValues == null) {
-        return false;
-      }
-      String valueStr = Joiner.on(",").join(headerValues);
-      boolean baseMatch;
-      if (headerMatcher.exactValue() != null) {
-        baseMatch = headerMatcher.exactValue().equals(valueStr);
-      } else if (headerMatcher.safeRegEx() != null) {
-        baseMatch = headerMatcher.safeRegEx().matches(valueStr);
-      } else if (headerMatcher.range() != null) {
-        long numValue;
-        try {
-          numValue = Long.parseLong(valueStr);
-          baseMatch = numValue >= headerMatcher.range().start()
-              && numValue <= headerMatcher.range().end();
-        } catch (NumberFormatException ignored) {
-          baseMatch = false;
-        }
-      } else if (headerMatcher.prefix() != null) {
-        baseMatch = valueStr.startsWith(headerMatcher.prefix());
-      } else {
-        baseMatch = valueStr.endsWith(headerMatcher.suffix());
-      }
-      return baseMatch != headerMatcher.inverted();
+  @VisibleForTesting
+  static boolean matchHeader(HeaderMatcher headerMatcher,
+      @Nullable Iterable<String> headerValues) {
+    if (headerMatcher.present() != null) {
+      return (headerValues == null) == headerMatcher.present().equals(headerMatcher.inverted());
     }
+    if (headerValues == null) {
+      return false;
+    }
+    String valueStr = Joiner.on(",").join(headerValues);
+    boolean baseMatch;
+    if (headerMatcher.exactValue() != null) {
+      baseMatch = headerMatcher.exactValue().equals(valueStr);
+    } else if (headerMatcher.safeRegEx() != null) {
+      baseMatch = headerMatcher.safeRegEx().matches(valueStr);
+    } else if (headerMatcher.range() != null) {
+      long numValue;
+      try {
+        numValue = Long.parseLong(valueStr);
+        baseMatch = numValue >= headerMatcher.range().start()
+            && numValue <= headerMatcher.range().end();
+      } catch (NumberFormatException ignored) {
+        baseMatch = false;
+      }
+    } else if (headerMatcher.prefix() != null) {
+      baseMatch = valueStr.startsWith(headerMatcher.prefix());
+    } else {
+      baseMatch = valueStr.endsWith(headerMatcher.suffix());
+    }
+    return baseMatch != headerMatcher.inverted();
   }
 
   private class ResolveState implements LdsResourceWatcher {
