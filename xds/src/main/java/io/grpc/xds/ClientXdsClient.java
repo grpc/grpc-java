@@ -278,8 +278,9 @@ final class ClientXdsClient extends AbstractXdsClient {
         name, proto.getDomainsList(), routes, httpFault));
   }
 
+  @VisibleForTesting
   @Nullable
-  private static StructOrError<Route> parseRoute(io.envoyproxy.envoy.config.route.v3.Route proto) {
+  static StructOrError<Route> parseRoute(io.envoyproxy.envoy.config.route.v3.Route proto) {
     StructOrError<RouteMatch> routeMatch = parseRouteMatch(proto.getMatch());
     if (routeMatch == null) {
       return null;
@@ -328,8 +329,9 @@ final class ClientXdsClient extends AbstractXdsClient {
         routeMatch.getStruct(), routeAction.getStruct(), httpFault));
   }
 
+  @VisibleForTesting
   @Nullable
-  private static StructOrError<RouteMatch> parseRouteMatch(
+  static StructOrError<RouteMatch> parseRouteMatch(
       io.envoyproxy.envoy.config.route.v3.RouteMatch proto) {
     if (proto.getQueryParametersCount() != 0) {
       return null;
@@ -408,7 +410,8 @@ final class ClientXdsClient extends AbstractXdsClient {
     return StructOrError.fromStruct(FractionMatcher.create(numerator, denominator));
   }
 
-  private static StructOrError<HeaderMatcher> parseHeaderMatcher(
+  @VisibleForTesting
+  static StructOrError<HeaderMatcher> parseHeaderMatcher(
       io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
     switch (proto.getHeaderMatchSpecifierCase()) {
       case EXACT_MATCH:
@@ -446,8 +449,9 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
+  @VisibleForTesting
   @Nullable
-  private static StructOrError<RouteAction> parseRouteAction(
+  static StructOrError<RouteAction> parseRouteAction(
       io.envoyproxy.envoy.config.route.v3.RouteAction proto) {
     Long timeoutNano = null;
     if (proto.hasMaxStreamDuration()) {
@@ -491,7 +495,8 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static StructOrError<ClusterWeight> parseClusterWeight(
+  @VisibleForTesting
+  static StructOrError<ClusterWeight> parseClusterWeight(
       io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto) {
     HttpFault httpFault = null;
     Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
@@ -1337,19 +1342,20 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static final class StructOrError<T> {
+  @VisibleForTesting
+  static final class StructOrError<T> {
 
     /**
      * Returns a {@link StructOrError} for the successfully converted data object.
      */
-    static <T> StructOrError<T> fromStruct(T struct) {
+    private static <T> StructOrError<T> fromStruct(T struct) {
       return new StructOrError<>(struct);
     }
 
     /**
      * Returns a {@link StructOrError} for the failure to convert the data object.
      */
-    static <T> StructOrError<T> fromError(String errorDetail) {
+    private static <T> StructOrError<T> fromError(String errorDetail) {
       return new StructOrError<>(errorDetail);
     }
 
@@ -1369,14 +1375,16 @@ final class ClientXdsClient extends AbstractXdsClient {
     /**
      * Returns struct if exists, otherwise null.
      */
+    @VisibleForTesting
     @Nullable
-    public T getStruct() {
+    T getStruct() {
       return struct;
     }
 
     /**
      * Returns error detail if exists, otherwise null.
      */
+    @VisibleForTesting
     @Nullable
     String getErrorDetail() {
       return errorDetail;
