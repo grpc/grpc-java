@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME;
-import static io.grpc.xds.XdsLbPolicies.LRS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
 import static org.mockito.ArgumentMatchers.any;
@@ -65,7 +64,6 @@ import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
@@ -168,7 +166,6 @@ public class ClusterResolverLoadBalancerTest {
 
     lbRegistry.register(new FakeLoadBalancerProvider(PRIORITY_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_IMPL_POLICY_NAME));
-    lbRegistry.register(new FakeLoadBalancerProvider(LRS_POLICY_NAME));
     lbRegistry.register(
         new FakeLoadBalancerProvider("pick_first")); // needed by logical_dns
     URI targetUri = new URI(AUTHORITY);
@@ -244,9 +241,7 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(weightedTargetConfig.targets.keySet()).containsExactly(locality1.toString());
     WeightedPolicySelection target = weightedTargetConfig.targets.get(locality1.toString());
     assertThat(target.weight).isEqualTo(70);
-    assertThat(target.policySelection.getProvider().getPolicyName()).isEqualTo(LRS_POLICY_NAME);
-    assertLrsConfig((LrsConfig) target.policySelection.getConfig(), CLUSTER2, EDS_SERVICE_NAME2,
-        LRS_SERVER_NAME, locality1, "round_robin");
+    assertThat(target.policySelection.getProvider().getPolicyName()).isEqualTo("round_robin");
 
     priorityChildConfig = priorityLbConfig.childConfigs.get(priority2);
     assertThat(priorityChildConfig.ignoreReresolution).isTrue();
@@ -259,9 +254,7 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(weightedTargetConfig.targets.keySet()).containsExactly(locality3.toString());
     target = weightedTargetConfig.targets.get(locality3.toString());
     assertThat(target.weight).isEqualTo(20);
-    assertThat(target.policySelection.getProvider().getPolicyName()).isEqualTo(LRS_POLICY_NAME);
-    assertLrsConfig((LrsConfig) target.policySelection.getConfig(), CLUSTER2, EDS_SERVICE_NAME2,
-        LRS_SERVER_NAME, locality3, "round_robin");
+    assertThat(target.policySelection.getProvider().getPolicyName()).isEqualTo("round_robin");
     List<EquivalentAddressGroup> priorityAddrs1 =
         AddressFilter.filter(childBalancer.addresses, priority1);
     assertThat(priorityAddrs1).hasSize(2);
@@ -290,9 +283,7 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(weightedTargetConfig.targets.keySet()).containsExactly(locality2.toString());
     target = weightedTargetConfig.targets.get(locality2.toString());
     assertThat(target.weight).isEqualTo(10);
-    assertThat(target.policySelection.getProvider().getPolicyName()).isEqualTo(LRS_POLICY_NAME);
-    assertLrsConfig((LrsConfig) target.policySelection.getConfig(), CLUSTER1, EDS_SERVICE_NAME1,
-        LRS_SERVER_NAME, locality2, "round_robin");
+    assertThat(target.policySelection.getProvider().getPolicyName()).isEqualTo("round_robin");
     List<EquivalentAddressGroup> priorityAddrs3 =
         AddressFilter.filter(childBalancer.addresses, priority3);
     assertThat(priorityAddrs3).hasSize(1);
@@ -458,10 +449,7 @@ public class ClusterResolverLoadBalancerTest {
     ClusterImplConfig clusterImplConfig =
         (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
     assertClusterImplConfig(clusterImplConfig, CLUSTER_DNS, null, LRS_SERVER_NAME, 100L, null,
-        Collections.<DropOverload>emptyList(), LRS_POLICY_NAME);
-    LrsConfig lrsConfig = (LrsConfig) clusterImplConfig.childPolicy.getConfig();
-    assertLrsConfig(lrsConfig, CLUSTER_DNS, null, LRS_SERVER_NAME,
-        new Locality("", "", ""), "pick_first");  // hardcoded override
+        Collections.<DropOverload>emptyList(), "pick_first");
     assertAddressesEqual(Arrays.asList(endpoint1, endpoint2), childBalancer.addresses);
   }
 
@@ -764,16 +752,6 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(config.maxConcurrentRequests).isEqualTo(maxConcurrentRequests);
     assertThat(config.tlsContext).isEqualTo(tlsContext);
     assertThat(config.dropCategories).isEqualTo(dropCategories);
-    assertThat(config.childPolicy.getProvider().getPolicyName()).isEqualTo(childPolicy);
-  }
-
-  private static void assertLrsConfig(LrsConfig config, String cluster,
-      @Nullable String edsServiceName, String lrsServerName, Locality locality,
-      String childPolicy) {
-    assertThat(config.clusterName).isEqualTo(cluster);
-    assertThat(config.edsServiceName).isEqualTo(edsServiceName);
-    assertThat(config.lrsServerName).isEqualTo(lrsServerName);
-    assertThat(config.locality).isEqualTo(locality);
     assertThat(config.childPolicy.getProvider().getPolicyName()).isEqualTo(childPolicy);
   }
 

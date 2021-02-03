@@ -29,7 +29,8 @@ import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.VirtualHost;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.LoadStatsManager.LoadStatsStore;
+import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
+import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -568,20 +569,26 @@ abstract class XdsClient {
   }
 
   /**
-   * Starts recording client load stats for the given cluster:cluster_service. Caller should use
-   * the returned {@link LoadStatsStore} to record and aggregate stats for load sent to the given
-   * cluster:cluster_service. The first call of this method starts load reporting via LRS.
+   * Adds drop stats for the specified cluster with edsServiceName by using the returned object
+   * to record dropped requests. Drop stats recorded with the returned object will be reported
+   * to the load reporting server. The returned object is reference counted and the caller should
+   * use {@link ClusterDropStats#release} to release its <i>hard</i> reference when it is safe to
+   * stop reporting dropped RPCs for the specified cluster in the future.
    */
-  LoadStatsStore addClientStats(String clusterName, @Nullable String clusterServiceName) {
+  ClusterDropStats addClusterDropStats(String clusterName, @Nullable String edsServiceName) {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Stops recording client load stats for the given cluster:cluster_service. The load reporting
-   * server will no longer receive stats for the given cluster:cluster_service after this call.
-   * Load reporting may be terminated if there is no stats to be reported.
+   * Adds load stats for the specified locality (in the specified cluster with edsServiceName) by
+   * using the returned object to record RPCs. Load stats recorded with the returned object will
+   * be reported to the load reporting server. The returned object is reference counted and the
+   * caller should use {@link ClusterLocalityStats#release} to release its <i>hard</i>
+   * reference when it is safe to stop reporting RPC loads for the specified locality in the
+   * future.
    */
-  void removeClientStats(String clusterName, @Nullable String clusterServiceName) {
+  ClusterLocalityStats addClusterLocalityStats(
+      String clusterName, @Nullable String edsServiceName, Locality locality) {
     throw new UnsupportedOperationException();
   }
 }
