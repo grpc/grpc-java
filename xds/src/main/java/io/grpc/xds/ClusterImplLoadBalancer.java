@@ -207,9 +207,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         }
         addresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
       }
-      args = args.toBuilder().setAddresses(addresses).build();
-      final Subchannel subchannel = delegate().createSubchannel(args);
-      Locality locality = subchannel.getAllAddresses().get(0).getAttributes().get(
+      Locality locality = args.getAddresses().get(0).getAttributes().get(
           InternalXdsAttributes.ATTR_LOCALITY);  // all addresses should be in the same locality
       // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
       // attributes with its locality, including endpoints in LOGICAL_DNS clusters.
@@ -219,14 +217,12 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       }
       final ClusterLocalityStats localityStats = xdsClient.addClusterLocalityStats(
           cluster, edsServiceName, locality);
+      Attributes attrs = args.getAttributes().toBuilder().set(
+          ATTR_CLUSTER_LOCALITY_STATS, localityStats).build();
+      args = args.toBuilder().setAddresses(addresses).setAttributes(attrs).build();
+      final Subchannel subchannel = delegate().createSubchannel(args);
 
       return new ForwardingSubchannel() {
-        @Override
-        public Attributes getAttributes() {
-          return delegate().getAttributes().toBuilder().set(
-              ATTR_CLUSTER_LOCALITY_STATS, localityStats).build();
-        }
-
         @Override
         public void shutdown() {
           localityStats.release();
