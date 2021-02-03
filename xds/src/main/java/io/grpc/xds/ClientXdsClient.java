@@ -23,6 +23,7 @@ import static io.grpc.xds.EnvoyProtoData.TRANSPORT_SOCKET_NAME_TLS;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.Durations;
@@ -36,7 +37,6 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
-import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
@@ -45,13 +45,14 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.xds.EnvoyProtoData.DropOverload;
-import io.grpc.xds.EnvoyProtoData.Locality;
-import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.Endpoints.DropOverload;
+import io.grpc.xds.Endpoints.LbEndpoint;
+import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.HttpFault.FaultAbort;
@@ -70,6 +71,7 @@ import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsClient.CdsUpdate.EdsClusterConfig;
 import io.grpc.xds.XdsClient.CdsUpdate.LogicalDnsClusterConfig;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -632,29 +634,6 @@ final class ClientXdsClient extends AbstractXdsClient {
     return status.withDescription("HTTP code: " + httpCode);
   }
 
-  private static int getRatePerMillion(FractionalPercent percent) {
-    int numerator = percent.getNumerator();
-    DenominatorType type = percent.getDenominator();
-    switch (type) {
-      case TEN_THOUSAND:
-        numerator *= 100;
-        break;
-      case HUNDRED:
-        numerator *= 10_000;
-        break;
-      case MILLION:
-        break;
-      case UNRECOGNIZED:
-      default:
-        throw new IllegalArgumentException("Unknown denominator type of " + percent);
-    }
-
-    if (numerator > 1_000_000 || numerator < 0) {
-      numerator = 1_000_000;
-    }
-    return numerator;
-  }
-
   @Override
   protected void handleRdsResponse(String versionInfo, List<Any> resources, String nonce) {
     // Unpack RouteConfiguration messages.
@@ -926,45 +905,35 @@ final class ClientXdsClient extends AbstractXdsClient {
       Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
       List<DropOverload> dropOverloads = new ArrayList<>();
       int maxPriority = -1;
-      for (io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints localityLbEndpoints
+      for (io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints localityLbEndpointsProto
           : assignment.getEndpointsList()) {
-        // Filter out localities without or with 0 weight.
-        if (!localityLbEndpoints.hasLoadBalancingWeight()
-            || localityLbEndpoints.getLoadBalancingWeight().getValue() < 1) {
+        StructOrError<LocalityLbEndpoints> localityLbEndpoints =
+            parseLocalityLbEndpoints(localityLbEndpointsProto);
+        if (localityLbEndpoints == null) {
           continue;
         }
-        int localityPriority = localityLbEndpoints.getPriority();
-        if (localityPriority < 0) {
-          nackResponse(ResourceType.EDS, nonce,
-              "ClusterLoadAssignment " + clusterName + " : locality with negative priority.");
+        if (localityLbEndpoints.getErrorDetail() != null) {
+          nackResponse(ResourceType.EDS, nonce, "ClusterLoadAssignment " + clusterName + ": "
+              + localityLbEndpoints.getErrorDetail());
           return;
         }
-        maxPriority = Math.max(maxPriority, localityPriority);
-        priorities.add(localityPriority);
-        // The endpoint field of each lb_endpoints must be set.
-        // Inside of it: the address field must be set.
-        for (LbEndpoint lbEndpoint : localityLbEndpoints.getLbEndpointsList()) {
-          if (!lbEndpoint.getEndpoint().hasAddress()) {
-            nackResponse(ResourceType.EDS, nonce,
-                "ClusterLoadAssignment " + clusterName + " : endpoint with no address.");
-            return;
-          }
-        }
-        // Note endpoints with health status other than UNHEALTHY and UNKNOWN are still
+        maxPriority = Math.max(maxPriority, localityLbEndpoints.getStruct().priority());
+        priorities.add(localityLbEndpoints.getStruct().priority());
+        // Note endpoints with health status other than HEALTHY and UNKNOWN are still
         // handed over to watching parties. It is watching parties' responsibility to
         // filter out unhealthy endpoints. See EnvoyProtoData.LbEndpoint#isHealthy().
         localityLbEndpointsMap.put(
-            Locality.fromEnvoyProtoLocality(localityLbEndpoints.getLocality()),
-            LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(localityLbEndpoints));
+            parseLocality(localityLbEndpointsProto.getLocality()),
+            localityLbEndpoints.getStruct());
       }
       if (priorities.size() != maxPriority + 1) {
         nackResponse(ResourceType.EDS, nonce,
             "ClusterLoadAssignment " + clusterName + " : sparse priorities.");
         return;
       }
-      for (ClusterLoadAssignment.Policy.DropOverload dropOverload
+      for (ClusterLoadAssignment.Policy.DropOverload dropOverloadProto
           : assignment.getPolicy().getDropOverloadsList()) {
-        dropOverloads.add(DropOverload.fromEnvoyProtoDropOverload(dropOverload));
+        dropOverloads.add(parseDropOverload(dropOverloadProto));
       }
       EdsUpdate update = new EdsUpdate(clusterName, localityLbEndpointsMap, dropOverloads);
       edsUpdates.put(clusterName, update);
@@ -977,6 +946,71 @@ final class ClientXdsClient extends AbstractXdsClient {
         subscriber.onData(edsUpdates.get(resource));
       }
     }
+  }
+
+  private static Locality parseLocality(io.envoyproxy.envoy.config.core.v3.Locality proto) {
+    return Locality.create(proto.getRegion(), proto.getZone(), proto.getSubZone());
+  }
+
+  private static DropOverload parseDropOverload(
+      io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment.Policy.DropOverload proto) {
+    return DropOverload.create(proto.getCategory(), getRatePerMillion(proto.getDropPercentage()));
+  }
+
+  @Nullable
+  private static StructOrError<LocalityLbEndpoints> parseLocalityLbEndpoints(
+      io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto) {
+    // Filter out localities without or with 0 weight.
+    if (!proto.hasLoadBalancingWeight() || proto.getLoadBalancingWeight().getValue() < 1) {
+      return null;
+    }
+    if (proto.getPriority() < 0) {
+      return StructOrError.fromError("negative priority");
+    }
+    List<LbEndpoint> endpoints = new ArrayList<>(proto.getLbEndpointsCount());
+    for (io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint endpoint : proto.getLbEndpointsList()) {
+      // The endpoint field of each lb_endpoints must be set.
+      // Inside of it: the address field must be set.
+      if (!endpoint.hasEndpoint() || !endpoint.getEndpoint().hasAddress()) {
+        return StructOrError.fromError("LbEndpoint with no endpoint/address");
+      }
+      io.envoyproxy.envoy.config.core.v3.SocketAddress socketAddress =
+          endpoint.getEndpoint().getAddress().getSocketAddress();
+      InetSocketAddress addr =
+          new InetSocketAddress(socketAddress.getAddress(), socketAddress.getPortValue());
+      boolean isHealthy =
+          endpoint.getHealthStatus() == io.envoyproxy.envoy.config.core.v3.HealthStatus.HEALTHY
+              || endpoint.getHealthStatus()
+              == io.envoyproxy.envoy.config.core.v3.HealthStatus.UNKNOWN;
+      endpoints.add(LbEndpoint.create(
+          new EquivalentAddressGroup(ImmutableList.<java.net.SocketAddress>of(addr)),
+          endpoint.getLoadBalancingWeight().getValue(), isHealthy));
+    }
+    return StructOrError.fromStruct(LocalityLbEndpoints.create(
+        endpoints, proto.getLoadBalancingWeight().getValue(), proto.getPriority()));
+  }
+
+  private static int getRatePerMillion(FractionalPercent percent) {
+    int numerator = percent.getNumerator();
+    DenominatorType type = percent.getDenominator();
+    switch (type) {
+      case TEN_THOUSAND:
+        numerator *= 100;
+        break;
+      case HUNDRED:
+        numerator *= 10_000;
+        break;
+      case MILLION:
+        break;
+      case UNRECOGNIZED:
+      default:
+        throw new IllegalArgumentException("Unknown denominator type of " + percent);
+    }
+
+    if (numerator > 1_000_000 || numerator < 0) {
+      numerator = 1_000_000;
+    }
+    return numerator;
   }
 
   @Override

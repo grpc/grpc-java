@@ -29,7 +29,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.Node;
 import java.io.IOException;
 import java.util.List;
@@ -118,7 +117,7 @@ public class BootstrapperImplTest {
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
-            .setLocality(new Locality("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
+            .setLocality(Locality.create("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
             .setMetadata(
                 ImmutableMap.of(
                     "TRAFFICDIRECTOR_INTERCEPTION_PORT",
@@ -176,7 +175,7 @@ public class BootstrapperImplTest {
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
-            .setLocality(new Locality("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
+            .setLocality(Locality.create("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
             .setMetadata(
                 ImmutableMap.of(
                     "TRAFFICDIRECTOR_INTERCEPTION_PORT",
@@ -224,7 +223,7 @@ public class BootstrapperImplTest {
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
-            .setLocality(new Locality("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
+            .setLocality(Locality.create("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
             .setMetadata(
                 ImmutableMap.of(
                     "TRAFFICDIRECTOR_INTERCEPTION_PORT",

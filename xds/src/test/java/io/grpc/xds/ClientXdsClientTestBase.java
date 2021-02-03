@@ -43,10 +43,9 @@ import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
-import io.grpc.xds.EnvoyProtoData.DropOverload;
-import io.grpc.xds.EnvoyProtoData.LbEndpoint;
-import io.grpc.xds.EnvoyProtoData.Locality;
-import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.Endpoints.DropOverload;
+import io.grpc.xds.Endpoints.LbEndpoint;
+import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
@@ -941,17 +940,17 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
     assertThat(edsUpdate.dropPolicies)
         .containsExactly(
-            new DropOverload("lb", 200),
-            new DropOverload("throttle", 1000));
+            DropOverload.create("lb", 200),
+            DropOverload.create("throttle", 1000));
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
+            Locality.create("region1", "zone1", "subzone1"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080,
+                    LbEndpoint.create("192.168.0.1", 8080,
                         2, true)), 1, 0),
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+            Locality.create("region3", "zone3", "subzone3"),
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
   }
 
   @Test
@@ -990,17 +989,17 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
     assertThat(edsUpdate.dropPolicies)
         .containsExactly(
-            new DropOverload("lb", 200),
-            new DropOverload("throttle", 1000));
+            DropOverload.create("lb", 200),
+            DropOverload.create("throttle", 1000));
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
+            Locality.create("region1", "zone1", "subzone1"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080,
+                    LbEndpoint.create("192.168.0.1", 8080,
                         2, true)), 1, 0),
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+            Locality.create("region3", "zone3", "subzone3"),
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
     call.verifyNoMoreRequest();
   }
 
@@ -1049,16 +1048,16 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
     assertThat(edsUpdate.dropPolicies)
         .containsExactly(
-            new DropOverload("lb", 200),
-            new DropOverload("throttle", 1000));
+            DropOverload.create("lb", 200),
+            DropOverload.create("throttle", 1000));
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
+            Locality.create("region1", "zone1", "subzone1"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080, 2, true)), 1, 0),
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+                    LbEndpoint.create("192.168.0.1", 8080, 2, true)), 1, 0),
+            Locality.create("region3", "zone3", "subzone3"),
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
 
     clusterLoadAssignments =
         ImmutableList.of(
@@ -1078,10 +1077,10 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.dropPolicies).isEmpty();
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region2", "zone2", "subzone2"),
-            new LocalityLbEndpoints(
+            Locality.create("region2", "zone2", "subzone2"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
   }
 
   @Test
@@ -1186,16 +1185,16 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
     assertThat(edsUpdate.dropPolicies)
         .containsExactly(
-            new DropOverload("lb", 200),
-            new DropOverload("throttle", 1000));
+            DropOverload.create("lb", 200),
+            DropOverload.create("throttle", 1000));
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
+            Locality.create("region1", "zone1", "subzone1"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080, 2, true)), 1, 0),
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+                    LbEndpoint.create("192.168.0.1", 8080, 2, true)), 1, 0),
+            Locality.create("region3", "zone3", "subzone3"),
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
     verifyNoMoreInteractions(watcher1, watcher2);
 
     clusterLoadAssignments =
@@ -1216,20 +1215,20 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.dropPolicies).isEmpty();
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region2", "zone2", "subzone2"),
-            new LocalityLbEndpoints(
+            Locality.create("region2", "zone2", "subzone2"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
     verify(watcher2).onChanged(edsUpdateCaptor.capture());
     edsUpdate = edsUpdateCaptor.getValue();
     assertThat(edsUpdate.clusterName).isEqualTo(edsResource);
     assertThat(edsUpdate.dropPolicies).isEmpty();
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region2", "zone2", "subzone2"),
-            new LocalityLbEndpoints(
+            Locality.create("region2", "zone2", "subzone2"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
     verifyNoMoreInteractions(edsResourceWatcher);
   }
 

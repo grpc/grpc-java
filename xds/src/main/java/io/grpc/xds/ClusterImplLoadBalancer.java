@@ -34,8 +34,7 @@ import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
-import io.grpc.xds.EnvoyProtoData.DropOverload;
-import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
@@ -213,7 +212,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       // attributes with its locality, including endpoints in LOGICAL_DNS clusters.
       // In case of not (which really shouldn't), loads are aggregated under an empty locality.
       if (locality == null) {
-        locality = new Locality("", "", "");
+        locality = Locality.create("", "", "");
       }
       final ClusterLocalityStats localityStats = xdsClient.addClusterLocalityStats(
           cluster, edsServiceName, locality);
@@ -292,14 +291,14 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       public PickResult pickSubchannel(PickSubchannelArgs args) {
         for (DropOverload dropOverload : dropPolicies) {
           int rand = random.nextInt(1_000_000);
-          if (rand < dropOverload.getDropsPerMillion()) {
+          if (rand < dropOverload.dropsPerMillion()) {
             logger.log(XdsLogLevel.INFO, "Drop request with category: {0}",
-                dropOverload.getCategory());
+                dropOverload.category());
             if (dropStats != null) {
-              dropStats.recordDroppedRequest(dropOverload.getCategory());
+              dropStats.recordDroppedRequest(dropOverload.category());
             }
             return PickResult.withDrop(
-                Status.UNAVAILABLE.withDescription("Dropped: " + dropOverload.getCategory()));
+                Status.UNAVAILABLE.withDescription("Dropped: " + dropOverload.category()));
           }
         }
         final PickResult result = delegate.pickSubchannel(args);

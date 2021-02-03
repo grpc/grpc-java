@@ -23,10 +23,9 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.Sets;
 import io.grpc.Status;
-import io.grpc.xds.EnvoyProtoData.ClusterStats;
-import io.grpc.xds.EnvoyProtoData.ClusterStats.DroppedRequests;
-import io.grpc.xds.EnvoyProtoData.Locality;
-import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
+import io.grpc.xds.Stats.ClusterStats;
+import io.grpc.xds.Stats.DroppedRequests;
+import io.grpc.xds.Stats.UpstreamLocalityStats;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -153,9 +152,9 @@ final class LoadStatsManager2 {
     if (clusterDropStats != null) {
       Set<String> toDiscard = new HashSet<>();
       for (String edsServiceName : clusterDropStats.keySet()) {
-        ClusterStats.Builder builder = ClusterStats.newBuilder().setClusterName(cluster);
+        ClusterStats.Builder builder = ClusterStats.newBuilder().clusterName(cluster);
         if (edsServiceName != null) {
-          builder.setClusterServiceName(edsServiceName);
+          builder.clusterServiceName(edsServiceName);
         }
         ReferenceCounted<ClusterDropStats> ref = clusterDropStats.get(edsServiceName);
         if (ref.getReferenceCount() == 0) {  // stats object no longer needed after snapshot
@@ -164,12 +163,12 @@ final class LoadStatsManager2 {
         ClusterDropStatsSnapshot dropStatsSnapshot = ref.get().snapshot();
         long totalCategorizedDrops = 0L;
         for (Map.Entry<String, Long> entry : dropStatsSnapshot.categorizedDrops.entrySet()) {
-          builder.addDroppedRequests(new DroppedRequests(entry.getKey(), entry.getValue()));
+          builder.addDroppedRequests(DroppedRequests.create(entry.getKey(), entry.getValue()));
           totalCategorizedDrops += entry.getValue();
         }
-        builder.setTotalDroppedRequests(
+        builder.totalDroppedRequests(
             totalCategorizedDrops + dropStatsSnapshot.uncategorizedDrops);
-        builder.setLoadReportIntervalNanos(dropStatsSnapshot.durationNano);
+        builder.loadReportIntervalNano(dropStatsSnapshot.durationNano);
         statsReportBuilders.put(edsServiceName, builder);
       }
       clusterDropStats.keySet().removeAll(toDiscard);
@@ -180,9 +179,9 @@ final class LoadStatsManager2 {
       for (String edsServiceName : clusterLoadStats.keySet()) {
         ClusterStats.Builder builder = statsReportBuilders.get(edsServiceName);
         if (builder == null) {
-          builder = ClusterStats.newBuilder().setClusterName(cluster);
+          builder = ClusterStats.newBuilder().clusterName(cluster);
           if (edsServiceName != null) {
-            builder.setClusterServiceName(edsServiceName);
+            builder.clusterServiceName(edsServiceName);
           }
           statsReportBuilders.put(edsServiceName, builder);
         }
@@ -196,17 +195,14 @@ final class LoadStatsManager2 {
           if (ref.getReferenceCount() == 0 && snapshot.callsInProgress == 0) {
             localitiesToDiscard.add(locality);
           }
-          UpstreamLocalityStats.Builder localityStatsBuilder = UpstreamLocalityStats.newBuilder();
-          localityStatsBuilder.setLocality(locality);
-          localityStatsBuilder.setTotalIssuedRequests(snapshot.callsIssued);
-          localityStatsBuilder.setTotalSuccessfulRequests(snapshot.callsSucceeded);
-          localityStatsBuilder.setTotalErrorRequests(snapshot.callsFailed);
-          localityStatsBuilder.setTotalRequestsInProgress(snapshot.callsInProgress);
-          builder.addUpstreamLocalityStats(localityStatsBuilder.build());
+          UpstreamLocalityStats upstreamLocalityStats = UpstreamLocalityStats.create(
+              locality, snapshot.callsIssued, snapshot.callsSucceeded, snapshot.callsFailed,
+              snapshot.callsInProgress);
+          builder.addUpstreamLocalityStats(upstreamLocalityStats);
           // Use the max (drops/loads) recording interval as the overall interval for the
           // cluster's stats. In general, they should be mostly identical.
-          builder.setLoadReportIntervalNanos(
-              Math.max(builder.getLoadReportIntervalNanos(), snapshot.durationNano));
+          builder.loadReportIntervalNano(
+              Math.max(builder.loadReportIntervalNano(), snapshot.durationNano));
         }
         localityStats.keySet().removeAll(localitiesToDiscard);
         if (localityStats.isEmpty()) {

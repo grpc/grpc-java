@@ -43,10 +43,9 @@ import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
-import io.grpc.xds.EnvoyProtoData.DropOverload;
-import io.grpc.xds.EnvoyProtoData.LbEndpoint;
-import io.grpc.xds.EnvoyProtoData.Locality;
-import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.Endpoints.DropOverload;
+import io.grpc.xds.Endpoints.LbEndpoint;
+import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
@@ -78,7 +77,7 @@ import javax.annotation.Nullable;
  */
 final class ClusterResolverLoadBalancer extends LoadBalancer {
 
-  private static final Locality LOGICAL_DNS_CLUSTER_LOCALITY = new Locality("", "", "");
+  private static final Locality LOGICAL_DNS_CLUSTER_LOCALITY = Locality.create("", "", "");
   private final XdsLogger logger;
   private final String authority;
   private final SynchronizationContext syncContext;
@@ -385,16 +384,16 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             Map<String, Map<Locality, Integer>> prioritizedLocalityWeights = new HashMap<>();
             for (Locality locality : localityLbEndpoints.keySet()) {
               LocalityLbEndpoints localityLbInfo = localityLbEndpoints.get(locality);
-              int priority = localityLbInfo.getPriority();
+              int priority = localityLbInfo.priority();
               String priorityName = priorityName(name, priority);
               boolean discard = true;
-              for (LbEndpoint endpoint : localityLbInfo.getEndpoints()) {
+              for (LbEndpoint endpoint : localityLbInfo.endpoints()) {
                 if (endpoint.isHealthy()) {
                   discard = false;
-                  Attributes attr = endpoint.getAddress().getAttributes().toBuilder()
+                  Attributes attr = endpoint.eag().getAttributes().toBuilder()
                       .set(InternalXdsAttributes.ATTR_LOCALITY, locality).build();
                   EquivalentAddressGroup eag =
-                      new EquivalentAddressGroup(endpoint.getAddress().getAddresses(), attr);
+                      new EquivalentAddressGroup(endpoint.eag().getAddresses(), attr);
                   eag = AddressFilter.setPathFilter(
                       eag, Arrays.asList(priorityName, localityName(locality)));
                   addresses.add(eag);
@@ -409,7 +408,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                 prioritizedLocalityWeights.put(priorityName, new HashMap<Locality, Integer>());
               }
               prioritizedLocalityWeights.get(priorityName).put(
-                  locality, localityLbInfo.getLocalityWeight());
+                  locality, localityLbInfo.localityWeight());
             }
             if (prioritizedLocalityWeights.isEmpty()) {
               // Will still update the result, as if the cluster resource is revoked.

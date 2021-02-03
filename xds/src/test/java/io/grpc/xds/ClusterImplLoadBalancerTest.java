@@ -45,14 +45,13 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
-import io.grpc.xds.EnvoyProtoData.ClusterStats;
-import io.grpc.xds.EnvoyProtoData.DropOverload;
-import io.grpc.xds.EnvoyProtoData.Locality;
-import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
+import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
+import io.grpc.xds.Stats.ClusterStats;
+import io.grpc.xds.Stats.UpstreamLocalityStats;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
@@ -97,7 +96,7 @@ public class ClusterImplLoadBalancerTest {
       });
   private final FakeClock fakeClock = new FakeClock();
   private final Locality locality =
-      new Locality("test-region", "test-zone", "test-subzone");
+      Locality.create("test-region", "test-zone", "test-subzone");
   private final PolicySelection roundRobin =
       new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null);
   private final List<FakeLoadBalancer> downstreamBalancers = new ArrayList<>();
@@ -219,27 +218,27 @@ public class ClusterImplLoadBalancerTest {
     ClusterStats clusterStats =
         Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
     UpstreamLocalityStats localityStats =
-        Iterables.getOnlyElement(clusterStats.getUpstreamLocalityStatsList());
-    assertThat(localityStats.getLocality()).isEqualTo(locality);
-    assertThat(localityStats.getTotalIssuedRequests()).isEqualTo(3L);
-    assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(1L);
-    assertThat(localityStats.getTotalErrorRequests()).isEqualTo(1L);
-    assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(1L);
+        Iterables.getOnlyElement(clusterStats.upstreamLocalityStatsList());
+    assertThat(localityStats.locality()).isEqualTo(locality);
+    assertThat(localityStats.totalIssuedRequests()).isEqualTo(3L);
+    assertThat(localityStats.totalSuccessfulRequests()).isEqualTo(1L);
+    assertThat(localityStats.totalErrorRequests()).isEqualTo(1L);
+    assertThat(localityStats.totalRequestsInProgress()).isEqualTo(1L);
 
     streamTracer3.streamClosed(Status.OK);
     subchannel.shutdown();  // stats recorder released
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
     // Locality load is reported for one last time in case of loads occurred since the previous
     // load report.
-    localityStats = Iterables.getOnlyElement(clusterStats.getUpstreamLocalityStatsList());
-    assertThat(localityStats.getLocality()).isEqualTo(locality);
-    assertThat(localityStats.getTotalIssuedRequests()).isEqualTo(0L);
-    assertThat(localityStats.getTotalSuccessfulRequests()).isEqualTo(1L);
-    assertThat(localityStats.getTotalErrorRequests()).isEqualTo(0L);
-    assertThat(localityStats.getTotalRequestsInProgress()).isEqualTo(0L);
+    localityStats = Iterables.getOnlyElement(clusterStats.upstreamLocalityStatsList());
+    assertThat(localityStats.locality()).isEqualTo(locality);
+    assertThat(localityStats.totalIssuedRequests()).isEqualTo(0L);
+    assertThat(localityStats.totalSuccessfulRequests()).isEqualTo(1L);
+    assertThat(localityStats.totalErrorRequests()).isEqualTo(0L);
+    assertThat(localityStats.totalRequestsInProgress()).isEqualTo(0L);
 
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    assertThat(clusterStats.getUpstreamLocalityStatsList()).isEmpty();  // no longer reported
+    assertThat(clusterStats.upstreamLocalityStatsList()).isEmpty();  // no longer reported
   }
 
   @Test
@@ -248,7 +247,7 @@ public class ClusterImplLoadBalancerTest {
     WeightedTargetConfig weightedTargetConfig =
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
     ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
-        null, Collections.singletonList(new DropOverload("throttle", 500_000)),
+        null, Collections.singletonList(DropOverload.create("throttle", 500_000)),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
@@ -268,16 +267,16 @@ public class ClusterImplLoadBalancerTest {
     assertThat(result.getStatus().getDescription()).isEqualTo("Dropped: throttle");
     ClusterStats clusterStats =
         Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
-    assertThat(Iterables.getOnlyElement(clusterStats.getDroppedRequestsList()).getCategory())
+    assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
+    assertThat(Iterables.getOnlyElement(clusterStats.droppedRequestsList()).category())
         .isEqualTo("throttle");
-    assertThat(Iterables.getOnlyElement(clusterStats.getDroppedRequestsList()).getDroppedCount())
+    assertThat(Iterables.getOnlyElement(clusterStats.droppedRequestsList()).droppedCount())
         .isEqualTo(1L);
-    assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(1L);
+    assertThat(clusterStats.totalDroppedRequests()).isEqualTo(1L);
 
     //  Config update updates drop policies.
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, null,
-        Collections.singletonList(new DropOverload("lb", 1_000_000)),
+        Collections.singletonList(DropOverload.create("lb", 1_000_000)),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig), null);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -294,12 +293,12 @@ public class ClusterImplLoadBalancerTest {
     assertThat(result.getStatus().getDescription()).isEqualTo("Dropped: lb");
     clusterStats =
         Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
-    assertThat(Iterables.getOnlyElement(clusterStats.getDroppedRequestsList()).getCategory())
+    assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
+    assertThat(Iterables.getOnlyElement(clusterStats.droppedRequestsList()).category())
         .isEqualTo("lb");
-    assertThat(Iterables.getOnlyElement(clusterStats.getDroppedRequestsList()).getDroppedCount())
+    assertThat(Iterables.getOnlyElement(clusterStats.droppedRequestsList()).droppedCount())
         .isEqualTo(1L);
-    assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(1L);
+    assertThat(clusterStats.totalDroppedRequests()).isEqualTo(1L);
 
     result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getStatus().isOk()).isTrue();
@@ -346,21 +345,21 @@ public class ClusterImplLoadBalancerTest {
     }
     ClusterStats clusterStats =
         Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
-    assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
+    assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
+    assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
 
     PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
+    assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     if (enableCircuitBreaking) {
       assertThat(result.getStatus().isOk()).isFalse();
       assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
       assertThat(result.getStatus().getDescription())
           .isEqualTo("Cluster max concurrent requests limit exceeded");
-      assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(1L);
+      assertThat(clusterStats.totalDroppedRequests()).isEqualTo(1L);
     } else {
       assertThat(result.getStatus().isOk()).isTrue();
-      assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
+      assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
     }
 
     // Config update increments circuit breakers max_concurrent_requests threshold.
@@ -375,21 +374,21 @@ public class ClusterImplLoadBalancerTest {
     result.getStreamTracerFactory().newClientStreamTracer(
         ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // 101th request
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
-    assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
+    assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
+    assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
 
     result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));  // 102th request
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
+    assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     if (enableCircuitBreaking) {
       assertThat(result.getStatus().isOk()).isFalse();
       assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
       assertThat(result.getStatus().getDescription())
           .isEqualTo("Cluster max concurrent requests limit exceeded");
-      assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(1L);
+      assertThat(clusterStats.totalDroppedRequests()).isEqualTo(1L);
     } else {
       assertThat(result.getStatus().isOk()).isTrue();
-      assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
+      assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
     }
   }
 
@@ -434,21 +433,21 @@ public class ClusterImplLoadBalancerTest {
     }
     ClusterStats clusterStats =
         Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
-    assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
+    assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
+    assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
 
     PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    assertThat(clusterStats.getClusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
+    assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     if (enableCircuitBreaking) {
       assertThat(result.getStatus().isOk()).isFalse();
       assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
       assertThat(result.getStatus().getDescription())
           .isEqualTo("Cluster max concurrent requests limit exceeded");
-      assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(1L);
+      assertThat(clusterStats.totalDroppedRequests()).isEqualTo(1L);
     } else {
       assertThat(result.getStatus().isOk()).isTrue();
-      assertThat(clusterStats.getTotalDroppedRequests()).isEqualTo(0L);
+      assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
     }
   }
 

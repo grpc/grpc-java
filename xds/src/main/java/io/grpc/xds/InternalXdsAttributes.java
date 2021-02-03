@@ -22,7 +22,6 @@ import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 
