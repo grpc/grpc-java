@@ -32,10 +32,13 @@ import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.util.ForwardingSubchannel;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.LoadStatsManager.LoadStatsStore;
+import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
+import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
@@ -67,6 +70,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   static boolean enableSecurity =
       Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"));
+  private static final Attributes.Key<ClusterLocalityStats> ATTR_CLUSTER_LOCALITY_STATS =
+      Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocalityStats");
 
   private final XdsLogger logger;
   private final Helper helper;
@@ -79,7 +84,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private CallCounterProvider callCounterProvider;
-  private LoadStatsStore loadStatsStore;
+  private ClusterDropStats dropStats;
   private ClusterImplLbHelper childLbHelper;
   private LoadBalancer childLb;
 
@@ -119,7 +124,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       // Assume load report server does not change throughout cluster lifetime.
       if (config.lrsServerName != null) {
         if (config.lrsServerName.isEmpty()) {
-          loadStatsStore = xdsClient.addClientStats(cluster, edsServiceName);
+          dropStats = xdsClient.addClusterDropStats(cluster, edsServiceName);
         } else {
           logger.log(XdsLogLevel.WARNING, "Can only report load to the same management server");
         }
@@ -128,10 +133,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     childLbHelper.updateDropPolicies(config.dropCategories);
     childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
     childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
-    if (loadStatsStore != null) {
-      attributes = attributes.toBuilder()
-          .set(InternalXdsAttributes.ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE, loadStatsStore).build();
-    }
     childLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setAttributes(attributes)
@@ -150,8 +151,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
   @Override
   public void shutdown() {
-    if (loadStatsStore != null) {
-      xdsClient.removeClientStats(cluster, edsServiceName);
+    if (dropStats != null) {
+      dropStats.release();
     }
     if (childLb != null) {
       childLb.shutdown();
@@ -172,7 +173,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
    * or requests to endpoints in the cluster.
    */
   private final class ClusterImplLbHelper extends ForwardingLoadBalancerHelper {
-    private final AtomicLong requestCount;
+    private final AtomicLong inFlights;
     private ConnectivityState currentState = ConnectivityState.IDLE;
     private SubchannelPicker currentPicker = BUFFER_PICKER;
     private List<DropOverload> dropPolicies = Collections.emptyList();
@@ -180,8 +181,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     @Nullable
     private SslContextProviderSupplier sslContextProviderSupplier;
 
-    private ClusterImplLbHelper(AtomicLong requestCount) {
-      this.requestCount = requestCount;
+    private ClusterImplLbHelper(AtomicLong inFlights) {
+      this.inFlights = checkNotNull(inFlights, "inFlights");
     }
 
     @Override
@@ -206,8 +207,33 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         }
         addresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
       }
-      args = args.toBuilder().setAddresses(addresses).build();
-      return delegate().createSubchannel(args);
+      Locality locality = args.getAddresses().get(0).getAttributes().get(
+          InternalXdsAttributes.ATTR_LOCALITY);  // all addresses should be in the same locality
+      // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
+      // attributes with its locality, including endpoints in LOGICAL_DNS clusters.
+      // In case of not (which really shouldn't), loads are aggregated under an empty locality.
+      if (locality == null) {
+        locality = new Locality("", "", "");
+      }
+      final ClusterLocalityStats localityStats = xdsClient.addClusterLocalityStats(
+          cluster, edsServiceName, locality);
+      Attributes attrs = args.getAttributes().toBuilder().set(
+          ATTR_CLUSTER_LOCALITY_STATS, localityStats).build();
+      args = args.toBuilder().setAddresses(addresses).setAttributes(attrs).build();
+      final Subchannel subchannel = delegate().createSubchannel(args);
+
+      return new ForwardingSubchannel() {
+        @Override
+        public void shutdown() {
+          localityStats.release();
+          delegate().shutdown();
+        }
+
+        @Override
+        protected Subchannel delegate() {
+          return subchannel;
+        }
+      };
     }
 
     @Override
@@ -269,57 +295,59 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           if (rand < dropOverload.getDropsPerMillion()) {
             logger.log(XdsLogLevel.INFO, "Drop request with category: {0}",
                 dropOverload.getCategory());
-            if (loadStatsStore != null) {
-              loadStatsStore.recordDroppedRequest(dropOverload.getCategory());
+            if (dropStats != null) {
+              dropStats.recordDroppedRequest(dropOverload.getCategory());
             }
             return PickResult.withDrop(
                 Status.UNAVAILABLE.withDescription("Dropped: " + dropOverload.getCategory()));
           }
         }
-        PickResult result = delegate.pickSubchannel(args);
-        if (enableCircuitBreaking) {
-          if (result.getStatus().isOk() && result.getSubchannel() != null) {
-            if (requestCount.get() >= maxConcurrentRequests) {
-              if (loadStatsStore != null) {
-                loadStatsStore.recordDroppedRequest();
+        final PickResult result = delegate.pickSubchannel(args);
+        if (result.getStatus().isOk() && result.getSubchannel() != null) {
+          if (enableCircuitBreaking) {
+            if (inFlights.get() >= maxConcurrentRequests) {
+              if (dropStats != null) {
+                dropStats.recordDroppedRequest();
               }
               return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
                   "Cluster max concurrent requests limit exceeded"));
-            } else {
-              ClientStreamTracer.Factory tracerFactory = new RequestCountingStreamTracerFactory(
-                  result.getStreamTracerFactory(), requestCount);
-              return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
             }
           }
+          final ClusterLocalityStats stats =
+              result.getSubchannel().getAttributes().get(ATTR_CLUSTER_LOCALITY_STATS);
+          ClientStreamTracer.Factory tracerFactory = new CountingStreamTracerFactory(
+              stats, inFlights, result.getStreamTracerFactory());
+          return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
         }
         return result;
       }
     }
   }
 
-  /**
-   * Counts the number of outstanding requests.
-   */
-  private static final class RequestCountingStreamTracerFactory
-      extends ClientStreamTracer.Factory {
+  private static final class CountingStreamTracerFactory extends ClientStreamTracer.Factory {
+    private ClusterLocalityStats stats;
+    private final AtomicLong inFlights;
     @Nullable
     private final ClientStreamTracer.Factory delegate;
-    private final AtomicLong counter;
 
-    private RequestCountingStreamTracerFactory(@Nullable ClientStreamTracer.Factory delegate,
-        AtomicLong counter) {
+    private CountingStreamTracerFactory(
+        ClusterLocalityStats stats, AtomicLong inFlights,
+        @Nullable ClientStreamTracer.Factory delegate) {
+      this.stats = checkNotNull(stats, "stats");
+      this.inFlights = checkNotNull(inFlights, "inFlights");
       this.delegate = delegate;
-      this.counter = counter;
     }
 
     @Override
     public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-      counter.incrementAndGet();
+      stats.recordCallStarted();
+      inFlights.incrementAndGet();
       if (delegate == null) {
         return new ClientStreamTracer() {
           @Override
           public void streamClosed(Status status) {
-            counter.decrementAndGet();
+            stats.recordCallFinished(status);
+            inFlights.decrementAndGet();
           }
         };
       }
@@ -332,7 +360,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
         @Override
         public void streamClosed(Status status) {
-          counter.decrementAndGet();
+          stats.recordCallFinished(status);
+          inFlights.decrementAndGet();
           delegate().streamClosed(status);
         }
       };

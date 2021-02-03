@@ -904,6 +904,10 @@ final class EnvoyProtoData {
         return this;
       }
 
+      long getLoadReportIntervalNanos() {
+        return loadReportIntervalNanos;
+      }
+
       Builder addUpstreamLocalityStats(UpstreamLocalityStats upstreamLocalityStats) {
         upstreamLocalityStatsList.add(checkNotNull(upstreamLocalityStats, "upstreamLocalityStats"));
         return this;

@@ -22,7 +22,7 @@ import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.LoadStatsManager.LoadStatsStore;
+import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 
@@ -62,10 +62,12 @@ public final class InternalXdsAttributes {
   public static final Attributes.Key<String> ATTR_CLUSTER_NAME =
       Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.clusterName");
 
-  // TODO (chengyuanzhang): temporary solution for migrating to LRS policy. Should access
-  //   stats object via XdsClient interface.
-  static final Attributes.Key<LoadStatsStore> ATTR_CLUSTER_SERVICE_LOAD_STATS_STORE =
-      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.loadStatsStore");
+  /**
+   * The locality that this EquivalentAddressGroup is in.
+   */
+  @EquivalentAddressGroup.Attr
+  static final Attributes.Key<Locality> ATTR_LOCALITY =
+      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.locality");
 
   private InternalXdsAttributes() {}
 }

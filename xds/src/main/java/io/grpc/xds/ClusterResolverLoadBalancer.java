@@ -19,11 +19,11 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsLbPolicies.LRS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -48,7 +48,6 @@ import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.LrsLoadBalancerProvider.LrsConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
@@ -392,10 +391,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               for (LbEndpoint endpoint : localityLbInfo.getEndpoints()) {
                 if (endpoint.isHealthy()) {
                   discard = false;
+                  Attributes attr = endpoint.getAddress().getAttributes().toBuilder()
+                      .set(InternalXdsAttributes.ATTR_LOCALITY, locality).build();
                   EquivalentAddressGroup eag =
-                      AddressFilter.setPathFilter(
-                          endpoint.getAddress(),
-                          Arrays.asList(priorityName, localityName(locality)));
+                      new EquivalentAddressGroup(endpoint.getAddress().getAddresses(), attr);
+                  eag = AddressFilter.setPathFilter(
+                      eag, Arrays.asList(priorityName, localityName(locality)));
                   addresses.add(eag);
                 }
               }
@@ -533,19 +534,18 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               String priorityName = priorityName(name, 0);  // value doesn't matter
               List<EquivalentAddressGroup> addresses = new ArrayList<>();
               for (EquivalentAddressGroup eag : resolutionResult.getAddresses()) {
-                EquivalentAddressGroup annotatedAddr =
-                    AddressFilter.setPathFilter(
-                        eag, Arrays.asList(
-                            priorityName, LOGICAL_DNS_CLUSTER_LOCALITY.toString()));
-                addresses.add(annotatedAddr);
+                Attributes attr = eag.getAttributes().toBuilder().set(
+                    InternalXdsAttributes.ATTR_LOCALITY, LOGICAL_DNS_CLUSTER_LOCALITY).build();
+                eag = new EquivalentAddressGroup(eag.getAddresses(), attr);
+                eag = AddressFilter.setPathFilter(
+                    eag, Arrays.asList(priorityName, LOGICAL_DNS_CLUSTER_LOCALITY.toString()));
+                addresses.add(eag);
               }
-              LoadBalancerProvider endpointPickingLbProvider =
-                  lbRegistry.getProvider("pick_first");
               PolicySelection endpointPickingPolicy =
-                  new PolicySelection(endpointPickingLbProvider, null);
+                  new PolicySelection(lbRegistry.getProvider("pick_first"), null);
               PriorityChildConfig priorityChildConfig = generatePriorityChildConfig(
                   name, edsServiceName, lrsServerName, maxConcurrentRequests, tlsContext,
-                  endpointPickingPolicy, false, lbRegistry, LOGICAL_DNS_CLUSTER_LOCALITY,
+                  endpointPickingPolicy, false, lbRegistry,
                   Collections.<DropOverload>emptyList());
               status = Status.OK;
               resolved = true;
@@ -615,19 +615,16 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   /**
    * Generates the config to be used in the priority LB policy for a single priority.
    *
-   * <p>priority LB -> cluster_impl LB -> (lrs LB) -> pick_first
+   * <p>priority LB -> cluster_impl LB -> pick_first
    */
   private static PriorityChildConfig generatePriorityChildConfig(
       String cluster, @Nullable String edsServiceName, @Nullable String lrsServerName,
       @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
       PolicySelection endpointPickingPolicy, boolean ignoreReresolution,
-      LoadBalancerRegistry lbRegistry, Locality locality, List<DropOverload> dropOverloads) {
-    PolicySelection localityLbPolicy =
-        generateLocalityLbConfig(locality, cluster, edsServiceName, lrsServerName,
-            endpointPickingPolicy, lbRegistry);
+      LoadBalancerRegistry lbRegistry, List<DropOverload> dropOverloads) {
     ClusterImplConfig clusterImplConfig =
         new ClusterImplConfig(cluster, edsServiceName, lrsServerName, maxConcurrentRequests,
-            dropOverloads, localityLbPolicy, tlsContext);
+            dropOverloads, endpointPickingPolicy, tlsContext);
     LoadBalancerProvider clusterImplLbProvider =
         lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
     PolicySelection clusterImplPolicy =
@@ -639,7 +636,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    * Generates configs to be used in the priority LB policy for priorities in the cluster.
    *
    * <p>priority LB -> cluster_impl LB (one per priority) -> weighted_target LB
-   * -> (lrs LB (one per locality)) -> round_robin
+   * -> round_robin (one per locality))
    */
   private static Map<String, PriorityChildConfig> generatePriorityChildConfigs(
       String cluster, @Nullable String edsServiceName, @Nullable String lrsServerName,
@@ -650,11 +647,16 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       List<DropOverload> dropOverloads) {
     Map<String, PriorityChildConfig> configs = new HashMap<>();
     for (String priority : prioritizedLocalityWeights.keySet()) {
-      WeightedTargetConfig localityPickingLbConfig =
-          generateLocalityPickingLbConfig(cluster, edsServiceName, lrsServerName,
-              endpointPickingPolicy, lbRegistry, prioritizedLocalityWeights.get(priority));
-      PolicySelection localityPicking =
-          new PolicySelection(localityPickingPolicy.getProvider(), localityPickingLbConfig);
+      Map<Locality, Integer> localityWeights = prioritizedLocalityWeights.get(priority);
+      Map<String, WeightedPolicySelection> targets = new HashMap<>();
+      for (Locality locality : localityWeights.keySet()) {
+        int weight = localityWeights.get(locality);
+        targets.put(localityName(locality),
+            new WeightedPolicySelection(weight, endpointPickingPolicy));
+      }
+      PolicySelection localityPicking = new PolicySelection(
+          localityPickingPolicy.getProvider(),
+          new WeightedTargetConfig(Collections.unmodifiableMap(targets)));
       ClusterImplConfig clusterImplConfig =
           new ClusterImplConfig(cluster, edsServiceName, lrsServerName, maxConcurrentRequests,
               dropOverloads, localityPicking, tlsContext);
@@ -665,40 +667,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       configs.put(priority, new PriorityChildConfig(clusterImplPolicy, ignoreReresolution));
     }
     return configs;
-  }
-
-  private static WeightedTargetConfig generateLocalityPickingLbConfig(
-      String cluster, @Nullable String edsServiceName, @Nullable String lrsServerName,
-      PolicySelection endpointPickingPolicy, LoadBalancerRegistry lbRegistry,
-      Map<Locality, Integer> localityWeights) {
-    Map<String, WeightedPolicySelection> targets = new HashMap<>();
-    for (Locality locality : localityWeights.keySet()) {
-      int weight = localityWeights.get(locality);
-      PolicySelection childPolicy =
-          generateLocalityLbConfig(locality, cluster, edsServiceName, lrsServerName,
-              endpointPickingPolicy, lbRegistry);
-      targets.put(localityName(locality), new WeightedPolicySelection(weight, childPolicy));
-    }
-    return new WeightedTargetConfig(Collections.unmodifiableMap(targets));
-  }
-
-  /**
-   * Generates intra-locality LB policy (with config) for the given locality.
-   */
-  private static PolicySelection generateLocalityLbConfig(
-      Locality locality, String cluster, @Nullable String edsServiceName,
-      @Nullable String lrsServerName, PolicySelection endpointPickingPolicy,
-      LoadBalancerRegistry lbRegistry) {
-    PolicySelection policy;
-    if (lrsServerName != null) {
-      LrsConfig childConfig =
-          new LrsConfig(cluster, edsServiceName, lrsServerName, locality, endpointPickingPolicy);
-      LoadBalancerProvider childPolicyProvider = lbRegistry.getProvider(LRS_POLICY_NAME);
-      policy = new PolicySelection(childPolicyProvider, childConfig);
-    } else {
-      policy = endpointPickingPolicy;
-    }
-    return policy;
   }
 
   /**
