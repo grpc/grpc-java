@@ -16,6 +16,10 @@ description = "gRPC: XDS plugin"
         // only has AutoValue annotation processor
         "-Xlint:-processing",
     ]
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/build/generated/sources/annotationProcessor/java/.*",
+            "|")
 }
 
 evaluationDependsOn(project(':grpc-core').path)
