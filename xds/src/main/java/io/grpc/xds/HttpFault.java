@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Status;
@@ -56,7 +58,16 @@ abstract class HttpFault {
 
     abstract int ratePerMillion();
 
-    static FaultDelay create(@Nullable Long delayNanos, boolean headerDelay, int ratePerMillion) {
+    static FaultDelay forFixedDelay(long delayNanos, int ratePerMillion) {
+      return FaultDelay.create(delayNanos, false, ratePerMillion);
+    }
+
+    static FaultDelay forHeader(int ratePerMillion) {
+      return FaultDelay.create(null, true, ratePerMillion);
+    }
+
+    private static FaultDelay create(
+        @Nullable Long delayNanos, boolean headerDelay, int ratePerMillion) {
       return new AutoValue_HttpFault_FaultDelay(delayNanos, headerDelay, ratePerMillion);
     }
   }
@@ -70,7 +81,17 @@ abstract class HttpFault {
 
     abstract int ratePerMillion();
 
-    static FaultAbort create(@Nullable Status status, boolean headerAbort, int ratePerMillion) {
+    static FaultAbort forStatus(Status status, int ratePerMillion) {
+      checkNotNull(status, "status");
+      return FaultAbort.create(status, false, ratePerMillion);
+    }
+
+    static FaultAbort forHeader(int ratePerMillion) {
+      return FaultAbort.create(null, true, ratePerMillion);
+    }
+
+    private static FaultAbort create(
+        @Nullable Status status, boolean headerAbort, int ratePerMillion) {
       return new AutoValue_HttpFault_FaultAbort(status, headerAbort, ratePerMillion);
     }
   }
