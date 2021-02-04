@@ -20,7 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
-import jdk.internal.jline.internal.Nullable;
+import javax.annotation.Nullable;
 
 final class Stats {
   private Stats() {}
@@ -54,7 +54,17 @@ final class Stats {
 
       abstract ImmutableList.Builder<UpstreamLocalityStats> upstreamLocalityStatsListBuilder();
 
+      Builder addUpstreamLocalityStats(UpstreamLocalityStats upstreamLocalityStats) {
+        upstreamLocalityStatsListBuilder().add(upstreamLocalityStats);
+        return this;
+      }
+
       abstract ImmutableList.Builder<DroppedRequests> droppedRequestsListBuilder();
+
+      Builder addDroppedRequests(DroppedRequests droppedRequests) {
+        droppedRequestsListBuilder().add(droppedRequests);
+        return this;
+      }
 
       abstract Builder totalDroppedRequests(long totalDroppedRequests);
 
