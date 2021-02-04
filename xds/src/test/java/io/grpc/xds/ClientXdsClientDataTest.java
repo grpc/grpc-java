@@ -18,19 +18,29 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.google.protobuf.BoolValue;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.Locality;
 import io.envoyproxy.envoy.config.core.v3.RuntimeFractionalPercent;
-import io.envoyproxy.envoy.config.route.v3.QueryParameterMatcher;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
+import io.envoyproxy.envoy.config.route.v3.DirectResponseAction;
+import io.envoyproxy.envoy.config.route.v3.FilterAction;
 import io.envoyproxy.envoy.config.route.v3.RedirectAction;
 import io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration;
 import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
+import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.HeaderAbort;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
+import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.envoyproxy.envoy.type.v3.Int64Range;
+import io.grpc.Status.Code;
 import io.grpc.xds.ClientXdsClient.StructOrError;
+import io.grpc.xds.Endpoints.LbEndpoint;
+import io.grpc.xds.Endpoints.LocalityLbEndpoints;
+import io.grpc.xds.HttpFault.FaultAbort;
 import io.grpc.xds.Matchers.FractionMatcher;
 import io.grpc.xds.Matchers.HeaderMatcher;
 import io.grpc.xds.Matchers.PathMatcher;
@@ -49,8 +59,8 @@ import org.junit.runners.JUnit4;
 public class ClientXdsClientDataTest {
 
   @Test
-  public void parseRoute() {
-    io.envoyproxy.envoy.config.route.v3.Route proto1 =
+  public void parseRoute_withRouteAction() {
+    io.envoyproxy.envoy.config.route.v3.Route proto =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
             .setName("route-blade")
             .setMatch(
@@ -60,24 +70,48 @@ public class ClientXdsClientDataTest {
                 io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
                     .setCluster("cluster-foo"))
             .build();
-    StructOrError<Route> struct1 = ClientXdsClient.parseRoute(proto1);
-    assertThat(struct1.getErrorDetail()).isNull();
-    assertThat(struct1.getStruct())
+    StructOrError<Route> struct = ClientXdsClient.parseRoute(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct())
         .isEqualTo(
             Route.create(
                 RouteMatch.create(PathMatcher.fromPath("/service/method", false),
                     Collections.<HeaderMatcher>emptyList(), null),
                 RouteAction.forCluster("cluster-foo", null), null));
+  }
 
-    io.envoyproxy.envoy.config.route.v3.Route unsupportedProto =
+  @Test
+  public void parseRoute_withUnsupportedActionTypes() {
+    StructOrError<Route> res;
+    io.envoyproxy.envoy.config.route.v3.Route redirectRoute =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
             .setName("route-blade")
             .setMatch(io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPath(""))
             .setRedirect(RedirectAction.getDefaultInstance())
             .build();
-    StructOrError<Route> unsupportedStruct = ClientXdsClient.parseRoute(unsupportedProto);
-    assertThat(unsupportedStruct.getErrorDetail()).isNotNull();
-    assertThat(unsupportedStruct.getStruct()).isNull();
+    res = ClientXdsClient.parseRoute(redirectRoute);
+    assertThat(res.getStruct()).isNull();
+    assertThat(res.getErrorDetail()).isEqualTo("Unsupported action type: redirect");
+
+    io.envoyproxy.envoy.config.route.v3.Route directResponseRoute =
+        io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
+            .setName("route-blade")
+            .setMatch(io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPath(""))
+            .setDirectResponse(DirectResponseAction.getDefaultInstance())
+            .build();
+    res = ClientXdsClient.parseRoute(directResponseRoute);
+    assertThat(res.getStruct()).isNull();
+    assertThat(res.getErrorDetail()).isEqualTo("Unsupported action type: direct_response");
+
+    io.envoyproxy.envoy.config.route.v3.Route filterRoute =
+        io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
+            .setName("route-blade")
+            .setMatch(io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPath(""))
+            .setFilterAction(FilterAction.getDefaultInstance())
+            .build();
+    res = ClientXdsClient.parseRoute(filterRoute);
+    assertThat(res.getStruct()).isNull();
+    assertThat(res.getErrorDetail()).isEqualTo("Unsupported action type: filter_action");
   }
 
   @Test
@@ -90,7 +124,7 @@ public class ClientXdsClientDataTest {
                     .setPath("/service/method")
                     .addQueryParameters(
                         io.envoyproxy.envoy.config.route.v3.QueryParameterMatcher
-                            .getDefaultInstance()))
+                            .getDefaultInstance()))  // query parameter not supported
             .setRoute(
                 io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
                     .setCluster("cluster-foo"))
@@ -108,77 +142,13 @@ public class ClientXdsClientDataTest {
                     .setPath("/service/method"))
             .setRoute(
                 io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
-                    .setClusterHeader("some cluster header"))
+                    .setClusterHeader("cluster header"))  // cluster_header action not supported
             .build();
     assertThat(ClientXdsClient.parseRoute(proto)).isNull();
   }
 
   @Test
-  public void parseRouteMatch_withPathMatching() {
-    // path_specifier = prefix
-    io.envoyproxy.envoy.config.route.v3.RouteMatch proto1 =
-        io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPrefix("/").build();
-    StructOrError<RouteMatch> struct1 = ClientXdsClient.parseRouteMatch(proto1);
-    assertThat(struct1.getErrorDetail()).isNull();
-    assertThat(struct1.getStruct()).isEqualTo(
-        RouteMatch.create(
-            PathMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null));
-
-    proto1 = proto1.toBuilder().setCaseSensitive(BoolValue.newBuilder().setValue(true)).build();
-    struct1 = ClientXdsClient.parseRouteMatch(proto1);
-    assertThat(struct1.getStruct()).isEqualTo(
-        RouteMatch.create(
-            PathMatcher.fromPrefix("/", true), Collections.<HeaderMatcher>emptyList(), null));
-
-    // path_specifier = path
-    io.envoyproxy.envoy.config.route.v3.RouteMatch proto2 =
-        io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
-            .setPath("/service/method")
-            .build();
-    StructOrError<RouteMatch> struct2 = ClientXdsClient.parseRouteMatch(proto2);
-    assertThat(struct2.getErrorDetail()).isNull();
-    assertThat(struct2.getStruct()).isEqualTo(
-        RouteMatch.create(
-            PathMatcher.fromPath("/service/method", false),
-            Collections.<HeaderMatcher>emptyList(), null));
-
-    proto2 = proto2.toBuilder().setCaseSensitive(BoolValue.newBuilder().setValue(true)).build();
-    struct2 = ClientXdsClient.parseRouteMatch(proto2);
-    assertThat(struct2.getStruct()).isEqualTo(
-        RouteMatch.create(
-            PathMatcher.fromPath("/service/method", true),
-            Collections.<HeaderMatcher>emptyList(), null));
-
-    // path_specifier = safe_regex
-    io.envoyproxy.envoy.config.route.v3.RouteMatch proto4 =
-        io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
-            .setSafeRegex(RegexMatcher.newBuilder().setRegex("."))
-            .build();
-    StructOrError<RouteMatch> struct4 = ClientXdsClient.parseRouteMatch(proto4);
-    assertThat(struct4.getErrorDetail()).isNull();
-    assertThat(struct4.getStruct()).isEqualTo(
-        RouteMatch.create(
-            PathMatcher.fromRegEx(Pattern.compile(".")),
-            Collections.<HeaderMatcher>emptyList(), null));
-
-    // query_parameters is set
-    io.envoyproxy.envoy.config.route.v3.RouteMatch proto6 =
-        io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
-            .addQueryParameters(QueryParameterMatcher.getDefaultInstance())
-            .build();
-    StructOrError<RouteMatch> struct6 = ClientXdsClient.parseRouteMatch(proto6);
-    assertThat(struct6).isNull();
-
-    // path_specifier unset
-    io.envoyproxy.envoy.config.route.v3.RouteMatch unsetProto =
-        io.envoyproxy.envoy.config.route.v3.RouteMatch.getDefaultInstance();
-    StructOrError<RouteMatch> unsetStruct = ClientXdsClient.parseRouteMatch(unsetProto);
-    assertThat(unsetStruct.getErrorDetail()).isNotNull();
-    assertThat(unsetStruct.getStruct()).isNull();
-  }
-
-  @Test
-  public void parseRouteMatch_withHeaderMatching() {
+  public void parseRouteMatch_withHeaderMatcher() {
     io.envoyproxy.envoy.config.route.v3.RouteMatch proto =
         io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
             .setPrefix("")
@@ -204,7 +174,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
-  public void parseRouteMatch_withRuntimeFraction() {
+  public void parseRouteMatch_withRuntimeFractionMatcher() {
     io.envoyproxy.envoy.config.route.v3.RouteMatch proto =
         io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
             .setPrefix("")
@@ -225,79 +195,114 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
-  public void parseHeaderMatcher() {
-    // header_match_specifier = exact_match
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto1 =
+  public void parsePathMatcher_withFullPath() {
+    io.envoyproxy.envoy.config.route.v3.RouteMatch proto =
+        io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
+            .setPath("/service/method")
+            .build();
+    StructOrError<PathMatcher> struct = ClientXdsClient.parsePathMatcher(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct()).isEqualTo(
+        PathMatcher.fromPath("/service/method", false));
+  }
+
+  @Test
+  public void parsePathMatcher_withPrefix() {
+    io.envoyproxy.envoy.config.route.v3.RouteMatch proto =
+        io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPrefix("/").build();
+    StructOrError<PathMatcher> struct = ClientXdsClient.parsePathMatcher(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct()).isEqualTo(
+        PathMatcher.fromPrefix("/", false));
+  }
+
+  @Test
+  public void parsePathMatcher_withSafeRegEx() {
+    io.envoyproxy.envoy.config.route.v3.RouteMatch proto =
+        io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
+            .setSafeRegex(RegexMatcher.newBuilder().setRegex("."))
+            .build();
+    StructOrError<PathMatcher> struct = ClientXdsClient.parsePathMatcher(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct()).isEqualTo(PathMatcher.fromRegEx(Pattern.compile(".")));
+  }
+
+  @Test
+  public void parseHeaderMatcher_withExactMatch() {
+    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
             .setName(":method")
             .setExactMatch("PUT")
             .build();
-    StructOrError<HeaderMatcher> struct1 = ClientXdsClient.parseHeaderMatcher(proto1);
+    StructOrError<HeaderMatcher> struct1 = ClientXdsClient.parseHeaderMatcher(proto);
     assertThat(struct1.getErrorDetail()).isNull();
     assertThat(struct1.getStruct()).isEqualTo(
         HeaderMatcher.forExactValue(":method", "PUT", false));
+  }
 
-    // header_match_specifier = safe_regex_match
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto3 =
+  @Test
+  public void parseHeaderMatcher_withSafeRegExMatch() {
+    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
             .setName(":method")
             .setSafeRegexMatch(RegexMatcher.newBuilder().setRegex("P*"))
             .build();
-    StructOrError<HeaderMatcher> struct3 = ClientXdsClient.parseHeaderMatcher(proto3);
+    StructOrError<HeaderMatcher> struct3 = ClientXdsClient.parseHeaderMatcher(proto);
     assertThat(struct3.getErrorDetail()).isNull();
     assertThat(struct3.getStruct()).isEqualTo(
         HeaderMatcher.forSafeRegEx(":method", Pattern.compile("P*"), false));
+  }
 
-    // header_match_specifier = range_match
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto4 =
+  @Test
+  public void parseHeaderMatcher_withRangeMatch() {
+    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
             .setName("timeout")
             .setRangeMatch(Int64Range.newBuilder().setStart(10L).setEnd(20L))
             .build();
-    StructOrError<HeaderMatcher> struct4 = ClientXdsClient.parseHeaderMatcher(proto4);
+    StructOrError<HeaderMatcher> struct4 = ClientXdsClient.parseHeaderMatcher(proto);
     assertThat(struct4.getErrorDetail()).isNull();
     assertThat(struct4.getStruct()).isEqualTo(
         HeaderMatcher.forRange("timeout", HeaderMatcher.Range.create(10L, 20L), false));
+  }
 
-    // header_match_specifier = present_match
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto5 =
+  @Test
+  public void parseHeaderMatcher_withPresentMatch() {
+    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
             .setName("user-agent")
             .setPresentMatch(true)
             .build();
-    StructOrError<HeaderMatcher> struct5 = ClientXdsClient.parseHeaderMatcher(proto5);
+    StructOrError<HeaderMatcher> struct5 = ClientXdsClient.parseHeaderMatcher(proto);
     assertThat(struct5.getErrorDetail()).isNull();
     assertThat(struct5.getStruct()).isEqualTo(
         HeaderMatcher.forPresent("user-agent", true, false));
+  }
 
-    // header_match_specifier = prefix_match
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto6 =
+  @Test
+  public void parseHeaderMatcher_withPrefixMatch() {
+    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
             .setName("authority")
             .setPrefixMatch("service-foo")
             .build();
-    StructOrError<HeaderMatcher> struct6 = ClientXdsClient.parseHeaderMatcher(proto6);
+    StructOrError<HeaderMatcher> struct6 = ClientXdsClient.parseHeaderMatcher(proto);
     assertThat(struct6.getErrorDetail()).isNull();
     assertThat(struct6.getStruct()).isEqualTo(
         HeaderMatcher.forPrefix("authority", "service-foo", false));
+  }
 
-    // header_match_specifier = suffix_match
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto7 =
+  @Test
+  public void parseHeaderMatcher_withSuffixMatch() {
+    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
             .setName("authority")
             .setSuffixMatch("googleapis.com")
             .build();
-    StructOrError<HeaderMatcher> struct7 = ClientXdsClient.parseHeaderMatcher(proto7);
+    StructOrError<HeaderMatcher> struct7 = ClientXdsClient.parseHeaderMatcher(proto);
     assertThat(struct7.getErrorDetail()).isNull();
     assertThat(struct7.getStruct()).isEqualTo(
         HeaderMatcher.forSuffix("authority", "googleapis.com", false));
-
-    // header_match_specifier unset
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher unsetProto =
-        io.envoyproxy.envoy.config.route.v3.HeaderMatcher.getDefaultInstance();
-    StructOrError<HeaderMatcher> unsetStruct = ClientXdsClient.parseHeaderMatcher(unsetProto);
-    assertThat(unsetStruct.getErrorDetail()).isNotNull();
-    assertThat(unsetStruct.getStruct()).isNull();
   }
 
   @Test
@@ -349,15 +354,6 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
-  public void parseRouteAction_withUnspecifiedCluster() {
-    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
-        io.envoyproxy.envoy.config.route.v3.RouteAction.getDefaultInstance();
-    StructOrError<RouteAction> unsetStruct = ClientXdsClient.parseRouteAction(proto);
-    assertThat(unsetStruct.getStruct()).isNull();
-    assertThat(unsetStruct.getErrorDetail()).isNotNull();
-  }
-
-  @Test
   public void parseRouteAction_withTimeoutByGrpcTimeoutHeaderMax() {
     io.envoyproxy.envoy.config.route.v3.RouteAction proto =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
@@ -399,9 +395,204 @@ public class ClientXdsClientDataTest {
     io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto =
         io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight.newBuilder()
             .setName("cluster-foo")
-            .setWeight(UInt32Value.newBuilder().setValue(30)).build();
-    ClusterWeight struct = ClientXdsClient.parseClusterWeight(proto).getStruct();
-    assertThat(struct.name()).isEqualTo("cluster-foo");
-    assertThat(struct.weight()).isEqualTo(30);
+            .setWeight(UInt32Value.newBuilder().setValue(30))
+            .build();
+    ClusterWeight clusterWeight = ClientXdsClient.parseClusterWeight(proto).getStruct();
+    assertThat(clusterWeight.name()).isEqualTo("cluster-foo");
+    assertThat(clusterWeight.weight()).isEqualTo(30);
+  }
+
+  // TODO(zdapeng): add tests for parseClusterWeight with HttpFault.
+
+  // TODO(zdapeng): add tests for parseHttpFault.
+
+  @Test
+  public void parseFaultAbort_withHeaderAbort() {
+    io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort proto =
+        io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
+            .setPercentage(FractionalPercent.newBuilder()
+                .setNumerator(20).setDenominator(DenominatorType.HUNDRED))
+            .setHeaderAbort(HeaderAbort.getDefaultInstance()).build();
+    FaultAbort faultAbort = ClientXdsClient.parseFaultAbort(proto).getStruct();
+    assertThat(faultAbort.headerAbort()).isTrue();
+    assertThat(faultAbort.ratePerMillion()).isEqualTo(200_000);
+  }
+
+  @Test
+  public void parseFaultAbort_withHttpStatus() {
+    FaultAbort res;
+    io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort proto;
+    proto = io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
+        .setPercentage(FractionalPercent.newBuilder()
+            .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
+        .setHttpStatus(400).build();
+    res = ClientXdsClient.parseFaultAbort(proto).getStruct();
+    assertThat(res.ratePerMillion()).isEqualTo(10_000);
+    assertThat(res.status().getCode()).isEqualTo(Code.INTERNAL);
+
+    proto = io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
+        .setPercentage(FractionalPercent.newBuilder()
+            .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
+        .setHttpStatus(401).build();
+    res = ClientXdsClient.parseFaultAbort(proto).getStruct();
+    assertThat(res.ratePerMillion()).isEqualTo(10_000);
+    assertThat(res.status().getCode()).isEqualTo(Code.UNAUTHENTICATED);
+
+    proto = io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
+        .setPercentage(FractionalPercent.newBuilder()
+            .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
+        .setHttpStatus(403).build();
+    res = ClientXdsClient.parseFaultAbort(proto).getStruct();
+    assertThat(res.ratePerMillion()).isEqualTo(10_000);
+    assertThat(res.status().getCode()).isEqualTo(Code.PERMISSION_DENIED);
+
+    proto = io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
+        .setPercentage(FractionalPercent.newBuilder()
+            .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
+        .setHttpStatus(404).build();
+    res = ClientXdsClient.parseFaultAbort(proto).getStruct();
+    assertThat(res.ratePerMillion()).isEqualTo(10_000);
+    assertThat(res.status().getCode()).isEqualTo(Code.UNIMPLEMENTED);
+
+    proto = io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
+        .setPercentage(FractionalPercent.newBuilder()
+            .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
+        .setHttpStatus(503).build();
+    res = ClientXdsClient.parseFaultAbort(proto).getStruct();
+    assertThat(res.ratePerMillion()).isEqualTo(10_000);
+    assertThat(res.status().getCode()).isEqualTo(Code.UNAVAILABLE);
+
+    proto = io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
+        .setPercentage(FractionalPercent.newBuilder()
+            .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
+        .setHttpStatus(500).build();
+    res = ClientXdsClient.parseFaultAbort(proto).getStruct();
+    assertThat(res.ratePerMillion()).isEqualTo(10_000);
+    assertThat(res.status().getCode()).isEqualTo(Code.UNKNOWN);
+  }
+
+  @Test
+  public void parseFaultAbort_withGrpcStatus() {
+    io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort proto =
+        io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
+            .setPercentage(FractionalPercent.newBuilder()
+                .setNumerator(600).setDenominator(DenominatorType.MILLION))
+            .setGrpcStatus(Code.DEADLINE_EXCEEDED.value()).build();
+    FaultAbort faultAbort = ClientXdsClient.parseFaultAbort(proto).getStruct();
+    assertThat(faultAbort.ratePerMillion()).isEqualTo(600);
+    assertThat(faultAbort.status().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
+  }
+
+  @Test
+  public void parseLocalityLbEndpoints_withHealthyEndpoints() {
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+            .setLocality(Locality.newBuilder()
+                .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
+            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(100))  // locality weight
+            .setPriority(1)
+            .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.newBuilder()
+                .setEndpoint(Endpoint.newBuilder()
+                    .setAddress(Address.newBuilder()
+                        .setSocketAddress(
+                            SocketAddress.newBuilder()
+                                .setAddress("172.14.14.5").setPortValue(8888))))
+                .setHealthStatus(io.envoyproxy.envoy.config.core.v3.HealthStatus.HEALTHY)
+                .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(20)))  // endpoint weight
+            .build();
+    StructOrError<LocalityLbEndpoints> struct = ClientXdsClient.parseLocalityLbEndpoints(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct()).isEqualTo(
+        LocalityLbEndpoints.create(
+            Collections.singletonList(LbEndpoint.create("172.14.14.5", 8888, 20, true)), 100, 1));
+  }
+
+  @Test
+  public void parseLocalityLbEndpoints_treatUnknownHealthAsHealthy() {
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+            .setLocality(Locality.newBuilder()
+                .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
+            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(100))  // locality weight
+            .setPriority(1)
+            .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.newBuilder()
+                .setEndpoint(Endpoint.newBuilder()
+                    .setAddress(Address.newBuilder()
+                        .setSocketAddress(
+                            SocketAddress.newBuilder()
+                                .setAddress("172.14.14.5").setPortValue(8888))))
+                .setHealthStatus(io.envoyproxy.envoy.config.core.v3.HealthStatus.UNKNOWN)
+                .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(20)))  // endpoint weight
+            .build();
+    StructOrError<LocalityLbEndpoints> struct = ClientXdsClient.parseLocalityLbEndpoints(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct()).isEqualTo(
+        LocalityLbEndpoints.create(
+            Collections.singletonList(LbEndpoint.create("172.14.14.5", 8888, 20, true)), 100, 1));
+  }
+
+  @Test
+  public void parseLocalityLbEndpoints_withUnHealthyEndpoints() {
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+            .setLocality(Locality.newBuilder()
+                .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
+            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(100))  // locality weight
+            .setPriority(1)
+            .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.newBuilder()
+                .setEndpoint(Endpoint.newBuilder()
+                    .setAddress(Address.newBuilder()
+                        .setSocketAddress(
+                            SocketAddress.newBuilder()
+                                .setAddress("172.14.14.5").setPortValue(8888))))
+                .setHealthStatus(io.envoyproxy.envoy.config.core.v3.HealthStatus.UNHEALTHY)
+                .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(20)))  // endpoint weight
+            .build();
+    StructOrError<LocalityLbEndpoints> struct = ClientXdsClient.parseLocalityLbEndpoints(proto);
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct()).isEqualTo(
+        LocalityLbEndpoints.create(
+            Collections.singletonList(LbEndpoint.create("172.14.14.5", 8888, 20, false)), 100, 1));
+  }
+
+  @Test
+  public void parseLocalityLbEndpoints_ignorZeroWeightLocality() {
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+            .setLocality(Locality.newBuilder()
+                .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
+            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(0))  // locality weight
+            .setPriority(1)
+            .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.newBuilder()
+                .setEndpoint(Endpoint.newBuilder()
+                    .setAddress(Address.newBuilder()
+                        .setSocketAddress(
+                            SocketAddress.newBuilder()
+                                .setAddress("172.14.14.5").setPortValue(8888))))
+                .setHealthStatus(io.envoyproxy.envoy.config.core.v3.HealthStatus.UNKNOWN)
+                .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(20)))  // endpoint weight
+            .build();
+    assertThat(ClientXdsClient.parseLocalityLbEndpoints(proto)).isNull();
+  }
+
+  @Test
+  public void parseLocalityLbEndpoints_invalidPriority() {
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+            .setLocality(Locality.newBuilder()
+                .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
+            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(100))  // locality weight
+            .setPriority(-1)
+            .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.newBuilder()
+                .setEndpoint(Endpoint.newBuilder()
+                    .setAddress(Address.newBuilder()
+                        .setSocketAddress(
+                            SocketAddress.newBuilder()
+                                .setAddress("172.14.14.5").setPortValue(8888))))
+                .setHealthStatus(io.envoyproxy.envoy.config.core.v3.HealthStatus.UNKNOWN)
+                .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(20)))  // endpoint weight
+            .build();
+    StructOrError<LocalityLbEndpoints> struct = ClientXdsClient.parseLocalityLbEndpoints(proto);
+    assertThat(struct.getErrorDetail()).isEqualTo("negative priority");
   }
 }

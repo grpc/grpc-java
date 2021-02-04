@@ -368,7 +368,8 @@ final class ClientXdsClient extends AbstractXdsClient {
         pathMatch.getStruct(), headerMatchers, fractionMatch));
   }
 
-  private static StructOrError<PathMatcher> parsePathMatcher(
+  @VisibleForTesting
+  static StructOrError<PathMatcher> parsePathMatcher(
       io.envoyproxy.envoy.config.route.v3.RouteMatch proto) {
     boolean caseSensitive = proto.getCaseSensitive().getValue();
     switch (proto.getPathSpecifierCase()) {
@@ -578,33 +579,29 @@ final class ClientXdsClient extends AbstractXdsClient {
       io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay faultDelay) {
     int rate = getRatePerMillion(faultDelay.getPercentage());
     if (faultDelay.hasHeaderDelay()) {
-      return FaultDelay.create(null, true, rate);
+      return FaultDelay.forHeader(rate);
     }
-    long delay = Durations.toNanos(faultDelay.getFixedDelay());
-    return FaultDelay.create(delay, false, rate);
+    return FaultDelay.forFixedDelay(Durations.toNanos(faultDelay.getFixedDelay()), rate);
   }
 
-  private static StructOrError<FaultAbort> parseFaultAbort(
+  @VisibleForTesting
+  static StructOrError<FaultAbort> parseFaultAbort(
       io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
     int rate = getRatePerMillion(faultAbort.getPercentage());
-    boolean headerAbort = false;
-    Status status = null;
     switch (faultAbort.getErrorTypeCase()) {
       case HEADER_ABORT:
-        headerAbort = true;
-        break;
+        return StructOrError.fromStruct(FaultAbort.forHeader(rate));
       case HTTP_STATUS:
-        status = convertHttpStatus(faultAbort.getHttpStatus());
-        break;
+        return StructOrError.fromStruct(FaultAbort.forStatus(
+            convertHttpStatus(faultAbort.getHttpStatus()), rate));
       case GRPC_STATUS:
-        status = Status.fromCodeValue(faultAbort.getGrpcStatus());
-        break;
+        return StructOrError.fromStruct(FaultAbort.forStatus(
+            Status.fromCodeValue(faultAbort.getGrpcStatus()), rate));
       case ERRORTYPE_NOT_SET:
       default:
         return StructOrError.fromError(
             "Unknown error type case: " + faultAbort.getErrorTypeCase());
     }
-    return StructOrError.fromStruct(FaultAbort.create(status, headerAbort, rate));
   }
 
   private static Status convertHttpStatus(int httpCode) {
@@ -957,8 +954,9 @@ final class ClientXdsClient extends AbstractXdsClient {
     return DropOverload.create(proto.getCategory(), getRatePerMillion(proto.getDropPercentage()));
   }
 
+  @VisibleForTesting
   @Nullable
-  private static StructOrError<LocalityLbEndpoints> parseLocalityLbEndpoints(
+  static StructOrError<LocalityLbEndpoints> parseLocalityLbEndpoints(
       io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto) {
     // Filter out localities without or with 0 weight.
     if (!proto.hasLoadBalancingWeight() || proto.getLoadBalancingWeight().getValue() < 1) {
