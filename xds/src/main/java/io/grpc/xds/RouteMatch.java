@@ -227,7 +227,7 @@ final class RouteMatch {
       this.isInvertedMatch = isInvertedMatch;
     }
 
-    private boolean matchesValue(@Nullable Iterable<String> values) {
+    boolean matchesValue(@Nullable Iterable<String> values) {
       if (presentMatch != null) {
         return (values == null) == presentMatch.equals(isInvertedMatch);
       }

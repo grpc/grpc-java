@@ -815,6 +815,7 @@ final class EnvoyProtoData {
       this(name, domains, routes, null);
     }
 
+    @VisibleForTesting
     VirtualHost(String name, List<String> domains, List<Route> routes, HttpFault httpFault) {
       this.name = name;
       this.domains = domains;
@@ -1147,7 +1148,8 @@ final class EnvoyProtoData {
     @Nullable
     Integer maxActiveFaults;
 
-    private HttpFault(
+    @VisibleForTesting
+    HttpFault(
         @Nullable FaultDelay faultDelay, @Nullable FaultAbort faultAbort, String upstreamCluster,
         List<String> downstreamNodes, List<HeaderMatcher> headers,
         @Nullable Integer maxActiveFaults) {
@@ -1263,7 +1265,8 @@ final class EnvoyProtoData {
     final boolean headerDelay;
     final int ratePerMillion;
 
-    private FaultDelay(@Nullable Long delayNanos, boolean headerDelay, int ratePerMillion) {
+    @VisibleForTesting
+    FaultDelay(@Nullable Long delayNanos, boolean headerDelay, int ratePerMillion) {
       this.delayNanos = delayNanos;
       this.headerDelay = headerDelay;
       this.ratePerMillion = ratePerMillion;
@@ -1322,7 +1325,8 @@ final class EnvoyProtoData {
     final boolean headerAbort;
     final int ratePerMillion;
 
-    private FaultAbort(@Nullable Status status, boolean headerAbort, int ratePerMillion) {
+    @VisibleForTesting
+    FaultAbort(@Nullable Status status, boolean headerAbort, int ratePerMillion) {
       this.status = status;
       this.headerAbort = headerAbort;
       this.ratePerMillion = ratePerMillion;
@@ -1383,7 +1387,7 @@ final class EnvoyProtoData {
       return StructOrError.fromStruct(new FaultAbort(status, headerAbort, rate));
     }
 
-    private static Status convertHttpStatus(int httpCode) {
+    static Status convertHttpStatus(int httpCode) {
       Status status;
       switch (httpCode) {
         case 400:

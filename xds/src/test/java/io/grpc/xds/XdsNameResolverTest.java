@@ -17,10 +17,20 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.XdsNameResolver.DOWNSTREAM_NODE_KEY;
+import static io.grpc.xds.XdsNameResolver.HEADER_ABORT_GRPC_STATUS_KEY;
+import static io.grpc.xds.XdsNameResolver.HEADER_ABORT_HTTP_STATUS_KEY;
+import static io.grpc.xds.XdsNameResolver.HEADER_ABORT_PERCENTAGE_KEY;
+import static io.grpc.xds.XdsNameResolver.HEADER_DELAY_KEY;
+import static io.grpc.xds.XdsNameResolver.HEADER_DELAY_PERCENTAGE_KEY;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
@@ -42,6 +52,7 @@ import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import io.grpc.internal.NoopClientCall;
@@ -50,9 +61,14 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.EnvoyProtoData.ClusterWeight;
+import io.grpc.xds.EnvoyProtoData.FaultAbort;
+import io.grpc.xds.EnvoyProtoData.FaultDelay;
+import io.grpc.xds.EnvoyProtoData.HttpFault;
 import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.RouteAction;
 import io.grpc.xds.EnvoyProtoData.VirtualHost;
+import io.grpc.xds.RouteMatch.HeaderMatcher;
+import io.grpc.xds.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.io.IOException;
@@ -60,6 +76,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -88,6 +105,8 @@ public class XdsNameResolverTest {
           throw new AssertionError(e);
         }
       });
+  private final FakeClock fakeClock = new FakeClock();
+  private final ScheduledExecutorService scheduler = fakeClock.getScheduledExecutorService();
   private final ServiceConfigParser serviceConfigParser = new ServiceConfigParser() {
     @Override
     public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
@@ -115,7 +134,8 @@ public class XdsNameResolverTest {
   @Before
   public void setUp() {
     XdsNameResolver.enableTimeout = true;
-    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext,
+    XdsNameResolver.enableFaultInjection = true;
+    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom);
   }
 
@@ -137,7 +157,7 @@ public class XdsNameResolverTest {
         throw new XdsInitializationException("Fail to read bootstrap file");
       }
     };
-    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext,
+    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom);
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
@@ -678,6 +698,537 @@ public class XdsNameResolverTest {
         .isEqualTo(vHost1);;
   }
 
+  @Test
+  public void resolved_faultAbortInLdsUpdate() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
+
+    // header abort, header abort rate = 60 %
+    HttpFault httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(null, true, 0),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    // no header abort key provided in metadata, rpc should succeed
+    Metadata metadata = new Metadata();
+    ClientCall.Listener<Void> observer = startCall(configSelector, metadata);
+    verifyRpcSucceeded(observer);
+    // header abort http status key provided, rpc should fail
+    metadata = new Metadata();
+    metadata.put(HEADER_ABORT_HTTP_STATUS_KEY, "404");
+    metadata.put(HEADER_ABORT_PERCENTAGE_KEY, "60");
+    observer = startCall(configSelector, metadata);
+    verifyRpcFailed(observer, Status.UNIMPLEMENTED.withDescription("HTTP code: 404"));
+    // header abort grpc status key provided, rpc should fail
+    metadata = new Metadata();
+    metadata.put(HEADER_ABORT_GRPC_STATUS_KEY, String.valueOf(
+        Status.UNAUTHENTICATED.getCode().value()));
+    metadata.put(HEADER_ABORT_PERCENTAGE_KEY, "60");
+    observer = startCall(configSelector, metadata);
+    verifyRpcFailed(observer, Status.UNAUTHENTICATED);
+
+    // header abort, no header rate, fix rate = 60 %
+    httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(null, true, 600_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    metadata = new Metadata();
+    metadata.put(HEADER_ABORT_HTTP_STATUS_KEY, "404");
+    observer = startCall(configSelector, metadata);
+    verifyRpcFailed(observer, Status.UNIMPLEMENTED.withDescription("HTTP code: 404"));
+
+    // header abort, no header rate, fix rate = 0
+    httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(null, true, 0),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    metadata = new Metadata();
+    metadata.put(HEADER_ABORT_HTTP_STATUS_KEY, "404");
+    observer = startCall(configSelector, metadata);
+    verifyRpcSucceeded(observer);
+
+    // fixed abort, fix rate = 60%
+    httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNAUTHENTICATED.withDescription("unauthenticated"), false, 600_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    observer = startCall(configSelector, new Metadata());
+    verifyRpcFailed(observer, Status.UNAUTHENTICATED.withDescription("unauthenticated"));
+
+    // fixed abort, fix rate = 40%
+    httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNAUTHENTICATED.withDescription("unauthenticated"), false, 400_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    observer = startCall(configSelector, new Metadata());
+    verifyRpcSucceeded(observer);
+  }
+
+  @Test
+  public void resolved_faultDelayInLdsUpdate() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
+
+    // header delay, header delay rate = 60 %
+    HttpFault httpFilterFaultConfig = new HttpFault(
+        new FaultDelay(null, true, 0),
+        null,
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    // no header delay key provided in metadata, rpc should succeed immediately
+    Metadata metadata = new Metadata();
+    ClientCall.Listener<Void> observer = startCall(configSelector, metadata);
+    verifyRpcSucceeded(observer);
+    // header delay key provided, rpc should be delayed
+    metadata = new Metadata();
+    metadata.put(HEADER_DELAY_KEY, "1000");
+    metadata.put(HEADER_DELAY_PERCENTAGE_KEY, "60");
+    observer = startCall(configSelector, metadata);
+    verifyRpcDelayed(observer, TimeUnit.MILLISECONDS.toNanos(1000));
+
+    // header delay, no header rate, fix rate = 60 %
+    httpFilterFaultConfig = new HttpFault(
+        new FaultDelay(null, true, 600_000),
+        null,
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    metadata = new Metadata();
+    metadata.put(HEADER_DELAY_KEY, "1000");
+    observer = startCall(configSelector, metadata);
+    verifyRpcDelayed(observer, TimeUnit.MILLISECONDS.toNanos(1000));
+
+    // header delay, no header rate, fix rate = 0
+    httpFilterFaultConfig = new HttpFault(
+        new FaultDelay(null, true, 0),
+        null,
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    metadata = new Metadata();
+    metadata.put(HEADER_DELAY_KEY, "1000");
+    observer = startCall(configSelector, metadata);
+    verifyRpcSucceeded(observer);
+
+    // fixed delay, fix rate = 60%
+    httpFilterFaultConfig = new HttpFault(
+        new FaultDelay(5000L, false, 600_000),
+        null,
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    observer = startCall(configSelector, new Metadata());
+    verifyRpcDelayed(observer, 5000L);
+
+    // fixed delay, fix rate = 40%
+    httpFilterFaultConfig = new HttpFault(
+        new FaultDelay(5000L, false, 400_000),
+        null,
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    observer = startCall(configSelector, new Metadata());
+    verifyRpcSucceeded(observer);
+  }
+
+  @Test
+  public void resolved_faultAbortWithUpstreamClusterMismatchInLdsUpdate() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
+
+    HttpFault httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNAUTHENTICATED.withDescription("unauthenticated"), false, 1000_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    // cluster mismatch with fault config
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster2, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    ClientCall.Listener<Void> observer = startCall(configSelector, new Metadata());
+    verifyRpcSucceeded(observer);
+  }
+
+  @Test
+  public void resolved_faultAbortWithDownstreamNodesInLdsUpdate() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
+
+    // downstream node match
+    HttpFault httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNAUTHENTICATED.withDescription("unauthenticated"), false, 1000_000),
+        cluster1,
+        Collections.singletonList("node1.example.com"),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    Metadata metadata = new Metadata();
+    metadata.put(DOWNSTREAM_NODE_KEY, "node1.example.com");
+    ClientCall.Listener<Void> observer = startCall(configSelector, metadata);
+    verifyRpcFailed(observer, Status.UNAUTHENTICATED.withDescription("unauthenticated"));
+
+    // downstream node mismatch
+    httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNAUTHENTICATED.withDescription("unauthenticated"), false, 1000_000),
+        cluster1,
+        Collections.singletonList("node1.example.com"),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    metadata = new Metadata();
+    metadata.put(DOWNSTREAM_NODE_KEY, "node2.example.com");
+    observer = startCall(configSelector, metadata);
+    verifyRpcSucceeded(observer);
+
+    // downstream node absent in headers
+    httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNAUTHENTICATED.withDescription("unauthenticated"), false, 1000_000),
+        cluster1,
+        Collections.singletonList("node1.example.com"),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    observer = startCall(configSelector, new Metadata());
+    verifyRpcSucceeded(observer);
+  }
+
+  @Test
+  public void resolved_faultAbortWithHeaderMatcherInLdsUpdate() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
+    Metadata.Key<String> faultKey = Metadata.Key.of("fault_key", Metadata.ASCII_STRING_MARSHALLER);
+
+    // headers match
+    HttpFault httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNAUTHENTICATED, false, 1000_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.singletonList(new HeaderMatcher(
+            "fault_key", "fault_value", null, null, null, null, null, false)),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    Metadata metadata = new Metadata();
+    metadata.put(faultKey, "fault_value");
+    ClientCall.Listener<Void> observer = startCall(configSelector, metadata);
+    verifyRpcFailed(observer, Status.UNAUTHENTICATED);
+
+    // headers mismatch
+    httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNAUTHENTICATED.withDescription("unauthenticated"), false, 1000_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.singletonList(new HeaderMatcher(
+            "fault_key", "fault_value", null, null, null, null, null, false)),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    metadata = new Metadata();
+    metadata.put(faultKey, "value_not_match");
+    observer = startCall(configSelector, metadata);
+    verifyRpcSucceeded(observer);
+
+    // headers absent
+    httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNAUTHENTICATED.withDescription("unauthenticated"), false, 1000_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.singletonList(new HeaderMatcher(
+            "fault_key", "fault_value", null, null, null, null, null, false)),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    observer = startCall(configSelector, new Metadata());
+    verifyRpcSucceeded(observer);
+  }
+
+  @Test
+  public void resolved_faultDelayWithMaxActiveStreamsInLdsUpdate() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
+
+    HttpFault httpFilterFaultConfig = new HttpFault(
+        new FaultDelay(5000L, false, 1000_000),
+        null,
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        /* maxActiveFaults= */ 1);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+
+    // Send two calls, then the first call should delayed and the second call should not be delayed
+    // because maxActiveFaults is exceeded.
+    ClientCall.Listener<Void> observer1 = startCall(configSelector, new Metadata());
+    assertThat(testCall).isNull();
+    ClientCall.Listener<Void> observer2 = startCall(configSelector, new Metadata());
+    verifyRpcSucceeded(observer2);
+    verifyRpcDelayed(observer1, 5000L);
+    // Once all calls are finished, new call should be delayed.
+    ClientCall.Listener<Void> observer3 = startCall(configSelector, new Metadata());
+    verifyRpcDelayed(observer3, 5000L);
+  }
+
+  @Test
+  public void resolved_faultAbortAndDelayInLdsUpdateInLdsUpdate() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
+
+    HttpFault httpFilterFaultConfig = new HttpFault(
+        new FaultDelay(5000L, false, 1000_000),
+        new FaultAbort(Status.UNAUTHENTICATED.withDescription("unauthenticated"), false, 1000_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    ClientCall.Listener<Void> observer = startCall(configSelector, new Metadata());
+    verifyRpcDelayedThenAborted(
+        observer, 5000L, Status.UNAUTHENTICATED.withDescription("unauthenticated"));
+  }
+
+  @Test
+  public void resolved_faultConfigOverrideInLdsUpdate() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
+
+    HttpFault httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNAUTHENTICATED, false, 1000_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    // VirtualHost fault config override
+    HttpFault virtualHostFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.INTERNAL, false, 1000_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(
+        cluster1, httpFilterFaultConfig, virtualHostFaultConfig, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    ClientCall.Listener<Void> observer = startCall(configSelector, new Metadata());
+    verifyRpcFailed(observer, Status.INTERNAL);
+
+    // Route fault config override
+    HttpFault routeFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNKNOWN, false, 1000_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(
+        cluster1, httpFilterFaultConfig, virtualHostFaultConfig, routeFaultConfig, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    observer = startCall(configSelector, new Metadata());
+    verifyRpcFailed(observer, Status.UNKNOWN);
+
+    // WeightedCluster fault config override
+    HttpFault weightedClusterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNAVAILABLE, false, 1000_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(
+        cluster1, httpFilterFaultConfig, virtualHostFaultConfig, routeFaultConfig,
+        weightedClusterFaultConfig);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    result = resolutionResultCaptor.getValue();
+    configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    observer = startCall(configSelector, new Metadata());
+    verifyRpcFailed(observer, Status.UNAVAILABLE);
+  }
+
+  @Test
+  public void resolved_faultConfigOverrideInLdsAndInRdsUpdate() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
+
+    HttpFault httpFilterFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNAUTHENTICATED, false, 1000_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverRdsNameWithFaultInjection(AUTHORITY, httpFilterFaultConfig);
+
+
+    // Route fault config override
+    HttpFault routeFaultConfig = new HttpFault(
+        null,
+        new FaultAbort(Status.UNKNOWN, false, 1000_000),
+        cluster1,
+        Collections.<String>emptyList(),
+        Collections.<HeaderMatcher>emptyList(),
+        null);
+    xdsClient.deliverRdsUpdateWithFaultInjection(null, routeFaultConfig, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    ClientCall.Listener<Void> observer = startCall(configSelector, new Metadata());
+    verifyRpcFailed(observer, Status.UNKNOWN);
+  }
+
+  private ClientCall.Listener<Void> startCall(
+      InternalConfigSelector configSelector,
+      Metadata metadata) {
+    testCall = null;
+    MethodDescriptor<Void, Void> method = TestMethodDescriptors.voidMethod();
+    Result result = configSelector.selectConfig(
+        new PickSubchannelArgsImpl(method, metadata, CallOptions.DEFAULT));
+    assertThat(result.getStatus().isOk()).isTrue();
+    ClientInterceptor interceptor = result.getInterceptor();
+    ClientCall<Void, Void> clientCall = interceptor.interceptCall(
+        method, CallOptions.DEFAULT, channel);
+    @SuppressWarnings("unchecked")
+    ClientCall.Listener<Void> observer =
+        (ClientCall.Listener<Void>) mock(ClientCall.Listener.class);
+    clientCall.start(observer, metadata);
+    clientCall.sendMessage(null);
+    clientCall.halfClose();
+    return observer;
+  }
+
+  private void verifyRpcSucceeded(ClientCall.Listener<Void> observer) {
+    assertThat(testCall).isNotNull();
+    testCall.deliverResponseHeaders();
+    testCall.deliverCompleted();
+    verify(observer).onClose(eq(Status.OK), any(Metadata.class));
+    testCall = null;
+  }
+
+  private void verifyRpcFailed(
+      ClientCall.Listener<Void> listener, Status expectedStatus) {
+    verify(listener).onClose(errorCaptor.capture(), any(Metadata.class));
+    assertThat(errorCaptor.getValue().getCode()).isEqualTo(expectedStatus.getCode());
+    assertThat(errorCaptor.getValue().getDescription())
+        .isEqualTo(expectedStatus.getDescription());
+    assertThat(testCall).isNull();
+  }
+
+  private void verifyRpcDelayed(ClientCall.Listener<Void> observer, long expectedDelayNanos) {
+    assertThat(testCall).isNull();
+    verifyNoInteractions(observer);
+    fakeClock.forwardNanos(expectedDelayNanos);
+    verifyRpcSucceeded(observer);
+  }
+
+  private void verifyRpcDelayedThenAborted(
+      ClientCall.Listener<Void> listener, long expectedDelayNanos, Status expectedStatus) {
+    verifyNoInteractions(listener);
+    fakeClock.forwardNanos(expectedDelayNanos);
+    verifyRpcFailed(listener, expectedStatus);
+  }
+
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
 
     @Override
@@ -765,6 +1316,43 @@ public class XdsNameResolverTest {
       });
     }
 
+    void deliverLdsUpdateWithFaultInjection(
+        final String cluster,
+        final HttpFault httpFilterFaultConfig,
+        final HttpFault virtualHostFaultConfig,
+        final HttpFault routeFaultConfig,
+        final HttpFault weightedClusterFaultConfig) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          ClusterWeight clusterWeight =
+              new ClusterWeight(cluster, 100, weightedClusterFaultConfig);
+          Route route = new Route(
+              new RouteMatch(
+                  PathMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
+              new RouteAction(0L, null, Collections.singletonList(clusterWeight)),
+              routeFaultConfig);
+          VirtualHost virtualHost = new VirtualHost(
+              "virtual-host",
+              Collections.singletonList(AUTHORITY),
+              Collections.singletonList(route), virtualHostFaultConfig);
+          ldsWatcher.onChanged(
+              new LdsUpdate(
+                  0, Collections.singletonList(virtualHost), true, httpFilterFaultConfig));
+        }
+      });
+    }
+
+    void deliverRdsNameWithFaultInjection(
+        final String rdsName, final HttpFault httpFilterFaultConfig) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          ldsWatcher.onChanged(new LdsUpdate(0, rdsName, true, httpFilterFaultConfig));
+        }
+      });
+    }
+
     void deliverRdsName(final String resourceName, final String rdsName) {
       syncContext.execute(new Runnable() {
         @Override
@@ -789,13 +1377,32 @@ public class XdsNameResolverTest {
       });
     }
 
+    void deliverRdsUpdateWithFaultInjection(
+        final HttpFault virtualHostFaultConfig, final HttpFault routFaultConfig,
+        final HttpFault weightedClusterFaultConfig) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          ClusterWeight clusterWeight =
+              new ClusterWeight(cluster1, 100, weightedClusterFaultConfig);
+          Route route = new Route(
+              new RouteMatch(
+                  PathMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
+              new RouteAction(0L, null, Collections.singletonList(clusterWeight)),
+              routFaultConfig);
+          VirtualHost virtualHost = new VirtualHost(
+              "virtual-host",
+              Collections.singletonList(AUTHORITY),
+              Collections.singletonList(route), virtualHostFaultConfig);
+          rdsWatcher.onChanged(new RdsUpdate(Collections.singletonList(virtualHost)));
+        }
+      });
+    }
+
     void deliverRdsUpdate(final String resourceName, final List<VirtualHost> virtualHosts) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          if (!resourceName.equals(rdsResource)) {
-            return;
-          }
           rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
         }
       });
@@ -881,6 +1488,10 @@ public class XdsNameResolverTest {
 
     void deliverResponseHeaders() {
       listener.onHeaders(new Metadata());
+    }
+
+    void deliverCompleted() {
+      listener.onClose(Status.OK, new Metadata());
     }
 
     void deliverErrorStatus() {
