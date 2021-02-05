@@ -23,10 +23,6 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.protobuf.ListValue;
-import com.google.protobuf.NullValue;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadReportingServiceStub;
@@ -47,7 +43,6 @@ import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -492,42 +487,5 @@ final class LoadReportClient {
           .setLoadReportInterval(Durations.fromNanos(stats.loadReportIntervalNano()))
           .build();
     }
-  }
-
-  /**
-   * Converts Java representation of the given JSON value to protobuf's {@link
-   * com.google.protobuf.Value} representation.
-   *
-   * <p>The given {@code rawObject} must be a valid JSON value in Java representation, which is
-   * either a {@code Map<String, ?>}, {@code List<?>}, {@code String}, {@code Double}, {@code
-   * Boolean}, or {@code null}.
-   */
-  private static Value convertJsonValueToProtobufValue(Object rawObject) {
-    Value.Builder valueBuilder = Value.newBuilder();
-    if (rawObject == null) {
-      valueBuilder.setNullValue(NullValue.NULL_VALUE);
-    } else if (rawObject instanceof Double) {
-      valueBuilder.setNumberValue((Double) rawObject);
-    } else if (rawObject instanceof String) {
-      valueBuilder.setStringValue((String) rawObject);
-    } else if (rawObject instanceof Boolean) {
-      valueBuilder.setBoolValue((Boolean) rawObject);
-    } else if (rawObject instanceof Map) {
-      Struct.Builder structBuilder = Struct.newBuilder();
-      @SuppressWarnings("unchecked")
-      Map<String, ?> map = (Map<String, ?>) rawObject;
-      for (Map.Entry<String, ?> entry : map.entrySet()) {
-        structBuilder.putFields(entry.getKey(), convertJsonValueToProtobufValue(entry.getValue()));
-      }
-      valueBuilder.setStructValue(structBuilder);
-    } else if (rawObject instanceof List) {
-      ListValue.Builder listBuilder = ListValue.newBuilder();
-      List<?> list = (List<?>) rawObject;
-      for (Object obj : list) {
-        listBuilder.addValues(convertJsonValueToProtobufValue(obj));
-      }
-      valueBuilder.setListValue(listBuilder);
-    }
-    return valueBuilder.build();
   }
 }
