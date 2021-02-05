@@ -26,7 +26,6 @@ import io.grpc.Internal;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
-import io.grpc.Status;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
@@ -42,12 +41,13 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
 
   private final NettyServerBuilder delegate;
   private final int port;
-  private ErrorNotifier errorNotifier;
+  private XdsServingStatusListener xdsServingStatusListener;
   private AtomicBoolean isServerBuilt = new AtomicBoolean(false);
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
     this.port = port;
+    xdsServingStatusListener = new DefaultListener("port:" + port);
   }
 
   @Override
@@ -56,9 +56,10 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     return delegate;
   }
 
-  /** Set the {@link ErrorNotifier}. Pass null to unset a previously set value. */
-  public XdsServerBuilder errorNotifier(ErrorNotifier errorNotifier) {
-    this.errorNotifier = errorNotifier;
+  /** Set the {@link XdsServingStatusListener}. Pass null to unset a previously set value. */
+  public XdsServerBuilder xdsServingStatusListener(
+      XdsServingStatusListener xdsServingStatusListener) {
+    this.xdsServingStatusListener = xdsServingStatusListener;
     return this;
   }
 
@@ -91,7 +92,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     InternalNettyServerBuilder.eagAttributes(delegate, Attributes.newBuilder()
         .set(SdsProtocolNegotiators.SERVER_XDS_CLIENT, xdsClient)
         .build());
-    return new ServerWrapperForXds(delegate.build(), xdsClient, errorNotifier);
+    return new ServerWrapperForXds(delegate.build(), xdsClient, xdsServingStatusListener);
   }
 
   public ServerBuilder<?> transportBuilder() {
@@ -99,8 +100,40 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   }
 
   /** Watcher to receive error notifications from xDS control plane during {@code start()}. */
-  public interface ErrorNotifier {
+  public interface XdsServingStatusListener {
 
-    void onError(Status error);
+    /** Callback invoked when server begins serving. */
+    void onServing();
+
+    /** Callback invoked when server is forced to be "not serving" due to an error.
+     * @param throwable cause of the error
+     */
+    void onNotServing(Throwable throwable);
+  }
+
+  /** Default implementation that logs at WARNING level. */
+  private static class DefaultListener implements XdsServingStatusListener {
+    XdsLogger xdsLogger;
+    boolean notServing;
+
+    DefaultListener(String prefix) {
+      xdsLogger = XdsLogger.withPrefix(prefix);
+      notServing = true;
+    }
+
+    /** Log calls to onServing() following a call to onNotServing() at WARNING level. */
+    @Override
+    public void onServing() {
+      if (notServing) {
+        notServing = false;
+        xdsLogger.log(XdsLogger.XdsLogLevel.WARNING, "Entering serving state...");
+      }
+    }
+
+    @Override
+    public void onNotServing(Throwable throwable) {
+      xdsLogger.log(XdsLogger.XdsLogLevel.WARNING, throwable.getMessage());
+      notServing = true;
+    }
   }
 }

@@ -104,8 +104,9 @@ public final class XdsClientWrapperForServerSds {
         throw new XdsInitializationException("No management server provided by bootstrap");
       }
     } catch (XdsInitializationException e) {
-      reportError(Status.fromThrowable(e));
-      throw new IOException(e);
+      IOException ioException = new IOException(e);
+      reportError(ioException);
+      throw ioException;
     }
     Node node = bootstrapInfo.getNode();
     Bootstrapper.ServerInfo serverInfo = bootstrapInfo.getServers().get(0);  // use first server
@@ -116,9 +117,9 @@ public final class XdsClientWrapperForServerSds {
     newServerApi = serverInfo.isUseProtocolV3() && experimentalNewServerApiEnvVar;
     String grpcServerResourceId = bootstrapInfo.getGrpcServerResourceId();
     if (newServerApi && grpcServerResourceId == null) {
-      reportError(
-          Status.INVALID_ARGUMENT.withDescription("missing grpc_server_resource_name_id value"));
-      throw new IOException("missing grpc_server_resource_name_id value");
+      IOException ioException = new IOException("missing grpc_server_resource_name_id value");
+      reportError(ioException);
+      throw ioException;
     }
     XdsClient xdsClientImpl =
         new ServerXdsClient(
@@ -152,14 +153,14 @@ public final class XdsClientWrapperForServerSds {
           public void onResourceDoesNotExist(String resourceName) {
             logger.log(Level.WARNING, "Resource {0} is unavailable", resourceName);
             curListener = null;
-            reportError(Status.NOT_FOUND.withDescription(resourceName));
+            reportError(Status.NOT_FOUND.withDescription(resourceName).asException());
           }
 
           @Override
           public void onError(Status error) {
             logger.log(
                 Level.WARNING, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
-            reportError(error);
+            reportError(error.asException());
           }
         };
     xdsClient.watchListenerData(port, listenerWatcher);
@@ -225,9 +226,9 @@ public final class XdsClientWrapperForServerSds {
     }
   }
 
-  private void reportError(Status status) {
+  private void reportError(Throwable throwable) {
     for (ServerWatcher watcher : getServerWatchers()) {
-      watcher.onError(status);
+      watcher.onError(throwable);
     }
   }
 
@@ -249,7 +250,7 @@ public final class XdsClientWrapperForServerSds {
   public interface ServerWatcher {
 
     /** Called to report errors from the control plane including "not found". */
-    void onError(Status error);
+    void onError(Throwable throwable);
 
     /** Called to report successful receipt of server config. */
     void onSuccess(DownstreamTlsContext downstreamTlsContext);

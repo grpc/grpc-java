@@ -23,7 +23,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
-import io.grpc.Status;
 import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.grpc.xds.XdsServerBuilder;
@@ -45,7 +44,7 @@ import javax.annotation.Nullable;
 public final class ServerWrapperForXds extends Server {
   private final Server delegate;
   private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
-  @Nullable XdsServerBuilder.ErrorNotifier errorNotifier;
+  private XdsServerBuilder.XdsServingStatusListener xdsServingStatusListener;
   @Nullable XdsClientWrapperForServerSds.ServerWatcher serverWatcher;
   private AtomicBoolean started = new AtomicBoolean();
 
@@ -53,11 +52,12 @@ public final class ServerWrapperForXds extends Server {
   public ServerWrapperForXds(
       Server delegate,
       XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
-      @Nullable XdsServerBuilder.ErrorNotifier errorNotifier) {
+      XdsServerBuilder.XdsServingStatusListener xdsServingStatusListener) {
     this.delegate = checkNotNull(delegate, "delegate");
     this.xdsClientWrapperForServerSds =
         checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
-    this.errorNotifier = errorNotifier;
+    this.xdsServingStatusListener =
+        checkNotNull(xdsServingStatusListener, "xdsServingStatusListener");
   }
 
   @Override
@@ -77,6 +77,7 @@ public final class ServerWrapperForXds extends Server {
       throw new RuntimeException(ex);
     }
     delegate.start();
+    xdsServingStatusListener.onServing();
     return this;
   }
 
@@ -86,15 +87,12 @@ public final class ServerWrapperForXds extends Server {
     serverWatcher =
         new XdsClientWrapperForServerSds.ServerWatcher() {
           @Override
-          public void onError(Status error) {
-            if (errorNotifier != null) {
-              errorNotifier.onError(error);
-            }
+          public void onError(Throwable throwable) {
+            xdsServingStatusListener.onNotServing(throwable);
           }
 
           @Override
           public void onSuccess(EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext) {
-            removeServerWatcher();
             settableFuture.set(downstreamTlsContext);
           }
         };
