@@ -50,7 +50,7 @@ abstract class HttpFault {
         ImmutableList.copyOf(downstreamNodes), ImmutableList.copyOf(headers), maxActiveFaults);
   }
 
-  // Fault configurations for aborting requests.
+  /** Fault configurations for aborting requests. */
   @AutoValue
   abstract static class FaultDelay {
     @Nullable
@@ -74,7 +74,7 @@ abstract class HttpFault {
     }
   }
 
-  // Fault configurations for delaying requests.
+  /** Fault configurations for delaying requests. */
   @AutoValue
   abstract static class FaultAbort {
     @Nullable

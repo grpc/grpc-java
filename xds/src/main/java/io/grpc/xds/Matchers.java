@@ -26,7 +26,7 @@ import javax.annotation.Nullable;
 final class Matchers {
   private Matchers() {}
 
-  // Matcher for HTTP request path.
+  /** Matcher for HTTP request path. */
   @AutoValue
   abstract static class PathMatcher {
     // Exact full path to be matched.
@@ -66,7 +66,7 @@ final class Matchers {
     }
   }
 
-  // Matcher for HTTP request headers.
+  /** Matcher for HTTP request headers. */
   @AutoValue
   abstract static class HeaderMatcher {
     // Name of the header to be matched.
@@ -143,7 +143,7 @@ final class Matchers {
           prefix, suffix, inverted);
     }
 
-    // Represents an integer range.
+    /** Represents an integer range. */
     @AutoValue
     abstract static class Range {
       abstract long start();
@@ -157,7 +157,7 @@ final class Matchers {
     }
   }
 
-  // Represents a fractional value.
+  /** Represents a fractional value. */
   @AutoValue
   abstract static class FractionMatcher {
     abstract int numerator();

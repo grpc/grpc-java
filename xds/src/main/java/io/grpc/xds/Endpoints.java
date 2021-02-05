@@ -27,7 +27,7 @@ import java.util.List;
 final class Endpoints {
   private Endpoints() {}
 
-  // Represents a group of endpoints belong to a single locality.
+  /** Represents a group of endpoints belong to a single locality. */
   @AutoValue
   abstract static class LocalityLbEndpoints {
     // Endpoints to be load balanced.
@@ -46,7 +46,7 @@ final class Endpoints {
     }
   }
 
-  // Represents a single endpoint to be load balanced.
+  /** Represents a single endpoint to be load balanced. */
   @AutoValue
   abstract static class LbEndpoint {
     // The endpoint address to be connected to.
@@ -72,7 +72,7 @@ final class Endpoints {
     }
   }
 
-  // Represents a drop policy.
+  /** Represents a drop policy. */
   @AutoValue
   abstract static class DropOverload {
     abstract String category();

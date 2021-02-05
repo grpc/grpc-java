@@ -24,7 +24,7 @@ import javax.annotation.Nullable;
 final class Stats {
   private Stats() {}
 
-  // Cluster-level load stats.
+  /** Cluster-level load stats. */
   @AutoValue
   abstract static class ClusterStats {
     abstract String clusterName();
@@ -76,7 +76,7 @@ final class Stats {
     }
   }
 
-  // Stats for dropped requests.
+  /** Stats for dropped requests. */
   @AutoValue
   abstract static class DroppedRequests {
     abstract String category();
@@ -88,7 +88,7 @@ final class Stats {
     }
   }
 
-  // Load stats aggregated in locality level.
+  /** Load stats aggregated in locality level. */
   @AutoValue
   abstract static class UpstreamLocalityStats {
     abstract Locality locality();

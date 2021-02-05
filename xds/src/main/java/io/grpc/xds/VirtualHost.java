@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.List;
 import javax.annotation.Nullable;
 
+/** Reprsents an upstream virtual host. */
 @AutoValue
 abstract class VirtualHost {
   // The canonical name of this virtual host.
