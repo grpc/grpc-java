@@ -34,6 +34,9 @@ import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * A fake HandshakeService for ALTS integration testing in non-gcp environments.
+ * */
 public class AltsHandshakerTestService extends HandshakerServiceImplBase {
   private static final Logger log = Logger.getLogger(AltsHandshakerTestService.class.getName());
 

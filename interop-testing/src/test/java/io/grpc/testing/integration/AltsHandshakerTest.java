@@ -20,22 +20,22 @@ import static org.junit.Assert.assertEquals;
 
 import com.google.protobuf.ByteString;
 import io.grpc.ChannelCredentials;
-import io.grpc.Deadline;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.alts.AltsChannelCredentials;
 import io.grpc.alts.AltsServerCredentials;
+import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
-import java.util.concurrent.TimeUnit;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.util.concurrent.DefaultThreadFactory;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -69,8 +69,16 @@ public class AltsHandshakerTest {
 
   @Before
   public void setup() throws Exception {
-    handshakerServer = grpcCleanup.register(ServerBuilder.forPort(0)
-        .addService(new AltsHandshakerTestService()).build()).start();
+    // create new EventLoopGroups to avoid deadlock at server side handshake negotiation, e.g.
+    // happens when handshakerServer and testServer child channels are on the same eventloop.
+    handshakerServer = grpcCleanup.register(NettyServerBuilder.forPort(0)
+        .bossEventLoopGroup(
+            new NioEventLoopGroup(0, new DefaultThreadFactory("test-alts-boss")))
+        .workerEventLoopGroup(
+            new NioEventLoopGroup(0, new DefaultThreadFactory("test-alts-worker")))
+        .channelType(NioServerSocketChannel.class)
+        .addService(new AltsHandshakerTestService())
+        .build()).start();
     startAltsServer();
 
     ChannelCredentials channelCredentials = AltsChannelCredentials.newBuilder()
@@ -82,10 +90,8 @@ public class AltsHandshakerTest {
   }
 
   @Test
-  @Ignore // flaky. Latency high and handshake often exceeds deadline.
   public void testAlts() {
-    TestServiceGrpc.TestServiceBlockingStub blockingStub = TestServiceGrpc.newBlockingStub(channel)
-        .withDeadline(Deadline.after(200, TimeUnit.SECONDS));
+    TestServiceGrpc.TestServiceBlockingStub blockingStub = TestServiceGrpc.newBlockingStub(channel);
     final SimpleRequest request = SimpleRequest.newBuilder()
             .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[10])))
             .build();
