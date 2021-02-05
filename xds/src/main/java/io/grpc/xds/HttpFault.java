@@ -25,6 +25,7 @@ import io.grpc.xds.Matchers.HeaderMatcher;
 import java.util.List;
 import javax.annotation.Nullable;
 
+/** Fault injection configurations. */
 @AutoValue
 abstract class HttpFault {
   @Nullable
@@ -49,6 +50,7 @@ abstract class HttpFault {
         ImmutableList.copyOf(downstreamNodes), ImmutableList.copyOf(headers), maxActiveFaults);
   }
 
+  // Fault configurations for aborting requests.
   @AutoValue
   abstract static class FaultDelay {
     @Nullable
@@ -72,6 +74,7 @@ abstract class HttpFault {
     }
   }
 
+  // Fault configurations for delaying requests.
   @AutoValue
   abstract static class FaultAbort {
     @Nullable

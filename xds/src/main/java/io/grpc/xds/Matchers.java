@@ -22,20 +22,27 @@ import com.google.auto.value.AutoValue;
 import com.google.re2j.Pattern;
 import javax.annotation.Nullable;
 
+/** A group of request matchers. */
 final class Matchers {
   private Matchers() {}
 
+  // Matcher for HTTP request path.
   @AutoValue
   abstract static class PathMatcher {
+    // Exact full path to be matched.
     @Nullable
     abstract String path();
 
+    // Path prefix to be matched.
     @Nullable
     abstract String prefix();
 
+    // Regular expression pattern of the path to be matched.
     @Nullable
     abstract Pattern regEx();
 
+    // Whether case sensitivity is taken into account for matching.
+    // Only valid for full path matching or prefix matching.
     abstract boolean caseSensitive();
 
     static PathMatcher fromPath(String path, boolean caseSensitive) {
@@ -59,28 +66,37 @@ final class Matchers {
     }
   }
 
+  // Matcher for HTTP request headers.
   @AutoValue
   abstract static class HeaderMatcher {
+    // Name of the header to be matched.
     abstract String name();
 
+    // Matches exact header value.
     @Nullable
     abstract String exactValue();
 
+    // Matches header value with the regular expression pattern.
     @Nullable
     abstract Pattern safeRegEx();
 
+    // Matches header value an integer value in the range.
     @Nullable
     abstract Range range();
 
+    // Matches header presence.
     @Nullable
     abstract Boolean present();
 
+    // Matches header value with the prefix.
     @Nullable
     abstract String prefix();
 
+    // Matches header value with the suffix.
     @Nullable
     abstract String suffix();
 
+    // Whether the matching semantics is inverted. E.g., present && !inverted -> !present
     abstract boolean inverted();
 
     static HeaderMatcher forExactValue(String name, String exactValue, boolean inverted) {
@@ -127,6 +143,7 @@ final class Matchers {
           prefix, suffix, inverted);
     }
 
+    // Represents an integer range.
     @AutoValue
     abstract static class Range {
       abstract long start();
@@ -140,6 +157,7 @@ final class Matchers {
     }
   }
 
+  // Represents a fractional value.
   @AutoValue
   abstract static class FractionMatcher {
     abstract int numerator();

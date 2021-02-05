@@ -16,10 +16,9 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.auto.value.AutoValue;
 
+/** Represents a network locality. */
 @AutoValue
 abstract class Locality {
   abstract String region();

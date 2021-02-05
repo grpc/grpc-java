@@ -23,15 +23,20 @@ import io.grpc.EquivalentAddressGroup;
 import java.net.InetSocketAddress;
 import java.util.List;
 
+/** Locality and endpoint level load balancing configurations. */
 final class Endpoints {
   private Endpoints() {}
 
+  // Represents a group of endpoints belong to a single locality.
   @AutoValue
   abstract static class LocalityLbEndpoints {
+    // Endpoints to be load balanced.
     abstract ImmutableList<LbEndpoint> endpoints();
 
+    // Locality's weight for inter-locality load balancing.
     abstract int localityWeight();
 
+    // Locality's priority level.
     abstract int priority();
 
     static LocalityLbEndpoints create(List<LbEndpoint> endpoints, int localityWeight,
@@ -41,12 +46,16 @@ final class Endpoints {
     }
   }
 
+  // Represents a single endpoint to be load balanced.
   @AutoValue
   abstract static class LbEndpoint {
+    // The endpoint address to be connected to.
     abstract EquivalentAddressGroup eag();
 
+    // Endpoint's wight for load balancing.
     abstract int loadBalancingWeight();
 
+    // Whether the endpoint is healthy.
     abstract boolean isHealthy();
 
     static LbEndpoint create(EquivalentAddressGroup eag, int loadBalancingWeight,
@@ -63,6 +72,7 @@ final class Endpoints {
     }
   }
 
+  // Represents a drop policy.
   @AutoValue
   abstract static class DropOverload {
     abstract String category();
@@ -73,6 +83,4 @@ final class Endpoints {
       return new AutoValue_Endpoints_DropOverload(category, dropsPerMillion);
     }
   }
-
-
 }
