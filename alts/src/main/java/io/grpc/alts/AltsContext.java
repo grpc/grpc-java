@@ -16,7 +16,6 @@
 
 package io.grpc.alts;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ExperimentalApi;
 import io.grpc.alts.internal.AltsInternalContext;
 import io.grpc.alts.internal.HandshakerResult;
@@ -39,7 +38,6 @@ public final class AltsContext {
    * @param localServiceAccount the local service account of the to be created {@code AltsContext}
    * @return the created {@code AltsContext}
    */
-  @VisibleForTesting
   public static AltsContext createTestInstance(String peerServiceAccount,
       String localServiceAccount) {
     return new AltsContext(new AltsInternalContext(HandshakerResult.newBuilder()
