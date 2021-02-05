@@ -27,7 +27,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
-import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.io.IOException;
@@ -214,7 +213,7 @@ public class BootstrapperImpl implements Bootstrapper {
         if (rawLocality.containsKey("sub_zone")) {
           logger.log(XdsLogLevel.INFO, "Locality sub_zone: {0}", subZone);
         }
-        Locality locality = new Locality(region, zone, subZone);
+        Locality locality = Locality.create(region, zone, subZone);
         nodeBuilder.setLocality(locality);
       }
     }

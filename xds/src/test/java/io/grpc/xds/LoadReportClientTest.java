@@ -50,7 +50,6 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import java.util.ArrayDeque;
@@ -85,8 +84,8 @@ public class LoadReportClientTest {
   private static final String CLUSTER2 = "cluster-bar.googleapis.com";
   private static final String EDS_SERVICE_NAME1 = "backend-service-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME2 = "backend-service-bar.googleapis.com";
-  private static final Locality LOCALITY1 = new Locality("region1", "zone1", "subZone1");
-  private static final Locality LOCALITY2 = new Locality("region2", "zone2", "subZone2");
+  private static final Locality LOCALITY1 = Locality.create("region1", "zone1", "subZone1");
+  private static final Locality LOCALITY2 = Locality.create("region2", "zone2", "subZone2");
   private static final FakeClock.TaskFilter LOAD_REPORTING_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override

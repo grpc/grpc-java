@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -26,6 +27,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
+import com.google.re2j.Pattern;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -49,15 +51,18 @@ import io.grpc.internal.NoopClientCall.NoopClientCallListener;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
-import io.grpc.xds.EnvoyProtoData.ClusterWeight;
-import io.grpc.xds.EnvoyProtoData.Route;
-import io.grpc.xds.EnvoyProtoData.RouteAction;
-import io.grpc.xds.EnvoyProtoData.VirtualHost;
+import io.grpc.xds.Matchers.HeaderMatcher;
+import io.grpc.xds.Matchers.PathMatcher;
+import io.grpc.xds.VirtualHost.Route;
+import io.grpc.xds.VirtualHost.Route.RouteAction;
+import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
+import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -232,25 +237,25 @@ public class XdsNameResolverTest {
   }
 
   private List<VirtualHost> buildUnmatchedVirtualHosts() {
-    Route route1 = new Route(RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-        new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null));
-    Route route2 = new Route(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-        new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster1, null));
+    Route route1 = Route.create(RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
+        RouteAction.forCluster(cluster2, TimeUnit.SECONDS.toNanos(15L)), null);
+    Route route2 = Route.create(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+        RouteAction.forCluster(cluster1, TimeUnit.SECONDS.toNanos(15L)), null);
     return Arrays.asList(
-        new VirtualHost("virtualhost-foo", Collections.singletonList("hello.googleapis.com"),
-            Collections.singletonList(route1)),
-        new VirtualHost("virtualhost-bar", Collections.singletonList("hi.googleapis.com"),
-            Collections.singletonList(route2)));
+        VirtualHost.create("virtualhost-foo", Collections.singletonList("hello.googleapis.com"),
+            Collections.singletonList(route1), null),
+        VirtualHost.create("virtualhost-bar", Collections.singletonList("hi.googleapis.com"),
+            Collections.singletonList(route2), null));
   }
 
   @Test
   public void resolved_noTimeout() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    Route route = new Route(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-        new RouteAction(null, cluster1, null));  // per-route timeout unset
-    VirtualHost virtualHost = new VirtualHost("does not matter",
-        Collections.singletonList(AUTHORITY), Collections.singletonList(route));
+    Route route = Route.create(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+        RouteAction.forCluster(cluster1, null), null);  // per-route timeout unset
+    VirtualHost virtualHost = VirtualHost.create("does not matter",
+        Collections.singletonList(AUTHORITY), Collections.singletonList(route), null);
     xdsClient.deliverLdsUpdate(AUTHORITY, 0L, Collections.singletonList(virtualHost));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -262,10 +267,10 @@ public class XdsNameResolverTest {
   public void resolved_fallbackToHttpMaxStreamDurationAsTimeout() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    Route route = new Route(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-        new RouteAction(null, cluster1, null));  // per-route timeout unset
-    VirtualHost virtualHost = new VirtualHost("does not matter",
-        Collections.singletonList(AUTHORITY), Collections.singletonList(route));
+    Route route = Route.create(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+        RouteAction.forCluster(cluster1, null), null);  // per-route timeout unset
+    VirtualHost virtualHost = VirtualHost.create("does not matter",
+        Collections.singletonList(AUTHORITY), Collections.singletonList(route), null);
     xdsClient.deliverLdsUpdate(AUTHORITY, TimeUnit.SECONDS.toNanos(5L),
         Collections.singletonList(virtualHost));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -307,12 +312,12 @@ public class XdsNameResolverTest {
     xdsClient.deliverLdsUpdate(
         AUTHORITY,
         Arrays.asList(
-            new Route(
+            Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(20L), "another-cluster", null)),
-            new Route(
+                RouteAction.forCluster("another-cluster", TimeUnit.SECONDS.toNanos(20L)), null),
+            Route.create(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                RouteAction.forCluster(cluster2, TimeUnit.SECONDS.toNanos(15L)), null)));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     // Updated service config still contains cluster1 while it is removed resource. New calls no
@@ -342,12 +347,12 @@ public class XdsNameResolverTest {
     xdsClient.deliverLdsUpdate(
         AUTHORITY,
         Arrays.asList(
-            new Route(
+            Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(20L), "another-cluster", null)),
-            new Route(
+                RouteAction.forCluster("another-cluster", TimeUnit.SECONDS.toNanos(20L)), null),
+            Route.create(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                RouteAction.forCluster(cluster2, TimeUnit.SECONDS.toNanos(15L)), null)));
     // Two consecutive service config updates: one for removing clcuster1,
     // one for adding "another=cluster".
     verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
@@ -373,12 +378,12 @@ public class XdsNameResolverTest {
     xdsClient.deliverLdsUpdate(
         AUTHORITY,
         Arrays.asList(
-            new Route(
+            Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(20L), "another-cluster", null)),
-            new Route(
+                RouteAction.forCluster("another-cluster", TimeUnit.SECONDS.toNanos(20L)), null),
+            Route.create(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                RouteAction.forCluster(cluster2, TimeUnit.SECONDS.toNanos(15L)), null)));
 
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -389,12 +394,12 @@ public class XdsNameResolverTest {
     xdsClient.deliverLdsUpdate(
         AUTHORITY,
         Arrays.asList(
-            new Route(
+            Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), "another-cluster", null)),
-            new Route(
+                RouteAction.forCluster("another-cluster", TimeUnit.SECONDS.toNanos(15L)), null),
+            Route.create(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                RouteAction.forCluster(cluster2, TimeUnit.SECONDS.toNanos(15L)), null)));
     verifyNoMoreInteractions(mockListener);  // no cluster added/deleted
     assertCallSelectResult(call1, configSelector, "another-cluster", 15.0);
   }
@@ -407,18 +412,18 @@ public class XdsNameResolverTest {
     xdsClient.deliverLdsUpdate(
         AUTHORITY,
         Collections.singletonList(
-            new Route(
+            Route.create(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                RouteAction.forCluster(cluster2, TimeUnit.SECONDS.toNanos(15L)), null)));
     xdsClient.deliverLdsUpdate(
         AUTHORITY,
         Arrays.asList(
-            new Route(
+            Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster1, null)),
-            new Route(
+                RouteAction.forCluster(cluster1, TimeUnit.SECONDS.toNanos(15L)), null),
+            Route.create(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                RouteAction.forCluster(cluster2, TimeUnit.SECONDS.toNanos(15L)), null)));
     testCall.deliverErrorStatus();
     verifyNoMoreInteractions(mockListener);
   }
@@ -431,14 +436,14 @@ public class XdsNameResolverTest {
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
         AUTHORITY,
-        Arrays.asList(
-            new Route(
+        Collections.singletonList(
+            Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(
-                    TimeUnit.SECONDS.toNanos(20L), null,
+                RouteAction.forWeightedClusters(
                     Arrays.asList(
-                        new ClusterWeight(cluster1, 20, null),
-                        new ClusterWeight(cluster2, 80, null))))));
+                        ClusterWeight.create(cluster1, 20, null),
+                        ClusterWeight.create(cluster2, 80, null)),
+                    TimeUnit.SECONDS.toNanos(20L)), null)));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
@@ -493,12 +498,12 @@ public class XdsNameResolverTest {
     xdsClient.deliverLdsUpdate(
         AUTHORITY,
         Arrays.asList(
-            new Route(
+            Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster1, null)),
-            new Route(
+                RouteAction.forCluster(cluster1, TimeUnit.SECONDS.toNanos(15L)), null),
+            Route.create(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
-                new RouteAction(TimeUnit.SECONDS.toNanos(15L), cluster2, null))));
+                RouteAction.forCluster(cluster2, TimeUnit.SECONDS.toNanos(15L)), null)));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertThat(result.getAddresses()).isEmpty();
@@ -636,12 +641,12 @@ public class XdsNameResolverTest {
   public void findVirtualHostForHostName_exactMatchFirst() {
     String hostname = "a.googleapis.com";
     List<Route> routes = Collections.emptyList();
-    VirtualHost vHost1 = new VirtualHost("virtualhost01.googleapis.com",
-        Arrays.asList("a.googleapis.com", "b.googleapis.com"), routes);
-    VirtualHost vHost2 = new VirtualHost("virtualhost02.googleapis.com",
-        Collections.singletonList("*.googleapis.com"), routes);
-    VirtualHost vHost3 =
-        new VirtualHost("virtualhost03.googleapis.com", Collections.singletonList("*"), routes);
+    VirtualHost vHost1 = VirtualHost.create("virtualhost01.googleapis.com",
+        Arrays.asList("a.googleapis.com", "b.googleapis.com"), routes, null);
+    VirtualHost vHost2 = VirtualHost.create("virtualhost02.googleapis.com",
+        Collections.singletonList("*.googleapis.com"), routes, null);
+    VirtualHost vHost3 = VirtualHost.create("virtualhost03.googleapis.com",
+        Collections.singletonList("*"), routes, null);
     List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2, vHost3);
     assertThat(XdsNameResolver.findVirtualHostForHostName(virtualHosts, hostname))
         .isEqualTo(vHost1);
@@ -651,14 +656,12 @@ public class XdsNameResolverTest {
   public void findVirtualHostForHostName_preferSuffixDomainOverPrefixDomain() {
     String hostname = "a.googleapis.com";
     List<Route> routes = Collections.emptyList();
-    VirtualHost vHost1 =
-        new VirtualHost("virtualhost01.googleapis.com",
-            Arrays.asList("*.googleapis.com", "b.googleapis.com"), routes);
-    VirtualHost vHost2 =
-        new VirtualHost("virtualhost02.googleapis.com",
-            Collections.singletonList("a.googleapis.*"), routes);
-    VirtualHost vHost3 =
-        new VirtualHost("virtualhost03.googleapis.com", Collections.singletonList("*"), routes);
+    VirtualHost vHost1 = VirtualHost.create("virtualhost01.googleapis.com",
+        Arrays.asList("*.googleapis.com", "b.googleapis.com"), routes, null);
+    VirtualHost vHost2 = VirtualHost.create("virtualhost02.googleapis.com",
+        Collections.singletonList("a.googleapis.*"), routes, null);
+    VirtualHost vHost3 = VirtualHost.create("virtualhost03.googleapis.com",
+        Collections.singletonList("*"), routes, null);
     List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2, vHost3);
     assertThat(XdsNameResolver.findVirtualHostForHostName(virtualHosts, hostname))
         .isEqualTo(vHost1);
@@ -668,14 +671,125 @@ public class XdsNameResolverTest {
   public void findVirtualHostForHostName_asteriskMatchAnyDomain() {
     String hostname = "a.googleapis.com";
     List<Route> routes = Collections.emptyList();
-    VirtualHost vHost1 =
-        new VirtualHost("virtualhost01.googleapis.com", Collections.singletonList("*"), routes);
-    VirtualHost vHost2 =
-        new VirtualHost("virtualhost02.googleapis.com",
-            Collections.singletonList("b.googleapis.com"), routes);
+    VirtualHost vHost1 = VirtualHost.create("virtualhost01.googleapis.com",
+        Collections.singletonList("*"), routes, null);
+    VirtualHost vHost2 = VirtualHost.create("virtualhost02.googleapis.com",
+            Collections.singletonList("b.googleapis.com"), routes, null);
     List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2);
     assertThat(XdsNameResolver.findVirtualHostForHostName(virtualHosts, hostname))
         .isEqualTo(vHost1);;
+  }
+
+  @Test
+  public void routeMatching_pathOnly() {
+    Map<String, Iterable<String>> headers = Collections.emptyMap();
+    ThreadSafeRandom random = mock(ThreadSafeRandom.class);
+
+    RouteMatch routeMatch1 =
+        RouteMatch.create(
+            PathMatcher.fromPath("/FooService/barMethod", true),
+            Collections.<HeaderMatcher>emptyList(), null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/FooService/barMethod", headers, random))
+        .isTrue();
+    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/FooService/bazMethod", headers, random))
+        .isFalse();
+
+    RouteMatch routeMatch2 =
+        RouteMatch.create(
+            PathMatcher.fromPrefix("/FooService/", true),
+            Collections.<HeaderMatcher>emptyList(), null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/FooService/barMethod", headers, random))
+        .isTrue();
+    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/FooService/bazMethod", headers, random))
+        .isTrue();
+    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/BarService/bazMethod", headers, random))
+        .isFalse();
+
+    RouteMatch routeMatch3 =
+        RouteMatch.create(
+            PathMatcher.fromRegEx(Pattern.compile(".*Foo.*")),
+            Collections.<HeaderMatcher>emptyList(), null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch3, "/FooService/barMethod", headers, random))
+        .isTrue();
+  }
+
+  @Test
+  public void routeMatching_withHeaders() {
+    Map<String, Iterable<String>> headers = new HashMap<>();
+    headers.put("authority", Collections.singletonList("foo.googleapis.com"));
+    headers.put("grpc-encoding", Collections.singletonList("gzip"));
+    headers.put("user-agent", Collections.singletonList("gRPC-Java"));
+    headers.put("content-length", Collections.singletonList("1000"));
+    headers.put("custom-key", Arrays.asList("custom-value1", "custom-value2"));
+    ThreadSafeRandom random = mock(ThreadSafeRandom.class);
+
+    PathMatcher pathMatcher = PathMatcher.fromPath("/FooService/barMethod", true);
+    RouteMatch routeMatch1 = RouteMatch.create(
+        pathMatcher,
+        Arrays.asList(
+            HeaderMatcher.forExactValue("grpc-encoding", "gzip", false),
+            HeaderMatcher.forSafeRegEx("authority", Pattern.compile(".*googleapis.*"), false),
+            HeaderMatcher.forRange(
+                "content-length", HeaderMatcher.Range.create(100, 10000), false),
+            HeaderMatcher.forPresent("user-agent", true, false),
+            HeaderMatcher.forPrefix("custom-key", "custom-", false),
+            HeaderMatcher.forSuffix("custom-key", "value2", false)),
+        null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/FooService/barMethod", headers, random))
+        .isTrue();
+
+    RouteMatch routeMatch2 = RouteMatch.create(
+        pathMatcher,
+        Collections.singletonList(
+            HeaderMatcher.forSafeRegEx("authority", Pattern.compile(".*googleapis.*"), true)),
+        null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/FooService/barMethod", headers, random))
+        .isFalse();
+
+    RouteMatch routeMatch3 = RouteMatch.create(
+        pathMatcher,
+        Collections.singletonList(
+            HeaderMatcher.forExactValue("user-agent", "gRPC-Go", false)), null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch3, "/FooService/barMethod", headers, random))
+        .isFalse();
+
+    RouteMatch routeMatch4 = RouteMatch.create(
+        pathMatcher,
+        Collections.singletonList(HeaderMatcher.forPresent("user-agent", false, false)),
+        null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch4, "/FooService/barMethod", headers, random))
+        .isFalse();
+
+    RouteMatch routeMatch5 = RouteMatch.create(
+        pathMatcher,
+        Collections.singletonList(HeaderMatcher.forPresent("user-agent", false, true)), // inverted
+        null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch5, "/FooService/barMethod", headers, random))
+        .isTrue();
+
+    RouteMatch routeMatch6 = RouteMatch.create(
+        pathMatcher,
+        Collections.singletonList(HeaderMatcher.forPresent("user-agent", true, true)),
+        null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch6, "/FooService/barMethod", headers, random))
+        .isFalse();
+
+    RouteMatch routeMatch7 = RouteMatch.create(
+        pathMatcher,
+        Collections.singletonList(
+            HeaderMatcher.forExactValue("custom-key", "custom-value1,custom-value2", false)),
+        null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch7, "/FooService/barMethod", headers, random))
+        .isTrue();
+  }
+
+  @Test
+  public void pathMatching_caseInsensitive() {
+    PathMatcher pathMatcher1 = PathMatcher.fromPath("/FooService/barMethod", false);
+    assertThat(XdsNameResolver.matchPath(pathMatcher1, "/fooservice/barmethod")).isTrue();
+
+    PathMatcher pathMatcher2 = PathMatcher.fromPrefix("/FooService", false);
+    assertThat(XdsNameResolver.matchPath(pathMatcher2, "/fooservice/barmethod")).isTrue();
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
@@ -757,8 +871,8 @@ public class XdsNameResolverTest {
           if (!resourceName.equals(ldsResource)) {
             return;
           }
-          VirtualHost virtualHost =
-              new VirtualHost("virtual-host", Collections.singletonList(AUTHORITY), routes);
+          VirtualHost virtualHost = VirtualHost.create("virtual-host",
+              Collections.singletonList(AUTHORITY), routes, null);
           ldsWatcher.onChanged(
               new LdsUpdate(0, Collections.singletonList(virtualHost), false, null));
         }

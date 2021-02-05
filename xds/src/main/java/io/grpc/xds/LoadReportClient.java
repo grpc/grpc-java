@@ -35,8 +35,10 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.Stats.ClusterStats;
+import io.grpc.xds.Stats.DroppedRequests;
+import io.grpc.xds.Stats.UpstreamLocalityStats;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -346,7 +348,7 @@ final class LoadReportClient {
           io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest.newBuilder()
               .setNode(node.toEnvoyProtoNodeV2());
       for (ClusterStats stats : clusterStatsList) {
-        requestBuilder.addClusterStats(stats.toEnvoyProtoClusterStatsV2());
+        requestBuilder.addClusterStats(buildClusterStats(stats));
       }
       io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest request = requestBuilder.build();
       lrsRequestWriterV2.onNext(requestBuilder.build());
@@ -356,6 +358,37 @@ final class LoadReportClient {
     @Override
     void sendError(Exception error) {
       lrsRequestWriterV2.onError(error);
+    }
+
+    private io.envoyproxy.envoy.api.v2.endpoint.ClusterStats buildClusterStats(
+        ClusterStats stats) {
+      io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.Builder builder =
+          io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.newBuilder()
+              .setClusterName(stats.clusterName());
+      if (stats.clusterServiceName() != null) {
+        builder.setClusterServiceName(stats.clusterServiceName());
+      }
+      for (UpstreamLocalityStats upstreamLocalityStats : stats.upstreamLocalityStatsList()) {
+        builder.addUpstreamLocalityStats(
+            io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats.newBuilder()
+            .setLocality(
+                io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
+                    .setRegion(upstreamLocalityStats.locality().region())
+                    .setZone(upstreamLocalityStats.locality().zone())
+                    .setSubZone(upstreamLocalityStats.locality().subZone()))
+            .setTotalSuccessfulRequests(upstreamLocalityStats.totalSuccessfulRequests())
+            .setTotalErrorRequests(upstreamLocalityStats.totalErrorRequests())
+            .setTotalRequestsInProgress(upstreamLocalityStats.totalRequestsInProgress())
+            .setTotalIssuedRequests(upstreamLocalityStats.totalIssuedRequests()));
+      }
+      for (DroppedRequests droppedRequests : stats.droppedRequestsList()) {
+        builder.addDroppedRequests(
+            io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests.newBuilder()
+                .setCategory(droppedRequests.category())
+                .setDroppedCount(droppedRequests.droppedCount()));
+      }
+      return builder.setTotalDroppedRequests(stats.totalDroppedRequests())
+          .setLoadReportInterval(Durations.fromNanos(stats.loadReportIntervalNano())).build();
     }
   }
 
@@ -410,7 +443,7 @@ final class LoadReportClient {
       LoadStatsRequest.Builder requestBuilder =
           LoadStatsRequest.newBuilder().setNode(node.toEnvoyProtoNode());
       for (ClusterStats stats : clusterStatsList) {
-        requestBuilder.addClusterStats(stats.toEnvoyProtoClusterStats());
+        requestBuilder.addClusterStats(buildClusterStats(stats));
       }
       LoadStatsRequest request = requestBuilder.build();
       lrsRequestWriterV3.onNext(request);
@@ -420,6 +453,39 @@ final class LoadReportClient {
     @Override
     void sendError(Exception error) {
       lrsRequestWriterV3.onError(error);
+    }
+
+    private io.envoyproxy.envoy.config.endpoint.v3.ClusterStats buildClusterStats(
+        ClusterStats stats) {
+      io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.Builder builder =
+          io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.newBuilder()
+              .setClusterName(stats.clusterName());
+      if (stats.clusterServiceName() != null) {
+        builder.setClusterServiceName(stats.clusterServiceName());
+      }
+      for (UpstreamLocalityStats upstreamLocalityStats : stats.upstreamLocalityStatsList()) {
+        builder.addUpstreamLocalityStats(
+            io.envoyproxy.envoy.config.endpoint.v3.UpstreamLocalityStats.newBuilder()
+                .setLocality(
+                    io.envoyproxy.envoy.config.core.v3.Locality.newBuilder()
+                        .setRegion(upstreamLocalityStats.locality().region())
+                        .setZone(upstreamLocalityStats.locality().zone())
+                        .setSubZone(upstreamLocalityStats.locality().subZone()))
+            .setTotalSuccessfulRequests(upstreamLocalityStats.totalSuccessfulRequests())
+            .setTotalErrorRequests(upstreamLocalityStats.totalErrorRequests())
+            .setTotalRequestsInProgress(upstreamLocalityStats.totalRequestsInProgress())
+            .setTotalIssuedRequests(upstreamLocalityStats.totalIssuedRequests()));
+      }
+      for (DroppedRequests droppedRequests : stats.droppedRequestsList()) {
+        builder.addDroppedRequests(
+            io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.DroppedRequests.newBuilder()
+                .setCategory(droppedRequests.category())
+                .setDroppedCount(droppedRequests.droppedCount()));
+      }
+      return builder
+          .setTotalDroppedRequests(stats.totalDroppedRequests())
+          .setLoadReportInterval(Durations.fromNanos(stats.loadReportIntervalNano()))
+          .build();
     }
   }
 }

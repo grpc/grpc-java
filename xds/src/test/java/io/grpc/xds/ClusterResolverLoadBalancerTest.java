@@ -59,10 +59,9 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
-import io.grpc.xds.EnvoyProtoData.DropOverload;
-import io.grpc.xds.EnvoyProtoData.LbEndpoint;
-import io.grpc.xds.EnvoyProtoData.Locality;
-import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.Endpoints.DropOverload;
+import io.grpc.xds.Endpoints.LbEndpoint;
+import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
@@ -104,11 +103,11 @@ public class ClusterResolverLoadBalancerTest {
   private static final String EDS_SERVICE_NAME2 = "backend-service-bar.googleapis.com";
   private static final String LRS_SERVER_NAME = "lrs.googleapis.com";
   private final Locality locality1 =
-      new Locality("test-region-1", "test-zone-1", "test-subzone-1");
+      Locality.create("test-region-1", "test-zone-1", "test-subzone-1");
   private final Locality locality2 =
-      new Locality("test-region-2", "test-zone-2", "test-subzone-2");
+      Locality.create("test-region-2", "test-zone-2", "test-subzone-2");
   private final Locality locality3 =
-      new Locality("test-region-3", "test-zone-3", "test-subzone-3");
+      Locality.create("test-region-3", "test-zone-3", "test-subzone-3");
   private final UpstreamTlsContext tlsContext =
       CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
           CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
@@ -580,7 +579,7 @@ public class ClusterResolverLoadBalancerTest {
         Collections.singletonList(endpoint3));
     assertAddressesEqual(AddressFilter.filter(AddressFilter.filter(
         childBalancer.addresses, CLUSTER_DNS + "[priority0]"),
-        new Locality("", "", "").toString()),
+        Locality.create("", "", "").toString()),
         Arrays.asList(endpoint1, endpoint2));
   }
 
@@ -769,9 +768,9 @@ public class ClusterResolverLoadBalancerTest {
     List<LbEndpoint> endpoints = new ArrayList<>();
     for (EquivalentAddressGroup addr : managedEndpoints.keySet()) {
       boolean status = managedEndpoints.get(addr);
-      endpoints.add(new LbEndpoint(addr, 100 /* unused */, status));
+      endpoints.add(LbEndpoint.create(addr, 100 /* unused */, status));
     }
-    return new LocalityLbEndpoints(endpoints, localityWeight, priority);
+    return LocalityLbEndpoints.create(endpoints, localityWeight, priority);
   }
 
   private static EquivalentAddressGroup makeAddress(final String name) {
