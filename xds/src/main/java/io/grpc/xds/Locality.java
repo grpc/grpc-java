@@ -29,9 +29,6 @@ abstract class Locality {
   abstract String subZone();
 
   static Locality create(String region, String zone, String subZone) {
-    checkNotNull(region, "region");
-    checkNotNull(zone, "zone");
-    checkNotNull(subZone, "subZone");
     return new AutoValue_Locality(region, zone, subZone);
   }
 }

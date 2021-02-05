@@ -16,8 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -38,7 +36,6 @@ final class Endpoints {
 
     static LocalityLbEndpoints create(List<LbEndpoint> endpoints, int localityWeight,
         int priority) {
-      checkNotNull(endpoints, "endpoints");
       return new AutoValue_Endpoints_LocalityLbEndpoints(
           ImmutableList.copyOf(endpoints), localityWeight, priority);
     }
@@ -54,7 +51,6 @@ final class Endpoints {
 
     static LbEndpoint create(EquivalentAddressGroup eag, int loadBalancingWeight,
         boolean isHealthy) {
-      checkNotNull(eag, "eag");
       return new AutoValue_Endpoints_LbEndpoint(eag, loadBalancingWeight, isHealthy);
     }
 
@@ -74,7 +70,6 @@ final class Endpoints {
     abstract int dropsPerMillion();
 
     static DropOverload create(String category, int dropsPerMillion) {
-      checkNotNull(category, "category");
       return new AutoValue_Endpoints_DropOverload(category, dropsPerMillion);
     }
   }

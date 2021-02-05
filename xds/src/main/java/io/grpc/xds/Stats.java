@@ -16,8 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
 import javax.annotation.Nullable;
@@ -101,7 +99,6 @@ final class Stats {
 
     static UpstreamLocalityStats create(Locality locality, long totalIssuedRequests,
         long totalSuccessfulRequests, long totalErrorRequests, long totalRequestsInProgress) {
-      checkNotNull(locality, "locality");
       return new AutoValue_Stats_UpstreamLocalityStats(locality, totalIssuedRequests,
           totalSuccessfulRequests, totalErrorRequests, totalRequestsInProgress);
     }

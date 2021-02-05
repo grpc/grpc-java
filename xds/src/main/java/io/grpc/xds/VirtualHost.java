@@ -45,9 +45,6 @@ abstract class VirtualHost {
 
   public static VirtualHost create(String name, List<String> domains, List<Route> routes,
       @Nullable HttpFault httpFault) {
-    checkNotNull(name, "name");
-    checkNotNull(domains, "domains");
-    checkNotNull(routes, "routes");
     return new AutoValue_VirtualHost(name, ImmutableList.copyOf(domains),
         ImmutableList.copyOf(routes), httpFault);
   }
@@ -128,7 +125,6 @@ abstract class VirtualHost {
         abstract HttpFault httpFault();
 
         static ClusterWeight create(String name, int weight, @Nullable HttpFault httpFault) {
-          checkNotNull(name, "name");
           return new AutoValue_VirtualHost_Route_RouteAction_ClusterWeight(name, weight,
               httpFault);
         }
