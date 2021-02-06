@@ -53,48 +53,50 @@ public class AltsHandshakerTestService extends HandshakerServiceImplBase {
       @Override
       public void onNext(HandshakerReq value) {
         log.log(Level.FINE, "request received: " + value);
-        switch (expectState) {
-          case CLIENT_INIT:
-            checkState(CLIENT_START.equals(value.getReqOneofCase()));
-            HandshakerResp initClient = HandshakerResp.newBuilder()
-                .setOutFrames(fakeOutput)
-                .build();
-            log.log(Level.FINE, "init client response " + initClient);
-            responseObserver.onNext(initClient);
-            expectState = State.SERVER_INIT;
-            break;
-          case SERVER_INIT:
-            checkState(SERVER_START.equals(value.getReqOneofCase()));
-            HandshakerResp initServer = HandshakerResp.newBuilder()
+        synchronized (this) {
+          switch (expectState) {
+            case CLIENT_INIT:
+              checkState(CLIENT_START.equals(value.getReqOneofCase()));
+              HandshakerResp initClient = HandshakerResp.newBuilder()
+                  .setOutFrames(fakeOutput)
+                  .build();
+              log.log(Level.FINE, "init client response " + initClient);
+              responseObserver.onNext(initClient);
+              expectState = State.SERVER_INIT;
+              break;
+            case SERVER_INIT:
+              checkState(SERVER_START.equals(value.getReqOneofCase()));
+              HandshakerResp initServer = HandshakerResp.newBuilder()
                   .setBytesConsumed(FIXED_LENGTH_OUTPUT)
                   .setOutFrames(fakeOutput)
                   .build();
-            log.log(Level.FINE, "init server response" + initServer);
-            responseObserver.onNext(initServer);
-            expectState = State.CLIENT_FINISH;
-            break;
-          case CLIENT_FINISH:
-            checkState(NEXT.equals(value.getReqOneofCase()));
-            HandshakerResp resp = HandshakerResp.newBuilder()
+              log.log(Level.FINE, "init server response" + initServer);
+              responseObserver.onNext(initServer);
+              expectState = State.CLIENT_FINISH;
+              break;
+            case CLIENT_FINISH:
+              checkState(NEXT.equals(value.getReqOneofCase()));
+              HandshakerResp resp = HandshakerResp.newBuilder()
                   .setResult(getResult())
                   .setBytesConsumed(FIXED_LENGTH_OUTPUT)
                   .setOutFrames(fakeOutput)
                   .build();
-            log.log(Level.FINE, "client finished response " + resp);
-            responseObserver.onNext(resp);
-            expectState = State.SERVER_FINISH;
-            break;
-          case SERVER_FINISH:
-            resp = HandshakerResp.newBuilder()
+              log.log(Level.FINE, "client finished response " + resp);
+              responseObserver.onNext(resp);
+              expectState = State.SERVER_FINISH;
+              break;
+            case SERVER_FINISH:
+              resp = HandshakerResp.newBuilder()
                   .setResult(getResult())
                   .setBytesConsumed(FIXED_LENGTH_OUTPUT)
                   .build();
-            log.log(Level.FINE, "server finished response " + resp);
-            responseObserver.onNext(resp);
-            expectState = State.CLIENT_INIT;
-            break;
-          default:
-            throw new RuntimeException("unknown state");
+              log.log(Level.FINE, "server finished response " + resp);
+              responseObserver.onNext(resp);
+              expectState = State.CLIENT_INIT;
+              break;
+            default:
+              throw new RuntimeException("unknown state");
+          }
         }
       }
 
