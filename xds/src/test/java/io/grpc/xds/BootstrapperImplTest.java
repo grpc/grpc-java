@@ -191,11 +191,7 @@ public class BootstrapperImplTest {
         + "  \"node\": {\n"
         + "    \"id\": \"ENVOY_NODE_ID\",\n"
         + "    \"cluster\": \"ENVOY_CLUSTER\",\n"
-        + "    \"locality\": {\n"
-        + "      \"region\": \"ENVOY_REGION\",\n"
-        + "      \"zone\": \"ENVOY_ZONE\",\n"
-        + "      \"sub_zone\": \"ENVOY_SUBZONE\"\n"
-        + "    },\n"
+        + "    \"locality\": {},\n"
         + "    \"metadata\": {\n"
         + "      \"TRAFFICDIRECTOR_INTERCEPTION_PORT\": \"ENVOY_PORT\",\n"
         + "      \"TRAFFICDIRECTOR_NETWORK_NAME\": \"VPC_NETWORK_NAME\"\n"
@@ -223,7 +219,7 @@ public class BootstrapperImplTest {
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
-            .setLocality(Locality.create("ENVOY_REGION", "ENVOY_ZONE", "ENVOY_SUBZONE"))
+            .setLocality(Locality.create("", "", ""))
             .setMetadata(
                 ImmutableMap.of(
                     "TRAFFICDIRECTOR_INTERCEPTION_PORT",
