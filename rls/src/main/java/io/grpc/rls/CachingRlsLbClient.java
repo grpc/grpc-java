@@ -253,7 +253,7 @@ final class CachingRlsLbClient {
       linkedHashLruCache.close();
       // TODO(creamsoup) maybe cancel all pending requests
       pendingCallCache.clear();
-      rlsChannel.shutdown();
+      rlsChannel.shutdownNow();
       rlsPicker.close();
     }
   }
