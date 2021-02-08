@@ -187,7 +187,8 @@ public class CachingRlsLbClientTest {
   public void get_noError_lifeCycle() throws Exception {
     InOrder inOrder = inOrder(evictionListener);
     RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest("server", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+        new RouteLookupRequest(
+            "bigtable.googleapis.com", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
@@ -277,7 +278,8 @@ public class CachingRlsLbClientTest {
   public void get_updatesLbState() throws Exception {
     InOrder inOrder = inOrder(helper);
     RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest("service1", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+        new RouteLookupRequest(
+            "bigtable.googleapis.com", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
@@ -317,7 +319,7 @@ public class CachingRlsLbClientTest {
     // try to get invalid
     RouteLookupRequest invalidRouteLookupRequest =
         new RouteLookupRequest(
-            "service1", "/doesn/exists", "grpc", ImmutableMap.<String, String>of());
+            "bigtable.googleapis.com", "/doesn/exists", "grpc", ImmutableMap.<String, String>of());
     CachedRouteLookupResponse errorResp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(errorResp.isPending()).isTrue();
     fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
@@ -581,7 +583,7 @@ public class CachingRlsLbClientTest {
 
     @Override
     public String getAuthority() {
-      return DEFAULT_TARGET;
+      return "bigtable.googleapis.com";
     }
 
     @Override
