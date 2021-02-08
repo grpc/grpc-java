@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
 import com.google.common.collect.Sets;
@@ -46,15 +47,16 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.DelayedClientCall;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.EnvoyProtoData.ClusterWeight;
-import io.grpc.xds.EnvoyProtoData.FaultAbort;
-import io.grpc.xds.EnvoyProtoData.FaultDelay;
-import io.grpc.xds.EnvoyProtoData.HttpFault;
-import io.grpc.xds.EnvoyProtoData.Route;
-import io.grpc.xds.EnvoyProtoData.RouteAction;
-import io.grpc.xds.EnvoyProtoData.VirtualHost;
-import io.grpc.xds.RouteMatch.HeaderMatcher;
+import io.grpc.xds.HttpFault.FaultAbort;
+import io.grpc.xds.HttpFault.FaultDelay;
+import io.grpc.xds.Matchers.FractionMatcher;
+import io.grpc.xds.Matchers.HeaderMatcher;
+import io.grpc.xds.Matchers.PathMatcher;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
+import io.grpc.xds.VirtualHost.Route;
+import io.grpc.xds.VirtualHost.Route.RouteAction;
+import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
+import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
@@ -260,7 +262,7 @@ final class XdsNameResolver extends NameResolver {
     boolean exactMatchFound = false;  // true if a virtual host with exactly matched domain found
     VirtualHost targetVirtualHost = null;  // target VirtualHost with longest matched domain
     for (VirtualHost vHost : virtualHosts) {
-      for (String domain : vHost.getDomains()) {
+      for (String domain : vHost.domains()) {
         boolean selected = false;
         if (matchHostName(hostName, domain)) { // matching
           if (!domain.contains("*")) { // exact matching
@@ -364,11 +366,11 @@ final class XdsNameResolver extends NameResolver {
       do {
         selectedFaultConfig = routingConfig.faultConfig;
         for (Route route : routingConfig.routes) {
-          if (route.getRouteMatch().matches(
-              "/" + args.getMethodDescriptor().getFullMethodName(), asciiHeaders)) {
+          if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
+              asciiHeaders, random)) {
             selectedRoute = route;
-            if (routingConfig.applyFaultInjection && route.getHttpFault() != null) {
-              selectedFaultConfig = route.getHttpFault();
+            if (routingConfig.applyFaultInjection && route.httpFault() != null) {
+              selectedFaultConfig = route.httpFault();
             }
             break;
           }
@@ -377,22 +379,22 @@ final class XdsNameResolver extends NameResolver {
           return Result.forError(
               Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"));
         }
-        RouteAction action = selectedRoute.getRouteAction();
-        if (action.getCluster() != null) {
-          cluster = action.getCluster();
-        } else if (action.getWeightedCluster() != null) {
+        RouteAction action = selectedRoute.routeAction();
+        if (action.cluster() != null) {
+          cluster = action.cluster();
+        } else if (action.weightedClusters() != null) {
           int totalWeight = 0;
-          for (ClusterWeight weightedCluster : action.getWeightedCluster()) {
-            totalWeight += weightedCluster.getWeight();
+          for (ClusterWeight weightedCluster : action.weightedClusters()) {
+            totalWeight += weightedCluster.weight();
           }
           int select = random.nextInt(totalWeight);
           int accumulator = 0;
-          for (ClusterWeight weightedCluster : action.getWeightedCluster()) {
-            accumulator += weightedCluster.getWeight();
+          for (ClusterWeight weightedCluster : action.weightedClusters()) {
+            accumulator += weightedCluster.weight();
             if (select < accumulator) {
-              cluster = weightedCluster.getName();
-              if (routingConfig.applyFaultInjection && weightedCluster.getHttpFault() != null) {
-                selectedFaultConfig = weightedCluster.getHttpFault();
+              cluster = weightedCluster.name();
+              if (routingConfig.applyFaultInjection && weightedCluster.httpFault() != null) {
+                selectedFaultConfig = weightedCluster.httpFault();
               }
               break;
             }
@@ -402,7 +404,7 @@ final class XdsNameResolver extends NameResolver {
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
       Map<String, ?> rawServiceConfig = Collections.emptyMap();
       if (enableTimeout) {
-        Long timeoutNano = selectedRoute.getRouteAction().getTimeoutNano();
+        Long timeoutNano = selectedRoute.routeAction().timeoutNano();
         if (timeoutNano == null) {
           timeoutNano = routingConfig.fallbackTimeoutNano;
         }
@@ -419,46 +421,33 @@ final class XdsNameResolver extends NameResolver {
                 "Failed to parse service config (method config)"));
       }
       final String finalCluster = cluster;
-      if (selectedFaultConfig != null && selectedFaultConfig.maxActiveFaults != null
-          && activeFaultInjectedStreams.get() >= selectedFaultConfig.maxActiveFaults) {
+      if (selectedFaultConfig != null && selectedFaultConfig.maxActiveFaults() != null
+          && activeFaultInjectedStreams.get() >= selectedFaultConfig.maxActiveFaults()) {
         selectedFaultConfig = null;
       }
       if (selectedFaultConfig != null) {
-        if (!selectedFaultConfig.upstreamCluster.equals(cluster)) {
+        if (!selectedFaultConfig.upstreamCluster().equals(cluster)) {
           selectedFaultConfig = null;
-        } else if (!selectedFaultConfig.downstreamNodes.isEmpty()) {
+        } else if (!selectedFaultConfig.downstreamNodes().isEmpty()) {
           String downstreamNode = headers.get(DOWNSTREAM_NODE_KEY);
           if (downstreamNode == null
-              || !selectedFaultConfig.downstreamNodes.contains(downstreamNode)) {
+              || !selectedFaultConfig.downstreamNodes().contains(downstreamNode)) {
             selectedFaultConfig = null;
           }
         }
       }
-      if (selectedFaultConfig != null) {
-        // TODO(zdapeng): extract a reusable method
-        for (HeaderMatcher headerMatcher : selectedFaultConfig.headers) {
-          Iterable<String> headerValues = asciiHeaders.get(headerMatcher.getName());
-          // Special cases for hiding headers: "grpc-previous-rpc-attempts".
-          if (headerMatcher.getName().equals("grpc-previous-rpc-attempts")) {
-            headerValues = null;
-          }
-          // Special case for exposing headers: "content-type".
-          if (headerMatcher.getName().equals("content-type")) {
-            headerValues = Collections.singletonList("application/grpc");
-          }
-          if (!headerMatcher.matchesValue(headerValues)) {
-            selectedFaultConfig = null;
-          }
-        }
+      if (selectedFaultConfig != null
+          && !matchHeaders(selectedFaultConfig.headers(), asciiHeaders)) {
+        selectedFaultConfig = null;
       }
       Long delayNanos = null;
       Status abortStatus = null;
       if (selectedFaultConfig != null) {
-        if (selectedFaultConfig.faultDelay != null) {
-          delayNanos = determineFaultDelayNanos(selectedFaultConfig.faultDelay, headers);
+        if (selectedFaultConfig.faultDelay() != null) {
+          delayNanos = determineFaultDelayNanos(selectedFaultConfig.faultDelay(), headers);
         }
-        if (selectedFaultConfig.faultAbort != null) {
-          abortStatus = determineFaultAbortStatus(selectedFaultConfig.faultAbort, headers);
+        if (selectedFaultConfig.faultAbort() != null) {
+          abortStatus = determineFaultAbortStatus(selectedFaultConfig.faultAbort(), headers);
         }
       }
       final Long finalDelayNanos = delayNanos;
@@ -571,7 +560,7 @@ final class XdsNameResolver extends NameResolver {
     private Long determineFaultDelayNanos(FaultDelay faultDelay, Metadata headers) {
       Long delayNanos;
       Integer delayRate = null;
-      if (faultDelay.headerDelay) {
+      if (faultDelay.headerDelay()) {
         try {
           int delayMillis = Integer.parseInt(headers.get(HEADER_DELAY_KEY));
           delayNanos = TimeUnit.MILLISECONDS.toNanos(delayMillis);
@@ -584,10 +573,10 @@ final class XdsNameResolver extends NameResolver {
           return null; // treated as header_delay not applicable
         }
       } else {
-        delayNanos = faultDelay.delayNanos;
+        delayNanos = faultDelay.delayNanos();
       }
       if (delayRate == null) {
-        delayRate = faultDelay.ratePerMillion;
+        delayRate = faultDelay.ratePerMillion();
       }
       if (random.nextInt(1_000_000) >= delayRate) {
         return null;
@@ -599,12 +588,12 @@ final class XdsNameResolver extends NameResolver {
     private Status determineFaultAbortStatus(FaultAbort faultAbort, Metadata headers) {
       Status abortStatus = null;
       Integer abortRate = null;
-      if (faultAbort.headerAbort) {
+      if (faultAbort.headerAbort()) {
         try {
           String httpCodeStr = headers.get(HEADER_ABORT_HTTP_STATUS_KEY);
           if (httpCodeStr != null) {
             int httpCode = Integer.parseInt(httpCodeStr);
-            abortStatus = FaultAbort.convertHttpStatus(httpCode);
+            abortStatus = GrpcUtil.httpStatusToGrpcStatus(httpCode);
           }
           String grpcCodeStr = headers.get(HEADER_ABORT_GRPC_STATUS_KEY);
           if (grpcCodeStr != null) {
@@ -621,10 +610,10 @@ final class XdsNameResolver extends NameResolver {
           return null; // treated as header_abort not applicable
         }
       } else {
-        abortStatus = faultAbort.status;
+        abortStatus = faultAbort.status();
       }
       if (abortRate == null) {
-        abortRate = faultAbort.ratePerMillion;
+        abortRate = faultAbort.ratePerMillion();
       }
       if (random.nextInt(1_000_000) >= abortRate) {
         return null;
@@ -739,6 +728,84 @@ final class XdsNameResolver extends NameResolver {
     public void sendMessage(ReqT message) {}
   }
 
+  @VisibleForTesting
+  static boolean matchRoute(RouteMatch routeMatch, String fullMethodName,
+      Map<String, Iterable<String>> headers, ThreadSafeRandom random) {
+    if (!matchPath(routeMatch.pathMatcher(), fullMethodName)) {
+      return false;
+    }
+    if (!matchHeaders(routeMatch.headerMatchers(), headers)) {
+      return false;
+    }
+    FractionMatcher fraction = routeMatch.fractionMatcher();
+    return fraction == null || random.nextInt(fraction.denominator()) < fraction.numerator();
+  }
+
+  @VisibleForTesting
+  static boolean matchPath(PathMatcher pathMatcher, String fullMethodName) {
+    if (pathMatcher.path() != null) {
+      return pathMatcher.caseSensitive()
+          ? pathMatcher.path().equals(fullMethodName)
+          : pathMatcher.path().equalsIgnoreCase(fullMethodName);
+    } else if (pathMatcher.prefix() != null) {
+      return pathMatcher.caseSensitive()
+          ? fullMethodName.startsWith(pathMatcher.prefix())
+          : fullMethodName.toLowerCase().startsWith(pathMatcher.prefix().toLowerCase());
+    }
+    return pathMatcher.regEx().matches(fullMethodName);
+  }
+
+  private static boolean matchHeaders(
+      List<HeaderMatcher> headerMatchers, Map<String, Iterable<String>> headers) {
+    for (HeaderMatcher headerMatcher : headerMatchers) {
+      Iterable<String> headerValues = headers.get(headerMatcher.name());
+      // Special cases for hiding headers: "grpc-previous-rpc-attempts".
+      if (headerMatcher.name().equals("grpc-previous-rpc-attempts")) {
+        headerValues = null;
+      }
+      // Special case for exposing headers: "content-type".
+      if (headerMatcher.name().equals("content-type")) {
+        headerValues = Collections.singletonList("application/grpc");
+      }
+      if (!matchHeader(headerMatcher, headerValues)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @VisibleForTesting
+  static boolean matchHeader(HeaderMatcher headerMatcher,
+      @Nullable Iterable<String> headerValues) {
+    if (headerMatcher.present() != null) {
+      return (headerValues == null) == headerMatcher.present().equals(headerMatcher.inverted());
+    }
+    if (headerValues == null) {
+      return false;
+    }
+    String valueStr = Joiner.on(",").join(headerValues);
+    boolean baseMatch;
+    if (headerMatcher.exactValue() != null) {
+      baseMatch = headerMatcher.exactValue().equals(valueStr);
+    } else if (headerMatcher.safeRegEx() != null) {
+      baseMatch = headerMatcher.safeRegEx().matches(valueStr);
+    } else if (headerMatcher.range() != null) {
+      long numValue;
+      try {
+        numValue = Long.parseLong(valueStr);
+        baseMatch = numValue >= headerMatcher.range().start()
+            && numValue <= headerMatcher.range().end();
+      } catch (NumberFormatException ignored) {
+        baseMatch = false;
+      }
+    } else if (headerMatcher.prefix() != null) {
+      baseMatch = valueStr.startsWith(headerMatcher.prefix());
+    } else {
+      baseMatch = valueStr.endsWith(headerMatcher.suffix());
+    }
+    return baseMatch != headerMatcher.inverted();
+  }
+
   private class ResolveState implements LdsResourceWatcher {
     private final ConfigOrError emptyServiceConfig =
         serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
@@ -839,19 +906,19 @@ final class XdsNameResolver extends NameResolver {
         listener.onResult(emptyResult);
         return;
       }
-      List<Route> routes = virtualHost.getRoutes();
+      List<Route> routes = virtualHost.routes();
       HttpFault faultConfig = httpFilterFaultConfig;
-      if (applyFaultInjection && virtualHost.getHttpFault() != null) {
-        faultConfig = virtualHost.getHttpFault();
+      if (applyFaultInjection && virtualHost.httpFault() != null) {
+        faultConfig = virtualHost.httpFault();
       }
       Set<String> clusters = new HashSet<>();
       for (Route route : routes) {
-        RouteAction action = route.getRouteAction();
-        if (action.getCluster() != null) {
-          clusters.add(action.getCluster());
-        } else if (action.getWeightedCluster() != null) {
-          for (ClusterWeight weighedCluster : action.getWeightedCluster()) {
-            clusters.add(weighedCluster.getName());
+        RouteAction action = route.routeAction();
+        if (action.cluster() != null) {
+          clusters.add(action.cluster());
+        } else if (action.weightedClusters() != null) {
+          for (ClusterWeight weighedCluster : action.weightedClusters()) {
+            clusters.add(weighedCluster.name());
           }
         }
       }

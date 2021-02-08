@@ -27,7 +27,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
-import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.io.IOException;
@@ -202,19 +201,21 @@ public class BootstrapperImpl implements Bootstrapper {
       }
       Map<String, ?> rawLocality = JsonUtil.getObject(rawNode, "locality");
       if (rawLocality != null) {
-        String region = JsonUtil.getString(rawLocality, "region");
-        String zone = JsonUtil.getString(rawLocality, "zone");
-        String subZone = JsonUtil.getString(rawLocality, "sub_zone");
-        if (region != null) {
-          logger.log(XdsLogLevel.INFO, "Locality region: {0}", region);
+        String region = "";
+        String zone = "";
+        String subZone = "";
+        if (rawLocality.containsKey("region")) {
+          region = JsonUtil.getString(rawLocality, "region");
         }
         if (rawLocality.containsKey("zone")) {
-          logger.log(XdsLogLevel.INFO, "Locality zone: {0}", zone);
+          zone = JsonUtil.getString(rawLocality, "zone");
         }
         if (rawLocality.containsKey("sub_zone")) {
-          logger.log(XdsLogLevel.INFO, "Locality sub_zone: {0}", subZone);
+          subZone = JsonUtil.getString(rawLocality, "sub_zone");
         }
-        Locality locality = new Locality(region, zone, subZone);
+        logger.log(XdsLogLevel.INFO, "Locality region: {0}, zone: {0}, subZone: {0}",
+            region, zone, subZone);
+        Locality locality = Locality.create(region, zone, subZone);
         nodeBuilder.setLocality(locality);
       }
     }

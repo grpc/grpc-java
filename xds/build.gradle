@@ -13,7 +13,13 @@ description = "gRPC: XDS plugin"
     it.options.compilerArgs += [
         // valueOf(int) in RoutingPriority has been deprecated
         "-Xlint:-deprecation",
+        // only has AutoValue annotation processor
+        "-Xlint:-processing",
     ]
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/build/generated/sources/annotationProcessor/java/.*",
+            "|")
 }
 
 evaluationDependsOn(project(':grpc-core').path)
@@ -27,7 +33,8 @@ dependencies {
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.gson,
             libraries.re2j,
-            libraries.bouncycastle
+            libraries.bouncycastle,
+            libraries.autovalue_annotation
     def nettyDependency = implementation project(':grpc-netty')
 
     implementation (libraries.opencensus_proto) {
@@ -44,6 +51,7 @@ dependencies {
 
     testImplementation project(':grpc-core').sourceSets.test.output
 
+    annotationProcessor libraries.autovalue
     compileOnly libraries.javax_annotation,
             // At runtime use the epoll included in grpc-netty-shaded
             libraries.netty_epoll
