@@ -137,7 +137,8 @@ final class CachingRlsLbClient {
             builder.evictionListener,
             scheduledExecutorService,
             timeProvider);
-    RlsRequestFactory requestFactory = new RlsRequestFactory(lbPolicyConfig.getRouteLookupConfig());
+    RlsRequestFactory requestFactory = new RlsRequestFactory(
+        lbPolicyConfig.getRouteLookupConfig(), helper.getAuthority());
     rlsPicker = new RlsPicker(requestFactory);
     // It is safe to use helper.getUnsafeChannelCredentials() because the client authenticates the
     // RLS server using the same authority as the backends, even though the RLS server’s addresses
