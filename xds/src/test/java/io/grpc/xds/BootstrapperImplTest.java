@@ -56,7 +56,6 @@ public class BootstrapperImplTest {
   private String originalBootstrapPathFromSysProp;
   private String originalBootstrapConfigFromEnvVar;
   private String originalBootstrapConfigFromSysProp;
-  private boolean originalEnableV3Protocol;
 
   @Before
   public void setUp() {
@@ -69,7 +68,6 @@ public class BootstrapperImplTest {
     originalBootstrapPathFromSysProp = BootstrapperImpl.bootstrapPathFromSysProp;
     originalBootstrapConfigFromEnvVar = BootstrapperImpl.bootstrapConfigFromEnvVar;
     originalBootstrapConfigFromSysProp = BootstrapperImpl.bootstrapConfigFromSysProp;
-    originalEnableV3Protocol = BootstrapperImpl.enableV3Protocol;
   }
 
   @After
@@ -78,7 +76,6 @@ public class BootstrapperImplTest {
     BootstrapperImpl.bootstrapPathFromSysProp = originalBootstrapPathFromSysProp;
     BootstrapperImpl.bootstrapConfigFromEnvVar = originalBootstrapConfigFromEnvVar;
     BootstrapperImpl.bootstrapConfigFromSysProp = originalBootstrapConfigFromSysProp;
-    BootstrapperImpl.enableV3Protocol = originalEnableV3Protocol;
   }
 
   @Test
@@ -567,7 +564,7 @@ public class BootstrapperImplTest {
         + "      \"channel_creds\": [\n"
         + "        {\"type\": \"insecure\"}\n"
         + "      ],\n"
-        + "      \"server_features\": [\"xds_v3\"]\n"
+        + "      \"server_features\": []\n"
         + "    }\n"
         + "  ]\n"
         + "}";
@@ -581,17 +578,7 @@ public class BootstrapperImplTest {
   }
 
   @Test
-  public void supportV3Protocol_disabledByDefault() throws XdsInitializationException {
-    subtestSupportV3Protocol(false);
-  }
-
-  @Test
-  public void supportV3Protocol_enabled() throws XdsInitializationException {
-    BootstrapperImpl.enableV3Protocol = true;
-    subtestSupportV3Protocol(true);
-  }
-
-  private void subtestSupportV3Protocol(boolean enabled) throws XdsInitializationException {
+  public void useV3ProtocolIfV3FeaturePresent() throws XdsInitializationException {
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
@@ -609,11 +596,7 @@ public class BootstrapperImplTest {
     ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
     assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
     assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
-    if (enabled) {
-      assertThat(serverInfo.isUseProtocolV3()).isTrue();
-    } else {
-      assertThat(serverInfo.isUseProtocolV3()).isFalse();
-    }
+    assertThat(serverInfo.isUseProtocolV3()).isTrue();
   }
 
   @Test

@@ -59,9 +59,6 @@ public class BootstrapperImpl implements Bootstrapper {
   static String bootstrapConfigFromSysProp = System.getProperty(BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR);
   private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
   @VisibleForTesting
-  static boolean enableV3Protocol = Boolean.parseBoolean(
-      System.getenv("GRPC_XDS_EXPERIMENTAL_V3_SUPPORT"));
-  @VisibleForTesting
   static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
       "envoy.lb.does_not_support_overprovisioning";
 
@@ -176,8 +173,7 @@ public class BootstrapperImpl implements Bootstrapper {
       List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
-        useProtocolV3 = enableV3Protocol
-            && serverFeatures.contains(XDS_V3_SERVER_FEATURE);
+        useProtocolV3 = serverFeatures.contains(XDS_V3_SERVER_FEATURE);
       }
       servers.add(new ServerInfo(serverUri, channelCredentials, useProtocolV3));
     }
