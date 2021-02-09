@@ -144,9 +144,8 @@ public class XdsServerBuilderTest {
     Future<Throwable> future = startServerAsync();
     XdsServerTestHelper.generateListenerUpdate(
         listenerWatcher,
-        port,
-            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
-        null);
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1")
+    );
     verifyServer(future, null, null);
     verifyShutdown();
   }
@@ -157,9 +156,8 @@ public class XdsServerBuilderTest {
     buildServer(null, true);
     XdsServerTestHelper.generateListenerUpdate(
             listenerWatcher,
-            port,
-            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
-            null);
+            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1")
+    );
     xdsServer.start();
     try {
       xdsServer.start();
@@ -180,9 +178,8 @@ public class XdsServerBuilderTest {
     Future<Throwable> future = startServerAsync();
     XdsServerTestHelper.generateListenerUpdate(
         listenerWatcher,
-        port,
-        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
-        null);
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1")
+    );
     verifyServer(future, mockXdsServingStatusListener, null);
     verifyShutdown();
   }
@@ -217,9 +214,8 @@ public class XdsServerBuilderTest {
     reset(mockXdsServingStatusListener);
     XdsServerTestHelper.generateListenerUpdate(
         listenerWatcher,
-        port,
-        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
-        null);
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1")
+    );
     verifyServer(future, mockXdsServingStatusListener, null);
     verifyShutdown();
   }
@@ -235,9 +231,8 @@ public class XdsServerBuilderTest {
     ServerSocket serverSocket = new ServerSocket(port);
     XdsServerTestHelper.generateListenerUpdate(
         listenerWatcher,
-        port,
-        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
-        null);
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1")
+    );
     Throwable exception = future.get(5, TimeUnit.SECONDS);
     assertThat(exception).isInstanceOf(IOException.class);
     assertThat(exception).hasMessageThat().contains("Failed to bind");
@@ -269,14 +264,12 @@ public class XdsServerBuilderTest {
     Future<Throwable> future = startServerAsync();
     XdsServerTestHelper.generateListenerUpdate(
         listenerWatcher,
-        port,
-        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
-        null);
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1")
+    );
     XdsServerTestHelper.generateListenerUpdate(
         listenerWatcher,
-        port,
-        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
-        null);
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1")
+    );
     verify(mockXdsServingStatusListener, never()).onNotServing(any(Throwable.class));
     verifyServer(future, mockXdsServingStatusListener, null);
     listenerWatcher.onError(Status.ABORTED);

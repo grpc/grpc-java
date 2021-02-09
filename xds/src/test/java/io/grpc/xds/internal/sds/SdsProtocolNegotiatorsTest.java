@@ -43,7 +43,7 @@ import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
-import io.grpc.xds.XdsClientWrapperForServerSdsTest;
+import io.grpc.xds.XdsClientWrapperForServerSdsTestMisc;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsHandler;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsProtocolNegotiator;
 import io.netty.channel.ChannelHandler;
@@ -227,13 +227,18 @@ public class SdsProtocolNegotiatorsTest {
           public SocketAddress localAddress() {
             return new InetSocketAddress("172.168.1.1", 80);
           }
+
+          @Override
+          public SocketAddress remoteAddress() {
+            return new InetSocketAddress("172.168.2.2", 90);
+          }
         };
     pipeline = channel.pipeline();
     DownstreamTlsContext downstreamTlsContext =
         buildDownstreamTlsContextFromFilenames(SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
+        XdsClientWrapperForServerSdsTestMisc.createXdsClientWrapperForServerSds(
             80, downstreamTlsContext);
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
         new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds,
@@ -281,7 +286,7 @@ public class SdsProtocolNegotiatorsTest {
                 .getDefaultInstance());
 
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
+        XdsClientWrapperForServerSdsTestMisc.createXdsClientWrapperForServerSds(
             80, downstreamTlsContext);
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
         new SdsProtocolNegotiators.HandlerPickerHandler(

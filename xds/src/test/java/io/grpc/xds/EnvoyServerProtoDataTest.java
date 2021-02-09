@@ -57,6 +57,7 @@ public class EnvoyServerProtoDataTest {
             .setAddress(address)
             .addFilterChains(createOutFilter())
             .addFilterChains(createInFilter())
+            .setDefaultFilterChain(createDefaultFilterChain())
             .build();
 
     Listener xdsListener = Listener.fromEnvoyProtoListener(listener);
@@ -81,8 +82,13 @@ public class EnvoyServerProtoDataTest {
     assertThat(inFilterChainMatch).isNotNull();
     assertThat(inFilterChainMatch.getDestinationPort()).isEqualTo(8000);
     assertThat(inFilterChainMatch.getApplicationProtocols()).containsExactly("managed-mtls");
-    assertThat(inFilterChainMatch.getPrefixRanges()).containsExactly(
-        new EnvoyServerProtoData.CidrRange("10.20.0.15", 32));
+    assertThat(inFilterChainMatch.getPrefixRanges())
+        .containsExactly(new EnvoyServerProtoData.CidrRange("10.20.0.15", 32));
+    assertThat(inFilterChainMatch.getSourcePrefixRanges())
+        .containsExactly(new EnvoyServerProtoData.CidrRange("10.30.3.0", 24));
+    assertThat(inFilterChainMatch.getConnectionSourceType())
+        .isEqualTo(EnvoyServerProtoData.ConnectionSourceType.EXTERNAL);
+    assertThat(inFilterChainMatch.getSourcePorts()).containsExactly(200, 300);
     DownstreamTlsContext inFilterTlsContext = inFilter.getDownstreamTlsContext();
     assertThat(inFilterTlsContext.getCommonTlsContext()).isNotNull();
     CommonTlsContext commonTlsContext = inFilterTlsContext.getCommonTlsContext();
@@ -90,6 +96,15 @@ public class EnvoyServerProtoDataTest {
         .getTlsCertificateSdsSecretConfigsList();
     assertThat(tlsCertSdsConfigs).hasSize(1);
     assertThat(tlsCertSdsConfigs.get(0).getName()).isEqualTo("google-sds-config-default");
+
+    EnvoyServerProtoData.FilterChain defaultFilter = xdsListener.getDefaultFilterChain();
+    assertThat(defaultFilter).isNotNull();
+    EnvoyServerProtoData.FilterChainMatch defaultFilterChainMatch =
+        defaultFilter.getFilterChainMatch();
+    assertThat(defaultFilterChainMatch).isNotNull();
+    assertThat(defaultFilterChainMatch.getDestinationPort()).isEqualTo(8001);
+    assertThat(defaultFilterChainMatch.getPrefixRanges())
+        .containsExactly(new EnvoyServerProtoData.CidrRange("10.20.0.16", 30));
   }
 
   private static FilterChain createOutFilter() {
@@ -116,7 +131,15 @@ public class EnvoyServerProtoDataTest {
                         .setAddressPrefix("10.20.0.15")
                         .setPrefixLen(UInt32Value.of(32))
                         .build())
+                    .addSourcePrefixRanges(
+                        CidrRange.newBuilder()
+                            .setAddressPrefix("10.30.3.0")
+                            .setPrefixLen(UInt32Value.of(24))
+                            .build())
                     .addApplicationProtocols("managed-mtls")
+                    .setSourceType(FilterChainMatch.ConnectionSourceType.EXTERNAL)
+                    .addSourcePorts(200)
+                    .addSourcePorts(300)
                     .build())
             .setTransportSocket(TransportSocket.newBuilder().setName("envoy.transport_sockets.tls")
                 .setTypedConfig(
@@ -130,6 +153,40 @@ public class EnvoyServerProtoDataTest {
                         "type.googleapis.com/envoy.config.filter.network.http_connection_manager"
                             + ".v2.HttpConnectionManager"))
                 .build())
+            .build();
+    return filterChain;
+  }
+
+  private static FilterChain createDefaultFilterChain() {
+    FilterChain filterChain =
+        FilterChain.newBuilder()
+            .setFilterChainMatch(
+                FilterChainMatch.newBuilder()
+                    .setDestinationPort(UInt32Value.of(8001))
+                    .addPrefixRanges(
+                        CidrRange.newBuilder()
+                            .setAddressPrefix("10.20.0.16")
+                            .setPrefixLen(UInt32Value.of(30))
+                            .build())
+                    .build())
+            .setTransportSocket(
+                TransportSocket.newBuilder()
+                    .setName("envoy.transport_sockets.tls")
+                    .setTypedConfig(
+                        Any.pack(
+                            CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+                                "google-sds-config-default", "ROOTCA")))
+                    .build())
+            .addFilters(
+                Filter.newBuilder()
+                    .setName("envoy.http_connection_manager")
+                    .setTypedConfig(
+                        Any.newBuilder()
+                            .setTypeUrl(
+                                "type.googleapis.com/"
+                                    + "envoy.config.filter.network.http_connection_manager"
+                                    + ".v2.HttpConnectionManager"))
+                    .build())
             .build();
     return filterChain;
   }
