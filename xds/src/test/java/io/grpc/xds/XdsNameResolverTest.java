@@ -180,7 +180,8 @@ public class XdsNameResolverTest {
     Map<String, ?> rawRoute3 = XdsNameResolver.convertToRawRoute(routeMatch3, "action_foo");
     Map<String, ?> header =
         (Map<String, ?>) Iterables.getOnlyElement((List<?>) rawRoute3.get("headers"));
-    assertThat((Map<String, ?>) header.get("rangeMatch")).containsExactly("start", 0L, "end", 10L);
+    assertThat((Map<String, ?>) header.get("rangeMatch")).containsExactly(
+        "start", (double) 0L, "end", (double) 10L);
 
     RouteMatch routeMatch4 =
         new RouteMatch(
