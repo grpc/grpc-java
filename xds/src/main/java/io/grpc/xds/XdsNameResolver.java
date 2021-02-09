@@ -310,10 +310,10 @@ final class XdsNameResolver extends NameResolver {
         rawHeaderMatcherBuilder.put("regexMatch", regexMatch.pattern());
       }
       if (rangeMatch != null) {
-        rawHeaderMatcherBuilder
-            .put(
-                "rangeMatch",
-                ImmutableMap.of("start", rangeMatch.getStart(), "end", rangeMatch.getEnd()));
+        rawHeaderMatcherBuilder.put(
+            "rangeMatch",
+            ImmutableMap.of("start", Long.valueOf(rangeMatch.getStart()).doubleValue(),
+                "end", Long.valueOf(rangeMatch.getEnd()).doubleValue()));
       }
       if (presentMatch != null) {
         rawHeaderMatcherBuilder.put("presentMatch", presentMatch);
