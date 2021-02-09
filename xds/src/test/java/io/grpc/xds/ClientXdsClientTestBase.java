@@ -43,12 +43,11 @@ import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
-import io.grpc.xds.EnvoyProtoData.DropOverload;
-import io.grpc.xds.EnvoyProtoData.HttpFault;
-import io.grpc.xds.EnvoyProtoData.LbEndpoint;
-import io.grpc.xds.EnvoyProtoData.Locality;
-import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.Endpoints.DropOverload;
+import io.grpc.xds.Endpoints.LbEndpoint;
+import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
 import io.grpc.xds.XdsClient.CdsUpdate;
 import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
@@ -370,18 +369,18 @@ public abstract class ClientXdsClientTestBase {
     assertThat(ldsUpdate.virtualHosts).hasSize(2);
     assertThat(ldsUpdate.hasFaultInjection).isTrue();
     assertThat(ldsUpdate.httpFault).isNull();
-    HttpFault httpFault = ldsUpdate.virtualHosts.get(0).getHttpFault();
-    assertThat(httpFault.faultDelay.delayNanos).isEqualTo(300);
-    assertThat(httpFault.faultDelay.ratePerMillion).isEqualTo(1000);
-    assertThat(httpFault.faultAbort).isNull();
-    assertThat(httpFault.upstreamCluster).isEqualTo("cluster1");
-    assertThat(httpFault.maxActiveFaults).isEqualTo(100);
-    httpFault = ldsUpdate.virtualHosts.get(1).getHttpFault();
-    assertThat(httpFault.faultDelay).isNull();
-    assertThat(httpFault.faultAbort.status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(httpFault.faultAbort.ratePerMillion).isEqualTo(2000);
-    assertThat(httpFault.upstreamCluster).isEqualTo("cluster2");
-    assertThat(httpFault.maxActiveFaults).isEqualTo(101);
+    HttpFault httpFault = ldsUpdate.virtualHosts.get(0).httpFault();
+    assertThat(httpFault.faultDelay().delayNanos()).isEqualTo(300);
+    assertThat(httpFault.faultDelay().ratePerMillion()).isEqualTo(1000);
+    assertThat(httpFault.faultAbort()).isNull();
+    assertThat(httpFault.upstreamCluster()).isEqualTo("cluster1");
+    assertThat(httpFault.maxActiveFaults()).isEqualTo(100);
+    httpFault = ldsUpdate.virtualHosts.get(1).httpFault();
+    assertThat(httpFault.faultDelay()).isNull();
+    assertThat(httpFault.faultAbort().status().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(httpFault.faultAbort().ratePerMillion()).isEqualTo(2000);
+    assertThat(httpFault.upstreamCluster()).isEqualTo("cluster2");
+    assertThat(httpFault.maxActiveFaults()).isEqualTo(101);
   }
 
   @Test
@@ -960,17 +959,17 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
     assertThat(edsUpdate.dropPolicies)
         .containsExactly(
-            new DropOverload("lb", 200),
-            new DropOverload("throttle", 1000));
+            DropOverload.create("lb", 200),
+            DropOverload.create("throttle", 1000));
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
+            Locality.create("region1", "zone1", "subzone1"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080,
+                    LbEndpoint.create("192.168.0.1", 8080,
                         2, true)), 1, 0),
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+            Locality.create("region3", "zone3", "subzone3"),
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
   }
 
   @Test
@@ -1009,17 +1008,17 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
     assertThat(edsUpdate.dropPolicies)
         .containsExactly(
-            new DropOverload("lb", 200),
-            new DropOverload("throttle", 1000));
+            DropOverload.create("lb", 200),
+            DropOverload.create("throttle", 1000));
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
+            Locality.create("region1", "zone1", "subzone1"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080,
+                    LbEndpoint.create("192.168.0.1", 8080,
                         2, true)), 1, 0),
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+            Locality.create("region3", "zone3", "subzone3"),
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
     call.verifyNoMoreRequest();
   }
 
@@ -1068,16 +1067,16 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
     assertThat(edsUpdate.dropPolicies)
         .containsExactly(
-            new DropOverload("lb", 200),
-            new DropOverload("throttle", 1000));
+            DropOverload.create("lb", 200),
+            DropOverload.create("throttle", 1000));
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
+            Locality.create("region1", "zone1", "subzone1"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080, 2, true)), 1, 0),
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+                    LbEndpoint.create("192.168.0.1", 8080, 2, true)), 1, 0),
+            Locality.create("region3", "zone3", "subzone3"),
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
 
     clusterLoadAssignments =
         ImmutableList.of(
@@ -1097,10 +1096,10 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.dropPolicies).isEmpty();
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region2", "zone2", "subzone2"),
-            new LocalityLbEndpoints(
+            Locality.create("region2", "zone2", "subzone2"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
   }
 
   @Test
@@ -1206,16 +1205,16 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
     assertThat(edsUpdate.dropPolicies)
         .containsExactly(
-            new DropOverload("lb", 200),
-            new DropOverload("throttle", 1000));
+            DropOverload.create("lb", 200),
+            DropOverload.create("throttle", 1000));
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
+            Locality.create("region1", "zone1", "subzone1"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080, 2, true)), 1, 0),
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+                    LbEndpoint.create("192.168.0.1", 8080, 2, true)), 1, 0),
+            Locality.create("region3", "zone3", "subzone3"),
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
     verifyNoMoreInteractions(watcher1, watcher2);
 
     clusterLoadAssignments =
@@ -1236,20 +1235,20 @@ public abstract class ClientXdsClientTestBase {
     assertThat(edsUpdate.dropPolicies).isEmpty();
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region2", "zone2", "subzone2"),
-            new LocalityLbEndpoints(
+            Locality.create("region2", "zone2", "subzone2"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
     verify(watcher2).onChanged(edsUpdateCaptor.capture());
     edsUpdate = edsUpdateCaptor.getValue();
     assertThat(edsUpdate.clusterName).isEqualTo(edsResource);
     assertThat(edsUpdate.dropPolicies).isEmpty();
     assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region2", "zone2", "subzone2"),
-            new LocalityLbEndpoints(
+            Locality.create("region2", "zone2", "subzone2"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
     verifyNoMoreInteractions(edsResourceWatcher);
   }
 
@@ -1443,13 +1442,10 @@ public abstract class ClientXdsClientTestBase {
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
   }
 
-  /**
-   * Tests sending a streaming LRS RPC for each cluster to report loads for.
-   */
   @Test
   public void reportLoadStatsToServer() {
     String clusterName = "cluster-foo.googleapis.com";
-    xdsClient.addClientStats(clusterName, null);
+    ClusterDropStats dropStats = xdsClient.addClusterDropStats(clusterName, null);
     LrsRpcCall lrsCall = loadReportCalls.poll();
     lrsCall.verifyNextReportClusters(Collections.<String[]>emptyList()); // initial LRS request
 
@@ -1457,8 +1453,15 @@ public abstract class ClientXdsClientTestBase {
     fakeClock.forwardNanos(1000L);
     lrsCall.verifyNextReportClusters(Collections.singletonList(new String[] {clusterName, null}));
 
-    xdsClient.removeClientStats(clusterName, null);
+    dropStats.release();
     fakeClock.forwardNanos(1000L);
+    // In case of having unreported cluster stats, one last report will be sent after corresponding
+    // stats object released.
+    lrsCall.verifyNextReportClusters(Collections.singletonList(new String[] {clusterName, null}));
+
+    fakeClock.forwardNanos(1000L);
+    // Currently load reporting continues (with empty stats) even if all stats objects have been
+    // released.
     lrsCall.verifyNextReportClusters(Collections.<String[]>emptyList());  // no more stats reported
 
     // See more test on LoadReportClientTest.java

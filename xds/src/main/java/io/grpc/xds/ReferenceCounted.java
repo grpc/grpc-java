@@ -28,6 +28,7 @@ import static com.google.common.base.Preconditions.checkState;
  * wrapper itself should never be returned to the consumers of the elements to avoid reference
  * counts being leaked.
  */
+// TODO(chengyuanzhang): move this class into LoadStatsManager2.
 final class ReferenceCounted<T> {
   private final T instance;
   private int refs;

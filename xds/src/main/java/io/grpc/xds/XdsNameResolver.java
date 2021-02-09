@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import io.grpc.Attributes;
@@ -39,11 +40,14 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.EnvoyProtoData.ClusterWeight;
-import io.grpc.xds.EnvoyProtoData.Route;
-import io.grpc.xds.EnvoyProtoData.RouteAction;
-import io.grpc.xds.EnvoyProtoData.VirtualHost;
+import io.grpc.xds.Matchers.FractionMatcher;
+import io.grpc.xds.Matchers.HeaderMatcher;
+import io.grpc.xds.Matchers.PathMatcher;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
+import io.grpc.xds.VirtualHost.Route;
+import io.grpc.xds.VirtualHost.Route.RouteAction;
+import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
+import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
@@ -218,7 +222,7 @@ final class XdsNameResolver extends NameResolver {
     boolean exactMatchFound = false;  // true if a virtual host with exactly matched domain found
     VirtualHost targetVirtualHost = null;  // target VirtualHost with longest matched domain
     for (VirtualHost vHost : virtualHosts) {
-      for (String domain : vHost.getDomains()) {
+      for (String domain : vHost.domains()) {
         boolean selected = false;
         if (matchHostName(hostName, domain)) { // matching
           if (!domain.contains("*")) { // exact matching
@@ -320,8 +324,8 @@ final class XdsNameResolver extends NameResolver {
       Route selectedRoute = null;
       do {
         for (Route route : routingConfig.routes) {
-          if (route.getRouteMatch().matches(
-              "/" + args.getMethodDescriptor().getFullMethodName(), asciiHeaders)) {
+          if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
+              asciiHeaders, random)) {
             selectedRoute = route;
             break;
           }
@@ -330,20 +334,20 @@ final class XdsNameResolver extends NameResolver {
           return Result.forError(
               Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"));
         }
-        RouteAction action = selectedRoute.getRouteAction();
-        if (action.getCluster() != null) {
-          cluster = action.getCluster();
-        } else if (action.getWeightedCluster() != null) {
+        RouteAction action = selectedRoute.routeAction();
+        if (action.cluster() != null) {
+          cluster = action.cluster();
+        } else if (action.weightedClusters() != null) {
           int totalWeight = 0;
-          for (ClusterWeight weightedCluster : action.getWeightedCluster()) {
-            totalWeight += weightedCluster.getWeight();
+          for (ClusterWeight weightedCluster : action.weightedClusters()) {
+            totalWeight += weightedCluster.weight();
           }
           int select = random.nextInt(totalWeight);
           int accumulator = 0;
-          for (ClusterWeight weightedCluster : action.getWeightedCluster()) {
-            accumulator += weightedCluster.getWeight();
+          for (ClusterWeight weightedCluster : action.weightedClusters()) {
+            accumulator += weightedCluster.weight();
             if (select < accumulator) {
-              cluster = weightedCluster.getName();
+              cluster = weightedCluster.name();
               break;
             }
           }
@@ -352,7 +356,7 @@ final class XdsNameResolver extends NameResolver {
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
       Map<String, ?> rawServiceConfig = Collections.emptyMap();
       if (enableTimeout) {
-        Long timeoutNano = selectedRoute.getRouteAction().getTimeoutNano();
+        Long timeoutNano = selectedRoute.routeAction().timeoutNano();
         if (timeoutNano == null) {
           timeoutNano = routingConfig.fallbackTimeoutNano;
         }
@@ -440,6 +444,76 @@ final class XdsNameResolver extends NameResolver {
         });
       }
     }
+  }
+
+  @VisibleForTesting
+  static boolean matchRoute(RouteMatch routeMatch, String fullMethodName,
+      Map<String, Iterable<String>> headers, ThreadSafeRandom random) {
+    if (!matchPath(routeMatch.pathMatcher(), fullMethodName)) {
+      return false;
+    }
+    for (HeaderMatcher headerMatcher : routeMatch.headerMatchers()) {
+      Iterable<String> headerValues = headers.get(headerMatcher.name());
+      // Special cases for hiding headers: "grpc-previous-rpc-attempts".
+      if (headerMatcher.name().equals("grpc-previous-rpc-attempts")) {
+        headerValues = null;
+      }
+      // Special case for exposing headers: "content-type".
+      if (headerMatcher.name().equals("content-type")) {
+        headerValues = Collections.singletonList("application/grpc");
+      }
+      if (!matchHeader(headerMatcher, headerValues)) {
+        return false;
+      }
+    }
+    FractionMatcher fraction = routeMatch.fractionMatcher();
+    return fraction == null || random.nextInt(fraction.denominator()) < fraction.numerator();
+  }
+
+  @VisibleForTesting
+  static boolean matchPath(PathMatcher pathMatcher, String fullMethodName) {
+    if (pathMatcher.path() != null) {
+      return pathMatcher.caseSensitive()
+          ? pathMatcher.path().equals(fullMethodName)
+          : pathMatcher.path().equalsIgnoreCase(fullMethodName);
+    } else if (pathMatcher.prefix() != null) {
+      return pathMatcher.caseSensitive()
+          ? fullMethodName.startsWith(pathMatcher.prefix())
+          : fullMethodName.toLowerCase().startsWith(pathMatcher.prefix().toLowerCase());
+    }
+    return pathMatcher.regEx().matches(fullMethodName);
+  }
+
+  @VisibleForTesting
+  static boolean matchHeader(HeaderMatcher headerMatcher,
+      @Nullable Iterable<String> headerValues) {
+    if (headerMatcher.present() != null) {
+      return (headerValues == null) == headerMatcher.present().equals(headerMatcher.inverted());
+    }
+    if (headerValues == null) {
+      return false;
+    }
+    String valueStr = Joiner.on(",").join(headerValues);
+    boolean baseMatch;
+    if (headerMatcher.exactValue() != null) {
+      baseMatch = headerMatcher.exactValue().equals(valueStr);
+    } else if (headerMatcher.safeRegEx() != null) {
+      baseMatch = headerMatcher.safeRegEx().matches(valueStr);
+    } else if (headerMatcher.range() != null) {
+      long numValue;
+      try {
+        numValue = Long.parseLong(valueStr);
+        baseMatch = numValue >= headerMatcher.range().start()
+            && numValue <= headerMatcher.range().end();
+      } catch (NumberFormatException ignored) {
+        baseMatch = false;
+      }
+    } else if (headerMatcher.prefix() != null) {
+      baseMatch = valueStr.startsWith(headerMatcher.prefix());
+    } else {
+      baseMatch = valueStr.endsWith(headerMatcher.suffix());
+    }
+    return baseMatch != headerMatcher.inverted();
   }
 
   private class ResolveState implements LdsResourceWatcher {
@@ -537,15 +611,15 @@ final class XdsNameResolver extends NameResolver {
         listener.onResult(emptyResult);
         return;
       }
-      List<Route> routes = virtualHost.getRoutes();
+      List<Route> routes = virtualHost.routes();
       Set<String> clusters = new HashSet<>();
       for (Route route : routes) {
-        RouteAction action = route.getRouteAction();
-        if (action.getCluster() != null) {
-          clusters.add(action.getCluster());
-        } else if (action.getWeightedCluster() != null) {
-          for (ClusterWeight weighedCluster : action.getWeightedCluster()) {
-            clusters.add(weighedCluster.getName());
+        RouteAction action = route.routeAction();
+        if (action.cluster() != null) {
+          clusters.add(action.cluster());
+        } else if (action.weightedClusters() != null) {
+          for (ClusterWeight weighedCluster : action.weightedClusters()) {
+            clusters.add(weighedCluster.name());
           }
         }
       }

@@ -23,6 +23,7 @@ GIT_REPO="https://github.com/envoyproxy/protoc-gen-validate.git"
 GIT_BASE_DIR=protoc-gen-validate
 SOURCE_PROTO_BASE_DIR=protoc-gen-validate
 TARGET_PROTO_BASE_DIR=src/main/proto
+# Sorted alphabetically.
 FILES=(
 validate/validate.proto
 )

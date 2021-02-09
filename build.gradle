@@ -60,6 +60,7 @@ subprojects {
         protobufVersion = '3.12.0'
         protocVersion = protobufVersion
         opencensusVersion = '0.28.0'
+        autovalueVersion = '1.7.4'
 
         configureProtoCompilation = {
             String generatedSourcePath = "${projectDir}/src/generated"
@@ -142,6 +143,8 @@ subprojects {
         libraries = [
             android_annotations: "com.google.android:annotations:4.1.1.4",
             animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.19",
+            autovalue: "com.google.auto.value:auto-value:${autovalueVersion}",
+            autovalue_annotation: "com.google.auto.value:auto-value-annotations:${autovalueVersion}",
             errorprone: "com.google.errorprone:error_prone_annotations:2.4.0",
             cronet_api: 'org.chromium.net:cronet-api:76.3809.111',
             cronet_embedded: 'org.chromium.net:cronet-embedded:66.3359.158',

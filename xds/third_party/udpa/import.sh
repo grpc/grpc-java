@@ -23,6 +23,7 @@ GIT_REPO="https://github.com/cncf/udpa.git"
 GIT_BASE_DIR=udpa
 SOURCE_PROTO_BASE_DIR=udpa
 TARGET_PROTO_BASE_DIR=src/main/proto
+# Sorted alphabetically.
 FILES=(
 udpa/annotations/migrate.proto
 udpa/annotations/security.proto

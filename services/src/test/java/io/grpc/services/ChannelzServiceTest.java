@@ -25,6 +25,8 @@ import io.grpc.InternalChannelz;
 import io.grpc.Status;
 import io.grpc.channelz.v1.GetChannelRequest;
 import io.grpc.channelz.v1.GetChannelResponse;
+import io.grpc.channelz.v1.GetServerRequest;
+import io.grpc.channelz.v1.GetServerResponse;
 import io.grpc.channelz.v1.GetServersRequest;
 import io.grpc.channelz.v1.GetServersResponse;
 import io.grpc.channelz.v1.GetSocketRequest;
@@ -128,6 +130,24 @@ public class ChannelzServiceTest {
   }
 
   @Test
+  public void getServer() throws ExecutionException, InterruptedException {
+    TestServer server = new TestServer();
+    assertServerNotFound(server.getLogId().getId());
+
+    channelz.addServer(server);
+    assertEquals(
+        GetServerResponse
+            .newBuilder()
+            .setServer(ChannelzProtoUtil.toServer(server))
+            .build(),
+        getServerHelper(server.getLogId().getId()));
+
+    channelz.removeServer(server);
+    assertServerNotFound(server.getLogId().getId());
+  }
+
+
+  @Test
   public void getSocket() throws Exception {
     TestSocket socket = new TestSocket();
     assertSocketNotFound(socket.getLogId().getId());
@@ -210,6 +230,26 @@ public class ChannelzServiceTest {
     verify(observer).onNext(responseCaptor.capture());
     verify(observer).onCompleted();
     return responseCaptor.getValue();
+  }
+
+  private void assertServerNotFound(long id) {
+    @SuppressWarnings("unchecked")
+    StreamObserver<GetServerResponse> observer = mock(StreamObserver.class);
+    ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+    service.getServer(GetServerRequest.newBuilder().setServerId(id).build(), observer);
+    verify(observer).onError(exceptionCaptor.capture());
+    Status s = Status.fromThrowable(exceptionCaptor.getValue());
+    assertWithMessage(s.toString()).that(s.getCode()).isEqualTo(Status.Code.NOT_FOUND);
+  }
+
+  private GetServerResponse getServerHelper(long id) {
+    @SuppressWarnings("unchecked")
+    StreamObserver<GetServerResponse> observer = mock(StreamObserver.class);
+    ArgumentCaptor<GetServerResponse> response = ArgumentCaptor.forClass(GetServerResponse.class);
+    service.getServer(GetServerRequest.newBuilder().setServerId(id).build(), observer);
+    verify(observer).onNext(response.capture());
+    verify(observer).onCompleted();
+    return response.getValue();
   }
 
   private void assertSocketNotFound(long id) {

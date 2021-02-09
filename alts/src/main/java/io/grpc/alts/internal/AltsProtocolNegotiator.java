@@ -334,24 +334,24 @@ public final class AltsProtocolNegotiator {
 
     @Override
     public SecurityDetails validatePeerObject(Object peerObject) throws GeneralSecurityException {
-      AltsAuthContext altsAuthContext = (AltsAuthContext) peerObject;
+      AltsInternalContext altsContext = (AltsInternalContext) peerObject;
       // Checks peer Rpc Protocol Versions in the ALTS auth context. Fails the connection if
       // Rpc Protocol Versions mismatch.
       RpcVersionsCheckResult checkResult =
           RpcProtocolVersionsUtil.checkRpcProtocolVersions(
               RpcProtocolVersionsUtil.getRpcProtocolVersions(),
-              altsAuthContext.getPeerRpcVersions());
+              altsContext.getPeerRpcVersions());
       if (!checkResult.getResult()) {
         String errorMessage =
             "Local Rpc Protocol Versions "
                 + RpcProtocolVersionsUtil.getRpcProtocolVersions()
                 + " are not compatible with peer Rpc Protocol Versions "
-                + altsAuthContext.getPeerRpcVersions();
+                + altsContext.getPeerRpcVersions();
         throw Status.UNAVAILABLE.withDescription(errorMessage).asRuntimeException();
       }
       return new SecurityDetails(
           SecurityLevel.PRIVACY_AND_INTEGRITY,
-          new Security(new OtherSecurity("alts", Any.pack(altsAuthContext.context))));
+          new Security(new OtherSecurity("alts", Any.pack(altsContext.context))));
     }
   }
 

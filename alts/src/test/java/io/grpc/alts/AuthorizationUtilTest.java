@@ -24,7 +24,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.Status;
-import io.grpc.alts.internal.AltsAuthContext;
+import io.grpc.alts.internal.AltsInternalContext;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
 import io.grpc.alts.internal.HandshakerResult;
 import io.grpc.alts.internal.Identity;
@@ -65,8 +65,8 @@ public final class AuthorizationUtilTest {
             HandshakerResult.newBuilder()
                 .setPeerIdentity(Identity.newBuilder().setServiceAccount(peerServiceAccount))
                 .build();
-        AltsAuthContext altsAuthContext = new AltsAuthContext(handshakerResult);
-        attrsBuilder.set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY, altsAuthContext);
+        AltsInternalContext altsContext = new AltsInternalContext(handshakerResult);
+        attrsBuilder.set(AltsProtocolNegotiator.AUTH_CONTEXT_KEY, altsContext);
       }
       attrs = attrsBuilder.build();
     }

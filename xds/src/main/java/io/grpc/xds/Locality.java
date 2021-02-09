@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2021 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,18 @@
 
 package io.grpc.xds;
 
-final class XdsLbPolicies {
-  static final String CLUSTER_MANAGER_POLICY_NAME = "cluster_manager_experimental";
-  static final String CDS_POLICY_NAME = "cds_experimental";
-  static final String CLUSTER_RESOLVER_POLICY_NAME = "cluster_resolver_experimental";
-  static final String PRIORITY_POLICY_NAME = "priority_experimental";
-  static final String CLUSTER_IMPL_POLICY_NAME = "cluster_impl_experimental";
-  static final String WEIGHTED_TARGET_POLICY_NAME = "weighted_target_experimental";
+import com.google.auto.value.AutoValue;
 
-  private XdsLbPolicies() {}
+/** Represents a network locality. */
+@AutoValue
+abstract class Locality {
+  abstract String region();
+
+  abstract String zone();
+
+  abstract String subZone();
+
+  static Locality create(String region, String zone, String subZone) {
+    return new AutoValue_Locality(region, zone, subZone);
+  }
 }
