@@ -29,10 +29,16 @@ import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.config.route.v3.DirectResponseAction;
 import io.envoyproxy.envoy.config.route.v3.FilterAction;
 import io.envoyproxy.envoy.config.route.v3.RedirectAction;
+import io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.ConnectionProperties;
+import io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.FilterState;
+import io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.Header;
+import io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.QueryParameter;
 import io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration;
 import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.HeaderAbort;
+import io.envoyproxy.envoy.type.matcher.v3.RegexMatchAndSubstitute;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
+import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher.GoogleRE2;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.envoyproxy.envoy.type.v3.Int64Range;
@@ -51,6 +57,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -390,6 +397,52 @@ public class ClientXdsClientDataTest {
             .build();
     StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto);
     assertThat(struct.getStruct().timeoutNano()).isNull();
+  }
+
+  @Test
+  public void parseRouteAction_withHashPolicies() {
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setCluster("cluster-foo")
+            .addHashPolicy(
+                io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.newBuilder()
+                    .setHeader(
+                        Header.newBuilder()
+                            .setHeaderName("user-agent")
+                            .setRegexRewrite(
+                                RegexMatchAndSubstitute.newBuilder()
+                                    .setPattern(
+                                        RegexMatcher.newBuilder()
+                                            .setGoogleRe2(GoogleRE2.getDefaultInstance())
+                                            .setRegex("grpc.*"))
+                                    .setSubstitution("gRPC"))))
+            .addHashPolicy(
+                io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.newBuilder()
+                    .setConnectionProperties(ConnectionProperties.newBuilder().setSourceIp(true))
+                    .setTerminal(true))
+            .addHashPolicy(
+                io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.newBuilder()
+                    .setFilterState(
+                        FilterState.newBuilder()
+                            .setKey(ClientXdsClient.HASH_POLICY_FILTER_STATE_KEY)))
+            .addHashPolicy(
+                io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.newBuilder()
+                    .setQueryParameter(QueryParameter.newBuilder().setName("param")))
+            .build();
+    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto);
+    List<HashPolicy> policies = struct.getStruct().hashPolicies();
+    assertThat(policies).hasSize(3);
+    assertThat(policies.get(0).type()).isEqualTo(HashPolicy.Type.HEADER);
+    assertThat(policies.get(0).headerName()).isEqualTo("user-agent");
+    assertThat(policies.get(0).isTerminal()).isFalse();
+    assertThat(policies.get(0).regEx().pattern()).isEqualTo("grpc.*");
+    assertThat(policies.get(0).regExSubstitution()).isEqualTo("gRPC");
+
+    assertThat(policies.get(1).type()).isEqualTo(HashPolicy.Type.SOURCE_IP);
+    assertThat(policies.get(1).isTerminal()).isTrue();
+
+    assertThat(policies.get(2).type()).isEqualTo(HashPolicy.Type.CHANNEL_ID);
+    assertThat(policies.get(2).isTerminal()).isFalse();
   }
 
   @Test

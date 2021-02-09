@@ -96,7 +96,8 @@ final class ClientXdsClient extends AbstractXdsClient {
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   private static final String HTTP_FAULT_FILTER_NAME = "envoy.fault";
-  private static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
+  @VisibleForTesting
+  static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
