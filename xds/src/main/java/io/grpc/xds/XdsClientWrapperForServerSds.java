@@ -115,7 +115,7 @@ public final class XdsClientWrapperForServerSds {
     newServerApi = serverInfo.isUseProtocolV3() && experimentalNewServerApiEnvVar;
     String grpcServerResourceId = bootstrapInfo.getGrpcServerResourceId();
     if (newServerApi && grpcServerResourceId == null) {
-      throw new IOException("missing grpc_server_resource_name_id value");
+      throw new IOException("missing grpc_server_resource_name_id value in xds bootstrap");
     }
     XdsClient xdsClientImpl =
         new ServerXdsClient(
