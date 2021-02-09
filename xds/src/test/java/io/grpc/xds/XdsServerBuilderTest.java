@@ -257,11 +257,7 @@ public class XdsServerBuilderTest {
     } catch (IOException expected) {
       assertThat(expected).hasMessageThat().contains("Cannot find bootstrap configuration");
     }
-    ArgumentCaptor<Throwable> argCaptor = ArgumentCaptor.forClass(null);
-    verify(mockXdsServingStatusListener).onNotServing(argCaptor.capture());
-    Throwable throwable = argCaptor.getValue();
-    assertThat(throwable).isInstanceOf(IOException.class);
-    assertThat(throwable).hasMessageThat().contains("Cannot find bootstrap configuration");
+    verify(mockXdsServingStatusListener, never()).onNotServing(any(Throwable.class));
   }
 
   @Test

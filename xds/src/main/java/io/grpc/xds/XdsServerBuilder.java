@@ -126,7 +126,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     public void onServing() {
       if (notServing) {
         notServing = false;
-        xdsLogger.log(XdsLogger.XdsLogLevel.WARNING, "Entering serving state...");
+        xdsLogger.log(XdsLogger.XdsLogLevel.WARNING, "Entering serving state.");
       }
     }
 

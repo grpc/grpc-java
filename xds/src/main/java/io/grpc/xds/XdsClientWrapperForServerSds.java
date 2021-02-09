@@ -104,9 +104,7 @@ public final class XdsClientWrapperForServerSds {
         throw new XdsInitializationException("No management server provided by bootstrap");
       }
     } catch (XdsInitializationException e) {
-      IOException ioException = new IOException(e);
-      reportError(ioException);
-      throw ioException;
+      throw new IOException(e);
     }
     Node node = bootstrapInfo.getNode();
     Bootstrapper.ServerInfo serverInfo = bootstrapInfo.getServers().get(0);  // use first server
@@ -117,9 +115,7 @@ public final class XdsClientWrapperForServerSds {
     newServerApi = serverInfo.isUseProtocolV3() && experimentalNewServerApiEnvVar;
     String grpcServerResourceId = bootstrapInfo.getGrpcServerResourceId();
     if (newServerApi && grpcServerResourceId == null) {
-      IOException ioException = new IOException("missing grpc_server_resource_name_id value");
-      reportError(ioException);
-      throw ioException;
+      throw new IOException("missing grpc_server_resource_name_id value");
     }
     XdsClient xdsClientImpl =
         new ServerXdsClient(

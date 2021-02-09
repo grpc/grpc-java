@@ -211,13 +211,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
               .hasMessageThat()
               .contains("Cannot find bootstrap configuration");
     }
-    ArgumentCaptor<Throwable> argCaptor = ArgumentCaptor.forClass(null);
-    verify(mockServerWatcher).onError(argCaptor.capture());
-    Throwable throwable = argCaptor.getValue();
-    assertThat(throwable).isInstanceOf(IOException.class);
-    assertThat(throwable)
-            .hasMessageThat()
-            .contains("Cannot find bootstrap configuration");
+    verify(mockServerWatcher, never()).onError(any(Throwable.class));
   }
 
   private DownstreamTlsContext sendListenerUpdate(
