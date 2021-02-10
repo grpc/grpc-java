@@ -31,15 +31,11 @@ import io.grpc.alts.ComputeEngineChannelCredentials;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.InsecureFromHttp1ChannelCredentials;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
-import io.grpc.netty.NettySslContextChannelCredentials;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
-import io.grpc.okhttp.SslSocketFactoryChannelCredentials;
-import io.grpc.okhttp.internal.Platform;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
@@ -420,15 +416,9 @@ public class TestServiceClient {
           channelCredentials = TlsChannelCredentials.create();
         } else {
           try {
-            if (useOkHttp) {
-              channelCredentials = SslSocketFactoryChannelCredentials.create(
-                  TestUtils.newSslSocketFactoryForCa(
-                      Platform.get().getProvider(), TestUtils.loadCert("ca.pem")));
-            } else {
-              channelCredentials = NettySslContextChannelCredentials.create(
-                  GrpcSslContexts.forClient().trustManager(
-                      TestUtils.loadCert("ca.pem")).build());
-            }
+            channelCredentials = TlsChannelCredentials.newBuilder()
+                .trustManager(TestUtils.loadCert("ca.pem"))
+                .build();
           } catch (Exception ex) {
             throw new RuntimeException(ex);
           }
