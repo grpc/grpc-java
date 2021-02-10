@@ -20,10 +20,11 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.BootstrapperImpl;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 
 /**
@@ -44,11 +45,11 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   private final ReferenceCountingMap<DownstreamTlsContext, SslContextProvider> mapForServers;
   private final boolean hasCertInstanceOverride;
 
-  /** Create a TlsContextManagerImpl instance using the passed in {@link Bootstrapper}. */
-  @VisibleForTesting public TlsContextManagerImpl(Bootstrapper bootstrapper) {
+  /** Create a TlsContextManagerImpl instance using the passed in {@link BootstrapInfo}. */
+  @VisibleForTesting public TlsContextManagerImpl(BootstrapInfo bootstrapInfo) {
     this(
-        new ClientSslContextProviderFactory(bootstrapper),
-        new ServerSslContextProviderFactory(bootstrapper), CERT_INSTANCE_OVERRIDE);
+        new ClientSslContextProviderFactory(bootstrapInfo),
+        new ServerSslContextProviderFactory(bootstrapInfo), CERT_INSTANCE_OVERRIDE);
   }
 
   @VisibleForTesting
@@ -64,15 +65,18 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   }
 
   /** Gets the TlsContextManagerImpl singleton. */
-  public static synchronized TlsContextManagerImpl getInstance() {
-    return getInstance(new BootstrapperImpl());
+  public static synchronized TlsContextManagerImpl getInstance() throws XdsInitializationException {
+    if (instance == null) {
+      instance = getInstance(new BootstrapperImpl().bootstrap());
+    }
+    return instance;
   }
 
-  /** Gets the TlsContextManagerImpl singleton using the passed bootstrapper. */
+  /** Gets the TlsContextManagerImpl singleton using the passed bootstrapInfo. */
   @VisibleForTesting
-  public static TlsContextManagerImpl getInstance(Bootstrapper bootstrapper) {
+  public static TlsContextManagerImpl getInstance(BootstrapInfo bootstrapInfo) {
     if (instance == null) {
-      instance = new TlsContextManagerImpl(bootstrapper);
+      instance = new TlsContextManagerImpl(bootstrapInfo);
     }
     return instance;
   }

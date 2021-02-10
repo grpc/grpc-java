@@ -22,7 +22,6 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -55,7 +54,6 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 public class ClientSslContextProviderFactoryTest {
 
-  Bootstrapper bootstrapper;
   CertificateProviderRegistry certificateProviderRegistry;
   CertificateProviderStore certificateProviderStore;
   CertProviderClientSslContextProvider.Factory certProviderClientSslContextProviderFactory;
@@ -63,16 +61,14 @@ public class ClientSslContextProviderFactoryTest {
 
   @Before
   public void setUp() throws XdsInitializationException {
-    bootstrapper = mock(Bootstrapper.class);
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    doReturn(bootstrapInfo).when(bootstrapper).bootstrap();
     certificateProviderRegistry = new CertificateProviderRegistry();
     certificateProviderStore = new CertificateProviderStore(certificateProviderRegistry);
     certProviderClientSslContextProviderFactory =
         new CertProviderClientSslContextProvider.Factory(certificateProviderStore);
     clientSslContextProviderFactory =
         new ClientSslContextProviderFactory(
-            bootstrapper, certProviderClientSslContextProviderFactory);
+            bootstrapInfo, certProviderClientSslContextProviderFactory);
   }
 
   @Test

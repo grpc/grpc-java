@@ -75,8 +75,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
   private final Helper helper;
   private final ThreadSafeRandom random;
-  private final TlsContextManager tlsContextManager;
   // The following fields are effectively final.
+  private TlsContextManager tlsContextManager;
   private String cluster;
   @Nullable
   private String edsServiceName;
@@ -88,14 +88,19 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private LoadBalancer childLb;
 
   ClusterImplLoadBalancer(Helper helper) {
-    this(helper, ThreadSafeRandomImpl.instance, TlsContextManagerImpl.getInstance());
+    this(helper, ThreadSafeRandomImpl.instance);
   }
 
+  ClusterImplLoadBalancer(Helper helper, ThreadSafeRandom random) {
+    this(helper, random, null);
+  }
+
+  @VisibleForTesting
   ClusterImplLoadBalancer(Helper helper, ThreadSafeRandom random,
       TlsContextManager tlsContextManager) {
     this.helper = checkNotNull(helper, "helper");
     this.random = checkNotNull(random, "random");
-    this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
+    this.tlsContextManager = tlsContextManager;
     InternalLogId logId = InternalLogId.allocate("cluster-impl-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
@@ -131,7 +136,12 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
     childLbHelper.updateDropPolicies(config.dropCategories);
     childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
-    childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
+    try {
+      childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
+    } catch (XdsInitializationException e) {
+      handleNameResolutionError(Status.fromThrowable(e));
+      return;
+    }
     childLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setAttributes(attributes)
@@ -258,21 +268,26 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       updateBalancingState(currentState, currentPicker);
     }
 
-    private void updateSslContextProviderSupplier(@Nullable UpstreamTlsContext tlsContext) {
+    private void updateSslContextProviderSupplier(@Nullable UpstreamTlsContext tlsContext)
+        throws XdsInitializationException {
       UpstreamTlsContext currentTlsContext =
           sslContextProviderSupplier != null
               ? sslContextProviderSupplier.getUpstreamTlsContext()
               : null;
-      if (Objects.equals(currentTlsContext,  tlsContext)) {
+      if (Objects.equals(currentTlsContext, tlsContext)) {
         return;
       }
       if (sslContextProviderSupplier != null) {
         sslContextProviderSupplier.close();
       }
-      sslContextProviderSupplier =
-          tlsContext != null
-              ? new SslContextProviderSupplier(tlsContext, tlsContextManager)
-              : null;
+      if (enableSecurity && tlsContext != null) {
+        if (tlsContextManager == null) {
+          tlsContextManager = TlsContextManagerImpl.getInstance();
+        }
+        sslContextProviderSupplier = new SslContextProviderSupplier(tlsContext, tlsContextManager);
+      } else {
+        sslContextProviderSupplier = null;
+      }
     }
 
     private class RequestLimitingSubchannelPicker extends SubchannelPicker {

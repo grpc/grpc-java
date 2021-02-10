@@ -22,8 +22,6 @@ import static io.grpc.xds.internal.sds.ClientSslContextProviderFactoryTest.verif
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
 
 import com.google.common.collect.ImmutableSet;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
@@ -49,7 +47,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ServerSslContextProviderFactoryTest {
 
-  Bootstrapper bootstrapper;
   CertificateProviderRegistry certificateProviderRegistry;
   CertificateProviderStore certificateProviderStore;
   CertProviderServerSslContextProvider.Factory certProviderServerSslContextProviderFactory;
@@ -57,16 +54,14 @@ public class ServerSslContextProviderFactoryTest {
 
   @Before
   public void setUp() throws XdsInitializationException {
-    bootstrapper = mock(Bootstrapper.class);
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    doReturn(bootstrapInfo).when(bootstrapper).bootstrap();
     certificateProviderRegistry = new CertificateProviderRegistry();
     certificateProviderStore = new CertificateProviderStore(certificateProviderRegistry);
     certProviderServerSslContextProviderFactory =
         new CertProviderServerSslContextProvider.Factory(certificateProviderStore);
     serverSslContextProviderFactory =
         new ServerSslContextProviderFactory(
-            bootstrapper, certProviderServerSslContextProviderFactory);
+                bootstrapInfo, certProviderServerSslContextProviderFactory);
   }
 
   @Test

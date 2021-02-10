@@ -412,10 +412,11 @@ public final class SdsProtocolNegotiators {
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
       SslContextProvider sslContextProviderTemp = null;
+      TlsContextManagerImpl tlsContextManagerImplTemp = null;
       try {
+        tlsContextManagerImplTemp = TlsContextManagerImpl.getInstance();
         sslContextProviderTemp =
-            TlsContextManagerImpl.getInstance()
-                .findOrCreateServerSslContextProvider(downstreamTlsContext);
+            tlsContextManagerImplTemp.findOrCreateServerSslContextProvider(downstreamTlsContext);
       } catch (Exception e) {
         if (fallbackProtocolNegotiator == null) {
           ctx.fireExceptionCaught(new CertStoreException("No certificate source found!", e));
@@ -427,6 +428,7 @@ public final class SdsProtocolNegotiators {
         ctx.pipeline().remove(bufferReads);
         return;
       }
+      final TlsContextManagerImpl tlsContextManagerImpl = tlsContextManagerImplTemp;
       final SslContextProvider sslContextProvider = sslContextProviderTemp;
       sslContextProvider.addCallback(
           new SslContextProvider.Callback(ctx.executor()) {
@@ -442,8 +444,7 @@ public final class SdsProtocolNegotiators {
                 fireProtocolNegotiationEvent(ctx);
                 ctx.pipeline().remove(bufferReads);
               }
-              TlsContextManagerImpl.getInstance()
-                  .releaseServerSslContextProvider(sslContextProvider);
+              tlsContextManagerImpl.releaseServerSslContextProvider(sslContextProvider);
             }
 
             @Override

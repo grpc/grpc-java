@@ -19,9 +19,8 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.certprovider.CertProviderClientSslContextProvider;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 import java.util.concurrent.Executors;
@@ -30,21 +29,17 @@ import java.util.concurrent.Executors;
 final class ClientSslContextProviderFactory
     implements ValueFactory<UpstreamTlsContext, SslContextProvider> {
 
-  private final Bootstrapper.BootstrapInfo bootstrapInfo;
+  private final BootstrapInfo bootstrapInfo;
   private final CertProviderClientSslContextProvider.Factory
       certProviderClientSslContextProviderFactory;
 
-  ClientSslContextProviderFactory(Bootstrapper bootstrapper) {
-    this(bootstrapper, CertProviderClientSslContextProvider.Factory.getInstance());
+  ClientSslContextProviderFactory(BootstrapInfo bootstrapInfo) {
+    this(bootstrapInfo, CertProviderClientSslContextProvider.Factory.getInstance());
   }
 
   ClientSslContextProviderFactory(
-      Bootstrapper bootstrapper, CertProviderClientSslContextProvider.Factory factory) {
-    try {
-      this.bootstrapInfo = bootstrapper.bootstrap();
-    } catch (XdsInitializationException e) {
-      throw new RuntimeException(e);
-    }
+      BootstrapInfo bootstrapInfo, CertProviderClientSslContextProvider.Factory factory) {
+    this.bootstrapInfo = bootstrapInfo;
     this.certProviderClientSslContextProviderFactory = factory;
   }
 

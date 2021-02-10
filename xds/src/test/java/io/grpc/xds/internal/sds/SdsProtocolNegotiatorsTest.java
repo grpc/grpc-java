@@ -39,7 +39,7 @@ import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
-import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.InternalXdsAttributes;
@@ -199,7 +199,7 @@ public class SdsProtocolNegotiatorsTest {
 
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(
-            upstreamTlsContext, TlsContextManagerImpl.getInstance(mock(Bootstrapper.class)));
+            upstreamTlsContext, TlsContextManagerImpl.getInstance(mock(BootstrapInfo.class)));
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
     pipeline.addLast(clientSdsHandler);
@@ -222,7 +222,7 @@ public class SdsProtocolNegotiatorsTest {
 
   @Test
   public void serverSdsHandler_addLast() throws IOException {
-    TlsContextManagerImpl unused = TlsContextManagerImpl.getInstance(mock(Bootstrapper.class));
+    TlsContextManagerImpl unused = TlsContextManagerImpl.getInstance(mock(BootstrapInfo.class));
     // we need InetSocketAddress instead of EmbeddedSocketAddress as localAddress for this test
     channel =
         new EmbeddedChannel() {
@@ -359,7 +359,7 @@ public class SdsProtocolNegotiatorsTest {
 
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(
-            upstreamTlsContext, TlsContextManagerImpl.getInstance(mock(Bootstrapper.class)));
+            upstreamTlsContext, TlsContextManagerImpl.getInstance(mock(BootstrapInfo.class)));
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
 

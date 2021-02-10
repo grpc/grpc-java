@@ -45,7 +45,8 @@ public class ClusterImplLoadBalancerProviderTest {
 
   @Test
   public void providesLoadBalancer()  {
-    TlsContextManagerImpl unused = TlsContextManagerImpl.getInstance(mock(Bootstrapper.class));
+    TlsContextManagerImpl unused =
+        TlsContextManagerImpl.getInstance(mock(Bootstrapper.BootstrapInfo.class));
     Helper helper = mock(Helper.class);
     when(helper.getAuthority()).thenReturn("api.google.com");
     LoadBalancerProvider provider = new ClusterImplLoadBalancerProvider();
