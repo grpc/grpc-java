@@ -34,6 +34,7 @@ import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
+import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
@@ -70,7 +71,8 @@ public class TlsContextManagerTest {
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
 
-    TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
+    TlsContextManagerImpl tlsContextManagerImpl =
+        TlsContextManagerImpl.getInstance(mock(Bootstrapper.class));
     SslContextProvider serverSecretProvider =
         tlsContextManagerImpl.findOrCreateServerSslContextProvider(downstreamTlsContext);
     assertThat(serverSecretProvider).isNotNull();
@@ -86,7 +88,8 @@ public class TlsContextManagerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
 
-    TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
+    TlsContextManagerImpl tlsContextManagerImpl =
+            TlsContextManagerImpl.getInstance(mock(Bootstrapper.class));
     SslContextProvider clientSecretProvider =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isNotNull();
@@ -102,7 +105,8 @@ public class TlsContextManagerTest {
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
 
-    TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
+    TlsContextManagerImpl tlsContextManagerImpl =
+            TlsContextManagerImpl.getInstance(mock(Bootstrapper.class));
     SslContextProvider serverSecretProvider =
         tlsContextManagerImpl.findOrCreateServerSslContextProvider(downstreamTlsContext);
     assertThat(serverSecretProvider).isNotNull();
@@ -122,7 +126,8 @@ public class TlsContextManagerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
 
-    TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
+    TlsContextManagerImpl tlsContextManagerImpl =
+            TlsContextManagerImpl.getInstance(mock(Bootstrapper.class));
     SslContextProvider clientSecretProvider =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isNotNull();

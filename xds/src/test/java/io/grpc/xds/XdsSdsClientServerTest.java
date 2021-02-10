@@ -83,12 +83,11 @@ public class XdsSdsClientServerTest {
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private int port;
   private FakeNameResolverFactory fakeNameResolverFactory;
-  private Bootstrapper mockBootstrapper;
 
   @Before
   public void setUp() throws IOException {
     port = XdsServerTestHelper.findFreePort();
-    mockBootstrapper = mock(Bootstrapper.class);
+    TlsContextManagerImpl unused = TlsContextManagerImpl.getInstance(mock(Bootstrapper.class));
   }
 
   @After
@@ -398,7 +397,7 @@ public class XdsSdsClientServerTest {
             ? Attributes.newBuilder()
                 .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                     new SslContextProviderSupplier(
-                        upstreamTlsContext, new TlsContextManagerImpl(mockBootstrapper)))
+                        upstreamTlsContext, TlsContextManagerImpl.getInstance()))
                 .build()
             : Attributes.EMPTY;
     fakeNameResolverFactory.setServers(
@@ -427,7 +426,7 @@ public class XdsSdsClientServerTest {
             ? Attributes.newBuilder()
                 .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                     new SslContextProviderSupplier(
-                        upstreamTlsContext, new TlsContextManagerImpl(mockBootstrapper)))
+                        upstreamTlsContext, TlsContextManagerImpl.getInstance()))
                 .build()
             : Attributes.EMPTY;
     fakeNameResolverFactory.setServers(

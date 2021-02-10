@@ -22,6 +22,7 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -61,8 +62,10 @@ public class ClientSslContextProviderFactoryTest {
   ClientSslContextProviderFactory clientSslContextProviderFactory;
 
   @Before
-  public void setUp() {
+  public void setUp() throws XdsInitializationException {
     bootstrapper = mock(Bootstrapper.class);
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
+    doReturn(bootstrapInfo).when(bootstrapper).bootstrap();
     certificateProviderRegistry = new CertificateProviderRegistry();
     certificateProviderStore = new CertificateProviderStore(certificateProviderRegistry);
     certProviderClientSslContextProviderFactory =
@@ -133,8 +136,6 @@ public class ClientSslContextProviderFactoryTest {
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null);
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -160,8 +161,6 @@ public class ClientSslContextProviderFactoryTest {
     builder = addFilenames(builder, "foo.pem", "foo.key", "root.pem");
     upstreamTlsContext = new UpstreamTlsContext(builder.build());
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -183,8 +182,6 @@ public class ClientSslContextProviderFactoryTest {
                     /* alpnProtocols= */ null,
                     /* staticCertValidationContext= */ null);
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
             clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -213,8 +210,6 @@ public class ClientSslContextProviderFactoryTest {
                     /* alpnProtocols= */ null,
                     staticCertValidationContext);
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
             clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -240,34 +235,11 @@ public class ClientSslContextProviderFactoryTest {
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null);
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
     verifyWatcher(sslContextProvider, watcherCaptor[1]);
-  }
-
-  @Test
-  public void createCertProviderClientSslContextProvider_exception()
-      throws XdsInitializationException {
-    UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContextForCertProviderInstance(
-            "gcp_id",
-            "cert-default",
-            "gcp_id",
-            "root-default",
-            /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null);
-    when(bootstrapper.bootstrap())
-        .thenThrow(new XdsInitializationException("test exception"));
-    try {
-      clientSslContextProviderFactory.create(upstreamTlsContext);
-      Assert.fail("no exception thrown");
-    } catch (RuntimeException expected) {
-      assertThat(expected).hasMessageThat().contains("test exception");
-    }
   }
 
   @Test

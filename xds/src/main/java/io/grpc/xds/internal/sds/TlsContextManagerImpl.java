@@ -65,8 +65,14 @@ public final class TlsContextManagerImpl implements TlsContextManager {
 
   /** Gets the TlsContextManagerImpl singleton. */
   public static synchronized TlsContextManagerImpl getInstance() {
+    return getInstance(new BootstrapperImpl());
+  }
+
+  /** Gets the TlsContextManagerImpl singleton using the passed bootstrapper. */
+  @VisibleForTesting
+  public static TlsContextManagerImpl getInstance(Bootstrapper bootstrapper) {
     if (instance == null) {
-      instance = new TlsContextManagerImpl(new BootstrapperImpl());
+      instance = new TlsContextManagerImpl(bootstrapper);
     }
     return instance;
   }

@@ -39,6 +39,7 @@ import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
+import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.InternalXdsAttributes;
@@ -197,7 +198,8 @@ public class SdsProtocolNegotiatorsTest {
         buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProviderSupplier sslContextProviderSupplier =
-        new SslContextProviderSupplier(upstreamTlsContext, TlsContextManagerImpl.getInstance());
+        new SslContextProviderSupplier(
+            upstreamTlsContext, TlsContextManagerImpl.getInstance(mock(Bootstrapper.class)));
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
     pipeline.addLast(clientSdsHandler);
@@ -220,6 +222,7 @@ public class SdsProtocolNegotiatorsTest {
 
   @Test
   public void serverSdsHandler_addLast() throws IOException {
+    TlsContextManagerImpl unused = TlsContextManagerImpl.getInstance(mock(Bootstrapper.class));
     // we need InetSocketAddress instead of EmbeddedSocketAddress as localAddress for this test
     channel =
         new EmbeddedChannel() {
@@ -355,7 +358,8 @@ public class SdsProtocolNegotiatorsTest {
         buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProviderSupplier sslContextProviderSupplier =
-        new SslContextProviderSupplier(upstreamTlsContext, TlsContextManagerImpl.getInstance());
+        new SslContextProviderSupplier(
+            upstreamTlsContext, TlsContextManagerImpl.getInstance(mock(Bootstrapper.class)));
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
 

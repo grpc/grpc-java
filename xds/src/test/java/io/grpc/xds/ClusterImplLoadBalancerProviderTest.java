@@ -24,6 +24,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -44,6 +45,7 @@ public class ClusterImplLoadBalancerProviderTest {
 
   @Test
   public void providesLoadBalancer()  {
+    TlsContextManagerImpl unused = TlsContextManagerImpl.getInstance(mock(Bootstrapper.class));
     Helper helper = mock(Helper.class);
     when(helper.getAuthority()).thenReturn("api.google.com");
     LoadBalancerProvider provider = new ClusterImplLoadBalancerProvider();
