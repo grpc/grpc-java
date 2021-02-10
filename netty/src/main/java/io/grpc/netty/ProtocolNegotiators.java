@@ -90,9 +90,11 @@ import javax.net.ssl.SSLSession;
 final class ProtocolNegotiators {
   private static final Logger log = Logger.getLogger(ProtocolNegotiators.class.getName());
   private static final EnumSet<TlsChannelCredentials.Feature> understoodTlsFeatures =
-      EnumSet.noneOf(TlsChannelCredentials.Feature.class);
+      EnumSet.of(
+          TlsChannelCredentials.Feature.MTLS, TlsChannelCredentials.Feature.CUSTOM_MANAGERS);
   private static final EnumSet<TlsServerCredentials.Feature> understoodServerTlsFeatures =
-      EnumSet.noneOf(TlsServerCredentials.Feature.class);
+      EnumSet.of(
+          TlsServerCredentials.Feature.MTLS, TlsServerCredentials.Feature.CUSTOM_MANAGERS);
 
 
   private ProtocolNegotiators() {
@@ -107,7 +109,27 @@ final class ProtocolNegotiators {
         return FromChannelCredentialsResult.error(
             "TLS features not understood: " + incomprehensible);
       }
-      return FromChannelCredentialsResult.negotiator(tlsClientFactory(null));
+      SslContextBuilder builder = GrpcSslContexts.forClient();
+      if (tlsCreds.getKeyManagers() != null) {
+        builder.keyManager(new FixedKeyManagerFactory(tlsCreds.getKeyManagers()));
+      } else if (tlsCreds.getPrivateKey() != null) {
+        builder.keyManager(
+            new ByteArrayInputStream(tlsCreds.getCertificateChain()),
+            new ByteArrayInputStream(tlsCreds.getPrivateKey()),
+            tlsCreds.getPrivateKeyPassword());
+      }
+      if (tlsCreds.getTrustManagers() != null) {
+        builder.trustManager(new FixedTrustManagerFactory(tlsCreds.getTrustManagers()));
+      } else if (tlsCreds.getRootCertificates() != null) {
+        builder.trustManager(new ByteArrayInputStream(tlsCreds.getRootCertificates()));
+      } // else use system default
+      try {
+        return FromChannelCredentialsResult.negotiator(tlsClientFactory(builder.build()));
+      } catch (SSLException ex) {
+        log.log(Level.FINE, "Exception building SslContext", ex);
+        return FromChannelCredentialsResult.error(
+            "Unable to create SslContext: " + ex.getMessage());
+      }
 
     } else if (creds instanceof InsecureChannelCredentials) {
       return FromChannelCredentialsResult.negotiator(plaintextClientFactory());
@@ -184,10 +206,40 @@ final class ProtocolNegotiators {
         return FromServerCredentialsResult.error(
             "TLS features not understood: " + incomprehensible);
       }
-      SslContextBuilder builder = GrpcSslContexts.forServer(
-          new ByteArrayInputStream(tlsCreds.getCertificateChain()),
-          new ByteArrayInputStream(tlsCreds.getPrivateKey()),
-          tlsCreds.getPrivateKeyPassword());
+      SslContextBuilder builder;
+      if (tlsCreds.getKeyManagers() != null) {
+        builder = GrpcSslContexts.configure(SslContextBuilder.forServer(
+            new FixedKeyManagerFactory(tlsCreds.getKeyManagers())));
+      } else if (tlsCreds.getPrivateKey() != null) {
+        builder = GrpcSslContexts.forServer(
+            new ByteArrayInputStream(tlsCreds.getCertificateChain()),
+            new ByteArrayInputStream(tlsCreds.getPrivateKey()),
+            tlsCreds.getPrivateKeyPassword());
+      } else {
+        throw new AssertionError("BUG! No key");
+      }
+      if (tlsCreds.getTrustManagers() != null) {
+        builder.trustManager(new FixedTrustManagerFactory(tlsCreds.getTrustManagers()));
+      } else if (tlsCreds.getRootCertificates() != null) {
+        builder.trustManager(new ByteArrayInputStream(tlsCreds.getRootCertificates()));
+      } // else use system default
+      switch (tlsCreds.getClientAuth()) {
+        case OPTIONAL:
+          builder.clientAuth(io.netty.handler.ssl.ClientAuth.OPTIONAL);
+          break;
+
+        case REQUIRE:
+          builder.clientAuth(io.netty.handler.ssl.ClientAuth.REQUIRE);
+          break;
+
+        case NONE:
+          builder.clientAuth(io.netty.handler.ssl.ClientAuth.NONE);
+          break;
+
+        default:
+          return FromServerCredentialsResult.error(
+              "Unknown TlsServerCredentials.ClientAuth value: " + tlsCreds.getClientAuth());
+      }
       SslContext sslContext;
       try {
         sslContext = builder.build();
@@ -675,18 +727,10 @@ final class ProtocolNegotiators {
     private final SslContext sslContext;
 
     public TlsProtocolNegotiatorClientFactory(SslContext sslContext) {
-      this.sslContext = sslContext;
+      this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
     }
 
     @Override public ProtocolNegotiator newNegotiator() {
-      SslContext sslContext = this.sslContext;
-      if (sslContext == null) {
-        try {
-          sslContext = GrpcSslContexts.forClient().build();
-        } catch (SSLException ex) {
-          throw new RuntimeException(ex);
-        }
-      }
       return tls(sslContext);
     }
 
