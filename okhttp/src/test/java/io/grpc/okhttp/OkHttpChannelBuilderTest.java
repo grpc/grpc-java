@@ -24,6 +24,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.mockito.Mockito.mock;
 
+import com.google.common.util.concurrent.SettableFuture;
 import com.squareup.okhttp.ConnectionSpec;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
@@ -38,14 +39,23 @@ import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.GrpcCleanupRule;
+import io.netty.handler.ssl.util.SelfSignedCertificate;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.net.SocketFactory;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManagerFactory;
+import javax.security.auth.x500.X500Principal;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -151,6 +161,110 @@ public class OkHttpChannelBuilderTest {
     OkHttpChannelBuilder.SslSocketFactoryResult result = OkHttpChannelBuilder.sslSocketFactoryFrom(
         TlsChannelCredentials.newBuilder().requireFakeFeature().build());
     assertThat(result.error).contains("FAKE");
+    assertThat(result.callCredentials).isNull();
+    assertThat(result.factory).isNull();
+  }
+
+  @Test
+  public void sslSocketFactoryFrom_tls_customRoots() throws Exception {
+    SelfSignedCertificate cert = new SelfSignedCertificate(TestUtils.TEST_SERVER_HOST);
+    KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+    keyStore.load(null);
+    keyStore.setKeyEntry("mykey", cert.key(), new char[0], new Certificate[] {cert.cert()});
+    KeyManagerFactory keyManagerFactory =
+        KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+    keyManagerFactory.init(keyStore, new char[0]);
+
+    SSLContext serverContext = SSLContext.getInstance("TLS");
+    serverContext.init(keyManagerFactory.getKeyManagers(), null, null);
+    final SSLServerSocket serverListenSocket =
+        (SSLServerSocket) serverContext.getServerSocketFactory().createServerSocket(0);
+    final SettableFuture<SSLSocket> serverSocket = SettableFuture.create();
+    new Thread(new Runnable() {
+      @Override public void run() {
+        try {
+          SSLSocket socket = (SSLSocket) serverListenSocket.accept();
+          socket.getSession(); // Force handshake
+          serverSocket.set(socket);
+          serverListenSocket.close();
+        } catch (Throwable t) {
+          serverSocket.setException(t);
+        }
+      }
+    }).start();
+
+    ChannelCredentials creds = TlsChannelCredentials.newBuilder()
+        .trustManager(cert.certificate())
+        .build();
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(creds);
+    SSLSocket socket =
+        (SSLSocket) result.factory.createSocket("localhost", serverListenSocket.getLocalPort());
+    socket.getSession(); // Force handshake
+    socket.close();
+    serverSocket.get().close();
+  }
+
+  @Test
+  public void sslSocketFactoryFrom_tls_mtls() throws Exception {
+    SelfSignedCertificate cert = new SelfSignedCertificate(TestUtils.TEST_SERVER_HOST);
+    KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+    keyStore.load(null);
+    keyStore.setKeyEntry("mykey", cert.key(), new char[0], new Certificate[] {cert.cert()});
+    KeyManagerFactory keyManagerFactory =
+        KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+    keyManagerFactory.init(keyStore, new char[0]);
+
+    KeyStore certStore = KeyStore.getInstance(KeyStore.getDefaultType());
+    certStore.load(null);
+    certStore.setCertificateEntry("mycert", cert.cert());
+    TrustManagerFactory trustManagerFactory =
+        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    trustManagerFactory.init(certStore);
+
+    SSLContext serverContext = SSLContext.getInstance("TLS");
+    serverContext.init(
+        keyManagerFactory.getKeyManagers(), trustManagerFactory.getTrustManagers(), null);
+    final SSLServerSocket serverListenSocket =
+        (SSLServerSocket) serverContext.getServerSocketFactory().createServerSocket(0);
+    serverListenSocket.setNeedClientAuth(true);
+    final SettableFuture<SSLSocket> serverSocket = SettableFuture.create();
+    new Thread(new Runnable() {
+      @Override public void run() {
+        try {
+          SSLSocket socket = (SSLSocket) serverListenSocket.accept();
+          socket.getSession(); // Force handshake
+          serverSocket.set(socket);
+          serverListenSocket.close();
+        } catch (Throwable t) {
+          serverSocket.setException(t);
+        }
+      }
+    }).start();
+
+    ChannelCredentials creds = TlsChannelCredentials.newBuilder()
+        .keyManager(keyManagerFactory.getKeyManagers())
+        .trustManager(trustManagerFactory.getTrustManagers())
+        .build();
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(creds);
+    SSLSocket socket =
+        (SSLSocket) result.factory.createSocket("localhost", serverListenSocket.getLocalPort());
+    socket.getSession(); // Force handshake
+    assertThat(((X500Principal) serverSocket.get().getSession().getPeerPrincipal()).getName())
+        .isEqualTo("CN=" + TestUtils.TEST_SERVER_HOST);
+    socket.close();
+    serverSocket.get().close();
+  }
+
+  @Test
+  public void sslSocketFactoryFrom_tls_mtls_byteKeyUnsupported() throws Exception {
+    ChannelCredentials creds = TlsChannelCredentials.newBuilder()
+        .keyManager(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
+        .build();
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(creds);
+    assertThat(result.error).contains("unsupported");
     assertThat(result.callCredentials).isNull();
     assertThat(result.factory).isNull();
   }

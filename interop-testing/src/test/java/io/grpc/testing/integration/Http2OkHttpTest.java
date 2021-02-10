@@ -22,9 +22,11 @@ import static org.junit.Assert.assertTrue;
 
 import com.google.common.base.Throwables;
 import com.squareup.okhttp.ConnectionSpec;
+import io.grpc.ChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.StreamRecorder;
@@ -81,6 +83,25 @@ public class Http2OkHttpTest extends AbstractInteropTest {
   @Override
   protected OkHttpChannelBuilder createChannelBuilder() {
     int port = ((InetSocketAddress) getListenAddress()).getPort();
+    ChannelCredentials channelCreds;
+    try {
+      channelCreds = TlsChannelCredentials.newBuilder()
+          .trustManager(TestUtils.loadCert("ca.pem"))
+          .build();
+    } catch (IOException ex) {
+      throw new RuntimeException(ex);
+    }
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("localhost", port, channelCreds)
+        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
+        .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
+            TestUtils.TEST_SERVER_HOST, port));
+    // Disable the default census stats interceptor, use testing interceptor instead.
+    InternalOkHttpChannelBuilder.setStatsEnabled(builder, false);
+    return builder.intercept(createCensusStatsClientInterceptor());
+  }
+
+  private OkHttpChannelBuilder createChannelBuilderPreCredentialsApi() {
+    int port = ((InetSocketAddress) getListenAddress()).getPort();
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("localhost", port)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .connectionSpec(new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
@@ -125,7 +146,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
   @Test
   public void wrongHostNameFailHostnameVerification() throws Exception {
     int port = ((InetSocketAddress) getListenAddress()).getPort();
-    ManagedChannel channel = createChannelBuilder()
+    ManagedChannel channel = createChannelBuilderPreCredentialsApi()
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
             BAD_HOSTNAME, port))
         .build();
@@ -148,7 +169,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
   @Test
   public void hostnameVerifierWithBadHostname() throws Exception {
     int port = ((InetSocketAddress) getListenAddress()).getPort();
-    ManagedChannel channel = createChannelBuilder()
+    ManagedChannel channel = createChannelBuilderPreCredentialsApi()
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
             BAD_HOSTNAME, port))
         .hostnameVerifier(new HostnameVerifier() {
@@ -169,7 +190,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
   @Test
   public void hostnameVerifierWithCorrectHostname() throws Exception {
     int port = ((InetSocketAddress) getListenAddress()).getPort();
-    ManagedChannel channel = createChannelBuilder()
+    ManagedChannel channel = createChannelBuilderPreCredentialsApi()
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
             TestUtils.TEST_SERVER_HOST, port))
         .hostnameVerifier(new HostnameVerifier() {
