@@ -64,6 +64,7 @@ import io.grpc.rls.Throttler.ThrottledException;
 import io.grpc.stub.StreamObserver;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -138,7 +139,17 @@ final class CachingRlsLbClient {
             builder.evictionListener,
             scheduledExecutorService,
             timeProvider);
-    String serverHost = URI.create("//" + helper.getAuthority()).getHost();
+    logger = helper.getChannelLogger();
+    String serverHost = null;
+    try {
+      serverHost = new URI(null, helper.getAuthority(), null, null, null).getHost();
+    } catch (URISyntaxException e) {
+      logger.log(
+          ChannelLogLevel.DEBUG, "Can not get hostname from authority: {0}", helper.getAuthority());
+    }
+    if (serverHost == null) {
+      serverHost = helper.getAuthority();
+    }
     RlsRequestFactory requestFactory = new RlsRequestFactory(
         lbPolicyConfig.getRouteLookupConfig(), serverHost);
     rlsPicker = new RlsPicker(requestFactory);
@@ -149,7 +160,6 @@ final class CachingRlsLbClient {
     ManagedChannelBuilder<?> rlsChannelBuilder = helper.createResolvingOobChannelBuilder(
         rlsConfig.getLookupService(), helper.getUnsafeChannelCredentials());
     rlsChannelBuilder.overrideAuthority(helper.getAuthority());
-    logger = helper.getChannelLogger();
     if (enableOobChannelDirectPath) {
       logger.log(
           ChannelLogLevel.DEBUG,
