@@ -143,11 +143,12 @@ final class CachingRlsLbClient {
     String serverHost = null;
     try {
       serverHost = new URI(null, helper.getAuthority(), null, null, null).getHost();
-    } catch (URISyntaxException e) {
-      logger.log(
-          ChannelLogLevel.DEBUG, "Can not get hostname from authority: {0}", helper.getAuthority());
+    } catch (URISyntaxException ignore) {
+      // handled by the following null check
     }
     if (serverHost == null) {
+      logger.log(
+          ChannelLogLevel.DEBUG, "Can not get hostname from authority: {0}", helper.getAuthority());
       serverHost = helper.getAuthority();
     }
     RlsRequestFactory requestFactory = new RlsRequestFactory(
