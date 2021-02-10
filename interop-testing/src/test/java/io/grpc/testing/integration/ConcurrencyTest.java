@@ -23,19 +23,15 @@ import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerCredentials;
+import io.grpc.TlsChannelCredentials;
+import io.grpc.TlsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NettySslContextChannelCredentials;
-import io.grpc.netty.NettySslContextServerCredentials;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.ResponseParameters;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
-import io.netty.handler.ssl.ClientAuth;
 import java.io.File;
 import java.io.IOException;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -185,18 +181,16 @@ public class ConcurrencyTest {
   /**
    * Creates and starts a new {@link TestServiceImpl} server.
    */
-  private Server newServer() throws CertificateException, IOException {
+  private Server newServer() throws IOException {
     File serverCertChainFile = TestUtils.loadCert("server1.pem");
     File serverPrivateKeyFile = TestUtils.loadCert("server1.key");
-    X509Certificate[] serverTrustedCaCerts = {
-      TestUtils.loadX509Cert("ca.pem")
-    };
+    File serverTrustedCaCerts = TestUtils.loadCert("ca.pem");
 
-    ServerCredentials serverCreds = NettySslContextServerCredentials.create(
-        GrpcSslContexts.forServer(serverCertChainFile, serverPrivateKeyFile)
-                       .trustManager(serverTrustedCaCerts)
-                       .clientAuth(ClientAuth.REQUIRE)
-                       .build());
+    ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
+        .keyManager(serverCertChainFile, serverPrivateKeyFile)
+        .trustManager(serverTrustedCaCerts)
+        .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
+        .build();
 
     return Grpc.newServerBuilderForPort(0, serverCreds)
         .addService(new TestServiceImpl(serverExecutor))
@@ -204,18 +198,15 @@ public class ConcurrencyTest {
         .start();
   }
 
-  private ManagedChannel newClientChannel() throws CertificateException, IOException {
+  private ManagedChannel newClientChannel() throws IOException {
     File clientCertChainFile = TestUtils.loadCert("client.pem");
     File clientPrivateKeyFile = TestUtils.loadCert("client.key");
-    X509Certificate[] clientTrustedCaCerts = {
-      TestUtils.loadX509Cert("ca.pem")
-    };
+    File clientTrustedCaCerts = TestUtils.loadCert("ca.pem");
 
-    ChannelCredentials channelCreds = NettySslContextChannelCredentials.create(
-        GrpcSslContexts.forClient()
-                       .keyManager(clientCertChainFile, clientPrivateKeyFile)
-                       .trustManager(clientTrustedCaCerts)
-                       .build());
+    ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+        .keyManager(clientCertChainFile, clientPrivateKeyFile)
+        .trustManager(clientTrustedCaCerts)
+        .build();
 
     return Grpc.newChannelBuilder("localhost:" + server.getPort(), channelCreds)
         .overrideAuthority(TestUtils.TEST_SERVER_HOST)

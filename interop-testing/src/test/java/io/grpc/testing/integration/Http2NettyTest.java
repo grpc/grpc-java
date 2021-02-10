@@ -19,17 +19,16 @@ package io.grpc.testing.integration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 
+import io.grpc.ChannelCredentials;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
+import io.grpc.TlsChannelCredentials;
+import io.grpc.TlsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
-import io.grpc.netty.NettySslContextServerCredentials;
-import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -47,13 +46,11 @@ public class Http2NettyTest extends AbstractInteropTest {
   protected ServerBuilder<?> getServerBuilder() {
     // Starts the server with HTTPS.
     try {
-      ServerCredentials serverCreds = NettySslContextServerCredentials.create(
-          GrpcSslContexts
-              .forServer(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
-              .clientAuth(ClientAuth.REQUIRE)
-              .trustManager(TestUtils.loadCert("ca.pem"))
-              .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
-              .build());
+      ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
+          .keyManager(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
+          .trustManager(TestUtils.loadCert("ca.pem"))
+          .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
+          .build();
       NettyServerBuilder builder = NettyServerBuilder.forPort(0, serverCreds)
           .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
           .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
@@ -68,16 +65,15 @@ public class Http2NettyTest extends AbstractInteropTest {
   @Override
   protected NettyChannelBuilder createChannelBuilder() {
     try {
+      ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+          .keyManager(TestUtils.loadCert("client.pem"), TestUtils.loadCert("client.key"))
+          .trustManager(TestUtils.loadCert("ca.pem"))
+          .build();
       NettyChannelBuilder builder = NettyChannelBuilder
-          .forAddress(TestUtils.testServerAddress((InetSocketAddress) getListenAddress()))
+          .forAddress("localhost", ((InetSocketAddress) getListenAddress()).getPort(), channelCreds)
+          .overrideAuthority(TestUtils.TEST_SERVER_HOST)
           .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
-          .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-          .sslContext(GrpcSslContexts
-              .forClient()
-              .keyManager(TestUtils.loadCert("client.pem"), TestUtils.loadCert("client.key"))
-              .trustManager(TestUtils.loadX509Cert("ca.pem"))
-              .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
-              .build());
+          .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
       // Disable the default census stats interceptor, use testing interceptor instead.
       InternalNettyChannelBuilder.setStatsEnabled(builder, false);
       return builder.intercept(createCensusStatsClientInterceptor());

@@ -25,22 +25,17 @@ import com.squareup.okhttp.ConnectionSpec;
 import io.grpc.ManagedChannel;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
+import io.grpc.TlsServerCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
-import io.grpc.netty.NettySslContextServerCredentials;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.EmptyProtos.Empty;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.SslProvider;
-import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import javax.net.ssl.HostnameVerifier;
@@ -70,18 +65,8 @@ public class Http2OkHttpTest extends AbstractInteropTest {
   protected ServerBuilder<?> getServerBuilder() {
     // Starts the server with HTTPS.
     try {
-      SslProvider sslProvider = SslContext.defaultServerProvider();
-      if (sslProvider == SslProvider.OPENSSL && !SslProvider.isAlpnSupported(SslProvider.OPENSSL)) {
-        // OkHttp only supports Jetty ALPN on OpenJDK. So if OpenSSL doesn't support ALPN, then we
-        // are forced to use Jetty ALPN for Netty instead of OpenSSL.
-        sslProvider = SslProvider.JDK;
-      }
-      SslContextBuilder contextBuilder = SslContextBuilder
-          .forServer(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
-      GrpcSslContexts.configure(contextBuilder, sslProvider);
-      contextBuilder.ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE);
-      ServerCredentials serverCreds =
-          NettySslContextServerCredentials.create(contextBuilder.build());
+      ServerCredentials serverCreds = TlsServerCredentials.create(
+          TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
       NettyServerBuilder builder = NettyServerBuilder.forPort(0, serverCreds)
           .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
           .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
@@ -99,7 +84,6 @@ public class Http2OkHttpTest extends AbstractInteropTest {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("localhost", port)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .connectionSpec(new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
-            .cipherSuites(TestUtils.preferredTestCiphers().toArray(new String[0]))
             .build())
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
             TestUtils.TEST_SERVER_HOST, port));
