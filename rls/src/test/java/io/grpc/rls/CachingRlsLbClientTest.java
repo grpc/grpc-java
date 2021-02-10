@@ -583,7 +583,7 @@ public class CachingRlsLbClientTest {
 
     @Override
     public String getAuthority() {
-      return "bigtable.googleapis.com";
+      return "bigtable.googleapis.com:443";
     }
 
     @Override
