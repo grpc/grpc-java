@@ -5,7 +5,7 @@ pluginManagement {
         id "com.github.johnrengelman.shadow" version "6.1.0"
         id "com.github.kt3k.coveralls" version "2.10.2"
         id "com.google.osdetector" version "1.6.2"
-        id "com.google.protobuf" version "0.8.14"
+        id "com.google.protobuf" version "0.8.15"
         id "digital.wup.android-maven-publish" version "3.6.2"
         id "me.champeau.gradle.japicmp" version "0.2.5"
         id "me.champeau.gradle.jmh" version "0.5.2"
