@@ -168,10 +168,6 @@ abstract class VirtualHost {
           return HashPolicy.create(Type.HEADER, isTerminal, headerName, regEx, regExSubstitution);
         }
 
-        static HashPolicy forSourceIp(boolean isTerminal) {
-          return HashPolicy.create(Type.SOURCE_IP, isTerminal, null, null, null);
-        }
-
         static HashPolicy forChannelId(boolean isTerminal) {
           return HashPolicy.create(Type.CHANNEL_ID, isTerminal, null, null, null);
         }
@@ -183,7 +179,7 @@ abstract class VirtualHost {
         }
 
         enum Type {
-          HEADER, SOURCE_IP, CHANNEL_ID
+          HEADER, CHANNEL_ID
         }
       }
     }

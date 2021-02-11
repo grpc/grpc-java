@@ -489,11 +489,6 @@ final class ClientXdsClient extends AbstractXdsClient {
           policy = HashPolicy.forHeader(
               terminal, headerCfg.getHeaderName(), regEx, regExSubstitute);
           break;
-        case CONNECTION_PROPERTIES:
-          if (config.getConnectionProperties().getSourceIp()) {
-            policy = HashPolicy.forSourceIp(terminal);
-          }
-          break;
         case FILTER_STATE:
           if (config.getFilterState().getKey().equals(HASH_POLICY_FILTER_STATE_KEY)) {
             policy = HashPolicy.forChannelId(terminal);

@@ -419,7 +419,7 @@ public class ClientXdsClientDataTest {
             .addHashPolicy(
                 io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.newBuilder()
                     .setConnectionProperties(ConnectionProperties.newBuilder().setSourceIp(true))
-                    .setTerminal(true))
+                    .setTerminal(true))  // unsupported
             .addHashPolicy(
                 io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.newBuilder()
                     .setFilterState(
@@ -427,22 +427,20 @@ public class ClientXdsClientDataTest {
                             .setKey(ClientXdsClient.HASH_POLICY_FILTER_STATE_KEY)))
             .addHashPolicy(
                 io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.newBuilder()
-                    .setQueryParameter(QueryParameter.newBuilder().setName("param")))
+                    .setQueryParameter(
+                        QueryParameter.newBuilder().setName("param"))) // unsupported
             .build();
     StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto);
     List<HashPolicy> policies = struct.getStruct().hashPolicies();
-    assertThat(policies).hasSize(3);
+    assertThat(policies).hasSize(2);
     assertThat(policies.get(0).type()).isEqualTo(HashPolicy.Type.HEADER);
     assertThat(policies.get(0).headerName()).isEqualTo("user-agent");
     assertThat(policies.get(0).isTerminal()).isFalse();
     assertThat(policies.get(0).regEx().pattern()).isEqualTo("grpc.*");
     assertThat(policies.get(0).regExSubstitution()).isEqualTo("gRPC");
 
-    assertThat(policies.get(1).type()).isEqualTo(HashPolicy.Type.SOURCE_IP);
-    assertThat(policies.get(1).isTerminal()).isTrue();
-
-    assertThat(policies.get(2).type()).isEqualTo(HashPolicy.Type.CHANNEL_ID);
-    assertThat(policies.get(2).isTerminal()).isFalse();
+    assertThat(policies.get(1).type()).isEqualTo(HashPolicy.Type.CHANNEL_ID);
+    assertThat(policies.get(1).isTerminal()).isFalse();
   }
 
   @Test
