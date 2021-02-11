@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -56,10 +57,11 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     return delegate;
   }
 
-  /** Set the {@link XdsServingStatusListener}. Pass null to unset a previously set value. */
+  /** Set the {@link XdsServingStatusListener}. */
   public XdsServerBuilder xdsServingStatusListener(
       XdsServingStatusListener xdsServingStatusListener) {
-    this.xdsServingStatusListener = xdsServingStatusListener;
+    this.xdsServingStatusListener =
+        checkNotNull(xdsServingStatusListener, "xdsServingStatusListener");
     return this;
   }
 
