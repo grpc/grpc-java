@@ -35,12 +35,9 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import java.security.GeneralSecurityException;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
 import javax.annotation.Nullable;
 
 /**
@@ -82,14 +79,11 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   }
 
   private static final int HANDSHAKE_FRAME_SIZE = 1024;
-  // Avoid performing too many handshakes in parallel, as it may cause queuing in the handshake
-  // server and cause unbounded blocking on the event loop (b/168808426). This is a workaround until
-  // there is an async TSI handshaking API to avoid the blocking.
-  private static final AsyncSemaphore semaphore = new AsyncSemaphore(32);
 
   private final NettyTsiHandshaker handshaker;
   private final HandshakeValidator handshakeValidator;
   private final ChannelHandler next;
+  private final AsyncSemaphore semaphore;
 
   private ProtocolNegotiationEvent pne;
   private boolean semaphoreAcquired;
@@ -99,9 +93,20 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
    */
   public TsiHandshakeHandler(
       ChannelHandler next, NettyTsiHandshaker handshaker, HandshakeValidator handshakeValidator) {
+    this(next, handshaker, handshakeValidator, null);
+  }
+
+  /**
+   * Constructs a TsHandshakeHandler. If a semaphore is provided, a permit from the semaphore is
+   * required to start the handshake and is returned when the handshake ends.
+   */
+  public TsiHandshakeHandler(
+      ChannelHandler next, NettyTsiHandshaker handshaker, HandshakeValidator handshakeValidator,
+      AsyncSemaphore semaphore) {
     this.handshaker = checkNotNull(handshaker, "handshaker");
     this.handshakeValidator = checkNotNull(handshakeValidator, "handshakeValidator");
     this.next = checkNotNull(next, "next");
+    this.semaphore = semaphore;
   }
 
   @Override
@@ -152,7 +157,7 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
       pne = (ProtocolNegotiationEvent) evt;
       InternalProtocolNegotiators.negotiationLogger(ctx)
           .log(ChannelLogLevel.INFO, "TsiHandshake started");
-      ChannelFuture acquire = semaphore.acquire(ctx);
+      ChannelFuture acquire = semaphoreAcquire(ctx);
       if (acquire.isSuccess()) {
         semaphoreAcquired = true;
         sendHandshake(ctx);
@@ -164,7 +169,7 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
               return;
             }
             if (ctx.isRemoved()) {
-              semaphore.release();
+              semaphoreRelease();
               return;
             }
             semaphoreAcquired = true;
@@ -222,44 +227,23 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   @Override
   protected void handlerRemoved0(ChannelHandlerContext ctx) throws Exception {
     if (semaphoreAcquired) {
-      semaphore.release();
+      semaphoreRelease();
       semaphoreAcquired = false;
     }
     handshaker.close();
   }
 
-  private static class AsyncSemaphore {
-    private final Object lock = new Object();
-    @SuppressWarnings("JdkObsolete") // LinkedList avoids high watermark memory issues
-    private final Queue<ChannelPromise> queue = new LinkedList<>();
-    private int permits;
-
-    public AsyncSemaphore(int permits) {
-      this.permits = permits;
+  private ChannelFuture semaphoreAcquire(ChannelHandlerContext ctx) {
+    if (semaphore == null) {
+      return ctx.newSucceededFuture();
+    } else {
+      return semaphore.acquire(ctx);
     }
+  }
 
-    public ChannelFuture acquire(ChannelHandlerContext ctx) {
-      synchronized (lock) {
-        if (permits > 0) {
-          permits--;
-          return ctx.newSucceededFuture();
-        }
-        ChannelPromise promise = ctx.newPromise();
-        queue.add(promise);
-        return promise;
-      }
-    }
-
-    public void release() {
-      ChannelPromise next;
-      synchronized (lock) {
-        next = queue.poll();
-        if (next == null) {
-          permits++;
-          return;
-        }
-      }
-      next.setSuccess();
+  private void semaphoreRelease() {
+    if (semaphore != null) {
+      semaphore.release();
     }
   }
 }
