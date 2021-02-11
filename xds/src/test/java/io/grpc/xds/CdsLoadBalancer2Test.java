@@ -544,8 +544,9 @@ public class CdsLoadBalancer2Test {
         @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
         @Nullable UpstreamTlsContext tlsContext) {
       if (watchers.containsKey(clusterName)) {
-        CdsUpdate update = CdsUpdate.forEds(clusterName, "round_robin", -1, -1, null,
-            edsServiceName, lrsServerName, maxConcurrentRequests, tlsContext);
+        CdsUpdate update = CdsUpdate.forEds(
+            clusterName, edsServiceName, lrsServerName, maxConcurrentRequests, tlsContext)
+            .lbPolicy("round_robin").build();
         watchers.get(clusterName).onChanged(update);
       }
     }
@@ -553,16 +554,17 @@ public class CdsLoadBalancer2Test {
     private void deliverLogicalDnsCluster(String clusterName, @Nullable String lrsServerName,
         @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext) {
       if (watchers.containsKey(clusterName)) {
-        CdsUpdate update = CdsUpdate.forLogicalDns(clusterName, "round_robin", -1, -1, null,
-            lrsServerName, maxConcurrentRequests, tlsContext);
+        CdsUpdate update = CdsUpdate.forLogicalDns(
+            clusterName, lrsServerName, maxConcurrentRequests, tlsContext)
+            .lbPolicy("round_robin").build();
         watchers.get(clusterName).onChanged(update);
       }
     }
 
     private void deliverAggregateCluster(String clusterName, List<String> clusters) {
       if (watchers.containsKey(clusterName)) {
-        CdsUpdate update = CdsUpdate.forAggregate(clusterName, "round_robin", -1, -1, null,
-            clusters);
+        CdsUpdate update = CdsUpdate.forAggregate(clusterName, clusters)
+            .lbPolicy("round_robin").build();
         watchers.get(clusterName).onChanged(update);
       }
     }

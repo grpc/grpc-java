@@ -752,23 +752,44 @@ final class ClientXdsClient extends AbstractXdsClient {
       if (!cdsResourceSubscribers.containsKey(clusterName)) {
         continue;
       }
-      CdsUpdate update = null;
+      StructOrError<CdsUpdate.Builder> structOrError;
       switch (cluster.getClusterDiscoveryTypeCase()) {
         case TYPE:
-          update = parseNonAggregateCluster(cluster, nonce, edsResources);
+          structOrError = parseNonAggregateCluster(cluster, edsResources);
           break;
         case CLUSTER_TYPE:
-          update = parseAggregateCluster(cluster, nonce);
+          structOrError = parseAggregateCluster(cluster);
           break;
         case CLUSTERDISCOVERYTYPE_NOT_SET:
         default:
           nackResponse(ResourceType.CDS, nonce,
               "Cluster " + clusterName + ": cluster discovery type unspecified");
+          return;
       }
-      if (update == null) {
+      if (structOrError.getErrorDetail() != null) {
+        nackResponse(ResourceType.CDS, nonce, structOrError.errorDetail);
         return;
       }
-      cdsUpdates.put(clusterName, update);
+      CdsUpdate.Builder updateBuilder = structOrError.getStruct();
+      String lbPolicy = CaseFormat.UPPER_UNDERSCORE.to(
+          CaseFormat.LOWER_UNDERSCORE, cluster.getLbPolicy().name());
+      if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
+        HashFunction hashFunction;
+        RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
+        if (lbConfig.getHashFunction() == RingHashLbConfig.HashFunction.XX_HASH) {
+          hashFunction = HashFunction.XX_HASH;
+        } else {
+          nackResponse(ResourceType.CDS, nonce,
+              "Cluster " + clusterName + ": unsupported ring hash function: "
+                  + lbConfig.getHashFunction());
+          return;
+        }
+        updateBuilder.lbPolicy(lbPolicy, lbConfig.getMinimumRingSize().getValue(),
+            lbConfig.getMaximumRingSize().getValue(), hashFunction);
+      } else {
+        updateBuilder.lbPolicy(lbPolicy);
+      }
+      cdsUpdates.put(clusterName, updateBuilder.build());
     }
     ackResponse(ResourceType.CDS, versionInfo, nonce);
 
@@ -788,33 +809,13 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  /**
-   * Parses CDS resource for an aggregate cluster into {@link io.grpc.xds.XdsClient.CdsUpdate}.
-   * Returns {@code null} and nack the response with the given nonce if the resource is invalid.
-   */
-  private CdsUpdate parseAggregateCluster(Cluster cluster, String nonce) {
+  private static StructOrError<CdsUpdate.Builder> parseAggregateCluster(Cluster cluster) {
     String clusterName = cluster.getName();
-    String lbPolicy = CaseFormat.UPPER_UNDERSCORE.to(
-        CaseFormat.LOWER_UNDERSCORE, cluster.getLbPolicy().name());
-    long minRingSize = -1;
-    long maxRingSize = -1;
-    HashFunction hashFunction = null;
-    if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
-      RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
-      minRingSize = lbConfig.getMinimumRingSize().getValue();
-      maxRingSize = lbConfig.getMaximumRingSize().getValue();
-      if (lbConfig.getHashFunction() == RingHashLbConfig.HashFunction.XX_HASH) {
-        hashFunction = HashFunction.XX_HASH;
-      } else if (lbConfig.getHashFunction() == RingHashLbConfig.HashFunction.MURMUR_HASH_2) {
-        hashFunction = HashFunction.MURMUR_HASH_2;
-      }
-    }
     CustomClusterType customType = cluster.getClusterType();
     String typeName = customType.getName();
     if (!typeName.equals(AGGREGATE_CLUSTER_TYPE_NAME)) {
-      nackResponse(ResourceType.CDS, nonce,
+      return StructOrError.fromError(
           "Cluster " + clusterName + ": unsupported custom cluster type: " + typeName);
-      return null;
     }
     io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig clusterConfig;
     Any unpackedClusterConfig = customType.getTypedConfig();
@@ -826,45 +827,23 @@ final class ClientXdsClient extends AbstractXdsClient {
       clusterConfig = unpackedClusterConfig.unpack(
           io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig.class);
     } catch (InvalidProtocolBufferException e) {
-      nackResponse(ResourceType.CDS, nonce,
-          "Cluster " + clusterName + ": invalid cluster config: " + e);
+      StructOrError.fromError("Cluster " + clusterName + ": malformed ClusterConfig: " + e);
       return null;
     }
-    return CdsUpdate.forAggregate(clusterName, lbPolicy, minRingSize, maxRingSize, hashFunction,
-        clusterConfig.getClustersList());
+    return StructOrError.fromStruct(CdsUpdate.forAggregate(
+        clusterName, clusterConfig.getClustersList()));
   }
 
-  /**
-   * Parses CDS resource for a non-aggregate cluster (EDS or Logical DNS) into {@link
-   * io.grpc.xds.XdsClient.CdsUpdate}. Returns {@code null} and nack the response with the given
-   * nonce if the resource is invalid.
-   */
-  private CdsUpdate parseNonAggregateCluster(
-      Cluster cluster, String nonce, Set<String> edsResources) {
+  private static StructOrError<CdsUpdate.Builder> parseNonAggregateCluster(
+      Cluster cluster, Set<String> edsResources) {
     String clusterName = cluster.getName();
-    String lbPolicy = CaseFormat.UPPER_UNDERSCORE.to(
-        CaseFormat.LOWER_UNDERSCORE, cluster.getLbPolicy().name());
-    long minRingSize = -1;
-    long maxRingSize = -1;
-    HashFunction hashFunction = null;
-    if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
-      RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
-      minRingSize = lbConfig.getMinimumRingSize().getValue();
-      maxRingSize = lbConfig.getMaximumRingSize().getValue();
-      if (lbConfig.getHashFunction() == RingHashLbConfig.HashFunction.XX_HASH) {
-        hashFunction = HashFunction.XX_HASH;
-      } else if (lbConfig.getHashFunction() == RingHashLbConfig.HashFunction.MURMUR_HASH_2) {
-        hashFunction = HashFunction.MURMUR_HASH_2;
-      }
-    }
     String lrsServerName = null;
     Long maxConcurrentRequests = null;
     UpstreamTlsContext upstreamTlsContext = null;
     if (cluster.hasLrsServer()) {
       if (!cluster.getLrsServer().hasSelf()) {
-        nackResponse(ResourceType.CDS, nonce,
+        return StructOrError.fromError(
             "Cluster " + clusterName + ": only support LRS for the same management server");
-        return null;
       }
       lrsServerName = "";
     }
@@ -890,9 +869,8 @@ final class ClientXdsClient extends AbstractXdsClient {
         unpacked = any.unpack(
             io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class);
       } catch (InvalidProtocolBufferException e) {
-        nackResponse(ResourceType.CDS, nonce,
-            "Cluster " + clusterName + ": invalid upstream TLS context: " + e);
-        return null;
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": malformed UpstreamTlsContext: " + e);
       }
       upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(unpacked);
     }
@@ -903,9 +881,8 @@ final class ClientXdsClient extends AbstractXdsClient {
       io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig edsClusterConfig =
           cluster.getEdsClusterConfig();
       if (!edsClusterConfig.getEdsConfig().hasAds()) {
-        nackResponse(ResourceType.CDS, nonce, "Cluster " + clusterName + ": "
-            + "field eds_cluster_config must be set to indicate to use EDS over ADS.");
-        return null;
+        return StructOrError.fromError("Cluster " + clusterName
+            + ": field eds_cluster_config must be set to indicate to use EDS over ADS.");
       }
       // If the service_name field is set, that value will be used for the EDS request.
       if (!edsClusterConfig.getServiceName().isEmpty()) {
@@ -914,15 +891,14 @@ final class ClientXdsClient extends AbstractXdsClient {
       } else {
         edsResources.add(clusterName);
       }
-      return CdsUpdate.forEds(clusterName, lbPolicy, minRingSize, maxRingSize, hashFunction,
-          edsServiceName, lrsServerName, maxConcurrentRequests, upstreamTlsContext);
+      return StructOrError.fromStruct(CdsUpdate.forEds(
+          clusterName, edsServiceName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
     } else if (type.equals(DiscoveryType.LOGICAL_DNS)) {
-      return CdsUpdate.forLogicalDns(clusterName, lbPolicy, minRingSize, maxRingSize, hashFunction,
-          lrsServerName, maxConcurrentRequests, upstreamTlsContext);
+      return StructOrError.fromStruct(CdsUpdate.forLogicalDns(
+          clusterName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
     }
-    nackResponse(ResourceType.CDS, nonce,
+    return StructOrError.fromError(
         "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);
-    return null;
   }
 
   @Override

@@ -623,13 +623,13 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName).isNull();
-    assertThat(cdsUpdate.lbPolicy).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerName).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext).isNull();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
+    assertThat(cdsUpdate.edsServiceName()).isNull();
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -648,16 +648,16 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName).isNull();
-    assertThat(cdsUpdate.lbPolicy).isEqualTo("ring_hash");
-    assertThat(cdsUpdate.hashFunction).isEqualTo(HashFunction.XX_HASH);
-    assertThat(cdsUpdate.minRingSize).isEqualTo(10L);
-    assertThat(cdsUpdate.maxRingSize).isEqualTo(100L);
-    assertThat(cdsUpdate.lrsServerName).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext).isNull();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
+    assertThat(cdsUpdate.edsServiceName()).isNull();
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo("ring_hash");
+    assertThat(cdsUpdate.hashFunction()).isEqualTo(HashFunction.XX_HASH);
+    assertThat(cdsUpdate.minRingSize()).isEqualTo(10L);
+    assertThat(cdsUpdate.maxRingSize()).isEqualTo(100L);
+    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -676,10 +676,10 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.AGGREGATE);
-    assertThat(cdsUpdate.lbPolicy).isEqualTo("round_robin");
-    assertThat(cdsUpdate.prioritizedClusterNames).containsExactlyElementsIn(candidates).inOrder();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.AGGREGATE);
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.prioritizedClusterNames()).containsExactlyElementsIn(candidates).inOrder();
   }
 
   @Test
@@ -696,13 +696,13 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName).isNull();
-    assertThat(cdsUpdate.lbPolicy).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerName).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests).isEqualTo(200L);
-    assertThat(cdsUpdate.upstreamTlsContext).isNull();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
+    assertThat(cdsUpdate.edsServiceName()).isNull();
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.maxConcurrentRequests()).isEqualTo(200L);
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
   }
 
   /**
@@ -730,7 +730,7 @@ public abstract class ClientXdsClientTestBase {
     verify(cdsResourceWatcher, times(1)).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
     SdsSecretConfig validationContextSdsSecretConfig =
-        cdsUpdate.upstreamTlsContext.getCommonTlsContext().getValidationContextSdsSecretConfig();
+        cdsUpdate.upstreamTlsContext().getCommonTlsContext().getValidationContextSdsSecretConfig();
     assertThat(validationContextSdsSecretConfig.getName()).isEqualTo("secret1");
     assertThat(
         Iterables.getOnlyElement(
@@ -759,13 +759,13 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchCdsResource(CDS_RESOURCE, watcher);
     verify(watcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName).isNull();
-    assertThat(cdsUpdate.lbPolicy).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerName).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext).isNull();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
+    assertThat(cdsUpdate.edsServiceName()).isNull();
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     call.verifyNoMoreRequest();
   }
 
@@ -794,12 +794,12 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.LOGICAL_DNS);
-    assertThat(cdsUpdate.lbPolicy).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerName).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext).isNull();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
 
     String edsService = "eds-service-bar.googleapis.com";
     clusters = ImmutableList.of(
@@ -812,13 +812,13 @@ public abstract class ClientXdsClientTestBase {
         "0001");
     verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
     cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName).isEqualTo(edsService);
-    assertThat(cdsUpdate.lbPolicy).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerName).isEqualTo("");
-    assertThat(cdsUpdate.maxConcurrentRequests).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext).isNull();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
+    assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
   }
 
   @Test
@@ -834,13 +834,13 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName).isNull();
-    assertThat(cdsUpdate.lbPolicy).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerName).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext).isNull();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
+    assertThat(cdsUpdate.edsServiceName()).isNull();
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
 
     call.sendResponse("1", Collections.<Any>emptyList(), ResourceType.CDS, "0001");
 
@@ -874,30 +874,30 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName).isEqualTo(CDS_RESOURCE);
-    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.LOGICAL_DNS);
-    assertThat(cdsUpdate.lbPolicy).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerName).isNull();
-    assertThat(cdsUpdate.maxConcurrentRequests).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext).isNull();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verify(watcher1).onChanged(cdsUpdateCaptor.capture());
     cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName).isEqualTo(cdsResource);
-    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName).isEqualTo(edsService);
-    assertThat(cdsUpdate.lbPolicy).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerName).isEqualTo("");
-    assertThat(cdsUpdate.maxConcurrentRequests).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext).isNull();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(cdsResource);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
+    assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verify(watcher2).onChanged(cdsUpdateCaptor.capture());
     cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.clusterName).isEqualTo(cdsResource);
-    assertThat(cdsUpdate.clusterType).isEqualTo(ClusterType.EDS);
-    assertThat(cdsUpdate.edsServiceName).isEqualTo(edsService);
-    assertThat(cdsUpdate.lbPolicy).isEqualTo("round_robin");
-    assertThat(cdsUpdate.lrsServerName).isEqualTo("");
-    assertThat(cdsUpdate.maxConcurrentRequests).isNull();
-    assertThat(cdsUpdate.upstreamTlsContext).isNull();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(cdsResource);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
+    assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
   }
 
   @Test
@@ -1119,12 +1119,12 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
     verify(cdsWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.edsServiceName).isEqualTo(null);
-    assertThat(cdsUpdate.lrsServerName).isEqualTo("");
+    assertThat(cdsUpdate.edsServiceName()).isEqualTo(null);
+    assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     cdsUpdate = cdsUpdateCaptor.getValue();
-    assertThat(cdsUpdate.edsServiceName).isEqualTo(EDS_RESOURCE);
-    assertThat(cdsUpdate.lrsServerName).isNull();
+    assertThat(cdsUpdate.edsServiceName()).isEqualTo(EDS_RESOURCE);
+    assertThat(cdsUpdate.lrsServerName()).isNull();
 
     List<Any> clusterLoadAssignments =
         ImmutableList.of(
@@ -1159,7 +1159,7 @@ public abstract class ClientXdsClientTestBase {
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null, false, null, null)));
     call.sendResponse("1", clusters, ResourceType.CDS, "0001");
     verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
-    assertThat(cdsUpdateCaptor.getValue().edsServiceName).isNull();
+    assertThat(cdsUpdateCaptor.getValue().edsServiceName()).isNull();
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     verifyNoMoreInteractions(cdsWatcher, edsWatcher);
   }

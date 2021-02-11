@@ -149,16 +149,16 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           }
           if (clusterState.isLeaf) {
             DiscoveryMechanism instance;
-            if (clusterState.result.clusterType ==  ClusterType.EDS) {
+            if (clusterState.result.clusterType() ==  ClusterType.EDS) {
               instance = DiscoveryMechanism.forEds(
-                  clusterState.name, clusterState.result.edsServiceName,
-                  clusterState.result.lrsServerName, clusterState.result.maxConcurrentRequests,
-                  clusterState.result.upstreamTlsContext);
+                  clusterState.name, clusterState.result.edsServiceName(),
+                  clusterState.result.lrsServerName(), clusterState.result.maxConcurrentRequests(),
+                  clusterState.result.upstreamTlsContext());
             } else {  // logical DNS
               instance = DiscoveryMechanism.forLogicalDns(
-                  clusterState.name, clusterState.result.lrsServerName,
-                  clusterState.result.maxConcurrentRequests,
-                  clusterState.result.upstreamTlsContext);
+                  clusterState.name, clusterState.result.lrsServerName(),
+                  clusterState.result.maxConcurrentRequests(),
+                  clusterState.result.upstreamTlsContext());
             }
             instances.add(instance);
           } else {
@@ -178,7 +178,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
         return;
       }
-      String endpointPickingPolicy = root.result.lbPolicy;
+      String endpointPickingPolicy = root.result.lbPolicy();
       LoadBalancerProvider localityPickingLbProvider =
           lbRegistry.getProvider(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);  // hardcoded
       LoadBalancerProvider endpointPickingLbProvider =
@@ -279,12 +279,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             logger.log(XdsLogLevel.DEBUG, "Received cluster update {0}", update);
             discovered = true;
             result = update;
-            if (update.clusterType == ClusterType.AGGREGATE) {
+            if (update.clusterType() == ClusterType.AGGREGATE) {
               isLeaf = false;
               logger.log(XdsLogLevel.INFO, "Aggregate cluster {0}, underlying clusters: {1}",
-                  update.clusterName, update.prioritizedClusterNames);
+                  update.clusterName(), update.prioritizedClusterNames());
               Map<String, ClusterState> newChildStates = new LinkedHashMap<>();
-              for (String cluster : update.prioritizedClusterNames) {
+              for (String cluster : update.prioritizedClusterNames()) {
                 if (childClusterStates == null || !childClusterStates.containsKey(cluster)) {
                   ClusterState childState = new ClusterState(cluster);
                   childState.start();
@@ -299,13 +299,13 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                 }
               }
               childClusterStates = newChildStates;
-            } else if (update.clusterType == ClusterType.EDS) {
+            } else if (update.clusterType() == ClusterType.EDS) {
               isLeaf = true;
               logger.log(XdsLogLevel.INFO, "EDS cluster {0}, edsServiceName: {1}",
-                  update.clusterName, update.edsServiceName);
+                  update.clusterName(), update.edsServiceName());
             } else {  // logical DNS
               isLeaf = true;
-              logger.log(XdsLogLevel.INFO, "Logical DNS cluster {0}", update.clusterName);
+              logger.log(XdsLogLevel.INFO, "Logical DNS cluster {0}", update.clusterName());
             }
             handleClusterDiscovered();
           }
