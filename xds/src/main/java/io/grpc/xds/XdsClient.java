@@ -19,8 +19,10 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.auto.value.AutoValue;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
+import com.google.common.collect.ImmutableList;
 import io.grpc.Status;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -155,197 +157,155 @@ abstract class XdsClient {
     }
   }
 
-  static final class CdsUpdate implements ResourceUpdate {
-    final String clusterName;
-    final ClusterType clusterType;
-    final ClusterConfig clusterConfig;
+  /** xDS resource update for cluster-level configuration. */
+  @AutoValue
+  abstract static class CdsUpdate implements ResourceUpdate {
+    abstract String clusterName();
 
-    CdsUpdate(String clusterName, ClusterType clusterType, ClusterConfig clusterConfig) {
-      this.clusterName = checkNotNull(clusterName, "clusterName");
-      this.clusterType = checkNotNull(clusterType, "clusterType");
-      this.clusterConfig = checkNotNull(clusterConfig, "clusterConfig");
+    abstract ClusterType clusterType();
+
+    // Endpoint-level load balancing policy.
+    abstract String lbPolicy();
+
+    // Only valid if lbPolicy is "ring_hash".
+    abstract long minRingSize();
+
+    // Only valid if lbPolicy is "ring_hash".
+    abstract long maxRingSize();
+
+    // Only valid if lbPolicy is "ring_hash".
+    @Nullable
+    abstract HashFunction hashFunction();
+
+    // Alternative resource name to be used in EDS requests.
+    /// Only valid for EDS cluster.
+    @Nullable
+    abstract String edsServiceName();
+
+    // Load report server name for reporting loads via LRS.
+    // Only valid for EDS or LOGICAL_DNS cluster.
+    @Nullable
+    abstract String lrsServerName();
+
+    // Max number of concurrent requests can be sent to this cluster.
+    // Only valid for EDS or LOGICAL_DNS cluster.
+    @Nullable
+    abstract Long maxConcurrentRequests();
+
+    // TLS context used to connect to connect to this cluster.
+    // Only valid for EDS or LOGICAL_DNS cluster.
+    @Nullable
+    abstract UpstreamTlsContext upstreamTlsContext();
+
+    // List of underlying clusters making of this aggregate cluster.
+    // Only valid for AGGREGATE cluster.
+    @Nullable
+    abstract ImmutableList<String> prioritizedClusterNames();
+
+    static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
+      checkNotNull(prioritizedClusterNames, "prioritizedClusterNames");
+      return new AutoValue_XdsClient_CdsUpdate.Builder()
+          .clusterName(clusterName)
+          .clusterType(ClusterType.AGGREGATE)
+          .minRingSize(0)
+          .maxRingSize(0)
+          .prioritizedClusterNames(ImmutableList.copyOf(prioritizedClusterNames));
     }
 
-    @Override
-    public int hashCode() {
-      return Objects.hash(clusterName, clusterType, clusterConfig);
+    static Builder forEds(String clusterName, @Nullable String edsServiceName,
+        @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+        @Nullable UpstreamTlsContext upstreamTlsContext) {
+      return new AutoValue_XdsClient_CdsUpdate.Builder()
+          .clusterName(clusterName)
+          .clusterType(ClusterType.EDS)
+          .minRingSize(0)
+          .maxRingSize(0)
+          .edsServiceName(edsServiceName)
+          .lrsServerName(lrsServerName)
+          .maxConcurrentRequests(maxConcurrentRequests)
+          .upstreamTlsContext(upstreamTlsContext);
     }
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      CdsUpdate that = (CdsUpdate) o;
-      return Objects.equals(clusterName, that.clusterName)
-          && Objects.equals(clusterType, that.clusterType)
-          && Objects.equals(clusterConfig, that.clusterConfig);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("clusterName", clusterName)
-          .add("clusterType", clusterType)
-          .add("clusterConfig", clusterConfig)
-          .toString();
+    static Builder forLogicalDns(String clusterName, @Nullable String lrsServerName,
+        @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext upstreamTlsContext) {
+      return new AutoValue_XdsClient_CdsUpdate.Builder()
+          .clusterName(clusterName)
+          .clusterType(ClusterType.LOGICAL_DNS)
+          .minRingSize(0)
+          .maxRingSize(0)
+          .lrsServerName(lrsServerName)
+          .maxConcurrentRequests(maxConcurrentRequests)
+          .upstreamTlsContext(upstreamTlsContext);
     }
 
     enum ClusterType {
       EDS, LOGICAL_DNS, AGGREGATE
     }
 
-    abstract static class ClusterConfig {
-      // Endpoint level load balancing policy.
-      final String lbPolicy;
-
-      private ClusterConfig(String lbPolicy) {
-        this.lbPolicy = checkNotNull(lbPolicy, "lbPolicy");
-      }
+    enum HashFunction {
+      XX_HASH
     }
 
-    static final class AggregateClusterConfig extends ClusterConfig {
-      // List of underlying clusters making of this aggregate cluster.
-      final List<String> prioritizedClusterNames;
-
-      AggregateClusterConfig(String lbPolicy, List<String> prioritizedClusterNames) {
-        super(lbPolicy);
-        this.prioritizedClusterNames =
-            Collections.unmodifiableList(new ArrayList<>(prioritizedClusterNames));
-      }
-
-      @Override
-      public int hashCode() {
-        return Objects.hash(lbPolicy, prioritizedClusterNames);
-      }
-
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-          return false;
-        }
-        AggregateClusterConfig that = (AggregateClusterConfig) o;
-        return Objects.equals(lbPolicy, that.lbPolicy)
-            && Objects.equals(prioritizedClusterNames, that.prioritizedClusterNames);
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this)
-            .add("lbPolicy", lbPolicy)
-            .add("prioritizedClusterNames", prioritizedClusterNames)
-            .toString();
-      }
+    // FIXME(chengyuanzhang): delete this after UpstreamTlsContext's toString() is fixed.
+    @Override
+    public final String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("clusterName", clusterName())
+          .add("clusterType", clusterType())
+          .add("lbPolicy", lbPolicy())
+          .add("minRingSize", minRingSize())
+          .add("maxRingSize", maxRingSize())
+          .add("hashFunction", hashFunction())
+          .add("edsServiceName", edsServiceName())
+          .add("lrsServerName", lrsServerName())
+          .add("maxConcurrentRequests", maxConcurrentRequests())
+          // Exclude upstreamTlsContext as its string representation is cumbersome.
+          .add("prioritizedClusterNames", prioritizedClusterNames())
+          .toString();
     }
 
-    private abstract static class NonAggregateClusterConfig extends ClusterConfig {
-      // Load report server name for reporting loads via LRS.
-      @Nullable
-      final String lrsServerName;
-      // Max number of concurrent requests can be sent to this cluster.
-      // FIXME(chengyuanzhang): protobuf uint32 is int in Java, so this field can be Integer.
-      @Nullable
-      final Long maxConcurrentRequests;
-      // TLS context used to connect to connect to this cluster.
-      @Nullable
-      final UpstreamTlsContext upstreamTlsContext;
+    @AutoValue.Builder
+    abstract static class Builder {
+      // Private do not use.
+      protected abstract Builder clusterName(String clusterName);
 
-      private NonAggregateClusterConfig(String lbPolicy, @Nullable String lrsServerName,
-          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext upstreamTlsContext) {
-        super(lbPolicy);
-        this.lrsServerName = lrsServerName;
-        this.maxConcurrentRequests = maxConcurrentRequests;
-        this.upstreamTlsContext = upstreamTlsContext;
-      }
-    }
+      // Private do not use.
+      protected abstract Builder clusterType(ClusterType clusterType);
 
-    static final class EdsClusterConfig extends NonAggregateClusterConfig {
-      // Alternative resource name to be used in EDS requests.
-      @Nullable
-      final String edsServiceName;
+      // Private do not use.
+      protected abstract Builder lbPolicy(String lbPolicy);
 
-      EdsClusterConfig(String lbPolicy, @Nullable String edsServiceName,
-          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
-          @Nullable UpstreamTlsContext upstreamTlsContext) {
-        super(lbPolicy, lrsServerName, maxConcurrentRequests, upstreamTlsContext);
-        this.edsServiceName = edsServiceName;
+      Builder lbPolicy(String lbPolicy, long minRingSize, long maxRingSize,
+          HashFunction hashFunction) {
+        return this.lbPolicy(lbPolicy).minRingSize(minRingSize).maxRingSize(maxRingSize)
+            .hashFunction(checkNotNull(hashFunction, "hashFunction"));
       }
 
-      @Override
-      public int hashCode() {
-        return Objects.hash(lbPolicy, edsServiceName, lrsServerName, maxConcurrentRequests,
-            upstreamTlsContext);
-      }
+      // Private do not use.
+      protected abstract Builder minRingSize(long minRingSize);
 
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-          return false;
-        }
-        EdsClusterConfig that = (EdsClusterConfig) o;
-        return Objects.equals(lbPolicy, that.lbPolicy)
-            && Objects.equals(edsServiceName, that.edsServiceName)
-            && Objects.equals(lrsServerName, that.lrsServerName)
-            && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
-            && Objects.equals(upstreamTlsContext, that.upstreamTlsContext);
-      }
+      // Private do not use.
+      protected abstract Builder maxRingSize(long maxRingSize);
 
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this)
-            .add("lbPolicy", lbPolicy)
-            .add("edsServiceName", edsServiceName)
-            .add("lrsServerName", lrsServerName)
-            .add("maxConcurrentRequests", maxConcurrentRequests)
-            // Exclude upstreamTlsContext as its string representation is cumbersome.
-            .toString();
-      }
-    }
+      // Private do not use.
+      protected abstract Builder hashFunction(HashFunction hashFunction);
 
-    static final class LogicalDnsClusterConfig extends NonAggregateClusterConfig {
-      LogicalDnsClusterConfig(String lbPolicy, @Nullable String lrsServerName,
-          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext upstreamTlsContext) {
-        super(lbPolicy, lrsServerName, maxConcurrentRequests, upstreamTlsContext);
-      }
+      // Private do not use.
+      protected abstract Builder edsServiceName(String edsServiceName);
 
-      @Override
-      public int hashCode() {
-        return Objects.hash(lbPolicy, lrsServerName, maxConcurrentRequests, upstreamTlsContext);
-      }
+      // Private do not use.
+      protected abstract Builder lrsServerName(String lrsServerName);
 
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-          return false;
-        }
-        LogicalDnsClusterConfig that = (LogicalDnsClusterConfig) o;
-        return Objects.equals(lbPolicy, that.lbPolicy)
-            && Objects.equals(lrsServerName, that.lrsServerName)
-            && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
-            && Objects.equals(upstreamTlsContext, that.upstreamTlsContext);
-      }
+      // Private do not use.
+      protected abstract Builder maxConcurrentRequests(Long maxConcurrentRequests);
 
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this)
-            .add("lbPolicy", lbPolicy)
-            .add("lrsServerName", lrsServerName)
-            .add("maxConcurrentRequests", maxConcurrentRequests)
-            // Exclude upstreamTlsContext as its string representation is cumbersome.
-            .toString();
-      }
+      // Private do not use.
+      protected abstract Builder upstreamTlsContext(UpstreamTlsContext upstreamTlsContext);
+
+      // Private do not use.
+      protected abstract Builder prioritizedClusterNames(List<String> prioritizedClusterNames);
+
+      abstract CdsUpdate build();
     }
   }
 

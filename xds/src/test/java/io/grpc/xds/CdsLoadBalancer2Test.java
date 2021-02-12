@@ -47,10 +47,6 @@ import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.XdsClient.CdsUpdate.AggregateClusterConfig;
-import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
-import io.grpc.xds.XdsClient.CdsUpdate.EdsClusterConfig;
-import io.grpc.xds.XdsClient.CdsUpdate.LogicalDnsClusterConfig;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -548,9 +544,9 @@ public class CdsLoadBalancer2Test {
         @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
         @Nullable UpstreamTlsContext tlsContext) {
       if (watchers.containsKey(clusterName)) {
-        EdsClusterConfig clusterConfig = new EdsClusterConfig("round_robin", edsServiceName,
-            lrsServerName, maxConcurrentRequests, tlsContext);
-        CdsUpdate update = new CdsUpdate(clusterName, ClusterType.EDS, clusterConfig);
+        CdsUpdate update = CdsUpdate.forEds(
+            clusterName, edsServiceName, lrsServerName, maxConcurrentRequests, tlsContext)
+            .lbPolicy("round_robin").build();
         watchers.get(clusterName).onChanged(update);
       }
     }
@@ -558,17 +554,17 @@ public class CdsLoadBalancer2Test {
     private void deliverLogicalDnsCluster(String clusterName, @Nullable String lrsServerName,
         @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext) {
       if (watchers.containsKey(clusterName)) {
-        LogicalDnsClusterConfig clusterConfig = new LogicalDnsClusterConfig("round_robin",
-            lrsServerName, maxConcurrentRequests, tlsContext);
-        CdsUpdate update = new CdsUpdate(clusterName, ClusterType.LOGICAL_DNS, clusterConfig);
+        CdsUpdate update = CdsUpdate.forLogicalDns(
+            clusterName, lrsServerName, maxConcurrentRequests, tlsContext)
+            .lbPolicy("round_robin").build();
         watchers.get(clusterName).onChanged(update);
       }
     }
 
     private void deliverAggregateCluster(String clusterName, List<String> clusters) {
       if (watchers.containsKey(clusterName)) {
-        AggregateClusterConfig clusterConfig = new AggregateClusterConfig("round_robin", clusters);
-        CdsUpdate update = new CdsUpdate(clusterName, ClusterType.AGGREGATE, clusterConfig);
+        CdsUpdate update = CdsUpdate.forAggregate(clusterName, clusters)
+            .lbPolicy("round_robin").build();
         watchers.get(clusterName).onChanged(update);
       }
     }
