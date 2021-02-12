@@ -32,7 +32,7 @@ for (subproject in rootProject.subprojects) {
 }
 
 dependencies {
-    api subprojects.minus([project(':grpc-protobuf-lite'), project(':grpc-rls')])
+    api subprojects.minus([project(':grpc-protobuf-lite')])
 }
 
 javadoc {

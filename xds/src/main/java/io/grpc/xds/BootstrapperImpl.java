@@ -59,9 +59,6 @@ public class BootstrapperImpl implements Bootstrapper {
   static String bootstrapConfigFromSysProp = System.getProperty(BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR);
   private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
   @VisibleForTesting
-  static boolean enableV3Protocol = Boolean.parseBoolean(
-      System.getenv("GRPC_XDS_EXPERIMENTAL_V3_SUPPORT"));
-  @VisibleForTesting
   static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
       "envoy.lb.does_not_support_overprovisioning";
 
@@ -176,8 +173,7 @@ public class BootstrapperImpl implements Bootstrapper {
       List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
-        useProtocolV3 = enableV3Protocol
-            && serverFeatures.contains(XDS_V3_SERVER_FEATURE);
+        useProtocolV3 = serverFeatures.contains(XDS_V3_SERVER_FEATURE);
       }
       servers.add(new ServerInfo(serverUri, channelCredentials, useProtocolV3));
     }
@@ -201,18 +197,20 @@ public class BootstrapperImpl implements Bootstrapper {
       }
       Map<String, ?> rawLocality = JsonUtil.getObject(rawNode, "locality");
       if (rawLocality != null) {
-        String region = JsonUtil.getString(rawLocality, "region");
-        String zone = JsonUtil.getString(rawLocality, "zone");
-        String subZone = JsonUtil.getString(rawLocality, "sub_zone");
-        if (region != null) {
-          logger.log(XdsLogLevel.INFO, "Locality region: {0}", region);
+        String region = "";
+        String zone = "";
+        String subZone = "";
+        if (rawLocality.containsKey("region")) {
+          region = JsonUtil.getString(rawLocality, "region");
         }
         if (rawLocality.containsKey("zone")) {
-          logger.log(XdsLogLevel.INFO, "Locality zone: {0}", zone);
+          zone = JsonUtil.getString(rawLocality, "zone");
         }
         if (rawLocality.containsKey("sub_zone")) {
-          logger.log(XdsLogLevel.INFO, "Locality sub_zone: {0}", subZone);
+          subZone = JsonUtil.getString(rawLocality, "sub_zone");
         }
+        logger.log(XdsLogLevel.INFO, "Locality region: {0}, zone: {0}, subZone: {0}",
+            region, zone, subZone);
         Locality locality = Locality.create(region, zone, subZone);
         nodeBuilder.setLocality(locality);
       }

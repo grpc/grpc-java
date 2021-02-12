@@ -413,6 +413,7 @@ public final class Status {
    *
    * @return the trailers or {@code null} if not found.
    */
+  @Nullable
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4683")
   public static Metadata trailersFromThrowable(Throwable t) {
     Throwable cause = checkNotNull(t, "t");
