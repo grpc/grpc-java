@@ -53,7 +53,7 @@ public class AltsHandshakerTestService extends HandshakerServiceImplBase {
       @Override
       public void onNext(HandshakerReq value) {
         log.log(Level.FINE, "request received: " + value);
-        synchronized (this) {
+        synchronized (AltsHandshakerTestService.this) {
           switch (expectState) {
             case CLIENT_INIT:
               checkState(CLIENT_START.equals(value.getReqOneofCase()));
