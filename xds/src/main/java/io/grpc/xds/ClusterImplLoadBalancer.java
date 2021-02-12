@@ -88,11 +88,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private LoadBalancer childLb;
 
   ClusterImplLoadBalancer(Helper helper) {
-    this(helper, ThreadSafeRandomImpl.instance);
-  }
-
-  ClusterImplLoadBalancer(Helper helper, ThreadSafeRandom random) {
-    this(helper, random, null);
+    this(helper, ThreadSafeRandomImpl.instance, null);
   }
 
   @VisibleForTesting
