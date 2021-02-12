@@ -28,6 +28,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
@@ -171,12 +172,19 @@ public class XdsClientWrapperForServerSdsTestMisc {
         mock(XdsClientWrapperForServerSds.ServerWatcher.class);
     xdsClientWrapperForServerSds.addServerWatcher(mockServerWatcher);
     registeredWatcher.onError(Status.INTERNAL);
-    verify(mockServerWatcher).onError(eq(Status.INTERNAL));
+    ArgumentCaptor<Throwable> argCaptor = ArgumentCaptor.forClass(null);
+    verify(mockServerWatcher).onError(argCaptor.capture());
+    Throwable throwable = argCaptor.getValue();
+    assertThat(throwable).isInstanceOf(StatusException.class);
+    Status captured = ((StatusException)throwable).getStatus();
+    assertThat(captured.getCode()).isEqualTo(Status.Code.INTERNAL);
     reset(mockServerWatcher);
     registeredWatcher.onResourceDoesNotExist("not-found Error");
-    ArgumentCaptor<Status> argCaptor = ArgumentCaptor.forClass(null);
-    verify(mockServerWatcher).onError(argCaptor.capture());
-    Status captured = argCaptor.getValue();
+    ArgumentCaptor<Throwable> argCaptor1 = ArgumentCaptor.forClass(null);
+    verify(mockServerWatcher).onError(argCaptor1.capture());
+    throwable = argCaptor1.getValue();
+    assertThat(throwable).isInstanceOf(StatusException.class);
+    captured = ((StatusException)throwable).getStatus();
     assertThat(captured.getCode()).isEqualTo(Status.Code.NOT_FOUND);
     assertThat(captured.getDescription()).isEqualTo("not-found Error");
     InetAddress ipLocalAddress = InetAddress.getByName("10.1.2.3");
@@ -203,14 +211,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
               .hasMessageThat()
               .contains("Cannot find bootstrap configuration");
     }
-    ArgumentCaptor<Status> argCaptor = ArgumentCaptor.forClass(null);
-    verify(mockServerWatcher).onError(argCaptor.capture());
-    Status captured = argCaptor.getValue();
-    assertThat(captured.getCode()).isEqualTo(Status.Code.UNKNOWN);
-    assertThat(captured.getCause()).isInstanceOf(XdsInitializationException.class);
-    assertThat(captured.getCause())
-        .hasMessageThat()
-        .contains("Cannot find bootstrap configuration");
+    verify(mockServerWatcher, never()).onError(any(Throwable.class));
   }
 
   private DownstreamTlsContext sendListenerUpdate(
