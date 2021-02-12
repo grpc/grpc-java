@@ -72,25 +72,36 @@ public class AltsHandshakerTestService extends HandshakerServiceImplBase {
                   .build();
               log.log(Level.FINE, "init server response" + initServer);
               responseObserver.onNext(initServer);
-              expectState = State.CLIENT_FINISH;
+              expectState = State.CLIENT_NEXT;
               break;
-            case CLIENT_FINISH:
+            case CLIENT_NEXT:
               checkState(NEXT.equals(value.getReqOneofCase()));
               HandshakerResp resp = HandshakerResp.newBuilder()
-                  .setResult(getResult())
                   .setBytesConsumed(FIXED_LENGTH_OUTPUT)
                   .setOutFrames(fakeOutput)
                   .build();
-              log.log(Level.FINE, "client finished response " + resp);
+              log.log(Level.FINE, "client response" + resp);
               responseObserver.onNext(resp);
               expectState = State.SERVER_FINISH;
               break;
             case SERVER_FINISH:
+              checkState(NEXT.equals(value.getReqOneofCase()));
+              resp = HandshakerResp.newBuilder()
+                  .setResult(getResult())
+                  .setOutFrames(fakeOutput)
+                  .setBytesConsumed(FIXED_LENGTH_OUTPUT)
+                  .build();
+              log.log(Level.FINE, "server finished response " + resp);
+              responseObserver.onNext(resp);
+              expectState = State.CLIENT_FINISH;
+              break;
+            case CLIENT_FINISH:
+              checkState(NEXT.equals(value.getReqOneofCase()));
               resp = HandshakerResp.newBuilder()
                   .setResult(getResult())
                   .setBytesConsumed(FIXED_LENGTH_OUTPUT)
                   .build();
-              log.log(Level.FINE, "server finished response " + resp);
+              log.log(Level.FINE, "client finished response " + resp);
               responseObserver.onNext(resp);
               expectState = State.CLIENT_INIT;
               break;
@@ -140,7 +151,8 @@ public class AltsHandshakerTestService extends HandshakerServiceImplBase {
   private enum State {
     CLIENT_INIT,
     SERVER_INIT,
+    CLIENT_NEXT,
+    SERVER_FINISH,
     CLIENT_FINISH,
-    SERVER_FINISH
   }
 }
