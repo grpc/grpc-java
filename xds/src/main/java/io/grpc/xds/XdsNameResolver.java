@@ -128,7 +128,6 @@ final class XdsNameResolver extends NameResolver {
   private final ThreadSafeRandom random;
   private final ConcurrentMap<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
-  private final AtomicLong activeFaultInjectedStreams = new AtomicLong();
 
   private volatile RoutingConfig routingConfig = RoutingConfig.empty;
   private Listener2 listener;
@@ -136,6 +135,7 @@ final class XdsNameResolver extends NameResolver {
   private XdsClient xdsClient;
   private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
+  private AtomicLong activeFaultInjectedStreams;
 
   XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler) {
@@ -175,6 +175,7 @@ final class XdsNameResolver extends NameResolver {
       return;
     }
     xdsClient = xdsClientPool.getObject();
+    activeFaultInjectedStreams = xdsClient.activeFaultInjectedStreams;
     callCounterProvider = SharedCallCounterMap.getInstance();
     resolveState = new ResolveState();
     resolveState.start();
