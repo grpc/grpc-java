@@ -33,7 +33,6 @@ import io.grpc.stub.StreamObserver;
 import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * A fake HandshakeService for ALTS integration testing in non-gcp environments.
@@ -45,8 +44,6 @@ public class AltsHandshakerTestService extends HandshakerServiceImplBase {
   private static final int FIXED_LENGTH_OUTPUT = 16;
   private final ByteString fakeOutput = data(FIXED_LENGTH_OUTPUT);
   private final ByteString secret = data(128);
-  private static final Object lock = new Object();
-  @GuardedBy("lock")
   private State expectState = State.CLIENT_INIT;
 
   @Override
@@ -56,7 +53,7 @@ public class AltsHandshakerTestService extends HandshakerServiceImplBase {
       @Override
       public void onNext(HandshakerReq value) {
         log.log(Level.FINE, "request received: " + value);
-        synchronized (lock) {
+        synchronized (AltsHandshakerTestService.this) {
           switch (expectState) {
             case CLIENT_INIT:
               checkState(CLIENT_START.equals(value.getReqOneofCase()));
