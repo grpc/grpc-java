@@ -87,8 +87,7 @@ public class XdsSdsClientServerTest {
   @Before
   public void setUp() throws IOException {
     port = XdsServerTestHelper.findFreePort();
-    TlsContextManagerImpl unused =
-        TlsContextManagerImpl.getInstance(mock(Bootstrapper.BootstrapInfo.class));
+    TlsContextManagerImpl.getInstance(mock(Bootstrapper.BootstrapInfo.class));
   }
 
   @After
