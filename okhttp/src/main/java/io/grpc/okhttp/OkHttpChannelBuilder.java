@@ -59,6 +59,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.net.SocketFactory;
 import javax.net.ssl.HostnameVerifier;
@@ -145,7 +146,7 @@ public final class OkHttpChannelBuilder extends
     if (result.error != null) {
       throw new IllegalArgumentException(result.error);
     }
-    return new OkHttpChannelBuilder(target, result.factory, result.callCredentials);
+    return new OkHttpChannelBuilder(target, creds, result.callCredentials, result.factory);
   }
 
   private Executor transportExecutor;
@@ -181,9 +182,11 @@ public final class OkHttpChannelBuilder extends
     this.freezeSecurityConfiguration = false;
   }
 
-  OkHttpChannelBuilder(String target, @Nullable SSLSocketFactory factory,
-      @Nullable CallCredentials callCredentials) {
-    managedChannelImplBuilder = new ManagedChannelImplBuilder(target, callCredentials,
+  OkHttpChannelBuilder(
+      String target, ChannelCredentials channelCreds, CallCredentials callCreds,
+      SSLSocketFactory factory) {
+    managedChannelImplBuilder = new ManagedChannelImplBuilder(
+        target, channelCreds, callCreds,
         new OkHttpChannelTransportFactoryBuilder(),
         new OkHttpChannelDefaultPortProvider());
     this.sslSocketFactory = factory;
@@ -631,7 +634,8 @@ public final class OkHttpChannelBuilder extends
     private final ConnectionSpec connectionSpec;
     private final int maxMessageSize;
     private final boolean enableKeepAlive;
-    private final AtomicBackoff keepAliveTimeNanos;
+    private final long keepAliveTimeNanos;
+    private final AtomicBackoff keepAliveBackoff;
     private final long keepAliveTimeoutNanos;
     private final int flowControlWindow;
     private final boolean keepAliveWithoutCalls;
@@ -665,7 +669,8 @@ public final class OkHttpChannelBuilder extends
       this.connectionSpec = connectionSpec;
       this.maxMessageSize = maxMessageSize;
       this.enableKeepAlive = enableKeepAlive;
-      this.keepAliveTimeNanos = new AtomicBackoff("keepalive time nanos", keepAliveTimeNanos);
+      this.keepAliveTimeNanos = keepAliveTimeNanos;
+      this.keepAliveBackoff = new AtomicBackoff("keepalive time nanos", keepAliveTimeNanos);
       this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
       this.flowControlWindow = flowControlWindow;
       this.keepAliveWithoutCalls = keepAliveWithoutCalls;
@@ -689,7 +694,7 @@ public final class OkHttpChannelBuilder extends
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }
-      final AtomicBackoff.State keepAliveTimeNanosState = keepAliveTimeNanos.getState();
+      final AtomicBackoff.State keepAliveTimeNanosState = keepAliveBackoff.getState();
       Runnable tooManyPingsRunnable = new Runnable() {
         @Override
         public void run() {
@@ -725,6 +730,33 @@ public final class OkHttpChannelBuilder extends
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
       return timeoutService;
+    }
+
+    @Nullable
+    @CheckReturnValue
+    @Override
+    public SwapChannelCredentialsResult swapChannelCredentials(ChannelCredentials channelCreds) {
+      SslSocketFactoryResult result = sslSocketFactoryFrom(channelCreds);
+      if (result.error != null) {
+        return null;
+      }
+      ClientTransportFactory factory = new OkHttpTransportFactory(
+          executor,
+          timeoutService,
+          socketFactory,
+          result.factory,
+          hostnameVerifier,
+          connectionSpec,
+          maxMessageSize,
+          enableKeepAlive,
+          keepAliveTimeNanos,
+          keepAliveTimeoutNanos,
+          flowControlWindow,
+          keepAliveWithoutCalls,
+          maxInboundMetadataSize,
+          transportTracerFactory,
+          useGetForSafeMethods);
+      return new SwapChannelCredentialsResult(factory, result.callCredentials);
     }
 
     @Override

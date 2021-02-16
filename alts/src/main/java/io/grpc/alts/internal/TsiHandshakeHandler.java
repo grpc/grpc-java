@@ -31,6 +31,7 @@ import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -82,17 +83,30 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   private final NettyTsiHandshaker handshaker;
   private final HandshakeValidator handshakeValidator;
   private final ChannelHandler next;
+  private final AsyncSemaphore semaphore;
 
   private ProtocolNegotiationEvent pne;
+  private boolean semaphoreAcquired;
 
   /**
    * Constructs a TsiHandshakeHandler.
    */
   public TsiHandshakeHandler(
       ChannelHandler next, NettyTsiHandshaker handshaker, HandshakeValidator handshakeValidator) {
+    this(next, handshaker, handshakeValidator, null);
+  }
+
+  /**
+   * Constructs a TsHandshakeHandler. If a semaphore is provided, a permit from the semaphore is
+   * required to start the handshake and is returned when the handshake ends.
+   */
+  public TsiHandshakeHandler(
+      ChannelHandler next, NettyTsiHandshaker handshaker, HandshakeValidator handshakeValidator,
+      AsyncSemaphore semaphore) {
     this.handshaker = checkNotNull(handshaker, "handshaker");
     this.handshakeValidator = checkNotNull(handshakeValidator, "handshakeValidator");
     this.next = checkNotNull(next, "next");
+    this.semaphore = semaphore;
   }
 
   @Override
@@ -137,13 +151,37 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   }
 
   @Override
-  public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+  public void userEventTriggered(final ChannelHandlerContext ctx, Object evt) throws Exception {
     if (evt instanceof ProtocolNegotiationEvent) {
       checkState(pne == null, "negotiation already started");
       pne = (ProtocolNegotiationEvent) evt;
       InternalProtocolNegotiators.negotiationLogger(ctx)
           .log(ChannelLogLevel.INFO, "TsiHandshake started");
-      sendHandshake(ctx);
+      ChannelFuture acquire = semaphoreAcquire(ctx);
+      if (acquire.isSuccess()) {
+        semaphoreAcquired = true;
+        sendHandshake(ctx);
+      } else {
+        acquire.addListener(new ChannelFutureListener() {
+          @Override public void operationComplete(ChannelFuture future) {
+            if (!future.isSuccess()) {
+              ctx.fireExceptionCaught(future.cause());
+              return;
+            }
+            if (ctx.isRemoved()) {
+              semaphoreRelease();
+              return;
+            }
+            semaphoreAcquired = true;
+            try {
+              sendHandshake(ctx);
+            } catch (Exception ex) {
+              ctx.fireExceptionCaught(ex);
+            }
+            ctx.flush();
+          }
+        });
+      }
     } else {
       super.userEventTriggered(ctx, evt);
     }
@@ -188,6 +226,24 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
 
   @Override
   protected void handlerRemoved0(ChannelHandlerContext ctx) throws Exception {
+    if (semaphoreAcquired) {
+      semaphoreRelease();
+      semaphoreAcquired = false;
+    }
     handshaker.close();
+  }
+
+  private ChannelFuture semaphoreAcquire(ChannelHandlerContext ctx) {
+    if (semaphore == null) {
+      return ctx.newSucceededFuture();
+    } else {
+      return semaphore.acquire(ctx);
+    }
+  }
+
+  private void semaphoreRelease() {
+    if (semaphore != null) {
+      semaphore.release();
+    }
   }
 }

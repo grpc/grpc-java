@@ -30,11 +30,11 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -239,7 +239,13 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
     if (savedReportTransportTerminated != null) {
       for (PendingStream stream : savedPendingStreams) {
-        stream.cancel(status);
+        Runnable runnable = stream.setStream(new FailingClientStream(status, RpcProgress.REFUSED));
+        if (runnable != null) {
+          // Drain in-line instead of using an executor as failing stream just throws everything
+          // away. This is essentially the same behavior as DelayedStream.cancel() but can be done
+          // before stream.start().
+          runnable.run();
+        }
       }
       syncContext.execute(savedReportTransportTerminated);
     }
@@ -283,9 +289,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
     ArrayList<PendingStream> toRemove = new ArrayList<>();
 
     for (final PendingStream stream : toProcess) {
-      if (stream.isRealStreamSet()) {
-        continue;
-      }
       PickResult pickResult = picker.pickSubchannel(stream.args);
       CallOptions callOptions = stream.args.getCallOptions();
       final ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
@@ -298,20 +301,12 @@ final class DelayedClientTransport implements ManagedClientTransport {
         if (callOptions.getExecutor() != null) {
           executor = callOptions.getExecutor();
         }
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-              stream.createRealStream(transport);
-            }
-          });
-
-      }  // else: stay pending
-    }
-
-    for (final PendingStream stream : toProcess) {
-      if (stream.isRealStreamStarted()) {
+        Runnable runnable = stream.createRealStream(transport);
+        if (runnable != null) {
+          executor.execute(runnable);
+        }
         toRemove.add(stream);
-      }
+      }  // else: stay pending
     }
 
     synchronized (lock) {
@@ -356,7 +351,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
       this.args = args;
     }
 
-    private void createRealStream(ClientTransport transport) {
+    /** Runnable may be null. */
+    private Runnable createRealStream(ClientTransport transport) {
       ClientStream realStream;
       Context origContext = context.attach();
       try {
@@ -365,7 +361,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       } finally {
         context.detach(origContext);
       }
-      setStream(realStream);
+      return setStream(realStream);
     }
 
     @Override
@@ -384,6 +380,14 @@ final class DelayedClientTransport implements ManagedClientTransport {
         }
       }
       syncContext.drain();
+    }
+
+    @Override
+    public void appendTimeoutInsight(InsightBuilder insight) {
+      if (args.getCallOptions().isWaitForReady()) {
+        insight.append("wait_for_ready");
+      }
+      super.appendTimeoutInsight(insight);
     }
   }
 }

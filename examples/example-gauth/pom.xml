@@ -6,13 +6,13 @@
   <packaging>jar</packaging>
   <!-- Feel free to delete the comment at the end of these lines. It is just
        for safely updating the version in our release process. -->
-  <version>1.35.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
+  <version>1.37.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
   <name>example-gauth</name>
   <url>https://github.com/grpc/grpc-java</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <grpc.version>1.35.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
+    <grpc.version>1.37.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
     <protobuf.version>3.12.0</protobuf.version>
     <!-- required for jdk9 -->
     <maven.compiler.source>1.7</maven.compiler.source>
@@ -33,11 +33,6 @@
 
   <dependencies>
     <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java-util</artifactId>
-      <version>${protobuf.version}</version>
-    </dependency>
-    <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-netty-shaded</artifactId>
       <scope>runtime</scope>
@@ -53,6 +48,11 @@
     <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-auth</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java-util</artifactId>
+      <version>${protobuf.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.tomcat</groupId>
@@ -84,7 +84,7 @@
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
-      <version>2.28.2</version>
+      <version>3.4.0</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

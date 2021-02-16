@@ -35,4 +35,14 @@ package io.grpc;
  * {@code ChoiceChannelCredentials}!).
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
-public abstract class ChannelCredentials {}
+public abstract class ChannelCredentials {
+  /**
+   * Returns the ChannelCredentials stripped of its CallCredentials. In the future,
+   * this may strip only some of the CallCredentials, preserving call credentials
+   * that are safe from replay attacks (e.g., if the token is bound to the
+   * channel's certificate).
+   *
+   * @since 1.35.0
+   */
+  public abstract ChannelCredentials withoutBearerTokens();
+}

@@ -35,6 +35,7 @@ java_library(
     visibility = ["//visibility:public"],
     deps = [
         ":alts_internal",
+        ":handshaker_java_proto",
         ":handshaker_java_grpc",
         "//api",
         "//auth",
@@ -47,7 +48,6 @@ java_library(
         "@io_netty_netty_common//jar",
         "@io_netty_netty_handler//jar",
         "@io_netty_netty_transport//jar",
-        "@org_apache_commons_commons_lang3//jar",
     ],
 )
 

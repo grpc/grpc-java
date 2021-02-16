@@ -29,14 +29,16 @@ import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadRe
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.InternalLogId;
+import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.EnvoyProtoData.ClusterStats;
 import io.grpc.xds.EnvoyProtoData.Node;
-import io.grpc.xds.XdsClient.XdsChannel;
+import io.grpc.xds.Stats.ClusterStats;
+import io.grpc.xds.Stats.DroppedRequests;
+import io.grpc.xds.Stats.UpstreamLocalityStats;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -52,13 +54,14 @@ import javax.annotation.Nullable;
 final class LoadReportClient {
   private final InternalLogId logId;
   private final XdsLogger logger;
-  private final XdsChannel xdsChannel;
+  private final ManagedChannel channel;
+  private final boolean useProtocolV3;
   private final Node node;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timerService;
   private final Stopwatch retryStopwatch;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final LoadStatsManager loadStatsManager;
+  private final LoadStatsManager2 loadStatsManager;
 
   private boolean started;
   @Nullable
@@ -69,15 +72,17 @@ final class LoadReportClient {
   private LrsStream lrsStream;
 
   LoadReportClient(
-      LoadStatsManager loadStatsManager,
-      XdsChannel xdsChannel,
+      LoadStatsManager2 loadStatsManager,
+      ManagedChannel channel,
+      boolean useProtocolV3,
       Node node,
       SynchronizationContext syncContext,
       ScheduledExecutorService scheduledExecutorService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.loadStatsManager = checkNotNull(loadStatsManager, "loadStatsManager");
-    this.xdsChannel = checkNotNull(xdsChannel, "xdsChannel");
+    this.channel = checkNotNull(channel, "xdsChannel");
+    this.useProtocolV3 = useProtocolV3;
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timerService = checkNotNull(scheduledExecutorService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
@@ -152,7 +157,7 @@ final class LoadReportClient {
       return;
     }
     checkState(lrsStream == null, "previous lbStream has not been cleared yet");
-    if (xdsChannel.isUseProtocolV3()) {
+    if (useProtocolV3) {
       lrsStream = new LrsStreamV3();
     } else {
       lrsStream = new LrsStreamV2();
@@ -210,11 +215,11 @@ final class LoadReportClient {
       }
       List<ClusterStats> clusterStatsList;
       if (reportAllClusters) {
-        clusterStatsList = loadStatsManager.getAllLoadReports();
+        clusterStatsList = loadStatsManager.getAllClusterStatsReports();
       } else {
         clusterStatsList = new ArrayList<>();
         for (String name : clusterNames) {
-          clusterStatsList.addAll(loadStatsManager.getClusterLoadReports(name));
+          clusterStatsList.addAll(loadStatsManager.getClusterStatsReports(name));
         }
       }
       sendLoadStatsRequest(clusterStatsList);
@@ -331,7 +336,7 @@ final class LoadReportClient {
           };
       io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.LoadReportingServiceStub
           stubV2 = io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.newStub(
-              xdsChannel.getManagedChannel());
+              channel);
       lrsRequestWriterV2 = stubV2.withWaitForReady().streamLoadStats(lrsResponseReaderV2);
       logger.log(XdsLogLevel.DEBUG, "Sending initial LRS request");
       sendLoadStatsRequest(Collections.<ClusterStats>emptyList());
@@ -343,7 +348,7 @@ final class LoadReportClient {
           io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest.newBuilder()
               .setNode(node.toEnvoyProtoNodeV2());
       for (ClusterStats stats : clusterStatsList) {
-        requestBuilder.addClusterStats(stats.toEnvoyProtoClusterStatsV2());
+        requestBuilder.addClusterStats(buildClusterStats(stats));
       }
       io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest request = requestBuilder.build();
       lrsRequestWriterV2.onNext(requestBuilder.build());
@@ -353,6 +358,37 @@ final class LoadReportClient {
     @Override
     void sendError(Exception error) {
       lrsRequestWriterV2.onError(error);
+    }
+
+    private io.envoyproxy.envoy.api.v2.endpoint.ClusterStats buildClusterStats(
+        ClusterStats stats) {
+      io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.Builder builder =
+          io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.newBuilder()
+              .setClusterName(stats.clusterName());
+      if (stats.clusterServiceName() != null) {
+        builder.setClusterServiceName(stats.clusterServiceName());
+      }
+      for (UpstreamLocalityStats upstreamLocalityStats : stats.upstreamLocalityStatsList()) {
+        builder.addUpstreamLocalityStats(
+            io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats.newBuilder()
+            .setLocality(
+                io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
+                    .setRegion(upstreamLocalityStats.locality().region())
+                    .setZone(upstreamLocalityStats.locality().zone())
+                    .setSubZone(upstreamLocalityStats.locality().subZone()))
+            .setTotalSuccessfulRequests(upstreamLocalityStats.totalSuccessfulRequests())
+            .setTotalErrorRequests(upstreamLocalityStats.totalErrorRequests())
+            .setTotalRequestsInProgress(upstreamLocalityStats.totalRequestsInProgress())
+            .setTotalIssuedRequests(upstreamLocalityStats.totalIssuedRequests()));
+      }
+      for (DroppedRequests droppedRequests : stats.droppedRequestsList()) {
+        builder.addDroppedRequests(
+            io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests.newBuilder()
+                .setCategory(droppedRequests.category())
+                .setDroppedCount(droppedRequests.droppedCount()));
+      }
+      return builder.setTotalDroppedRequests(stats.totalDroppedRequests())
+          .setLoadReportInterval(Durations.fromNanos(stats.loadReportIntervalNano())).build();
     }
   }
 
@@ -396,7 +432,7 @@ final class LoadReportClient {
             }
           };
       LoadReportingServiceStub stubV3 =
-          LoadReportingServiceGrpc.newStub(xdsChannel.getManagedChannel());
+          LoadReportingServiceGrpc.newStub(channel);
       lrsRequestWriterV3 = stubV3.withWaitForReady().streamLoadStats(lrsResponseReaderV3);
       logger.log(XdsLogLevel.DEBUG, "Sending initial LRS request");
       sendLoadStatsRequest(Collections.<ClusterStats>emptyList());
@@ -407,7 +443,7 @@ final class LoadReportClient {
       LoadStatsRequest.Builder requestBuilder =
           LoadStatsRequest.newBuilder().setNode(node.toEnvoyProtoNode());
       for (ClusterStats stats : clusterStatsList) {
-        requestBuilder.addClusterStats(stats.toEnvoyProtoClusterStats());
+        requestBuilder.addClusterStats(buildClusterStats(stats));
       }
       LoadStatsRequest request = requestBuilder.build();
       lrsRequestWriterV3.onNext(request);
@@ -417,6 +453,39 @@ final class LoadReportClient {
     @Override
     void sendError(Exception error) {
       lrsRequestWriterV3.onError(error);
+    }
+
+    private io.envoyproxy.envoy.config.endpoint.v3.ClusterStats buildClusterStats(
+        ClusterStats stats) {
+      io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.Builder builder =
+          io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.newBuilder()
+              .setClusterName(stats.clusterName());
+      if (stats.clusterServiceName() != null) {
+        builder.setClusterServiceName(stats.clusterServiceName());
+      }
+      for (UpstreamLocalityStats upstreamLocalityStats : stats.upstreamLocalityStatsList()) {
+        builder.addUpstreamLocalityStats(
+            io.envoyproxy.envoy.config.endpoint.v3.UpstreamLocalityStats.newBuilder()
+                .setLocality(
+                    io.envoyproxy.envoy.config.core.v3.Locality.newBuilder()
+                        .setRegion(upstreamLocalityStats.locality().region())
+                        .setZone(upstreamLocalityStats.locality().zone())
+                        .setSubZone(upstreamLocalityStats.locality().subZone()))
+            .setTotalSuccessfulRequests(upstreamLocalityStats.totalSuccessfulRequests())
+            .setTotalErrorRequests(upstreamLocalityStats.totalErrorRequests())
+            .setTotalRequestsInProgress(upstreamLocalityStats.totalRequestsInProgress())
+            .setTotalIssuedRequests(upstreamLocalityStats.totalIssuedRequests()));
+      }
+      for (DroppedRequests droppedRequests : stats.droppedRequestsList()) {
+        builder.addDroppedRequests(
+            io.envoyproxy.envoy.config.endpoint.v3.ClusterStats.DroppedRequests.newBuilder()
+                .setCategory(droppedRequests.category())
+                .setDroppedCount(droppedRequests.droppedCount()));
+      }
+      return builder
+          .setTotalDroppedRequests(stats.totalDroppedRequests())
+          .setLoadReportInterval(Durations.fromNanos(stats.loadReportIntervalNano()))
+          .build();
     }
   }
 }

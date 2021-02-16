@@ -32,7 +32,7 @@ import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
-import io.grpc.xds.XdsAttributes;
+import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -189,7 +189,8 @@ public final class SdsProtocolNegotiators {
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       // check if SslContextProviderSupplier was passed via attributes
       SslContextProviderSupplier localSslContextProviderSupplier =
-          grpcHandler.getEagAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+          grpcHandler.getEagAttributes().get(
+              InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
       if (localSslContextProviderSupplier == null) {
         checkNotNull(
             fallbackProtocolNegotiator, "No TLS config and no fallbackProtocolNegotiator!");
@@ -436,9 +437,11 @@ public final class SdsProtocolNegotiators {
                   InternalProtocolNegotiators.serverTls(sslContext).newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
-              ctx.pipeline().addAfter(ctx.name(), null, handler);
-              fireProtocolNegotiationEvent(ctx);
-              ctx.pipeline().remove(bufferReads);
+              if (!ctx.isRemoved()) {
+                ctx.pipeline().addAfter(ctx.name(), null, handler);
+                fireProtocolNegotiationEvent(ctx);
+                ctx.pipeline().remove(bufferReads);
+              }
               TlsContextManagerImpl.getInstance()
                   .releaseServerSslContextProvider(sslContextProvider);
             }

@@ -26,6 +26,7 @@ import com.google.common.base.Objects;
 import io.grpc.Metadata.TrustedAsciiMarshaller;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.TreeMap;
@@ -412,6 +413,7 @@ public final class Status {
    *
    * @return the trailers or {@code null} if not found.
    */
+  @Nullable
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4683")
   public static Metadata trailersFromThrowable(Throwable t) {
     Throwable cause = checkNotNull(t, "t");
@@ -616,10 +618,7 @@ public final class Status {
         }
         escapedBytes[wi++] = b;
       }
-      byte[] dest = new byte[wi];
-      System.arraycopy(escapedBytes, 0, dest, 0, wi);
-
-      return dest;
+      return Arrays.copyOf(escapedBytes, wi);
     }
 
     @SuppressWarnings("deprecation") // Use fast but deprecated String ctor

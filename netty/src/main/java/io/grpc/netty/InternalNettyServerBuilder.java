@@ -30,7 +30,7 @@ import java.util.List;
  */
 @Internal
 public final class InternalNettyServerBuilder {
-  public static List<NettyServer> buildTransportServers(NettyServerBuilder builder,
+  public static NettyServer buildTransportServers(NettyServerBuilder builder,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
     return builder.buildTransportServers(streamTracerFactories);
   }

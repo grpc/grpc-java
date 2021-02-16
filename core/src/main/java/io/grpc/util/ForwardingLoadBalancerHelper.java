@@ -17,7 +17,7 @@
 package io.grpc.util;
 
 import com.google.common.base.MoreObjects;
-import io.grpc.Attributes;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -31,7 +31,6 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
 import io.grpc.SynchronizationContext;
-import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
@@ -41,22 +40,9 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
    */
   protected abstract LoadBalancer.Helper delegate();
 
-  @Deprecated
-  @Override
-  public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
-    return delegate().createSubchannel(addrs, attrs);
-  }
-
   @Override
   public Subchannel createSubchannel(CreateSubchannelArgs args) {
     return delegate().createSubchannel(args);
-  }
-
-  @Deprecated
-  @Override
-  public void updateSubchannelAddresses(
-      Subchannel subchannel, List<EquivalentAddressGroup> addrs) {
-    delegate().updateSubchannelAddresses(subchannel, addrs);
   }
 
   @Override
@@ -69,9 +55,16 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
     delegate().updateOobChannelAddresses(channel, eag);
   }
 
+  @Deprecated
   @Override
   public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
     return delegate().createResolvingOobChannelBuilder(target);
+  }
+
+  @Override
+  public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
+      String target, ChannelCredentials creds) {
+    return delegate().createResolvingOobChannelBuilder(target, creds);
   }
 
   @Override
@@ -91,20 +84,18 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   }
 
   @Override
-  @Deprecated
-  public void runSerialized(Runnable task) {
-    delegate().runSerialized(task);
-  }
-
-  @Deprecated
-  @Override
-  public NameResolver.Factory getNameResolverFactory() {
-    return delegate().getNameResolverFactory();
-  }
-
-  @Override
   public String getAuthority() {
     return delegate().getAuthority();
+  }
+
+  @Override
+  public ChannelCredentials getChannelCredentials() {
+    return delegate().getChannelCredentials();
+  }
+
+  @Override
+  public ChannelCredentials getUnsafeChannelCredentials() {
+    return delegate().getUnsafeChannelCredentials();
   }
 
   @Override

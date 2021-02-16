@@ -96,8 +96,8 @@ public class AltsProtocolNegotiatorTest {
   private Throwable caughtException;
 
   private TsiPeer mockedTsiPeer = new TsiPeer(Collections.<Property<?>>emptyList());
-  private AltsAuthContext mockedAltsContext =
-      new AltsAuthContext(
+  private AltsInternalContext mockedAltsContext =
+      new AltsInternalContext(
           HandshakerResult.newBuilder()
               .setPeerRpcVersions(RpcProtocolVersionsUtil.getRpcProtocolVersions())
               .build());

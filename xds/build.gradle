@@ -13,7 +13,13 @@ description = "gRPC: XDS plugin"
     it.options.compilerArgs += [
         // valueOf(int) in RoutingPriority has been deprecated
         "-Xlint:-deprecation",
+        // only has AutoValue annotation processor
+        "-Xlint:-processing",
     ]
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/build/generated/sources/annotationProcessor/java/.*",
+            "|")
 }
 
 evaluationDependsOn(project(':grpc-core').path)
@@ -27,7 +33,8 @@ dependencies {
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.gson,
             libraries.re2j,
-            libraries.bouncycastle
+            libraries.bouncycastle,
+            libraries.autovalue_annotation
     def nettyDependency = implementation project(':grpc-netty')
 
     implementation (libraries.opencensus_proto) {
@@ -44,6 +51,7 @@ dependencies {
 
     testImplementation project(':grpc-core').sourceSets.test.output
 
+    annotationProcessor libraries.autovalue
     compileOnly libraries.javax_annotation,
             // At runtime use the epoll included in grpc-netty-shaded
             libraries.netty_epoll
@@ -81,6 +89,7 @@ jar {
 }
 
 javadoc {
+    // Exclusions here should generally also be relocated
     exclude 'com/github/udpa/**'
     exclude 'com/google/security/**'
     exclude 'io/envoyproxy/**'
@@ -93,6 +102,7 @@ javadoc {
     exclude 'io/grpc/xds/XdsInitializationException.java'
     exclude 'io/grpc/xds/XdsNameResolverProvider.java'
     exclude 'io/grpc/xds/internal/**'
+    exclude 'io/grpc/xds/Internal*'
 }
 
 shadowJar {
@@ -100,21 +110,27 @@ shadowJar {
     dependencies {
         include(project(':grpc-xds'))
     }
-    relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
+    // Relocated packages commonly need exclusions in jacocoTestReport and javadoc
     relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
+    relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
+    relocate 'com.google.security', 'io.grpc.xds.shaded.com.google.security'
+    // TODO: missing java_package option in .proto
+    relocate 'envoy.annotations', 'io.grpc.xds.shaded.envoy.annotations'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
-    relocate 'com.google.security', 'io.grpc.xds.shaded.com.google.security'
+    // TODO: missing java_package option in .proto
+    relocate 'udpa.annotations', 'io.grpc.xds.shaded.udpa.annotations'
     exclude "**/*.proto"
 }
 
 jacocoTestReport {
     classDirectories.from = sourceSets.main.output.collect {
         fileTree(dir: it,
-        exclude: [
-                '**/com/google/api/**',
-                '**/com/github/**',
+        exclude: [ // Exclusions here should generally also be relocated
+                '**/com/github/udpa/**',
+                '**/com/google/api/expr/**',
+                '**/com/google/security/**',
                 '**/envoy/annotations/**',
                 '**/io/envoyproxy/**',
                 '**/udpa/annotations/**',
@@ -125,8 +141,9 @@ jacocoTestReport {
 publishing {
     publications {
         maven(MavenPublication) {
-            artifact shadowJar
-            artifacts.removeAll { it.classifier == 'original' }
+            // We want this to throw an exception if it isn't working
+            def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
+            artifacts.remove(originalJar)
 
             pom.withXml {
                 def dependenciesNode = new Node(null, 'dependencies')

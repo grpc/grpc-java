@@ -270,7 +270,6 @@ final class LbPolicyConfiguration {
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("target", target)
-          .add("helper", helper)
           .add("picker", picker)
           .add("state", state)
           .toString();

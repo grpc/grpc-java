@@ -36,7 +36,8 @@ import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
@@ -53,8 +54,8 @@ class CronetClientTransport implements ConnectionClientTransport {
   private Listener listener;
   private final Object lock = new Object();
   @GuardedBy("lock")
-  private final Set<CronetClientStream> streams =
-      new HashSet<CronetClientStream>();
+  private final Set<CronetClientStream> streams = Collections.newSetFromMap(
+          new IdentityHashMap<CronetClientStream, Boolean>());
   private final Executor executor;
   private final int maxMessageSize;
   private final boolean alwaysUsePut;

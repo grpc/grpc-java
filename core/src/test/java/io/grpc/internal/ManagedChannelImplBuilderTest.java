@@ -180,7 +180,7 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void nameResolverFactory_default() {
-    assertNotNull(builder.getNameResolverFactory());
+    assertNotNull(builder.nameResolverFactory);
   }
 
   @Test
@@ -188,16 +188,16 @@ public class ManagedChannelImplBuilderTest {
   public void nameResolverFactory_normal() {
     NameResolver.Factory nameResolverFactory = mock(NameResolver.Factory.class);
     assertEquals(builder, builder.nameResolverFactory(nameResolverFactory));
-    assertEquals(nameResolverFactory, builder.getNameResolverFactory());
+    assertEquals(nameResolverFactory, builder.nameResolverFactory);
   }
 
   @Test
   @SuppressWarnings("deprecation")
   public void nameResolverFactory_null() {
-    NameResolver.Factory defaultValue = builder.getNameResolverFactory();
+    NameResolver.Factory defaultValue = builder.nameResolverFactory;
     builder.nameResolverFactory(mock(NameResolver.Factory.class));
     assertEquals(builder, builder.nameResolverFactory(null));
-    assertEquals(defaultValue, builder.getNameResolverFactory());
+    assertEquals(defaultValue, builder.nameResolverFactory);
   }
 
   @Test(expected = IllegalStateException.class)
@@ -334,14 +334,14 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void overrideAuthority_default() {
-    assertNull(builder.getOverrideAuthority());
+    assertNull(builder.authorityOverride);
   }
 
   @Test
   public void overrideAuthority_normal() {
     String overrideAuthority = "best-authority";
     assertEquals(builder, builder.overrideAuthority(overrideAuthority));
-    assertEquals(overrideAuthority, builder.getOverrideAuthority());
+    assertEquals(overrideAuthority, builder.authorityOverride);
   }
 
   @Test(expected = NullPointerException.class)
@@ -352,14 +352,6 @@ public class ManagedChannelImplBuilderTest {
   @Test(expected = IllegalArgumentException.class)
   public void overrideAuthority_invalid() {
     builder.overrideAuthority("not_allowed");
-  }
-
-  @Test
-  public void overrideAuthority_getNameResolverFactory() {
-    assertNull(builder.getOverrideAuthority());
-    assertFalse(builder.getNameResolverFactory() instanceof OverrideAuthorityNameResolverFactory);
-    builder.overrideAuthority("google.com");
-    assertTrue(builder.getNameResolverFactory() instanceof OverrideAuthorityNameResolverFactory);
   }
 
   @Test

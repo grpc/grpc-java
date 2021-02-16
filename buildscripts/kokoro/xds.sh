@@ -28,16 +28,17 @@ grpc/tools/run_tests/helper_scripts/prep_xds.sh
 # --test_case after they are added into "all".
 JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.properties \
   python3 grpc/tools/run_tests/run_xds_tests.py \
-    --test_case="all,path_matching,header_matching,circuit_breaking" \
+    --test_case="all,path_matching,header_matching,circuit_breaking,timeout" \
     --project_id=grpc-testing \
-    --source_image=projects/grpc-testing/global/images/xds-test-server-3 \
+    --project_num=830293263384 \
+    --source_image=projects/grpc-testing/global/images/xds-test-server-4 \
     --path_to_server_binary=/java_server/grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-server \
     --gcp_suffix=$(date '+%s') \
     --verbose \
+    ${XDS_V3_OPT-} \
     --client_cmd="grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-client \
       --server=xds:///{server_uri} \
       --stats_port={stats_port} \
       --qps={qps} \
       {rpcs_to_send} \
       {metadata_to_send}"
-

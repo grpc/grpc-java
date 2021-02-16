@@ -35,3 +35,6 @@ bin
 # Emacs
 *~
 \#*\#
+
+# ARM tests
+qemu-arm-static

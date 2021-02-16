@@ -34,6 +34,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -46,7 +47,6 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
-import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -187,7 +187,8 @@ public class CachingRlsLbClientTest {
   public void get_noError_lifeCycle() throws Exception {
     InOrder inOrder = inOrder(evictionListener);
     RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest("server", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+        new RouteLookupRequest(
+            "bigtable.googleapis.com", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
@@ -277,7 +278,8 @@ public class CachingRlsLbClientTest {
   public void get_updatesLbState() throws Exception {
     InOrder inOrder = inOrder(helper);
     RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest("service1", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+        new RouteLookupRequest(
+            "bigtable.googleapis.com", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
@@ -317,7 +319,7 @@ public class CachingRlsLbClientTest {
     // try to get invalid
     RouteLookupRequest invalidRouteLookupRequest =
         new RouteLookupRequest(
-            "service1", "/doesn/exists", "grpc", ImmutableMap.<String, String>of());
+            "bigtable.googleapis.com", "/doesn/exists", "grpc", ImmutableMap.<String, String>of());
     CachedRouteLookupResponse errorResp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(errorResp.isPending()).isTrue();
     fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
@@ -537,7 +539,8 @@ public class CachingRlsLbClientTest {
   private final class FakeHelper extends Helper {
 
     @Override
-    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
+        String target, ChannelCredentials creds) {
       try {
         grpcCleanupRule.register(
             InProcessServerBuilder.forName(target)
@@ -579,14 +582,19 @@ public class CachingRlsLbClientTest {
     }
 
     @Override
-    @Deprecated
-    public NameResolver.Factory getNameResolverFactory() {
-      throw new UnsupportedOperationException();
+    public String getAuthority() {
+      return "bigtable.googleapis.com:443";
     }
 
     @Override
-    public String getAuthority() {
-      throw new UnsupportedOperationException();
+    public ChannelCredentials getUnsafeChannelCredentials() {
+      // In test we don't do any authentication.
+      return new ChannelCredentials() {
+        @Override
+        public ChannelCredentials withoutBearerTokens() {
+          return this;
+        }
+      };
     }
 
     @Override

@@ -40,10 +40,8 @@ import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
-import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalDecompressorRegistry;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -90,8 +88,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final ContextCancellationListener cancellationListener =
       new ContextCancellationListener();
   private final ScheduledExecutorService deadlineCancellationExecutor;
-  @Nullable
-  private final InternalConfigSelector configSelector;
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
@@ -101,6 +97,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       ClientStreamProvider clientStreamProvider,
       ScheduledExecutorService deadlineCancellationExecutor,
       CallTracer channelCallsTracer,
+      // TODO(zdapeng): remove this arg
       @Nullable InternalConfigSelector configSelector) {
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this construction to ManagedChannelImpl.
@@ -123,7 +120,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     this.callOptions = callOptions;
     this.clientStreamProvider = clientStreamProvider;
     this.deadlineCancellationExecutor = deadlineCancellationExecutor;
-    this.configSelector = configSelector;
     PerfMark.event("ClientCall.<init>", tag);
   }
 
@@ -220,25 +216,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       callExecutor.execute(new ClosedByContext());
       return;
     }
-
-    if (configSelector != null) {
-      PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
-      InternalConfigSelector.Result result = configSelector.selectConfig(args);
-      Status status = result.getStatus();
-      if (!status.isOk()) {
-        executeCloseObserverInContext(observer, status);
-        return;
-      }
-      callOptions = result.getCallOptions();
-      Runnable committedCallback = result.getCommittedCallback();
-      if (committedCallback != null) {
-        observer = new CommittedCallbackListener(observer, committedCallback);
-      }
-      ManagedChannelServiceConfig config = (ManagedChannelServiceConfig) result.getConfig();
-      MethodInfo methodInfo = config.getMethodConfig(method);
-      applyMethodConfig(methodInfo);
-    }
-
+    applyMethodConfig();
     final String compressorName = callOptions.getCompressor();
     Compressor compressor;
     if (compressorName != null) {
@@ -325,38 +303,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
   }
 
-  private final class CommittedCallbackListener extends
-      SimpleForwardingClientCallListener<RespT> {
-    final Runnable committedCallback;
-    boolean committed;
-
-    CommittedCallbackListener(Listener<RespT> delegate, Runnable committedCallback) {
-      super(delegate);
-      this.committedCallback = committedCallback;
-    }
-
-    @Override
-    public void onHeaders(Metadata headers) {
-      committed = true;
-      committedCallback.run();
-      delegate().onHeaders(headers);
-    }
-
-    @Override
-    public void onClose(Status status, Metadata trailers) {
-      if (!committed) {
-        committed = true;
-        committedCallback.run();
-      }
-      delegate().onClose(status, trailers);
-    }
-  }
-
-  private void applyMethodConfig(MethodInfo info) {
+  private void applyMethodConfig() {
+    MethodInfo info = callOptions.getOption(MethodInfo.KEY);
     if (info == null) {
       return;
     }
-    callOptions = callOptions.withOption(MethodInfo.KEY, info);
     if (info.timeoutNanos != null) {
       Deadline newDeadline = Deadline.after(info.timeoutNanos, TimeUnit.NANOSECONDS);
       Deadline existingDeadline = callOptions.getDeadline();
@@ -454,21 +405,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     return deadlineCancellationExecutor.schedule(
         new LogExceptionRunnable(
             new DeadlineTimer(remainingNanos)), remainingNanos, TimeUnit.NANOSECONDS);
-  }
-
-  private void executeCloseObserverInContext(final Listener<RespT> observer, final Status status) {
-    class CloseInContext extends ContextRunnable {
-      CloseInContext() {
-        super(context);
-      }
-
-      @Override
-      public void runInContext() {
-        closeObserver(observer, status, new Metadata());
-      }
-    }
-
-    callExecutor.execute(new CloseInContext());
   }
 
   @Nullable

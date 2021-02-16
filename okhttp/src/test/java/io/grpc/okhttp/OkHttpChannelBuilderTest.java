@@ -34,6 +34,7 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
@@ -125,7 +126,12 @@ public class OkHttpChannelBuilderTest {
   @Test
   public void sslSocketFactoryFrom_unknown() {
     OkHttpChannelBuilder.SslSocketFactoryResult result =
-        OkHttpChannelBuilder.sslSocketFactoryFrom(new ChannelCredentials() {});
+        OkHttpChannelBuilder.sslSocketFactoryFrom(new ChannelCredentials() {
+          @Override
+          public ChannelCredentials withoutBearerTokens() {
+            throw new UnsupportedOperationException();
+          }
+        });
     assertThat(result.error).isNotNull();
     assertThat(result.callCredentials).isNull();
     assertThat(result.factory).isNull();
@@ -191,7 +197,12 @@ public class OkHttpChannelBuilderTest {
   public void sslSocketFactoryFrom_choice() {
     OkHttpChannelBuilder.SslSocketFactoryResult result =
         OkHttpChannelBuilder.sslSocketFactoryFrom(ChoiceChannelCredentials.create(
-          new ChannelCredentials() {},
+          new ChannelCredentials() {
+            @Override
+            public ChannelCredentials withoutBearerTokens() {
+              throw new UnsupportedOperationException();
+            }
+          },
           TlsChannelCredentials.create(),
           InsecureChannelCredentials.create()));
     assertThat(result.error).isNull();
@@ -200,7 +211,12 @@ public class OkHttpChannelBuilderTest {
 
     result = OkHttpChannelBuilder.sslSocketFactoryFrom(ChoiceChannelCredentials.create(
           InsecureChannelCredentials.create(),
-          new ChannelCredentials() {},
+          new ChannelCredentials() {
+            @Override
+            public ChannelCredentials withoutBearerTokens() {
+              throw new UnsupportedOperationException();
+            }
+          },
           TlsChannelCredentials.create()));
     assertThat(result.error).isNull();
     assertThat(result.callCredentials).isNull();
@@ -211,7 +227,12 @@ public class OkHttpChannelBuilderTest {
   public void sslSocketFactoryFrom_choice_unknown() {
     OkHttpChannelBuilder.SslSocketFactoryResult result =
         OkHttpChannelBuilder.sslSocketFactoryFrom(ChoiceChannelCredentials.create(
-          new ChannelCredentials() {}));
+          new ChannelCredentials() {
+            @Override
+            public ChannelCredentials withoutBearerTokens() {
+              throw new UnsupportedOperationException();
+            }
+          }));
     assertThat(result.error).isNotNull();
     assertThat(result.callCredentials).isNull();
     assertThat(result.factory).isNull();
@@ -336,6 +357,20 @@ public class OkHttpChannelBuilderTest {
     assertSame(socketFactory, transport.getSocketFactory());
 
     transportFactory.close();
+  }
+
+  @Test
+  public void transportFactorySupportsOkHttpChannelCreds() {
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forTarget("foo");
+    ClientTransportFactory transportFactory = builder.buildTransportFactory();
+
+    SwapChannelCredentialsResult result = transportFactory.swapChannelCredentials(
+        mock(ChannelCredentials.class));
+    assertThat(result).isNull();
+
+    result = transportFactory.swapChannelCredentials(
+        SslSocketFactoryChannelCredentials.create(mock(SSLSocketFactory.class)));
+    assertThat(result).isNotNull();
   }
 
   private static final class FakeChannelLogger extends ChannelLogger {

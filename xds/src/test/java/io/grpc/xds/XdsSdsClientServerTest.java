@@ -64,6 +64,7 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
 import org.junit.Before;
@@ -175,8 +176,14 @@ public class XdsSdsClientServerTest {
       unaryRpc(/* requestMessage= */ "buddy", blockingStub);
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
-      assertThat(sre).hasCauseThat().isInstanceOf(SSLHandshakeException.class);
-      assertThat(sre).hasCauseThat().hasMessageThat().contains("HANDSHAKE_FAILURE");
+      if (sre.getCause() instanceof SSLHandshakeException) {
+        assertThat(sre).hasCauseThat().isInstanceOf(SSLHandshakeException.class);
+        assertThat(sre).hasCauseThat().hasMessageThat().contains("HANDSHAKE_FAILURE");
+      } else {
+        // Client cert verification is after handshake in TLSv1.3
+        assertThat(sre).hasCauseThat().hasCauseThat().isInstanceOf(SSLException.class);
+        assertThat(sre).hasCauseThat().hasMessageThat().contains("CERTIFICATE_REQUIRED");
+      }
     }
   }
 
@@ -206,8 +213,14 @@ public class XdsSdsClientServerTest {
           false);
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
-      assertThat(sre).hasCauseThat().isInstanceOf(SSLHandshakeException.class);
-      assertThat(sre).hasCauseThat().hasMessageThat().contains("HANDSHAKE_FAILURE");
+      if (sre.getCause() instanceof SSLHandshakeException) {
+        assertThat(sre).hasCauseThat().isInstanceOf(SSLHandshakeException.class);
+        assertThat(sre).hasCauseThat().hasMessageThat().contains("HANDSHAKE_FAILURE");
+      } else {
+        // Client cert verification is after handshake in TLSv1.3
+        assertThat(sre).hasCauseThat().hasCauseThat().isInstanceOf(SSLException.class);
+        assertThat(sre).hasCauseThat().hasMessageThat().contains("CERTIFICATE_REQUIRED");
+      }
     }
   }
 
@@ -383,7 +396,7 @@ public class XdsSdsClientServerTest {
     Attributes attrs =
         (upstreamTlsContext != null)
             ? Attributes.newBuilder()
-                .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                     new SslContextProviderSupplier(
                         upstreamTlsContext, new TlsContextManagerImpl(mockBootstrapper)))
                 .build()
@@ -412,7 +425,7 @@ public class XdsSdsClientServerTest {
     Attributes attrs =
         (upstreamTlsContext != null)
             ? Attributes.newBuilder()
-                .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                     new SslContextProviderSupplier(
                         upstreamTlsContext, new TlsContextManagerImpl(mockBootstrapper)))
                 .build()

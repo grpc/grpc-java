@@ -61,7 +61,7 @@ public final class CallOptions {
   @Nullable
   private String compressorName;
 
-  private Object[][] customOptions = new Object[0][2];
+  private Object[][] customOptions;
 
   // Unmodifiable list
   private List<ClientStreamTracer.Factory> streamTracerFactories = Collections.emptyList();
@@ -364,6 +364,7 @@ public final class CallOptions {
   }
 
   private CallOptions() {
+    customOptions = new Object[0][2];
   }
 
   /**

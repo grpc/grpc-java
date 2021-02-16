@@ -55,7 +55,7 @@ final class ServerSslContextProviderFactory
     if (CommonTlsContextUtil.hasCertProviderInstance(
             downstreamTlsContext.getCommonTlsContext())) {
       try {
-        Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.readBootstrap();
+        Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.bootstrap();
         return certProviderServerSslContextProviderFactory.getProvider(
                 downstreamTlsContext,
                 bootstrapInfo.getNode().toEnvoyProtoNode(),
@@ -71,7 +71,7 @@ final class ServerSslContextProviderFactory
       try {
         return SdsServerSslContextProvider.getProvider(
             downstreamTlsContext,
-            bootstrapper.readBootstrap().getNode().toEnvoyProtoNodeV2(),
+            bootstrapper.bootstrap().getNode().toEnvoyProtoNodeV2(),
             Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
                 .setNameFormat("server-sds-sslcontext-provider-%d")
                 .setDaemon(true)

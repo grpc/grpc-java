@@ -20,12 +20,13 @@ import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.util.List;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * An object that accepts new incoming connections. This would commonly encapsulate a bound socket
- * that {@code accept()}s new connections.
+ * An object that accepts new incoming connections on one or more listening socket addresses.
+ * This would commonly encapsulate a bound socket that {@code accept()}s new connections.
  */
 @ThreadSafe
 public interface InternalServer {
@@ -49,13 +50,25 @@ public interface InternalServer {
   void shutdown();
 
   /**
-   * Returns the listening socket address.  May change after {@link start(ServerListener)} is
+   * Returns the first listening socket address.  May change after {@link start(ServerListener)} is
    * called.
    */
   SocketAddress getListenSocketAddress();
 
   /**
-   * Returns the listen socket stats of this server. May return {@code null}.
+   * Returns the first listen socket stats of this server. May return {@code null}.
    */
   @Nullable InternalInstrumented<SocketStats> getListenSocketStats();
+
+  /**
+   * Returns a list of listening socket addresses.  May change after {@link start(ServerListener)}
+   * is called.
+   */
+  List<? extends SocketAddress> getListenSocketAddresses();
+
+  /**
+   * Returns a list of listen socket stats of this server. May return {@code null}.
+   */
+  @Nullable List<InternalInstrumented<SocketStats>> getListenSocketStatsList();
+
 }

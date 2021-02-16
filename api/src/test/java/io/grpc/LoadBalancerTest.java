@@ -45,7 +45,6 @@ public class LoadBalancerTest {
   private final Attributes attrs = Attributes.newBuilder()
       .set(Attributes.Key.create("trash"), new Object())
       .build();
-  private final Subchannel emptySubchannel = new EmptySubchannel();
 
   @Test
   public void pickResult_withSubchannel() {
@@ -123,38 +122,6 @@ public class LoadBalancerTest {
     assertThat(error1).isNotEqualTo(drop1);
   }
 
-  @Deprecated
-  @Test
-  public void helper_createSubchannel_old_delegates() {
-    class OverrideCreateSubchannel extends NoopHelper {
-      boolean ran;
-
-      @Override
-      public Subchannel createSubchannel(List<EquivalentAddressGroup> addrsIn, Attributes attrsIn) {
-        assertThat(addrsIn).hasSize(1);
-        assertThat(addrsIn.get(0)).isSameInstanceAs(eag);
-        assertThat(attrsIn).isSameInstanceAs(attrs);
-        ran = true;
-        return subchannel;
-      }
-    }
-
-    OverrideCreateSubchannel helper = new OverrideCreateSubchannel();
-    assertThat(helper.createSubchannel(eag, attrs)).isSameInstanceAs(subchannel);
-    assertThat(helper.ran).isTrue();
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void helper_createSubchannelList_oldApi_throws() {
-    try {
-      new NoopHelper().createSubchannel(Arrays.asList(eag), attrs);
-      fail("Should throw");
-    } catch (UnsupportedOperationException e) {
-      // expected
-    }
-  }
-
   @Test
   public void helper_createSubchannelList_throws() {
     try {
@@ -166,33 +133,6 @@ public class LoadBalancerTest {
     } catch (UnsupportedOperationException e) {
       // expected
     }
-  }
-
-  @Deprecated
-  @Test
-  public void helper_updateSubchannelAddresses_delegates() {
-    class OverrideUpdateSubchannel extends NoopHelper {
-      boolean ran;
-
-      @Override
-      public void updateSubchannelAddresses(
-          Subchannel subchannelIn, List<EquivalentAddressGroup> addrsIn) {
-        assertThat(subchannelIn).isSameInstanceAs(emptySubchannel);
-        assertThat(addrsIn).hasSize(1);
-        assertThat(addrsIn.get(0)).isSameInstanceAs(eag);
-        ran = true;
-      }
-    }
-
-    OverrideUpdateSubchannel helper = new OverrideUpdateSubchannel();
-    helper.updateSubchannelAddresses(emptySubchannel, eag);
-    assertThat(helper.ran).isTrue();
-  }
-
-  @Deprecated
-  @Test(expected = UnsupportedOperationException.class)
-  public void helper_updateSubchannelAddressesList_throws() {
-    new NoopHelper().updateSubchannelAddresses(null, Arrays.asList(eag));
   }
 
   @Test
@@ -407,12 +347,6 @@ public class LoadBalancerTest {
         ConnectivityState newState, LoadBalancer.SubchannelPicker newPicker) {}
 
     @Override public SynchronizationContext getSynchronizationContext() {
-      return null;
-    }
-
-    @Deprecated
-    @Override
-    public NameResolver.Factory getNameResolverFactory() {
       return null;
     }
 

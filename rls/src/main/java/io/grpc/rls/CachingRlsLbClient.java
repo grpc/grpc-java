@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Converter;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -62,6 +63,8 @@ import io.grpc.rls.RlsProtoData.RouteLookupResponse;
 import io.grpc.rls.Throttler.ThrottledException;
 import io.grpc.stub.StreamObserver;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -136,11 +139,28 @@ final class CachingRlsLbClient {
             builder.evictionListener,
             scheduledExecutorService,
             timeProvider);
-    RlsRequestFactory requestFactory = new RlsRequestFactory(lbPolicyConfig.getRouteLookupConfig());
-    rlsPicker = new RlsPicker(requestFactory);
-    ManagedChannelBuilder<?> rlsChannelBuilder =
-        helper.createResolvingOobChannelBuilder(rlsConfig.getLookupService());
     logger = helper.getChannelLogger();
+    String serverHost = null;
+    try {
+      serverHost = new URI(null, helper.getAuthority(), null, null, null).getHost();
+    } catch (URISyntaxException ignore) {
+      // handled by the following null check
+    }
+    if (serverHost == null) {
+      logger.log(
+          ChannelLogLevel.DEBUG, "Can not get hostname from authority: {0}", helper.getAuthority());
+      serverHost = helper.getAuthority();
+    }
+    RlsRequestFactory requestFactory = new RlsRequestFactory(
+        lbPolicyConfig.getRouteLookupConfig(), serverHost);
+    rlsPicker = new RlsPicker(requestFactory);
+    // It is safe to use helper.getUnsafeChannelCredentials() because the client authenticates the
+    // RLS server using the same authority as the backends, even though the RLS server’s addresses
+    // will be looked up differently than the backends; overrideAuthority(helper.getAuthority()) is
+    // called to impose the authority security restrictions.
+    ManagedChannelBuilder<?> rlsChannelBuilder = helper.createResolvingOobChannelBuilder(
+        rlsConfig.getLookupService(), helper.getUnsafeChannelCredentials());
+    rlsChannelBuilder.overrideAuthority(helper.getAuthority());
     if (enableOobChannelDirectPath) {
       logger.log(
           ChannelLogLevel.DEBUG,
@@ -247,7 +267,7 @@ final class CachingRlsLbClient {
       linkedHashLruCache.close();
       // TODO(creamsoup) maybe cancel all pending requests
       pendingCallCache.clear();
-      rlsChannel.shutdown();
+      rlsChannel.shutdownNow();
       rlsPicker.close();
     }
   }
@@ -399,11 +419,17 @@ final class CachingRlsLbClient {
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("dataCacheEntry", dataCacheEntry)
-          .add("pendingCacheEntry", pendingCacheEntry)
-          .add("backoffCacheEntry", backoffCacheEntry)
-          .toString();
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
+      if (dataCacheEntry != null) {
+        toStringHelper.add("dataCacheEntry", dataCacheEntry);
+      }
+      if (pendingCacheEntry != null) {
+        toStringHelper.add("pendingCacheEntry", pendingCacheEntry);
+      }
+      if (backoffCacheEntry != null) {
+        toStringHelper.add("backoffCacheEntry", backoffCacheEntry);
+      }
+      return toStringHelper.toString();
     }
   }
 
@@ -475,8 +501,6 @@ final class CachingRlsLbClient {
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("request", request)
-          .add("pendingCall", pendingCall)
-          .add("backoffPolicy", backoffPolicy)
           .toString();
     }
   }
@@ -718,8 +742,6 @@ final class CachingRlsLbClient {
       return MoreObjects.toStringHelper(this)
           .add("request", request)
           .add("status", status)
-          .add("backoffPolicy", backoffPolicy)
-          .add("scheduledFuture", scheduledHandle)
           .toString();
     }
   }
@@ -856,12 +878,6 @@ final class CachingRlsLbClient {
       // eldest entry should be evicted if size limit exceeded
       return true;
     }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .toString();
-    }
   }
 
   /**
@@ -905,12 +921,12 @@ final class CachingRlsLbClient {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       String[] methodName = args.getMethodDescriptor().getFullMethodName().split("/", 2);
-      logger.log(ChannelLogLevel.DEBUG,
-          "Creating lookup request for service={0}, method={1}, headers={2}",
-          new Object[]{methodName[0], methodName[1], args.getHeaders()});
       RouteLookupRequest request =
           requestFactory.create(methodName[0], methodName[1], args.getHeaders());
       final CachedRouteLookupResponse response = CachingRlsLbClient.this.get(request);
+      logger.log(ChannelLogLevel.DEBUG,
+          "Got route lookup cache entry for service={0}, method={1}, headers={2}:\n {3}",
+          new Object[]{methodName[0], methodName[1], args.getHeaders(), response});
 
       if (response.getHeaderData() != null && !response.getHeaderData().isEmpty()) {
         Metadata headers = args.getHeaders();
@@ -958,6 +974,7 @@ final class CachingRlsLbClient {
 
     private void startFallbackChildPolicy() {
       String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
+      logger.log(ChannelLogLevel.DEBUG, "starting fallback to {0}", defaultTarget);
       synchronized (lock) {
         if (fallbackChildPolicyWrapper != null) {
           return;

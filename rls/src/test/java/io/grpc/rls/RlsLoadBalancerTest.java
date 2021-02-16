@@ -32,6 +32,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -50,7 +51,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
-import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -145,10 +145,12 @@ public class RlsLoadBalancerTest {
     fakeRlsServerImpl.setLookupTable(
         ImmutableMap.of(
             new RouteLookupRequest(
-                "localhost:8972", "/com.google/Search", "grpc", ImmutableMap.<String, String>of()),
+                "fake-bigtable.googleapis.com", "/com.google/Search", "grpc",
+                ImmutableMap.<String, String>of()),
             new RouteLookupResponse(ImmutableList.of("wilderness"), "where are you?"),
             new RouteLookupRequest(
-                "localhost:8972", "/com.google/Rescue", "grpc", ImmutableMap.<String, String>of()),
+                "fake-bigtable.googleapis.com", "/com.google/Rescue", "grpc",
+                ImmutableMap.<String, String>of()),
             new RouteLookupResponse(ImmutableList.of("civilization"), "you are safe")));
 
     rlsLb = (RlsLoadBalancer) provider.newLoadBalancer(helper);
@@ -377,7 +379,7 @@ public class RlsLoadBalancerTest {
         .setAddresses(ImmutableList.of(new EquivalentAddressGroup(mock(SocketAddress.class))))
         .setLoadBalancingPolicyConfig(parsedConfigOrError.getConfig())
         .build());
-    verify(helper).createResolvingOobChannelBuilder(anyString());
+    verify(helper).createResolvingOobChannelBuilder(anyString(), any(ChannelCredentials.class));
   }
 
   @SuppressWarnings("unchecked")
@@ -430,7 +432,8 @@ public class RlsLoadBalancerTest {
     }
 
     @Override
-    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
+        String target, ChannelCredentials creds) {
       try {
         grpcCleanupRule.register(
             InProcessServerBuilder.forName(target)
@@ -472,15 +475,21 @@ public class RlsLoadBalancerTest {
     }
 
     @Override
-    @Deprecated
-    public NameResolver.Factory getNameResolverFactory() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
     public String getAuthority() {
       return "fake-bigtable.googleapis.com";
     }
+
+    @Override
+    public ChannelCredentials getUnsafeChannelCredentials() {
+      // In test we don't do any authentication.
+      return new ChannelCredentials() {
+        @Override
+        public ChannelCredentials withoutBearerTokens() {
+          return this;
+        }
+      };
+    }
+
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
