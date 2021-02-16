@@ -56,7 +56,10 @@ import net.ltgt.gradle.errorprone.CheckSeverity
     it.options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
 }
 
-javadoc { exclude 'io/grpc/alts/internal/**' }
+javadoc {
+    exclude 'io/grpc/alts/internal/**'
+    exclude 'io/grpc/alts/Internal*'
+}
 
 jar {
     // Must use a different classifier to avoid conflicting with shadowJar
