@@ -34,7 +34,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 /**
@@ -44,9 +43,6 @@ import javax.annotation.Nullable;
  * are provided for each set of data needed by gRPC.
  */
 abstract class XdsClient {
-
-  // Global counter of active streams with fault injection.
-  final AtomicLong activeFaultInjectedStreams = new AtomicLong();
 
   static final class LdsUpdate implements ResourceUpdate {
     // Total number of nanoseconds to keep alive an HTTP request/response stream.
