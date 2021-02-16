@@ -49,6 +49,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.HttpFault.FaultAbort;
 import io.grpc.xds.HttpFault.FaultDelay;
+import io.grpc.xds.HttpFault.FractionalPercent;
 import io.grpc.xds.Matchers.FractionMatcher;
 import io.grpc.xds.Matchers.HeaderMatcher;
 import io.grpc.xds.Matchers.PathMatcher;
@@ -563,7 +564,7 @@ final class XdsNameResolver extends NameResolver {
     @Nullable
     private Long determineFaultDelayNanos(FaultDelay faultDelay, Metadata headers) {
       Long delayNanos;
-      Integer delayRate = null;
+      FractionalPercent fractionalPercent = faultDelay.percent();
       if (faultDelay.headerDelay()) {
         try {
           int delayMillis = Integer.parseInt(headers.get(HEADER_DELAY_KEY));
@@ -571,7 +572,10 @@ final class XdsNameResolver extends NameResolver {
           String delayPercentageStr = headers.get(HEADER_DELAY_PERCENTAGE_KEY);
           if (delayPercentageStr != null) {
             int delayPercentage = Integer.parseInt(delayPercentageStr);
-            delayRate = delayPercentage * 100 * 100;
+            if (delayPercentage >= 0 && delayPercentage < fractionalPercent.numerator()) {
+              fractionalPercent =
+                  FractionalPercent.create(delayPercentage, fractionalPercent.denominatorType());
+            }
           }
         } catch (NumberFormatException e) {
           return null; // treated as header_delay not applicable
@@ -579,10 +583,7 @@ final class XdsNameResolver extends NameResolver {
       } else {
         delayNanos = faultDelay.delayNanos();
       }
-      if (delayRate == null) {
-        delayRate = faultDelay.ratePerMillion();
-      }
-      if (random.nextInt(1_000_000) >= delayRate) {
+      if (random.nextInt(1_000_000) >= getRatePerMillion(fractionalPercent)) {
         return null;
       }
       return delayNanos;
@@ -591,7 +592,7 @@ final class XdsNameResolver extends NameResolver {
     @Nullable
     private Status determineFaultAbortStatus(FaultAbort faultAbort, Metadata headers) {
       Status abortStatus = null;
-      Integer abortRate = null;
+      FractionalPercent fractionalPercent = faultAbort.percent();
       if (faultAbort.headerAbort()) {
         try {
           String grpcCodeStr = headers.get(HEADER_ABORT_GRPC_STATUS_KEY);
@@ -608,7 +609,10 @@ final class XdsNameResolver extends NameResolver {
           if (abortPercentageStr != null) {
             int abortPercentage =
                 Integer.parseInt(headers.get(HEADER_ABORT_PERCENTAGE_KEY));
-            abortRate = abortPercentage * 100 * 100;
+            if (abortPercentage >= 0 && abortPercentage < fractionalPercent.numerator()) {
+              fractionalPercent =
+                  FractionalPercent.create(abortPercentage, fractionalPercent.denominatorType());
+            }
           }
         } catch (NumberFormatException e) {
           return null; // treated as header_abort not applicable
@@ -616,14 +620,32 @@ final class XdsNameResolver extends NameResolver {
       } else {
         abortStatus = faultAbort.status();
       }
-      if (abortRate == null) {
-        abortRate = faultAbort.ratePerMillion();
-      }
-      if (random.nextInt(1_000_000) >= abortRate) {
+      if (random.nextInt(1_000_000) >= getRatePerMillion(fractionalPercent)) {
         return null;
       }
       return abortStatus;
     }
+  }
+
+  private static int getRatePerMillion(FractionalPercent percent) {
+    int numerator = percent.numerator();
+    FractionalPercent.DenominatorType type = percent.denominatorType();
+    switch (type) {
+      case TEN_THOUSAND:
+        numerator *= 100;
+        break;
+      case HUNDRED:
+        numerator *= 10_000;
+        break;
+      case MILLION:
+      default:
+        break;
+    }
+
+    if (numerator > 1_000_000 || numerator < 0) {
+      numerator = 1_000_000;
+    }
+    return numerator;
   }
 
   /**

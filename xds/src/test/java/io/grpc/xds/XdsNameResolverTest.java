@@ -707,7 +707,7 @@ public class XdsNameResolverTest {
     // header abort, header abort rate = 60 %
     HttpFault httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forHeader(0),
+        FaultAbort.forHeader(HttpFault.FractionalPercent.perHundred(70)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),
@@ -745,7 +745,7 @@ public class XdsNameResolverTest {
     // header abort, no header rate, fix rate = 60 %
     httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forHeader(600_000),
+        FaultAbort.forHeader(HttpFault.FractionalPercent.perMillion(600_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),
@@ -762,7 +762,7 @@ public class XdsNameResolverTest {
     // header abort, no header rate, fix rate = 0
     httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forHeader(0),
+        FaultAbort.forHeader(HttpFault.FractionalPercent.perMillion(0)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),
@@ -779,7 +779,9 @@ public class XdsNameResolverTest {
     // fixed abort, fix rate = 60%
     httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNAUTHENTICATED.withDescription("unauthenticated"), 600_000),
+        FaultAbort.forStatus(
+            Status.UNAUTHENTICATED.withDescription("unauthenticated"),
+            HttpFault.FractionalPercent.perMillion(600_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),
@@ -794,7 +796,9 @@ public class XdsNameResolverTest {
     // fixed abort, fix rate = 40%
     httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNAUTHENTICATED.withDescription("unauthenticated"), 400_000),
+        FaultAbort.forStatus(
+            Status.UNAUTHENTICATED.withDescription("unauthenticated"),
+            HttpFault.FractionalPercent.perMillion(400_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),
@@ -815,7 +819,7 @@ public class XdsNameResolverTest {
 
     // header delay, header delay rate = 60 %
     HttpFault httpFilterFaultConfig = HttpFault.create(
-        FaultDelay.forHeader(0),
+        FaultDelay.forHeader(HttpFault.FractionalPercent.perHundred(70)),
         null,
         cluster1,
         Collections.<String>emptyList(),
@@ -838,7 +842,7 @@ public class XdsNameResolverTest {
 
     // header delay, no header rate, fix rate = 60 %
     httpFilterFaultConfig = HttpFault.create(
-        FaultDelay.forHeader(600_000),
+        FaultDelay.forHeader(HttpFault.FractionalPercent.perMillion(600_000)),
         null,
         cluster1,
         Collections.<String>emptyList(),
@@ -855,7 +859,7 @@ public class XdsNameResolverTest {
 
     // header delay, no header rate, fix rate = 0
     httpFilterFaultConfig = HttpFault.create(
-        FaultDelay.forHeader(0),
+        FaultDelay.forHeader(HttpFault.FractionalPercent.perMillion(0)),
         null,
         cluster1,
         Collections.<String>emptyList(),
@@ -872,7 +876,7 @@ public class XdsNameResolverTest {
 
     // fixed delay, fix rate = 60%
     httpFilterFaultConfig = HttpFault.create(
-        FaultDelay.forFixedDelay(5000L, 600_000),
+        FaultDelay.forFixedDelay(5000L, HttpFault.FractionalPercent.perMillion(600_000)),
         null,
         cluster1,
         Collections.<String>emptyList(),
@@ -887,7 +891,7 @@ public class XdsNameResolverTest {
 
     // fixed delay, fix rate = 40%
     httpFilterFaultConfig = HttpFault.create(
-        FaultDelay.forFixedDelay(5000L, 400_000),
+        FaultDelay.forFixedDelay(5000L, HttpFault.FractionalPercent.perMillion(400_000)),
         null,
         cluster1,
         Collections.<String>emptyList(),
@@ -909,7 +913,9 @@ public class XdsNameResolverTest {
 
     HttpFault httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNAUTHENTICATED.withDescription("unauthenticated"), 1000_000),
+        FaultAbort.forStatus(
+            Status.UNAUTHENTICATED.withDescription("unauthenticated"),
+            HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),
@@ -932,7 +938,9 @@ public class XdsNameResolverTest {
     // downstream node match
     HttpFault httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNAUTHENTICATED.withDescription("unauthenticated"), 1000_000),
+        FaultAbort.forStatus(
+            Status.UNAUTHENTICATED.withDescription("unauthenticated"),
+            HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.singletonList("node1.example.com"),
         Collections.<HeaderMatcher>emptyList(),
@@ -949,7 +957,9 @@ public class XdsNameResolverTest {
     // downstream node mismatch
     httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNAUTHENTICATED.withDescription("unauthenticated"), 1000_000),
+        FaultAbort.forStatus(
+            Status.UNAUTHENTICATED.withDescription("unauthenticated"),
+            HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.singletonList("node1.example.com"),
         Collections.<HeaderMatcher>emptyList(),
@@ -966,7 +976,9 @@ public class XdsNameResolverTest {
     // downstream node absent in headers
     httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNAUTHENTICATED.withDescription("unauthenticated"), 1000_000),
+        FaultAbort.forStatus(
+            Status.UNAUTHENTICATED.withDescription("unauthenticated"),
+            HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.singletonList("node1.example.com"),
         Collections.<HeaderMatcher>emptyList(),
@@ -989,7 +1001,8 @@ public class XdsNameResolverTest {
     // headers match
     HttpFault httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNAUTHENTICATED, 1000_000),
+        FaultAbort.forStatus(
+            Status.UNAUTHENTICATED, HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.singletonList(HeaderMatcher.forExactValue("fault_key", "fault_value", false)),
@@ -1006,7 +1019,9 @@ public class XdsNameResolverTest {
     // headers mismatch
     httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNAUTHENTICATED.withDescription("unauthenticated"), 1000_000),
+        FaultAbort.forStatus(
+            Status.UNAUTHENTICATED.withDescription("unauthenticated"),
+            HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.singletonList(HeaderMatcher.forExactValue("fault_key", "fault_value", false)),
@@ -1023,7 +1038,9 @@ public class XdsNameResolverTest {
     // headers absent
     httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNAUTHENTICATED.withDescription("unauthenticated"), 1000_000),
+        FaultAbort.forStatus(
+            Status.UNAUTHENTICATED.withDescription("unauthenticated"),
+            HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.singletonList(HeaderMatcher.forExactValue("fault_key", "fault_value", false)),
@@ -1043,7 +1060,7 @@ public class XdsNameResolverTest {
     when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
 
     HttpFault httpFilterFaultConfig = HttpFault.create(
-        FaultDelay.forFixedDelay(5000L, 1000_000),
+        FaultDelay.forFixedDelay(5000L, HttpFault.FractionalPercent.perMillion(1000_000)),
         null,
         cluster1,
         Collections.<String>emptyList(),
@@ -1073,8 +1090,10 @@ public class XdsNameResolverTest {
     when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
 
     HttpFault httpFilterFaultConfig = HttpFault.create(
-        FaultDelay.forFixedDelay(5000L, 1000_000),
-        FaultAbort.forStatus(Status.UNAUTHENTICATED.withDescription("unauthenticated"), 1000_000),
+        FaultDelay.forFixedDelay(5000L, HttpFault.FractionalPercent.perMillion(1000_000)),
+        FaultAbort.forStatus(
+            Status.UNAUTHENTICATED.withDescription("unauthenticated"),
+            HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),
@@ -1096,7 +1115,8 @@ public class XdsNameResolverTest {
 
     HttpFault httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNAUTHENTICATED, 1000_000),
+        FaultAbort.forStatus(
+            Status.UNAUTHENTICATED, HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),
@@ -1104,7 +1124,7 @@ public class XdsNameResolverTest {
     // VirtualHost fault config override
     HttpFault virtualHostFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.INTERNAL, 1000_000),
+        FaultAbort.forStatus(Status.INTERNAL, HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),
@@ -1120,7 +1140,7 @@ public class XdsNameResolverTest {
     // Route fault config override
     HttpFault routeFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNKNOWN, 1000_000),
+        FaultAbort.forStatus(Status.UNKNOWN, HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),
@@ -1136,7 +1156,7 @@ public class XdsNameResolverTest {
     // WeightedCluster fault config override
     HttpFault weightedClusterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNAVAILABLE, 1000_000),
+        FaultAbort.forStatus(Status.UNAVAILABLE, HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),
@@ -1159,7 +1179,8 @@ public class XdsNameResolverTest {
 
     HttpFault httpFilterFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNAUTHENTICATED, 1000_000),
+        FaultAbort.forStatus(
+            Status.UNAUTHENTICATED, HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),
@@ -1170,7 +1191,7 @@ public class XdsNameResolverTest {
     // Route fault config override
     HttpFault routeFaultConfig = HttpFault.create(
         null,
-        FaultAbort.forStatus(Status.UNKNOWN, 1000_000),
+        FaultAbort.forStatus(Status.UNKNOWN, HttpFault.FractionalPercent.perMillion(1000_000)),
         cluster1,
         Collections.<String>emptyList(),
         Collections.<HeaderMatcher>emptyList(),

@@ -415,7 +415,9 @@ public class ClientXdsClientDataTest {
             .setHeaderAbort(HeaderAbort.getDefaultInstance()).build();
     FaultAbort faultAbort = ClientXdsClient.parseFaultAbort(proto).getStruct();
     assertThat(faultAbort.headerAbort()).isTrue();
-    assertThat(faultAbort.ratePerMillion()).isEqualTo(200_000);
+    assertThat(faultAbort.percent().numerator()).isEqualTo(20);
+    assertThat(faultAbort.percent().denominatorType())
+        .isEqualTo(HttpFault.FractionalPercent.DenominatorType.HUNDRED);
   }
 
   @Test
@@ -426,7 +428,9 @@ public class ClientXdsClientDataTest {
                .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
             .setHttpStatus(400).build();
     FaultAbort res = ClientXdsClient.parseFaultAbort(proto).getStruct();
-    assertThat(res.ratePerMillion()).isEqualTo(10_000);
+    assertThat(res.percent().numerator()).isEqualTo(100);
+    assertThat(res.percent().denominatorType())
+        .isEqualTo(HttpFault.FractionalPercent.DenominatorType.TEN_THOUSAND);
     assertThat(res.status().getCode()).isEqualTo(Code.INTERNAL);
   }
 
@@ -438,7 +442,9 @@ public class ClientXdsClientDataTest {
                 .setNumerator(600).setDenominator(DenominatorType.MILLION))
             .setGrpcStatus(Code.DEADLINE_EXCEEDED.value()).build();
     FaultAbort faultAbort = ClientXdsClient.parseFaultAbort(proto).getStruct();
-    assertThat(faultAbort.ratePerMillion()).isEqualTo(600);
+    assertThat(faultAbort.percent().numerator()).isEqualTo(600);
+    assertThat(faultAbort.percent().denominatorType())
+        .isEqualTo(HttpFault.FractionalPercent.DenominatorType.MILLION);
     assertThat(faultAbort.status().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
   }
 
