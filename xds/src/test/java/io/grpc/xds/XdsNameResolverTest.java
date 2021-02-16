@@ -733,6 +733,14 @@ public class XdsNameResolverTest {
     metadata.put(HEADER_ABORT_PERCENTAGE_KEY, "60");
     observer = startCall(configSelector, metadata);
     verifyRpcFailed(observer, Status.UNAUTHENTICATED);
+    // header abort, both http and grpc code keys provided, rpc should fail with http code
+    metadata = new Metadata();
+    metadata.put(HEADER_ABORT_HTTP_STATUS_KEY, "404");
+    metadata.put(HEADER_ABORT_GRPC_STATUS_KEY, String.valueOf(
+        Status.UNAUTHENTICATED.getCode().value()));
+    metadata.put(HEADER_ABORT_PERCENTAGE_KEY, "60");
+    observer = startCall(configSelector, metadata);
+    verifyRpcFailed(observer, Status.UNIMPLEMENTED.withDescription("HTTP status code 404"));
 
     // header abort, no header rate, fix rate = 60 %
     httpFilterFaultConfig = HttpFault.create(

@@ -594,15 +594,15 @@ final class XdsNameResolver extends NameResolver {
       Integer abortRate = null;
       if (faultAbort.headerAbort()) {
         try {
-          String httpCodeStr = headers.get(HEADER_ABORT_HTTP_STATUS_KEY);
-          if (httpCodeStr != null) {
-            int httpCode = Integer.parseInt(httpCodeStr);
-            abortStatus = GrpcUtil.httpStatusToGrpcStatus(httpCode);
-          }
           String grpcCodeStr = headers.get(HEADER_ABORT_GRPC_STATUS_KEY);
           if (grpcCodeStr != null) {
             int grpcCode = Integer.parseInt(grpcCodeStr);
             abortStatus = Status.fromCodeValue(grpcCode);
+          }
+          String httpCodeStr = headers.get(HEADER_ABORT_HTTP_STATUS_KEY);
+          if (httpCodeStr != null) {
+            int httpCode = Integer.parseInt(httpCodeStr);
+            abortStatus = GrpcUtil.httpStatusToGrpcStatus(httpCode);
           }
           String abortPercentageStr = headers.get(HEADER_ABORT_PERCENTAGE_KEY);
           if (abortPercentageStr != null) {
