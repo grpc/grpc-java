@@ -28,6 +28,7 @@ import static org.mockito.Mockito.verify;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.ServerWrapperForXds;
@@ -62,14 +63,15 @@ public class XdsServerBuilderTest {
   private XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 
   private XdsServerBuilder buildServer(
-      XdsServerBuilder.ErrorNotifier errorNotifier, boolean injectMockXdsClient)
+      XdsServerBuilder.XdsServingStatusListener xdsServingStatusListener,
+      boolean injectMockXdsClient)
       throws IOException {
     port = XdsServerTestHelper.findFreePort();
     XdsServerBuilder builder =
         XdsServerBuilder.forPort(
             port, XdsServerCredentials.create(InsecureServerCredentials.create()));
-    if (errorNotifier != null) {
-      builder = builder.errorNotifier(errorNotifier);
+    if (xdsServingStatusListener != null) {
+      builder = builder.xdsServingStatusListener(xdsServingStatusListener);
     }
     xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(port);
     if (injectMockXdsClient) {
@@ -82,7 +84,9 @@ public class XdsServerBuilderTest {
   }
 
   private void verifyServer(
-      Future<Throwable> future, XdsServerBuilder.ErrorNotifier mockErrorNotifier)
+      Future<Throwable> future,
+      XdsServerBuilder.XdsServingStatusListener mockXdsServingStatusListener,
+      Status notServingStatus)
       throws InterruptedException, ExecutionException, TimeoutException {
     if (future != null) {
       Throwable exception = future.get(5, TimeUnit.SECONDS);
@@ -93,10 +97,18 @@ public class XdsServerBuilderTest {
     InetSocketAddress socketAddress = (InetSocketAddress) list.get(0);
     assertThat(socketAddress.getAddress().isAnyLocalAddress()).isTrue();
     assertThat(socketAddress.getPort()).isEqualTo(port);
-    if (mockErrorNotifier != null) {
-      verify(mockErrorNotifier, never()).onError(any(Status.class));
+    if (mockXdsServingStatusListener != null) {
+      if (notServingStatus != null) {
+        ArgumentCaptor<Throwable> argCaptor = ArgumentCaptor.forClass(null);
+        verify(mockXdsServingStatusListener, times(1)).onNotServing(argCaptor.capture());
+        Throwable throwable = argCaptor.getValue();
+        assertThat(throwable).isInstanceOf(StatusException.class);
+        assertThat(((StatusException) throwable).getStatus()).isEqualTo(notServingStatus);
+      } else {
+        verify(mockXdsServingStatusListener, never()).onNotServing(any(Throwable.class));
+        verify(mockXdsServingStatusListener, times(1)).onServing();
+      }
     }
-    assertThat(xdsClientWrapperForServerSds.serverWatchers).isEmpty();
   }
 
   private void verifyShutdown() throws InterruptedException {
@@ -135,7 +147,7 @@ public class XdsServerBuilderTest {
         port,
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
         null);
-    verifyServer(future, null);
+    verifyServer(future, null, null);
     verifyShutdown();
   }
 
@@ -155,125 +167,128 @@ public class XdsServerBuilderTest {
     } catch (IllegalStateException expected) {
       assertThat(expected).hasMessageThat().contains("Already started");
     }
-    verifyServer(null,null);
+    verifyServer(null,null, null);
     verifyShutdown();
   }
 
   @Test
-  public void xdsServerStartAndShutdownWithErrorNotifier()
+  public void xdsServerStartAndShutdownWithXdsServingStatusListener()
       throws IOException, InterruptedException, TimeoutException, ExecutionException {
-    XdsServerBuilder.ErrorNotifier mockErrorNotifier = mock(XdsServerBuilder.ErrorNotifier.class);
-    buildServer(mockErrorNotifier, true);
+    XdsServerBuilder.XdsServingStatusListener mockXdsServingStatusListener =
+        mock(XdsServerBuilder.XdsServingStatusListener.class);
+    buildServer(mockXdsServingStatusListener, true);
     Future<Throwable> future = startServerAsync();
     XdsServerTestHelper.generateListenerUpdate(
         listenerWatcher,
         port,
-            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
         null);
-    verifyServer(future, mockErrorNotifier);
+    verifyServer(future, mockXdsServingStatusListener, null);
     verifyShutdown();
   }
 
   @Test
   public void xdsServer_serverWatcher()
       throws IOException, InterruptedException, TimeoutException, ExecutionException {
-    XdsServerBuilder.ErrorNotifier mockErrorNotifier = mock(XdsServerBuilder.ErrorNotifier.class);
-    buildServer(mockErrorNotifier, true);
+    XdsServerBuilder.XdsServingStatusListener mockXdsServingStatusListener =
+        mock(XdsServerBuilder.XdsServingStatusListener.class);
+    buildServer(mockXdsServingStatusListener, true);
     Future<Throwable> future = startServerAsync();
     listenerWatcher.onError(Status.ABORTED);
-    verify(mockErrorNotifier).onError(Status.ABORTED);
+    ArgumentCaptor<Throwable> argCaptor = ArgumentCaptor.forClass(null);
+    verify(mockXdsServingStatusListener).onNotServing(argCaptor.capture());
+    Throwable throwable = argCaptor.getValue();
+    assertThat(throwable).isInstanceOf(StatusException.class);
+    Status captured = ((StatusException) throwable).getStatus();
+    assertThat(captured.getCode()).isEqualTo(Status.Code.ABORTED);
     assertThat(xdsClientWrapperForServerSds.serverWatchers).hasSize(1);
     assertThat(future.isDone()).isFalse();
-    reset(mockErrorNotifier);
+    reset(mockXdsServingStatusListener);
     listenerWatcher.onResourceDoesNotExist("not found error");
-    ArgumentCaptor<Status> argCaptor = ArgumentCaptor.forClass(null);
-    verify(mockErrorNotifier).onError(argCaptor.capture());
-    Status captured = argCaptor.getValue();
+    argCaptor = ArgumentCaptor.forClass(null);
+    verify(mockXdsServingStatusListener).onNotServing(argCaptor.capture());
+    throwable = argCaptor.getValue();
+    assertThat(throwable).isInstanceOf(StatusException.class);
+    captured = ((StatusException) throwable).getStatus();
     assertThat(captured.getCode()).isEqualTo(Status.Code.NOT_FOUND);
     assertThat(captured.getDescription()).isEqualTo("not found error");
     assertThat(xdsClientWrapperForServerSds.serverWatchers).hasSize(1);
     assertThat(future.isDone()).isFalse();
-    reset(mockErrorNotifier);
+    reset(mockXdsServingStatusListener);
     XdsServerTestHelper.generateListenerUpdate(
         listenerWatcher,
         port,
-            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
         null);
-    verifyServer(future, mockErrorNotifier);
+    verifyServer(future, mockXdsServingStatusListener, null);
     verifyShutdown();
   }
 
   @Test
   public void xdsServer_startError()
       throws IOException, InterruptedException, TimeoutException, ExecutionException {
-    XdsServerBuilder.ErrorNotifier mockErrorNotifier = mock(XdsServerBuilder.ErrorNotifier.class);
-    buildServer(mockErrorNotifier, true);
+    XdsServerBuilder.XdsServingStatusListener mockXdsServingStatusListener =
+        mock(XdsServerBuilder.XdsServingStatusListener.class);
+    buildServer(mockXdsServingStatusListener, true);
     Future<Throwable> future = startServerAsync();
     // create port conflict for start to fail
     ServerSocket serverSocket = new ServerSocket(port);
     XdsServerTestHelper.generateListenerUpdate(
         listenerWatcher,
         port,
-            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
         null);
     Throwable exception = future.get(5, TimeUnit.SECONDS);
     assertThat(exception).isInstanceOf(IOException.class);
     assertThat(exception).hasMessageThat().contains("Failed to bind");
-    verify(mockErrorNotifier, never()).onError(any(Status.class));
+    verify(mockXdsServingStatusListener, never()).onNotServing(any(Throwable.class));
     serverSocket.close();
   }
 
   @Test
   public void xdsServerWithoutMockXdsClient_startError()
-          throws IOException, InterruptedException, TimeoutException, ExecutionException {
-    XdsServerBuilder.ErrorNotifier mockErrorNotifier = mock(XdsServerBuilder.ErrorNotifier.class);
-    buildServer(mockErrorNotifier, false);
+      throws IOException, InterruptedException, TimeoutException, ExecutionException {
+    XdsServerBuilder.XdsServingStatusListener mockXdsServingStatusListener =
+        mock(XdsServerBuilder.XdsServingStatusListener.class);
+    buildServer(mockXdsServingStatusListener, false);
     try {
       xdsServer.start();
       fail("exception expected");
     } catch (IOException expected) {
-      assertThat(expected)
-              .hasMessageThat()
-              .contains("Cannot find bootstrap configuration");
+      assertThat(expected).hasMessageThat().contains("Cannot find bootstrap configuration");
     }
-    ArgumentCaptor<Status> argCaptor = ArgumentCaptor.forClass(null);
-    verify(mockErrorNotifier).onError(argCaptor.capture());
-    Status captured = argCaptor.getValue();
-    assertThat(captured.getCode()).isEqualTo(Status.Code.UNKNOWN);
-    assertThat(captured.getCause()).isInstanceOf(XdsInitializationException.class);
-    assertThat(captured.getCause())
-            .hasMessageThat()
-            .contains("Cannot find bootstrap configuration");
+    verify(mockXdsServingStatusListener, never()).onNotServing(any(Throwable.class));
   }
 
   @Test
   public void xdsServerStartSecondUpdateAndError()
       throws IOException, InterruptedException, TimeoutException, ExecutionException {
-    XdsServerBuilder.ErrorNotifier mockErrorNotifier = mock(XdsServerBuilder.ErrorNotifier.class);
-    buildServer(mockErrorNotifier, true);
+    XdsServerBuilder.XdsServingStatusListener mockXdsServingStatusListener =
+        mock(XdsServerBuilder.XdsServingStatusListener.class);
+    buildServer(mockXdsServingStatusListener, true);
     Future<Throwable> future = startServerAsync();
     XdsServerTestHelper.generateListenerUpdate(
         listenerWatcher,
         port,
-            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
         null);
     XdsServerTestHelper.generateListenerUpdate(
         listenerWatcher,
         port,
-            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
         null);
-    verify(mockErrorNotifier, never()).onError(any(Status.class));
-    verifyServer(future, mockErrorNotifier);
+    verify(mockXdsServingStatusListener, never()).onNotServing(any(Throwable.class));
+    verifyServer(future, mockXdsServingStatusListener, null);
     listenerWatcher.onError(Status.ABORTED);
-    verify(mockErrorNotifier, never()).onError(any(Status.class));
-    verifyServer(null, mockErrorNotifier);
+    verifyServer(null, mockXdsServingStatusListener, Status.ABORTED);
     verifyShutdown();
   }
 
   @Test
   public void xdsServer_2ndBuild_expectException() throws IOException {
-    XdsServerBuilder.ErrorNotifier mockErrorNotifier = mock(XdsServerBuilder.ErrorNotifier.class);
-    XdsServerBuilder builder = buildServer(mockErrorNotifier, true);
+    XdsServerBuilder.XdsServingStatusListener mockXdsServingStatusListener =
+        mock(XdsServerBuilder.XdsServingStatusListener.class);
+    XdsServerBuilder builder = buildServer(mockXdsServingStatusListener, true);
     try {
       builder.build();
       fail("exception expected");

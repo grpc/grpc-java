@@ -3,6 +3,7 @@ plugins {
     id "maven-publish"
     id "com.google.protobuf"
     id "jacoco"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: RouteLookupService Loadbalancing plugin"
@@ -19,12 +20,15 @@ dependencies {
             project(':grpc-testing'),
             project(':grpc-testing-proto'),
             project(':grpc-core').sourceSets.test.output  // for FakeClock
+    signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 
 javadoc {
+    // Do not publish javadoc since currently there is no public API.
+    failOnError false  // no public or protected classes found to document
+    exclude 'io/grpc/lookup/v1/**'
     exclude 'io/grpc/rls/internal/**'
-    // do not publish javadoc since it is not published yet
-    exclude 'io/grpc/rls/**'
+    exclude 'io/grpc/rls/Internal*'
 }
 
 jacocoTestReport {
@@ -34,6 +38,3 @@ jacocoTestReport {
 }
 
 configureProtoCompilation()
-
-// do not publish 'grpc-rls'
-[publishMavenPublicationToMavenRepository]*.onlyIf { false }

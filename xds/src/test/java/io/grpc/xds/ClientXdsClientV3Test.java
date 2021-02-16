@@ -27,6 +27,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
+import com.google.protobuf.UInt64Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
@@ -35,6 +36,8 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.CustomClusterType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig.HashFunction;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ApiConfigSource;
@@ -382,10 +385,10 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
 
     @Override
     protected Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
-        boolean enableLrs, @Nullable Message upstreamTlsContext,
-        @Nullable Message circuitBreakers) {
-      Cluster.Builder builder =
-          initClusterBuilder(clusterName, enableLrs, upstreamTlsContext, circuitBreakers);
+        String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
+        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+      Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
+          enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.EDS);
       EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
       edsClusterConfigBuilder.setEdsConfig(
@@ -398,34 +401,49 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildLogicalDnsCluster(String clusterName, boolean enableLrs,
+    protected Message buildLogicalDnsCluster(String clusterName, String lbPolicy,
+        @Nullable Message ringHashLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
-      Cluster.Builder builder =
-          initClusterBuilder(clusterName, enableLrs, upstreamTlsContext, circuitBreakers);
+      Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
+          enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.LOGICAL_DNS);
       return builder.build();
     }
 
     @Override
-    protected Message buildAggregateCluster(String clusterName, List<String> clusters) {
+    protected Message buildAggregateCluster(String clusterName, String lbPolicy,
+        @Nullable Message ringHashLbConfig, List<String> clusters) {
       ClusterConfig clusterConfig = ClusterConfig.newBuilder().addAllClusters(clusters).build();
       CustomClusterType type =
           CustomClusterType.newBuilder()
               .setName(ClientXdsClient.AGGREGATE_CLUSTER_TYPE_NAME)
               .setTypedConfig(Any.pack(clusterConfig))
               .build();
-      return Cluster.newBuilder()
-          .setName(clusterName)
-          .setLbPolicy(LbPolicy.ROUND_ROBIN)
-          .setClusterType(type)
-          .build();
+      Cluster.Builder builder = Cluster.newBuilder().setName(clusterName).setClusterType(type);
+      if (lbPolicy.equals("round_robin")) {
+        builder.setLbPolicy(LbPolicy.ROUND_ROBIN);
+      } else if (lbPolicy.equals("ring_hash")) {
+        builder.setLbPolicy(LbPolicy.RING_HASH);
+        builder.setRingHashLbConfig((RingHashLbConfig) ringHashLbConfig);
+      } else {
+        throw new AssertionError("Invalid LB policy");
+      }
+      return builder.build();
     }
 
-    private Cluster.Builder initClusterBuilder(String clusterName, boolean enableLrs,
+    private Cluster.Builder initClusterBuilder(String clusterName, String lbPolicy,
+        @Nullable Message ringHashLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
       Cluster.Builder builder = Cluster.newBuilder();
       builder.setName(clusterName);
-      builder.setLbPolicy(LbPolicy.ROUND_ROBIN);
+      if (lbPolicy.equals("round_robin")) {
+        builder.setLbPolicy(LbPolicy.ROUND_ROBIN);
+      } else if (lbPolicy.equals("ring_hash")) {
+        builder.setLbPolicy(LbPolicy.RING_HASH);
+        builder.setRingHashLbConfig((RingHashLbConfig) ringHashLbConfig);
+      } else {
+        throw new AssertionError("Invalid LB policy");
+      }
       if (enableLrs) {
         builder.setLrsServer(
             ConfigSource.newBuilder()
@@ -441,6 +459,22 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
         builder.setCircuitBreakers((CircuitBreakers) circuitBreakers);
       }
       return builder;
+    }
+
+    @Override
+    protected Message buildRingHashLbConfig(String hashFunction, long minRingSize,
+        long maxRingSize) {
+      RingHashLbConfig.Builder builder = RingHashLbConfig.newBuilder();
+      if (hashFunction.equals("xx_hash")) {
+        builder.setHashFunction(HashFunction.XX_HASH);
+      } else if (hashFunction.equals("murmur_hash_2")) {
+        builder.setHashFunction(HashFunction.MURMUR_HASH_2);
+      } else {
+        throw new AssertionError("Invalid hash function");
+      }
+      builder.setMinimumRingSize(UInt64Value.newBuilder().setValue(minRingSize).build());
+      builder.setMaximumRingSize(UInt64Value.newBuilder().setValue(maxRingSize).build());
+      return builder.build();
     }
 
     @Override

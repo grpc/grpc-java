@@ -58,7 +58,7 @@ public class RlsRequestFactoryTest {
                   ImmutableList.of(new Name("com.google.service3")),
                   ImmutableList.of(
                       new NameMatcher("user", ImmutableList.of("User", "Parent"), true)))),
-          /* lookupService= */ "foo.google.com",
+          /* lookupService= */ "bigtable-rls.googleapis.com",
           /* lookupServiceTimeoutInMillis= */ TimeUnit.SECONDS.toMillis(2),
           /* maxAgeInMillis= */ TimeUnit.SECONDS.toMillis(300),
           /* staleAgeInMillis= */ TimeUnit.SECONDS.toMillis(240),
@@ -66,7 +66,8 @@ public class RlsRequestFactoryTest {
           /* validTargets= */ ImmutableList.of("a valid target"),
           /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
 
-  private final RlsRequestFactory factory = new RlsRequestFactory(RLS_CONFIG);
+  private final RlsRequestFactory factory = new RlsRequestFactory(
+      RLS_CONFIG, "bigtable.googleapis.com");
 
   @Test
   public void create_pathMatches() {
@@ -78,7 +79,7 @@ public class RlsRequestFactoryTest {
     RouteLookupRequest request = factory.create("com.google.service1", "Create", metadata);
     assertThat(request.getTargetType()).isEqualTo("grpc");
     assertThat(request.getPath()).isEqualTo("/com.google.service1/Create");
-    assertThat(request.getServer()).isEqualTo("foo.google.com");
+    assertThat(request.getServer()).isEqualTo("bigtable.googleapis.com");
     assertThat(request.getKeyMap()).containsExactly("user", "test", "id", "123");
   }
 
@@ -107,7 +108,7 @@ public class RlsRequestFactoryTest {
 
     assertThat(request.getTargetType()).isEqualTo("grpc");
     assertThat(request.getPath()).isEqualTo("/com.google.service1/Update");
-    assertThat(request.getServer()).isEqualTo("foo.google.com");
+    assertThat(request.getServer()).isEqualTo("bigtable.googleapis.com");
     assertThat(request.getKeyMap()).containsExactly("user", "test", "password", "hunter2");
   }
 
@@ -122,7 +123,7 @@ public class RlsRequestFactoryTest {
 
     assertThat(request.getTargetType()).isEqualTo("grpc");
     assertThat(request.getPath()).isEqualTo("/com.google.service1/Update");
-    assertThat(request.getServer()).isEqualTo("foo.google.com");
+    assertThat(request.getServer()).isEqualTo("bigtable.googleapis.com");
     assertThat(request.getKeyMap()).containsExactly("user", "test");
   }
 
@@ -137,7 +138,7 @@ public class RlsRequestFactoryTest {
 
     assertThat(request.getTargetType()).isEqualTo("grpc");
     assertThat(request.getPath()).isEqualTo("/abc.def.service999/Update");
-    assertThat(request.getServer()).isEqualTo("foo.google.com");
+    assertThat(request.getServer()).isEqualTo("bigtable.googleapis.com");
     assertThat(request.getKeyMap()).isEmpty();
   }
 
@@ -152,7 +153,7 @@ public class RlsRequestFactoryTest {
 
     assertThat(request.getTargetType()).isEqualTo("grpc");
     assertThat(request.getPath()).isEqualTo("/com.google.service3/Update");
-    assertThat(request.getServer()).isEqualTo("foo.google.com");
+    assertThat(request.getServer()).isEqualTo("bigtable.googleapis.com");
     assertThat(request.getKeyMap()).containsExactly("user", "test");
   }
 }

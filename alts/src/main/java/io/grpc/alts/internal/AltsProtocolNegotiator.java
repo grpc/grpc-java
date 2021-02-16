@@ -50,6 +50,10 @@ import javax.annotation.Nullable;
 // TODO(carl-mastrangelo): rename this AltsProtocolNegotiators.
 public final class AltsProtocolNegotiator {
   private static final Logger logger = Logger.getLogger(AltsProtocolNegotiator.class.getName());
+  // Avoid performing too many handshakes in parallel, as it may cause queuing in the handshake
+  // server and cause unbounded blocking on the event loop (b/168808426). This is a workaround until
+  // there is an async TSI handshaking API to avoid the blocking.
+  private static final AsyncSemaphore handshakeSemaphore = new AsyncSemaphore(32);
 
   @Grpc.TransportAttr
   public static final Attributes.Key<TsiPeer> TSI_PEER_KEY = Attributes.Key.create("TSI_PEER");
@@ -110,8 +114,8 @@ public final class AltsProtocolNegotiator {
       TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
       NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
-      ChannelHandler thh =
-          new TsiHandshakeHandler(gnh, nettyHandshaker, new AltsHandshakeValidator());
+      ChannelHandler thh = new TsiHandshakeHandler(
+          gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore);
       ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh);
       return wuah;
     }
@@ -165,8 +169,8 @@ public final class AltsProtocolNegotiator {
       TsiHandshaker handshaker = handshakerFactory.newHandshaker(/* authority= */ null);
       NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
-      ChannelHandler thh =
-          new TsiHandshakeHandler(gnh, nettyHandshaker, new AltsHandshakeValidator());
+      ChannelHandler thh = new TsiHandshakeHandler(
+          gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore);
       ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh);
       return wuah;
     }
@@ -259,8 +263,8 @@ public final class AltsProtocolNegotiator {
           || isXdsDirectPath) {
         TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
         NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
-        securityHandler =
-            new TsiHandshakeHandler(gnh, nettyHandshaker, new AltsHandshakeValidator());
+        securityHandler = new TsiHandshakeHandler(
+            gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore);
       } else {
         securityHandler = InternalProtocolNegotiators.clientTlsHandler(
             gnh, sslContext, grpcHandler.getAuthority());
