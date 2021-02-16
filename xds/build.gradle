@@ -120,7 +120,7 @@ shadowJar {
     // TODO: missing java_package option in .proto
     relocate 'envoy.annotations', "${prefixName}.shaded.envoy.annotations"
     relocate 'io.envoyproxy', "${prefixName}.shaded.io.envoyproxy"
-    relocate 'io.grpc.netty', "io.grpc.netty.shaded.io.grpc.netty"
+    relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
     // TODO: missing java_package option in .proto
     relocate 'udpa.annotations', "${prefixName}.shaded.udpa.annotations"
@@ -129,12 +129,13 @@ shadowJar {
 
 task checkPackageLeakage(dependsOn: shadowJar) {
     doLast {
+        def jarEntryPrefixName = prefixName.replaceAll('\\.', '/')
         shadowJar.outputs.getFiles().each { jar ->
             def package_leak_detected = false
             JarFile jf = new JarFile(jar)
             jf.entries().each { entry ->
                 if (entry.name.endsWith(".class") && !entry.name.startsWith(
-                        prefixName.replaceAll('\\.', '/'))) {
+                        jarEntryPrefixName)) {
                     package_leak_detected = true
                     println "WARNING: package leaked, may need relocation: " +
                             entry.name
