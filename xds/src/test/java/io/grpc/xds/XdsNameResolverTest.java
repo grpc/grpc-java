@@ -79,6 +79,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -120,6 +121,7 @@ public class XdsNameResolverTest {
   private final CallInfo call1 = new CallInfo("HelloService", "hi");
   private final CallInfo call2 = new CallInfo("GreetService", "bye");
   private final TestChannel channel = new TestChannel();
+  private final AtomicLong activeFaultInjectedStreamCounter = new AtomicLong();
 
   @Mock
   private ThreadSafeRandom mockRandom;
@@ -137,7 +139,7 @@ public class XdsNameResolverTest {
     XdsNameResolver.enableTimeout = true;
     XdsNameResolver.enableFaultInjection = true;
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom);
+        xdsClientPoolFactory, mockRandom, activeFaultInjectedStreamCounter);
   }
 
   @After
@@ -159,7 +161,7 @@ public class XdsNameResolverTest {
       }
     };
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom);
+        xdsClientPoolFactory, mockRandom, activeFaultInjectedStreamCounter);
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
