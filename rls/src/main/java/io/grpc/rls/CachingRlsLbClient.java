@@ -162,11 +162,13 @@ final class CachingRlsLbClient {
         rlsConfig.getLookupService(), helper.getUnsafeChannelCredentials());
     rlsChannelBuilder.overrideAuthority(helper.getAuthority());
     if (enableOobChannelDirectPath) {
+      Map<String, ?> directPathServiceConfig =
+          getDirectPathServiceConfig(rlsConfig.getLookupService());
       logger.log(
           ChannelLogLevel.DEBUG,
           "RLS channel direct path enabled. RLS channel service config: {0}",
-          getDirectpathServiceConfig());
-      rlsChannelBuilder.defaultServiceConfig(getDirectpathServiceConfig());
+          directPathServiceConfig);
+      rlsChannelBuilder.defaultServiceConfig(directPathServiceConfig);
       rlsChannelBuilder.disableServiceConfigLookUp();
     }
     rlsChannel = rlsChannelBuilder.build();
@@ -183,12 +185,14 @@ final class CachingRlsLbClient {
     logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient created");
   }
 
-  private static ImmutableMap<String, Object> getDirectpathServiceConfig() {
+  private static ImmutableMap<String, Object> getDirectPathServiceConfig(String serviceName) {
     ImmutableMap<String, Object> pickFirstStrategy =
         ImmutableMap.<String, Object>of("pick_first", ImmutableMap.of());
 
     ImmutableMap<String, Object> childPolicy =
-        ImmutableMap.<String, Object>of("childPolicy", ImmutableList.of(pickFirstStrategy));
+        ImmutableMap.<String, Object>of(
+            "childPolicy", ImmutableList.of(pickFirstStrategy),
+            "serviceName", serviceName);
 
     ImmutableMap<String, Object> grpcLbPolicy =
         ImmutableMap.<String, Object>of("grpclb", childPolicy);
