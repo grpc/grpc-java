@@ -122,7 +122,6 @@ public class XdsNameResolverTest {
   private final CallInfo call1 = new CallInfo("HelloService", "hi");
   private final CallInfo call2 = new CallInfo("GreetService", "bye");
   private final TestChannel channel = new TestChannel();
-  private final AtomicLong activeFaultInjectedStreamCounter = new AtomicLong();
 
   @Mock
   private ThreadSafeRandom mockRandom;
@@ -140,7 +139,8 @@ public class XdsNameResolverTest {
     XdsNameResolver.enableTimeout = true;
     XdsNameResolver.enableFaultInjection = true;
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, activeFaultInjectedStreamCounter);
+        xdsClientPoolFactory, mockRandom);
+    resolver.activeFaultInjectedStreams = new AtomicLong();
   }
 
   @After
@@ -162,7 +162,7 @@ public class XdsNameResolverTest {
       }
     };
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, activeFaultInjectedStreamCounter);
+        xdsClientPoolFactory, mockRandom);
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();

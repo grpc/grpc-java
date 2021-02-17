@@ -119,7 +119,7 @@ final class XdsNameResolver extends NameResolver {
   @VisibleForTesting
   static final Metadata.Key<String> HEADER_ABORT_PERCENTAGE_KEY =
       Metadata.Key.of("x-envoy-fault-abort-request-percentage", Metadata.ASCII_STRING_MARSHALLER);
-  static final AtomicLong activeFaultInjectedStreamCounter = new AtomicLong();
+  private static final AtomicLong activeFaultInjectedStreamCounter = new AtomicLong();
 
   private final XdsLogger logger;
   private final String authority;
@@ -130,7 +130,9 @@ final class XdsNameResolver extends NameResolver {
   private final ThreadSafeRandom random;
   private final ConcurrentMap<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
-  private final AtomicLong activeFaultInjectedStreams;
+
+  @VisibleForTesting
+  AtomicLong activeFaultInjectedStreams = activeFaultInjectedStreamCounter;
 
   private volatile RoutingConfig routingConfig = RoutingConfig.empty;
   private Listener2 listener;
@@ -140,26 +142,21 @@ final class XdsNameResolver extends NameResolver {
   private ResolveState resolveState;
 
   XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
-      SynchronizationContext syncContext, ScheduledExecutorService scheduler,
-      AtomicLong activeFaultInjectedStreamCounter) {
+      SynchronizationContext syncContext, ScheduledExecutorService scheduler) {
     this(name, serviceConfigParser, syncContext, scheduler,
-        SharedXdsClientPoolProvider.getDefaultProvider(),
-        ThreadSafeRandomImpl.instance, activeFaultInjectedStreamCounter);
+        SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance);
   }
 
   @VisibleForTesting
   XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
-      XdsClientPoolFactory xdsClientPoolFactory,
-      ThreadSafeRandom random, AtomicLong activeFaultInjectedStreamCounter) {
+      XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random) {
     authority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
     this.random = checkNotNull(random, "random");
-    this.activeFaultInjectedStreams =
-        checkNotNull(activeFaultInjectedStreamCounter, "activeFaultInjectedStreamsCounter");
     logger = XdsLogger.withLogId(InternalLogId.allocate("xds-resolver", name));
     logger.log(XdsLogLevel.INFO, "Created resolver for {0}", name);
   }
