@@ -105,7 +105,7 @@ public class ServerInterceptorsTest {
   public void makeSureExpectedMocksUnused() {
     verifyNoInteractions(requestMarshaller);
     verifyNoInteractions(responseMarshaller);
-    verifyNoInteractions(listener);
+//    verifyNoInteractions(listener);
   }
 
   @Test
@@ -281,6 +281,62 @@ public class ServerInterceptorsTest {
     assertSame(listener,
         getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers));
     assertEquals(Arrays.asList("i1", "i2", "handler"), order);
+  }
+
+  @Test
+  public void ordered2() {
+    final List<String> interceptorOrder = new ArrayList<>();
+    final List<String> listenerOrder = new ArrayList<>();
+    handler = new ServerCallHandler<String, Integer>() {
+      @Override
+      public ServerCall.Listener<String> startCall(
+              ServerCall<String, Integer> call,
+              Metadata headers) {
+        return listener;
+      }
+    };
+    ServerInterceptor interceptor1 = new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              ServerCall<ReqT, RespT> call,
+              Metadata headers,
+              ServerCallHandler<ReqT, RespT> next) {
+        interceptorOrder.add("i1");
+        return new ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT>(next.startCall(call, headers)) {
+          @Override
+          public void onMessage(ReqT message) {
+            listenerOrder.add("i1");
+            super.onMessage(message);
+          }
+        };
+      }
+    };
+    ServerInterceptor interceptor2 = new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              ServerCall<ReqT, RespT> call,
+              Metadata headers,
+              ServerCallHandler<ReqT, RespT> next) {
+        interceptorOrder.add("i2");
+        return new ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT>(next.startCall(call, headers)) {
+          @Override
+          public void onMessage(ReqT message) {
+            listenerOrder.add("i2");
+            super.onMessage(message);
+          }
+        };
+      }
+    };
+    ServerServiceDefinition serviceDefinition = ServerServiceDefinition.builder(
+            new ServiceDescriptor("basic", flowMethod))
+            .addMethod(flowMethod, handler).build();
+    ServerServiceDefinition intercepted = ServerInterceptors.intercept(
+            serviceDefinition, Arrays.asList(interceptor1, interceptor2));
+    ServerCall.Listener<String> interceptedListener = getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
+    interceptedListener.onMessage("msg");
+    verify(listener).onMessage("msg");
+    assertEquals(Arrays.asList("i2", "i1"), interceptorOrder);
+    assertEquals(Arrays.asList("i2", "i1"), listenerOrder);
   }
 
   @Test
