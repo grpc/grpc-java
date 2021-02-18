@@ -145,12 +145,16 @@ public class CachingRlsLbClientTest {
 
   private CachingRlsLbClient rlsLbClient;
   private boolean existingEnableOobChannelDirectPath;
+  private Map<String, ?> rlsChannelServiceConfig;
+  private String rlsChannelOverriddenAuthority;
 
   @Before
   public void setUp() throws Exception {
     existingEnableOobChannelDirectPath = CachingRlsLbClient.enableOobChannelDirectPath;
     CachingRlsLbClient.enableOobChannelDirectPath = false;
+  }
 
+  private void setUpRlsLbClient() {
     rlsLbClient =
         CachingRlsLbClient.newBuilder()
             .setBackoffProvider(fakeBackoffProvider)
@@ -185,6 +189,7 @@ public class CachingRlsLbClientTest {
 
   @Test
   public void get_noError_lifeCycle() throws Exception {
+    setUpRlsLbClient();
     InOrder inOrder = inOrder(evictionListener);
     RouteLookupRequest routeLookupRequest =
         new RouteLookupRequest(
@@ -234,7 +239,43 @@ public class CachingRlsLbClientTest {
   }
 
   @Test
+  public void rls_overDirectPath() throws Exception {
+    CachingRlsLbClient.enableOobChannelDirectPath = true;
+    setUpRlsLbClient();
+    RouteLookupRequest routeLookupRequest =
+        new RouteLookupRequest(
+            "bigtable.googleapis.com", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequest,
+            new RouteLookupResponse(ImmutableList.of("target"), "header")));
+
+    // initial request
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.isPending()).isTrue();
+
+    // server response
+    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.hasData()).isTrue();
+
+    assertThat(rlsChannelOverriddenAuthority).isEqualTo("bigtable.googleapis.com:443");
+    assertThat(rlsChannelServiceConfig).isEqualTo(
+        ImmutableMap.of(
+            "loadBalancingConfig",
+            ImmutableList.of(ImmutableMap.of(
+                "grpclb",
+                ImmutableMap.of(
+                    "childPolicy",
+                    ImmutableList.of(ImmutableMap.of("pick_first", ImmutableMap.of())),
+                    "serviceName",
+                    "service1")))));
+  }
+
+  @Test
   public void get_throttledAndRecover() throws Exception {
+    setUpRlsLbClient();
     RouteLookupRequest routeLookupRequest =
         new RouteLookupRequest("server", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
     rlsServerImpl.setLookupTable(
@@ -276,6 +317,7 @@ public class CachingRlsLbClientTest {
 
   @Test
   public void get_updatesLbState() throws Exception {
+    setUpRlsLbClient();
     InOrder inOrder = inOrder(helper);
     RouteLookupRequest routeLookupRequest =
         new RouteLookupRequest(
@@ -344,6 +386,7 @@ public class CachingRlsLbClientTest {
 
   @Test
   public void get_childPolicyWrapper_reusedForSameTarget() throws Exception {
+    setUpRlsLbClient();
     RouteLookupRequest routeLookupRequest =
         new RouteLookupRequest("server", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
     RouteLookupRequest routeLookupRequest2 =
@@ -564,6 +607,20 @@ public class CachingRlsLbClientTest {
         @Override
         public ManagedChannel build() {
           return grpcCleanupRule.register(super.build());
+        }
+
+        @Override
+        public CleaningChannelBuilder defaultServiceConfig(Map<String, ?> serviceConfig) {
+          rlsChannelServiceConfig = serviceConfig;
+          delegate().defaultServiceConfig(serviceConfig);
+          return this;
+        }
+
+        @Override
+        public CleaningChannelBuilder overrideAuthority(String authority) {
+          rlsChannelOverriddenAuthority = authority;
+          delegate().overrideAuthority(authority);
+          return this;
         }
       }
 

@@ -1,3 +1,5 @@
+import java.util.jar.JarFile
+
 plugins {
     id "java"
     id "maven-publish"
@@ -105,23 +107,51 @@ javadoc {
     exclude 'io/grpc/xds/Internal*'
 }
 
+def prefixName = 'io.grpc.xds'
 shadowJar {
     classifier = null
     dependencies {
         include(project(':grpc-xds'))
     }
     // Relocated packages commonly need exclusions in jacocoTestReport and javadoc
-    relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
-    relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
-    relocate 'com.google.security', 'io.grpc.xds.shaded.com.google.security'
+    relocate 'com.github.udpa', "${prefixName}.shaded.com.github.udpa"
+    relocate 'com.google.api.expr', "${prefixName}.shaded.com.google.api.expr"
+    relocate 'com.google.security', "${prefixName}.shaded.com.google.security"
     // TODO: missing java_package option in .proto
-    relocate 'envoy.annotations', 'io.grpc.xds.shaded.envoy.annotations'
-    relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
+    relocate 'envoy.annotations', "${prefixName}.shaded.envoy.annotations"
+    relocate 'io.envoyproxy', "${prefixName}.shaded.io.envoyproxy"
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
     // TODO: missing java_package option in .proto
-    relocate 'udpa.annotations', 'io.grpc.xds.shaded.udpa.annotations'
+    relocate 'udpa.annotations', "${prefixName}.shaded.udpa.annotations"
     exclude "**/*.proto"
+}
+
+task checkPackageLeakage(dependsOn: shadowJar) {
+    doLast {
+        def jarEntryPrefixName = prefixName.replaceAll('\\.', '/')
+        shadowJar.outputs.getFiles().each { jar ->
+            def package_leak_detected = false
+            JarFile jf = new JarFile(jar)
+            jf.entries().each { entry ->
+                if (entry.name.endsWith(".class") && !entry.name.startsWith(
+                        jarEntryPrefixName)) {
+                    package_leak_detected = true
+                    println "WARNING: package leaked, may need relocation: " +
+                            entry.name
+                }
+            }
+            jf.close()
+            if (package_leak_detected) {
+                throw new TaskExecutionException(shadowJar,
+                        new IllegalStateException("Resource leakage detected!"))
+            }
+        }
+    }
+}
+
+test {
+    dependsOn checkPackageLeakage
 }
 
 jacocoTestReport {
