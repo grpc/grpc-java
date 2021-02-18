@@ -468,60 +468,23 @@ public class ClientXdsClientDataTest {
             .setHeaderAbort(HeaderAbort.getDefaultInstance()).build();
     FaultAbort faultAbort = ClientXdsClient.parseFaultAbort(proto).getStruct();
     assertThat(faultAbort.headerAbort()).isTrue();
-    assertThat(faultAbort.ratePerMillion()).isEqualTo(200_000);
+    assertThat(faultAbort.percent().numerator()).isEqualTo(20);
+    assertThat(faultAbort.percent().denominatorType())
+        .isEqualTo(HttpFault.FractionalPercent.DenominatorType.HUNDRED);
   }
 
   @Test
   public void parseFaultAbort_withHttpStatus() {
-    FaultAbort res;
-    io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort proto;
-    proto = io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
-        .setPercentage(FractionalPercent.newBuilder()
-            .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
-        .setHttpStatus(400).build();
-    res = ClientXdsClient.parseFaultAbort(proto).getStruct();
-    assertThat(res.ratePerMillion()).isEqualTo(10_000);
+    io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort proto =
+        io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
+            .setPercentage(FractionalPercent.newBuilder()
+               .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
+            .setHttpStatus(400).build();
+    FaultAbort res = ClientXdsClient.parseFaultAbort(proto).getStruct();
+    assertThat(res.percent().numerator()).isEqualTo(100);
+    assertThat(res.percent().denominatorType())
+        .isEqualTo(HttpFault.FractionalPercent.DenominatorType.TEN_THOUSAND);
     assertThat(res.status().getCode()).isEqualTo(Code.INTERNAL);
-
-    proto = io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
-        .setPercentage(FractionalPercent.newBuilder()
-            .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
-        .setHttpStatus(401).build();
-    res = ClientXdsClient.parseFaultAbort(proto).getStruct();
-    assertThat(res.ratePerMillion()).isEqualTo(10_000);
-    assertThat(res.status().getCode()).isEqualTo(Code.UNAUTHENTICATED);
-
-    proto = io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
-        .setPercentage(FractionalPercent.newBuilder()
-            .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
-        .setHttpStatus(403).build();
-    res = ClientXdsClient.parseFaultAbort(proto).getStruct();
-    assertThat(res.ratePerMillion()).isEqualTo(10_000);
-    assertThat(res.status().getCode()).isEqualTo(Code.PERMISSION_DENIED);
-
-    proto = io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
-        .setPercentage(FractionalPercent.newBuilder()
-            .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
-        .setHttpStatus(404).build();
-    res = ClientXdsClient.parseFaultAbort(proto).getStruct();
-    assertThat(res.ratePerMillion()).isEqualTo(10_000);
-    assertThat(res.status().getCode()).isEqualTo(Code.UNIMPLEMENTED);
-
-    proto = io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
-        .setPercentage(FractionalPercent.newBuilder()
-            .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
-        .setHttpStatus(503).build();
-    res = ClientXdsClient.parseFaultAbort(proto).getStruct();
-    assertThat(res.ratePerMillion()).isEqualTo(10_000);
-    assertThat(res.status().getCode()).isEqualTo(Code.UNAVAILABLE);
-
-    proto = io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
-        .setPercentage(FractionalPercent.newBuilder()
-            .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
-        .setHttpStatus(500).build();
-    res = ClientXdsClient.parseFaultAbort(proto).getStruct();
-    assertThat(res.ratePerMillion()).isEqualTo(10_000);
-    assertThat(res.status().getCode()).isEqualTo(Code.UNKNOWN);
   }
 
   @Test
@@ -532,7 +495,9 @@ public class ClientXdsClientDataTest {
                 .setNumerator(600).setDenominator(DenominatorType.MILLION))
             .setGrpcStatus(Code.DEADLINE_EXCEEDED.value()).build();
     FaultAbort faultAbort = ClientXdsClient.parseFaultAbort(proto).getStruct();
-    assertThat(faultAbort.ratePerMillion()).isEqualTo(600);
+    assertThat(faultAbort.percent().numerator()).isEqualTo(600);
+    assertThat(faultAbort.percent().denominatorType())
+        .isEqualTo(HttpFault.FractionalPercent.DenominatorType.MILLION);
     assertThat(faultAbort.status().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
   }
 

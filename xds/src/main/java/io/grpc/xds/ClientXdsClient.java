@@ -52,6 +52,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -407,8 +408,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static StructOrError<FractionMatcher> parseFractionMatcher(
-      io.envoyproxy.envoy.type.v3.FractionalPercent proto) {
+  private static StructOrError<FractionMatcher> parseFractionMatcher(FractionalPercent proto) {
     int numerator = proto.getNumerator();
     int denominator = 0;
     switch (proto.getDenominator()) {
@@ -625,26 +625,26 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   private static FaultDelay parseFaultDelay(
       io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay faultDelay) {
-    int rate = getRatePerMillion(faultDelay.getPercentage());
+    HttpFault.FractionalPercent percent = parsePercent(faultDelay.getPercentage());
     if (faultDelay.hasHeaderDelay()) {
-      return FaultDelay.forHeader(rate);
+      return FaultDelay.forHeader(percent);
     }
-    return FaultDelay.forFixedDelay(Durations.toNanos(faultDelay.getFixedDelay()), rate);
+    return FaultDelay.forFixedDelay(Durations.toNanos(faultDelay.getFixedDelay()), percent);
   }
 
   @VisibleForTesting
   static StructOrError<FaultAbort> parseFaultAbort(
       io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
-    int rate = getRatePerMillion(faultAbort.getPercentage());
+    HttpFault.FractionalPercent percent = parsePercent(faultAbort.getPercentage());
     switch (faultAbort.getErrorTypeCase()) {
       case HEADER_ABORT:
-        return StructOrError.fromStruct(FaultAbort.forHeader(rate));
+        return StructOrError.fromStruct(FaultAbort.forHeader(percent));
       case HTTP_STATUS:
         return StructOrError.fromStruct(FaultAbort.forStatus(
-            convertHttpStatus(faultAbort.getHttpStatus()), rate));
+            GrpcUtil.httpStatusToGrpcStatus(faultAbort.getHttpStatus()), percent));
       case GRPC_STATUS:
         return StructOrError.fromStruct(FaultAbort.forStatus(
-            Status.fromCodeValue(faultAbort.getGrpcStatus()), rate));
+            Status.fromCodeValue(faultAbort.getGrpcStatus()), percent));
       case ERRORTYPE_NOT_SET:
       default:
         return StructOrError.fromError(
@@ -652,31 +652,18 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static Status convertHttpStatus(int httpCode) {
-    Status status;
-    switch (httpCode) {
-      case 400:
-        status = Status.INTERNAL;
-        break;
-      case 401:
-        status = Status.UNAUTHENTICATED;
-        break;
-      case 403:
-        status = Status.PERMISSION_DENIED;
-        break;
-      case 404:
-        status = Status.UNIMPLEMENTED;
-        break;
-      case 429:
-      case 502:
-      case 503:
-      case 504:
-        status = Status.UNAVAILABLE;
-        break;
+  private static HttpFault.FractionalPercent parsePercent(FractionalPercent proto) {
+    switch (proto.getDenominator()) {
+      case HUNDRED:
+        return HttpFault.FractionalPercent.perHundred(proto.getNumerator());
+      case TEN_THOUSAND:
+        return HttpFault.FractionalPercent.perTenThousand(proto.getNumerator());
+      case MILLION:
+        return HttpFault.FractionalPercent.perMillion(proto.getNumerator());
+      case UNRECOGNIZED:
       default:
-        status = Status.UNKNOWN;
+        throw new IllegalArgumentException("Unknown denominator type: " + proto.getDenominator());
     }
-    return status.withDescription("HTTP code: " + httpCode);
   }
 
   @Override

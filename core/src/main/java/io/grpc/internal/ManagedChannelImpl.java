@@ -1168,9 +1168,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
       this.configSelector = configSelector;
       this.channel = channel;
       this.method = method;
-      this.callOptions = callOptions;
       this.callExecutor =
           callOptions.getExecutor() == null ? channelExecutor : callOptions.getExecutor();
+      this.callOptions = callOptions.withExecutor(callExecutor);
       this.context = Context.current();
     }
 

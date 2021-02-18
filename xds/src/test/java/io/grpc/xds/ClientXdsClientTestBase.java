@@ -47,6 +47,7 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.HttpFault.FractionalPercent.DenominatorType;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
 import io.grpc.xds.XdsClient.CdsUpdate;
@@ -377,14 +378,18 @@ public abstract class ClientXdsClientTestBase {
     assertThat(ldsUpdate.httpFault).isNull();
     HttpFault httpFault = ldsUpdate.virtualHosts.get(0).httpFault();
     assertThat(httpFault.faultDelay().delayNanos()).isEqualTo(300);
-    assertThat(httpFault.faultDelay().ratePerMillion()).isEqualTo(1000);
+    assertThat(httpFault.faultDelay().percent().numerator()).isEqualTo(1000);
+    assertThat(httpFault.faultDelay().percent().denominatorType())
+        .isEqualTo(DenominatorType.MILLION);
     assertThat(httpFault.faultAbort()).isNull();
     assertThat(httpFault.upstreamCluster()).isEqualTo("cluster1");
     assertThat(httpFault.maxActiveFaults()).isEqualTo(100);
     httpFault = ldsUpdate.virtualHosts.get(1).httpFault();
     assertThat(httpFault.faultDelay()).isNull();
     assertThat(httpFault.faultAbort().status().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(httpFault.faultAbort().ratePerMillion()).isEqualTo(2000);
+    assertThat(httpFault.faultAbort().percent().numerator()).isEqualTo(2000);
+    assertThat(httpFault.faultAbort().percent().denominatorType())
+        .isEqualTo(DenominatorType.MILLION);
     assertThat(httpFault.upstreamCluster()).isEqualTo("cluster2");
     assertThat(httpFault.maxActiveFaults()).isEqualTo(101);
   }

@@ -53,7 +53,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetUri);
       String name = targetPath.substring(1);
       return new XdsNameResolver(name, args.getServiceConfigParser(),
-          args.getSynchronizationContext());
+          args.getSynchronizationContext(), args.getScheduledExecutorService());
     }
     return null;
   }

@@ -58,19 +58,19 @@ abstract class HttpFault {
 
     abstract boolean headerDelay();
 
-    abstract int ratePerMillion();
+    abstract FractionalPercent percent();
 
-    static FaultDelay forFixedDelay(long delayNanos, int ratePerMillion) {
-      return FaultDelay.create(delayNanos, false, ratePerMillion);
+    static FaultDelay forFixedDelay(long delayNanos, FractionalPercent percent) {
+      return FaultDelay.create(delayNanos, false, percent);
     }
 
-    static FaultDelay forHeader(int ratePerMillion) {
-      return FaultDelay.create(null, true, ratePerMillion);
+    static FaultDelay forHeader(FractionalPercent percentage) {
+      return FaultDelay.create(null, true, percentage);
     }
 
     private static FaultDelay create(
-        @Nullable Long delayNanos, boolean headerDelay, int ratePerMillion) {
-      return new AutoValue_HttpFault_FaultDelay(delayNanos, headerDelay, ratePerMillion);
+        @Nullable Long delayNanos, boolean headerDelay, FractionalPercent percent) {
+      return new AutoValue_HttpFault_FaultDelay(delayNanos, headerDelay, percent);
     }
   }
 
@@ -82,20 +82,48 @@ abstract class HttpFault {
 
     abstract boolean headerAbort();
 
-    abstract int ratePerMillion();
+    abstract FractionalPercent percent();
 
-    static FaultAbort forStatus(Status status, int ratePerMillion) {
+    static FaultAbort forStatus(Status status, FractionalPercent percent) {
       checkNotNull(status, "status");
-      return FaultAbort.create(status, false, ratePerMillion);
+      return FaultAbort.create(status, false, percent);
     }
 
-    static FaultAbort forHeader(int ratePerMillion) {
-      return FaultAbort.create(null, true, ratePerMillion);
+    static FaultAbort forHeader(FractionalPercent percent) {
+      return FaultAbort.create(null, true, percent);
     }
 
     private static FaultAbort create(
-        @Nullable Status status, boolean headerAbort, int ratePerMillion) {
-      return new AutoValue_HttpFault_FaultAbort(status, headerAbort, ratePerMillion);
+        @Nullable Status status, boolean headerAbort, FractionalPercent percent) {
+      return new AutoValue_HttpFault_FaultAbort(status, headerAbort, percent);
+    }
+  }
+
+  @AutoValue
+  abstract static class FractionalPercent {
+    enum DenominatorType {
+      HUNDRED, TEN_THOUSAND, MILLION
+    }
+
+    abstract int numerator();
+
+    abstract DenominatorType denominatorType();
+
+    static FractionalPercent perHundred(int numerator) {
+      return FractionalPercent.create(numerator, DenominatorType.HUNDRED);
+    }
+
+    static FractionalPercent perTenThousand(int numerator) {
+      return FractionalPercent.create(numerator, DenominatorType.TEN_THOUSAND);
+    }
+
+    static FractionalPercent perMillion(int numerator) {
+      return FractionalPercent.create(numerator, DenominatorType.MILLION);
+    }
+
+    static FractionalPercent create(
+        int numerator, DenominatorType denominatorType) {
+      return new AutoValue_HttpFault_FractionalPercent(numerator, denominatorType);
     }
   }
 }
