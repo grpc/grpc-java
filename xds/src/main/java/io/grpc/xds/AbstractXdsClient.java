@@ -195,6 +195,10 @@ abstract class AbstractXdsClient extends XdsClient {
     return shutdown;
   }
 
+  final boolean useProtocolV3() {
+    return useProtocolV3;
+  }
+
   @Override
   public String toString() {
     return logId.toString();

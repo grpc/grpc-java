@@ -98,6 +98,10 @@ final class ClientXdsClient extends AbstractXdsClient {
   private static final String HTTP_FAULT_FILTER_NAME = "envoy.fault";
   @VisibleForTesting
   static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
+  @VisibleForTesting
+  static boolean enableFaultInjection =
+      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"));
+
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
@@ -186,22 +190,24 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       boolean hasFaultInjection = false;
       HttpFault httpFault = null;
-      List<HttpFilter> httpFilters = hcm.getHttpFiltersList();
-      for (HttpFilter httpFilter : httpFilters) {
-        if (HTTP_FAULT_FILTER_NAME.equals(httpFilter.getName())) {
-          hasFaultInjection = true;
-          if (httpFilter.hasTypedConfig()) {
-            StructOrError<HttpFault> httpFaultOrError =
-                decodeFaultFilterConfig(httpFilter.getTypedConfig());
-            if (httpFaultOrError.getErrorDetail() != null) {
-              nackResponse(ResourceType.LDS, nonce,
-                  "Listener " + listenerName + " contains invalid HttpFault filter: "
-                      + httpFaultOrError.getErrorDetail());
-              return;
+      if (enableFaultInjection && useProtocolV3()) {
+        List<HttpFilter> httpFilters = hcm.getHttpFiltersList();
+        for (HttpFilter httpFilter : httpFilters) {
+          if (HTTP_FAULT_FILTER_NAME.equals(httpFilter.getName())) {
+            hasFaultInjection = true;
+            if (httpFilter.hasTypedConfig()) {
+              StructOrError<HttpFault> httpFaultOrError =
+                  decodeFaultFilterConfig(httpFilter.getTypedConfig());
+              if (httpFaultOrError.getErrorDetail() != null) {
+                nackResponse(ResourceType.LDS, nonce,
+                    "Listener " + listenerName + " contains invalid HttpFault filter: "
+                        + httpFaultOrError.getErrorDetail());
+                return;
+              }
+              httpFault = httpFaultOrError.getStruct();
             }
-            httpFault = httpFaultOrError.getStruct();
+            break;
           }
-          break;
         }
       }
       if (hcm.hasRouteConfig()) {

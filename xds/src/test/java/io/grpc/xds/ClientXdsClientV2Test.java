@@ -71,11 +71,6 @@ import io.envoyproxy.envoy.api.v2.route.RouteAction;
 import io.envoyproxy.envoy.api.v2.route.RouteMatch;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.cluster.aggregate.v2alpha.ClusterConfig;
-import io.envoyproxy.envoy.config.filter.fault.v2.FaultDelay;
-import io.envoyproxy.envoy.config.filter.fault.v2.FaultDelay.HeaderDelay;
-import io.envoyproxy.envoy.config.filter.http.fault.v2.FaultAbort;
-import io.envoyproxy.envoy.config.filter.http.fault.v2.FaultAbort.HeaderAbort;
-import io.envoyproxy.envoy.config.filter.http.fault.v2.HTTPFault;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpFilter;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
@@ -282,11 +277,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
 
     @Override
     protected Message buildHttpFilter(String name, @Nullable Any typedConfig) {
-      HttpFilter.Builder builder = HttpFilter.newBuilder().setName(name);
-      if (typedConfig != null) {
-        builder.setTypedConfig(typedConfig);
-      }
-      return builder.build();
+      throw new UnsupportedOperationException();
     }
 
     @Override
@@ -294,40 +285,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
         @Nullable Long delayNanos, @Nullable Integer delayRate, String upstreamCluster,
         List<String> downstreamNodes, @Nullable Integer maxActiveFaults, @Nullable Status status,
         @Nullable Integer httpCode, @Nullable Integer abortRate) {
-      HTTPFault.Builder builder = HTTPFault.newBuilder();
-      if (delayRate != null) {
-        FaultDelay.Builder delayBuilder
-            = FaultDelay.newBuilder();
-        delayBuilder.setPercentage(
-            FractionalPercent.newBuilder()
-                .setNumerator(delayRate).setDenominator(DenominatorType.MILLION));
-        if (delayNanos != null) {
-          delayBuilder.setFixedDelay(Durations.fromNanos(delayNanos));
-        } else {
-          delayBuilder.setHeaderDelay(HeaderDelay.newBuilder());
-        }
-        builder.setDelay(delayBuilder);
-      }
-      if (abortRate != null) {
-        FaultAbort.Builder abortBuilder = FaultAbort.newBuilder();
-        abortBuilder.setPercentage(
-            FractionalPercent.newBuilder()
-                .setNumerator(abortRate).setDenominator(DenominatorType.MILLION));
-        if (status != null) {
-          throw new UnsupportedOperationException();
-        } else if (httpCode != null) {
-          abortBuilder.setHttpStatus(httpCode);
-        } else {
-          abortBuilder.setHeaderAbort(HeaderAbort.newBuilder());
-        }
-        builder.setAbort(abortBuilder);
-      }
-      builder.setUpstreamCluster(upstreamCluster);
-      builder.addAllDownstreamNodes(downstreamNodes);
-      if (maxActiveFaults != null) {
-        builder.setMaxActiveFaults(UInt32Value.of(maxActiveFaults));
-      }
-      return Any.pack(builder.build());
+      throw new UnsupportedOperationException();
     }
 
     @Override
