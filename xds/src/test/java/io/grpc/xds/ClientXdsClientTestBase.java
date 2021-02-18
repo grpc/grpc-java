@@ -170,9 +170,11 @@ public abstract class ClientXdsClientTestBase {
 
   private ManagedChannel channel;
   private ClientXdsClient xdsClient;
+  private boolean originalEnableFaultInjection;
 
   @Before
   public void setUp() throws IOException {
+    originalEnableFaultInjection = ClientXdsClient.enableFaultInjection;
     ClientXdsClient.enableFaultInjection = true;
     MockitoAnnotations.initMocks(this);
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
@@ -206,6 +208,7 @@ public abstract class ClientXdsClientTestBase {
 
   @After
   public void tearDown() {
+    ClientXdsClient.enableFaultInjection = originalEnableFaultInjection;
     xdsClient.shutdown();
     channel.shutdown();  // channel not owned by XdsClient
     assertThat(adsEnded.get()).isTrue();
