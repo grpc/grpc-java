@@ -99,9 +99,6 @@ final class XdsNameResolver extends NameResolver {
   static boolean enableTimeout =
       Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"));
   @VisibleForTesting
-  static boolean enableFaultInjection =
-      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"));
-  @VisibleForTesting
   static final Metadata.Key<String> DOWNSTREAM_NODE_KEY =
       Metadata.Key.of("x-envoy-downstream-service-node", Metadata.ASCII_STRING_MARSHALLER);
   @VisibleForTesting
@@ -856,7 +853,7 @@ final class XdsNameResolver extends NameResolver {
           }
           logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
           httpMaxStreamDurationNano = update.httpMaxStreamDurationNano;
-          applyFaultInjection = enableFaultInjection && update.hasFaultInjection;
+          applyFaultInjection = update.hasFaultInjection;
           httpFilterFaultConfig = applyFaultInjection ? update.httpFault : null;
           List<VirtualHost> virtualHosts = update.virtualHosts;
           String rdsName = update.rdsName;
