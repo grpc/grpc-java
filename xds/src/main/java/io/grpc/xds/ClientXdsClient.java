@@ -190,7 +190,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       boolean hasFaultInjection = false;
       HttpFault httpFault = null;
-      if (enableFaultInjection && useProtocolV3()) {
+      if (enableFaultInjection) {
         List<HttpFilter> httpFilters = hcm.getHttpFiltersList();
         for (HttpFilter httpFilter : httpFilters) {
           if (HTTP_FAULT_FILTER_NAME.equals(httpFilter.getName())) {
@@ -198,13 +198,15 @@ final class ClientXdsClient extends AbstractXdsClient {
             if (httpFilter.hasTypedConfig()) {
               StructOrError<HttpFault> httpFaultOrError =
                   decodeFaultFilterConfig(httpFilter.getTypedConfig());
-              if (httpFaultOrError.getErrorDetail() != null) {
-                nackResponse(ResourceType.LDS, nonce,
-                    "Listener " + listenerName + " contains invalid HttpFault filter: "
-                        + httpFaultOrError.getErrorDetail());
-                return;
+              if (httpFaultOrError != null) {
+                if (httpFaultOrError.getErrorDetail() != null) {
+                  nackResponse(ResourceType.LDS, nonce,
+                      "Listener " + listenerName + " contains invalid HttpFault filter: "
+                          + httpFaultOrError.getErrorDetail());
+                  return;
+                }
+                httpFault = httpFaultOrError.getStruct();
               }
-              httpFault = httpFaultOrError.getStruct();
             }
             break;
           }
@@ -279,12 +281,14 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
       Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
       StructOrError<HttpFault> httpFaultOrError = decodeFaultFilterConfig(rawFaultFilterConfig);
-      if (httpFaultOrError.getErrorDetail() != null) {
-        return StructOrError.fromError(
-            "Virtual host [" + name + "] contains invalid HttpFault filter : "
-                + httpFaultOrError.getErrorDetail());
+      if (httpFaultOrError != null) {
+        if (httpFaultOrError.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "Virtual host [" + name + "] contains invalid HttpFault filter : "
+                  + httpFaultOrError.getErrorDetail());
+        }
+        httpFault = httpFaultOrError.getStruct();
       }
-      httpFault = httpFaultOrError.getStruct();
     }
     return StructOrError.fromStruct(VirtualHost.create(
         name, proto.getDomainsList(), routes, httpFault));
@@ -330,12 +334,14 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
       Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
       StructOrError<HttpFault> httpFaultOrError = decodeFaultFilterConfig(rawFaultFilterConfig);
-      if (httpFaultOrError.getErrorDetail() != null) {
-        return StructOrError.fromError(
-            "Route [" + proto.getName() + "] contains invalid HttpFault filter: "
-                + httpFaultOrError.getErrorDetail());
+      if (httpFaultOrError != null) {
+        if (httpFaultOrError.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "Route [" + proto.getName() + "] contains invalid HttpFault filter: "
+                  + httpFaultOrError.getErrorDetail());
+        }
+        httpFault = httpFaultOrError.getStruct();
       }
-      httpFault = httpFaultOrError.getStruct();
     }
     return StructOrError.fromStruct(Route.create(
         routeMatch.getStruct(), routeAction.getStruct(), httpFault));
@@ -548,22 +554,24 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
       Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
       StructOrError<HttpFault> httpFaultOrError = decodeFaultFilterConfig(rawFaultFilterConfig);
-      if (httpFaultOrError.getErrorDetail() != null) {
-        return StructOrError.fromError(
-            "ClusterWeight [" + proto.getName() + "] contains invalid HttpFault filter: "
-                + httpFaultOrError.getErrorDetail());
+      if (httpFaultOrError != null) {
+        if (httpFaultOrError.getErrorDetail() != null) {
+          return StructOrError.fromError(
+              "ClusterWeight [" + proto.getName() + "] contains invalid HttpFault filter: "
+                  + httpFaultOrError.getErrorDetail());
+        }
+        httpFault = httpFaultOrError.getStruct();
       }
-      httpFault = httpFaultOrError.getStruct();
     }
     return StructOrError.fromStruct(
         ClusterWeight.create(proto.getName(), proto.getWeight().getValue(), httpFault));
   }
 
+  @Nullable
   private static StructOrError<HttpFault> decodeFaultFilterConfig(Any rawFaultFilterConfig) {
-    if (rawFaultFilterConfig.getTypeUrl().equals(
-        "type.googleapis.com/envoy.config.filter.http.fault.v2.HTTPFault")) {
-      rawFaultFilterConfig = rawFaultFilterConfig.toBuilder().setTypeUrl(
-          "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault").build();
+    if (!rawFaultFilterConfig.getTypeUrl().equals(
+        "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault")) {
+      return null;
     }
     HTTPFault httpFaultProto;
     try {
