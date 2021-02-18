@@ -119,7 +119,8 @@ final class XdsNameResolver extends NameResolver {
   @VisibleForTesting
   static final Metadata.Key<String> HEADER_ABORT_PERCENTAGE_KEY =
       Metadata.Key.of("x-envoy-fault-abort-request-percentage", Metadata.ASCII_STRING_MARSHALLER);
-  private static final AtomicLong activeFaultInjectedStreamCounter = new AtomicLong();
+  @VisibleForTesting
+  static AtomicLong activeFaultInjectedStreamCounter = new AtomicLong();
 
   private final XdsLogger logger;
   private final String authority;
@@ -130,9 +131,6 @@ final class XdsNameResolver extends NameResolver {
   private final ThreadSafeRandom random;
   private final ConcurrentMap<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
-
-  @VisibleForTesting
-  AtomicLong activeFaultInjectedStreams = activeFaultInjectedStreamCounter;
 
   private volatile RoutingConfig routingConfig = RoutingConfig.empty;
   private Listener2 listener;
@@ -424,7 +422,7 @@ final class XdsNameResolver extends NameResolver {
       }
       final String finalCluster = cluster;
       if (selectedFaultConfig != null && selectedFaultConfig.maxActiveFaults() != null
-          && activeFaultInjectedStreams.get() >= selectedFaultConfig.maxActiveFaults()) {
+          && activeFaultInjectedStreamCounter.get() >= selectedFaultConfig.maxActiveFaults()) {
         selectedFaultConfig = null;
       }
       if (selectedFaultConfig != null) {
@@ -652,7 +650,7 @@ final class XdsNameResolver extends NameResolver {
       SimpleForwardingClientCall<ReqT, RespT> {
     ActiveFaultCountingClientCall(ClientCall<ReqT, RespT> faultInjectedDelegate) {
       super(faultInjectedDelegate);
-      activeFaultInjectedStreams.incrementAndGet();
+      activeFaultInjectedStreamCounter.incrementAndGet();
     }
 
     @Override
@@ -661,7 +659,7 @@ final class XdsNameResolver extends NameResolver {
         @Override
         public void onClose(Status status, Metadata trailers) {
           delegate().onClose(status, trailers);
-          activeFaultInjectedStreams.decrementAndGet();
+          activeFaultInjectedStreamCounter.decrementAndGet();
         }
       };
       delegate().start(listener, headers);

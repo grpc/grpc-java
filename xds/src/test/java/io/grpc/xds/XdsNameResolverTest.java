@@ -133,18 +133,21 @@ public class XdsNameResolverTest {
   ArgumentCaptor<Status> errorCaptor;
   private XdsNameResolver resolver;
   private TestCall<?, ?> testCall;
+  private boolean originalEnableTimeout = XdsNameResolver.enableTimeout;
+  private AtomicLong originalFaultCounter = XdsNameResolver.activeFaultInjectedStreamCounter;
 
   @Before
   public void setUp() {
     XdsNameResolver.enableTimeout = true;
-    XdsNameResolver.enableFaultInjection = true;
+    XdsNameResolver.activeFaultInjectedStreamCounter = new AtomicLong();
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom);
-    resolver.activeFaultInjectedStreams = new AtomicLong();
   }
 
   @After
   public void tearDown() {
+    XdsNameResolver.enableTimeout = originalEnableTimeout;
+    XdsNameResolver.activeFaultInjectedStreamCounter = originalFaultCounter;
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     resolver.shutdown();
     if (xdsClient != null) {
