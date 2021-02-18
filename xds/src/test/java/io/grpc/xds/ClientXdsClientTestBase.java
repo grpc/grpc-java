@@ -70,6 +70,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -169,9 +170,12 @@ public abstract class ClientXdsClientTestBase {
 
   private ManagedChannel channel;
   private ClientXdsClient xdsClient;
+  private boolean originalEnableFaultInjection;
 
   @Before
   public void setUp() throws IOException {
+    originalEnableFaultInjection = ClientXdsClient.enableFaultInjection;
+    ClientXdsClient.enableFaultInjection = true;
     MockitoAnnotations.initMocks(this);
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
@@ -204,6 +208,7 @@ public abstract class ClientXdsClientTestBase {
 
   @After
   public void tearDown() {
+    ClientXdsClient.enableFaultInjection = originalEnableFaultInjection;
     xdsClient.shutdown();
     channel.shutdown();  // channel not owned by XdsClient
     assertThat(adsEnded.get()).isTrue();
@@ -330,6 +335,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdate_withFaultInjection() {
+    Assume.assumeTrue(useProtocolV3());
     DiscoveryRpcCall call =
         startResourceWatcher(ResourceType.LDS, LDS_RESOURCE, ldsResourceWatcher);
     List<Any> listeners = ImmutableList.of(
