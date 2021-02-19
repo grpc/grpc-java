@@ -47,7 +47,6 @@ import javax.annotation.Nullable;
  */
 // TODO(chengyuanzhang): put data types into smaller categories.
 final class EnvoyProtoData {
-  static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
 
   // Prevent instantiation.
   private EnvoyProtoData() {

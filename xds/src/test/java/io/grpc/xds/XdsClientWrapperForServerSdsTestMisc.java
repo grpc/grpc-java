@@ -23,7 +23,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -79,28 +78,20 @@ public class XdsClientWrapperForServerSdsTestMisc {
   }
 
   @Test
-  public void nonInetSocketAddress_expectException() {
+  public void nonInetSocketAddress_expectNull() throws UnknownHostException {
     registeredWatcher =
-            XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, xdsClient, PORT);
-    try {
-      DownstreamTlsContext unused =
-          sendListenerUpdate(new InProcessSocketAddress("test1"), null, null);
-      fail("exception expected");
-    } catch (IllegalStateException expected) {
-      assertThat(expected)
-          .hasMessageThat()
-          .isEqualTo("Channel localAddress is expected to be InetSocketAddress");
-    }
+        XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, xdsClient, PORT);
+    assertThat(sendListenerUpdate(new InProcessSocketAddress("test1"), null)).isNull();
   }
 
   @Test
   public void nonMatchingPort_expectException() throws UnknownHostException {
     registeredWatcher =
-            XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, xdsClient, PORT);
+        XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, xdsClient, PORT);
     try {
       InetAddress ipLocalAddress = InetAddress.getByName("10.1.2.3");
       InetSocketAddress localAddress = new InetSocketAddress(ipLocalAddress, PORT + 1);
-      DownstreamTlsContext unused = sendListenerUpdate(localAddress, null, null);
+      DownstreamTlsContext unused = sendListenerUpdate(localAddress, null);
       fail("exception expected");
     } catch (IllegalStateException expected) {
       assertThat(expected)
@@ -121,7 +112,10 @@ public class XdsClientWrapperForServerSdsTestMisc {
     when(channel.localAddress()).thenReturn(localAddress);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
-            "listener1", "10.1.2.3", Collections.<EnvoyServerProtoData.FilterChain>emptyList());
+            "listener1",
+            "10.1.2.3",
+            Collections.<EnvoyServerProtoData.FilterChain>emptyList(),
+            null);
     XdsClient.ListenerUpdate listenerUpdate =
         XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
     registeredWatcher.onListenerChanged(listenerUpdate);
@@ -141,10 +135,10 @@ public class XdsClientWrapperForServerSdsTestMisc {
     EnvoyServerProtoData.DownstreamTlsContext tlsContext =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     verify(mockServerWatcher, never())
-        .onSuccess(any(EnvoyServerProtoData.DownstreamTlsContext.class));
-    DownstreamTlsContext returnedTlsContext = sendListenerUpdate(localAddress, tlsContext, null);
+        .onSuccess();
+    DownstreamTlsContext returnedTlsContext = sendListenerUpdate(localAddress, tlsContext);
     assertThat(returnedTlsContext).isSameInstanceAs(tlsContext);
-    verify(mockServerWatcher).onSuccess(same(tlsContext));
+    verify(mockServerWatcher).onSuccess();
     xdsClientWrapperForServerSds.removeServerWatcher(mockServerWatcher);
   }
 
@@ -156,12 +150,12 @@ public class XdsClientWrapperForServerSdsTestMisc {
     InetSocketAddress localAddress = new InetSocketAddress(ipLocalAddress, PORT);
     EnvoyServerProtoData.DownstreamTlsContext tlsContext =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
-    DownstreamTlsContext returnedTlsContext = sendListenerUpdate(localAddress, tlsContext, null);
+    DownstreamTlsContext returnedTlsContext = sendListenerUpdate(localAddress, tlsContext);
     assertThat(returnedTlsContext).isSameInstanceAs(tlsContext);
     XdsClientWrapperForServerSds.ServerWatcher mockServerWatcher =
             mock(XdsClientWrapperForServerSds.ServerWatcher.class);
     xdsClientWrapperForServerSds.addServerWatcher(mockServerWatcher);
-    verify(mockServerWatcher).onSuccess(same(tlsContext));
+    verify(mockServerWatcher).onSuccess();
   }
 
   @Test
@@ -192,10 +186,10 @@ public class XdsClientWrapperForServerSdsTestMisc {
     EnvoyServerProtoData.DownstreamTlsContext tlsContext =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     verify(mockServerWatcher, never())
-        .onSuccess(any(EnvoyServerProtoData.DownstreamTlsContext.class));
-    DownstreamTlsContext returnedTlsContext = sendListenerUpdate(localAddress, tlsContext, null);
+        .onSuccess();
+    DownstreamTlsContext returnedTlsContext = sendListenerUpdate(localAddress, tlsContext);
     assertThat(returnedTlsContext).isSameInstanceAs(tlsContext);
-    verify(mockServerWatcher).onSuccess(same(tlsContext));
+    verify(mockServerWatcher).onSuccess();
   }
 
   @Test
@@ -215,12 +209,24 @@ public class XdsClientWrapperForServerSdsTestMisc {
   }
 
   private DownstreamTlsContext sendListenerUpdate(
-      SocketAddress localAddress,
-      DownstreamTlsContext tlsContext1,
-      DownstreamTlsContext tlsContext2) {
+      SocketAddress localAddress, DownstreamTlsContext tlsContext) throws UnknownHostException {
     when(channel.localAddress()).thenReturn(localAddress);
-    XdsServerTestHelper.generateListenerUpdate(
-        registeredWatcher, PORT, tlsContext1, tlsContext2);
+    InetAddress ipRemoteAddress = InetAddress.getByName("10.4.5.6");
+    InetSocketAddress remoteAddress = new InetSocketAddress(ipRemoteAddress, 1234);
+    when(channel.remoteAddress()).thenReturn(remoteAddress);
+    XdsServerTestHelper.generateListenerUpdate(registeredWatcher, tlsContext);
     return xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
+  }
+
+  /** Creates XdsClientWrapperForServerSds: also used by other classes. */
+  public static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(
+      int port, DownstreamTlsContext downstreamTlsContext) {
+    XdsClient mockXdsClient = mock(XdsClient.class);
+    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+        new XdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds.start(mockXdsClient);
+    XdsSdsClientServerTest.generateListenerUpdateToWatcher(
+        downstreamTlsContext, xdsClientWrapperForServerSds.getListenerWatcher());
+    return xdsClientWrapperForServerSds;
   }
 }

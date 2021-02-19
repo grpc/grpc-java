@@ -16,15 +16,16 @@
 
 package io.grpc.xds;
 
-import static io.grpc.xds.EnvoyProtoData.TRANSPORT_SOCKET_NAME_TLS;
-
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -37,6 +38,8 @@ import javax.annotation.Nullable;
  */
 @Internal
 public final class EnvoyServerProtoData {
+
+  static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
 
   // Prevent instantiation.
   private EnvoyServerProtoData() {
@@ -144,21 +147,25 @@ public final class EnvoyServerProtoData {
   }
 
   static final class CidrRange {
-    private final String addressPrefix;
+    private final InetAddress addressPrefix;
     private final int prefixLen;
 
     @VisibleForTesting
-    CidrRange(String addressPrefix, int prefixLen) {
-      this.addressPrefix = addressPrefix;
+    CidrRange(String addressPrefix, int prefixLen) throws InvalidProtocolBufferException {
+      try {
+        this.addressPrefix = InetAddress.getByName(addressPrefix);
+      } catch (UnknownHostException e) {
+        throw new InvalidProtocolBufferException(e.getMessage());
+      }
       this.prefixLen = prefixLen;
     }
 
     static CidrRange fromEnvoyProtoCidrRange(
-        io.envoyproxy.envoy.config.core.v3.CidrRange proto) {
+        io.envoyproxy.envoy.config.core.v3.CidrRange proto) throws InvalidProtocolBufferException {
       return new CidrRange(proto.getAddressPrefix(), proto.getPrefixLen().getValue());
     }
 
-    public String getAddressPrefix() {
+    public InetAddress getAddressPrefix() {
       return addressPrefix;
     }
 
@@ -193,6 +200,17 @@ public final class EnvoyServerProtoData {
     }
   }
 
+  enum ConnectionSourceType {
+    // Any connection source matches.
+    ANY,
+
+    // Match a connection originating from the same host.
+    SAME_IP_OR_LOOPBACK,
+
+    // Match a connection originating from a different host.
+    EXTERNAL
+  }
+
   /**
    * Corresponds to Envoy proto message
    * {@link io.envoyproxy.envoy.api.v2.listener.FilterChainMatch}.
@@ -201,29 +219,62 @@ public final class EnvoyServerProtoData {
     private final int destinationPort;
     private final List<CidrRange> prefixRanges;
     private final List<String> applicationProtocols;
+    private final List<CidrRange> sourcePrefixRanges;
+    private final ConnectionSourceType sourceType;
+    private final List<Integer> sourcePorts;
 
     @VisibleForTesting
-    FilterChainMatch(int destinationPort,
-        List<CidrRange> prefixRanges, List<String> applicationProtocols) {
+    FilterChainMatch(
+        int destinationPort,
+        List<CidrRange> prefixRanges,
+        List<String> applicationProtocols,
+        List<CidrRange> sourcePrefixRanges,
+        ConnectionSourceType sourceType,
+        List<Integer> sourcePorts) {
       this.destinationPort = destinationPort;
       this.prefixRanges = Collections.unmodifiableList(prefixRanges);
       this.applicationProtocols = Collections.unmodifiableList(applicationProtocols);
+      this.sourcePrefixRanges = sourcePrefixRanges;
+      this.sourceType = sourceType;
+      this.sourcePorts = sourcePorts;
     }
 
     static FilterChainMatch fromEnvoyProtoFilterChainMatch(
-        io.envoyproxy.envoy.config.listener.v3.FilterChainMatch proto) {
+        io.envoyproxy.envoy.config.listener.v3.FilterChainMatch proto)
+        throws InvalidProtocolBufferException {
       List<CidrRange> prefixRanges = new ArrayList<>();
       for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getPrefixRangesList()) {
         prefixRanges.add(CidrRange.fromEnvoyProtoCidrRange(range));
       }
+      List<CidrRange> sourcePrefixRanges = new ArrayList<>();
+      for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getSourcePrefixRangesList()) {
+        sourcePrefixRanges.add(CidrRange.fromEnvoyProtoCidrRange(range));
+      }
       List<String> applicationProtocols = new ArrayList<>();
-      for (String appProtocol  : proto.getApplicationProtocolsList()) {
+      for (String appProtocol : proto.getApplicationProtocolsList()) {
         applicationProtocols.add(appProtocol);
+      }
+      ConnectionSourceType sourceType = null;
+      switch (proto.getSourceType()) {
+        case ANY:
+          sourceType = ConnectionSourceType.ANY;
+          break;
+        case EXTERNAL:
+          sourceType = ConnectionSourceType.EXTERNAL;
+          break;
+        case SAME_IP_OR_LOOPBACK:
+          sourceType = ConnectionSourceType.SAME_IP_OR_LOOPBACK;
+          break;
+        default:
+          throw new InvalidProtocolBufferException("Unknown source-type:" + proto.getSourceType());
       }
       return new FilterChainMatch(
           proto.getDestinationPort().getValue(),
           prefixRanges,
-          applicationProtocols);
+          applicationProtocols,
+          sourcePrefixRanges,
+          sourceType,
+          proto.getSourcePortsList());
     }
 
     public int getDestinationPort() {
@@ -238,6 +289,18 @@ public final class EnvoyServerProtoData {
       return applicationProtocols;
     }
 
+    public List<CidrRange> getSourcePrefixRanges() {
+      return sourcePrefixRanges;
+    }
+
+    public ConnectionSourceType getConnectionSourceType() {
+      return sourceType;
+    }
+
+    public List<Integer> getSourcePorts() {
+      return sourcePorts;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) {
@@ -248,22 +311,34 @@ public final class EnvoyServerProtoData {
       }
       FilterChainMatch that = (FilterChainMatch) o;
       return destinationPort == that.destinationPort
-          && java.util.Objects.equals(prefixRanges, that.prefixRanges)
-          && java.util.Objects.equals(applicationProtocols, that.applicationProtocols);
+          && Objects.equals(prefixRanges, that.prefixRanges)
+          && Objects.equals(applicationProtocols, that.applicationProtocols)
+          && Objects.equals(sourcePrefixRanges, that.sourcePrefixRanges)
+          && sourceType == that.sourceType
+          && Objects.equals(sourcePorts, that.sourcePorts);
     }
 
     @Override
     public int hashCode() {
-      return java.util.Objects.hash(destinationPort, prefixRanges, applicationProtocols);
+      return Objects.hash(
+          destinationPort,
+          prefixRanges,
+          applicationProtocols,
+          sourcePrefixRanges,
+          sourceType,
+          sourcePorts);
     }
 
     @Override
     public String toString() {
-      return "FilterChainMatch{"
-          + "destinationPort=" + destinationPort
-          + ", prefixRanges=" + prefixRanges
-          + ", applicationProtocols=" + applicationProtocols
-          + '}';
+      return MoreObjects.toStringHelper(this)
+              .add("destinationPort", destinationPort)
+              .add("prefixRanges", prefixRanges)
+              .add("applicationProtocols", applicationProtocols)
+              .add("sourcePrefixRanges", sourcePrefixRanges)
+              .add("sourceType", sourceType)
+              .add("sourcePorts", sourcePorts)
+              .toString();
     }
   }
 
@@ -351,13 +426,15 @@ public final class EnvoyServerProtoData {
     @Nullable
     private final String address;
     private final List<FilterChain> filterChains;
+    private final FilterChain defaultFilterChain;
 
     @VisibleForTesting
     Listener(String name, String address,
-        List<FilterChain> filterChains) {
+        List<FilterChain> filterChains, FilterChain defaultFilterChain) {
       this.name = name;
       this.address = address;
       this.filterChains = Collections.unmodifiableList(filterChains);
+      this.defaultFilterChain = defaultFilterChain;
     }
 
     private static String convertEnvoyAddressToString(Address proto) {
@@ -381,12 +458,33 @@ public final class EnvoyServerProtoData {
       List<FilterChain> filterChains = new ArrayList<>(proto.getFilterChainsCount());
       for (io.envoyproxy.envoy.config.listener.v3.FilterChain filterChain :
           proto.getFilterChainsList()) {
-        filterChains.add(FilterChain.fromEnvoyProtoFilterChain(filterChain));
+        if (isAcceptable(filterChain.getFilterChainMatch())) {
+          filterChains.add(FilterChain.fromEnvoyProtoFilterChain(filterChain));
+        }
       }
       return new Listener(
           proto.getName(),
           convertEnvoyAddressToString(proto.getAddress()),
-          filterChains);
+          filterChains, FilterChain.fromEnvoyProtoFilterChain(proto.getDefaultFilterChain()));
+    }
+
+    // check if a filter is acceptable for gRPC server side processing
+    private static boolean isAcceptable(
+        io.envoyproxy.envoy.config.listener.v3.FilterChainMatch filterChainMatch) {
+      // reject if filer-chain-match
+      // - has server_name
+      // - transport protocol is other than "raw_buffer"
+      // - application_protocols is non-empty (for now accept "managed-mtls")
+      if (!filterChainMatch.getServerNamesList().isEmpty()) {
+        return false;
+      }
+      String transportProtocol = filterChainMatch.getTransportProtocol();
+      if (!transportProtocol.isEmpty() && !"raw_buffer".equals(transportProtocol)) {
+        return false;
+      }
+      List<String> appProtocols = filterChainMatch.getApplicationProtocolsList();
+      return appProtocols.isEmpty()
+          || appProtocols.contains("managed-mtls"); // TODO(sanjaypujare): remove once TD fixed
     }
 
     public String getName() {
@@ -401,6 +499,10 @@ public final class EnvoyServerProtoData {
       return filterChains;
     }
 
+    public FilterChain getDefaultFilterChain() {
+      return defaultFilterChain;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) {
@@ -410,22 +512,30 @@ public final class EnvoyServerProtoData {
         return false;
       }
       Listener listener = (Listener) o;
-      return java.util.Objects.equals(name, listener.name)
-          &&  java.util.Objects.equals(address, listener.address)
-          &&  java.util.Objects.equals(filterChains, listener.filterChains);
+      return Objects.equals(name, listener.name)
+          && Objects.equals(address, listener.address)
+          && Objects.equals(filterChains, listener.filterChains)
+          && Objects.equals(defaultFilterChain, listener.defaultFilterChain);
     }
 
     @Override
     public int hashCode() {
-      return java.util.Objects.hash(name, address, filterChains);
+      return Objects.hash(name, address, filterChains, defaultFilterChain);
     }
 
     @Override
     public String toString() {
       return "Listener{"
-          + "name='" + name + '\''
-          + ", address='" + address + '\''
-          + ", filterChains=" + filterChains
+          + "name='"
+          + name
+          + '\''
+          + ", address='"
+          + address
+          + '\''
+          + ", filterChains="
+          + filterChains
+          + ", defaultFilterChain="
+          + defaultFilterChain
           + '}';
     }
   }

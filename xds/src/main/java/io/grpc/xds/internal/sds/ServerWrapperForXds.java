@@ -92,8 +92,8 @@ public final class ServerWrapperForXds extends Server {
           }
 
           @Override
-          public void onSuccess(EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext) {
-            settableFuture.set(downstreamTlsContext);
+          public void onSuccess() {
+            settableFuture.set(null);
           }
         };
     xdsClientWrapperForServerSds.addServerWatcher(serverWatcher);

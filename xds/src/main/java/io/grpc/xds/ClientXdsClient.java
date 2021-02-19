@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.EnvoyProtoData.TRANSPORT_SOCKET_NAME_TLS;
+import static io.grpc.xds.EnvoyServerProtoData.TRANSPORT_SOCKET_NAME_TLS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.CaseFormat;
