@@ -24,9 +24,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.BindableService;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.testing.GrpcCleanupRule;
@@ -42,7 +45,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -57,17 +59,24 @@ public class XdsServerBuilderTest {
 
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private XdsClient mockXdsClient;
+  private XdsServerBuilder builder;
   private ServerWrapperForXds xdsServer;
   private XdsClient.ListenerWatcher listenerWatcher;
   private int port;
   private XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 
-  private XdsServerBuilder buildServer(
+  private void buildServer(
       XdsServerBuilder.XdsServingStatusListener xdsServingStatusListener,
       boolean injectMockXdsClient)
       throws IOException {
+    buildBuilder(xdsServingStatusListener, injectMockXdsClient);
+    xdsServer = cleanupRule.register(builder.buildServer(xdsClientWrapperForServerSds));
+  }
+
+  private void buildBuilder(XdsServerBuilder.XdsServingStatusListener xdsServingStatusListener,
+      boolean injectMockXdsClient) throws IOException {
     port = XdsServerTestHelper.findFreePort();
-    XdsServerBuilder builder =
+    builder =
         XdsServerBuilder.forPort(
             port, XdsServerCredentials.create(InsecureServerCredentials.create()));
     if (xdsServingStatusListener != null) {
@@ -79,8 +88,6 @@ public class XdsServerBuilderTest {
       listenerWatcher =
           XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, mockXdsClient, port);
     }
-    xdsServer = cleanupRule.register(builder.buildServer(xdsClientWrapperForServerSds));
-    return builder;
   }
 
   private void verifyServer(
@@ -201,6 +208,14 @@ public class XdsServerBuilderTest {
     assertThat(xdsClientWrapperForServerSds.serverWatchers).hasSize(1);
     assertThat(future.isDone()).isFalse();
     reset(mockXdsServingStatusListener);
+    listenerWatcher.onError(Status.NOT_FOUND);
+    argCaptor = ArgumentCaptor.forClass(null);
+    verify(mockXdsServingStatusListener).onNotServing(argCaptor.capture());
+    throwable = argCaptor.getValue();
+    assertThat(throwable).isInstanceOf(StatusException.class);
+    captured = ((StatusException) throwable).getStatus();
+    assertThat(captured.getCode()).isEqualTo(Status.Code.NOT_FOUND);
+    reset(mockXdsServingStatusListener);
     listenerWatcher.onResourceDoesNotExist("not found error");
     argCaptor = ArgumentCaptor.forClass(null);
     verify(mockXdsServingStatusListener).onNotServing(argCaptor.capture());
@@ -208,8 +223,6 @@ public class XdsServerBuilderTest {
     assertThat(throwable).isInstanceOf(StatusException.class);
     captured = ((StatusException) throwable).getStatus();
     assertThat(captured.getCode()).isEqualTo(Status.Code.NOT_FOUND);
-    assertThat(captured.getDescription()).isEqualTo("not found error");
-    assertThat(xdsClientWrapperForServerSds.serverWatchers).hasSize(1);
     assertThat(future.isDone()).isFalse();
     reset(mockXdsServingStatusListener);
     XdsServerTestHelper.generateListenerUpdate(
@@ -273,7 +286,7 @@ public class XdsServerBuilderTest {
     verify(mockXdsServingStatusListener, never()).onNotServing(any(Throwable.class));
     verifyServer(future, mockXdsServingStatusListener, null);
     listenerWatcher.onError(Status.ABORTED);
-    verifyServer(null, mockXdsServingStatusListener, Status.ABORTED);
+    verifyServer(null, mockXdsServingStatusListener, null);
     verifyShutdown();
   }
 
@@ -281,9 +294,28 @@ public class XdsServerBuilderTest {
   public void xdsServer_2ndBuild_expectException() throws IOException {
     XdsServerBuilder.XdsServingStatusListener mockXdsServingStatusListener =
         mock(XdsServerBuilder.XdsServingStatusListener.class);
-    XdsServerBuilder builder = buildServer(mockXdsServingStatusListener, true);
+    buildServer(mockXdsServingStatusListener, true);
     try {
       builder.build();
+      fail("exception expected");
+    } catch (IllegalStateException expected) {
+      assertThat(expected).hasMessageThat().contains("Server already built!");
+    }
+  }
+
+  @Test
+  public void xdsServer_2ndSetter_expectException() throws IOException {
+    XdsServerBuilder.XdsServingStatusListener mockXdsServingStatusListener =
+        mock(XdsServerBuilder.XdsServingStatusListener.class);
+    buildBuilder(mockXdsServingStatusListener, true);
+    BindableService mockBindableService = mock(BindableService.class);
+    ServerServiceDefinition serverServiceDefinition = io.grpc.ServerServiceDefinition
+        .builder("mock").build();
+    when(mockBindableService.bindService()).thenReturn(serverServiceDefinition);
+    builder.addService(mockBindableService);
+    xdsServer = cleanupRule.register(builder.buildServer(xdsClientWrapperForServerSds));
+    try {
+      builder.addService(mock(BindableService.class));
       fail("exception expected");
     } catch (IllegalStateException expected) {
       assertThat(expected).hasMessageThat().contains("Server already built!");

@@ -135,10 +135,10 @@ public class XdsClientWrapperForServerSdsTestMisc {
     EnvoyServerProtoData.DownstreamTlsContext tlsContext =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     verify(mockServerWatcher, never())
-        .onSuccess();
+        .onListenerUpdate();
     DownstreamTlsContext returnedTlsContext = sendListenerUpdate(localAddress, tlsContext);
     assertThat(returnedTlsContext).isSameInstanceAs(tlsContext);
-    verify(mockServerWatcher).onSuccess();
+    verify(mockServerWatcher).onListenerUpdate();
     xdsClientWrapperForServerSds.removeServerWatcher(mockServerWatcher);
   }
 
@@ -155,7 +155,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     XdsClientWrapperForServerSds.ServerWatcher mockServerWatcher =
             mock(XdsClientWrapperForServerSds.ServerWatcher.class);
     xdsClientWrapperForServerSds.addServerWatcher(mockServerWatcher);
-    verify(mockServerWatcher).onSuccess();
+    verify(mockServerWatcher).onListenerUpdate();
   }
 
   @Test
@@ -167,7 +167,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     xdsClientWrapperForServerSds.addServerWatcher(mockServerWatcher);
     registeredWatcher.onError(Status.INTERNAL);
     ArgumentCaptor<Throwable> argCaptor = ArgumentCaptor.forClass(null);
-    verify(mockServerWatcher).onError(argCaptor.capture());
+    verify(mockServerWatcher).onError(argCaptor.capture(), eq(false));
     Throwable throwable = argCaptor.getValue();
     assertThat(throwable).isInstanceOf(StatusException.class);
     Status captured = ((StatusException)throwable).getStatus();
@@ -175,21 +175,20 @@ public class XdsClientWrapperForServerSdsTestMisc {
     reset(mockServerWatcher);
     registeredWatcher.onResourceDoesNotExist("not-found Error");
     ArgumentCaptor<Throwable> argCaptor1 = ArgumentCaptor.forClass(null);
-    verify(mockServerWatcher).onError(argCaptor1.capture());
+    verify(mockServerWatcher).onError(argCaptor1.capture(), eq(true));
     throwable = argCaptor1.getValue();
     assertThat(throwable).isInstanceOf(StatusException.class);
     captured = ((StatusException)throwable).getStatus();
     assertThat(captured.getCode()).isEqualTo(Status.Code.NOT_FOUND);
-    assertThat(captured.getDescription()).isEqualTo("not-found Error");
     InetAddress ipLocalAddress = InetAddress.getByName("10.1.2.3");
     InetSocketAddress localAddress = new InetSocketAddress(ipLocalAddress, PORT);
     EnvoyServerProtoData.DownstreamTlsContext tlsContext =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     verify(mockServerWatcher, never())
-        .onSuccess();
+        .onListenerUpdate();
     DownstreamTlsContext returnedTlsContext = sendListenerUpdate(localAddress, tlsContext);
     assertThat(returnedTlsContext).isSameInstanceAs(tlsContext);
-    verify(mockServerWatcher).onSuccess();
+    verify(mockServerWatcher).onListenerUpdate();
   }
 
   @Test
@@ -205,7 +204,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
               .hasMessageThat()
               .contains("Cannot find bootstrap configuration");
     }
-    verify(mockServerWatcher, never()).onError(any(Throwable.class));
+    verify(mockServerWatcher, never()).onError(any(Throwable.class), eq(false));
   }
 
   private DownstreamTlsContext sendListenerUpdate(

@@ -21,17 +21,31 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
+import io.grpc.BinaryLog;
+import io.grpc.BindableService;
+import io.grpc.CompressorRegistry;
+import io.grpc.DecompressorRegistry;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
+import io.grpc.HandlerRegistry;
 import io.grpc.Internal;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
+import io.grpc.ServerInterceptor;
+import io.grpc.ServerServiceDefinition;
+import io.grpc.ServerStreamTracer;
+import io.grpc.ServerTransportFilter;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 import io.grpc.xds.internal.sds.ServerWrapperForXds;
+import java.io.File;
+import java.io.InputStream;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.Nullable;
 
 /**
  * A version of {@link ServerBuilder} to create xDS managed servers that will use SDS to set up SSL
@@ -94,7 +108,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     InternalNettyServerBuilder.eagAttributes(delegate, Attributes.newBuilder()
         .set(SdsProtocolNegotiators.SERVER_XDS_CLIENT, xdsClient)
         .build());
-    return new ServerWrapperForXds(delegate.build(), xdsClient, xdsServingStatusListener);
+    return new ServerWrapperForXds(delegate, xdsClient, xdsServingStatusListener);
   }
 
   public ServerBuilder<?> transportBuilder() {
@@ -137,5 +151,101 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
       xdsLogger.log(XdsLogger.XdsLogLevel.WARNING, throwable.getMessage());
       notServing = true;
     }
+  }
+
+  @Override
+  public XdsServerBuilder directExecutor() {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.directExecutor();
+  }
+
+  @Override
+  public XdsServerBuilder executor(@Nullable Executor executor) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.executor(executor);
+  }
+
+  @Override
+  public XdsServerBuilder addService(ServerServiceDefinition service) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.addService(service);
+  }
+
+  @Override
+  public XdsServerBuilder addService(BindableService bindableService) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.addService(bindableService);
+  }
+
+  @Override
+  public XdsServerBuilder intercept(ServerInterceptor interceptor) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.intercept(interceptor);
+  }
+
+  @Override
+  public XdsServerBuilder addTransportFilter(ServerTransportFilter filter) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.addTransportFilter(filter);
+  }
+
+  @Override
+  public XdsServerBuilder addStreamTracerFactory(ServerStreamTracer.Factory factory) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.addStreamTracerFactory(factory);
+  }
+
+  @Override
+  public XdsServerBuilder fallbackHandlerRegistry(@Nullable HandlerRegistry fallbackRegistry) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.fallbackHandlerRegistry(fallbackRegistry);
+  }
+
+  @Override
+  public XdsServerBuilder useTransportSecurity(File certChain, File privateKey) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.useTransportSecurity(certChain, privateKey);
+  }
+
+  @Override
+  public XdsServerBuilder useTransportSecurity(InputStream certChain, InputStream privateKey) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.useTransportSecurity(certChain, privateKey);
+  }
+
+  @Override
+  public XdsServerBuilder decompressorRegistry(@Nullable DecompressorRegistry registry) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.decompressorRegistry(registry);
+  }
+
+  @Override
+  public XdsServerBuilder compressorRegistry(@Nullable CompressorRegistry registry) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.compressorRegistry(registry);
+  }
+
+  @Override
+  public XdsServerBuilder handshakeTimeout(long timeout, TimeUnit unit) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.handshakeTimeout(timeout, unit);
+  }
+
+  @Override
+  public XdsServerBuilder maxInboundMessageSize(int bytes) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.maxInboundMessageSize(bytes);
+  }
+
+  @Override
+  public XdsServerBuilder maxInboundMetadataSize(int bytes) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.maxInboundMetadataSize(bytes);
+  }
+
+  @Override
+  public XdsServerBuilder setBinaryLog(BinaryLog binaryLog) {
+    checkState(!isServerBuilt.get(), "Server already built!");
+    return super.setBinaryLog(binaryLog);
   }
 }
