@@ -177,9 +177,10 @@ public final class XdsClientWrapperForServerSds {
       if (localAddress instanceof InetSocketAddress && remoteAddress instanceof InetSocketAddress) {
         InetSocketAddress localInetAddr = (InetSocketAddress) localAddress;
         InetSocketAddress remoteInetAddr = (InetSocketAddress) remoteAddress;
-        if (port == localInetAddr.getPort()) {
-          return getDownstreamTlsContext(localInetAddr, remoteInetAddr);
-        }
+        checkState(
+            port == localInetAddr.getPort(),
+            "Channel localAddress port does not match requested listener port");
+        return getDownstreamTlsContext(localInetAddr, remoteInetAddr);
       }
     }
     return null;

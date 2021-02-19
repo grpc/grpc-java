@@ -85,12 +85,19 @@ public class XdsClientWrapperForServerSdsTestMisc {
   }
 
   @Test
-  public void nonMatchingPort_expectNull() throws UnknownHostException {
+  public void nonMatchingPort_expectException() throws UnknownHostException {
     registeredWatcher =
         XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, xdsClient, PORT);
-    InetAddress ipLocalAddress = InetAddress.getByName("10.1.2.3");
-    InetSocketAddress localAddress = new InetSocketAddress(ipLocalAddress, PORT + 1);
-    assertThat(sendListenerUpdate(localAddress, null)).isNull();
+    try {
+      InetAddress ipLocalAddress = InetAddress.getByName("10.1.2.3");
+      InetSocketAddress localAddress = new InetSocketAddress(ipLocalAddress, PORT + 1);
+      DownstreamTlsContext unused = sendListenerUpdate(localAddress, null);
+      fail("exception expected");
+    } catch (IllegalStateException expected) {
+      assertThat(expected)
+          .hasMessageThat()
+          .isEqualTo("Channel localAddress port does not match requested listener port");
+    }
   }
 
   @Test

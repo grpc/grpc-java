@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.envoyproxy.envoy.config.core.v3.Address;
@@ -330,20 +331,14 @@ public final class EnvoyServerProtoData {
 
     @Override
     public String toString() {
-      return "FilterChainMatch{"
-          + "destinationPort="
-          + destinationPort
-          + ", prefixRanges="
-          + prefixRanges
-          + ", applicationProtocols="
-          + applicationProtocols
-          + ", sourcePrefixRanges="
-          + sourcePrefixRanges
-          + ", sourceType="
-          + sourceType
-          + ", sourcePorts="
-          + sourcePorts
-          + '}';
+      return MoreObjects.toStringHelper(this)
+              .add("destinationPort", destinationPort)
+              .add("prefixRanges", prefixRanges)
+              .add("applicationProtocols", applicationProtocols)
+              .add("sourcePrefixRanges", sourcePrefixRanges)
+              .add("sourceType", sourceType)
+              .add("sourcePorts", sourcePorts)
+              .toString();
     }
   }
 
