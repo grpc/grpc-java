@@ -74,12 +74,20 @@ dependencies {
 
 sourceSets {
     main {
+        java {
+            srcDir "${projectDir}/third_party/zero-allocation-hashing/main/java"
+        }
         proto {
             srcDir 'third_party/envoy/src/main/proto'
             srcDir 'third_party/protoc-gen-validate/src/main/proto'
             srcDir 'third_party/udpa/src/main/proto'
             srcDir 'third_party/googleapis/src/main/proto'
             srcDir 'third_party/istio/src/main/proto'
+        }
+    }
+    test {
+        java {
+            srcDir "${projectDir}/third_party/zero-allocation-hashing/test/java"
         }
     }
 }
