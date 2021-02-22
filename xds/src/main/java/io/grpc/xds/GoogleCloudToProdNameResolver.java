@@ -207,21 +207,35 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   }
 
   private String queryZoneMetadata(String url) throws IOException {
-    HttpURLConnection con = httpConnectionProvider.createConnection(url);
-    if (con.getResponseCode() != 200) {
-      return "";
-    }
+    HttpURLConnection con = null;
     String respBody;
-    try (Reader reader = new InputStreamReader(con.getInputStream(), Charsets.UTF_8)) {
-      respBody = CharStreams.toString(reader);
+    try {
+      con = httpConnectionProvider.createConnection(url);
+      if (con.getResponseCode() != 200) {
+        return "";
+      }
+      try (Reader reader = new InputStreamReader(con.getInputStream(), Charsets.UTF_8)) {
+        respBody = CharStreams.toString(reader);
+      }
+    } finally {
+      if (con != null) {
+        con.disconnect();
+      }
     }
     int index = respBody.lastIndexOf('/');
     return index == -1 ? "" : respBody.substring(index + 1);
   }
 
   private boolean queryIpv6SupportMetadata(String url) throws IOException {
-    HttpURLConnection con = httpConnectionProvider.createConnection(url);
-    return con.getResponseCode() == 200;
+    HttpURLConnection con = null;
+    try {
+      con = httpConnectionProvider.createConnection(url);
+      return con.getResponseCode() == 200;
+    } finally {
+      if (con != null) {
+        con.disconnect();
+      }
+    }
   }
 
   @VisibleForTesting
