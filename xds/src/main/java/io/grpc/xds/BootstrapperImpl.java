@@ -119,6 +119,27 @@ public class BootstrapperImpl extends Bootstrapper {
     return bootstrap(rawBootstrap);
   }
 
+  @VisibleForTesting
+  void setFileReader(FileReader reader) {
+    this.reader = reader;
+  }
+
+  /**
+   * Reads the content of the file with the given path in the file system.
+   */
+  interface FileReader {
+    String readFile(String path) throws IOException;
+  }
+
+  private enum LocalFileReader implements FileReader {
+    INSTANCE;
+
+    @Override
+    public String readFile(String path) throws IOException {
+      return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
+    }
+  }
+
   @Override
   BootstrapInfo bootstrap(Map<String, ?> rawData) throws XdsInitializationException {
     List<ServerInfo> servers = new ArrayList<>();
@@ -219,6 +240,14 @@ public class BootstrapperImpl extends Bootstrapper {
     return new BootstrapInfo(servers, nodeBuilder.build(), certProviders, grpcServerResourceId);
   }
 
+  private static <T> T checkForNull(T value, String fieldName) throws XdsInitializationException {
+    if (value == null) {
+      throw new XdsInitializationException(
+          "Invalid bootstrap: '" + fieldName + "' does not exist.");
+    }
+    return value;
+  }
+
   @Nullable
   private static ChannelCredentials parseChannelCredentials(List<Map<String, ?>> jsonList,
       String serverUri) throws XdsInitializationException {
@@ -239,34 +268,5 @@ public class BootstrapperImpl extends Bootstrapper {
       }
     }
     return null;
-  }
-
-  private static <T> T checkForNull(T value, String fieldName) throws XdsInitializationException {
-    if (value == null) {
-      throw new XdsInitializationException(
-          "Invalid bootstrap: '" + fieldName + "' does not exist.");
-    }
-    return value;
-  }
-
-  @VisibleForTesting
-  void setFileReader(FileReader reader) {
-    this.reader = reader;
-  }
-
-  /**
-   * Reads the content of the file with the given path in the file system.
-   */
-  interface FileReader {
-    String readFile(String path) throws IOException;
-  }
-
-  private enum LocalFileReader implements FileReader {
-    INSTANCE;
-
-    @Override
-    public String readFile(String path) throws IOException {
-      return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
-    }
   }
 }
