@@ -82,6 +82,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
         NameResolverRegistry.getDefaultRegistry().asFactory());
   }
 
+  @VisibleForTesting
   GoogleCloudToProdNameResolver(URI targetUri, Args args, Resource<Executor> executorResource,
       XdsClientPoolFactory xdsClientPoolFactory, NameResolver.Factory nameResolverFactory) {
     this.executorResource = checkNotNull(executorResource, "executorResource");
@@ -121,7 +122,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
       return;
     }
     resolving = true;
-    if (!schemeOverride.equals("xds")) {
+    if (schemeOverride.equals("dns")) {
       delegate.start(listener);
       succeeded = true;
       resolving = false;
@@ -184,12 +185,10 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
 
   @Override
   public void refresh() {
-    if (!resolving && delegate != null) {
-      if (succeeded) {
-        delegate.refresh();
-      } else {
-        resolve();
-      }
+    if (succeeded) {
+      delegate.refresh();
+    } else if (!resolving) {
+      resolve();
     }
   }
 
