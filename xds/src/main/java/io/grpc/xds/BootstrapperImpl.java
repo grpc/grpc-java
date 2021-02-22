@@ -119,27 +119,6 @@ public class BootstrapperImpl extends Bootstrapper {
     return bootstrap(rawBootstrap);
   }
 
-  @VisibleForTesting
-  void setFileReader(FileReader reader) {
-    this.reader = reader;
-  }
-
-  /**
-   * Reads the content of the file with the given path in the file system.
-   */
-  interface FileReader {
-    String readFile(String path) throws IOException;
-  }
-
-  private enum LocalFileReader implements FileReader {
-    INSTANCE;
-
-    @Override
-    public String readFile(String path) throws IOException {
-      return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
-    }
-  }
-
   @Override
   BootstrapInfo bootstrap(Map<String, ?> rawData) throws XdsInitializationException {
     List<ServerInfo> servers = new ArrayList<>();
@@ -238,6 +217,27 @@ public class BootstrapperImpl extends Bootstrapper {
     }
     String grpcServerResourceId = JsonUtil.getString(rawData, "grpc_server_resource_name_id");
     return new BootstrapInfo(servers, nodeBuilder.build(), certProviders, grpcServerResourceId);
+  }
+
+  @VisibleForTesting
+  void setFileReader(FileReader reader) {
+    this.reader = reader;
+  }
+
+  /**
+   * Reads the content of the file with the given path in the file system.
+   */
+  interface FileReader {
+    String readFile(String path) throws IOException;
+  }
+
+  private enum LocalFileReader implements FileReader {
+    INSTANCE;
+
+    @Override
+    public String readFile(String path) throws IOException {
+      return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
+    }
   }
 
   private static <T> T checkForNull(T value, String fieldName) throws XdsInitializationException {
