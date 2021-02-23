@@ -93,7 +93,7 @@ public final class AltsChannelCredentials {
     }
 
     InternalProtocolNegotiator.ClientFactory buildProtocolNegotiatorFactory() {
-      if (!CheckGcpEnvironment.isOnGcp()) {
+      if (!InternalCheckGcpEnvironment.isOnGcp()) {
         if (enableUntrustedAlts) {
           logger.log(
               Level.WARNING,

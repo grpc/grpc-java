@@ -43,7 +43,7 @@ import javax.annotation.Nullable;
  * A {@link Bootstrapper} implementation that reads xDS configurations from local file system.
  */
 @Internal
-public class BootstrapperImpl implements Bootstrapper {
+public class BootstrapperImpl extends Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
   @VisibleForTesting
@@ -80,70 +80,49 @@ public class BootstrapperImpl implements Bootstrapper {
    *   <li>Java System Property value of "io.grpc.xds.bootstrap_value"</li>
    * </ol>
    */
+  @SuppressWarnings("unchecked")
   @Override
   public BootstrapInfo bootstrap() throws XdsInitializationException {
     String filePath =
         bootstrapPathFromEnvVar != null ? bootstrapPathFromEnvVar : bootstrapPathFromSysProp;
-    String rawBootstrap;
+    String fileContent;
     if (filePath != null) {
       logger.log(XdsLogLevel.INFO, "Reading bootstrap file from {0}", filePath);
       try {
-        rawBootstrap = reader.readFile(filePath);
+        fileContent = reader.readFile(filePath);
       } catch (IOException e) {
         throw new XdsInitializationException("Fail to read bootstrap file", e);
       }
     } else {
-      rawBootstrap = bootstrapConfigFromEnvVar != null
+      fileContent = bootstrapConfigFromEnvVar != null
           ? bootstrapConfigFromEnvVar : bootstrapConfigFromSysProp;
     }
-    if (rawBootstrap != null) {
-      return parseConfig(rawBootstrap);
+    if (fileContent == null) {
+      throw new XdsInitializationException(
+          "Cannot find bootstrap configuration\n"
+              + "Environment variables searched:\n"
+              + "- " + BOOTSTRAP_PATH_SYS_ENV_VAR + "\n"
+              + "- " + BOOTSTRAP_CONFIG_SYS_ENV_VAR + "\n\n"
+              + "Java System Properties searched:\n"
+              + "- " + BOOTSTRAP_PATH_SYS_PROPERTY + "\n"
+              + "- " + BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR + "\n\n");
     }
-    throw new XdsInitializationException(
-        "Cannot find bootstrap configuration\n"
-            + "Environment variables searched:\n"
-            + "- " + BOOTSTRAP_PATH_SYS_ENV_VAR + "\n"
-            + "- " + BOOTSTRAP_CONFIG_SYS_ENV_VAR + "\n\n"
-            + "Java System Properties searched:\n"
-            + "- " + BOOTSTRAP_PATH_SYS_PROPERTY + "\n"
-            + "- " + BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR + "\n\n");
-  }
 
-  @VisibleForTesting
-  void setFileReader(FileReader reader) {
-    this.reader = reader;
-  }
-
-  /**
-   * Reads the content of the file with the given path in the file system.
-   */
-  interface FileReader {
-    String readFile(String path) throws IOException;
-  }
-
-  private enum LocalFileReader implements FileReader {
-    INSTANCE;
-
-    @Override
-    public String readFile(String path) throws IOException {
-      return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
-    }
-  }
-
-  /** Parses a raw string into {@link BootstrapInfo}. */
-  @SuppressWarnings("unchecked")
-  private BootstrapInfo parseConfig(String rawData) throws XdsInitializationException {
-    logger.log(XdsLogLevel.INFO, "Reading bootstrap information");
+    logger.log(XdsLogLevel.INFO, "Reading bootstrap from " + filePath);
     Map<String, ?> rawBootstrap;
     try {
-      rawBootstrap = (Map<String, ?>) JsonParser.parse(rawData);
+      rawBootstrap = (Map<String, ?>) JsonParser.parse(fileContent);
     } catch (IOException e) {
       throw new XdsInitializationException("Failed to parse JSON", e);
     }
     logger.log(XdsLogLevel.DEBUG, "Bootstrap configuration:\n{0}", rawBootstrap);
+    return bootstrap(rawBootstrap);
+  }
 
+  @Override
+  BootstrapInfo bootstrap(Map<String, ?> rawData) throws XdsInitializationException {
     List<ServerInfo> servers = new ArrayList<>();
-    List<?> rawServerConfigs = JsonUtil.getList(rawBootstrap, "xds_servers");
+    List<?> rawServerConfigs = JsonUtil.getList(rawData, "xds_servers");
     if (rawServerConfigs == null) {
       throw new XdsInitializationException("Invalid bootstrap: 'xds_servers' does not exist.");
     }
@@ -179,7 +158,7 @@ public class BootstrapperImpl implements Bootstrapper {
     }
 
     Node.Builder nodeBuilder = Node.newBuilder();
-    Map<String, ?> rawNode = JsonUtil.getObject(rawBootstrap, "node");
+    Map<String, ?> rawNode = JsonUtil.getObject(rawData, "node");
     if (rawNode != null) {
       String id = JsonUtil.getString(rawNode, "id");
       if (id != null) {
@@ -222,7 +201,7 @@ public class BootstrapperImpl implements Bootstrapper {
     nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
     nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
 
-    Map<String, ?> certProvidersBlob = JsonUtil.getObject(rawBootstrap, "certificate_providers");
+    Map<String, ?> certProvidersBlob = JsonUtil.getObject(rawData, "certificate_providers");
     Map<String, CertificateProviderInfo> certProviders = null;
     if (certProvidersBlob != null) {
       certProviders = new HashMap<>(certProvidersBlob.size());
@@ -236,11 +215,32 @@ public class BootstrapperImpl implements Bootstrapper {
         certProviders.put(name, certificateProviderInfo);
       }
     }
-    String grpcServerResourceId = JsonUtil.getString(rawBootstrap, "grpc_server_resource_name_id");
+    String grpcServerResourceId = JsonUtil.getString(rawData, "grpc_server_resource_name_id");
     return new BootstrapInfo(servers, nodeBuilder.build(), certProviders, grpcServerResourceId);
   }
 
-  static <T> T checkForNull(T value, String fieldName) throws XdsInitializationException {
+  @VisibleForTesting
+  void setFileReader(FileReader reader) {
+    this.reader = reader;
+  }
+
+  /**
+   * Reads the content of the file with the given path in the file system.
+   */
+  interface FileReader {
+    String readFile(String path) throws IOException;
+  }
+
+  private enum LocalFileReader implements FileReader {
+    INSTANCE;
+
+    @Override
+    public String readFile(String path) throws IOException {
+      return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
+    }
+  }
+
+  private static <T> T checkForNull(T value, String fieldName) throws XdsInitializationException {
     if (value == null) {
       throw new XdsInitializationException(
           "Invalid bootstrap: '" + fieldName + "' does not exist.");

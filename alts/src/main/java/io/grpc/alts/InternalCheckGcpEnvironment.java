@@ -19,6 +19,7 @@ package io.grpc.alts;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Internal;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -28,18 +29,27 @@ import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** Class for checking if the system is running on Google Cloud Platform (GCP). */
-final class CheckGcpEnvironment {
+/**
+ * Class for checking if the system is running on Google Cloud Platform (GCP).
+ * This is intended for usage internal to the gRPC team. If you *really* think you need
+ * to use this, contact the gRPC team first.
+ */
+@Internal
+public final class InternalCheckGcpEnvironment {
 
-  private static final Logger logger = Logger.getLogger(CheckGcpEnvironment.class.getName());
+  private static final Logger logger =
+      Logger.getLogger(InternalCheckGcpEnvironment.class.getName());
   private static final String DMI_PRODUCT_NAME = "/sys/class/dmi/id/product_name";
   private static final String WINDOWS_COMMAND = "powershell.exe";
   private static Boolean cachedResult = null;
 
   // Construct me not!
-  private CheckGcpEnvironment() {}
+  private InternalCheckGcpEnvironment() {}
 
-  static synchronized boolean isOnGcp() {
+  /**
+   * Returns {@code true} if currently running on Google Cloud Platform (GCP).
+   */
+  public static synchronized boolean isOnGcp() {
     if (cachedResult == null) {
       cachedResult = isRunningOnGcp();
     }

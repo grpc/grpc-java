@@ -31,19 +31,26 @@ import javax.annotation.Nullable;
  * Loads configuration information to bootstrap gRPC's integration of xDS protocol.
  */
 @Internal
-public interface Bootstrapper {
+public abstract class Bootstrapper {
 
   /**
-   * Returns configurations from bootstrap.
+   * Returns system-loaded bootstrap configuration.
    */
-  BootstrapInfo bootstrap() throws XdsInitializationException;
+  public abstract BootstrapInfo bootstrap() throws XdsInitializationException;
+
+  /**
+   * Returns bootstrap configuration given by the raw data in JSON format.
+   */
+  BootstrapInfo bootstrap(Map<String, ?> rawData) throws XdsInitializationException {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Data class containing xDS server information, such as server URI and channel credentials
    * to be used for communication.
    */
   @Internal
-  class ServerInfo {
+  static class ServerInfo {
     private final String target;
     private final ChannelCredentials channelCredentials;
     private final boolean useProtocolV3;
@@ -73,7 +80,7 @@ public interface Bootstrapper {
    * Map that represents the config for that plugin.
    */
   @Internal
-  class CertificateProviderInfo {
+  public static class CertificateProviderInfo {
     private final String pluginName;
     private final Map<String, ?> config;
 
@@ -95,7 +102,7 @@ public interface Bootstrapper {
    * Data class containing the results of reading bootstrap.
    */
   @Internal
-  class BootstrapInfo {
+  public static class BootstrapInfo {
     private List<ServerInfo> servers;
     private final Node node;
     @Nullable private final Map<String, CertificateProviderInfo> certProviders;

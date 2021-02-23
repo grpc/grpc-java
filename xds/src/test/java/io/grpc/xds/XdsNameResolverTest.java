@@ -160,6 +160,11 @@ public class XdsNameResolverTest {
   public void resolving_failToCreateXdsClientPool() {
     XdsClientPoolFactory xdsClientPoolFactory = new XdsClientPoolFactory() {
       @Override
+      public void setBootstrapOverride(Map<String, ?> bootstrap) {
+        throw new UnsupportedOperationException("Should not be called");
+      }
+
+      @Override
       public ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException {
         throw new XdsInitializationException("Fail to read bootstrap file");
       }
@@ -1393,6 +1398,11 @@ public class XdsNameResolverTest {
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
+
+    @Override
+    public void setBootstrapOverride(Map<String, ?> bootstrap) {
+      throw new UnsupportedOperationException("Should not be called");
+    }
 
     @Override
     public ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException {
