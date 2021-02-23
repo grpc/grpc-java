@@ -186,7 +186,7 @@ public class ServerXdsClientNewServerApiTest {
     xdsClient =
         new ServerXdsClient(channel, true, NODE,
             fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier(), true, INSTANCE_IP, "test/value");
+            fakeClock.getStopwatchSupplier(), INSTANCE_IP, "test/value");
     // Only the connection to management server is established, no RPC request is sent until at
     // least one watcher is registered.
     assertThat(responseObservers).isEmpty();

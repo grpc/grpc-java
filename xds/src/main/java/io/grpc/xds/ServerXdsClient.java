@@ -70,11 +70,10 @@ final class ServerXdsClient extends AbstractXdsClient {
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier,
-      boolean useNewApiForListenerQuery,
       String instanceIp,
       String grpcServerResourceId) {
     super(channel, useProtocolV3, node, timeService, backoffPolicyProvider, stopwatchSupplier);
-    this.useNewApiForListenerQuery = useProtocolV3 && useNewApiForListenerQuery;
+    this.useNewApiForListenerQuery = useProtocolV3;
     this.instanceIp = (instanceIp != null ? instanceIp : "0.0.0.0");
     this.grpcServerResourceId = grpcServerResourceId;
   }

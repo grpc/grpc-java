@@ -70,10 +70,6 @@ public final class XdsClientWrapperForServerSds {
   private static final TimeServiceResource timeServiceResource =
       new TimeServiceResource("GrpcServerXdsClient");
 
-  @VisibleForTesting
-  static boolean experimentalNewServerApiEnvVar = Boolean.parseBoolean(
-          System.getenv("GRPC_XDS_EXPERIMENTAL_NEW_SERVER_API"));
-
   private EnvoyServerProtoData.Listener curListener;
   @SuppressWarnings("unused")
   @Nullable private XdsClient xdsClient;
@@ -115,7 +111,7 @@ public final class XdsClientWrapperForServerSds {
         Grpc.newChannelBuilder(serverInfo.getTarget(), serverInfo.getChannelCredentials())
             .keepAliveTime(5, TimeUnit.MINUTES).build();
     timeService = SharedResourceHolder.get(timeServiceResource);
-    newServerApi = serverInfo.isUseProtocolV3() && experimentalNewServerApiEnvVar;
+    newServerApi = serverInfo.isUseProtocolV3();
     String grpcServerResourceId = bootstrapInfo.getGrpcServerResourceId();
     if (newServerApi && grpcServerResourceId == null) {
       throw new IOException("missing grpc_server_resource_name_id value in xds bootstrap");
@@ -128,7 +124,6 @@ public final class XdsClientWrapperForServerSds {
             timeService,
             new ExponentialBackoffPolicy.Provider(),
             GrpcUtil.STOPWATCH_SUPPLIER,
-            experimentalNewServerApiEnvVar,
             "0.0.0.0",
             grpcServerResourceId);
     start(xdsClientImpl);
