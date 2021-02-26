@@ -16,7 +16,7 @@
 # Update VERSION then in this directory run ./import.sh
 
 set -e
-BRANCH=master
+BRANCH=main
 # import VERSION from one of the google internal CLs
 VERSION=5459f2c994033b0afed7e4a70ac7e90c90c1ffee
 GIT_REPO="https://github.com/cncf/udpa.git"
@@ -32,6 +32,7 @@ udpa/annotations/status.proto
 udpa/annotations/versioning.proto
 udpa/data/orca/v1/orca_load_report.proto
 udpa/service/orca/v1/orca.proto
+udpa/type/v1/typed_struct.proto
 xds/core/v3/authority.proto
 xds/core/v3/collection_entry.proto
 xds/core/v3/context_params.proto
