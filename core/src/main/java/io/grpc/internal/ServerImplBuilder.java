@@ -132,15 +132,6 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   }
 
   @Override
-  public ServerImplBuilder addServices(List<BindableService> bindableServices) {
-    checkNotNull(bindableServices, "bindableServices");
-    for (BindableService bindableService : bindableServices) {
-      addService(bindableService);
-    }
-    return this;
-  }
-
-  @Override
   public ServerImplBuilder addTransportFilter(ServerTransportFilter filter) {
     transportFilters.add(checkNotNull(filter, "filter"));
     return this;

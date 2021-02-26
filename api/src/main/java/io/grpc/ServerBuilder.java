@@ -16,6 +16,8 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.Preconditions;
 import java.io.File;
 import java.io.InputStream;
@@ -93,12 +95,18 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   /**
    * Adds a list of service implementations to the handler registry together.
    *
-   * @param bindableServices the list of BindableService objects
+   * @param services the list of ServerServiceDefinition objects
    * @return this
    * @since 1.37.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7925")
-  public abstract T addServices(List<BindableService> bindableServices);
+  public T addServices(List<ServerServiceDefinition> services) {
+    checkNotNull(services, "services");
+    for (ServerServiceDefinition service : services) {
+      addService(service);
+    }
+    return thisT();
+  }
 
   /**
    * Adds a {@link ServerInterceptor} that is run for all services on the server.  Interceptors
