@@ -17,12 +17,14 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ChannelLogger;
+import io.grpc.InternalServiceProviders;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ServiceConfigParser;
-import io.grpc.NameResolverRegistry;
+import io.grpc.NameResolverProvider;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
@@ -54,12 +56,24 @@ public class GoogleCloudToProdNameResolverProviderTest {
       .setChannelLogger(mock(ChannelLogger.class))
       .build();
 
-  private final NameResolverRegistry nsRegistry = NameResolverRegistry.getDefaultRegistry();
+  private GoogleCloudToProdNameResolverProvider provider =
+      new GoogleCloudToProdNameResolverProvider();
 
   @Test
   public void provided() {
-    NameResolver resolver = nsRegistry.asFactory().newNameResolver(
-        URI.create("google-c2p:///foo.googleapis.com"), args);
-    assertThat(resolver).isInstanceOf(GoogleCloudToProdNameResolver.class);
+    for (NameResolverProvider current
+        : InternalServiceProviders.getCandidatesViaServiceLoader(
+        NameResolverProvider.class, getClass().getClassLoader())) {
+      if (current instanceof GoogleCloudToProdNameResolverProvider) {
+        return;
+      }
+    }
+    fail("GoogleCloudToProdNameResolverProvider not registered");
+  }
+
+  @Test
+  public void newNameResolver() {
+    assertThat(provider.newNameResolver(URI.create("google-c2p:///foo.googleapis.com"), args))
+        .isInstanceOf(GoogleCloudToProdNameResolver.class);
   }
 }

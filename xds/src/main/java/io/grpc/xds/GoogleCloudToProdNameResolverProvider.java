@@ -29,6 +29,8 @@ import java.net.URI;
 @Internal
 public final class GoogleCloudToProdNameResolverProvider extends NameResolverProvider {
 
+  private static final boolean enableC2PResolver =
+      Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_GOOGLE_C2P_RESOLVER"));
   private static final String SCHEME = "google-c2p";
 
   @Override
@@ -48,7 +50,10 @@ public final class GoogleCloudToProdNameResolverProvider extends NameResolverPro
 
   @Override
   protected boolean isAvailable() {
-    return true;
+    if (enableC2PResolver) {
+      return true;
+    }
+    return false;
   }
 
   @Override
