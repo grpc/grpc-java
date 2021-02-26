@@ -151,7 +151,7 @@ public class ServerWrapperForXdsTest {
         throw settableFutureForThrow.get();
       }
     }).when(mockServer1).start();
-    doThrow(new IOException(new BindException())).when(mockServer2).start();
+    doThrow(new BindException()).when(mockServer2).start();
     doReturn(mockServer3).when(mockServer3).start();
     when(mockDelegateBuilder.build()).thenReturn(mockServer1, mockServer2, mockServer3);
     new Thread(new Runnable() {
@@ -173,10 +173,11 @@ public class ServerWrapperForXdsTest {
     inOrder.verify(mockXdsServingStatusListener, times(2)).onNotServing(argCaptor.capture());
     List<Throwable> throwableList = argCaptor.getAllValues();
     assertThat(throwableList.size()).isEqualTo(2);
-    for (Throwable throwable : throwableList) {
-      assertThat(throwable).isInstanceOf(IOException.class);
-      assertThat(throwable.getCause()).isInstanceOf(BindException.class);
-    }
+    Throwable throwable = throwableList.remove(0);
+    assertThat(throwable).isInstanceOf(IOException.class);
+    assertThat(throwable.getCause()).isInstanceOf(BindException.class);
+    throwable = throwableList.remove(0);
+    assertThat(throwable).isInstanceOf(BindException.class);
     inOrder.verify(mockXdsServingStatusListener).onServing();
     assertThat(serverWrapperForXds.getCurrentServingState())
         .isEqualTo(ServerWrapperForXds.ServingState.STARTED);

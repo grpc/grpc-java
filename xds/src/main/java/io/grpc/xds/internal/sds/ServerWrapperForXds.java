@@ -25,7 +25,8 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
-import io.grpc.StatusException;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.XdsServerBuilder;
@@ -35,7 +36,6 @@ import java.net.SocketAddress;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -188,14 +188,14 @@ public final class ServerWrapperForXds extends Server {
 
   private final class StartRetryTask implements Runnable {
 
-    ScheduledExecutorService scheduledExecutorService;
+    ScheduledExecutorService timerService;
     ScheduledFuture<?> future;
 
     private void createTask(long delay) {
-      if (scheduledExecutorService == null) {
-        scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
+      if (timerService == null) {
+        timerService = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
       }
-      future = scheduledExecutorService.schedule(this, delay, timeUnitForDelayForRetry);
+      future = timerService.schedule(this, delay, timeUnitForDelayForRetry);
     }
 
     private void rebuildAndRestartServer() {
@@ -226,9 +226,8 @@ public final class ServerWrapperForXds extends Server {
     }
 
     private void cleanUpStartRetryTask() {
-      if (scheduledExecutorService != null) {
-        scheduledExecutorService.shutdown();
-        scheduledExecutorService = null;
+      if (timerService != null) {
+        timerService = SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timerService);
       }
       startRetryTask = null;
     }
@@ -252,6 +251,9 @@ public final class ServerWrapperForXds extends Server {
 
   // if the IOException indicates we can rebuild delegate and retry start...
   private static boolean isRetriableErrorInDelegateStart(IOException ioe) {
+    if (ioe instanceof BindException) {
+      return true;
+    }
     Throwable cause = ioe.getCause();
     return cause instanceof BindException;
   }
@@ -261,22 +263,18 @@ public final class ServerWrapperForXds extends Server {
     if (throwable instanceof XdsInitializationException) {
       return true;
     }
-    if (throwable instanceof StatusException) {
-      StatusException statusException = (StatusException) throwable;
-      Status.Code code = statusException.getStatus().getCode();
-      return EnumSet.of(
-              Status.Code.INTERNAL,
-              Status.Code.INVALID_ARGUMENT,
-              Status.Code.FAILED_PRECONDITION,
-              Status.Code.PERMISSION_DENIED,
-              Status.Code.UNAUTHENTICATED)
-          .contains(code);
-    }
-    return false;
+    Status.Code code = Status.fromThrowable(throwable).getCode();
+    return EnumSet.of(
+        Status.Code.INTERNAL,
+        Status.Code.INVALID_ARGUMENT,
+        Status.Code.FAILED_PRECONDITION,
+        Status.Code.PERMISSION_DENIED,
+        Status.Code.UNAUTHENTICATED)
+        .contains(code);
   }
 
   private void startRetryTaskCleanup() {
-    if (currentServingState == ServingState.ENTER_SERVING && startRetryTask != null) {
+    if (startRetryTask != null) {
       startRetryTask.shutdownNow();
       currentServingState = ServingState.SHUTDOWN;
     }
