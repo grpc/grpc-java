@@ -367,6 +367,8 @@ final class XdsNameResolver extends NameResolver {
           asciiHeaders.put(headerName, Joiner.on(",").join(values));
         }
       }
+      // Special hack for exposing headers: "content-type".
+      asciiHeaders.put("content-type", "application/grpc");
       String cluster = null;
       Route selectedRoute = null;
       HttpFault selectedFaultConfig;
@@ -818,16 +820,7 @@ final class XdsNameResolver extends NameResolver {
   private static boolean matchHeaders(
       List<HeaderMatcher> headerMatchers, Map<String, String> headers) {
     for (HeaderMatcher headerMatcher : headerMatchers) {
-      String value = headers.get(headerMatcher.name());
-      // Special cases for hiding headers: "grpc-previous-rpc-attempts".
-      if (headerMatcher.name().equals("grpc-previous-rpc-attempts")) {
-        value = null;
-      }
-      // Special case for exposing headers: "content-type".
-      if (headerMatcher.name().equals("content-type")) {
-        value = "application/grpc";
-      }
-      if (!matchHeader(headerMatcher, value)) {
+      if (!matchHeader(headerMatcher, headers.get(headerMatcher.name()))) {
         return false;
       }
     }
