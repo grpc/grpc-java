@@ -97,6 +97,11 @@ public class WeightedRandomPickerTest {
       assertThat(nextInt).isLessThan(bound);
       return nextInt;
     }
+
+    @Override
+    public long nextLong() {
+      throw new UnsupportedOperationException("Should not be called");
+    }
   }
 
   private final FakeRandom fakeRandom = new FakeRandom();
