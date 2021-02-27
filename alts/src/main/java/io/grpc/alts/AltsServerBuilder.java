@@ -30,6 +30,7 @@ import io.grpc.ServerTransportFilter;
 import io.grpc.netty.NettyServerBuilder;
 import java.io.File;
 import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
@@ -114,6 +115,13 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
   @Override
   public AltsServerBuilder addService(BindableService bindableService) {
     delegate.addService(bindableService);
+    return this;
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public AltsServerBuilder addServices(List<ServerServiceDefinition> services) {
+    delegate.addServices(services);
     return this;
   }
 
