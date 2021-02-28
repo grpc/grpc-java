@@ -40,6 +40,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
@@ -147,23 +148,26 @@ public final class ServerWrapperForXds extends Server {
         new XdsClientWrapperForServerSds.ServerWatcher() {
           @Override
           public void onError(Throwable throwable, boolean isAbsent) {
-            if (currentServingState == ServingState.STARTING) {
-              // during start
-              if (isPermanentErrorFromXds(throwable)) {
-                currentServingState = ServingState.SHUTDOWN;
-                future.set(throwable);
+            synchronized (ServerWrapperForXds.this) {
+              if (currentServingState == ServingState.SHUTDOWN) {
                 return;
-              }
-              xdsServingStatusListener.onNotServing(throwable);
-            } else {
-              // after start
-              if (isAbsent) {
+              } else if (currentServingState == ServingState.STARTING) {
+                // during start
+                if (isPermanentErrorFromXds(throwable)) {
+                  currentServingState = ServingState.SHUTDOWN;
+                  future.set(throwable);
+                  return;
+                }
                 xdsServingStatusListener.onNotServing(throwable);
-                if (currentServingState == ServingState.STARTED) {
-                  // shutdown the server
-                  delegate.shutdown();  // let existing calls finish on delegate
-                  currentServingState = ServingState.NOT_SERVING;
-                  delegate = null;
+              } else {
+                // is one of STARTED, NOT_SERVING or ENTER_SERVING
+                if (isAbsent) {
+                  xdsServingStatusListener.onNotServing(throwable);
+                  if (currentServingState == ServingState.STARTED) {
+                    // shutdown the server
+                    delegate.shutdown(); // let existing calls finish on delegate
+                    currentServingState = ServingState.NOT_SERVING;
+                  }
                 }
               }
             }
@@ -171,14 +175,18 @@ public final class ServerWrapperForXds extends Server {
 
           @Override
           public void onListenerUpdate() {
-            if (currentServingState == ServingState.STARTING) {
-              // during start()
-              future.set(null);
-            } else if (currentServingState == ServingState.NOT_SERVING) {
-              // coming out of NOT_SERVING
-              currentServingState = ServingState.ENTER_SERVING;
-              startRetryTask = new StartRetryTask();
-              startRetryTask.createTask(0L);
+            synchronized (ServerWrapperForXds.this) {
+              if (currentServingState == ServingState.SHUTDOWN) {
+                return;
+              } else if (currentServingState == ServingState.STARTING) {
+                // during start()
+                future.set(null);
+              } else if (currentServingState == ServingState.NOT_SERVING) {
+                // coming out of NOT_SERVING
+                currentServingState = ServingState.ENTER_SERVING;
+                startRetryTask = new StartRetryTask();
+                startRetryTask.createTask(0L);
+              }
             }
           }
         };
@@ -189,13 +197,13 @@ public final class ServerWrapperForXds extends Server {
   private final class StartRetryTask implements Runnable {
 
     ScheduledExecutorService timerService;
-    ScheduledFuture<?> future;
+    AtomicReference<ScheduledFuture<?>> future = new AtomicReference<>();
 
     private void createTask(long delay) {
       if (timerService == null) {
         timerService = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
       }
-      future = timerService.schedule(this, delay, timeUnitForDelayForRetry);
+      future.set(timerService.schedule(this, delay, timeUnitForDelayForRetry));
     }
 
     private void rebuildAndRestartServer() {
@@ -219,13 +227,15 @@ public final class ServerWrapperForXds extends Server {
 
     @Override
     public void run() {
-      if (currentServingState != ServingState.ENTER_SERVING) {
+      if (currentServingState == ServingState.SHUTDOWN) {
+        return;
+      } else if (currentServingState != ServingState.ENTER_SERVING) {
         throw new AssertionError("Wrong state:" + currentServingState);
       }
       rebuildAndRestartServer();
     }
 
-    private void cleanUpStartRetryTask() {
+    private synchronized void cleanUpStartRetryTask() {
       if (timerService != null) {
         timerService = SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timerService);
       }
@@ -233,8 +243,9 @@ public final class ServerWrapperForXds extends Server {
     }
 
     public void shutdownNow() {
-      if (future != null) {
-        future.cancel(true);
+      ScheduledFuture<?> oldValue = future.getAndSet(null);
+      if (oldValue != null) {
+        oldValue.cancel(true);
       }
       cleanUpStartRetryTask();
     }
@@ -273,30 +284,36 @@ public final class ServerWrapperForXds extends Server {
         .contains(code);
   }
 
-  private void startRetryTaskCleanup() {
-    if (startRetryTask != null) {
-      startRetryTask.shutdownNow();
+  private void cleanupStartRetryTaskAndShutdownDelegateAndXdsClient(boolean shutdownNow) {
+    Server delegateCopy = null;
+    synchronized (this) {
+      if (startRetryTask != null) {
+        startRetryTask.shutdownNow();
+      }
       currentServingState = ServingState.SHUTDOWN;
+      if (delegate != null && !delegate.isShutdown()) {
+        delegateCopy = delegate;
+      }
     }
+    if (delegateCopy != null) {
+      if (shutdownNow) {
+        delegateCopy.shutdownNow();
+      } else {
+        delegateCopy.shutdown();
+      }
+    }
+    xdsClientWrapperForServerSds.shutdown();
   }
 
   @Override
   public Server shutdown() {
-    startRetryTaskCleanup();
-    if (delegate != null) {
-      delegate.shutdown();
-    }
-    xdsClientWrapperForServerSds.shutdown();
+    cleanupStartRetryTaskAndShutdownDelegateAndXdsClient(false);
     return this;
   }
 
   @Override
   public Server shutdownNow() {
-    startRetryTaskCleanup();
-    if (delegate != null) {
-      delegate.shutdownNow();
-    }
-    xdsClientWrapperForServerSds.shutdown();
+    cleanupStartRetryTaskAndShutdownDelegateAndXdsClient(true);
     return this;
   }
 
