@@ -477,6 +477,13 @@ abstract class XdsClient {
   }
 
   /**
+   * Unregisters the given Listener resource watcher.
+   */
+  void cancelListenerResourceWatch(String resourceName, ListenerWatcher watcher) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Registers a data watcher for the given RDS resource.
    */
   void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
@@ -520,8 +527,16 @@ abstract class XdsClient {
 
   /**
    * Registers a watcher for a Listener with the given port.
+   * TODO(sanjaypujare): remove along with ServerXdsClient
    */
   void watchListenerData(int port, ListenerWatcher watcher) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Registers a watcher for a Listener with the given resource name.
+   */
+  void watchListenerData(String resourceName, ListenerWatcher watcher) {
     throw new UnsupportedOperationException();
   }
 

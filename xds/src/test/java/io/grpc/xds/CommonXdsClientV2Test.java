@@ -100,10 +100,10 @@ import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 
 /**
- * Tests for {@link ClientXdsClient} with protocol version v2.
+ * Tests for {@link CommonXdsClient} with protocol version v2.
  */
 @RunWith(JUnit4.class)
-public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
+public class CommonXdsClientV2Test extends CommonXdsClientTestBase {
 
   @Override
   protected BindableService createAdsService() {
@@ -376,7 +376,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
       ClusterConfig clusterConfig = ClusterConfig.newBuilder().addAllClusters(clusters).build();
       CustomClusterType type =
           CustomClusterType.newBuilder()
-              .setName(ClientXdsClient.AGGREGATE_CLUSTER_TYPE_NAME)
+              .setName(CommonXdsClient.AGGREGATE_CLUSTER_TYPE_NAME)
               .setTypedConfig(Any.pack(clusterConfig))
               .build();
       Cluster.Builder builder = Cluster.newBuilder().setName(clusterName).setClusterType(type);

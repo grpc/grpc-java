@@ -38,6 +38,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
+import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
@@ -89,7 +90,7 @@ import javax.annotation.Nullable;
 /**
  * XdsClient implementation for client side usages.
  */
-final class ClientXdsClient extends AbstractXdsClient {
+final class CommonXdsClient extends AbstractXdsClient {
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
@@ -126,7 +127,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final LoadReportClient lrsClient;
   private boolean reportingLoad;
 
-  ClientXdsClient(ManagedChannel channel, boolean useProtocolV3, Node node,
+  CommonXdsClient(ManagedChannel channel, boolean useProtocolV3, Node node,
       ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     super(channel, useProtocolV3, node, timeService, backoffPolicyProvider, stopwatchSupplier);
@@ -158,15 +159,20 @@ final class ClientXdsClient extends AbstractXdsClient {
 
     // Unpack HttpConnectionManager messages.
     Map<String, HttpConnectionManager> httpConnectionManagers = new HashMap<>(listeners.size());
+    Map<String, Listener> serverSideListeners = new HashMap<>(listeners.size());
     try {
       for (Listener listener : listeners) {
-        Any apiListener = listener.getApiListener().getApiListener();
-        if (apiListener.getTypeUrl().equals(TYPE_URL_HTTP_CONNECTION_MANAGER_V2)) {
-          apiListener =
-              apiListener.toBuilder().setTypeUrl(TYPE_URL_HTTP_CONNECTION_MANAGER).build();
+        if (listener.hasApiListener()) {
+          Any apiListener = listener.getApiListener().getApiListener();
+          if (apiListener.getTypeUrl().equals(TYPE_URL_HTTP_CONNECTION_MANAGER_V2)) {
+            apiListener =
+                apiListener.toBuilder().setTypeUrl(TYPE_URL_HTTP_CONNECTION_MANAGER).build();
+          }
+          HttpConnectionManager hcm = apiListener.unpack(HttpConnectionManager.class);
+          httpConnectionManagers.put(listener.getName(), hcm);
+        } else {
+          serverSideListeners.put(listener.getName(), listener);
         }
-        HttpConnectionManager hcm = apiListener.unpack(HttpConnectionManager.class);
-        httpConnectionManagers.put(listener.getName(), hcm);
       }
     } catch (InvalidProtocolBufferException e) {
       getLogger().log(
@@ -244,12 +250,30 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       ldsUpdates.put(listenerName, update);
     }
+
+    // code to process serverSideListeners to generate ListenerUpdate’s
+    Map<String, ListenerUpdate> listenerUpdates = new HashMap<>();
+    for (Map.Entry<String, Listener> entry : serverSideListeners.entrySet()) {
+      String listenerName = entry.getKey();
+      Listener listener = entry.getValue();
+      ListenerUpdate.Builder updateBuilder = ListenerUpdate.newBuilder();
+
+      StructOrError<EnvoyServerProtoData.Listener> convertedListener = parseListener(listener);
+      if (convertedListener.getErrorDetail() != null) {
+        nackResponse(ResourceType.LDS, nonce, convertedListener.getErrorDetail());
+        return;
+      }
+      updateBuilder.setListener(convertedListener.getStruct());
+      listenerUpdates.put(listenerName, updateBuilder.build());
+    }
     ackResponse(ResourceType.LDS, versionInfo, nonce);
 
     for (String resource : ldsResourceSubscribers.keySet()) {
       ResourceSubscriber subscriber = ldsResourceSubscribers.get(resource);
       if (ldsUpdates.containsKey(resource)) {
         subscriber.onData(ldsUpdates.get(resource));
+      } else if (listenerUpdates.containsKey(resource)) {
+        subscriber.onData(listenerUpdates.get(resource));
       } else {
         subscriber.onAbsent();
       }
@@ -259,6 +283,20 @@ final class ClientXdsClient extends AbstractXdsClient {
         ResourceSubscriber subscriber = rdsResourceSubscribers.get(resource);
         subscriber.onAbsent();
       }
+    }
+  }
+
+  private StructOrError<EnvoyServerProtoData.Listener> parseListener(Listener listener) {
+    if (!listener.getTrafficDirection().equals(TrafficDirection.INBOUND)) {
+      return StructOrError.fromError(
+          "Listener " + listener.getName() + " is not INBOUND");
+    }
+    try {
+      return StructOrError
+          .fromStruct(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
+    } catch (InvalidProtocolBufferException e) {
+      return StructOrError.fromError(
+          "Failed to unpack Listener " + listener.getName() + ":" + e.getMessage());
     }
   }
 
@@ -1101,7 +1139,16 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  void watchLdsResource(final String resourceName, final LdsResourceWatcher watcher) {
+  void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
+    commonLdsResourceWatch(resourceName, watcher);
+  }
+
+  @Override
+  void watchListenerData(String resourceName, ListenerWatcher watcher) {
+    commonLdsResourceWatch(resourceName, watcher);
+  }
+
+  private void commonLdsResourceWatch(final String resourceName, final ResourceWatcher watcher) {
     getSyncContext().execute(new Runnable() {
       @Override
       public void run() {
@@ -1118,7 +1165,17 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  void cancelLdsResourceWatch(final String resourceName, final LdsResourceWatcher watcher) {
+  void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
+    commonLdsResourceWatchCancel(resourceName, watcher);
+  }
+
+  @Override
+  void cancelListenerResourceWatch(String resourceName, ListenerWatcher watcher) {
+    commonLdsResourceWatchCancel(resourceName, watcher);
+  }
+
+  private void commonLdsResourceWatchCancel(final String resourceName,
+      final ResourceWatcher watcher) {
     getSyncContext().execute(new Runnable() {
       @Override
       public void run() {
@@ -1396,7 +1453,11 @@ final class ClientXdsClient extends AbstractXdsClient {
     private void notifyWatcher(ResourceWatcher watcher, ResourceUpdate update) {
       switch (type) {
         case LDS:
-          ((LdsResourceWatcher) watcher).onChanged((LdsUpdate) update);
+          if (watcher instanceof ListenerWatcher) {
+            ((ListenerWatcher) watcher).onListenerChanged((ListenerUpdate) update);
+          } else {
+            ((LdsResourceWatcher) watcher).onChanged((LdsUpdate) update);
+          }
           break;
         case RDS:
           ((RdsResourceWatcher) watcher).onChanged((RdsUpdate) update);

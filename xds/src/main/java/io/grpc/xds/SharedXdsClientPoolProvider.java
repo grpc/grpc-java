@@ -133,7 +133,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
               .keepAliveTime(5, TimeUnit.MINUTES)
               .build();
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
-          xdsClient = new ClientXdsClient(channel, useProtocolV3, node, scheduler,
+          xdsClient = new CommonXdsClient(channel, useProtocolV3, node, scheduler,
               new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER);
         }
         refCount++;

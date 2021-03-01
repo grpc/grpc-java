@@ -17,14 +17,20 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.UInt64Value;
@@ -90,25 +96,32 @@ import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.Status;
+import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
+import org.mockito.Captor;
 import org.mockito.InOrder;
+import org.mockito.Mock;
 
 /**
- * Tests for {@link ClientXdsClient} with protocol version v3.
+ * Tests for {@link CommonXdsClient} with protocol version v3.
  */
 @RunWith(JUnit4.class)
-public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
+public class CommonXdsClientV3Test extends CommonXdsClientTestBase {
 
   @Override
   protected BindableService createAdsService() {
@@ -416,7 +429,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       ClusterConfig clusterConfig = ClusterConfig.newBuilder().addAllClusters(clusters).build();
       CustomClusterType type =
           CustomClusterType.newBuilder()
-              .setName(ClientXdsClient.AGGREGATE_CLUSTER_TYPE_NAME)
+              .setName(CommonXdsClient.AGGREGATE_CLUSTER_TYPE_NAME)
               .setTypedConfig(Any.pack(clusterConfig))
               .build();
       Cluster.Builder builder = Cluster.newBuilder().setName(clusterName).setClusterType(type);
@@ -654,5 +667,101 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       Collections.sort(actual);
       return actual.equals(expected);
     }
+  }
+
+  private static final String LISTENER_RESOURCE =
+      "grpc/server?xds.resource.listening_address=0.0.0.0:7000";
+  @Mock
+  private XdsClient.ListenerWatcher listenerWatcher;
+  @Captor
+  private ArgumentCaptor<XdsClient.ListenerUpdate> listenerUpdateCaptor;
+
+  @Test
+  public void serverSideMatchingListenerFound() throws InvalidProtocolBufferException {
+    CommonXdsClientTestBase.DiscoveryRpcCall call =
+        startResourceWatcher(LDS, LISTENER_RESOURCE, listenerWatcher);
+    Listener listener = ServerXdsClientNewServerApiTest.buildListenerWithFilterChain(
+        LISTENER_RESOURCE,
+        7000,
+        "0.0.0.0",
+        "google-sds-config-default",
+        "ROOTCA");
+    List<Any> listeners = ImmutableList.of(Any.pack(listener));
+    call.sendResponse("0", listeners, ResourceType.LDS, "0000");
+
+    // Client sends an ACK LDS request.
+    call.verifyRequest(NODE, "0", Collections.singletonList(LISTENER_RESOURCE), ResourceType.LDS,
+        "0000");
+    verify(listenerWatcher).onListenerChanged(listenerUpdateCaptor.capture());
+    assertThat(listenerUpdateCaptor.getValue().getListener())
+        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
+
+    listener = ServerXdsClientNewServerApiTest.buildListenerWithFilterChain(
+        LISTENER_RESOURCE,
+        7000,
+        "0.0.0.0",
+        "CERT2",
+        "ROOTCA2");
+    listeners = ImmutableList.of(Any.pack(listener));
+    call.sendResponse("1", listeners, ResourceType.LDS, "0001");
+
+    // Client sends an ACK LDS request.
+    call.verifyRequest(NODE, "1", Collections.singletonList(LISTENER_RESOURCE), ResourceType.LDS,
+        "0001");
+    verify(listenerWatcher, times(2)).onListenerChanged(listenerUpdateCaptor.capture());
+    assertThat(listenerUpdateCaptor.getValue().getListener())
+        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+  }
+
+  @Test
+  public void serverSideMatchingListenerNotFound() throws InvalidProtocolBufferException {
+    CommonXdsClientTestBase.DiscoveryRpcCall call =
+        startResourceWatcher(LDS, LISTENER_RESOURCE, listenerWatcher);
+    final FilterChain filterChainInbound = ServerXdsClientNewServerApiTest
+        .buildFilterChain(ServerXdsClientNewServerApiTest.buildFilterChainMatch("managed-mtls"),
+            CommonTlsContextTestsUtil.buildTestDownstreamTlsContext("google-sds-config-default",
+                "ROOTCA"),
+            ServerXdsClientNewServerApiTest.buildTestFilter("envoy.http_connection_manager"));
+    Listener listener = ServerXdsClientNewServerApiTest.buildListenerWithFilterChain(
+        "grpc/server?xds.resource.listening_address=0.0.0.0:8000",
+        7000,
+        "0.0.0.0",
+        filterChainInbound);
+    List<Any> listeners = ImmutableList.of(Any.pack(listener));
+    call.sendResponse("0", listeners, ResourceType.LDS, "0000");
+    // Client sends an ACK LDS request.
+    call.verifyRequest(NODE, "0", Collections.singletonList(LISTENER_RESOURCE), ResourceType.LDS,
+        "0000");
+
+    verifyNoInteractions(listenerWatcher);
+    fakeClock.forwardTime(CommonXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    verify(listenerWatcher).onResourceDoesNotExist(LISTENER_RESOURCE);
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+  }
+
+  @Test
+  public void streamClosedAndRetryRaceWithAddRemoveListenerWatchers() {
+    xdsClient.watchListenerData(LISTENER_RESOURCE, listenerWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    call.sendError(Status.UNAVAILABLE.asException());
+    verify(listenerWatcher).onError(errorCaptor.capture());
+    assertThat(errorCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    FakeClock.ScheduledTask retryTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
+    assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(10L);
+
+    xdsClient.cancelListenerResourceWatch(LISTENER_RESOURCE, listenerWatcher);
+    fakeClock.forwardNanos(10L);
+    call = resourceDiscoveryCalls.poll();
+    call.verifyNoMoreRequest();
+
+    Listener listener = ServerXdsClientNewServerApiTest.buildListenerWithFilterChain(
+        LISTENER_RESOURCE,
+        7000,
+        "0.0.0.0");
+    List<Any> listeners = ImmutableList.of(Any.pack(listener));
+    call.sendResponse("0", listeners, ResourceType.LDS, "0000");
+    verifyNoMoreInteractions(listenerWatcher);
   }
 }
