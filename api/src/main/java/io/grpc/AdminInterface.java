@@ -31,7 +31,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * activity in a given binary. It aims to be a convenient API that automatically determines
  * which specific admin services are relevant.
  */
-// TODO(chengyuanzhang): add ExperimentalApi annotation.
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7929")
 @ThreadSafe
 public class AdminInterface {
   private static final int DEFAULT_CHANNELZ_MAX_PAGE_SIZE = 100;
