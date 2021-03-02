@@ -21,7 +21,6 @@ import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.GrpcNegotiationHandler;
 import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
 
@@ -31,13 +30,6 @@ import io.netty.util.AsciiString;
 public final class InternalProtocolNegotiators {
 
   private InternalProtocolNegotiators() {}
-
-  /**
-   * Returns the channel logger for the given channel context, or a Noop Logger if absent.
-   */
-  public static ChannelLogger negotiationLogger(ChannelHandlerContext ctx) {
-    return ProtocolNegotiators.negotiationLogger(ctx);
-  }
 
   /**
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
@@ -146,8 +138,9 @@ public final class InternalProtocolNegotiators {
   /**
    * Internal version of {@link WaitUntilActiveHandler}.
    */
-  public static ChannelHandler waitUntilActiveHandler(ChannelHandler next) {
-    return new WaitUntilActiveHandler(next);
+  public static ChannelHandler waitUntilActiveHandler(ChannelHandler next,
+      ChannelLogger negotiationLogger) {
+    return new WaitUntilActiveHandler(next, negotiationLogger);
   }
 
   /**
@@ -158,19 +151,21 @@ public final class InternalProtocolNegotiators {
   }
 
   public static ChannelHandler clientTlsHandler(
-      ChannelHandler next, SslContext sslContext, String authority) {
-    return new ClientTlsHandler(next, sslContext, authority, null);
+      ChannelHandler next, SslContext sslContext, String authority,
+      ChannelLogger negotiationLogger) {
+    return new ClientTlsHandler(next, sslContext, authority, null, negotiationLogger);
   }
 
   public static class ProtocolNegotiationHandler
       extends ProtocolNegotiators.ProtocolNegotiationHandler {
 
-    protected ProtocolNegotiationHandler(ChannelHandler next, String negotiatorName) {
-      super(next, negotiatorName);
+    protected ProtocolNegotiationHandler(ChannelHandler next, String negotiatorName,
+        ChannelLogger negotiationLogger) {
+      super(next, negotiatorName, negotiationLogger);
     }
 
-    protected ProtocolNegotiationHandler(ChannelHandler next) {
-      super(next);
+    protected ProtocolNegotiationHandler(ChannelHandler next, ChannelLogger negotiationLogger) {
+      super(next, negotiationLogger);
     }
   }
 }

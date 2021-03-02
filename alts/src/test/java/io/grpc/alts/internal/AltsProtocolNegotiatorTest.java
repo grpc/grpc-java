@@ -404,7 +404,7 @@ public class AltsProtocolNegotiatorTest {
         Http2ConnectionDecoder decoder,
         Http2ConnectionEncoder encoder,
         Http2Settings initialSettings) {
-      super(null, decoder, encoder, initialSettings);
+      super(null, decoder, encoder, initialSettings, null);
     }
 
     @Override

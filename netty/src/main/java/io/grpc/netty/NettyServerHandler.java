@@ -268,7 +268,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       final KeepAliveEnforcer keepAliveEnforcer,
       boolean autoFlowControl,
       Attributes eagAttributes) {
-    super(channelUnused, decoder, encoder, settings, autoFlowControl, null);
+    super(channelUnused, decoder, encoder, settings, null, autoFlowControl, null);
 
     final MaxConnectionIdleManager maxConnectionIdleManager;
     if (maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED) {

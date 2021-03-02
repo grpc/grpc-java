@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.Internal;
 import io.grpc.InternalChannelz;
 import io.netty.channel.ChannelPromise;
@@ -34,14 +35,18 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
 
   @Nullable
   protected final ChannelPromise channelUnused;
+  @Nullable
+  private final ChannelLogger negotiationLogger;
 
   protected GrpcHttp2ConnectionHandler(
       ChannelPromise channelUnused,
       Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,
-      Http2Settings initialSettings) {
+      Http2Settings initialSettings,
+      ChannelLogger negotiationLogger) {
     super(decoder, encoder, initialSettings);
     this.channelUnused = channelUnused;
+    this.negotiationLogger = negotiationLogger;
   }
 
   /**
@@ -67,6 +72,26 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
    */
   public void handleProtocolNegotiationCompleted(
       Attributes attrs, InternalChannelz.Security securityInfo) {
+  }
+
+  /**
+   * Returns the channel logger for the given channel context, or a Noop Logger if absent.
+   */
+  public ChannelLogger getNegotiationLogger() {
+    if (negotiationLogger != null) {
+      return negotiationLogger;
+    }
+    // This is only for tests where there may not be a valid logger.
+    final class NoopChannelLogger extends ChannelLogger {
+
+      @Override
+      public void log(ChannelLogLevel level, String message) {}
+
+      @Override
+      public void log(ChannelLogLevel level, String messageFormat, Object... args) {}
+    }
+
+    return new NoopChannelLogger();
   }
 
   /**

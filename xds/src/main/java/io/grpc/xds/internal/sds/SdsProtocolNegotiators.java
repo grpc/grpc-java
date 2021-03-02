@@ -252,7 +252,7 @@ public final class SdsProtocolNegotiators {
             public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
               ctx.pipeline().remove(this);
             }
-          });
+          }, grpcHandler.getNegotiationLogger());
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
       this.sslContextProviderSupplier = sslContextProviderSupplier;
@@ -399,7 +399,7 @@ public final class SdsProtocolNegotiators {
             public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
               ctx.pipeline().remove(this);
             }
-          });
+          }, grpcHandler.getNegotiationLogger());
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
       this.downstreamTlsContext = downstreamTlsContext;

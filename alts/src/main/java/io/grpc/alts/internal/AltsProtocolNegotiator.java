@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import io.grpc.Attributes;
 import io.grpc.Channel;
+import io.grpc.ChannelLogger;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.OtherSecurity;
 import io.grpc.InternalChannelz.Security;
@@ -112,11 +113,14 @@ public final class AltsProtocolNegotiator {
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
+      ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
       ChannelHandler thh = new TsiHandshakeHandler(
-          gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore);
-      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh);
+          gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore,
+          negotiationLogger);
+      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh,
+          negotiationLogger);
       return wuah;
     }
 
@@ -166,12 +170,15 @@ public final class AltsProtocolNegotiator {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+      ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       TsiHandshaker handshaker = handshakerFactory.newHandshaker(/* authority= */ null);
       NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
       ChannelHandler thh = new TsiHandshakeHandler(
-          gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore);
-      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh);
+          gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore,
+          negotiationLogger);
+      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh,
+          negotiationLogger);
       return wuah;
     }
 
@@ -250,6 +257,7 @@ public final class AltsProtocolNegotiator {
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
+      ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler securityHandler;
       boolean isXdsDirectPath = false;
       if (clusterNameAttrKey != null) {
@@ -264,12 +272,14 @@ public final class AltsProtocolNegotiator {
         TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
         NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
         securityHandler = new TsiHandshakeHandler(
-            gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore);
+            gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore,
+            negotiationLogger);
       } else {
         securityHandler = InternalProtocolNegotiators.clientTlsHandler(
-            gnh, sslContext, grpcHandler.getAuthority());
+            gnh, sslContext, grpcHandler.getAuthority(), negotiationLogger);
       }
-      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(securityHandler);
+      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(securityHandler,
+          negotiationLogger);
       return wuah;
     }
 

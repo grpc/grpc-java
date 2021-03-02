@@ -22,13 +22,13 @@ import static io.grpc.alts.internal.AltsProtocolNegotiator.AUTH_CONTEXT_KEY;
 import static io.grpc.alts.internal.AltsProtocolNegotiator.TSI_PEER_KEY;
 
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
 import io.grpc.alts.internal.TsiHandshakeHandler.HandshakeValidator.SecurityDetails;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
-import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
@@ -87,13 +87,15 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
 
   private ProtocolNegotiationEvent pne;
   private boolean semaphoreAcquired;
+  private final ChannelLogger negotiationLogger;
 
   /**
    * Constructs a TsiHandshakeHandler.
    */
   public TsiHandshakeHandler(
-      ChannelHandler next, NettyTsiHandshaker handshaker, HandshakeValidator handshakeValidator) {
-    this(next, handshaker, handshakeValidator, null);
+      ChannelHandler next, NettyTsiHandshaker handshaker, HandshakeValidator handshakeValidator,
+      ChannelLogger negotiationLogger) {
+    this(next, handshaker, handshakeValidator, null, negotiationLogger);
   }
 
   /**
@@ -102,11 +104,12 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
    */
   public TsiHandshakeHandler(
       ChannelHandler next, NettyTsiHandshaker handshaker, HandshakeValidator handshakeValidator,
-      AsyncSemaphore semaphore) {
+      AsyncSemaphore semaphore, ChannelLogger negotiationLogger) {
     this.handshaker = checkNotNull(handshaker, "handshaker");
     this.handshakeValidator = checkNotNull(handshakeValidator, "handshakeValidator");
     this.next = checkNotNull(next, "next");
     this.semaphore = semaphore;
+    this.negotiationLogger = negotiationLogger;
   }
 
   @Override
@@ -155,8 +158,7 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
     if (evt instanceof ProtocolNegotiationEvent) {
       checkState(pne == null, "negotiation already started");
       pne = (ProtocolNegotiationEvent) evt;
-      InternalProtocolNegotiators.negotiationLogger(ctx)
-          .log(ChannelLogLevel.INFO, "TsiHandshake started");
+      negotiationLogger.log(ChannelLogLevel.INFO, "TsiHandshake started");
       ChannelFuture acquire = semaphoreAcquire(ctx);
       if (acquire.isSuccess()) {
         semaphoreAcquired = true;
@@ -190,8 +192,7 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   private void fireProtocolNegotiationEvent(
       ChannelHandlerContext ctx, TsiPeer peer, Object authContext, SecurityDetails details) {
     checkState(pne != null, "negotiation not yet complete");
-    InternalProtocolNegotiators.negotiationLogger(ctx)
-        .log(ChannelLogLevel.INFO, "TsiHandshake finished");
+    negotiationLogger.log(ChannelLogLevel.INFO, "TsiHandshake finished");
     ProtocolNegotiationEvent localPne = pne;
     Attributes.Builder attrs = InternalProtocolNegotiationEvent.getAttributes(localPne).toBuilder()
         .set(TSI_PEER_KEY, peer)
