@@ -823,8 +823,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       clusterConfig = unpackedClusterConfig.unpack(
           io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig.class);
     } catch (InvalidProtocolBufferException e) {
-      StructOrError.fromError("Cluster " + clusterName + ": malformed ClusterConfig: " + e);
-      return null;
+      return StructOrError.fromError("Cluster " + clusterName + ": malformed ClusterConfig: " + e);
     }
     return StructOrError.fromStruct(CdsUpdate.forAggregate(
         clusterName, clusterConfig.getClustersList()));
