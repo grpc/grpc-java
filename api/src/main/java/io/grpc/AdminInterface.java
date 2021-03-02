@@ -33,13 +33,16 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7929")
 @ThreadSafe
-public class AdminInterface {
+public final class AdminInterface {
   private static final int DEFAULT_CHANNELZ_MAX_PAGE_SIZE = 100;
   private static final String CHANNELZ_CLASS = "io.grpc.services.ChannelzService";
   private static final String CSDS_CLASS = "io.grpc.xds.CsdsService";
   private static final Logger logger = Logger.getLogger(AdminInterface.class.getName());
   private static List<ServerServiceDefinition> standardServices;
   private static int channelzMaxPageSize = DEFAULT_CHANNELZ_MAX_PAGE_SIZE;
+
+  // Do not instantiate.
+  private AdminInterface() {}
 
   /**
    * Returns a list of gRPC's built-in admin services.
