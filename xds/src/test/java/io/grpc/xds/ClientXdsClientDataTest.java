@@ -19,6 +19,8 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Any;
+import com.google.protobuf.StringValue;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
@@ -36,7 +38,10 @@ import io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.Header;
 import io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.QueryParameter;
 import io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration;
 import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
+import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.HeaderAbort;
+import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatchAndSubstitute;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher.GoogleRE2;
@@ -60,6 +65,7 @@ import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -614,5 +620,72 @@ public class ClientXdsClientDataTest {
             .build();
     StructOrError<LocalityLbEndpoints> struct = ClientXdsClient.parseLocalityLbEndpoints(proto);
     assertThat(struct.getErrorDetail()).isEqualTo("negative priority");
+  }
+
+  @Test
+  public void parseHttpFilter_unsupportedButOptional() {
+    HttpFilter httpFilter = HttpFilter.newBuilder()
+        .setIsOptional(true)
+        .setTypedConfig(Any.pack(StringValue.of("unsupported")))
+        .build();
+    assertThat(ClientXdsClient.parseHttpFilter(httpFilter)).isNull();
+  }
+
+  @Test
+  public void parseHttpFilter_unsupportedAndRequired() {
+    HttpFilter httpFilter = HttpFilter.newBuilder()
+        .setIsOptional(false)
+        .setName("unsupported.filter")
+        .setTypedConfig(Any.pack(StringValue.of("string value")))
+        .build();
+    assertThat(ClientXdsClient.parseHttpFilter(httpFilter).getErrorDetail()).isEqualTo(
+        "HttpFilter [unsupported.filter] is not optional and has an unsupported config type: "
+            + "type.googleapis.com/google.protobuf.StringValue");
+  }
+
+  @Test
+  public void parseOverrideFilterConfigs_unsupportedButOptional() {
+    HTTPFault httpFault = HTTPFault.newBuilder()
+        .setDelay(FaultDelay.newBuilder().setFixedDelay(Durations.fromNanos(3000)))
+        .build();
+    Map<String, Any> configOverrides = ImmutableMap.of(
+        "envoy.fault",
+        Any.pack(httpFault),
+        "unsupported.filter",
+        Any.pack(io.envoyproxy.envoy.config.route.v3.FilterConfig.newBuilder()
+            .setIsOptional(true).setConfig(Any.pack(StringValue.of("string value")))
+            .build()));
+    Map<String, FilterConfig> parsedConfigs =
+        ClientXdsClient.parseOverrideFilterConfigs(configOverrides).getStruct();
+    assertThat(parsedConfigs).hasSize(1);
+    assertThat(parsedConfigs).containsKey("envoy.fault");
+  }
+
+  @Test
+  public void parseOverrideFilterConfigs_unsupportedAndRequired() {
+    HTTPFault httpFault = HTTPFault.newBuilder()
+        .setDelay(FaultDelay.newBuilder().setFixedDelay(Durations.fromNanos(3000)))
+        .build();
+    Map<String, Any> configOverrides = ImmutableMap.of(
+        "envoy.fault",
+        Any.pack(httpFault),
+        "unsupported.filter",
+        Any.pack(io.envoyproxy.envoy.config.route.v3.FilterConfig.newBuilder()
+            .setIsOptional(false).setConfig(Any.pack(StringValue.of("string value")))
+            .build()));
+    assertThat(ClientXdsClient.parseOverrideFilterConfigs(configOverrides).getErrorDetail())
+        .isEqualTo(
+            "HttpFilter [unsupported.filter] is not optional and has an unsupported config type: "
+                + "type.googleapis.com/google.protobuf.StringValue");
+
+    configOverrides = ImmutableMap.of(
+        "envoy.fault",
+        Any.pack(httpFault),
+        "unsupported.filter",
+        Any.pack(StringValue.of("string value")));
+    assertThat(ClientXdsClient.parseOverrideFilterConfigs(configOverrides).getErrorDetail())
+        .isEqualTo(
+            "HttpFilter [unsupported.filter] is not optional and has an unsupported config type: "
+                + "type.googleapis.com/google.protobuf.StringValue");
   }
 }

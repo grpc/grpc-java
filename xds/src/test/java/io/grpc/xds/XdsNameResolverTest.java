@@ -1000,6 +1000,18 @@ public class XdsNameResolverTest {
   }
 
   @Test
+  public void resolved_withNoRouterFilter() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdateWithNoRouterFilter();
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    ClientCall.Listener<Void> observer = startCall(configSelector, new Metadata());
+    verifyRpcFailed(observer, Status.UNAVAILABLE.withDescription("No router filter"));
+  }
+
+  @Test
   public void resolved_faultAbortAndDelayInLdsUpdateInLdsUpdate() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
@@ -1431,6 +1443,19 @@ public class XdsNameResolverTest {
                   filterConfig));
         }
       });
+    }
+
+    void deliverLdsUpdateWithNoRouterFilter() {
+      VirtualHost virtualHost = VirtualHost.create(
+          "virtual-host",
+          Collections.singletonList(AUTHORITY),
+          Collections.<Route>emptyList(),
+          Collections.<String, FilterConfig>emptyMap());
+      ldsWatcher.onChanged(
+          new LdsUpdate(
+              0, Collections.singletonList(virtualHost),
+              ImmutableList.<String>of(),
+              ImmutableMap.<String, FilterConfig>of()));
     }
 
     void deliverRdsNameWithFaultInjection(

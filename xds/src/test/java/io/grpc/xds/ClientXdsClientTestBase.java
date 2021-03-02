@@ -360,8 +360,7 @@ public abstract class ClientXdsClientTestBase {
                             "envoy.fault",
                             mf.buildHttpFaultTypedConfig(
                                 null, null, "cluster2", ImmutableList.<String>of(), 101, null, 503,
-                                2000)))
-                )),
+                                2000))))),
             ImmutableList.of(
                 mf.buildHttpFilter("irrelevant", null, true),
                 mf.buildHttpFilter(
@@ -369,8 +368,7 @@ public abstract class ClientXdsClientTestBase {
                     mf.buildHttpFaultTypedConfig(
                         1L, 2, "cluster1", ImmutableList.<String>of(), 3, null, null,
                         null),
-                    false)
-            ))));
+                    false)))));
     call.sendResponse("0", listeners, ResourceType.LDS, "0000");
 
     // Client sends an ACK LDS request.

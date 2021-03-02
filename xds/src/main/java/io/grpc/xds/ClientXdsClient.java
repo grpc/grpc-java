@@ -335,7 +335,7 @@ final class ClientXdsClient extends AbstractXdsClient {
           name, proto.getDomainsList(), routes, new HashMap<String, FilterConfig>()));
     }
     StructOrError<Map<String, FilterConfig>> overrideConfigs =
-        parseOverrideConfigs(proto.getTypedPerFilterConfigMap());
+        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap());
     if (overrideConfigs.errorDetail != null) {
       return StructOrError.fromError(
           "VirtualHost [" + proto.getName() + "] contains invalid HttpFilter config: "
@@ -346,7 +346,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @VisibleForTesting
-  static StructOrError<Map<String, FilterConfig>> parseOverrideConfigs(
+  static StructOrError<Map<String, FilterConfig>> parseOverrideFilterConfigs(
       Map<String, Any> rawFilterConfigMap) {
     Map<String, FilterConfig> overrideConfigs = new HashMap<>();
     for (String name : rawFilterConfigMap.keySet()) {
@@ -424,7 +424,7 @@ final class ClientXdsClient extends AbstractXdsClient {
           routeMatch.getStruct(), routeAction.getStruct(), new HashMap<String, FilterConfig>()));
     }
     StructOrError<Map<String, FilterConfig>> overrideConfigs =
-        parseOverrideConfigs(proto.getTypedPerFilterConfigMap());
+        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap());
     if (overrideConfigs.errorDetail != null) {
       return StructOrError.fromError(
           "Route [" + proto.getName() + "] contains invalid HttpFilter config: "
@@ -642,7 +642,7 @@ final class ClientXdsClient extends AbstractXdsClient {
           proto.getName(), proto.getWeight().getValue(), new HashMap<String, FilterConfig>()));
     }
     StructOrError<Map<String, FilterConfig>> overrideConfigs =
-        parseOverrideConfigs(proto.getTypedPerFilterConfigMap());
+        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap());
     if (overrideConfigs.errorDetail != null) {
       return StructOrError.fromError(
           "ClusterWeight [" + proto.getName() + "] contains invalid HttpFilter config: "
