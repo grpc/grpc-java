@@ -147,17 +147,32 @@ public final class XdsClientWrapperForServerSds {
           public void onResourceDoesNotExist(String resourceName) {
             logger.log(Level.WARNING, "Resource {0} is unavailable", resourceName);
             curListener = null;
-            reportError(Status.NOT_FOUND.withDescription(resourceName).asException());
+            reportError(Status.NOT_FOUND.asException(), true);
           }
 
           @Override
           public void onError(Status error) {
             logger.log(
                 Level.WARNING, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
-            reportError(error.asException());
+            reportError(error.asException(), isResourceAbsent(error));
           }
         };
     xdsClient.watchListenerData(port, listenerWatcher);
+  }
+
+  /** Whether the throwable indicates our listener resource is absent/deleted. */
+  private static boolean isResourceAbsent(Status status) {
+    Status.Code code  = status.getCode();
+    switch (code) {
+      case NOT_FOUND:
+      case INVALID_ARGUMENT:
+      case PERMISSION_DENIED:  // means resource not available for us
+      case UNIMPLEMENTED:
+      case UNAUTHENTICATED:  // same as above, resource not available for us
+        return true;
+      default:
+        return false;
+    }
   }
 
   /**
@@ -370,7 +385,7 @@ public final class XdsClientWrapperForServerSds {
       serverWatchers.add(serverWatcher);
     }
     if (curListener != null) {
-      serverWatcher.onSuccess();
+      serverWatcher.onListenerUpdate();
     }
   }
 
@@ -388,18 +403,17 @@ public final class XdsClientWrapperForServerSds {
     }
   }
 
-  private void reportError(Throwable throwable) {
+  private void reportError(Throwable throwable, boolean isAbsent) {
     for (ServerWatcher watcher : getServerWatchers()) {
-      watcher.onError(throwable);
+      watcher.onError(throwable, isAbsent);
     }
   }
 
   private void reportSuccess() {
     for (ServerWatcher watcher : getServerWatchers()) {
-      watcher.onSuccess();
+      watcher.onListenerUpdate();
     }
   }
-
 
   @VisibleForTesting
   XdsClient.ListenerWatcher getListenerWatcher() {
@@ -410,10 +424,10 @@ public final class XdsClientWrapperForServerSds {
   public interface ServerWatcher {
 
     /** Called to report errors from the control plane including "not found". */
-    void onError(Throwable throwable);
+    void onError(Throwable throwable, boolean isAbsent);
 
-    /** Called to report successful receipt of server config. */
-    void onSuccess();
+    /** Called to report successful receipt of listener config. */
+    void onListenerUpdate();
   }
 
   /** Shutdown this instance and release resources. */
