@@ -184,6 +184,25 @@ public class ServerWrapperForXdsTest {
     serverWrapperForXds.shutdown();
   }
 
+  @Test
+  public void delegateInitialStartError()
+          throws InterruptedException, TimeoutException, ExecutionException, IOException {
+    Future<Throwable> future = startServerAsync();
+    doThrow(new IOException("test exception")).when(mockServer).start();
+    new Thread(new Runnable() {
+      @Override
+      public void run() {
+        XdsServerTestHelper.generateListenerUpdate(
+                listenerWatcher,
+                CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2")
+        );
+      }
+    }).start();
+    Throwable exception = future.get(2, TimeUnit.SECONDS);
+    assertThat(exception).isInstanceOf(IOException.class);
+    assertThat(exception).hasMessageThat().isEqualTo("test exception");
+  }
+
   private void verifyCapturedCodeAndNotServing(Status.Code expected,
       ServerWrapperForXds.ServingState servingState) {
     ArgumentCaptor<Throwable> argCaptor = ArgumentCaptor.forClass(null);

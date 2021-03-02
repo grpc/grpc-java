@@ -132,9 +132,6 @@ public final class ServerWrapperForXds extends Server {
       }
       throw new RuntimeException(ex);
     }
-    delegate.start();
-    currentServingState = ServingState.STARTED;
-    xdsServingStatusListener.onServing();
     return this;
   }
 
@@ -180,7 +177,14 @@ public final class ServerWrapperForXds extends Server {
                 return;
               } else if (currentServingState == ServingState.STARTING) {
                 // during start()
-                future.set(null);
+                try {
+                  delegate.start();
+                  currentServingState = ServingState.STARTED;
+                  xdsServingStatusListener.onServing();
+                  future.set(null);
+                } catch (IOException ioe) {
+                  future.set(ioe);
+                }
               } else if (currentServingState == ServingState.NOT_SERVING) {
                 // coming out of NOT_SERVING
                 currentServingState = ServingState.ENTER_SERVING;
