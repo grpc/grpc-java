@@ -28,6 +28,7 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import java.util.ArrayList;
@@ -55,39 +56,39 @@ abstract class XdsClient {
     // The list virtual hosts that make up the route table.
     @Nullable
     final List<VirtualHost> virtualHosts;
-    // Listener contains the HttpFault filter.
-    final boolean hasFaultInjection;
-    @Nullable // Can be null even if hasFaultInjection is true.
-    final HttpFault httpFault;
+    // Filter instance names. Null if HttpFilter support is not enabled.
+    @Nullable final List<String> filterChain;
+    // Filter configs keyed by instance name.
+    final Map<String, FilterConfig> filterConfigs;
 
     LdsUpdate(
-        long httpMaxStreamDurationNano, String rdsName, boolean hasFaultInjection,
-        @Nullable HttpFault httpFault) {
-      this(httpMaxStreamDurationNano, rdsName, null, hasFaultInjection, httpFault);
+        long httpMaxStreamDurationNano, String rdsName, @Nullable List<String> filterChain,
+        Map<String, FilterConfig> filterConfigs) {
+      this(httpMaxStreamDurationNano, rdsName, null, filterChain, filterConfigs);
     }
 
     LdsUpdate(
         long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts,
-        boolean hasFaultInjection, @Nullable HttpFault httpFault) {
-      this(httpMaxStreamDurationNano, null, virtualHosts, hasFaultInjection, httpFault);
+        @Nullable List<String> filterChain, Map<String, FilterConfig> filterConfigs) {
+      this(httpMaxStreamDurationNano, null, virtualHosts, filterChain, filterConfigs);
     }
 
     private LdsUpdate(
         long httpMaxStreamDurationNano, @Nullable String rdsName,
-        @Nullable List<VirtualHost> virtualHosts, boolean hasFaultInjection,
-        @Nullable HttpFault httpFault) {
+        @Nullable List<VirtualHost> virtualHosts, @Nullable List<String> filterChain,
+        Map<String, FilterConfig> filterConfigs) {
       this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
       this.rdsName = rdsName;
       this.virtualHosts = virtualHosts == null
           ? null : Collections.unmodifiableList(new ArrayList<>(virtualHosts));
-      this.hasFaultInjection = hasFaultInjection;
-      this.httpFault = httpFault;
+      this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
+      this.filterConfigs = Collections.unmodifiableMap(filterConfigs);
     }
 
     @Override
     public int hashCode() {
       return Objects.hash(
-          httpMaxStreamDurationNano, rdsName, virtualHosts, hasFaultInjection, httpFault);
+          httpMaxStreamDurationNano, rdsName, virtualHosts, filterChain, filterConfigs);
     }
 
     @Override
@@ -102,8 +103,8 @@ abstract class XdsClient {
       return httpMaxStreamDurationNano == that.httpMaxStreamDurationNano
           && Objects.equals(rdsName, that.rdsName)
           && Objects.equals(virtualHosts, that.virtualHosts)
-          && hasFaultInjection == that.hasFaultInjection
-          && Objects.equals(httpFault, that.httpFault);
+          && Objects.equals(filterChain, that.filterChain)
+          && Objects.equals(filterConfigs, that.filterConfigs);
     }
 
     @Override
@@ -115,9 +116,9 @@ abstract class XdsClient {
       } else {
         toStringHelper.add("virtualHosts", virtualHosts);
       }
-      if (hasFaultInjection) {
-        toStringHelper.add("faultInjectionEnabled", true)
-            .add("httpFault", httpFault);
+      if (filterChain != null) {
+        toStringHelper.add("filterChain", filterChain);
+        toStringHelper.add("filterConfigs", filterConfigs);
       }
       return toStringHelper.toString();
     }

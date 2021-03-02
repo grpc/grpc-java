@@ -22,12 +22,15 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.re2j.Pattern;
+import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Matchers.FractionMatcher;
 import io.grpc.xds.Matchers.HeaderMatcher;
 import io.grpc.xds.Matchers.PathMatcher;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 /** Reprsents an upstream virtual host. */
@@ -43,12 +46,13 @@ abstract class VirtualHost {
   abstract ImmutableList<Route> routes();
 
   @Nullable
-  abstract HttpFault httpFault();
+  abstract ImmutableMap<String, FilterConfig> filterConfigOverrides();
 
-  public static VirtualHost create(String name, List<String> domains, List<Route> routes,
-      @Nullable HttpFault httpFault) {
+  public static VirtualHost create(
+      String name, List<String> domains, List<Route> routes,
+      Map<String, FilterConfig> filterConfigOverrides) {
     return new AutoValue_VirtualHost(name, ImmutableList.copyOf(domains),
-        ImmutableList.copyOf(routes), httpFault);
+        ImmutableList.copyOf(routes), ImmutableMap.copyOf(filterConfigOverrides));
   }
 
   @AutoValue
@@ -58,11 +62,13 @@ abstract class VirtualHost {
     abstract RouteAction routeAction();
 
     @Nullable
-    abstract HttpFault httpFault();
+    abstract ImmutableMap<String, FilterConfig> filterConfigOverrides();
 
-    static Route create(RouteMatch routeMatch, RouteAction routeAction,
-        @Nullable HttpFault httpFault) {
-      return new AutoValue_VirtualHost_Route(routeMatch, routeAction, httpFault);
+    static Route create(
+        RouteMatch routeMatch, RouteAction routeAction,
+        Map<String, FilterConfig> filterConfigOverrides) {
+      return new AutoValue_VirtualHost_Route(
+          routeMatch, routeAction, ImmutableMap.copyOf(filterConfigOverrides));
     }
 
     @AutoValue
@@ -129,11 +135,12 @@ abstract class VirtualHost {
         abstract int weight();
 
         @Nullable
-        abstract HttpFault httpFault();
+        abstract ImmutableMap<String, FilterConfig> filterConfigOverrides();
 
-        static ClusterWeight create(String name, int weight, @Nullable HttpFault httpFault) {
-          return new AutoValue_VirtualHost_Route_RouteAction_ClusterWeight(name, weight,
-              httpFault);
+        static ClusterWeight create(
+            String name, int weight, Map<String, FilterConfig> filterConfigOverrides) {
+          return new AutoValue_VirtualHost_Route_RouteAction_ClusterWeight(
+              name, weight, ImmutableMap.copyOf(filterConfigOverrides));
         }
       }
 

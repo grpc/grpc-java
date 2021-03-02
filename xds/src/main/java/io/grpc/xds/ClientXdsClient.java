@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.EnvoyServerProtoData.TRANSPORT_SOCKET_NAME_TLS;
 
+import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.CaseFormat;
 import com.google.common.base.Stopwatch;
@@ -41,9 +42,7 @@ import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
-import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
-import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
@@ -52,14 +51,12 @@ import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.HttpFault.FaultAbort;
-import io.grpc.xds.HttpFault.FaultDelay;
+import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.Matchers.FractionMatcher;
@@ -96,7 +93,6 @@ final class ClientXdsClient extends AbstractXdsClient {
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
-  private static final String HTTP_FAULT_FILTER_NAME = "envoy.fault";
   @VisibleForTesting
   static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
   @VisibleForTesting
@@ -117,6 +113,10 @@ final class ClientXdsClient extends AbstractXdsClient {
       "type.googleapis.com/envoy.config.cluster.aggregate.v2alpha.ClusterConfig";
   private static final String TYPE_URL_CLUSTER_CONFIG =
       "type.googleapis.com/envoy.extensions.clusters.aggregate.v3.ClusterConfig";
+  private static final String TYPE_URL_TYPED_STRUCT =
+      "type.googleapis.com/udpa.type.v1.TypedStruct";
+  private static final String TYPE_URL_FILTER_CONFIG =
+      "type.googleapis.com/envoy.config.route.v3.FilterConfig";
 
   private final Map<String, ResourceSubscriber> ldsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> rdsResourceSubscribers = new HashMap<>();
@@ -140,10 +140,13 @@ final class ClientXdsClient extends AbstractXdsClient {
     // Unpack Listener messages.
     List<Listener> listeners = new ArrayList<>(resources.size());
     List<String> listenerNames = new ArrayList<>(resources.size());
+    boolean isResourceV3 = false;
     try {
       for (com.google.protobuf.Any res : resources) {
         if (res.getTypeUrl().equals(ResourceType.LDS.typeUrlV2())) {
           res = res.toBuilder().setTypeUrl(ResourceType.LDS.typeUrl()).build();
+        } else {
+          isResourceV3 = true;
         }
         Listener listener = res.unpack(Listener.class);
         listeners.add(listener);
@@ -189,35 +192,36 @@ final class ClientXdsClient extends AbstractXdsClient {
           maxStreamDuration = Durations.toNanos(options.getMaxStreamDuration());
         }
       }
-      boolean hasFaultInjection = false;
-      HttpFault httpFault = null;
-      if (enableFaultInjection) {
-        List<HttpFilter> httpFilters = hcm.getHttpFiltersList();
-        for (HttpFilter httpFilter : httpFilters) {
-          if (HTTP_FAULT_FILTER_NAME.equals(httpFilter.getName())) {
-            hasFaultInjection = true;
-            if (httpFilter.hasTypedConfig()) {
-              StructOrError<HttpFault> httpFaultOrError =
-                  decodeFaultFilterConfig(httpFilter.getTypedConfig());
-              if (httpFaultOrError != null) {
-                if (httpFaultOrError.getErrorDetail() != null) {
-                  nackResponse(ResourceType.LDS, nonce,
-                      "Listener " + listenerName + " contains invalid HttpFault filter: "
-                          + httpFaultOrError.getErrorDetail());
-                  return;
-                }
-                httpFault = httpFaultOrError.getStruct();
-              }
-            }
-            break;
+      boolean parseFilter = enableFaultInjection && isResourceV3;
+      List<String> filterChain = null;
+      Map<String, FilterConfig> filterConfigs = new HashMap<>();
+      if (parseFilter) {
+        filterChain = new ArrayList<>();
+        List<io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter>
+            httpFilters = hcm.getHttpFiltersList();
+        for (io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
+                 httpFilter : httpFilters) {
+          String filterName = httpFilter.getName();
+          StructOrError<FilterConfig> filterConfig = parseHttpFilter(httpFilter);
+          if (filterConfig == null) {
+            continue;
           }
+          if (filterConfig.errorDetail != null) {
+            nackResponse(
+                ResourceType.LDS, nonce,
+                "Error parsing HttpFilter: " + filterConfig.errorDetail);
+            return;
+          }
+          filterChain.add(filterName);
+          filterConfigs.put(filterName, filterConfig.struct);
         }
       }
+
       if (hcm.hasRouteConfig()) {
         List<VirtualHost> virtualHosts = new ArrayList<>();
         for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
             : hcm.getRouteConfig().getVirtualHostsList()) {
-          StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto);
+          StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseFilter);
           if (virtualHost.getErrorDetail() != null) {
             nackResponse(ResourceType.LDS, nonce,
                 "Listener " + listenerName + " contains invalid virtual host: "
@@ -226,7 +230,7 @@ final class ClientXdsClient extends AbstractXdsClient {
           }
           virtualHosts.add(virtualHost.getStruct());
         }
-        update = new LdsUpdate(maxStreamDuration, virtualHosts, hasFaultInjection, httpFault);
+        update = new LdsUpdate(maxStreamDuration, virtualHosts, filterChain, filterConfigs);
       } else if (hcm.hasRds()) {
         Rds rds = hcm.getRds();
         if (!rds.getConfigSource().hasAds()) {
@@ -234,8 +238,8 @@ final class ClientXdsClient extends AbstractXdsClient {
               "Listener " + listenerName + " with RDS config_source not set to ADS");
           return;
         }
-        update = new LdsUpdate(
-            maxStreamDuration, rds.getRouteConfigName(), hasFaultInjection, httpFault);
+        update =
+            new LdsUpdate(maxStreamDuration, rds.getRouteConfigName(), filterChain, filterConfigs);
         rdsNames.add(rds.getRouteConfigName());
       } else {
         nackResponse(ResourceType.LDS, nonce,
@@ -262,12 +266,61 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
+  @VisibleForTesting
+  @Nullable // Returns null if the filter is optional but not supported.
+  static StructOrError<FilterConfig> parseHttpFilter(
+      io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
+          httpFilter) {
+    String filterName = httpFilter.getName();
+    if (!httpFilter.hasTypedConfig()) {
+      if (httpFilter.getIsOptional()) {
+        return null;
+      } else {
+        return StructOrError.fromError(
+            "HttpFilter [" + filterName + "] is not optional and has no typed config");
+      }
+    }
+    Any anyConfig = httpFilter.getTypedConfig();
+    String typeUrl;
+    try {
+      typeUrl = getFilterConfigTypeUrl(anyConfig);
+    } catch (InvalidProtocolBufferException e) {
+      return StructOrError.fromError("Invalid proto: " + e);
+    }
+    Filter filter = Filter.Registry.GLOBAL_REGISTRY.get(typeUrl);
+    if (filter == null) {
+      if (httpFilter.getIsOptional()) {
+        return null;
+      } else {
+        return StructOrError.fromError(
+            "HttpFilter [" + filterName + "] is not optional and has an unsupported config type: "
+                + typeUrl);
+      }
+    }
+    Filter.StructOrError<? extends FilterConfig> filterConfig =
+        filter.parseFilterConfig(anyConfig);
+    if (filterConfig.errorDetail != null) {
+      return StructOrError.fromError(
+          "HttpFilter [" + filterName + "] has an unsupported config: " + filterConfig.errorDetail);
+    }
+    return StructOrError.fromStruct(filterConfig.struct);
+  }
+
+  private static String getFilterConfigTypeUrl(Any rawProtoMessage)
+      throws InvalidProtocolBufferException {
+    if (rawProtoMessage.getTypeUrl().equals(TYPE_URL_TYPED_STRUCT)) {
+      TypedStruct typedStruct = rawProtoMessage.unpack(TypedStruct.class);
+      return typedStruct.getTypeUrl();
+    }
+    return rawProtoMessage.getTypeUrl();
+  }
+
   private static StructOrError<VirtualHost> parseVirtualHost(
-      io.envoyproxy.envoy.config.route.v3.VirtualHost proto) {
+      io.envoyproxy.envoy.config.route.v3.VirtualHost proto, boolean parseFilter) {
     String name = proto.getName();
     List<Route> routes = new ArrayList<>(proto.getRoutesCount());
     for (io.envoyproxy.envoy.config.route.v3.Route routeProto : proto.getRoutesList()) {
-      StructOrError<Route> route = parseRoute(routeProto);
+      StructOrError<Route> route = parseRoute(routeProto, parseFilter);
       if (route == null) {
         continue;
       }
@@ -277,27 +330,64 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       routes.add(route.getStruct());
     }
-    HttpFault httpFault = null;
-    Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
-    if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
-      Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
-      StructOrError<HttpFault> httpFaultOrError = decodeFaultFilterConfig(rawFaultFilterConfig);
-      if (httpFaultOrError != null) {
-        if (httpFaultOrError.getErrorDetail() != null) {
-          return StructOrError.fromError(
-              "Virtual host [" + name + "] contains invalid HttpFault filter : "
-                  + httpFaultOrError.getErrorDetail());
-        }
-        httpFault = httpFaultOrError.getStruct();
-      }
+    if (!parseFilter) {
+      return StructOrError.fromStruct(VirtualHost.create(
+          name, proto.getDomainsList(), routes, new HashMap<String, FilterConfig>()));
+    }
+    StructOrError<Map<String, FilterConfig>> overrideConfigs =
+        parseOverrideConfigs(proto.getTypedPerFilterConfigMap());
+    if (overrideConfigs.errorDetail != null) {
+      return StructOrError.fromError(
+          "VirtualHost [" + proto.getName() + "] contains invalid HttpFilter config: "
+              + overrideConfigs.errorDetail);
     }
     return StructOrError.fromStruct(VirtualHost.create(
-        name, proto.getDomainsList(), routes, httpFault));
+        name, proto.getDomainsList(), routes, overrideConfigs.struct));
+  }
+
+  @VisibleForTesting
+  static StructOrError<Map<String, FilterConfig>> parseOverrideConfigs(
+      Map<String, Any> rawFilterConfigMap) {
+    Map<String, FilterConfig> overrideConfigs = new HashMap<>();
+    for (String name : rawFilterConfigMap.keySet()) {
+      Any rawFilterConfig = rawFilterConfigMap.get(name);
+      String typeUrl = rawFilterConfig.getTypeUrl();
+      boolean isOptional = false;
+      if (typeUrl.equals(TYPE_URL_FILTER_CONFIG)) {
+        io.envoyproxy.envoy.config.route.v3.FilterConfig filterConfig;
+        try {
+          filterConfig =
+              rawFilterConfig.unpack(io.envoyproxy.envoy.config.route.v3.FilterConfig.class);
+        } catch (InvalidProtocolBufferException e) {
+          return StructOrError.fromError("Invalid proto: " + e);
+        }
+        isOptional = filterConfig.getIsOptional();
+        rawFilterConfig = filterConfig.getConfig();
+        typeUrl = rawFilterConfig.getTypeUrl();
+      }
+      Filter filter = Filter.Registry.GLOBAL_REGISTRY.get(typeUrl);
+      if (filter == null) {
+        if (isOptional) {
+          continue;
+        } else {
+          return StructOrError.fromError("HttpFilter [" + name
+              + "] is not optional and has an unsupported config type: " + typeUrl);
+        }
+      }
+      Filter.StructOrError<? extends FilterConfig> filterConfig =
+          filter.parseFilterConfigOverride(rawFilterConfig);
+      if (filterConfig.errorDetail != null) {
+        return StructOrError.fromError("Invalid filter config for HttpFilter: " + name);
+      }
+      overrideConfigs.put(name, filterConfig.struct);
+    }
+    return StructOrError.fromStruct(overrideConfigs);
   }
 
   @VisibleForTesting
   @Nullable
-  static StructOrError<Route> parseRoute(io.envoyproxy.envoy.config.route.v3.Route proto) {
+  static StructOrError<Route> parseRoute(
+      io.envoyproxy.envoy.config.route.v3.Route proto, boolean parseFilter) {
     StructOrError<RouteMatch> routeMatch = parseRouteMatch(proto.getMatch());
     if (routeMatch == null) {
       return null;
@@ -310,7 +400,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     StructOrError<RouteAction> routeAction;
     switch (proto.getActionCase()) {
       case ROUTE:
-        routeAction = parseRouteAction(proto.getRoute());
+        routeAction = parseRouteAction(proto.getRoute(), parseFilter);
         break;
       case REDIRECT:
         return StructOrError.fromError("Unsupported action type: redirect");
@@ -329,23 +419,19 @@ final class ClientXdsClient extends AbstractXdsClient {
       return StructOrError.fromError(
           "Invalid route [" + proto.getName() + "]: " + routeAction.getErrorDetail());
     }
-
-    HttpFault httpFault = null;
-    Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
-    if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
-      Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
-      StructOrError<HttpFault> httpFaultOrError = decodeFaultFilterConfig(rawFaultFilterConfig);
-      if (httpFaultOrError != null) {
-        if (httpFaultOrError.getErrorDetail() != null) {
-          return StructOrError.fromError(
-              "Route [" + proto.getName() + "] contains invalid HttpFault filter: "
-                  + httpFaultOrError.getErrorDetail());
-        }
-        httpFault = httpFaultOrError.getStruct();
-      }
+    if (!parseFilter) {
+      return StructOrError.fromStruct(Route.create(
+          routeMatch.getStruct(), routeAction.getStruct(), new HashMap<String, FilterConfig>()));
+    }
+    StructOrError<Map<String, FilterConfig>> overrideConfigs =
+        parseOverrideConfigs(proto.getTypedPerFilterConfigMap());
+    if (overrideConfigs.errorDetail != null) {
+      return StructOrError.fromError(
+          "Route [" + proto.getName() + "] contains invalid HttpFilter config: "
+              + overrideConfigs.errorDetail);
     }
     return StructOrError.fromStruct(Route.create(
-        routeMatch.getStruct(), routeAction.getStruct(), httpFault));
+        routeMatch.getStruct(), routeAction.getStruct(), overrideConfigs.struct));
   }
 
   @VisibleForTesting
@@ -471,7 +557,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   @VisibleForTesting
   @Nullable
   static StructOrError<RouteAction> parseRouteAction(
-      io.envoyproxy.envoy.config.route.v3.RouteAction proto) {
+      io.envoyproxy.envoy.config.route.v3.RouteAction proto, boolean parseFilter) {
     Long timeoutNano = null;
     if (proto.hasMaxStreamDuration()) {
       io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration maxStreamDuration
@@ -529,7 +615,8 @@ final class ClientXdsClient extends AbstractXdsClient {
         List<ClusterWeight> weightedClusters = new ArrayList<>();
         for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
             : clusterWeights) {
-          StructOrError<ClusterWeight> clusterWeightOrError = parseClusterWeight(clusterWeight);
+          StructOrError<ClusterWeight> clusterWeightOrError =
+              parseClusterWeight(clusterWeight, parseFilter);
           if (clusterWeightOrError.getErrorDetail() != null) {
             return StructOrError.fromError("RouteAction contains invalid ClusterWeight: "
                 + clusterWeightOrError.getErrorDetail());
@@ -548,132 +635,34 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @VisibleForTesting
   static StructOrError<ClusterWeight> parseClusterWeight(
-      io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto) {
-    HttpFault httpFault = null;
-    Map<String, Any> filterConfigMap = proto.getTypedPerFilterConfigMap();
-    if (filterConfigMap.containsKey(HTTP_FAULT_FILTER_NAME)) {
-      Any rawFaultFilterConfig = filterConfigMap.get(HTTP_FAULT_FILTER_NAME);
-      StructOrError<HttpFault> httpFaultOrError = decodeFaultFilterConfig(rawFaultFilterConfig);
-      if (httpFaultOrError != null) {
-        if (httpFaultOrError.getErrorDetail() != null) {
-          return StructOrError.fromError(
-              "ClusterWeight [" + proto.getName() + "] contains invalid HttpFault filter: "
-                  + httpFaultOrError.getErrorDetail());
-        }
-        httpFault = httpFaultOrError.getStruct();
-      }
+      io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto,
+      boolean parseFilter) {
+    if (!parseFilter) {
+      return StructOrError.fromStruct(ClusterWeight.create(
+          proto.getName(), proto.getWeight().getValue(), new HashMap<String, FilterConfig>()));
     }
-    return StructOrError.fromStruct(
-        ClusterWeight.create(proto.getName(), proto.getWeight().getValue(), httpFault));
-  }
-
-  @Nullable
-  private static StructOrError<HttpFault> decodeFaultFilterConfig(Any rawFaultFilterConfig) {
-    if (!rawFaultFilterConfig.getTypeUrl().equals(
-        "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault")) {
-      return null;
-    }
-    HTTPFault httpFaultProto;
-    try {
-      httpFaultProto = rawFaultFilterConfig.unpack(HTTPFault.class);
-    } catch (InvalidProtocolBufferException e) {
-      return StructOrError.fromError("Invalid proto: " + e);
-    }
-    return parseHttpFault(httpFaultProto);
-  }
-
-  private static StructOrError<HttpFault> parseHttpFault(HTTPFault httpFault) {
-    FaultDelay faultDelay = null;
-    FaultAbort faultAbort = null;
-    if (httpFault.hasDelay()) {
-      faultDelay = parseFaultDelay(httpFault.getDelay());
-    }
-    if (httpFault.hasAbort()) {
-      StructOrError<FaultAbort> faultAbortOrError = parseFaultAbort(httpFault.getAbort());
-      if (faultAbortOrError.getErrorDetail() != null) {
-        return StructOrError.fromError(
-            "HttpFault contains invalid FaultAbort: " + faultAbortOrError.getErrorDetail());
-      }
-      faultAbort = faultAbortOrError.getStruct();
-    }
-    if (faultDelay == null && faultAbort == null) {
+    StructOrError<Map<String, FilterConfig>> overrideConfigs =
+        parseOverrideConfigs(proto.getTypedPerFilterConfigMap());
+    if (overrideConfigs.errorDetail != null) {
       return StructOrError.fromError(
-          "Invalid HttpFault: neither fault_delay nor fault_abort is specified");
+          "ClusterWeight [" + proto.getName() + "] contains invalid HttpFilter config: "
+              + overrideConfigs.errorDetail);
     }
-    String upstreamCluster = httpFault.getUpstreamCluster();
-    List<String> downstreamNodes = httpFault.getDownstreamNodesList();
-    List<HeaderMatcher> headers = new ArrayList<>();
-    for (io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto : httpFault.getHeadersList()) {
-      StructOrError<HeaderMatcher> headerMatcherOrError = parseHeaderMatcher(proto);
-      if (headerMatcherOrError.getErrorDetail() != null) {
-        return StructOrError.fromError(
-            "HttpFault contains invalid header matcher: "
-                + headerMatcherOrError.getErrorDetail());
-      }
-      headers.add(headerMatcherOrError.getStruct());
-    }
-    Integer maxActiveFaults = null;
-    if (httpFault.hasMaxActiveFaults()) {
-      maxActiveFaults = httpFault.getMaxActiveFaults().getValue();
-      if (maxActiveFaults < 0) {
-        maxActiveFaults = Integer.MAX_VALUE;
-      }
-    }
-    return StructOrError.fromStruct(HttpFault.create(
-        faultDelay, faultAbort, upstreamCluster, downstreamNodes, headers, maxActiveFaults));
-  }
-
-  private static FaultDelay parseFaultDelay(
-      io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay faultDelay) {
-    HttpFault.FractionalPercent percent = parsePercent(faultDelay.getPercentage());
-    if (faultDelay.hasHeaderDelay()) {
-      return FaultDelay.forHeader(percent);
-    }
-    return FaultDelay.forFixedDelay(Durations.toNanos(faultDelay.getFixedDelay()), percent);
-  }
-
-  @VisibleForTesting
-  static StructOrError<FaultAbort> parseFaultAbort(
-      io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
-    HttpFault.FractionalPercent percent = parsePercent(faultAbort.getPercentage());
-    switch (faultAbort.getErrorTypeCase()) {
-      case HEADER_ABORT:
-        return StructOrError.fromStruct(FaultAbort.forHeader(percent));
-      case HTTP_STATUS:
-        return StructOrError.fromStruct(FaultAbort.forStatus(
-            GrpcUtil.httpStatusToGrpcStatus(faultAbort.getHttpStatus()), percent));
-      case GRPC_STATUS:
-        return StructOrError.fromStruct(FaultAbort.forStatus(
-            Status.fromCodeValue(faultAbort.getGrpcStatus()), percent));
-      case ERRORTYPE_NOT_SET:
-      default:
-        return StructOrError.fromError(
-            "Unknown error type case: " + faultAbort.getErrorTypeCase());
-    }
-  }
-
-  private static HttpFault.FractionalPercent parsePercent(FractionalPercent proto) {
-    switch (proto.getDenominator()) {
-      case HUNDRED:
-        return HttpFault.FractionalPercent.perHundred(proto.getNumerator());
-      case TEN_THOUSAND:
-        return HttpFault.FractionalPercent.perTenThousand(proto.getNumerator());
-      case MILLION:
-        return HttpFault.FractionalPercent.perMillion(proto.getNumerator());
-      case UNRECOGNIZED:
-      default:
-        throw new IllegalArgumentException("Unknown denominator type: " + proto.getDenominator());
-    }
+    return StructOrError.fromStruct(ClusterWeight.create(
+        proto.getName(), proto.getWeight().getValue(), overrideConfigs.struct));
   }
 
   @Override
   protected void handleRdsResponse(String versionInfo, List<Any> resources, String nonce) {
     // Unpack RouteConfiguration messages.
     Map<String, RouteConfiguration> routeConfigs = new HashMap<>(resources.size());
+    boolean isResourceV3 = false;
     try {
       for (com.google.protobuf.Any res : resources) {
         if (res.getTypeUrl().equals(ResourceType.RDS.typeUrlV2())) {
           res = res.toBuilder().setTypeUrl(ResourceType.RDS.typeUrl()).build();
+        } else {
+          isResourceV3 = true;
         }
         RouteConfiguration rc = res.unpack(RouteConfiguration.class);
         routeConfigs.put(rc.getName(), rc);
@@ -688,6 +677,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         XdsLogLevel.INFO, "Received RDS response for resources: {0}", routeConfigs.keySet());
 
     Map<String, RdsUpdate> rdsUpdates = new HashMap<>();
+    boolean parseFilter = enableFaultInjection && isResourceV3;
     for (Map.Entry<String, RouteConfiguration> entry : routeConfigs.entrySet()) {
       String routeConfigName = entry.getKey();
       RouteConfiguration routeConfig = entry.getValue();
@@ -695,7 +685,7 @@ final class ClientXdsClient extends AbstractXdsClient {
           new ArrayList<>(routeConfig.getVirtualHostsCount());
       for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
           : routeConfig.getVirtualHostsList()) {
-        StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto);
+        StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseFilter);
         if (virtualHost.getErrorDetail() != null) {
           nackResponse(ResourceType.RDS, nonce, "RouteConfiguration " + routeConfigName
               + " contains invalid virtual host: " + virtualHost.getErrorDetail());

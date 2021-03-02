@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
@@ -46,7 +47,8 @@ import io.grpc.Status.Code;
 import io.grpc.xds.ClientXdsClient.StructOrError;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.HttpFault.FaultAbort;
+import io.grpc.xds.FaultConfig.FaultAbort;
+import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Matchers.FractionMatcher;
 import io.grpc.xds.Matchers.HeaderMatcher;
 import io.grpc.xds.Matchers.PathMatcher;
@@ -78,7 +80,7 @@ public class ClientXdsClientDataTest {
                 io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
                     .setCluster("cluster-foo"))
             .build();
-    StructOrError<Route> struct = ClientXdsClient.parseRoute(proto);
+    StructOrError<Route> struct = ClientXdsClient.parseRoute(proto, false);
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct())
         .isEqualTo(
@@ -86,7 +88,7 @@ public class ClientXdsClientDataTest {
                 RouteMatch.create(PathMatcher.fromPath("/service/method", false),
                     Collections.<HeaderMatcher>emptyList(), null),
                 RouteAction.forCluster("cluster-foo", Collections.<HashPolicy>emptyList(), null),
-                null));
+                ImmutableMap.<String, FilterConfig>of()));
   }
 
   @Test
@@ -98,7 +100,7 @@ public class ClientXdsClientDataTest {
             .setMatch(io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPath(""))
             .setRedirect(RedirectAction.getDefaultInstance())
             .build();
-    res = ClientXdsClient.parseRoute(redirectRoute);
+    res = ClientXdsClient.parseRoute(redirectRoute, false);
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail()).isEqualTo("Unsupported action type: redirect");
 
@@ -108,7 +110,7 @@ public class ClientXdsClientDataTest {
             .setMatch(io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPath(""))
             .setDirectResponse(DirectResponseAction.getDefaultInstance())
             .build();
-    res = ClientXdsClient.parseRoute(directResponseRoute);
+    res = ClientXdsClient.parseRoute(directResponseRoute, false);
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail()).isEqualTo("Unsupported action type: direct_response");
 
@@ -118,7 +120,7 @@ public class ClientXdsClientDataTest {
             .setMatch(io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPath(""))
             .setFilterAction(FilterAction.getDefaultInstance())
             .build();
-    res = ClientXdsClient.parseRoute(filterRoute);
+    res = ClientXdsClient.parseRoute(filterRoute, false);
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail()).isEqualTo("Unsupported action type: filter_action");
   }
@@ -138,7 +140,7 @@ public class ClientXdsClientDataTest {
                 io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
                     .setCluster("cluster-foo"))
             .build();
-    assertThat(ClientXdsClient.parseRoute(proto)).isNull();
+    assertThat(ClientXdsClient.parseRoute(proto, false)).isNull();
   }
 
   @Test
@@ -153,7 +155,7 @@ public class ClientXdsClientDataTest {
                 io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
                     .setClusterHeader("cluster header"))  // cluster_header action not supported
             .build();
-    assertThat(ClientXdsClient.parseRoute(proto)).isNull();
+    assertThat(ClientXdsClient.parseRoute(proto, false)).isNull();
   }
 
   @Test
@@ -332,7 +334,7 @@ public class ClientXdsClientDataTest {
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
             .setCluster("cluster-foo")
             .build();
-    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto);
+    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto, false);
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct().cluster()).isEqualTo("cluster-foo");
     assertThat(struct.getStruct().weightedClusters()).isNull();
@@ -354,12 +356,12 @@ public class ClientXdsClientDataTest {
                         .setName("cluster-bar")
                         .setWeight(UInt32Value.newBuilder().setValue(70))))
             .build();
-    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto);
+    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto, false);
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct().cluster()).isNull();
     assertThat(struct.getStruct().weightedClusters()).containsExactly(
-        ClusterWeight.create("cluster-foo", 30, null),
-        ClusterWeight.create("cluster-bar", 70, null));
+        ClusterWeight.create("cluster-foo", 30, ImmutableMap.<String, FilterConfig>of()),
+        ClusterWeight.create("cluster-bar", 70, ImmutableMap.<String, FilterConfig>of()));
   }
 
   @Test
@@ -372,7 +374,7 @@ public class ClientXdsClientDataTest {
                     .setGrpcTimeoutHeaderMax(Durations.fromSeconds(5L))
                     .setMaxStreamDuration(Durations.fromMillis(20L)))
             .build();
-    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto);
+    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto, false);
     assertThat(struct.getStruct().timeoutNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L));
   }
 
@@ -385,7 +387,7 @@ public class ClientXdsClientDataTest {
                 MaxStreamDuration.newBuilder()
                     .setMaxStreamDuration(Durations.fromSeconds(5L)))
             .build();
-    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto);
+    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto, false);
     assertThat(struct.getStruct().timeoutNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L));
   }
 
@@ -395,7 +397,7 @@ public class ClientXdsClientDataTest {
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
             .setCluster("cluster-foo")
             .build();
-    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto);
+    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto, false);
     assertThat(struct.getStruct().timeoutNano()).isNull();
   }
 
@@ -430,7 +432,7 @@ public class ClientXdsClientDataTest {
                     .setQueryParameter(
                         QueryParameter.newBuilder().setName("param"))) // unsupported
             .build();
-    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto);
+    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto, false);
     List<HashPolicy> policies = struct.getStruct().hashPolicies();
     assertThat(policies).hasSize(2);
     assertThat(policies.get(0).type()).isEqualTo(HashPolicy.Type.HEADER);
@@ -450,7 +452,7 @@ public class ClientXdsClientDataTest {
             .setName("cluster-foo")
             .setWeight(UInt32Value.newBuilder().setValue(30))
             .build();
-    ClusterWeight clusterWeight = ClientXdsClient.parseClusterWeight(proto).getStruct();
+    ClusterWeight clusterWeight = ClientXdsClient.parseClusterWeight(proto, false).getStruct();
     assertThat(clusterWeight.name()).isEqualTo("cluster-foo");
     assertThat(clusterWeight.weight()).isEqualTo(30);
   }
@@ -466,11 +468,11 @@ public class ClientXdsClientDataTest {
             .setPercentage(FractionalPercent.newBuilder()
                 .setNumerator(20).setDenominator(DenominatorType.HUNDRED))
             .setHeaderAbort(HeaderAbort.getDefaultInstance()).build();
-    FaultAbort faultAbort = ClientXdsClient.parseFaultAbort(proto).getStruct();
+    FaultAbort faultAbort = FaultFilter.parseFaultAbort(proto).struct;
     assertThat(faultAbort.headerAbort()).isTrue();
     assertThat(faultAbort.percent().numerator()).isEqualTo(20);
     assertThat(faultAbort.percent().denominatorType())
-        .isEqualTo(HttpFault.FractionalPercent.DenominatorType.HUNDRED);
+        .isEqualTo(FaultConfig.FractionalPercent.DenominatorType.HUNDRED);
   }
 
   @Test
@@ -480,10 +482,10 @@ public class ClientXdsClientDataTest {
             .setPercentage(FractionalPercent.newBuilder()
                .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
             .setHttpStatus(400).build();
-    FaultAbort res = ClientXdsClient.parseFaultAbort(proto).getStruct();
+    FaultAbort res = FaultFilter.parseFaultAbort(proto).struct;
     assertThat(res.percent().numerator()).isEqualTo(100);
     assertThat(res.percent().denominatorType())
-        .isEqualTo(HttpFault.FractionalPercent.DenominatorType.TEN_THOUSAND);
+        .isEqualTo(FaultConfig.FractionalPercent.DenominatorType.TEN_THOUSAND);
     assertThat(res.status().getCode()).isEqualTo(Code.INTERNAL);
   }
 
@@ -494,10 +496,10 @@ public class ClientXdsClientDataTest {
             .setPercentage(FractionalPercent.newBuilder()
                 .setNumerator(600).setDenominator(DenominatorType.MILLION))
             .setGrpcStatus(Code.DEADLINE_EXCEEDED.value()).build();
-    FaultAbort faultAbort = ClientXdsClient.parseFaultAbort(proto).getStruct();
+    FaultAbort faultAbort = FaultFilter.parseFaultAbort(proto).struct;
     assertThat(faultAbort.percent().numerator()).isEqualTo(600);
     assertThat(faultAbort.percent().denominatorType())
-        .isEqualTo(HttpFault.FractionalPercent.DenominatorType.MILLION);
+        .isEqualTo(FaultConfig.FractionalPercent.DenominatorType.MILLION);
     assertThat(faultAbort.status().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
   }
 
