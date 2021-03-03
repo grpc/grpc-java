@@ -244,6 +244,7 @@ final class GrpclbState {
       // newLbAddressGroups, but we're considering that "okay". If we detected the RPC is to an
       // outdated backend, we could choose to re-create the RPC.
       if (lbStream == null) {
+        cancelLbRpcRetryTimer();
         startLbRpc();
       }
       // Start the fallback timer if it's never started
@@ -368,6 +369,7 @@ final class GrpclbState {
   private void cancelLbRpcRetryTimer() {
     if (lbRpcRetryTimer != null) {
       lbRpcRetryTimer.cancel();
+      lbRpcRetryTimer = null;
     }
   }
 
