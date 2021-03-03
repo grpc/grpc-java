@@ -142,7 +142,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     List<String> listenerNames = new ArrayList<>(resources.size());
     try {
       for (Any res : resources) {
-        Listener listener = unpackCompatibleTypes(res, Listener.class, ResourceType.LDS.typeUrl(),
+        Listener listener = unpackCompatibleType(res, Listener.class, ResourceType.LDS.typeUrl(),
             ResourceType.LDS.typeUrlV2());
         listeners.add(listener);
         listenerNames.add(listener.getName());
@@ -158,7 +158,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     Map<String, HttpConnectionManager> httpConnectionManagers = new HashMap<>(listeners.size());
     try {
       for (Listener listener : listeners) {
-        HttpConnectionManager hcm = unpackCompatibleTypes(
+        HttpConnectionManager hcm = unpackCompatibleType(
             listener.getApiListener().getApiListener(), HttpConnectionManager.class,
             TYPE_URL_HTTP_CONNECTION_MANAGER, TYPE_URL_HTTP_CONNECTION_MANAGER_V2);
         httpConnectionManagers.put(listener.getName(), hcm);
@@ -668,7 +668,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     try {
       for (Any res : resources) {
         RouteConfiguration rc =
-            unpackCompatibleTypes(res, RouteConfiguration.class, ResourceType.RDS.typeUrl(),
+            unpackCompatibleType(res, RouteConfiguration.class, ResourceType.RDS.typeUrl(),
                 ResourceType.RDS.typeUrlV2());
         routeConfigs.put(rc.getName(), rc);
       }
@@ -716,7 +716,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     List<String> clusterNames = new ArrayList<>(resources.size());
     try {
       for (Any res : resources) {
-        Cluster cluster = unpackCompatibleTypes(res, Cluster.class, ResourceType.CDS.typeUrl(),
+        Cluster cluster = unpackCompatibleType(res, Cluster.class, ResourceType.CDS.typeUrl(),
             ResourceType.CDS.typeUrlV2());
         clusters.add(cluster);
         clusterNames.add(cluster.getName());
@@ -807,7 +807,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig clusterConfig;
     try {
-      clusterConfig = unpackCompatibleTypes(customType.getTypedConfig(),
+      clusterConfig = unpackCompatibleType(customType.getTypedConfig(),
           io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig.class,
           TYPE_URL_CLUSTER_CONFIG, TYPE_URL_CLUSTER_CONFIG_V2);
     } catch (InvalidProtocolBufferException e) {
@@ -845,7 +845,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         && TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
       try {
         upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-            unpackCompatibleTypes(cluster.getTransportSocket().getTypedConfig(),
+            unpackCompatibleType(cluster.getTransportSocket().getTypedConfig(),
                 io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class,
                 TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2));
       } catch (InvalidProtocolBufferException e) {
@@ -888,7 +888,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     try {
       for (Any res : resources) {
         ClusterLoadAssignment assignment =
-            unpackCompatibleTypes(res, ClusterLoadAssignment.class, ResourceType.EDS.typeUrl(),
+            unpackCompatibleType(res, ClusterLoadAssignment.class, ResourceType.EDS.typeUrl(),
                 ResourceType.EDS.typeUrlV2());
         clusterLoadAssignments.add(assignment);
         claNames.add(assignment.getClusterName());
@@ -1012,7 +1012,7 @@ final class ClientXdsClient extends AbstractXdsClient {
    * @return Unpacked message
    * @throws InvalidProtocolBufferException if the message couldn't be unpacked
    */
-  private static <T extends com.google.protobuf.Message> T unpackCompatibleTypes(
+  private static <T extends com.google.protobuf.Message> T unpackCompatibleType(
       Any any, Class<T> clazz, String typeUrl, String compatibleTypeUrl)
       throws InvalidProtocolBufferException {
     if (any.getTypeUrl().equals(compatibleTypeUrl)) {
