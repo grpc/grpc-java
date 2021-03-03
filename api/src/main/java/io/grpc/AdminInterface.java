@@ -36,7 +36,6 @@ import javax.annotation.concurrent.ThreadSafe;
 public final class AdminInterface {
   private static final int DEFAULT_CHANNELZ_MAX_PAGE_SIZE = 100;
   private static final Logger logger = Logger.getLogger(AdminInterface.class.getName());
-  private static List<ServerServiceDefinition> standardServices;
   private static int channelzMaxPageSize = DEFAULT_CHANNELZ_MAX_PAGE_SIZE;
 
   // Do not instantiate.
@@ -47,23 +46,20 @@ public final class AdminInterface {
    *
    * @return list of standard admin services
    */
-  public static synchronized List<ServerServiceDefinition> getStandardServices() {
-    if (standardServices == null) {
-      List<ServerServiceDefinition> services = new ArrayList<>();
-      ServerServiceDefinition channelz = loadService(
-          "io.grpc.services.ChannelzService",
-          new Class<?>[]{int.class}, new Object[]{channelzMaxPageSize});
-      if (channelz != null) {
-        services.add(channelz);
-      }
-      ServerServiceDefinition csds = loadService(
-          "io.grpc.xds.CsdsService", new Class<?>[]{}, new Object[]{});
-      if (csds != null) {
-        services.add(csds);
-      }
-      standardServices = Collections.unmodifiableList(services);
+  public static List<ServerServiceDefinition> getStandardServices() {
+    List<ServerServiceDefinition> services = new ArrayList<>();
+    ServerServiceDefinition channelz = loadService(
+        "io.grpc.services.ChannelzService",
+        new Class<?>[]{int.class}, new Object[]{channelzMaxPageSize});
+    if (channelz != null) {
+      services.add(channelz);
     }
-    return standardServices;
+    ServerServiceDefinition csds = loadService(
+        "io.grpc.xds.CsdsService", new Class<?>[]{}, new Object[]{});
+    if (csds != null) {
+      services.add(csds);
+    }
+    return Collections.unmodifiableList(services);
   }
 
   /**
@@ -73,9 +69,7 @@ public final class AdminInterface {
    * @param size the max page size
    */
   public static synchronized void setChannelzMaxPageSize(int size) {
-    if (standardServices == null) {
-      channelzMaxPageSize = size;
-    }
+    channelzMaxPageSize = size;
   }
 
   @Nullable
