@@ -16,8 +16,6 @@
 
 package io.grpc.stub;
 
-import io.grpc.ExperimentalApi;
-
 /**
  * A refinement of {@link CallStreamObserver} to allows for interaction with call
  * cancellation events on the server side.
@@ -28,7 +26,6 @@ import io.grpc.ExperimentalApi;
  * <p>DO NOT MOCK: The API is too complex to reliably mock. Use InProcessChannelBuilder to create
  * "real" RPCs suitable for testing and interact with the server using a normal client stub.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1788")
 public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> {
 
   /**
@@ -89,8 +86,6 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    *   <li>{@link io.grpc.MethodDescriptor.MethodType#SERVER_STREAMING} operations.</li>
    * </ul>
    * </p>
-   *
-   * <p>This API is still a work in-progress and may change in the future.
    */
   public void disableAutoRequest() {
     throw new UnsupportedOperationException();

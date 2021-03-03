@@ -16,8 +16,6 @@
 
 package io.grpc.stub;
 
-import io.grpc.ExperimentalApi;
-
 /**
  * A refinement of StreamObserver provided by the GRPC runtime to the application (the client or
  * the server) that allows for more complex interactions with call behavior.
@@ -50,7 +48,6 @@ import io.grpc.ExperimentalApi;
  * <p>DO NOT MOCK: The API is too complex to reliably mock. Use InProcessChannelBuilder to create
  * "real" RPCs suitable for testing.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1788")
 public abstract class CallStreamObserver<V> implements StreamObserver<V> {
 
   /**
@@ -107,10 +104,11 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * </ul>
    * </p>
    * 
-   * <p>This API is being replaced, but is not yet deprecated. On server-side it being replaced
+   * <p>This API is being replaced. On server-side it being replaced
    * with {@link ServerCallStreamObserver#disableAutoRequest}. On client-side {@link
    * ClientCallStreamObserver#disableAutoRequestWithInitial disableAutoRequestWithInitial(1)}.
    */
+  @Deprecated
   public abstract void disableAutoInboundFlowControl();
 
   /**

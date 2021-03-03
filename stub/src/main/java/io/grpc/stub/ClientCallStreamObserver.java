@@ -16,8 +16,6 @@
 
 package io.grpc.stub;
 
-import io.grpc.ExperimentalApi;
-
 import javax.annotation.Nullable;
 
 /**
@@ -30,7 +28,6 @@ import javax.annotation.Nullable;
  * <p>DO NOT MOCK: The API is too complex to reliably mock. Use InProcessChannelBuilder to create
  * "real" RPCs suitable for testing and make a fake for the server-side.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1788")
 public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> {
   /**
    * Prevent any further processing for this {@code ClientCallStreamObserver}. No further messages
@@ -57,8 +54,6 @@ public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> 
    *
    * <p>This method may only be called during {@link ClientResponseObserver#beforeStart
    * ClientResponseObserver.beforeStart()}.
-   *
-   * <p>This API is still a work in-progress and may change in the future.
    */
   public void disableAutoRequestWithInitial(int request) {
     throw new UnsupportedOperationException();
