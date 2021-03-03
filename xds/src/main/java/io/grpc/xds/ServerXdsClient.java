@@ -24,7 +24,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.envoyproxy.envoy.config.core.v3.Address;
@@ -142,9 +141,11 @@ final class ServerXdsClient extends AbstractXdsClient {
     Listener requestedListener = null;
     getLogger().log(XdsLogLevel.DEBUG, "Listener count: {0}", resources.size());
     try {
-      for (Any res : resources) {
-        Listener listener = unpackCompatibleTypes(res, Listener.class, ResourceType.LDS.typeUrl(),
-            ImmutableSet.of(ResourceType.LDS.typeUrlV2()));
+      for (com.google.protobuf.Any res : resources) {
+        if (res.getTypeUrl().equals(ResourceType.LDS.typeUrlV2())) {
+          res = res.toBuilder().setTypeUrl(ResourceType.LDS.typeUrl()).build();
+        }
+        Listener listener = res.unpack(Listener.class);
         getLogger().log(XdsLogLevel.DEBUG, "Found listener {0}", listener.toString());
         if (isRequestedListener(listener)) {
           requestedListener = listener;

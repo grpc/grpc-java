@@ -24,7 +24,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.Any;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.rpc.Code;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
@@ -41,7 +40,6 @@ import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -228,26 +226,6 @@ abstract class AbstractXdsClient extends XdsClient {
     if (resources != null) {
       adsStream.sendDiscoveryRequest(type, resources);
     }
-  }
-
-  /**
-   * Helper method to unpack serialized {@code com.google.protobuf.Any} message, with on-the-fly
-   * replacement compatible type URLs provided in {@code compatibleTypeUrls} with {@code typeUrl}.
-   * @param any serialized message to unpack
-   * @param clazz the class to unpack the message to
-   * @param typeUrl type URL to replace one of the types listed in {@code compatibleTypeUrls}
-   * @param compatibleTypeUrls the set of compatible type URLs to be replaced with {@code typeUrl}
-   * @param <T> The type of unpacked message
-   * @return Unpacked message
-   * @throws InvalidProtocolBufferException if the message couldn't be unpacked
-   */
-  protected static <T extends com.google.protobuf.Message> T unpackCompatibleTypes(
-      Any any, Class<T> clazz, String typeUrl, Set<String> compatibleTypeUrls)
-      throws InvalidProtocolBufferException {
-    if (compatibleTypeUrls.contains(any.getTypeUrl())) {
-      any = any.toBuilder().setTypeUrl(typeUrl).build();
-    }
-    return any.unpack(clazz);
   }
 
   /**
