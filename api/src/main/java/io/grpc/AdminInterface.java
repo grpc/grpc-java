@@ -27,9 +27,9 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Admin Interface provides a class of services for exposing the overall state of all gRPC
- * activity in a given binary. It aims to be a convenient API that automatically determines
- * which specific admin services are relevant.
+ * Admin Interface provides a class of services for exposing the overall state of gRPC
+ * activity in a given binary. It aims to be a convenient API that provides available admin
+ * services.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7929")
 @ThreadSafe
