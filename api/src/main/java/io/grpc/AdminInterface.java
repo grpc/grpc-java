@@ -35,8 +35,6 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public final class AdminInterface {
   private static final int DEFAULT_CHANNELZ_MAX_PAGE_SIZE = 100;
-  private static final String CHANNELZ_CLASS = "io.grpc.services.ChannelzService";
-  private static final String CSDS_CLASS = "io.grpc.xds.CsdsService";
   private static final Logger logger = Logger.getLogger(AdminInterface.class.getName());
   private static List<ServerServiceDefinition> standardServices;
   private static int channelzMaxPageSize = DEFAULT_CHANNELZ_MAX_PAGE_SIZE;
@@ -53,11 +51,13 @@ public final class AdminInterface {
     if (standardServices == null) {
       List<ServerServiceDefinition> services = new ArrayList<>();
       ServerServiceDefinition channelz = loadService(
-          CHANNELZ_CLASS, new Class<?>[]{int.class}, new Object[]{channelzMaxPageSize});
+          "io.grpc.services.ChannelzService",
+          new Class<?>[]{int.class}, new Object[]{channelzMaxPageSize});
       if (channelz != null) {
         services.add(channelz);
       }
-      ServerServiceDefinition csds = loadService(CSDS_CLASS, new Class<?>[]{}, new Object[]{});
+      ServerServiceDefinition csds = loadService(
+          "io.grpc.xds.CsdsService", new Class<?>[]{}, new Object[]{});
       if (csds != null) {
         services.add(csds);
       }
