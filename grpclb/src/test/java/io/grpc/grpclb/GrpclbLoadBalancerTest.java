@@ -662,6 +662,53 @@ public class GrpclbLoadBalancerTest {
     assertEquals(1983, scheduledTask.getDelay(TimeUnit.MILLISECONDS));
   }
 
+  @SuppressWarnings("unchecked")
+  @Test
+  public void raceBetweenHandleAddressesAndLbStreamClosure() {
+    InOrder inOrder = inOrder(mockLbService, backoffPolicyProvider, backoffPolicy1);
+    deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(),
+        createResolvedBalancerAddresses(1));
+    assertEquals(1, fakeOobChannels.size());
+    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
+
+    // Close lbStream
+    lbResponseObserver.onCompleted();
+    inOrder.verify(backoffPolicyProvider).get();
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    // Retry task scheduled
+    assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    FakeClock.ScheduledTask retryTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    assertEquals(10L, retryTask.getDelay(TimeUnit.NANOSECONDS));
+
+    // Receive the same Lb address again
+    deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(),
+        createResolvedBalancerAddresses(1));
+    // Retry task cancelled
+    assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    // Reuse the existing OOB channel
+    assertEquals(1, fakeOobChannels.size());
+    // Start a new LoadBalance RPC
+    inOrder.verify(mockLbService).balanceLoad(any(StreamObserver.class));
+    assertEquals(1, lbRequestObservers.size());
+    lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
+
+    // Simulate a race condition where the task has just started when it's cancelled
+    retryTask.command.run();
+    inOrder.verifyNoMoreInteractions();
+  }
+
   @Test
   public void raceBetweenLoadReportingAndLbStreamClosure() {
     Metadata headers = new Metadata();
