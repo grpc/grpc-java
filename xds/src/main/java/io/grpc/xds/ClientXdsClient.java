@@ -1002,8 +1002,9 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   /**
-   * Helper method to unpack serialized {@code com.google.protobuf.Any} message, with replacing
+   * Helper method to unpack serialized {@link com.google.protobuf.Any} message, while replacing
    * Type URL {@code compatibleTypeUrl} with {@code typeUrl}.
+   *
    * @param <T> The type of unpacked message
    * @param any serialized message to unpack
    * @param clazz the class to unpack the message to
