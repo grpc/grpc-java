@@ -36,7 +36,6 @@ import javax.annotation.concurrent.ThreadSafe;
 public final class AdminInterface {
   private static final int DEFAULT_CHANNELZ_MAX_PAGE_SIZE = 100;
   private static final Logger logger = Logger.getLogger(AdminInterface.class.getName());
-  private static int channelzMaxPageSize = DEFAULT_CHANNELZ_MAX_PAGE_SIZE;
 
   // Do not instantiate.
   private AdminInterface() {}
@@ -50,7 +49,7 @@ public final class AdminInterface {
     List<ServerServiceDefinition> services = new ArrayList<>();
     ServerServiceDefinition channelz = loadService(
         "io.grpc.services.ChannelzService",
-        new Class<?>[]{int.class}, new Object[]{channelzMaxPageSize});
+        new Class<?>[]{int.class}, new Object[]{DEFAULT_CHANNELZ_MAX_PAGE_SIZE});
     if (channelz != null) {
       services.add(channelz);
     }
@@ -60,16 +59,6 @@ public final class AdminInterface {
       services.add(csds);
     }
     return Collections.unmodifiableList(services);
-  }
-
-  /**
-   * Initialize the size of Channelz response pages. Calls after the first call of {@link
-   * #getStandardServices} are no-op.
-   *
-   * @param size the max page size
-   */
-  public static synchronized void setChannelzMaxPageSize(int size) {
-    channelzMaxPageSize = size;
   }
 
   @Nullable
