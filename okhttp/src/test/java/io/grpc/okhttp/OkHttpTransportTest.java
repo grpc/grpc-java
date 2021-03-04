@@ -101,10 +101,4 @@ public class OkHttpTransportTest extends AbstractTransportTest {
     return true;
   }
 
-  @Override
-  @org.junit.Test
-  @org.junit.Ignore
-  public void clientChecksInboundMetadataSize_trailer() {
-    // Server-side is flaky due to https://github.com/netty/netty/pull/8332
-  }
 }
