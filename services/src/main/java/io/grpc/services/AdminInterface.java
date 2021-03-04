@@ -26,7 +26,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -50,40 +49,24 @@ public final class AdminInterface {
    */
   public static List<ServerServiceDefinition> getStandardServices() {
     List<ServerServiceDefinition> services = new ArrayList<>();
-    ServerServiceDefinition channelz = loadService(
-        "io.grpc.services.ChannelzService",
-        new Class<?>[]{int.class}, new Object[]{DEFAULT_CHANNELZ_MAX_PAGE_SIZE});
-    if (channelz != null) {
-      services.add(channelz);
+    services.add(ChannelzService.newInstance(DEFAULT_CHANNELZ_MAX_PAGE_SIZE).bindService());
+    BindableService csds = null;
+    try {
+      Class<?> clazz = Class.forName("io.grpc.xds.CsdsService");
+      Method m = clazz.getMethod("newInstance");
+      csds = (BindableService) m.invoke(null);
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE, "Unable to find CSDS service", e);
+    } catch (NoSuchMethodException e) {
+      logger.log(Level.FINE, "Unable to load CSDS service", e);
+    } catch (IllegalAccessException e) {
+      logger.log(Level.FINE, "Unable to load CSDS service", e);
+    } catch (InvocationTargetException e) {
+      logger.log(Level.FINE, "Unable to load CSDS service", e);
     }
-    ServerServiceDefinition csds = loadService(
-        "io.grpc.xds.CsdsService", new Class<?>[]{}, new Object[]{});
     if (csds != null) {
-      services.add(csds);
+      services.add(csds.bindService());
     }
     return Collections.unmodifiableList(services);
-  }
-
-  @Nullable
-  private static ServerServiceDefinition loadService(
-      String name, Class<?>[] parameterTypes, Object[] args) {
-    BindableService service = null;
-    try {
-      Class<?> clazz = Class.forName(name);
-      Method m = clazz.getMethod("newInstance", parameterTypes);
-      service = (BindableService) m.invoke(null, args);
-    } catch (ClassNotFoundException e) {
-      logger.log(Level.FINE, "Unable to find " + name, e);
-    } catch (NoSuchMethodException e) {
-      logger.log(Level.FINE, "Unable to load " + name, e);
-    } catch (IllegalAccessException e) {
-      logger.log(Level.FINE, "Unable to load " + name, e);
-    } catch (InvocationTargetException e) {
-      logger.log(Level.FINE, "Unable to load " + name, e);
-    }
-    if (service != null) {
-      return service.bindService();
-    }
-    return null;
   }
 }
