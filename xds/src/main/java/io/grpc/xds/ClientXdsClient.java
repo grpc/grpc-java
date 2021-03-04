@@ -142,13 +142,12 @@ final class ClientXdsClient extends AbstractXdsClient {
     List<String> listenerNames = new ArrayList<>(resources.size());
     boolean isResourceV3 = false;
     try {
-      for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(ResourceType.LDS.typeUrlV2())) {
-          res = res.toBuilder().setTypeUrl(ResourceType.LDS.typeUrl()).build();
-        } else {
+      for (Any res : resources) {
+        if (res.getTypeUrl().equals(ResourceType.LDS.typeUrl())) {
           isResourceV3 = true;
         }
-        Listener listener = res.unpack(Listener.class);
+        Listener listener = unpackCompatibleType(res, Listener.class, ResourceType.LDS.typeUrl(),
+            ResourceType.LDS.typeUrlV2());
         listeners.add(listener);
         listenerNames.add(listener.getName());
       }
@@ -163,12 +162,9 @@ final class ClientXdsClient extends AbstractXdsClient {
     Map<String, HttpConnectionManager> httpConnectionManagers = new HashMap<>(listeners.size());
     try {
       for (Listener listener : listeners) {
-        Any apiListener = listener.getApiListener().getApiListener();
-        if (apiListener.getTypeUrl().equals(TYPE_URL_HTTP_CONNECTION_MANAGER_V2)) {
-          apiListener =
-              apiListener.toBuilder().setTypeUrl(TYPE_URL_HTTP_CONNECTION_MANAGER).build();
-        }
-        HttpConnectionManager hcm = apiListener.unpack(HttpConnectionManager.class);
+        HttpConnectionManager hcm = unpackCompatibleType(
+            listener.getApiListener().getApiListener(), HttpConnectionManager.class,
+            TYPE_URL_HTTP_CONNECTION_MANAGER, TYPE_URL_HTTP_CONNECTION_MANAGER_V2);
         httpConnectionManagers.put(listener.getName(), hcm);
       }
     } catch (InvalidProtocolBufferException e) {
@@ -658,13 +654,13 @@ final class ClientXdsClient extends AbstractXdsClient {
     Map<String, RouteConfiguration> routeConfigs = new HashMap<>(resources.size());
     boolean isResourceV3 = false;
     try {
-      for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(ResourceType.RDS.typeUrlV2())) {
-          res = res.toBuilder().setTypeUrl(ResourceType.RDS.typeUrl()).build();
-        } else {
+      for (Any res : resources) {
+        if (res.getTypeUrl().equals(ResourceType.RDS.typeUrl())) {
           isResourceV3 = true;
         }
-        RouteConfiguration rc = res.unpack(RouteConfiguration.class);
+        RouteConfiguration rc =
+            unpackCompatibleType(res, RouteConfiguration.class, ResourceType.RDS.typeUrl(),
+                ResourceType.RDS.typeUrlV2());
         routeConfigs.put(rc.getName(), rc);
       }
     } catch (InvalidProtocolBufferException e) {
@@ -711,11 +707,9 @@ final class ClientXdsClient extends AbstractXdsClient {
     List<Cluster> clusters = new ArrayList<>(resources.size());
     List<String> clusterNames = new ArrayList<>(resources.size());
     try {
-      for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(ResourceType.CDS.typeUrlV2())) {
-          res = res.toBuilder().setTypeUrl(ResourceType.CDS.typeUrl()).build();
-        }
-        Cluster cluster = res.unpack(Cluster.class);
+      for (Any res : resources) {
+        Cluster cluster = unpackCompatibleType(res, Cluster.class, ResourceType.CDS.typeUrl(),
+            ResourceType.CDS.typeUrlV2());
         clusters.add(cluster);
         clusterNames.add(cluster.getName());
       }
@@ -804,17 +798,12 @@ final class ClientXdsClient extends AbstractXdsClient {
           "Cluster " + clusterName + ": unsupported custom cluster type: " + typeName);
     }
     io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig clusterConfig;
-    Any unpackedClusterConfig = customType.getTypedConfig();
-    if (unpackedClusterConfig.getTypeUrl().equals(TYPE_URL_CLUSTER_CONFIG_V2)) {
-      unpackedClusterConfig =
-          unpackedClusterConfig.toBuilder().setTypeUrl(TYPE_URL_CLUSTER_CONFIG).build();
-    }
     try {
-      clusterConfig = unpackedClusterConfig.unpack(
-          io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig.class);
+      clusterConfig = unpackCompatibleType(customType.getTypedConfig(),
+          io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig.class,
+          TYPE_URL_CLUSTER_CONFIG, TYPE_URL_CLUSTER_CONFIG_V2);
     } catch (InvalidProtocolBufferException e) {
-      StructOrError.fromError("Cluster " + clusterName + ": malformed ClusterConfig: " + e);
-      return null;
+      return StructOrError.fromError("Cluster " + clusterName + ": malformed ClusterConfig: " + e);
     }
     return StructOrError.fromStruct(CdsUpdate.forAggregate(
         clusterName, clusterConfig.getClustersList()));
@@ -846,19 +835,15 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     if (cluster.hasTransportSocket()
         && TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
-      Any any = cluster.getTransportSocket().getTypedConfig();
-      if (any.getTypeUrl().equals(TYPE_URL_UPSTREAM_TLS_CONTEXT_V2)) {
-        any = any.toBuilder().setTypeUrl(TYPE_URL_UPSTREAM_TLS_CONTEXT).build();
-      }
-      io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext unpacked;
       try {
-        unpacked = any.unpack(
-            io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class);
+        upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+            unpackCompatibleType(cluster.getTransportSocket().getTypedConfig(),
+                io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class,
+                TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2));
       } catch (InvalidProtocolBufferException e) {
         return StructOrError.fromError(
             "Cluster " + clusterName + ": malformed UpstreamTlsContext: " + e);
       }
-      upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(unpacked);
     }
 
     DiscoveryType type = cluster.getType();
@@ -893,11 +878,10 @@ final class ClientXdsClient extends AbstractXdsClient {
     List<ClusterLoadAssignment> clusterLoadAssignments = new ArrayList<>(resources.size());
     List<String> claNames = new ArrayList<>(resources.size());
     try {
-      for (com.google.protobuf.Any res : resources) {
-        if (res.getTypeUrl().equals(ResourceType.EDS.typeUrlV2())) {
-          res = res.toBuilder().setTypeUrl(ResourceType.EDS.typeUrl()).build();
-        }
-        ClusterLoadAssignment assignment = res.unpack(ClusterLoadAssignment.class);
+      for (Any res : resources) {
+        ClusterLoadAssignment assignment =
+            unpackCompatibleType(res, ClusterLoadAssignment.class, ResourceType.EDS.typeUrl(),
+                ResourceType.EDS.typeUrlV2());
         clusterLoadAssignments.add(assignment);
         claNames.add(assignment.getClusterName());
       }
@@ -1007,6 +991,27 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     return StructOrError.fromStruct(LocalityLbEndpoints.create(
         endpoints, proto.getLoadBalancingWeight().getValue(), proto.getPriority()));
+  }
+
+  /**
+   * Helper method to unpack serialized {@link com.google.protobuf.Any} message, while replacing
+   * Type URL {@code compatibleTypeUrl} with {@code typeUrl}.
+   *
+   * @param <T> The type of unpacked message
+   * @param any serialized message to unpack
+   * @param clazz the class to unpack the message to
+   * @param typeUrl type URL to replace message Type URL, when it's compatible
+   * @param compatibleTypeUrl compatible Type URL to be replaced with {@code typeUrl}
+   * @return Unpacked message
+   * @throws InvalidProtocolBufferException if the message couldn't be unpacked
+   */
+  private static <T extends com.google.protobuf.Message> T unpackCompatibleType(
+      Any any, Class<T> clazz, String typeUrl, String compatibleTypeUrl)
+      throws InvalidProtocolBufferException {
+    if (any.getTypeUrl().equals(compatibleTypeUrl)) {
+      any = any.toBuilder().setTypeUrl(typeUrl).build();
+    }
+    return any.unpack(clazz);
   }
 
   private static int getRatePerMillion(FractionalPercent percent) {
