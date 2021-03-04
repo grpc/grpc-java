@@ -401,7 +401,7 @@ final class XdsNameResolver extends NameResolver {
           if (filter instanceof ClientInterceptorBuilder) {
             ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
                 .buildClientInterceptor(
-                    savedRoutingConfig.filterConfigs.get(name), selectedOverrideConfigs.get(name),
+                    filterConfig, selectedOverrideConfigs.get(name),
                     args, scheduler);
             if (interceptor != null) {
               filterInterceptors.add(interceptor);
@@ -475,7 +475,7 @@ final class XdsNameResolver extends NameResolver {
         if (filter instanceof ClientInterceptorBuilder) {
           ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
               .buildClientInterceptor(
-                  savedRoutingConfig.filterConfigs.get(name),
+                  filterConfig,
                   savedRoutingConfig.virtualHostOverrideConfig.get(name),
                   args, scheduler);
           if (interceptor != null) {
