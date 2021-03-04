@@ -3791,61 +3791,6 @@ public class ManagedChannelImplTest {
     mychannel.shutdownNow();
   }
 
-  @Deprecated
-  @Test
-  public void nameResolver_forwardingStartOldApi() {
-    final AtomicReference<NameResolver.Listener2> listenerCapture = new AtomicReference<>();
-    final NameResolver noopResolver = new NameResolver() {
-        @Override
-        public String getServiceAuthority() {
-          return "fake-authority";
-        }
-
-        @Override
-        public void start(Listener2 listener) {
-          listenerCapture.set(listener);
-        }
-
-        @Override
-        public void shutdown() {}
-      };
-
-    // This forwarding resolver is still on the old start() API.  Despite that, the delegate
-    // resolver which is on the new API should get the new Listener2.
-    final NameResolver oldApiForwardingResolver = new NameResolver() {
-        @Override
-        public String getServiceAuthority() {
-          return noopResolver.getServiceAuthority();
-        }
-
-        @Override
-        public void start(Listener listener) {
-          noopResolver.start(listener);
-        }
-
-        @Override
-        public void shutdown() {
-          noopResolver.shutdown();
-        }
-      };
-
-    NameResolver.Factory oldApiResolverFactory = new NameResolver.Factory() {
-        @Override
-        public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
-          return oldApiForwardingResolver;
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          return "fakescheme";
-        }
-      };
-    channelBuilder.nameResolverFactory(oldApiResolverFactory);
-    createChannel();
-
-    assertThat(listenerCapture.get()).isNotNull();
-  }
-
   @Test
   public void nameResolverArgsPropagation() {
     final AtomicReference<NameResolver.Args> capturedArgs = new AtomicReference<>();
