@@ -97,11 +97,15 @@ interface Filter {
     }
   }
 
+  /**
+   * A registry for all supported {@link Filter}s. Filters can by queried from the registry
+   * by any of the {@link Filter#typeUrls(), type URLs}.
+   */
   final class Registry {
     static Registry GLOBAL_REGISTRY =
         newRegistry().register(FaultFilter.INSTANCE, RouterFilter.INSTANCE);
 
-    private final Map<String, Filter> map = new HashMap<>();
+    private final Map<String, Filter> supportedFilters = new HashMap<>();
 
     private Registry() {}
 
@@ -114,7 +118,7 @@ interface Filter {
     Registry register(Filter... filters) {
       for (Filter filter : filters) {
         for (String typeUrl : filter.typeUrls()) {
-          map.put(typeUrl, filter);
+          supportedFilters.put(typeUrl, filter);
         }
       }
       return this;
@@ -122,7 +126,7 @@ interface Filter {
 
     @Nullable
     Filter get(String typeUrl) {
-      return map.get(typeUrl);
+      return supportedFilters.get(typeUrl);
     }
   }
 }
