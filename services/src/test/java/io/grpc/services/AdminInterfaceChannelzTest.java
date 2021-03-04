@@ -19,7 +19,6 @@ package io.grpc.services;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.collect.Iterables;
-import io.grpc.AdminInterface;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.channelz.v1.ChannelzGrpc;
 import org.junit.Test;
