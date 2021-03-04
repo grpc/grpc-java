@@ -63,13 +63,6 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
 
   static final FaultFilter INSTANCE =
       new FaultFilter(ThreadSafeRandomImpl.instance, new AtomicLong());
-
-  @VisibleForTesting
-  FaultFilter(ThreadSafeRandom random, AtomicLong activeFaultCounter) {
-    this.random = random;
-    this.activeFaultCounter = activeFaultCounter;
-  }
-
   @VisibleForTesting
   static final Metadata.Key<String> HEADER_DELAY_KEY =
       Metadata.Key.of("x-envoy-fault-delay-request", Metadata.ASCII_STRING_MARSHALLER);
@@ -92,6 +85,12 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
 
   private final ThreadSafeRandom random;
   private final AtomicLong activeFaultCounter;
+
+  @VisibleForTesting
+  FaultFilter(ThreadSafeRandom random, AtomicLong activeFaultCounter) {
+    this.random = random;
+    this.activeFaultCounter = activeFaultCounter;
+  }
 
   @Override
   public String[] typeUrls() {
