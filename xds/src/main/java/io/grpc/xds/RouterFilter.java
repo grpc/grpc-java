@@ -16,7 +16,7 @@
 
 package io.grpc.xds;
 
-import com.google.protobuf.Any;
+import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
@@ -45,12 +45,12 @@ enum RouterFilter implements Filter, ClientInterceptorBuilder {
   }
 
   @Override
-  public StructOrError<? extends FilterConfig> parseFilterConfig(Any rawProtoMessage) {
+  public StructOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
     return StructOrError.fromStruct(ROUTER_CONFIG);
   }
 
   @Override
-  public StructOrError<? extends FilterConfig> parseFilterConfigOverride(Any rawProtoMessage) {
+  public StructOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
     return StructOrError.fromError("Router Filter should not have override config");
   }
 

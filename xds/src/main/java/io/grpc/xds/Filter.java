@@ -19,7 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.protobuf.Any;
+import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.ServerInterceptor;
@@ -42,12 +42,16 @@ interface Filter {
   String[] typeUrls();
 
   /**
-   * Parses the top-level filter config from raw proto message.
+   * Parses the top-level filter config from raw proto message. The message may be either a {@link
+   * com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
    */
-  StructOrError<? extends FilterConfig> parseFilterConfig(Any rawProtoMessage);
+  StructOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage);
 
-  /** Parses the per-filter override filter config from raw proto message. */
-  StructOrError<? extends FilterConfig> parseFilterConfigOverride(Any rawProtoMessage);
+  /**
+   * Parses the per-filter override filter config from raw proto message. The message may be either
+   * a {@link com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
+   */
+  StructOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage);
 
   /** Represents an opaque data structure holding configuration for a filter. */
   interface FilterConfig {

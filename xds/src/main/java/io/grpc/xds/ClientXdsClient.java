@@ -28,6 +28,7 @@ import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
@@ -277,11 +278,17 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
     }
     Any anyConfig = httpFilter.getTypedConfig();
-    String typeUrl;
-    try {
-      typeUrl = getFilterConfigTypeUrl(anyConfig);
-    } catch (InvalidProtocolBufferException e) {
-      return StructOrError.fromError("Invalid proto: " + e);
+    Message rawConfig = anyConfig;
+    String typeUrl = anyConfig.getTypeUrl();
+    if (anyConfig.getTypeUrl().equals(TYPE_URL_TYPED_STRUCT)) {
+      TypedStruct typedStruct;
+      try {
+        typedStruct = anyConfig.unpack(TypedStruct.class);
+      } catch (InvalidProtocolBufferException e) {
+        return StructOrError.fromError("Invalid proto: " + e);
+      }
+      typeUrl = typedStruct.getTypeUrl();
+      rawConfig = typedStruct.getValue();
     }
     Filter filter = Filter.Registry.GLOBAL_REGISTRY.get(typeUrl);
     if (filter == null) {
@@ -294,21 +301,12 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
     }
     Filter.StructOrError<? extends FilterConfig> filterConfig =
-        filter.parseFilterConfig(anyConfig);
+        filter.parseFilterConfig(rawConfig);
     if (filterConfig.errorDetail != null) {
       return StructOrError.fromError(
           "HttpFilter [" + filterName + "] has an unsupported config: " + filterConfig.errorDetail);
     }
     return StructOrError.fromStruct(filterConfig.struct);
-  }
-
-  private static String getFilterConfigTypeUrl(Any rawProtoMessage)
-      throws InvalidProtocolBufferException {
-    if (rawProtoMessage.getTypeUrl().equals(TYPE_URL_TYPED_STRUCT)) {
-      TypedStruct typedStruct = rawProtoMessage.unpack(TypedStruct.class);
-      return typedStruct.getTypeUrl();
-    }
-    return rawProtoMessage.getTypeUrl();
   }
 
   private static StructOrError<VirtualHost> parseVirtualHost(
@@ -346,20 +344,31 @@ final class ClientXdsClient extends AbstractXdsClient {
       Map<String, Any> rawFilterConfigMap) {
     Map<String, FilterConfig> overrideConfigs = new HashMap<>();
     for (String name : rawFilterConfigMap.keySet()) {
-      Any rawFilterConfig = rawFilterConfigMap.get(name);
-      String typeUrl = rawFilterConfig.getTypeUrl();
+      Any anyConfig = rawFilterConfigMap.get(name);
+      String typeUrl = anyConfig.getTypeUrl();
       boolean isOptional = false;
       if (typeUrl.equals(TYPE_URL_FILTER_CONFIG)) {
         io.envoyproxy.envoy.config.route.v3.FilterConfig filterConfig;
         try {
           filterConfig =
-              rawFilterConfig.unpack(io.envoyproxy.envoy.config.route.v3.FilterConfig.class);
+              anyConfig.unpack(io.envoyproxy.envoy.config.route.v3.FilterConfig.class);
         } catch (InvalidProtocolBufferException e) {
           return StructOrError.fromError("Invalid proto: " + e);
         }
         isOptional = filterConfig.getIsOptional();
-        rawFilterConfig = filterConfig.getConfig();
-        typeUrl = rawFilterConfig.getTypeUrl();
+        anyConfig = filterConfig.getConfig();
+        typeUrl = anyConfig.getTypeUrl();
+      }
+      Message rawConfig = anyConfig;
+      if (anyConfig.getTypeUrl().equals(TYPE_URL_TYPED_STRUCT)) {
+        TypedStruct typedStruct;
+        try {
+          typedStruct = anyConfig.unpack(TypedStruct.class);
+        } catch (InvalidProtocolBufferException e) {
+          return StructOrError.fromError("Invalid proto: " + e);
+        }
+        typeUrl = typedStruct.getTypeUrl();
+        rawConfig = typedStruct.getValue();
       }
       Filter filter = Filter.Registry.GLOBAL_REGISTRY.get(typeUrl);
       if (filter == null) {
@@ -371,7 +380,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
       Filter.StructOrError<? extends FilterConfig> filterConfig =
-          filter.parseFilterConfigOverride(rawFilterConfig);
+          filter.parseFilterConfigOverride(rawConfig);
       if (filterConfig.errorDetail != null) {
         return StructOrError.fromError("Invalid filter config for HttpFilter: " + name);
       }

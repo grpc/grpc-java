@@ -17,7 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.protobuf.Any;
+import com.google.protobuf.Message;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -51,12 +51,12 @@ enum LameFilter implements Filter, ClientInterceptorBuilder {
   }
 
   @Override
-  public StructOrError<? extends FilterConfig> parseFilterConfig(Any rawProtoMessage) {
+  public StructOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public StructOrError<? extends FilterConfig> parseFilterConfigOverride(Any rawProtoMessage) {
+  public StructOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
     throw new UnsupportedOperationException();
   }
 

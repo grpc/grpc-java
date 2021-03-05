@@ -18,15 +18,10 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.github.udpa.udpa.type.v1.TypedStruct;
-import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.grpc.internal.GrpcUtil;
-import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -34,30 +29,6 @@ import org.junit.runners.JUnit4;
 /** Tests for {@link FaultFilter}. */
 @RunWith(JUnit4.class)
 public class FaultFilterTest {
-  @Test
-  public void parseConfig_withTypedStruct() {
-    Map<String, Value> abortMap = ImmutableMap.of(
-        "httpStatus", Value.newBuilder().setNumberValue(404D).build()
-    );
-    Struct abortStruct = Struct.newBuilder()
-        .putAllFields(abortMap)
-        .build();
-    Map<String, Value> httpFaultMap = ImmutableMap.of(
-        "abort", Value.newBuilder().setStructValue(abortStruct).build()
-    );
-    TypedStruct faultStruct = TypedStruct.newBuilder()
-        .setTypeUrl(FaultFilter.TYPE_URL)
-        .setValue(Struct.newBuilder().putAllFields(httpFaultMap).build())
-        .build();
-    Any rawConfig = Any.pack(faultStruct);
-    FaultConfig faultConfig = FaultFilter.INSTANCE.parseFilterConfig(rawConfig).struct;
-    assertThat(faultConfig.faultAbort().status().getCode())
-        .isEqualTo(GrpcUtil.httpStatusToGrpcStatus(404).getCode());
-    FaultConfig faultConfigOverride =
-        FaultFilter.INSTANCE.parseFilterConfigOverride(rawConfig).struct;
-    assertThat(faultConfigOverride.faultAbort().status().getCode())
-        .isEqualTo(GrpcUtil.httpStatusToGrpcStatus(404).getCode());
-  }
 
   @Test
   public void parseConfig_withoutTypedStruct() {

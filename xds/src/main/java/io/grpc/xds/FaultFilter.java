@@ -16,20 +16,17 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
-import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.TypeRegistry;
+import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
-import com.google.protobuf.util.JsonFormat;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.CallOptions;
@@ -80,8 +77,6 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
       Metadata.Key.of("x-envoy-fault-abort-request-percentage", Metadata.ASCII_STRING_MARSHALLER);
   static final String TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault";
-  private static final String TYPE_URL_TYPED_STRUCT =
-      "type.googleapis.com/udpa.type.v1.TypedStruct";
 
   private final ThreadSafeRandom random;
   private final AtomicLong activeFaultCounter;
@@ -98,27 +93,14 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
   }
 
   @Override
-  public StructOrError<FaultConfig> parseFilterConfig(Any rawProtoMessage) {
+  public StructOrError<FaultConfig> parseFilterConfig(Message rawProtoMessage) {
     HTTPFault httpFaultProto;
+    if (!(rawProtoMessage instanceof Any)) {
+      return StructOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+    }
+    Any anyMessage = (Any) rawProtoMessage;
     try {
-      String typeUrl = rawProtoMessage.getTypeUrl();
-      if (typeUrl.equals(TYPE_URL_TYPED_STRUCT)) {
-        TypedStruct typedStruct = rawProtoMessage.unpack(TypedStruct.class);
-        typeUrl = typedStruct.getTypeUrl();
-        checkArgument(typeUrl.equals(TYPE_URL), "Unexpected typed struct: %s", typeUrl);
-        HTTPFault.Builder builder = HTTPFault.newBuilder();
-        TypeRegistry typeRegistry =
-            TypeRegistry.newBuilder().add(HTTPFault.getDescriptor()).build();
-        String json = JsonFormat.printer().usingTypeRegistry(typeRegistry)
-            .print(typedStruct.getValue());
-        JsonFormat.parser()
-            .usingTypeRegistry(typeRegistry)
-            .ignoringUnknownFields()
-            .merge(json, builder);
-        httpFaultProto = builder.build();
-      } else  {
-        httpFaultProto = rawProtoMessage.unpack(HTTPFault.class);
-      }
+      httpFaultProto = anyMessage.unpack(HTTPFault.class);
     } catch (InvalidProtocolBufferException e) {
       return StructOrError.fromError("Invalid proto: " + e);
     }
@@ -197,7 +179,7 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
   }
 
   @Override
-  public StructOrError<FaultConfig> parseFilterConfigOverride(Any rawProtoMessage) {
+  public StructOrError<FaultConfig> parseFilterConfigOverride(Message rawProtoMessage) {
     return parseFilterConfig(rawProtoMessage);
   }
 
