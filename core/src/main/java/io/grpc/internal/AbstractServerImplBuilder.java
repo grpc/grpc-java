@@ -30,7 +30,6 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import java.io.File;
 import java.io.InputStream;
-import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -83,12 +82,6 @@ public abstract class AbstractServerImplBuilder
   @Override
   public T addService(BindableService bindableService) {
     delegate().addService(bindableService);
-    return thisT();
-  }
-
-  @Override
-  public T addServices(List<ServerServiceDefinition> services) {
-    delegate().addServices(services);
     return thisT();
   }
 
