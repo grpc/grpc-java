@@ -353,7 +353,6 @@ final class XdsNameResolver extends NameResolver {
   private final class ConfigSelector extends InternalConfigSelector {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
-      RoutingConfig routingCfg = routingConfig;
       // Index ASCII headers by key, multi-value headers are concatenated for matching purposes.
       Map<String, String> asciiHeaders = new HashMap<>();
       Metadata headers = args.getHeaders();
@@ -372,7 +371,9 @@ final class XdsNameResolver extends NameResolver {
       String cluster = null;
       Route selectedRoute = null;
       HttpFault selectedFaultConfig;
+      RoutingConfig routingCfg;
       do {
+        routingCfg = routingConfig;
         selectedFaultConfig = routingCfg.faultConfig;
         for (Route route : routingCfg.routes) {
           if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
