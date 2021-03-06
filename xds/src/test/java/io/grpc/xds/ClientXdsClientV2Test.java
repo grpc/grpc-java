@@ -174,8 +174,9 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected void verifyRequest(EnvoyProtoData.Node node, String versionInfo,
-        List<String> resources, ResourceType type, String nonce) {
+    protected void verifyRequest(
+        ResourceType type, List<String> resources, String versionInfo, String nonce,
+        EnvoyProtoData.Node node) {
       verify(requestObserver).onNext(argThat(new DiscoveryRequestMatcher(
           node.toEnvoyProtoNodeV2(), versionInfo, resources, type.typeUrlV2(), nonce)));
     }
@@ -186,8 +187,8 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected void sendResponse(String versionInfo, List<Any> resources, ResourceType type,
-        String nonce) {
+    protected void sendResponse(
+        ResourceType type, List<Any> resources, String versionInfo, String nonce) {
       DiscoveryResponse response =
           DiscoveryResponse.newBuilder()
               .setVersionInfo(versionInfo)
