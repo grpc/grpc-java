@@ -120,7 +120,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void subchannelLazyConnectUntilPicked() {
     RingHashConfig config = new RingHashConfig(10, 100);
-    List<EquivalentAddressGroup> servers = createServers(1, 1, 1);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
@@ -151,7 +151,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void subchannelNotAutoReconnectAfterDisconnected() {
     RingHashConfig config = new RingHashConfig(10, 100);
-    List<EquivalentAddressGroup> servers = createServers(1, 1, 1);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
@@ -180,7 +180,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void deterministicPickWithHostsPartiallyRemoved() {
     RingHashConfig config = new RingHashConfig(10, 100);
-    List<EquivalentAddressGroup> servers = createServers(1, 1, 1, 1, 1);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1, 1, 1);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
@@ -211,7 +211,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void deterministicPickWithNewHostsAdded() {
     RingHashConfig config = new RingHashConfig(10, 100);
-    List<EquivalentAddressGroup> servers = createServers(1, 1);  // server0 and server1
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);  // server0 and server1
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
@@ -230,7 +230,7 @@ public class RingHashLoadBalancerTest {
     Subchannel subchannel = result.getSubchannel();
     assertThat(subchannel.getAddresses()).isEqualTo(servers.get(1));
 
-    servers = createServers(1, 1, 1, 1, 1);  // server2, server3, server4 added
+    servers = createWeightedServerAddrs(1, 1, 1, 1, 1);  // server2, server3, server4 added
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
@@ -241,8 +241,55 @@ public class RingHashLoadBalancerTest {
 
   @Test
   public void hostSelectionProportionalToWeights() {
-    RingHashConfig config = new RingHashConfig(11100, 111000);
-    List<EquivalentAddressGroup> servers = createServers(1, 100, 10000);  // 1:100:10000
+    RingHashConfig config = new RingHashConfig(100000, 1000000);  // large ring
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 10, 100); // 1:10:100
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+
+    // Warm up by trying to connect to all servers.
+    for (int i = 0; i < 3; i++) {
+      long rpcHash = hashFunc.hashAsciiString(String.format("[FakeSocketAddress-server%d]_0", i));
+      PickSubchannelArgs args = new PickSubchannelArgsImpl(
+          TestMethodDescriptors.voidMethod(), new Metadata(),
+          CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
+      pickerCaptor.getValue().pickSubchannel(args);
+      verify(helper, times(i + 1)).createSubchannel(any(CreateSubchannelArgs.class));
+    }
+    assertThat(subchannels).hasSize(3);
+
+    // Bring all subchannels to READY.
+    Map<EquivalentAddressGroup, Integer> pickCounts = new HashMap<>();
+    for (Subchannel subchannel : subchannels.values()) {
+      verify(subchannel).requestConnection();
+      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+      pickCounts.put(subchannel.getAddresses(), 0);
+    }
+    verify(helper, times(3)).updateBalancingState(eq(READY), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+
+    for (int i = 0; i < 10000; i++) {
+      long hash = hashFunc.hashInt(i);
+      PickSubchannelArgs args = new PickSubchannelArgsImpl(
+          TestMethodDescriptors.voidMethod(), new Metadata(),
+          CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hash));
+      Subchannel pickedSubchannel = picker.pickSubchannel(args).getSubchannel();
+      EquivalentAddressGroup addr = pickedSubchannel.getAddresses();
+      pickCounts.put(addr, pickCounts.get(addr) + 1);
+    }
+
+    // Actual distribution: server0 = 91, server1 = 866, server2 = 9043 (~0.5% tolerance)
+    double ratio01 = (double) pickCounts.get(servers.get(0)) / pickCounts.get(servers.get(1));
+    double ratio12 = (double) pickCounts.get(servers.get(1)) / pickCounts.get(servers.get(2));
+    assertThat(ratio01).isWithin(0.01).of((double) 1 / 10);
+    assertThat(ratio12).isWithin(0.01).of((double) 10 / 100);
+  }
+
+  @Test
+  public void hostSelectionProportionalToRepeatedAddressCount() {
+    RingHashConfig config = new RingHashConfig(100000, 100000);
+    List<EquivalentAddressGroup> servers = createRepeatedServerAddrs(1, 10, 100);  // 1:10:100
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
@@ -281,9 +328,9 @@ public class RingHashLoadBalancerTest {
 
     // Actual distribution: server0 = 0, server1 = 90, server2 = 9910
     double ratio01 = (double) pickCounts.get(servers.get(0)) / pickCounts.get(servers.get(1));
-    double ratio12 = (double) pickCounts.get(servers.get(1)) / pickCounts.get(servers.get(2));
-    assertThat(ratio01).isWithin(0.01).of((double) 1 / 100);
-    assertThat(ratio12).isWithin(0.01).of((double) 100 / 10000);
+    double ratio12 = (double) pickCounts.get(servers.get(1)) / pickCounts.get(servers.get(11));
+    assertThat(ratio01).isWithin(0.01).of((double) 1 / 10);
+    assertThat(ratio12).isWithin(0.01).of((double) 10 / 100);
   }
 
   @Test
@@ -301,7 +348,7 @@ public class RingHashLoadBalancerTest {
   @Test
   public void nameResolutionErrorWithActiveSubchannels() {
     RingHashConfig config = new RingHashConfig(10, 100);
-    List<EquivalentAddressGroup> servers = createServers(1, 1, 1);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
@@ -322,16 +369,28 @@ public class RingHashLoadBalancerTest {
     verifyNoMoreInteractions(helper);
   }
 
-  private static List<EquivalentAddressGroup> createServers(long... weights) {
-    List<EquivalentAddressGroup> res = new ArrayList<>();
+  private static List<EquivalentAddressGroup> createWeightedServerAddrs(long... weights) {
+    List<EquivalentAddressGroup> addrs = new ArrayList<>();
     for (int i = 0; i < weights.length; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
       Attributes attr = Attributes.newBuilder().set(
           InternalXdsAttributes.ATTR_SERVER_WEIGHT, weights[i]).build();
       EquivalentAddressGroup eag = new EquivalentAddressGroup(addr, attr);
-      res.add(eag);
+      addrs.add(eag);
     }
-    return res;
+    return addrs;
+  }
+
+  private static List<EquivalentAddressGroup> createRepeatedServerAddrs(long... weights) {
+    List<EquivalentAddressGroup> addrs = new ArrayList<>();
+    for (int i = 0; i < weights.length; i++) {
+      SocketAddress addr = new FakeSocketAddress("server" + i);
+      for (int j = 0; j < weights[i]; j++) {
+        EquivalentAddressGroup eag = new EquivalentAddressGroup(addr);
+        addrs.add(eag);
+      }
+    }
+    return addrs;
   }
 
   private void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo state) {
