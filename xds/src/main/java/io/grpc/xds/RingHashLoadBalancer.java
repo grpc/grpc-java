@@ -58,7 +58,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
       Attributes.Key.create("state-info");
 
   private final XdsLogger logger = XdsLogger.withLogId(
-      InternalLogId.allocate(RingHashLoadBalancer.class, null));
+      InternalLogId.allocate("ring_hash_lb", null));
   private final XxHash64 hashFunc = XxHash64.INSTANCE;
   private final ConcurrentMap<EquivalentAddressGroup, Subchannel> subchannels =
       Maps.newConcurrentMap();
