@@ -19,7 +19,6 @@ package io.grpc;
 import com.google.common.base.MoreObjects;
 import java.io.File;
 import java.io.InputStream;
-import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -69,12 +68,6 @@ public abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extend
   @Override
   public T addService(BindableService bindableService) {
     delegate().addService(bindableService);
-    return thisT();
-  }
-
-  @Override
-  public T addServices(List<ServerServiceDefinition> services) {
-    delegate().addServices(services);
     return thisT();
   }
 

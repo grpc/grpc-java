@@ -100,7 +100,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @since 1.37.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7925")
-  public T addServices(List<ServerServiceDefinition> services) {
+  public final T addServices(List<ServerServiceDefinition> services) {
     checkNotNull(services, "services");
     for (ServerServiceDefinition service : services) {
       addService(service);
