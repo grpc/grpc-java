@@ -102,7 +102,7 @@ interface Filter {
   }
 
   /**
-   * A registry for all supported {@link Filter}s. Filters can by queried from the registry
+   * A registry for all supported {@link Filter}s. Filters can be queried from the registry
    * by any of the {@link Filter#typeUrls(), type URLs}.
    */
   final class Registry {
