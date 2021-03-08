@@ -1064,7 +1064,6 @@ public class XdsNameResolverTest {
     verifyRpcSucceeded(observer);
   }
 
-
   @Test
   public void resolved_faultDelayWithMaxActiveStreamsInLdsUpdate() {
     resolver.start(mockListener);
