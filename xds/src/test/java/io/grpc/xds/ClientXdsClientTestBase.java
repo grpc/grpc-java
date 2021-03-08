@@ -299,7 +299,6 @@ public abstract class ClientXdsClientTestBase {
   @Test
   public void ldsResourceFound_containsVirtualHosts() {
     DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
-    fakeClock.forwardTime(10, TimeUnit.SECONDS);
 
     // Client sends an ACK LDS request.
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
