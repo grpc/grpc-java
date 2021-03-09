@@ -269,17 +269,40 @@ final class ClientXdsClient extends AbstractXdsClient {
       io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
           httpFilter) {
     String filterName = httpFilter.getName();
+    boolean isOptional = httpFilter.getIsOptional();
     if (!httpFilter.hasTypedConfig()) {
-      if (httpFilter.getIsOptional()) {
+      if (isOptional) {
         return null;
       } else {
         return StructOrError.fromError(
             "HttpFilter [" + filterName + "] is not optional and has no typed config");
       }
     }
-    Any anyConfig = httpFilter.getTypedConfig();
-    Message rawConfig = anyConfig;
+    return parseRawFilterConfig(filterName, httpFilter.getTypedConfig(), isOptional, false);
+  }
+
+  @Nullable // Returns null if the filter should be ignored.
+  private static StructOrError<FilterConfig> parseRawFilterConfig(
+      String filterName, Any anyConfig, Boolean isOptional, boolean isOverrideConfig) {
+    checkArgument(
+        isOptional != null || isOverrideConfig, "isOptional can't be null for top-level config");
     String typeUrl = anyConfig.getTypeUrl();
+    if (isOverrideConfig) {
+      isOptional = false;
+      if (typeUrl.equals(TYPE_URL_FILTER_CONFIG)) {
+        io.envoyproxy.envoy.config.route.v3.FilterConfig filterConfig;
+        try {
+          filterConfig =
+              anyConfig.unpack(io.envoyproxy.envoy.config.route.v3.FilterConfig.class);
+        } catch (InvalidProtocolBufferException e) {
+          return StructOrError.fromError("Invalid proto: " + e);
+        }
+        isOptional = filterConfig.getIsOptional();
+        anyConfig = filterConfig.getConfig();
+        typeUrl = anyConfig.getTypeUrl();
+      }
+    }
+    Message rawConfig = anyConfig;
     if (anyConfig.getTypeUrl().equals(TYPE_URL_TYPED_STRUCT)) {
       TypedStruct typedStruct;
       try {
@@ -292,7 +315,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     Filter filter = Filter.Registry.GLOBAL_REGISTRY.get(typeUrl);
     if (filter == null) {
-      if (httpFilter.getIsOptional()) {
+      if (isOptional) {
         return null;
       } else {
         return StructOrError.fromError(
@@ -300,11 +323,11 @@ final class ClientXdsClient extends AbstractXdsClient {
                 + typeUrl);
       }
     }
-    Filter.StructOrError<? extends FilterConfig> filterConfig =
-        filter.parseFilterConfig(rawConfig);
+    Filter.StructOrError<? extends FilterConfig> filterConfig = isOverrideConfig
+        ? filter.parseFilterConfigOverride(rawConfig) : filter.parseFilterConfig(rawConfig);
     if (filterConfig.errorDetail != null) {
       return StructOrError.fromError(
-          "HttpFilter [" + filterName + "] has an unsupported config: " + filterConfig.errorDetail);
+          "Invalid filter config for HttpFilter [" + filterName + "]: " + filterConfig.errorDetail);
     }
     return StructOrError.fromStruct(filterConfig.struct);
   }
@@ -345,44 +368,12 @@ final class ClientXdsClient extends AbstractXdsClient {
     Map<String, FilterConfig> overrideConfigs = new HashMap<>();
     for (String name : rawFilterConfigMap.keySet()) {
       Any anyConfig = rawFilterConfigMap.get(name);
-      String typeUrl = anyConfig.getTypeUrl();
-      boolean isOptional = false;
-      if (typeUrl.equals(TYPE_URL_FILTER_CONFIG)) {
-        io.envoyproxy.envoy.config.route.v3.FilterConfig filterConfig;
-        try {
-          filterConfig =
-              anyConfig.unpack(io.envoyproxy.envoy.config.route.v3.FilterConfig.class);
-        } catch (InvalidProtocolBufferException e) {
-          return StructOrError.fromError("Invalid proto: " + e);
-        }
-        isOptional = filterConfig.getIsOptional();
-        anyConfig = filterConfig.getConfig();
-        typeUrl = anyConfig.getTypeUrl();
+      StructOrError<FilterConfig> filterConfig = parseRawFilterConfig(name, anyConfig, null, true);
+      if (filterConfig == null) {
+        continue;
       }
-      Message rawConfig = anyConfig;
-      if (anyConfig.getTypeUrl().equals(TYPE_URL_TYPED_STRUCT)) {
-        TypedStruct typedStruct;
-        try {
-          typedStruct = anyConfig.unpack(TypedStruct.class);
-        } catch (InvalidProtocolBufferException e) {
-          return StructOrError.fromError("Invalid proto: " + e);
-        }
-        typeUrl = typedStruct.getTypeUrl();
-        rawConfig = typedStruct.getValue();
-      }
-      Filter filter = Filter.Registry.GLOBAL_REGISTRY.get(typeUrl);
-      if (filter == null) {
-        if (isOptional) {
-          continue;
-        } else {
-          return StructOrError.fromError("HttpFilter [" + name
-              + "] is not optional and has an unsupported config type: " + typeUrl);
-        }
-      }
-      Filter.StructOrError<? extends FilterConfig> filterConfig =
-          filter.parseFilterConfigOverride(rawConfig);
       if (filterConfig.errorDetail != null) {
-        return StructOrError.fromError("Invalid filter config for HttpFilter: " + name);
+        return StructOrError.fromError(filterConfig.errorDetail);
       }
       overrideConfigs.put(name, filterConfig.struct);
     }
