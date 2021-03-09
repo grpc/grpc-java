@@ -39,6 +39,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
@@ -395,7 +396,7 @@ public class SdsProtocolNegotiatorsTest {
         Http2ConnectionDecoder decoder,
         Http2ConnectionEncoder encoder,
         Http2Settings initialSettings) {
-      super(channelUnused, decoder, encoder, initialSettings, null);
+      super(channelUnused, decoder, encoder, initialSettings, new NoopChannelLogger());
     }
 
     static FakeGrpcHttp2ConnectionHandler newHandler() {

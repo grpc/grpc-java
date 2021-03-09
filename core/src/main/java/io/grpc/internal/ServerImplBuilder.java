@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.BinaryLog;
 import io.grpc.BindableService;
+import io.grpc.ChannelLogger;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.Deadline;
@@ -36,6 +37,7 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
+import io.grpc.internal.ChannelLoggerImpl.ServerChannelLogger;
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -98,7 +100,8 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
    */
   public interface ClientTransportServersBuilder {
     InternalServer buildClientTransportServers(
-        List<? extends ServerStreamTracer.Factory> streamTracerFactories);
+        List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+        ChannelLogger channelLogger);
   }
 
   /**
@@ -228,7 +231,8 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   @Override
   public Server build() {
     return new ServerImpl(this,
-        clientTransportServersBuilder.buildClientTransportServers(getTracerFactories()),
+        clientTransportServersBuilder.buildClientTransportServers(getTracerFactories(),
+            new ServerChannelLogger()),
         Context.ROOT);
   }
 

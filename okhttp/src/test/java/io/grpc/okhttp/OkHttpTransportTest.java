@@ -16,6 +16,7 @@
 
 package io.grpc.okhttp;
 
+import io.grpc.ChannelLogger;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
@@ -23,6 +24,7 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import java.net.InetSocketAddress;
@@ -44,6 +46,7 @@ public class OkHttpTransportTest extends AbstractTransportTest {
           .setTransportTracerFactory(fakeClockTransportTracer)
           .maxInboundMetadataSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE)
           .buildTransportFactory();
+  private ChannelLogger channelLogger = new NoopChannelLogger();
 
   @After
   public void releaseClientFactory() {
@@ -57,7 +60,8 @@ public class OkHttpTransportTest extends AbstractTransportTest {
         .forPort(0)
         .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW);
     InternalNettyServerBuilder.setTransportTracerFactory(builder, fakeClockTransportTracer);
-    return InternalNettyServerBuilder.buildTransportServers(builder, streamTracerFactories);
+    return InternalNettyServerBuilder.buildTransportServers(builder, streamTracerFactories,
+        channelLogger);
   }
 
   @Override
@@ -67,7 +71,8 @@ public class OkHttpTransportTest extends AbstractTransportTest {
         .forAddress(new InetSocketAddress(port))
         .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW);
     InternalNettyServerBuilder.setTransportTracerFactory(builder, fakeClockTransportTracer);
-    return InternalNettyServerBuilder.buildTransportServers(builder, streamTracerFactories);
+    return InternalNettyServerBuilder.buildTransportServers(builder, streamTracerFactories,
+        channelLogger);
   }
 
   @Override

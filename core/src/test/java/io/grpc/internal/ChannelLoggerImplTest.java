@@ -24,6 +24,7 @@ import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace.Event;
 import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
 import io.grpc.InternalLogId;
+import io.grpc.internal.ChannelLoggerImpl.ServerChannelLogger;
 import java.util.ArrayList;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
@@ -176,5 +177,21 @@ public class ChannelLoggerImplTest {
     // last event.
     assertThat(stats.channelTrace.events).containsExactly(event);
     assertThat(logs).contains("FINEST: " + logPrefix + "Debug message foo");
+  }
+
+  @Test
+  public void testServerLogger() {
+    ServerChannelLogger serverLogger = new ServerChannelLogger();
+    serverLogger.log(ChannelLogLevel.ERROR, "Debug message {0}", "foo");
+    assertThat(logs).contains("FINE: Debug message foo");
+
+    serverLogger.log(ChannelLogLevel.WARNING, "Debug message {0}", "bar");
+    assertThat(logs).contains("FINER: Debug message bar");
+
+    serverLogger.log(ChannelLogLevel.DEBUG, "Debug message {0}", "wine");
+    assertThat(logs).contains("FINEST: Debug message wine");
+
+    serverLogger.log(ChannelLogLevel.ERROR, "Warning message {0}, {1}", "foo", "bar");
+    assertThat(logs).contains("FINE: Warning message foo, bar");
   }
 }

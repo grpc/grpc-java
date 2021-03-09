@@ -50,6 +50,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.Channel;
+import io.grpc.ChannelLogger;
 import io.grpc.Compressor;
 import io.grpc.Context;
 import io.grpc.Grpc;
@@ -204,7 +205,8 @@ public class ServerImplTest {
         new ClientTransportServersBuilder() {
           @Override
           public InternalServer buildClientTransportServers(
-              List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+              List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+              ChannelLogger channelLogger) {
             throw new UnsupportedOperationException();
           }
         });

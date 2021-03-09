@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 
+import io.grpc.ChannelLogger;
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
@@ -47,7 +48,8 @@ public class ServerImplBuilderTest {
         new ClientTransportServersBuilder() {
           @Override
           public InternalServer buildClientTransportServers(
-              List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+              List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+              ChannelLogger channelLogger) {
             throw new UnsupportedOperationException();
           }
         });

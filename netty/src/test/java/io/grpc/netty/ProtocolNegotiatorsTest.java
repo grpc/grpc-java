@@ -60,6 +60,7 @@ import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
@@ -183,15 +184,7 @@ public class ProtocolNegotiatorsTest {
   private SslContext sslContext;
   private SSLEngine engine;
   private ChannelHandlerContext channelHandlerCtx;
-  private ChannelLogger noopLogger = new ChannelLogger() {
-    @Override
-    public void log(ChannelLogLevel level, String message) {
-    }
-
-    @Override
-    public void log(ChannelLogLevel level, String messageFormat, Object... args) {
-    }
-  };
+  private static ChannelLogger noopLogger = new NoopChannelLogger();
 
   @Before
   public void setUp() throws Exception {
@@ -353,7 +346,7 @@ public class ProtocolNegotiatorsTest {
         .buildTransportFactory();
     InternalServer server = NettyServerBuilder
         .forPort(0, serverCreds)
-        .buildTransportServers(Collections.<ServerStreamTracer.Factory>emptyList());
+        .buildTransportServers(Collections.<ServerStreamTracer.Factory>emptyList(), noopLogger);
     server.start(serverListener);
 
     ManagedClientTransport.Listener clientTransportListener =
@@ -1351,7 +1344,7 @@ public class ProtocolNegotiatorsTest {
           new DefaultHttp2ConnectionDecoder(conn, encoder, new DefaultHttp2FrameReader());
       Http2Settings settings = new Http2Settings();
       return new FakeGrpcHttp2ConnectionHandler(
-          /*channelUnused=*/ null, decoder, encoder, settings, noop, null);
+          /*channelUnused=*/ null, decoder, encoder, settings, noop, noopLogger);
     }
 
     private final boolean noop;

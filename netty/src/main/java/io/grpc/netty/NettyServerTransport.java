@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.ServerStreamTracer;
@@ -80,6 +81,7 @@ class NettyServerTransport implements ServerTransport {
   private final Attributes eagAttributes;
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer transportTracer;
+  private final ChannelLogger channelLogger;
 
   NettyServerTransport(
       Channel channel,
@@ -99,7 +101,8 @@ class NettyServerTransport implements ServerTransport {
       long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls,
       long permitKeepAliveTimeInNanos,
-      Attributes eagAttributes) {
+      Attributes eagAttributes,
+      ChannelLogger channelLogger) {
     this.channel = Preconditions.checkNotNull(channel, "channel");
     this.channelUnused = channelUnused;
     this.protocolNegotiator = Preconditions.checkNotNull(protocolNegotiator, "protocolNegotiator");
@@ -121,6 +124,7 @@ class NettyServerTransport implements ServerTransport {
     this.eagAttributes = Preconditions.checkNotNull(eagAttributes, "eagAttributes");
     SocketAddress remote = channel.remoteAddress();
     this.logId = InternalLogId.allocate(getClass(), remote != null ? remote.toString() : null);
+    this.channelLogger = channelLogger;
   }
 
   public void start(ServerTransportListener listener) {
@@ -277,6 +281,7 @@ class NettyServerTransport implements ServerTransport {
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
         permitKeepAliveTimeInNanos,
-        eagAttributes);
+        eagAttributes,
+        channelLogger);
   }
 }

@@ -26,6 +26,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
@@ -109,6 +110,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
       Collections.emptyList();
   private volatile boolean terminated;
   private final EventLoop bossExecutor;
+  private final ChannelLogger channelLogger;
 
   NettyServer(
       List<? extends SocketAddress> addresses,
@@ -127,7 +129,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
       long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos, long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos,
-      Attributes eagAttributes, InternalChannelz channelz) {
+      Attributes eagAttributes, InternalChannelz channelz, ChannelLogger channelLogger) {
     this.addresses = checkNotNull(addresses, "addresses");
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     checkNotNull(channelOptions, "channelOptions");
@@ -160,6 +162,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.channelz = Preconditions.checkNotNull(channelz);
     this.logId = InternalLogId.allocate(getClass(), addresses.isEmpty() ? "No address" :
         String.valueOf(addresses));
+    this.channelLogger = channelLogger;
   }
 
   @Override
@@ -257,7 +260,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
                 maxConnectionAgeGraceInNanos,
                 permitKeepAliveWithoutCalls,
                 permitKeepAliveTimeInNanos,
-                eagAttributes);
+                eagAttributes,
+                channelLogger);
         ServerTransportListener transportListener;
         // This is to order callbacks on the listener, not to guard access to channel.
         synchronized (NettyServer.this) {

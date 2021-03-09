@@ -12,6 +12,8 @@ description = "gRPC: ALTS"
 sourceCompatibility = 1.7
 targetCompatibility = 1.7
 
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
     api project(':grpc-core')
     implementation project(':grpc-auth'),
@@ -29,6 +31,7 @@ dependencies {
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
 
     testImplementation project(':grpc-testing'),
+            project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing-proto'),
             libraries.guava,
             libraries.junit,

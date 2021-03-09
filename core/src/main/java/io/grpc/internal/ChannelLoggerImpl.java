@@ -24,6 +24,7 @@ import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
 import io.grpc.InternalLogId;
 import java.text.MessageFormat;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
 final class ChannelLoggerImpl extends ChannelLogger {
   private final ChannelTracer tracer;
@@ -102,6 +103,20 @@ final class ChannelLoggerImpl extends ChannelLogger {
         return Level.FINER;
       default:
         return Level.FINEST;
+    }
+  }
+
+  public static class ServerChannelLogger extends ChannelLogger {
+    private static final Logger log = Logger.getLogger(ChannelLogger.class.getName());
+
+    @Override
+    public void log(ChannelLogLevel level, String message) {
+      log.log(toJavaLogLevel(level), message);
+    }
+
+    @Override
+    public void log(ChannelLogLevel level, String messageFormat, Object... args) {
+      log(level, MessageFormat.format(messageFormat, args));
     }
   }
 }

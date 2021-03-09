@@ -27,6 +27,7 @@ import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.ServerBuilder;
@@ -165,8 +166,9 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private final class NettyClientTransportServersBuilder implements ClientTransportServersBuilder {
     @Override
     public InternalServer buildClientTransportServers(
-        List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-      return buildTransportServers(streamTracerFactories);
+        List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+        ChannelLogger channelLogger) {
+      return buildTransportServers(streamTracerFactories, channelLogger);
     }
   }
 
@@ -623,7 +625,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   @CheckReturnValue
   NettyServer buildTransportServers(
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      ChannelLogger channelLogger) {
     assertEventLoopsAndChannelType();
 
     ProtocolNegotiator negotiator = protocolNegotiatorFactory.newNegotiator(
@@ -637,7 +640,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
         keepAliveTimeInNanos, keepAliveTimeoutInNanos,
         maxConnectionIdleInNanos, maxConnectionAgeInNanos,
         maxConnectionAgeGraceInNanos, permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos,
-        eagAttributes, this.serverImplBuilder.getChannelz());
+        eagAttributes, this.serverImplBuilder.getChannelz(), channelLogger);
   }
 
   @VisibleForTesting

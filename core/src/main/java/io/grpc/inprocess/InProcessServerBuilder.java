@@ -19,6 +19,7 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Preconditions;
+import io.grpc.ChannelLogger;
 import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
@@ -109,8 +110,9 @@ public final class InProcessServerBuilder extends
     final class InProcessClientTransportServersBuilder implements ClientTransportServersBuilder {
       @Override
       public InternalServer buildClientTransportServers(
-          List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-        return buildTransportServers(streamTracerFactories);
+          List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+          ChannelLogger channelLogger) {
+        return buildTransportServers(streamTracerFactories, channelLogger);
       }
     }
 
@@ -187,7 +189,8 @@ public final class InProcessServerBuilder extends
   }
 
   InProcessServer buildTransportServers(
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      ChannelLogger channelLogger) {
     return new InProcessServer(this, streamTracerFactories);
   }
 
