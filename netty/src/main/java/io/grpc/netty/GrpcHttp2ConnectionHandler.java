@@ -27,7 +27,6 @@ import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2ConnectionHandler;
 import io.netty.handler.codec.http2.Http2Settings;
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
@@ -38,7 +37,6 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
 
   @Nullable
   protected final ChannelPromise channelUnused;
-  @Nonnull
   private final ChannelLogger negotiationLogger;
 
   protected GrpcHttp2ConnectionHandler(
@@ -78,7 +76,7 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
   }
 
   /**
-   * Returns the channel logger for the given channel context, or a Noop Logger if absent.
+   * Returns the channel logger for the given channel context.
    */
   public ChannelLogger getNegotiationLogger() {
     checkState(negotiationLogger != null, "NegotiationLogger must not be null");
