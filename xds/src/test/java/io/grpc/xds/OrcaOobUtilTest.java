@@ -878,7 +878,7 @@ public class OrcaOobUtilTest {
     }
 
     @Override
-    public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
+    public ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag, String authority) {
       throw new AssertionError("Should not be called");
     }
   }

@@ -464,7 +464,7 @@ public class RlsLoadBalancerTest {
     }
 
     @Override
-    public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
+    public ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag, String authority) {
       throw new UnsupportedOperationException();
     }
 

@@ -933,19 +933,21 @@ public abstract class LoadBalancer {
     // TODO(ejona): Allow passing a List<EAG> here and to updateOobChannelAddresses, but want to
     // wait until https://github.com/grpc/grpc-java/issues/4469 is done.
     // https://github.com/grpc/grpc-java/issues/4618
-    public abstract ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority);
+    public abstract ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag,
+        String authority);
 
     /**
      * Updates the addresses used for connections in the {@code Channel} that was created by {@link
-     * #createOobChannel(EquivalentAddressGroup, String)}. This is superior to {@link
-     * #createOobChannel(EquivalentAddressGroup, String)} when the old and new addresses overlap,
+     * #createOobChannel(List, String)}. This is superior to {@link
+     * #createOobChannel(List, String)} when the old and new addresses overlap,
      * since the channel can continue using an existing connection.
      *
      * @throws IllegalArgumentException if {@code channel} was not returned from {@link
      *     #createOobChannel}
      * @since 1.4.0
      */
-    public void updateOobChannelAddresses(ManagedChannel channel, EquivalentAddressGroup eag) {
+    public void updateOobChannelAddresses(ManagedChannel channel,
+        List<EquivalentAddressGroup> eag) {
       throw new UnsupportedOperationException();
     }
 

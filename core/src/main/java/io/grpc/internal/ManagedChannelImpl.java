@@ -1464,7 +1464,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public ManagedChannel createOobChannel(EquivalentAddressGroup addressGroup, String authority) {
+    public ManagedChannel createOobChannel(List<EquivalentAddressGroup> addressGroup,
+        String authority) {
       // TODO(ejona): can we be even stricter? Like terminating?
       checkState(!terminated, "Channel is terminated");
       long oobChannelCreationTime = timeProvider.currentTimeNanos();
@@ -1505,7 +1506,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          Collections.singletonList(addressGroup),
+          Collections.unmodifiableList(addressGroup),
           authority, userAgent, backoffPolicyProvider, oobTransportFactory,
           oobTransportFactory.getScheduledExecutorService(), stopwatchSupplier, syncContext,
           // All callback methods are run from syncContext
@@ -1624,7 +1625,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public void updateOobChannelAddresses(ManagedChannel channel, EquivalentAddressGroup eag) {
+    public void updateOobChannelAddresses(ManagedChannel channel,
+        List<EquivalentAddressGroup> eag) {
       checkArgument(channel instanceof OobChannel,
           "channel must have been returned from createOobChannel");
       ((OobChannel) channel).updateAddresses(eag);

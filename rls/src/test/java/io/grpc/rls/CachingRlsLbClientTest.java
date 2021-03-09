@@ -79,6 +79,7 @@ import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -628,7 +629,7 @@ public class CachingRlsLbClientTest {
     }
 
     @Override
-    public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
+    public ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag, String authority) {
       throw new UnsupportedOperationException();
     }
 

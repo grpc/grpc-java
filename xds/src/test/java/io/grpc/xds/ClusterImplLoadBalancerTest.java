@@ -716,7 +716,7 @@ public class ClusterImplLoadBalancerTest {
     }
 
     @Override
-    public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
+    public ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag, String authority) {
       throw new UnsupportedOperationException("should not be called");
     }
 
