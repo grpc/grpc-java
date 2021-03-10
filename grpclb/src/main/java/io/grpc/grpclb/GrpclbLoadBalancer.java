@@ -29,6 +29,7 @@ import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -74,21 +75,26 @@ class GrpclbLoadBalancer extends LoadBalancer {
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     Attributes attributes = resolvedAddresses.getAttributes();
     List<EquivalentAddressGroup> newLbAddresses = attributes.get(GrpclbConstants.ATTR_LB_ADDRS);
-    List<EquivalentAddressGroup> overrideAuthorityLbAddresses = newLbAddresses == null
-        ? Collections.<EquivalentAddressGroup>emptyList() :
-        Collections.unmodifiableList(newLbAddresses);
-    if (overrideAuthorityLbAddresses.isEmpty() && resolvedAddresses.getAddresses().isEmpty()) {
+    if (newLbAddresses == null) {
+      newLbAddresses = Collections.emptyList();
+    }
+    if (newLbAddresses.isEmpty() && resolvedAddresses.getAddresses().isEmpty()) {
       handleNameResolutionError(
           Status.UNAVAILABLE.withDescription("No backend or balancer addresses found"));
       return;
     }
-
-    for (EquivalentAddressGroup lbAddr : overrideAuthorityLbAddresses) {
+    List<EquivalentAddressGroup> overrideAuthorityLbAddresses =
+        new ArrayList<>(newLbAddresses.size());
+    for (EquivalentAddressGroup lbAddr : newLbAddresses) {
       String lbAddrAuthority = lbAddr.getAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY);
       if (lbAddrAuthority == null) {
         throw new AssertionError(
             "This is a bug: LB address " + lbAddr + " does not have an authority.");
       }
+      Attributes attrs = Attributes.newBuilder()
+          .set(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE, lbAddrAuthority)
+          .build();
+      overrideAuthorityLbAddresses.add(new EquivalentAddressGroup(lbAddr.getAddresses(), attrs));
     }
 
     List<EquivalentAddressGroup> newBackendServers =
@@ -102,7 +108,8 @@ class GrpclbLoadBalancer extends LoadBalancer {
       helper.getChannelLogger().log(ChannelLogLevel.INFO, "Config: " + newConfig);
       recreateStates();
     }
-    grpclbState.handleAddresses(overrideAuthorityLbAddresses, newBackendServers);
+    grpclbState.handleAddresses(Collections.unmodifiableList(overrideAuthorityLbAddresses),
+        newBackendServers);
   }
 
   @Override

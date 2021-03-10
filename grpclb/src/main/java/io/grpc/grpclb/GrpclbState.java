@@ -107,6 +107,8 @@ final class GrpclbState {
         return "BUFFER_ENTRY";
       }
     };
+  @VisibleForTesting
+  static final String NO_USE_AUTHORITY_SUFFIX = "-notIntendedToBeUsed";
 
   enum Mode {
     ROUND_ROBIN,
@@ -320,10 +322,10 @@ final class GrpclbState {
   private void startLbComm(List<EquivalentAddressGroup> overrideAuthorityEags) {
     checkNotNull(overrideAuthorityEags, "overrideAuthorityEags");
     assert !overrideAuthorityEags.isEmpty();
-    String arbitraryAuthority = overrideAuthorityEags.get(0).getAttributes()
-        .get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY);
+    String doNotUseAuthority = overrideAuthorityEags.get(0).getAttributes()
+        .get(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE) + NO_USE_AUTHORITY_SUFFIX;
     if (lbCommChannel == null) {
-      lbCommChannel = helper.createOobChannel(overrideAuthorityEags, arbitraryAuthority);
+      lbCommChannel = helper.createOobChannel(overrideAuthorityEags, doNotUseAuthority);
       logger.log(
           ChannelLogLevel.DEBUG,
           "[grpclb-<{0}>] Created grpclb channel: EAG={1}",

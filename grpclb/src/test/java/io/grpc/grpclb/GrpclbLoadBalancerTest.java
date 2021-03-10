@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.grpclb.GrpclbState.BUFFER_ENTRY;
 import static io.grpc.grpclb.GrpclbState.DROP_PICK_RESULT;
+import static io.grpc.grpclb.GrpclbState.NO_USE_AUTHORITY_SUFFIX;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -805,7 +806,8 @@ public class GrpclbLoadBalancerTest {
 
     deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList);
 
-    verify(helper).createOobChannel(eq(grpclbBalancerList), eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+        eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
   }
 
@@ -816,7 +818,8 @@ public class GrpclbLoadBalancerTest {
     List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList);
 
-    verify(helper).createOobChannel(eq(grpclbBalancerList), eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+        eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
     assertEquals(1, fakeOobChannels.size());
     ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
@@ -853,16 +856,18 @@ public class GrpclbLoadBalancerTest {
     List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     deliverResolvedAddresses(backendList, grpclbBalancerList);
 
-    verify(helper).createOobChannel(eq(grpclbBalancerList), eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+        eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
     ManagedChannel oobChannel = fakeOobChannels.poll();
     assertEquals(1, lbRequestObservers.size());
 
     List<EquivalentAddressGroup> backendList2 = createResolvedBackendAddresses(1);
     List<EquivalentAddressGroup> grpclbBalancerList2 = createResolvedBalancerAddresses(2);
     deliverResolvedAddresses(backendList2, grpclbBalancerList2);
-    verify(helper).updateOobChannelAddresses(eq(oobChannel), eq(grpclbBalancerList2));
+    verify(helper).updateOobChannelAddresses(eq(oobChannel), eq(xattr(grpclbBalancerList2)));
     assertEquals(1, lbRequestObservers.size()); // No additional RPC
   }
+
 
   @Test
   public void grpclbUpdatedAddresses_reconnectOnAuthorityChange() {
@@ -870,7 +875,8 @@ public class GrpclbLoadBalancerTest {
     List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     deliverResolvedAddresses(backendList, grpclbBalancerList);
 
-    verify(helper).createOobChannel(eq(grpclbBalancerList), eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+        eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
     ManagedChannel oobChannel = fakeOobChannels.poll();
     assertEquals(1, lbRequestObservers.size());
 
@@ -881,7 +887,7 @@ public class GrpclbLoadBalancerTest {
             new EquivalentAddressGroup(
                 new FakeSocketAddress("somethingNew"), lbAttributes(newAuthority)));
     deliverResolvedAddresses(backendList2, grpclbBalancerList2);
-    verify(helper).updateOobChannelAddresses(eq(oobChannel), eq(grpclbBalancerList2));
+    verify(helper).updateOobChannelAddresses(eq(oobChannel), eq(xattr(grpclbBalancerList2)));
     assertEquals(1, lbRequestObservers.size()); // No additional RPC
   }
 
@@ -894,7 +900,8 @@ public class GrpclbLoadBalancerTest {
     // Fallback timer is started as soon as the addresses are resolved.
     assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
 
-    verify(helper).createOobChannel(eq(grpclbBalancerList), eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+        eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
     assertEquals(1, fakeOobChannels.size());
     ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
@@ -1209,8 +1216,8 @@ public class GrpclbLoadBalancerTest {
     List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     deliverResolvedAddresses(backendList, grpclbBalancerList);
 
-    inOrder.verify(helper)
-        .createOobChannel(eq(grpclbBalancerList), eq(lbAuthority(0)));
+    inOrder.verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+        eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
 
     // Attempted to connect to balancer
     assertEquals(1, fakeOobChannels.size());
@@ -1270,8 +1277,7 @@ public class GrpclbLoadBalancerTest {
 
     // New addresses are updated to the OobChannel
     inOrder.verify(helper).updateOobChannelAddresses(
-        same(oobChannel),
-        eq(grpclbBalancerList));
+        same(oobChannel), eq(xattr(grpclbBalancerList)));
 
     if (timerExpires) {
       // Still in fallback logic, except that the backend list is empty
@@ -1290,8 +1296,7 @@ public class GrpclbLoadBalancerTest {
 
     // New LB address is updated to the OobChannel
     inOrder.verify(helper).updateOobChannelAddresses(
-        same(oobChannel),
-        eq(grpclbBalancerList));
+        same(oobChannel), eq(xattr(grpclbBalancerList)));
 
     if (timerExpires) {
       // New backend addresses are used for fallback
@@ -1356,7 +1361,8 @@ public class GrpclbLoadBalancerTest {
     List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     deliverResolvedAddresses(backendList, grpclbBalancerList);
 
-    inOrder.verify(helper).createOobChannel(eq(grpclbBalancerList), eq(lbAuthority(0)));
+    inOrder.verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+        eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
 
     // Attempted to connect to balancer
     assertThat(fakeOobChannels).hasSize(1);
@@ -1450,7 +1456,8 @@ public class GrpclbLoadBalancerTest {
     List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
     deliverResolvedAddresses(backendList, grpclbBalancerList);
 
-    inOrder.verify(helper).createOobChannel(eq(grpclbBalancerList), eq(lbAuthority(0)));
+    inOrder.verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+        eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
 
     // Attempted to connect to balancer
     assertEquals(1, fakeOobChannels.size());
@@ -1603,7 +1610,8 @@ public class GrpclbLoadBalancerTest {
             lbAttributes("fake-authority-1")));
     deliverResolvedAddresses(backendList, grpclbBalancerList);
 
-    verify(helper).createOobChannel(grpclbBalancerList, "fake-authority-1");
+    verify(helper).createOobChannel(xattr(grpclbBalancerList),
+        "fake-authority-1" + NO_USE_AUTHORITY_SUFFIX);
   }
 
   @Test
@@ -2308,7 +2316,8 @@ public class GrpclbLoadBalancerTest {
 
     // Fallback timer is started as soon as the addresses are resolved.
     assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
-    verify(helper).createOobChannel(eq(grpclbBalancerList), eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+        eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
     assertEquals(1, fakeOobChannels.size());
     ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
@@ -2609,6 +2618,18 @@ public class GrpclbLoadBalancerTest {
     return LoadBalanceResponse.newBuilder()
         .setServerList(serverListBuilder.build())
         .build();
+  }
+
+  private List<EquivalentAddressGroup> xattr(List<EquivalentAddressGroup> lbAddr) {
+    List<EquivalentAddressGroup> oobAddr = new ArrayList<>(lbAddr.size());
+    for (EquivalentAddressGroup lb : lbAddr) {
+      String authority = lb.getAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY);
+      Attributes attrs = Attributes.newBuilder()
+          .set(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE, authority)
+          .build();
+      oobAddr.add(new EquivalentAddressGroup(lb.getAddresses(), attrs));
+    }
+    return oobAddr;
   }
 
   private static class ServerEntry {
