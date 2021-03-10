@@ -386,17 +386,7 @@ final class XdsNameResolver extends NameResolver {
         }
       } while (!retainCluster(cluster));
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
-      Map<String, ?> rawServiceConfig = Collections.emptyMap();
-      if (enableTimeout) {
-        Long timeoutNano = selectedRoute.routeAction().timeoutNano();
-        if (timeoutNano == null) {
-          timeoutNano = routingCfg.fallbackTimeoutNano;
-        }
-        if (timeoutNano > 0) {
-          rawServiceConfig = generateServiceConfigWithMethodTimeoutConfig(timeoutNano);
-        }
-      }
-      ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
+      ConfigOrError parsedServiceConfig = generateServiceConfig(routingCfg, selectedRoute);
       Object config = parsedServiceConfig.getConfig();
       if (config == null) {
         releaseCluster(cluster);
@@ -466,15 +456,8 @@ final class XdsNameResolver extends NameResolver {
     }
 
     // Adds LameFilter to the end of filter chain due to absence of RouterFilter.
-    private Result lameResult(RoutingConfig savedRoutingConfig, PickSubchannelArgs args) {
-      Map<String, ?> rawServiceConfig = Collections.emptyMap();
-      if (enableTimeout) {
-        Long timeoutNano = routingConfig.fallbackTimeoutNano;
-        if (timeoutNano > 0) {
-          rawServiceConfig = generateServiceConfigWithMethodTimeoutConfig(timeoutNano);
-        }
-      }
-      ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
+    private Result lameResult(RoutingConfig routingCfg, PickSubchannelArgs args) {
+      ConfigOrError parsedServiceConfig = generateServiceConfig(routingCfg, null);
       Object config = parsedServiceConfig.getConfig();
       if (config == null) {
         return Result.forError(
@@ -482,14 +465,14 @@ final class XdsNameResolver extends NameResolver {
                 "Failed to parse service config (method config)"));
       }
       List<ClientInterceptor> filterInterceptors = new ArrayList<>();
-      for (String name : savedRoutingConfig.filterChain) {
-        FilterConfig filterConfig = savedRoutingConfig.filterConfigs.get(name);
+      for (String name : routingCfg.filterChain) {
+        FilterConfig filterConfig = routingCfg.filterConfigs.get(name);
         Filter filter = filterRegistry.get(filterConfig.typeUrl());
         if (filter instanceof ClientInterceptorBuilder) {
           ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
               .buildClientInterceptor(
                   filterConfig,
-                  savedRoutingConfig.virtualHostOverrideConfig.get(name),
+                  routingCfg.virtualHostOverrideConfig.get(name),
                   args, scheduler);
           if (interceptor != null) {
             filterInterceptors.add(interceptor);
@@ -504,6 +487,24 @@ final class XdsNameResolver extends NameResolver {
               .setConfig(config)
               .setInterceptor(combineInterceptors(filterInterceptors))
               .build();
+    }
+
+    private ConfigOrError generateServiceConfig(
+        RoutingConfig routingConfig, @Nullable Route selectedRoute) {
+      Map<String, ?> rawServiceConfig = Collections.emptyMap();
+      if (enableTimeout) {
+        Long timeoutNanos = null;
+        if (selectedRoute != null) {
+          timeoutNanos = selectedRoute.routeAction().timeoutNano();
+        }
+        if (timeoutNanos == null) {
+          timeoutNanos = routingConfig.fallbackTimeoutNano;
+        }
+        if (timeoutNanos > 0) {
+          rawServiceConfig = generateServiceConfigWithMethodTimeoutConfig(timeoutNanos);
+        }
+      }
+      return serviceConfigParser.parseServiceConfig(rawServiceConfig);
     }
 
     private boolean retainCluster(String cluster) {
