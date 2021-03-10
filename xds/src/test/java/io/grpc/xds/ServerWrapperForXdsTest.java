@@ -65,7 +65,7 @@ public class ServerWrapperForXdsTest {
   private XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
   private XdsServerBuilder.XdsServingStatusListener mockXdsServingStatusListener;
   private XdsClient mockXdsClient;
-  private XdsClient.ListenerWatcher listenerWatcher;
+  private XdsClient.LdsResourceWatcher listenerWatcher;
   private Server mockServer;
 
   @Before

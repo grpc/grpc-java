@@ -37,8 +37,12 @@ import com.google.protobuf.Message;
 import com.google.protobuf.StringValue;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
+import io.envoyproxy.envoy.config.core.v3.TransportSocket;
+import io.envoyproxy.envoy.config.listener.v3.Filter;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
+import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
@@ -1332,13 +1336,14 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
     final FilterChain filterChainInbound =
-        ServerXdsClientNewServerApiTest.buildFilterChain(
-            ServerXdsClientNewServerApiTest.buildFilterChainMatch("managed-mtls"),
+        buildFilterChain(
+            FilterChainMatch.newBuilder().addAllApplicationProtocols(Arrays.asList("managed-mtls"))
+                .build(),
             CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
                 "google-sds-config-default", "ROOTCA"),
-            ServerXdsClientNewServerApiTest.buildTestFilter("envoy.http_connection_manager"));
+            buildTestFilter("envoy.http_connection_manager"));
     Listener listener =
-        ServerXdsClientNewServerApiTest.buildListenerWithFilterChain(
+        buildListenerWithFilterChain(
             "grpc/server?xds.resource.listening_address=0.0.0.0:8000",
             7000,
             "0.0.0.0",
@@ -1488,14 +1493,52 @@ public abstract class ClientXdsClientTestBase {
     protected abstract Message buildDropOverload(String category, int dropPerMillion);
   }
 
-  static Listener buildListenerWithFilterChain(
+  private static final String TYPE_URL_HTTP_CONNECTION_MANAGER =
+      "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
+          + ".HttpConnectionManager";
+
+  @SuppressWarnings("deprecation")
+  static FilterChain buildFilterChain(FilterChainMatch filterChainMatch,
+      DownstreamTlsContext tlsContext, Filter...filters) {
+    return FilterChain.newBuilder()
+        .setFilterChainMatch(filterChainMatch)
+        .setTransportSocket(
+            tlsContext == null
+                ? TransportSocket.getDefaultInstance()
+                : TransportSocket.newBuilder()
+                    .setName("envoy.transport_sockets.tls")
+                    .setTypedConfig(Any.pack(tlsContext))
+                    .build())
+        .addAllFilters(Arrays.asList(filters))
+        .build();
+  }
+
+  static Listener buildListenerWithFilterChain(String name, int portValue, String address,
+      FilterChain... filterChains) {
+    io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
+        io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
+            .setSocketAddress(
+                SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
+            .build();
+    return
+        Listener.newBuilder()
+            .setName(name)
+            .setAddress(listenerAddress)
+            .setDefaultFilterChain(FilterChain.getDefaultInstance())
+            .addAllFilterChains(Arrays.asList(filterChains))
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .build();
+  }
+
+  Listener buildListenerWithFilterChain(
       String name, int portValue, String address, String certName, String validationContextName) {
     FilterChain filterChain =
-        ServerXdsClientNewServerApiTest.buildFilterChain(
-            ServerXdsClientNewServerApiTest.buildFilterChainMatch(),
+        buildFilterChain(
+            FilterChainMatch.newBuilder().addAllApplicationProtocols(Arrays.<String>asList())
+                .build(),
             CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
                 certName, validationContextName),
-            ServerXdsClientNewServerApiTest.buildTestFilter("envoy.http_connection_manager"));
+            buildTestFilter("envoy.http_connection_manager"));
     io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
         io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
             .setSocketAddress(
@@ -1508,5 +1551,16 @@ public abstract class ClientXdsClientTestBase {
         .addAllFilterChains(Arrays.asList(filterChain))
         .setTrafficDirection(TrafficDirection.INBOUND)
         .build();
+  }
+
+  protected Filter buildTestFilter(String name) {
+    Assume.assumeTrue(useProtocolV3());
+    return
+        Filter.newBuilder()
+            .setName(name)
+            .setTypedConfig(
+                Any.newBuilder()
+                    .setTypeUrl(TYPE_URL_HTTP_CONNECTION_MANAGER))
+            .build();
   }
 }
