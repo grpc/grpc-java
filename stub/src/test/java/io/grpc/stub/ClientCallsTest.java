@@ -390,7 +390,7 @@ public class ClientCallsTest {
     ClientCalls.asyncBidiStreamingCall(call, new ClientResponseObserver<Integer, String>() {
       @Override
       public void beforeStart(ClientCallStreamObserver<Integer> requestStream) {
-        requestStream.disableAutoInboundFlowControl();
+        requestStream.disableAutoRequestWithInitial(1);
       }
 
       @Override

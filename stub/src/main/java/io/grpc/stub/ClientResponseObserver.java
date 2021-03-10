@@ -16,13 +16,10 @@
 
 package io.grpc.stub;
 
-import io.grpc.ExperimentalApi;
-
 /**
  * Specialization of {@link StreamObserver} implemented by clients in order to interact with the
  * advanced features of a call such as flow-control.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4693")
 public interface ClientResponseObserver<ReqT, RespT> extends StreamObserver<RespT> {
   /**
    * Called by the runtime priot to the start of a call to provide a reference to the
