@@ -17,7 +17,6 @@
 package io.grpc.netty;
 
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger;
 import io.grpc.Internal;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.SharedResourcePool;
@@ -32,9 +31,8 @@ import java.util.List;
 @Internal
 public final class InternalNettyServerBuilder {
   public static NettyServer buildTransportServers(NettyServerBuilder builder,
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
-      ChannelLogger channelLogger) {
-    return builder.buildTransportServers(streamTracerFactories, channelLogger);
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+    return builder.buildTransportServers(streamTracerFactories);
   }
 
   public static void setTransportTracerFactory(NettyServerBuilder builder,

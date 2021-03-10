@@ -62,7 +62,6 @@ import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
-import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
@@ -788,8 +787,7 @@ public class NettyClientTransportTest {
         MAX_CONNECTION_IDLE_NANOS_DISABLED,
         MAX_CONNECTION_AGE_NANOS_DISABLED, MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE, true, 0,
         Attributes.EMPTY,
-        channelz,
-        new NoopChannelLogger());
+        channelz);
     server.start(serverListener);
     address = TestUtils.testServerAddress((InetSocketAddress) server.getListenSocketAddress());
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());

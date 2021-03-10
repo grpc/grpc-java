@@ -53,7 +53,6 @@ import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.GrpcAttributes;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ServerListener;
@@ -346,7 +345,7 @@ public class ProtocolNegotiatorsTest {
         .buildTransportFactory();
     InternalServer server = NettyServerBuilder
         .forPort(0, serverCreds)
-        .buildTransportServers(Collections.<ServerStreamTracer.Factory>emptyList(), noopLogger);
+        .buildTransportServers(Collections.<ServerStreamTracer.Factory>emptyList());
     server.start(serverListener);
 
     ManagedClientTransport.Listener clientTransportListener =

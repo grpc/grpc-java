@@ -28,7 +28,6 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
-import io.grpc.internal.TestUtils.NoopChannelLogger;
 import java.net.InetSocketAddress;
 import java.nio.channels.UnresolvedAddressException;
 import java.util.List;
@@ -52,7 +51,6 @@ public class NettyTransportTest extends AbstractTransportTest {
       .negotiationType(NegotiationType.PLAINTEXT)
       .setTransportTracerFactory(fakeClockTransportTracer)
       .buildTransportFactory();
-  private final ChannelLogger channelLogger = new NoopChannelLogger();
 
   @Override
   protected boolean haveTransportTracer() {
@@ -71,7 +69,7 @@ public class NettyTransportTest extends AbstractTransportTest {
         .forAddress(new InetSocketAddress("localhost", 0))
         .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
         .setTransportTracerFactory(fakeClockTransportTracer)
-        .buildTransportServers(streamTracerFactories, channelLogger);
+        .buildTransportServers(streamTracerFactories);
   }
 
   @Override
@@ -81,7 +79,7 @@ public class NettyTransportTest extends AbstractTransportTest {
         .forAddress(new InetSocketAddress("localhost", port))
         .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
         .setTransportTracerFactory(fakeClockTransportTracer)
-        .buildTransportServers(streamTracerFactories, channelLogger);
+        .buildTransportServers(streamTracerFactories);
   }
 
   @Override

@@ -33,7 +33,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
@@ -44,7 +43,6 @@ import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
-import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
@@ -85,7 +83,6 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class NettyServerTest {
   private final InternalChannelz channelz = new InternalChannelz();
-  private final ChannelLogger channelLogger = new NoopChannelLogger();
   private final NioEventLoopGroup eventLoop = new NioEventLoopGroup(1);
   private final ChannelFactory<NioServerSocketChannel> channelFactory =
       new ReflectiveChannelFactory<>(NioServerSocketChannel.class);
@@ -154,8 +151,7 @@ public class NettyServerTest {
         1, 1, // ignore
         true, 0, // ignore
         Attributes.EMPTY,
-        channelz,
-        channelLogger);
+        channelz);
     final SettableFuture<Void> serverShutdownCalled = SettableFuture.create();
     ns.start(new ServerListener() {
       @Override
@@ -205,8 +201,7 @@ public class NettyServerTest {
         1, 1, // ignore
         true, 0, // ignore
         Attributes.EMPTY,
-        channelz,
-        channelLogger);
+        channelz);
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
     ns.start(new ServerListener() {
       @Override
@@ -279,8 +274,7 @@ public class NettyServerTest {
         1, 1, // ignore
         true, 0, // ignore
         Attributes.EMPTY,
-        channelz,
-        channelLogger);
+        channelz);
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
     ns.start(new ServerListener() {
       @Override
@@ -341,8 +335,7 @@ public class NettyServerTest {
         1, 1, // ignore
         true, 0, // ignore
         Attributes.EMPTY,
-        channelz,
-        channelLogger);
+        channelz);
 
     assertThat(ns.getListenSocketAddress()).isEqualTo(addr);
     assertThat(ns.getListenSocketAddresses()).isEqualTo(addresses);
@@ -416,8 +409,7 @@ public class NettyServerTest {
         1, 1, // ignore
         true, 0, // ignore
         eagAttributes,
-        channelz,
-        channelLogger);
+        channelz);
     ns.start(new ServerListener() {
       @Override
       public ServerTransportListener transportCreated(ServerTransport transport) {
@@ -464,8 +456,7 @@ public class NettyServerTest {
         1, 1, // ignore
         true, 0, // ignore
         Attributes.EMPTY,
-        channelz,
-        channelLogger);
+        channelz);
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
     ns.start(new ServerListener() {
       @Override
@@ -608,8 +599,7 @@ public class NettyServerTest {
         1, 1, // ignore
         true, 0, // ignore
         Attributes.EMPTY,
-        channelz,
-        channelLogger);
+        channelz);
   }
 
   private static class NoopServerTransportListener implements ServerTransportListener {

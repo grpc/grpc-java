@@ -67,7 +67,6 @@ import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
-import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
 import io.netty.buffer.ByteBuf;
@@ -126,7 +125,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private final ServerTransportListener transportListener =
       mock(ServerTransportListener.class, delegatesTo(new ServerTransportListenerImpl()));
   private final TestServerStreamTracer streamTracer = new TestServerStreamTracer();
-  private final NoopChannelLogger channelLogger = new NoopChannelLogger();
 
   private NettyServerStream stream;
   private KeepAliveManager spyKeepAliveManager;
@@ -1129,8 +1127,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
         permitKeepAliveTimeInNanos,
-        Attributes.EMPTY,
-        channelLogger);
+        Attributes.EMPTY);
   }
 
   @Override
