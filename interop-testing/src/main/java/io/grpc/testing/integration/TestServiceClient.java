@@ -299,16 +299,16 @@ public class TestServiceClient {
         break;
 
       case COMPUTE_ENGINE_CHANNEL_CREDENTIALS: {
-          ManagedChannelBuilder<?> builder =
-              Grpc.newChannelBuilderForAddress(
-                  serverHost, serverPort, ComputeEngineChannelCredentials.create());
-          if (disableServiceConfigLookUp) {
-            builder.disableServiceConfigLookUp();
-          }
-          if (defaultServiceConfig != null) {
-            builder.defaultServiceConfig(defaultServiceConfig);
-          }
-          ManagedChannel channel = builder.build();
+        ManagedChannelBuilder<?> builder =
+            Grpc.newChannelBuilderForAddress(
+                serverHost, serverPort, ComputeEngineChannelCredentials.create());
+        if (disableServiceConfigLookUp) {
+          builder.disableServiceConfigLookUp();
+        }
+        if (defaultServiceConfig != null) {
+          builder.defaultServiceConfig(defaultServiceConfig);
+        }
+        ManagedChannel channel = builder.build();
         try {
           TestServiceGrpc.TestServiceBlockingStub computeEngineStub =
               TestServiceGrpc.newBlockingStub(channel);
@@ -348,16 +348,16 @@ public class TestServiceClient {
       }
 
       case GOOGLE_DEFAULT_CREDENTIALS: {
-          ManagedChannelBuilder<?> builder =
-              Grpc.newChannelBuilderForAddress(
-                  serverHost, serverPort, GoogleDefaultChannelCredentials.create());
-          if (disableServiceConfigLookUp) {
-            builder.disableServiceConfigLookUp();
-          }
-          if (defaultServiceConfig != null) {
-            builder.defaultServiceConfig(defaultServiceConfig);
-          }
-          ManagedChannel channel = builder.build();
+        ManagedChannelBuilder<?> builder =
+            Grpc.newChannelBuilderForAddress(
+                serverHost, serverPort, GoogleDefaultChannelCredentials.create());
+        if (disableServiceConfigLookUp) {
+          builder.disableServiceConfigLookUp();
+        }
+        if (defaultServiceConfig != null) {
+          builder.defaultServiceConfig(defaultServiceConfig);
+        }
+        ManagedChannel channel = builder.build();
         try {
           TestServiceGrpc.TestServiceBlockingStub googleDefaultStub =
               TestServiceGrpc.newBlockingStub(channel);
