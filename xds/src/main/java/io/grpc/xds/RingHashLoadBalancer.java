@@ -109,7 +109,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
     double normalizedMinWeight = (double) minWeight / totalWeight;
     // Scale up the number of hashes per host such that the least-weiighted host gets a whole
     // number of hashes on the the ring. Other hosts might not end up with whole numbers, and
-    // that's fine (the ring-building algorithm can handle this). This preserves teh original
+    // that's fine (the ring-building algorithm can handle this). This preserves the original
     // implementation's behavior: when weights aren't provided, all hosts should get an equal
     // number of hashes. In the case where this number exceeds the max_ring_size, it's scaled
     // back down to fit.
@@ -292,8 +292,8 @@ final class RingHashLoadBalancer extends LoadBalancer {
             processSubchannelState(finalSubchannel, newState);
           }
         });
+        subchannels.put(addrKey, subchannel);
       }
-      subchannels.put(addrKey, subchannel);
       subchannel.requestConnection();
       // Return no result to queue the pick and re-attempt later.
       return PickResult.withNoResult();
