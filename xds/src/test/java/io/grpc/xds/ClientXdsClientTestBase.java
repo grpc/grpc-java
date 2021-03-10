@@ -32,6 +32,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.StringValue;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
@@ -99,9 +100,9 @@ public abstract class ClientXdsClientTestBase {
   private static final String EDS_RESOURCE = "cluster-load-assignment.googleapis.com";
   private static final String VERSION_1 = "42";
   private static final String VERSION_2 = "43";
-  private static final Node NODE = Node.newBuilder().build();
+  protected static final Node NODE = Node.newBuilder().build();
 
-  private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
+  protected static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
@@ -109,7 +110,7 @@ public abstract class ClientXdsClientTestBase {
         }
       };
 
-  private static final FakeClock.TaskFilter LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER =
+  protected static final FakeClock.TaskFilter LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER =
       new TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
@@ -144,7 +145,7 @@ public abstract class ClientXdsClientTestBase {
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
-  private final FakeClock fakeClock = new FakeClock();
+  protected final FakeClock fakeClock = new FakeClock();
   protected final Queue<DiscoveryRpcCall> resourceDiscoveryCalls = new ArrayDeque<>();
   protected final Queue<LrsRpcCall> loadReportCalls = new ArrayDeque<>();
   protected final AtomicBoolean adsEnded = new AtomicBoolean(true);
@@ -182,7 +183,7 @@ public abstract class ClientXdsClientTestBase {
       ImmutableList.of(mf.buildDropOverload("lb", 200), mf.buildDropOverload("throttle", 1000))));
 
   @Captor
-  private ArgumentCaptor<LdsUpdate> ldsUpdateCaptor;
+  protected ArgumentCaptor<LdsUpdate> ldsUpdateCaptor;
   @Captor
   private ArgumentCaptor<RdsUpdate> rdsUpdateCaptor;
   @Captor
@@ -190,7 +191,7 @@ public abstract class ClientXdsClientTestBase {
   @Captor
   private ArgumentCaptor<EdsUpdate> edsUpdateCaptor;
   @Captor
-  private ArgumentCaptor<Status> errorCaptor;
+  protected ArgumentCaptor<Status> errorCaptor;
   @Mock
   private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock
@@ -198,7 +199,7 @@ public abstract class ClientXdsClientTestBase {
   @Mock
   private BackoffPolicy backoffPolicy2;
   @Mock
-  private LdsResourceWatcher ldsResourceWatcher;
+  protected LdsResourceWatcher ldsResourceWatcher;
   @Mock
   private RdsResourceWatcher rdsResourceWatcher;
   @Mock
@@ -207,7 +208,7 @@ public abstract class ClientXdsClientTestBase {
   private EdsResourceWatcher edsResourceWatcher;
 
   private ManagedChannel channel;
-  private ClientXdsClient xdsClient;
+  protected ClientXdsClient xdsClient;
   private boolean originalEnableFaultInjection;
 
   @Before
@@ -1284,7 +1285,19 @@ public abstract class ClientXdsClientTestBase {
     // See more test on LoadReportClientTest.java
   }
 
-  private DiscoveryRpcCall startResourceWatcher(
+  @Test
+  public abstract void serverSideListenerFound() throws InvalidProtocolBufferException;
+
+  @Test
+  public abstract void serverSideListenerNotFound() throws InvalidProtocolBufferException;
+
+  @Test
+  public abstract void serverSideListenerNotInbound();
+
+  @Test
+  public abstract void serverSideStreamClosedAndRetryRaceWithAddRemoveListenerWatchers();
+
+  protected DiscoveryRpcCall startResourceWatcher(
       ResourceType type, String name, ResourceWatcher watcher) {
     FakeClock.TaskFilter timeoutTaskFilter;
     switch (type) {

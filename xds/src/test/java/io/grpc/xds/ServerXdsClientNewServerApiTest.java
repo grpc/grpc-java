@@ -724,6 +724,28 @@ public class ServerXdsClientNewServerApiTest {
   }
 
   static Listener buildListenerWithFilterChain(String name, int portValue, String address,
+      String certName, String validationContextName) {
+    FilterChain filterChain = ServerXdsClientNewServerApiTest
+        .buildFilterChain(ServerXdsClientNewServerApiTest.buildFilterChainMatch(),
+            CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(certName,
+                validationContextName),
+            ServerXdsClientNewServerApiTest.buildTestFilter("envoy.http_connection_manager"));
+    io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
+        io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
+            .setSocketAddress(
+                SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
+            .build();
+    return
+        Listener.newBuilder()
+            .setName(name)
+            .setAddress(listenerAddress)
+            .setDefaultFilterChain(FilterChain.getDefaultInstance())
+            .addAllFilterChains(Arrays.asList(filterChain))
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .build();
+  }
+
+  static Listener buildListenerWithFilterChain(String name, int portValue, String address,
                                                FilterChain... filterChains) {
     io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
             io.envoyproxy.envoy.config.core.v3.Address.newBuilder()

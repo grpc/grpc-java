@@ -38,6 +38,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
+import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
@@ -156,12 +157,17 @@ final class ClientXdsClient extends AbstractXdsClient {
 
     // Unpack HttpConnectionManager messages.
     Map<String, HttpConnectionManager> httpConnectionManagers = new HashMap<>(listeners.size());
+    Map<String, Listener> serverSideListeners = new HashMap<>(listeners.size());
     try {
       for (Listener listener : listeners) {
-        HttpConnectionManager hcm = unpackCompatibleType(
-            listener.getApiListener().getApiListener(), HttpConnectionManager.class,
-            TYPE_URL_HTTP_CONNECTION_MANAGER, TYPE_URL_HTTP_CONNECTION_MANAGER_V2);
-        httpConnectionManagers.put(listener.getName(), hcm);
+        if (listener.hasApiListener()) {
+          HttpConnectionManager hcm = unpackCompatibleType(
+                  listener.getApiListener().getApiListener(), HttpConnectionManager.class,
+                  TYPE_URL_HTTP_CONNECTION_MANAGER, TYPE_URL_HTTP_CONNECTION_MANAGER_V2);
+          httpConnectionManagers.put(listener.getName(), hcm);
+        } else {
+          serverSideListeners.put(listener.getName(), listener);
+        }
       }
     } catch (InvalidProtocolBufferException e) {
       getLogger().log(
@@ -239,6 +245,21 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       ldsUpdates.put(listenerName, update);
     }
+    // process serverSideListeners if any
+    for (Map.Entry<String, Listener> entry : serverSideListeners.entrySet()) {
+      String listenerName = entry.getKey();
+      Listener listener = entry.getValue();
+      LdsUpdate update;
+
+      StructOrError<EnvoyServerProtoData.Listener> convertedListener =
+              parseServerSideListener(listener);
+      if (convertedListener.getErrorDetail() != null) {
+        nackResponse(ResourceType.LDS, nonce, convertedListener.getErrorDetail());
+        return;
+      }
+      update = new LdsUpdate(convertedListener.getStruct());
+      ldsUpdates.put(listenerName, update);
+    }
     ackResponse(ResourceType.LDS, versionInfo, nonce);
 
     for (String resource : ldsResourceSubscribers.keySet()) {
@@ -255,6 +276,29 @@ final class ClientXdsClient extends AbstractXdsClient {
         subscriber.onAbsent();
       }
     }
+  }
+
+  private StructOrError<EnvoyServerProtoData.Listener> parseServerSideListener(Listener listener) {
+    String errorMessage = validateServerListener(listener);
+    if (errorMessage != null) {
+      return StructOrError.fromError(errorMessage);
+    }
+    try {
+      return StructOrError.fromStruct(EnvoyServerProtoData.Listener
+          .fromEnvoyProtoListener(listener));
+    } catch (InvalidProtocolBufferException e) {
+      return StructOrError.fromError(
+          "Failed to unpack Listener " + listener.getName() + ":" + e.getMessage());
+    }
+  }
+
+  private String validateServerListener(Listener listener) {
+    if (!listener.getTrafficDirection().equals(TrafficDirection.INBOUND)) {
+      return "Listener " + listener.getName() + " is not INBOUND";
+    }
+    // TODO(sanjaypujare): add validations based on gRFC
+    //  https://github.com/grpc/proposal/blob/master/A36-xds-for-servers.md
+    return null;
   }
 
   private static StructOrError<VirtualHost> parseVirtualHost(
