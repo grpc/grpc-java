@@ -295,7 +295,8 @@ final class ClientXdsClient extends AbstractXdsClient {
           filterConfig =
               anyConfig.unpack(io.envoyproxy.envoy.config.route.v3.FilterConfig.class);
         } catch (InvalidProtocolBufferException e) {
-          return StructOrError.fromError("Invalid proto: " + e);
+          return StructOrError.fromError(
+              "HttpFilter [" + filterName + "] contains invalid proto: " + e);
         }
         isOptional = filterConfig.getIsOptional();
         anyConfig = filterConfig.getConfig();
@@ -308,7 +309,8 @@ final class ClientXdsClient extends AbstractXdsClient {
       try {
         typedStruct = anyConfig.unpack(TypedStruct.class);
       } catch (InvalidProtocolBufferException e) {
-        return StructOrError.fromError("Invalid proto: " + e);
+        return StructOrError.fromError(
+            "HttpFilter [" + filterName + "] contains invalid proto: " + e);
       }
       typeUrl = typedStruct.getTypeUrl();
       rawConfig = typedStruct.getValue();
