@@ -17,6 +17,8 @@
 package io.grpc.testing.integration;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.io.Files;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
@@ -83,6 +85,8 @@ public class TestServiceClient {
   private String oauthScope;
   private boolean fullStreamDecompression;
   private int localHandshakerPort = -1;
+  private boolean disableServiceConfigLookUp = false;
+  private ImmutableMap<String, ?> defaultServiceConfig = null;
 
   private Tester tester = new Tester();
 
@@ -143,6 +147,18 @@ public class TestServiceClient {
         fullStreamDecompression = Boolean.parseBoolean(value);
       } else if ("local_handshaker_port".equals(key)) {
         localHandshakerPort = Integer.parseInt(value);
+      } else if ("grpc_test_use_grpclb_with_child_policy".equals(key)) {
+        defaultServiceConfig =
+            ImmutableMap.<String, Object>of(
+                "loadBalancingConfig",
+                ImmutableList.of(
+                    ImmutableMap.<String, Object>of(
+                        "grpclb",
+                        ImmutableMap.<String, Object>of(
+                            "childPolicy",
+                            ImmutableList.of(
+                                ImmutableMap.<String, Object>of(value, ImmutableMap.of()))))));
+        disableServiceConfigLookUp = true;
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -186,6 +202,11 @@ public class TestServiceClient {
           + "\n  --oauth_scope               Scope for OAuth tokens. Default " + c.oauthScope
           + "\n  --full_stream_decompression Enable full-stream decompression. Default "
             + c.fullStreamDecompression
+          + "\n --grpc_test_use_grpclb_with_child_policy=LB_POLICY_NAME"
+          + "\n                              If non-empty, disable service config lookup and "
+          + "\n                              set a default service config which configures the "
+          + "\n                              grpclb LB policy with a child policy being the value "
+          + "\n                              of this flag (e.g. round_robin or pick_first)."
       );
       System.exit(1);
     }
@@ -278,8 +299,16 @@ public class TestServiceClient {
         break;
 
       case COMPUTE_ENGINE_CHANNEL_CREDENTIALS: {
-        ManagedChannel channel = Grpc.newChannelBuilderForAddress(
-            serverHost, serverPort, ComputeEngineChannelCredentials.create()).build();
+          ManagedChannelBuilder<?> builder =
+              Grpc.newChannelBuilderForAddress(
+                  serverHost, serverPort, ComputeEngineChannelCredentials.create());
+          if (disableServiceConfigLookUp) {
+            builder.disableServiceConfigLookUp();
+          }
+          if (defaultServiceConfig != null) {
+            builder.defaultServiceConfig(defaultServiceConfig);
+          }
+          ManagedChannel channel = builder.build();
         try {
           TestServiceGrpc.TestServiceBlockingStub computeEngineStub =
               TestServiceGrpc.newBlockingStub(channel);
@@ -319,8 +348,16 @@ public class TestServiceClient {
       }
 
       case GOOGLE_DEFAULT_CREDENTIALS: {
-        ManagedChannel channel = Grpc.newChannelBuilderForAddress(
-            serverHost, serverPort, GoogleDefaultChannelCredentials.create()).build();
+          ManagedChannelBuilder<?> builder =
+              Grpc.newChannelBuilderForAddress(
+                  serverHost, serverPort, GoogleDefaultChannelCredentials.create());
+          if (disableServiceConfigLookUp) {
+            builder.disableServiceConfigLookUp();
+          }
+          if (defaultServiceConfig != null) {
+            builder.defaultServiceConfig(defaultServiceConfig);
+          }
+          ManagedChannel channel = builder.build();
         try {
           TestServiceGrpc.TestServiceBlockingStub googleDefaultStub =
               TestServiceGrpc.newBlockingStub(channel);
@@ -441,6 +478,12 @@ public class TestServiceClient {
         if (serverHostOverride != null) {
           channelBuilder.overrideAuthority(serverHostOverride);
         }
+        if (disableServiceConfigLookUp) {
+          channelBuilder.disableServiceConfigLookUp();
+        }
+        if (defaultServiceConfig != null) {
+          channelBuilder.defaultServiceConfig(defaultServiceConfig);
+        }
         return channelBuilder;
       }
       if (!useOkHttp) {
@@ -455,6 +498,12 @@ public class TestServiceClient {
         }
         // Disable the default census stats interceptor, use testing interceptor instead.
         InternalNettyChannelBuilder.setStatsEnabled(nettyBuilder, false);
+        if (disableServiceConfigLookUp) {
+          nettyBuilder.disableServiceConfigLookUp();
+        }
+        if (defaultServiceConfig != null) {
+          nettyBuilder.defaultServiceConfig(defaultServiceConfig);
+        }
         return nettyBuilder.intercept(createCensusStatsClientInterceptor());
       }
 
@@ -470,6 +519,12 @@ public class TestServiceClient {
       }
       // Disable the default census stats interceptor, use testing interceptor instead.
       InternalOkHttpChannelBuilder.setStatsEnabled(okBuilder, false);
+      if (disableServiceConfigLookUp) {
+        okBuilder.disableServiceConfigLookUp();
+      }
+      if (defaultServiceConfig != null) {
+        okBuilder.defaultServiceConfig(defaultServiceConfig);
+      }
       return okBuilder.intercept(createCensusStatsClientInterceptor());
     }
 
