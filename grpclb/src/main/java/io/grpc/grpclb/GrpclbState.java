@@ -223,7 +223,8 @@ final class GrpclbState {
    * not yet connected.
    */
   void handleAddresses(
-      List<LbAddressGroup> newLbAddressGroups, List<EquivalentAddressGroup> newBackendServers) {
+      List<EquivalentAddressGroup> newLbAddressGroups,
+      List<EquivalentAddressGroup> newBackendServers) {
     logger.log(
         ChannelLogLevel.DEBUG,
         "[grpclb-<{0}>] Resolved addresses: lb addresses {0}, backends: {1}",
@@ -236,9 +237,7 @@ final class GrpclbState {
       shutdownLbComm();
       syncContext.execute(new FallbackModeTask());
     } else {
-      List<EquivalentAddressGroup> eagByAuthority =
-          overrideAuthorityEagGroups(newLbAddressGroups);
-      startLbComm(eagByAuthority);
+      startLbComm(newLbAddressGroups);
       // Avoid creating a new RPC just because the addresses were updated, as it can cause a
       // stampeding herd. The current RPC may be on a connection to an address not present in
       // newLbAddressGroups, but we're considering that "okay". If we detected the RPC is to an
@@ -861,19 +860,6 @@ final class GrpclbState {
         picker.pickList,
         picker.dropList);
     helper.updateBalancingState(state, picker);
-  }
-
-  private List<EquivalentAddressGroup> overrideAuthorityEagGroups(List<LbAddressGroup> groupList) {
-    assert !groupList.isEmpty();
-    List<EquivalentAddressGroup> eags = new ArrayList<>(groupList.size());
-    for (LbAddressGroup group : groupList) {
-      String authority = group.getAuthority();
-      Attributes attrs = Attributes.newBuilder()
-          .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, authority)
-          .build();
-      eags.add(new EquivalentAddressGroup(group.getAddresses().getAddresses(), attrs));
-    }
-    return eags;
   }
 
   private static Attributes createSubchannelAttrs() {
