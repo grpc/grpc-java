@@ -194,7 +194,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
   }
 
   void updateAddresses(List<EquivalentAddressGroup> eag) {
-    subchannel.updateAddresses(Collections.unmodifiableList(eag));
+    subchannel.updateAddresses(eag);
   }
 
   @Override

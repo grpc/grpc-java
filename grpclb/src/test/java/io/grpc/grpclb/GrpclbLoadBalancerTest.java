@@ -859,13 +859,8 @@ public class GrpclbLoadBalancerTest {
 
     List<EquivalentAddressGroup> backendList2 = createResolvedBackendAddresses(1);
     List<EquivalentAddressGroup> grpclbBalancerList2 = createResolvedBalancerAddresses(2);
-    EquivalentAddressGroup combinedEag = new EquivalentAddressGroup(Arrays.asList(
-        grpclbBalancerList2.get(0).getAddresses().get(0),
-        grpclbBalancerList2.get(1).getAddresses().get(0)),
-        lbAttributes(lbAuthority(0)));
     deliverResolvedAddresses(backendList2, grpclbBalancerList2);
-    verify(helper).updateOobChannelAddresses(eq(oobChannel),
-        eq(Collections.singletonList(combinedEag)));
+    verify(helper).updateOobChannelAddresses(eq(oobChannel), eq(grpclbBalancerList2));
     assertEquals(1, lbRequestObservers.size()); // No additional RPC
   }
 
@@ -1276,12 +1271,7 @@ public class GrpclbLoadBalancerTest {
     // New addresses are updated to the OobChannel
     inOrder.verify(helper).updateOobChannelAddresses(
         same(oobChannel),
-        eq(Collections.singletonList(
-            new EquivalentAddressGroup(
-            Arrays.asList(
-                grpclbBalancerList.get(0).getAddresses().get(0),
-                grpclbBalancerList.get(1).getAddresses().get(0)),
-            lbAttributes(lbAuthority(0))))));
+        eq(grpclbBalancerList));
 
     if (timerExpires) {
       // Still in fallback logic, except that the backend list is empty
@@ -1611,20 +1601,9 @@ public class GrpclbLoadBalancerTest {
         new EquivalentAddressGroup(
             new FakeSocketAddress("fake-address-3"),
             lbAttributes("fake-authority-1")));
-    List<EquivalentAddressGroup> goldenOobChannelEags = Arrays.asList(
-        new EquivalentAddressGroup(
-            Arrays.<SocketAddress>asList(
-                new FakeSocketAddress("fake-address-1"),
-                new FakeSocketAddress("fake-address-3")),
-            lbAttributes("fake-authority-1")),
-        new EquivalentAddressGroup(
-            Arrays.<SocketAddress>asList(
-                new FakeSocketAddress("fake-address-2")),
-            lbAttributes("fake-authority-2"))
-    );
     deliverResolvedAddresses(backendList, grpclbBalancerList);
 
-    verify(helper).createOobChannel(goldenOobChannelEags, "fake-authority-1");
+    verify(helper).createOobChannel(grpclbBalancerList, "fake-authority-1");
   }
 
   @Test
@@ -2329,14 +2308,7 @@ public class GrpclbLoadBalancerTest {
 
     // Fallback timer is started as soon as the addresses are resolved.
     assertEquals(1, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
-
-    List<SocketAddress> addrs = new ArrayList<>();
-    addrs.addAll(grpclbBalancerList.get(0).getAddresses());
-    addrs.addAll(grpclbBalancerList.get(1).getAddresses());
-    Attributes attr = grpclbBalancerList.get(0).getAttributes();
-    EquivalentAddressGroup oobChannelEag = new EquivalentAddressGroup(addrs, attr);
-    verify(helper).createOobChannel(eq(Collections.singletonList(oobChannelEag)),
-        eq(lbAuthority(0)));
+    verify(helper).createOobChannel(eq(grpclbBalancerList), eq(lbAuthority(0)));
     assertEquals(1, fakeOobChannels.size());
     ManagedChannel oobChannel = fakeOobChannels.poll();
     verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
@@ -2719,6 +2691,11 @@ public class GrpclbLoadBalancerTest {
     }
 
     @Override
+    public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
+      return createOobChannel(Collections.singletonList(eag), authority);
+    }
+
+    @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       FakeSubchannel subchannel =
           mock(
@@ -2753,6 +2730,10 @@ public class GrpclbLoadBalancerTest {
     @Override
     public String getAuthority() {
       return SERVICE_AUTHORITY;
+    }
+
+    @Override
+    public void updateOobChannelAddresses(ManagedChannel channel, EquivalentAddressGroup eag) {
     }
 
     @Override

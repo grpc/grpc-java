@@ -1464,6 +1464,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
+    public ManagedChannel createOobChannel(EquivalentAddressGroup addressGroup, String authority) {
+      return createOobChannel(Collections.singletonList(addressGroup), authority);
+    }
+
+    @Override
     public ManagedChannel createOobChannel(List<EquivalentAddressGroup> addressGroup,
         String authority) {
       // TODO(ejona): can we be even stricter? Like terminating?
@@ -1506,7 +1511,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          Collections.unmodifiableList(addressGroup),
+          addressGroup,
           authority, userAgent, backoffPolicyProvider, oobTransportFactory,
           oobTransportFactory.getScheduledExecutorService(), stopwatchSupplier, syncContext,
           // All callback methods are run from syncContext
@@ -1622,6 +1627,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
         return new DefaultChannelCreds();
       }
       return originalChannelCreds;
+    }
+
+    @Override
+    public void updateOobChannelAddresses(ManagedChannel channel, EquivalentAddressGroup eag) {
+      updateOobChannelAddresses(channel, Collections.singletonList(eag));
     }
 
     @Override

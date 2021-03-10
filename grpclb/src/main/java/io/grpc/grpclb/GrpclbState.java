@@ -63,7 +63,6 @@ import io.grpc.lb.v1.ServerList;
 import io.grpc.stub.StreamObserver;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -320,20 +319,17 @@ final class GrpclbState {
   }
 
   private void startLbComm(List<EquivalentAddressGroup> overrideAuthorityEags) {
-    checkNotNull(overrideAuthorityEags, "eagGroups");
+    checkNotNull(overrideAuthorityEags, "overrideAuthorityEags");
     assert !overrideAuthorityEags.isEmpty();
     String arbitraryAuthority = overrideAuthorityEags.get(0).getAttributes()
         .get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY);
     if (lbCommChannel == null) {
       lbCommChannel = helper.createOobChannel(overrideAuthorityEags, arbitraryAuthority);
-      for (EquivalentAddressGroup eag : overrideAuthorityEags) {
-        logger.log(
-            ChannelLogLevel.DEBUG,
-            "[grpclb-<{0}>] Created grpclb channel: address={1}, authority={2}",
-            serviceName,
-            eag.getAddresses(),
-            eag.getAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY));
-      }
+      logger.log(
+          ChannelLogLevel.DEBUG,
+          "[grpclb-<{0}>] Created grpclb channel: EAG={1}",
+          serviceName,
+          overrideAuthorityEags);
     } else {
       helper.updateOobChannelAddresses(lbCommChannel, overrideAuthorityEags);
     }
@@ -869,34 +865,15 @@ final class GrpclbState {
 
   private List<EquivalentAddressGroup> overrideAuthorityEagGroups(List<LbAddressGroup> groupList) {
     assert !groupList.isEmpty();
-    Map<String, List<EquivalentAddressGroup>> eagsByAuthority = new HashMap<>();
+    List<EquivalentAddressGroup> eags = new ArrayList<>(groupList.size());
     for (LbAddressGroup group : groupList) {
       String authority = group.getAuthority();
-      if (!eagsByAuthority.containsKey(authority)) {
-        eagsByAuthority.put(authority, new ArrayList<EquivalentAddressGroup>());
-      }
-      eagsByAuthority.get(authority).add(group.getAddresses());
-    }
-    List<EquivalentAddressGroup> eagByAuthority = new ArrayList<>(eagsByAuthority.size());
-    for (String authority: eagsByAuthority.keySet()) {
       Attributes attrs = Attributes.newBuilder()
           .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, authority)
           .build();
-      eagByAuthority.add(flattenEquivalentAddressGroup(eagsByAuthority.get(authority), attrs));
+      eags.add(new EquivalentAddressGroup(group.getAddresses().getAddresses(), attrs));
     }
-    return eagByAuthority;
-  }
-
-  /**
-   * Flattens list of EquivalentAddressGroup objects into one EquivalentAddressGroup object.
-   */
-  private static EquivalentAddressGroup flattenEquivalentAddressGroup(
-      List<EquivalentAddressGroup> groupList, Attributes attrs) {
-    List<SocketAddress> addrs = new ArrayList<>();
-    for (EquivalentAddressGroup group : groupList) {
-      addrs.addAll(group.getAddresses());
-    }
-    return new EquivalentAddressGroup(addrs, attrs);
+    return eags;
   }
 
   private static Attributes createSubchannelAttrs() {

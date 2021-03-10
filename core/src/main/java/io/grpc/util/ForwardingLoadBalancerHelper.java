@@ -47,8 +47,18 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   }
 
   @Override
+  public  ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
+    return delegate().createOobChannel(eag, authority);
+  }
+
+  @Override
   public  ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag, String authority) {
     return delegate().createOobChannel(eag, authority);
+  }
+
+  @Override
+  public void updateOobChannelAddresses(ManagedChannel channel, EquivalentAddressGroup eag) {
+    delegate().updateOobChannelAddresses(channel, eag);
   }
 
   @Override

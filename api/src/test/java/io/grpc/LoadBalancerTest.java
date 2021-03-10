@@ -338,7 +338,7 @@ public class LoadBalancerTest {
 
   private static class NoopHelper extends LoadBalancer.Helper {
     @Override
-    public ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag, String authority) {
+    public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
       return null;
     }
 
