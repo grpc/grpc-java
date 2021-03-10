@@ -871,9 +871,6 @@ public class XdsNameResolverTest {
     FaultConfig httpFilterFaultConfig = FaultConfig.create(
         null,
         FaultAbort.forHeader(FaultConfig.FractionalPercent.perHundred(70)),
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -906,9 +903,6 @@ public class XdsNameResolverTest {
     httpFilterFaultConfig = FaultConfig.create(
         null,
         FaultAbort.forHeader(FaultConfig.FractionalPercent.perMillion(600_000)),
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -922,9 +916,6 @@ public class XdsNameResolverTest {
     httpFilterFaultConfig = FaultConfig.create(
         null,
         FaultAbort.forHeader(FaultConfig.FractionalPercent.perMillion(0)),
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -940,9 +931,6 @@ public class XdsNameResolverTest {
         FaultAbort.forStatus(
             Status.UNAUTHENTICATED.withDescription("unauthenticated"),
             FaultConfig.FractionalPercent.perMillion(600_000)),
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -958,9 +946,6 @@ public class XdsNameResolverTest {
         FaultAbort.forStatus(
             Status.UNAUTHENTICATED.withDescription("unauthenticated"),
             FaultConfig.FractionalPercent.perMillion(400_000)),
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -979,12 +964,7 @@ public class XdsNameResolverTest {
 
     // header delay, header delay rate = 60 %
     FaultConfig httpFilterFaultConfig = FaultConfig.create(
-        FaultDelay.forHeader(FaultConfig.FractionalPercent.perHundred(70)),
-        null,
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
-        null);
+        FaultDelay.forHeader(FaultConfig.FractionalPercent.perHundred(70)), null, null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -1001,12 +981,7 @@ public class XdsNameResolverTest {
 
     // header delay, no header rate, fix rate = 60 %
     httpFilterFaultConfig = FaultConfig.create(
-        FaultDelay.forHeader(FaultConfig.FractionalPercent.perMillion(600_000)),
-        null,
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
-        null);
+        FaultDelay.forHeader(FaultConfig.FractionalPercent.perMillion(600_000)), null, null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
@@ -1017,12 +992,7 @@ public class XdsNameResolverTest {
 
     // header delay, no header rate, fix rate = 0
     httpFilterFaultConfig = FaultConfig.create(
-        FaultDelay.forHeader(FaultConfig.FractionalPercent.perMillion(0)),
-        null,
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
-        null);
+        FaultDelay.forHeader(FaultConfig.FractionalPercent.perMillion(0)), null, null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
@@ -1035,9 +1005,6 @@ public class XdsNameResolverTest {
     httpFilterFaultConfig = FaultConfig.create(
         FaultDelay.forFixedDelay(5000L, FaultConfig.FractionalPercent.perMillion(600_000)),
         null,
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -1051,9 +1018,6 @@ public class XdsNameResolverTest {
     httpFilterFaultConfig = FaultConfig.create(
         FaultDelay.forFixedDelay(5000L, FaultConfig.FractionalPercent.perMillion(400_000)),
         null,
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -1073,9 +1037,6 @@ public class XdsNameResolverTest {
     FaultConfig httpFilterFaultConfig = FaultConfig.create(
         FaultDelay.forFixedDelay(5000L, FaultConfig.FractionalPercent.perMillion(1000_000)),
         null,
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         /* maxActiveFaults= */ 1);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -1122,9 +1083,6 @@ public class XdsNameResolverTest {
         FaultAbort.forStatus(
             Status.UNAUTHENTICATED.withDescription("unauthenticated"),
             FaultConfig.FractionalPercent.perMillion(1000_000)),
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -1146,17 +1104,11 @@ public class XdsNameResolverTest {
         null,
         FaultAbort.forStatus(
             Status.UNAUTHENTICATED, FaultConfig.FractionalPercent.perMillion(1000_000)),
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     // VirtualHost fault config override
     FaultConfig virtualHostFaultConfig = FaultConfig.create(
         null,
         FaultAbort.forStatus(Status.INTERNAL, FaultConfig.FractionalPercent.perMillion(1000_000)),
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(
         cluster1, httpFilterFaultConfig, virtualHostFaultConfig, null, null);
@@ -1171,9 +1123,6 @@ public class XdsNameResolverTest {
     FaultConfig routeFaultConfig = FaultConfig.create(
         null,
         FaultAbort.forStatus(Status.UNKNOWN, FaultConfig.FractionalPercent.perMillion(1000_000)),
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(
         cluster1, httpFilterFaultConfig, virtualHostFaultConfig, routeFaultConfig, null);
@@ -1189,9 +1138,6 @@ public class XdsNameResolverTest {
         null,
         FaultAbort.forStatus(
             Status.UNAVAILABLE, FaultConfig.FractionalPercent.perMillion(1000_000)),
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(
         cluster1, httpFilterFaultConfig, virtualHostFaultConfig, routeFaultConfig,
@@ -1214,9 +1160,6 @@ public class XdsNameResolverTest {
         null,
         FaultAbort.forStatus(
             Status.UNAUTHENTICATED, FaultConfig.FractionalPercent.perMillion(1000_000)),
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverRdsNameWithFaultInjection(AUTHORITY, httpFilterFaultConfig);
 
@@ -1224,9 +1167,6 @@ public class XdsNameResolverTest {
     FaultConfig routeFaultConfig = FaultConfig.create(
         null,
         FaultAbort.forStatus(Status.UNKNOWN, FaultConfig.FractionalPercent.perMillion(1000_000)),
-        cluster1,
-        Collections.<String>emptyList(),
-        Collections.<HeaderMatcher>emptyList(),
         null);
     xdsClient.deliverRdsUpdateWithFaultInjection(null, routeFaultConfig, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
@@ -1500,9 +1440,7 @@ public class XdsNameResolverTest {
         final FaultConfig routeFaultConfig,
         final FaultConfig weightedClusterFaultConfig) {
       if (httpFilterFaultConfig == null) {
-        httpFilterFaultConfig = FaultConfig.create(
-            null, null, "cluster1", ImmutableList.<String>of(), ImmutableList.<HeaderMatcher>of(),
-            null);
+        httpFilterFaultConfig = FaultConfig.create(null, null, null);
       }
       final ImmutableMap<String, FilterConfig> filterConfig = ImmutableMap.of(
           FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig,
@@ -1564,8 +1502,7 @@ public class XdsNameResolverTest {
         final String rdsName, FaultConfig httpFilterFaultConfig) {
       if (httpFilterFaultConfig == null) {
         httpFilterFaultConfig = FaultConfig.create(
-            null, null, "cluster1", ImmutableList.<String>of(), ImmutableList.<HeaderMatcher>of(),
-            null);
+            null, null, null);
       }
       final ImmutableMap<String, FilterConfig> filterConfig = ImmutableMap.of(
           FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig,

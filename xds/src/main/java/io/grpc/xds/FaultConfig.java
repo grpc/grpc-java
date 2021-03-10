@@ -19,11 +19,8 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.collect.ImmutableList;
 import io.grpc.Status;
 import io.grpc.xds.Filter.FilterConfig;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import java.util.List;
 import javax.annotation.Nullable;
 
 /** Fault injection configurations. */
@@ -35,12 +32,6 @@ abstract class FaultConfig implements FilterConfig {
   @Nullable
   abstract FaultAbort faultAbort();
 
-  abstract String upstreamCluster();
-
-  abstract ImmutableList<String> downstreamNodes();
-
-  abstract ImmutableList<HeaderMatcher> headers();
-
   @Nullable
   abstract Integer maxActiveFaults();
 
@@ -51,10 +42,8 @@ abstract class FaultConfig implements FilterConfig {
 
   static FaultConfig create(
       @Nullable FaultDelay faultDelay, @Nullable FaultAbort faultAbort,
-      String upstreamCluster, List<String> downstreamNodes, List<HeaderMatcher> headers,
       @Nullable Integer maxActiveFaults) {
-    return new AutoValue_FaultConfig(faultDelay, faultAbort, upstreamCluster,
-        ImmutableList.copyOf(downstreamNodes), ImmutableList.copyOf(headers), maxActiveFaults);
+    return new AutoValue_FaultConfig(faultDelay, faultAbort, maxActiveFaults);
   }
 
   /** Fault configurations for aborting requests. */

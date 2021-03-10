@@ -414,7 +414,6 @@ public abstract class ClientXdsClientTestBase {
     assertThat(faultConfig.faultDelay().percent().denominatorType())
         .isEqualTo(DenominatorType.MILLION);
     assertThat(faultConfig.faultAbort()).isNull();
-    assertThat(faultConfig.upstreamCluster()).isEqualTo("cluster1");
     assertThat(faultConfig.maxActiveFaults()).isEqualTo(100);
     faultConfig = (FaultConfig) ldsUpdate.virtualHosts.get(1)
         .filterConfigOverrides().get("envoy.fault");
@@ -423,7 +422,6 @@ public abstract class ClientXdsClientTestBase {
     assertThat(faultConfig.faultAbort().percent().numerator()).isEqualTo(2000);
     assertThat(faultConfig.faultAbort().percent().denominatorType())
         .isEqualTo(DenominatorType.MILLION);
-    assertThat(faultConfig.upstreamCluster()).isEqualTo("cluster2");
     assertThat(faultConfig.maxActiveFaults()).isEqualTo(101);
   }
 

@@ -44,10 +44,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
-import io.grpc.xds.Matchers.HeaderMatcher;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -121,9 +118,6 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
       }
       faultAbort = faultAbortOrError.struct;
     }
-    String upstreamCluster = httpFault.getUpstreamCluster();
-    List<String> downstreamNodes = httpFault.getDownstreamNodesList();
-    List<HeaderMatcher> headers = new ArrayList<>();
     Integer maxActiveFaults = null;
     if (httpFault.hasMaxActiveFaults()) {
       maxActiveFaults = httpFault.getMaxActiveFaults().getValue();
@@ -131,8 +125,7 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
         maxActiveFaults = Integer.MAX_VALUE;
       }
     }
-    return StructOrError.fromStruct(FaultConfig.create(
-        faultDelay, faultAbort, upstreamCluster, downstreamNodes, headers, maxActiveFaults));
+    return StructOrError.fromStruct(FaultConfig.create(faultDelay, faultAbort, maxActiveFaults));
   }
 
   private static FaultDelay parseFaultDelay(
