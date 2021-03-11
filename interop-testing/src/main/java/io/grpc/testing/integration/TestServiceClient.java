@@ -148,7 +148,8 @@ public class TestServiceClient {
         localHandshakerPort = Integer.parseInt(value);
       } else if ("service_config_json".equals(key)) {
         @SuppressWarnings("unchecked")
-        serviceConfig = (Map<String, ?>) JsonParser.parse(value);
+        Map<String, ?> map = (Map<String, ?>) JsonParser.parse(value);
+        serviceConfig = map;
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
