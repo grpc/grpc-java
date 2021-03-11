@@ -47,7 +47,6 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
       ChannelLogger negotiationLogger) {
     super(decoder, encoder, initialSettings);
     this.channelUnused = channelUnused;
-    checkState(negotiationLogger != null, "NegotiationLogger must not be null");
     this.negotiationLogger = negotiationLogger;
   }
 
@@ -80,6 +79,7 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
    * Returns the channel logger for the given channel context.
    */
   public ChannelLogger getNegotiationLogger() {
+    checkState(negotiationLogger != null, "NegotiationLogger must not be null");
     return negotiationLogger;
   }
 
