@@ -80,7 +80,6 @@ import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
-
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
@@ -205,7 +204,7 @@ public abstract class ClientXdsClientTestBase {
   @Mock
   private BackoffPolicy backoffPolicy2;
   @Mock
-  protected LdsResourceWatcher ldsResourceWatcher;
+  private LdsResourceWatcher ldsResourceWatcher;
   @Mock
   private RdsResourceWatcher rdsResourceWatcher;
   @Mock
@@ -1356,7 +1355,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
-  protected DiscoveryRpcCall startResourceWatcher(
+  private DiscoveryRpcCall startResourceWatcher(
       ResourceType type, String name, ResourceWatcher watcher) {
     FakeClock.TaskFilter timeoutTaskFilter;
     switch (type) {
