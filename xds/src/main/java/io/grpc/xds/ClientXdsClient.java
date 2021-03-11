@@ -38,7 +38,6 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
-import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
@@ -278,27 +277,17 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private StructOrError<EnvoyServerProtoData.Listener> parseServerSideListener(Listener listener) {
-    String errorMessage = validateServerListener(listener);
-    if (errorMessage != null) {
-      return StructOrError.fromError(errorMessage);
-    }
+  @VisibleForTesting static StructOrError<EnvoyServerProtoData.Listener> parseServerSideListener(
+      Listener listener) {
     try {
-      return StructOrError.fromStruct(EnvoyServerProtoData.Listener
-          .fromEnvoyProtoListener(listener));
+      return StructOrError.fromStruct(
+          EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
     } catch (InvalidProtocolBufferException e) {
       return StructOrError.fromError(
           "Failed to unpack Listener " + listener.getName() + ":" + e.getMessage());
+    } catch (IllegalArgumentException e) {
+      return StructOrError.fromError(e.getMessage());
     }
-  }
-
-  private String validateServerListener(Listener listener) {
-    if (!listener.getTrafficDirection().equals(TrafficDirection.INBOUND)) {
-      return "Listener " + listener.getName() + " is not INBOUND";
-    }
-    // TODO(sanjaypujare): add validations based on gRFC
-    //  https://github.com/grpc/proposal/blob/master/A36-xds-for-servers.md
-    return null;
   }
 
   private static StructOrError<VirtualHost> parseVirtualHost(

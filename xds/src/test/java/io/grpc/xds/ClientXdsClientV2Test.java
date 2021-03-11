@@ -616,16 +616,4 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
       return actual.equals(expected);
     }
   }
-
-  @Override
-  public void serverSideListenerFound() {}
-
-  @Override
-  public void serverSideListenerNotFound() {}
-
-  @Override
-  public void serverSideListenerNotInbound() {}
-
-  @Override
-  public void serverSideStreamClosedAndRetryRaceWithAddRemoveListenerWatchers() {}
 }

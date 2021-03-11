@@ -22,6 +22,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
 import java.net.InetAddress;
@@ -455,6 +456,9 @@ public final class EnvoyServerProtoData {
 
     static Listener fromEnvoyProtoListener(io.envoyproxy.envoy.config.listener.v3.Listener proto)
         throws InvalidProtocolBufferException {
+      if (!proto.getTrafficDirection().equals(TrafficDirection.INBOUND)) {
+        throw new IllegalArgumentException("Listener " + proto.getName() + " is not INBOUND");
+      }
       List<FilterChain> filterChains = new ArrayList<>(proto.getFilterChainsCount());
       for (io.envoyproxy.envoy.config.listener.v3.FilterChain filterChain :
           proto.getFilterChainsList()) {
