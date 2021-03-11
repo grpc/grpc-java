@@ -776,7 +776,7 @@ final class GrpclbState {
       case ROUND_ROBIN:
         pickList = new ArrayList<>(backendList.size());
         Status error = null;
-        boolean hasIdle = false;
+        boolean hasPending = false;
         for (BackendEntry entry : backendList) {
           Subchannel subchannel = entry.subchannel;
           Attributes attrs = subchannel.getAttributes();
@@ -785,12 +785,12 @@ final class GrpclbState {
             pickList.add(entry);
           } else if (stateInfo.getState() == TRANSIENT_FAILURE) {
             error = stateInfo.getStatus();
-          } else if (stateInfo.getState() == IDLE) {
-            hasIdle = true;
+          } else {
+            hasPending = true;
           }
         }
         if (pickList.isEmpty()) {
-          if (error != null && !hasIdle) {
+          if (error != null && !hasPending) {
             pickList.add(new ErrorEntry(error));
             state = TRANSIENT_FAILURE;
           } else {
