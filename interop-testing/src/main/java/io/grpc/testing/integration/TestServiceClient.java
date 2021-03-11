@@ -85,7 +85,7 @@ public class TestServiceClient {
   private String oauthScope;
   private boolean fullStreamDecompression;
   private int localHandshakerPort = -1;
-  private <String, ?> serviceConfig = null;
+  private Map<String, ?> serviceConfig = null;
 
   private Tester tester = new Tester();
 
@@ -498,7 +498,7 @@ public class TestServiceClient {
       }
       // Disable the default census stats interceptor, use testing interceptor instead.
       InternalOkHttpChannelBuilder.setStatsEnabled(okBuilder, false);
-      if (defaultServiceConfig != null) {
+      if (serviceConfig != null) {
         okBuilder.disableServiceConfigLookUp();
         okBuilder.defaultServiceConfig(serviceConfig);
       }
