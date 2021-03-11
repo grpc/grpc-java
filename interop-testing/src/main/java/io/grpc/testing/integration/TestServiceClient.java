@@ -17,8 +17,6 @@
 package io.grpc.testing.integration;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.io.Files;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
@@ -32,6 +30,7 @@ import io.grpc.alts.AltsChannelCredentials;
 import io.grpc.alts.ComputeEngineChannelCredentials;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.JsonParser;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.InsecureFromHttp1ChannelCredentials;
 import io.grpc.netty.InternalNettyChannelBuilder;
@@ -42,6 +41,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
 import java.util.concurrent.TimeUnit;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
@@ -86,12 +86,12 @@ public class TestServiceClient {
   private boolean fullStreamDecompression;
   private int localHandshakerPort = -1;
   private boolean disableServiceConfigLookUp = false;
-  private ImmutableMap<String, ?> defaultServiceConfig = null;
+  private <String, ?> defaultServiceConfig = null;
 
   private Tester tester = new Tester();
 
   @VisibleForTesting
-  void parseArgs(String[] args) {
+  void parseArgs(String[] args) throws Exception {
     boolean usage = false;
     for (String arg : args) {
       if (!arg.startsWith("--")) {
@@ -147,17 +147,8 @@ public class TestServiceClient {
         fullStreamDecompression = Boolean.parseBoolean(value);
       } else if ("local_handshaker_port".equals(key)) {
         localHandshakerPort = Integer.parseInt(value);
-      } else if ("grpc_test_use_grpclb_with_child_policy".equals(key)) {
-        defaultServiceConfig =
-            ImmutableMap.<String, Object>of(
-                "loadBalancingConfig",
-                ImmutableList.of(
-                    ImmutableMap.<String, Object>of(
-                        "grpclb",
-                        ImmutableMap.<String, Object>of(
-                            "childPolicy",
-                            ImmutableList.of(
-                                ImmutableMap.<String, Object>of(value, ImmutableMap.of()))))));
+      } else if ("service_config_json".equals(key)) {
+        defaultServiceConfig = (Map<String, ?>) JsonParser.parse(value);
         disableServiceConfigLookUp = true;
       } else {
         System.err.println("Unknown argument: " + key);
@@ -202,11 +193,9 @@ public class TestServiceClient {
           + "\n  --oauth_scope               Scope for OAuth tokens. Default " + c.oauthScope
           + "\n  --full_stream_decompression Enable full-stream decompression. Default "
             + c.fullStreamDecompression
-          + "\n --grpc_test_use_grpclb_with_child_policy=LB_POLICY_NAME"
-          + "\n                              If non-empty, disable service config lookup and "
-          + "\n                              set a default service config which configures the "
-          + "\n                              grpclb LB policy with a child policy being the value "
-          + "\n                              of this flag (e.g. round_robin or pick_first)."
+          + "\n --service_config_json=SERVICE_CONFIG_JSON"
+          + "\n                              Disables service config lookups and sets the provided "
+          + "\n                              string as the default service config."
       );
       System.exit(1);
     }
