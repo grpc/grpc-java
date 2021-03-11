@@ -63,7 +63,6 @@ import io.grpc.lb.v1.ServerList;
 import io.grpc.stub.StreamObserver;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -108,6 +107,8 @@ final class GrpclbState {
         return "BUFFER_ENTRY";
       }
     };
+  @VisibleForTesting
+  static final String NO_USE_AUTHORITY_SUFFIX = "-notIntendedToBeUsed";
 
   enum Mode {
     ROUND_ROBIN,
@@ -224,7 +225,8 @@ final class GrpclbState {
    * not yet connected.
    */
   void handleAddresses(
-      List<LbAddressGroup> newLbAddressGroups, List<EquivalentAddressGroup> newBackendServers) {
+      List<EquivalentAddressGroup> newLbAddressGroups,
+      List<EquivalentAddressGroup> newBackendServers) {
     logger.log(
         ChannelLogLevel.DEBUG,
         "[grpclb-<{0}>] Resolved addresses: lb addresses {0}, backends: {1}",
@@ -237,8 +239,7 @@ final class GrpclbState {
       shutdownLbComm();
       syncContext.execute(new FallbackModeTask());
     } else {
-      LbAddressGroup newLbAddressGroup = flattenLbAddressGroups(newLbAddressGroups);
-      startLbComm(newLbAddressGroup);
+      startLbComm(newLbAddressGroups);
       // Avoid creating a new RPC just because the addresses were updated, as it can cause a
       // stampeding herd. The current RPC may be on a connection to an address not present in
       // newLbAddressGroups, but we're considering that "okay". If we detected the RPC is to an
@@ -318,24 +319,20 @@ final class GrpclbState {
     }
   }
 
-  private void startLbComm(LbAddressGroup lbAddressGroup) {
-    checkNotNull(lbAddressGroup, "lbAddressGroup");
+  private void startLbComm(List<EquivalentAddressGroup> overrideAuthorityEags) {
+    checkNotNull(overrideAuthorityEags, "overrideAuthorityEags");
+    assert !overrideAuthorityEags.isEmpty();
+    String doNotUseAuthority = overrideAuthorityEags.get(0).getAttributes()
+        .get(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE) + NO_USE_AUTHORITY_SUFFIX;
     if (lbCommChannel == null) {
-      lbCommChannel = helper.createOobChannel(
-          lbAddressGroup.getAddresses(), lbAddressGroup.getAuthority());
+      lbCommChannel = helper.createOobChannel(overrideAuthorityEags, doNotUseAuthority);
       logger.log(
           ChannelLogLevel.DEBUG,
-          "[grpclb-<{0}>] Created grpclb channel: address={1}, authority={2}",
+          "[grpclb-<{0}>] Created grpclb channel: EAG={1}",
           serviceName,
-          lbAddressGroup.getAddresses(),
-          lbAddressGroup.getAuthority());
-    } else if (lbAddressGroup.getAuthority().equals(lbCommChannel.authority())) {
-      helper.updateOobChannelAddresses(lbCommChannel, lbAddressGroup.getAddresses());
+          overrideAuthorityEags);
     } else {
-      // Full restart of channel
-      shutdownLbComm();
-      lbCommChannel = helper.createOobChannel(
-          lbAddressGroup.getAddresses(), lbAddressGroup.getAuthority());
+      helper.updateOobChannelAddresses(lbCommChannel, overrideAuthorityEags);
     }
   }
 
@@ -865,47 +862,6 @@ final class GrpclbState {
         picker.pickList,
         picker.dropList);
     helper.updateBalancingState(state, picker);
-  }
-
-  private LbAddressGroup flattenLbAddressGroups(List<LbAddressGroup> groupList) {
-    assert !groupList.isEmpty();
-    List<EquivalentAddressGroup> eags = new ArrayList<>(groupList.size());
-    String authority = groupList.get(0).getAuthority();
-    for (LbAddressGroup group : groupList) {
-      if (!authority.equals(group.getAuthority())) {
-        // TODO(ejona): Allow different authorities for different addresses. Requires support from
-        // Helper.
-        logger.log(ChannelLogLevel.WARNING,
-            "[grpclb-<{0}>] Multiple authorities found for LB. "
-            + "Skipping addresses for {1} in preference to {2}",
-            serviceName,
-            group.getAuthority(),
-            authority);
-      } else {
-        eags.add(group.getAddresses());
-      }
-    }
-    // ALTS code can use the presence of ATTR_LB_ADDR_AUTHORITY to select ALTS instead of TLS, with
-    // Netty.
-    // TODO(ejona): The process here is a bit of a hack because ATTR_LB_ADDR_AUTHORITY isn't
-    // actually used in the normal case. https://github.com/grpc/grpc-java/issues/4618 should allow
-    // this to be more obvious.
-    Attributes attrs = Attributes.newBuilder()
-        .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, authority)
-        .build();
-    return new LbAddressGroup(flattenEquivalentAddressGroup(eags, attrs), authority);
-  }
-
-  /**
-   * Flattens list of EquivalentAddressGroup objects into one EquivalentAddressGroup object.
-   */
-  private static EquivalentAddressGroup flattenEquivalentAddressGroup(
-      List<EquivalentAddressGroup> groupList, Attributes attrs) {
-    List<SocketAddress> addrs = new ArrayList<>();
-    for (EquivalentAddressGroup group : groupList) {
-      addrs.addAll(group.getAddresses());
-    }
-    return new EquivalentAddressGroup(addrs, attrs);
   }
 
   private static Attributes createSubchannelAttrs() {
