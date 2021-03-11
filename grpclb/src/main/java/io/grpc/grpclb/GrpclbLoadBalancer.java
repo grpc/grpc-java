@@ -91,7 +91,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
         throw new AssertionError(
             "This is a bug: LB address " + lbAddr + " does not have an authority.");
       }
-      Attributes attrs = Attributes.newBuilder()
+      Attributes attrs = lbAddr.getAttributes().toBuilder()
           .set(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE, lbAddrAuthority)
           .build();
       overrideAuthorityLbAddresses.add(new EquivalentAddressGroup(lbAddr.getAddresses(), attrs));

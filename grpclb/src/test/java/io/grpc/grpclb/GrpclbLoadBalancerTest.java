@@ -1607,11 +1607,36 @@ public class GrpclbLoadBalancerTest {
             lbAttributes("fake-authority-2")),
         new EquivalentAddressGroup(
             new FakeSocketAddress("fake-address-3"),
-            lbAttributes("fake-authority-1")));
+            lbAttributes("fake-authority-1").toBuilder()
+                .set(GrpclbConstants.TOKEN_ATTRIBUTE_KEY, "value").build()
+            ));
     deliverResolvedAddresses(backendList, grpclbBalancerList);
 
-    verify(helper).createOobChannel(xattr(grpclbBalancerList),
-        "fake-authority-1" + NO_USE_AUTHORITY_SUFFIX);
+    List<EquivalentAddressGroup> goldenOobEagList =
+        Arrays.asList(
+            new EquivalentAddressGroup(
+                new FakeSocketAddress("fake-address-1"),
+                Attributes.newBuilder()
+                    .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, "fake-authority-1")
+                    .set(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE, "fake-authority-1")
+                    .build()),
+            new EquivalentAddressGroup(
+                new FakeSocketAddress("fake-address-2"),
+                Attributes.newBuilder()
+                    .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, "fake-authority-2")
+                    .set(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE, "fake-authority-2")
+                    .build()),
+            new EquivalentAddressGroup(
+                new FakeSocketAddress("fake-address-3"),
+                Attributes.newBuilder()
+                    .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, "fake-authority-1")
+                    .set(GrpclbConstants.TOKEN_ATTRIBUTE_KEY, "value")
+                    .set(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE, "fake-authority-1")
+                    .build()
+            ));
+
+    verify(helper).createOobChannel(eq(goldenOobEagList),
+        eq("fake-authority-1" + NO_USE_AUTHORITY_SUFFIX));
   }
 
   @Test
@@ -2624,7 +2649,7 @@ public class GrpclbLoadBalancerTest {
     List<EquivalentAddressGroup> oobAddr = new ArrayList<>(lbAddr.size());
     for (EquivalentAddressGroup lb : lbAddr) {
       String authority = lb.getAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY);
-      Attributes attrs = Attributes.newBuilder()
+      Attributes attrs = lb.getAttributes().toBuilder()
           .set(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE, authority)
           .build();
       oobAddr.add(new EquivalentAddressGroup(lb.getAddresses(), attrs));
