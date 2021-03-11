@@ -20,6 +20,7 @@ import static io.netty.handler.codec.http2.Http2CodecUtil.getEmbeddedHttp2Except
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.grpc.ChannelLogger;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
@@ -51,9 +52,10 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,
       Http2Settings initialSettings,
+      ChannelLogger negotiationLogger,
       boolean autoFlowControl,
       PingLimiter pingLimiter) {
-    super(channelUnused, decoder, encoder, initialSettings);
+    super(channelUnused, decoder, encoder, initialSettings, negotiationLogger);
 
     // During a graceful shutdown, wait until all streams are closed.
     gracefulShutdownTimeoutMillis(GRACEFUL_SHUTDOWN_NO_TIMEOUT);

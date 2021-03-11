@@ -25,6 +25,9 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FI
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -34,6 +37,9 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValida
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
@@ -179,6 +185,9 @@ public class SdsProtocolNegotiatorsTest {
     ClientSdsProtocolNegotiator pn =
         new ClientSdsProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
+    ChannelLogger logger = mock(ChannelLogger.class);
+    doNothing().when(logger).log(any(ChannelLogLevel.class), anyString());
+    when(mockHandler.getNegotiationLogger()).thenReturn(logger);
     TlsContextManager mockTlsContextManager = mock(TlsContextManager.class);
     when(mockHandler.getEagAttributes())
         .thenReturn(
@@ -387,7 +396,7 @@ public class SdsProtocolNegotiatorsTest {
         Http2ConnectionDecoder decoder,
         Http2ConnectionEncoder encoder,
         Http2Settings initialSettings) {
-      super(channelUnused, decoder, encoder, initialSettings);
+      super(channelUnused, decoder, encoder, initialSettings, new NoopChannelLogger());
     }
 
     static FakeGrpcHttp2ConnectionHandler newHandler() {

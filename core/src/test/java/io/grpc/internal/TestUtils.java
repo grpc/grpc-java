@@ -142,4 +142,13 @@ public final class TestUtils {
 
   private TestUtils() {
   }
+
+  public static class NoopChannelLogger extends ChannelLogger {
+
+    @Override
+    public void log(ChannelLogLevel level, String message) {}
+
+    @Override
+    public void log(ChannelLogLevel level, String messageFormat, Object... args) {}
+  }
 }

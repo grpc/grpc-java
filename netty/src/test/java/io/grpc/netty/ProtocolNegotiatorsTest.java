@@ -53,13 +53,13 @@ import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.GrpcAttributes;
-import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
@@ -183,6 +183,7 @@ public class ProtocolNegotiatorsTest {
   private SslContext sslContext;
   private SSLEngine engine;
   private ChannelHandlerContext channelHandlerCtx;
+  private static ChannelLogger noopLogger = new NoopChannelLogger();
 
   @Before
   public void setUp() throws Exception {
@@ -583,7 +584,7 @@ public class ProtocolNegotiatorsTest {
             latch.countDown();
             super.handlerAdded(ctx);
           }
-        });
+        }, noopLogger);
 
     ChannelHandler lateAddingHandler = new ChannelInboundHandlerAdapter() {
       @Override
@@ -627,7 +628,7 @@ public class ProtocolNegotiatorsTest {
             latch.countDown();
             super.handlerAdded(ctx);
           }
-        });
+        }, noopLogger);
 
     LocalAddress addr = new LocalAddress("local");
     ChannelFuture cf = new Bootstrap()
@@ -860,7 +861,8 @@ public class ProtocolNegotiatorsTest {
     };
     DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
 
-    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext, "authority", elg);
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
+        "authority", elg, noopLogger);
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -898,7 +900,8 @@ public class ProtocolNegotiatorsTest {
         .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apn).build();
 
-    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext, "authority", elg);
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
+        "authority", elg, noopLogger);
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -921,7 +924,8 @@ public class ProtocolNegotiatorsTest {
     };
     DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
 
-    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext, "authority", elg);
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
+        "authority", elg, noopLogger);
     pipeline.addLast(handler);
 
     final AtomicReference<Throwable> error = new AtomicReference<>();
@@ -948,7 +952,8 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void clientTlsHandler_closeDuringNegotiation() throws Exception {
-    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext, "authority", null);
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
+        "authority", null, noopLogger);
     pipeline.addLast(new WriteBufferingAndExceptionHandler(handler));
     ChannelFuture pendingWrite = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
 
@@ -1174,7 +1179,7 @@ public class ProtocolNegotiatorsTest {
         .sync()
         .channel();
     Channel c = new Bootstrap()
-        .handler(new WaitUntilActiveHandler(next))
+        .handler(new WaitUntilActiveHandler(next, noopLogger))
         .channel(LocalChannel.class).group(group)
         .connect(addr)
         .sync()
@@ -1338,7 +1343,7 @@ public class ProtocolNegotiatorsTest {
           new DefaultHttp2ConnectionDecoder(conn, encoder, new DefaultHttp2FrameReader());
       Http2Settings settings = new Http2Settings();
       return new FakeGrpcHttp2ConnectionHandler(
-          /*channelUnused=*/ null, decoder, encoder, settings, noop);
+          /*channelUnused=*/ null, decoder, encoder, settings, noop, noopLogger);
     }
 
     private final boolean noop;
@@ -1351,8 +1356,9 @@ public class ProtocolNegotiatorsTest {
         Http2ConnectionDecoder decoder,
         Http2ConnectionEncoder encoder,
         Http2Settings initialSettings,
-        boolean noop) {
-      super(channelUnused, decoder, encoder, initialSettings);
+        boolean noop,
+        ChannelLogger negotiationLogger) {
+      super(channelUnused, decoder, encoder, initialSettings, negotiationLogger);
       this.noop = noop;
     }
 

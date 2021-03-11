@@ -32,6 +32,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalStatus;
@@ -85,6 +87,7 @@ import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
+import java.text.MessageFormat;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
@@ -268,7 +271,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       final KeepAliveEnforcer keepAliveEnforcer,
       boolean autoFlowControl,
       Attributes eagAttributes) {
-    super(channelUnused, decoder, encoder, settings, autoFlowControl, null);
+    super(channelUnused, decoder, encoder, settings, new ServerChannelLogger(),
+        autoFlowControl, null);
 
     final MaxConnectionIdleManager maxConnectionIdleManager;
     if (maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED) {
@@ -1043,6 +1047,31 @@ class NettyServerHandler extends AbstractNettyHandler {
       keepAliveEnforcer.resetCounters();
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight, exclusive,
           padding, endStream, promise);
+    }
+  }
+
+  private static class ServerChannelLogger extends ChannelLogger {
+    private static final Logger log = Logger.getLogger(ChannelLogger.class.getName());
+
+    @Override
+    public void log(ChannelLogLevel level, String message) {
+      log.log(toJavaLogLevel(level), message);
+    }
+
+    @Override
+    public void log(ChannelLogLevel level, String messageFormat, Object... args) {
+      log(level, MessageFormat.format(messageFormat, args));
+    }
+  }
+
+  private static Level toJavaLogLevel(ChannelLogLevel level) {
+    switch (level) {
+      case ERROR:
+        return Level.FINE;
+      case WARNING:
+        return Level.FINER;
+      default:
+        return Level.FINEST;
     }
   }
 }

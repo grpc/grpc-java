@@ -66,8 +66,6 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AsciiString;
-import io.netty.util.Attribute;
-import io.netty.util.AttributeMap;
 import java.io.ByteArrayInputStream;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -293,29 +291,6 @@ final class ProtocolNegotiators {
     }
   }
 
-  static ChannelLogger negotiationLogger(ChannelHandlerContext ctx) {
-    return negotiationLogger(ctx.channel());
-  }
-
-  private static ChannelLogger negotiationLogger(AttributeMap attributeMap) {
-    Attribute<ChannelLogger> attr = attributeMap.attr(NettyClientTransport.LOGGER_KEY);
-    final ChannelLogger channelLogger = attr.get();
-    if (channelLogger != null) {
-      return  channelLogger;
-    }
-    // This is only for tests where there may not be a valid logger.
-    final class NoopChannelLogger extends ChannelLogger {
-
-      @Override
-      public void log(ChannelLogLevel level, String message) {}
-
-      @Override
-      public void log(ChannelLogLevel level, String messageFormat, Object... args) {}
-    }
-
-    return new NoopChannelLogger();
-  }
-
   public static ProtocolNegotiator.ServerFactory fixedServerFactory(
       ProtocolNegotiator negotiator) {
     return new FixedProtocolNegotiatorServerFactory(negotiator);
@@ -400,7 +375,7 @@ final class ProtocolNegotiators {
       public ChannelHandler newHandler(GrpcHttp2ConnectionHandler handler) {
         ChannelHandler gnh = new GrpcNegotiationHandler(handler);
         ChannelHandler sth = new ServerTlsHandler(gnh, sslContext, executorPool);
-        return new WaitUntilActiveHandler(sth);
+        return new WaitUntilActiveHandler(sth, handler.getNegotiationLogger());
       }
 
       @Override
@@ -499,8 +474,10 @@ final class ProtocolNegotiators {
       @Override
       public ChannelHandler newHandler(GrpcHttp2ConnectionHandler http2Handler) {
         ChannelHandler protocolNegotiationHandler = negotiator.newHandler(http2Handler);
+        ChannelLogger negotiationLogger = http2Handler.getNegotiationLogger();
         return new ProxyProtocolNegotiationHandler(
-            proxyAddress, proxyUsername, proxyPassword, protocolNegotiationHandler);
+            proxyAddress, proxyUsername, proxyPassword, protocolNegotiationHandler,
+            negotiationLogger);
       }
 
       @Override
@@ -534,8 +511,9 @@ final class ProtocolNegotiators {
         SocketAddress address,
         @Nullable String userName,
         @Nullable String password,
-        ChannelHandler next) {
-      super(next);
+        ChannelHandler next,
+        ChannelLogger negotiationLogger) {
+      super(next, negotiationLogger);
       this.address = checkNotNull(address, "address");
       this.userName = userName;
       this.password = password;
@@ -585,9 +563,10 @@ final class ProtocolNegotiators {
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
+      ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler cth = new ClientTlsHandler(gnh, sslContext, grpcHandler.getAuthority(),
-          this.executor);
-      return new WaitUntilActiveHandler(cth);
+          this.executor, negotiationLogger);
+      return new WaitUntilActiveHandler(cth, negotiationLogger);
     }
 
     @Override
@@ -606,8 +585,8 @@ final class ProtocolNegotiators {
     private Executor executor;
 
     ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority,
-        Executor executor) {
-      super(next);
+        Executor executor, ChannelLogger negotiationLogger) {
+      super(next, negotiationLogger);
       this.sslContext = checkNotNull(sslContext, "sslContext");
       HostPort hostPort = parseAuthority(authority);
       this.host = hostPort.host;
@@ -784,7 +763,7 @@ final class ProtocolNegotiators {
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler upgradeHandler =
           new Http2UpgradeAndGrpcHandler(grpcHandler.getAuthority(), grpcHandler);
-      return new WaitUntilActiveHandler(upgradeHandler);
+      return new WaitUntilActiveHandler(upgradeHandler, grpcHandler.getNegotiationLogger());
     }
 
     @Override
@@ -800,17 +779,19 @@ final class ProtocolNegotiators {
 
     private final String authority;
     private final GrpcHttp2ConnectionHandler next;
+    private final ChannelLogger negotiationLogger;
 
     private ProtocolNegotiationEvent pne;
 
     Http2UpgradeAndGrpcHandler(String authority, GrpcHttp2ConnectionHandler next) {
       this.authority = checkNotNull(authority, "authority");
       this.next = checkNotNull(next, "next");
+      this.negotiationLogger = next.getNegotiationLogger();
     }
 
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-      negotiationLogger(ctx).log(ChannelLogLevel.INFO, "Http2Upgrade started");
+      negotiationLogger.log(ChannelLogLevel.INFO, "Http2Upgrade started");
       HttpClientCodec httpClientCodec = new HttpClientCodec();
       ctx.pipeline().addBefore(ctx.name(), null, httpClientCodec);
 
@@ -836,7 +817,7 @@ final class ProtocolNegotiators {
         pne = (ProtocolNegotiationEvent) evt;
       } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_SUCCESSFUL) {
         checkState(pne != null, "negotiation not yet complete");
-        negotiationLogger(ctx).log(ChannelLogLevel.INFO, "Http2Upgrade finished");
+        negotiationLogger.log(ChannelLogLevel.INFO, "Http2Upgrade finished");
         ctx.pipeline().remove(ctx.name());
         next.handleProtocolNegotiationCompleted(pne.getAttributes(), pne.getSecurity());
       } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_REJECTED) {
@@ -979,7 +960,8 @@ final class ProtocolNegotiators {
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler grpcNegotiationHandler = new GrpcNegotiationHandler(grpcHandler);
-      ChannelHandler activeHandler = new WaitUntilActiveHandler(grpcNegotiationHandler);
+      ChannelHandler activeHandler = new WaitUntilActiveHandler(grpcNegotiationHandler,
+          grpcHandler.getNegotiationLogger());
       return activeHandler;
     }
 
@@ -1001,8 +983,8 @@ final class ProtocolNegotiators {
 
     boolean protocolNegotiationEventReceived;
 
-    WaitUntilActiveHandler(ChannelHandler next) {
-      super(next);
+    WaitUntilActiveHandler(ChannelHandler next, ChannelLogger negotiationLogger) {
+      super(next, negotiationLogger);
     }
 
     @Override
@@ -1045,20 +1027,24 @@ final class ProtocolNegotiators {
     private final ChannelHandler next;
     private final String negotiatorName;
     private ProtocolNegotiationEvent pne;
+    private final ChannelLogger negotiationLogger;
 
-    protected ProtocolNegotiationHandler(ChannelHandler next, String negotiatorName) {
+    protected ProtocolNegotiationHandler(ChannelHandler next, String negotiatorName,
+        ChannelLogger negotiationLogger) {
       this.next = checkNotNull(next, "next");
       this.negotiatorName = negotiatorName;
+      this.negotiationLogger = checkNotNull(negotiationLogger, "negotiationLogger");
     }
 
-    protected ProtocolNegotiationHandler(ChannelHandler next) {
+    protected ProtocolNegotiationHandler(ChannelHandler next, ChannelLogger negotiationLogger) {
       this.next = checkNotNull(next, "next");
       this.negotiatorName = getClass().getSimpleName().replace("Handler", "");
+      this.negotiationLogger = checkNotNull(negotiationLogger, "negotiationLogger");
     }
 
     @Override
     public final void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-      negotiationLogger(ctx).log(ChannelLogLevel.DEBUG, "{0} started", negotiatorName);
+      negotiationLogger.log(ChannelLogLevel.DEBUG, "{0} started", negotiatorName);
       handlerAdded0(ctx);
     }
 
@@ -1099,7 +1085,7 @@ final class ProtocolNegotiators {
 
     protected final void fireProtocolNegotiationEvent(ChannelHandlerContext ctx) {
       checkState(pne != null, "previous protocol negotiation event hasn't triggered");
-      negotiationLogger(ctx).log(ChannelLogLevel.INFO, "{0} completed", negotiatorName);
+      negotiationLogger.log(ChannelLogLevel.INFO, "{0} completed", negotiatorName);
       ctx.pipeline().replace(ctx.name(), /* newName= */ null, next);
       ctx.fireUserEventTriggered(pne);
     }
