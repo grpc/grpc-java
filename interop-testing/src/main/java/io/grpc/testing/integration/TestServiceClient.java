@@ -40,8 +40,8 @@ import io.grpc.okhttp.OkHttpChannelBuilder;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
-import java.util.concurrent.TimeUnit;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
