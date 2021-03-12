@@ -704,7 +704,8 @@ public class ManagedChannelImplTest {
   @Test
   public void channelzMembership_oob() throws Exception {
     createChannel();
-    OobChannel oob = (OobChannel) helper.createOobChannel(addressGroup, AUTHORITY);
+    OobChannel oob = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), AUTHORITY);
     // oob channels are not root channels
     assertNull(channelz.getRootChannel(oob.getLogId().getId()));
     assertTrue(channelz.containsSubchannel(oob.getLogId()));
@@ -1621,8 +1622,10 @@ public class ManagedChannelImplTest {
   public void oobchannels() {
     createChannel();
 
-    ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1authority");
-    ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2authority");
+    ManagedChannel oob1 = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oob1authority");
+    ManagedChannel oob2 = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oob2authority");
     verify(balancerRpcExecutorPool, times(2)).getObject();
 
     assertEquals("oob1authority", oob1.authority());
@@ -1755,7 +1758,8 @@ public class ManagedChannelImplTest {
         .containsExactly(channelCredValue, callCredValue).inOrder();
 
     // Verify that the oob channel does not
-    ManagedChannel oob = helper.createOobChannel(addressGroup, "oobauthority");
+    ManagedChannel oob = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oobauthority");
 
     headers = new Metadata();
     call = oob.newCall(method, callOptions);
@@ -1886,8 +1890,10 @@ public class ManagedChannelImplTest {
   @Test
   public void oobChannelsWhenChannelShutdownNow() {
     createChannel();
-    ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1Authority");
-    ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2Authority");
+    ManagedChannel oob1 = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oob1Authority");
+    ManagedChannel oob2 = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oob2Authority");
 
     oob1.newCall(method, CallOptions.DEFAULT).start(mockCallListener, new Metadata());
     oob2.newCall(method, CallOptions.DEFAULT).start(mockCallListener2, new Metadata());
@@ -1915,8 +1921,10 @@ public class ManagedChannelImplTest {
   @Test
   public void oobChannelsNoConnectionShutdown() {
     createChannel();
-    ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1Authority");
-    ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2Authority");
+    ManagedChannel oob1 = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oob1Authority");
+    ManagedChannel oob2 = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oob2Authority");
     channel.shutdown();
 
     verify(mockLoadBalancer).shutdown();
@@ -1934,8 +1942,8 @@ public class ManagedChannelImplTest {
   @Test
   public void oobChannelsNoConnectionShutdownNow() {
     createChannel();
-    helper.createOobChannel(addressGroup, "oob1Authority");
-    helper.createOobChannel(addressGroup, "oob2Authority");
+    helper.createOobChannel(Collections.singletonList(addressGroup), "oob1Authority");
+    helper.createOobChannel(Collections.singletonList(addressGroup), "oob2Authority");
     channel.shutdownNow();
 
     verify(mockLoadBalancer).shutdown();
@@ -2116,7 +2124,8 @@ public class ManagedChannelImplTest {
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
     if (isOobChannel) {
-      OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "oobAuthority");
+      OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+          Collections.singletonList(addressGroup), "oobAuthority");
       oobChannel.getSubchannel().requestConnection();
     } else {
       Subchannel subchannel =
@@ -3183,7 +3192,8 @@ public class ManagedChannelImplTest {
   public void channelTracing_oobChannelStateChangeEvent() throws Exception {
     channelBuilder.maxTraceEvents(10);
     createChannel();
-    OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "authority");
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), "authority");
     timer.forwardNanos(1234);
     oobChannel.handleSubchannelStateChange(
         ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
@@ -3199,7 +3209,8 @@ public class ManagedChannelImplTest {
     channelBuilder.maxTraceEvents(10);
     createChannel();
     timer.forwardNanos(1234);
-    OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "authority");
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), "authority");
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Child OobChannel created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -3207,13 +3218,13 @@ public class ManagedChannelImplTest {
         .setChannelRef(oobChannel)
         .build());
     assertThat(getStats(oobChannel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-        .setDescription("OobChannel for [[test-addr]/{}] created")
+        .setDescription("OobChannel for [[[test-addr]/{}]] created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
         .build());
     assertThat(getStats(oobChannel.getInternalSubchannel()).channelTrace.events).contains(
         new ChannelTrace.Event.Builder()
-            .setDescription("Subchannel for [[test-addr]/{}] created")
+            .setDescription("Subchannel for [[[test-addr]/{}]] created")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());
@@ -3349,7 +3360,8 @@ public class ManagedChannelImplTest {
     ClientStream mockStream = mock(ClientStream.class);
     createChannel();
 
-    OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "oobauthority");
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oobauthority");
     AbstractSubchannel oobSubchannel = (AbstractSubchannel) oobChannel.getSubchannel();
     FakeClock callExecutor = new FakeClock();
     CallOptions options =
@@ -3411,7 +3423,8 @@ public class ManagedChannelImplTest {
     createChannel();
 
     String authority = "oobauthority";
-    OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, authority);
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), authority);
     assertEquals(authority, getStats(oobChannel).target);
   }
 
@@ -3419,7 +3432,8 @@ public class ManagedChannelImplTest {
   public void channelsAndSubchannels_oob_instrumented_state() throws Exception {
     createChannel();
 
-    OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "oobauthority");
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oobauthority");
     assertEquals(IDLE, getStats(oobChannel).state);
 
     oobChannel.getSubchannel().requestConnection();
