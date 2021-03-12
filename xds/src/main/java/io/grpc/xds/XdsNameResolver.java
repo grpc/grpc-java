@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import io.grpc.Attributes;
@@ -54,6 +55,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.LdsUpdate;
+import io.grpc.xds.XdsClient.LdsUpdate.NamedFilter;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
@@ -88,6 +90,8 @@ final class XdsNameResolver extends NameResolver {
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
   static final CallOptions.Key<Long> RPC_HASH_KEY =
       CallOptions.Key.create("io.grpc.xds.RPC_HASH_KEY");
+  private static final NamedFilter LAME_FILTER =
+      new NamedFilter(null, LameFilter.LAME_CONFIG);
   @VisibleForTesting
   static boolean enableTimeout =
       Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"));
@@ -349,10 +353,10 @@ final class XdsNameResolver extends NameResolver {
       List<ClientInterceptor> filterInterceptors = new ArrayList<>();
       do {
         routingCfg = routingConfig;
-        if (routingCfg.routes == null) {
-          return lameResult(routingCfg, args);
-        }
         selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
+        if (routingCfg.hasLameFilter()) {
+          break;
+        }
         for (Route route : routingCfg.routes) {
           if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
               asciiHeaders, random)) {
@@ -386,8 +390,20 @@ final class XdsNameResolver extends NameResolver {
         }
       } while (!retainCluster(cluster));
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
-      ConfigOrError parsedServiceConfig =
-          generateServiceConfig(routingCfg.fallbackTimeoutNano, selectedRoute);
+      Map<String, ?> rawServiceConfig = Collections.emptyMap();
+      if (enableTimeout) {
+        Long timeoutNanos = null;
+        if (selectedRoute != null) {
+          timeoutNanos = selectedRoute.routeAction().timeoutNano();
+        }
+        if (timeoutNanos == null) {
+          timeoutNanos = routingCfg.fallbackTimeoutNano;
+        }
+        if (timeoutNanos > 0) {
+          rawServiceConfig = generateServiceConfigWithMethodTimeoutConfig(timeoutNanos);
+        }
+      }
+      ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
       Object config = parsedServiceConfig.getConfig();
       if (config == null) {
         releaseCluster(cluster);
@@ -395,22 +411,34 @@ final class XdsNameResolver extends NameResolver {
             parsedServiceConfig.getError().augmentDescription(
                 "Failed to parse service config (method config)"));
       }
-      final String finalCluster = cluster;
       if (routingCfg.filterChain != null) {
-        for (String name : routingCfg.filterChain) {
-          FilterConfig filterConfig = routingCfg.filterConfigs.get(name);
-          Filter filter = filterRegistry.get(filterConfig.typeUrl());
+        for (NamedFilter namedFilter : routingCfg.filterChain) {
+          FilterConfig filterConfig = namedFilter.filterConfig;
+          Filter filter;
+          if (namedFilter.equals(LAME_FILTER)) {
+            filter = LameFilter.INSTANCE;
+          } else {
+            filter = filterRegistry.get(filterConfig.typeUrl());
+          }
           if (filter instanceof ClientInterceptorBuilder) {
             ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
                 .buildClientInterceptor(
-                    filterConfig, selectedOverrideConfigs.get(name),
+                    filterConfig, selectedOverrideConfigs.get(namedFilter.name),
                     args, scheduler);
             if (interceptor != null) {
               filterInterceptors.add(interceptor);
             }
           }
         }
+        if (routingCfg.hasLameFilter()) {
+          return
+              Result.newBuilder()
+                  .setConfig(config)
+                  .setInterceptor(combineInterceptors(filterInterceptors))
+                  .build();
+        }
       }
+      final String finalCluster = cluster;
       final long hash = generateHash(selectedRoute.routeAction().hashPolicies(), asciiHeaders);
       class ClusterSelectionInterceptor implements ClientInterceptor {
         @Override
@@ -454,59 +482,6 @@ final class XdsNameResolver extends NameResolver {
               .setConfig(config)
               .setInterceptor(combineInterceptors(filterInterceptors))
               .build();
-    }
-
-    // Adds LameFilter to the end of filter chain due to absence of RouterFilter.
-    private Result lameResult(RoutingConfig routingCfg, PickSubchannelArgs args) {
-      ConfigOrError parsedServiceConfig = generateServiceConfig(
-          routingCfg.fallbackTimeoutNano, null);
-      Object config = parsedServiceConfig.getConfig();
-      if (config == null) {
-        return Result.forError(
-            parsedServiceConfig.getError().augmentDescription(
-                "Failed to parse service config (method config)"));
-      }
-      List<ClientInterceptor> filterInterceptors = new ArrayList<>();
-      for (String name : routingCfg.filterChain) {
-        FilterConfig filterConfig = routingCfg.filterConfigs.get(name);
-        Filter filter = filterRegistry.get(filterConfig.typeUrl());
-        if (filter instanceof ClientInterceptorBuilder) {
-          ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
-              .buildClientInterceptor(
-                  filterConfig,
-                  routingCfg.virtualHostOverrideConfig.get(name),
-                  args, scheduler);
-          if (interceptor != null) {
-            filterInterceptors.add(interceptor);
-          }
-        }
-      }
-      ClientInterceptor lameInterceptor = LameFilter.INSTANCE.buildClientInterceptor(
-          LameFilter.LAME_CONFIG, null, args, scheduler);
-      filterInterceptors.add(lameInterceptor);
-      return
-          Result.newBuilder()
-              .setConfig(config)
-              .setInterceptor(combineInterceptors(filterInterceptors))
-              .build();
-    }
-
-    private ConfigOrError generateServiceConfig(
-        long fallbackTimeoutNano, @Nullable Route selectedRoute) {
-      Map<String, ?> rawServiceConfig = Collections.emptyMap();
-      if (enableTimeout) {
-        Long timeoutNanos = null;
-        if (selectedRoute != null) {
-          timeoutNanos = selectedRoute.routeAction().timeoutNano();
-        }
-        if (timeoutNanos == null) {
-          timeoutNanos = fallbackTimeoutNano;
-        }
-        if (timeoutNanos > 0) {
-          rawServiceConfig = generateServiceConfigWithMethodTimeoutConfig(timeoutNanos);
-        }
-      }
-      return serviceConfigParser.parseServiceConfig(rawServiceConfig);
     }
 
     private boolean retainCluster(String cluster) {
@@ -747,27 +722,26 @@ final class XdsNameResolver extends NameResolver {
         listener.onResult(emptyResult);
         return;
       }
-      boolean hasRouter = true;
-      List<String> filterChain = null;
+      List<NamedFilter> filterChain = null;
       if (update.filterChain != null) {
-        hasRouter = false;
-        filterChain = new ArrayList<>();
-        for (String name : update.filterChain) {
-          filterChain.add(name);
-          if (update.filterConfigs.get(name).typeUrl().equals(RouterFilter.TYPE_URL)) {
+        boolean hasRouter = false;
+        filterChain = new ArrayList<>(update.filterChain.size());
+        for (NamedFilter namedFilter : update.filterChain) {
+          filterChain.add(namedFilter);
+          if (namedFilter.filterConfig == RouterFilter.ROUTER_CONFIG) {
             hasRouter = true;
             break;
           }
         }
+        if (!hasRouter) {
+          filterChain.add(LAME_FILTER);
+          routingConfig = new RoutingConfig(
+              update.httpMaxStreamDurationNano, Collections.<Route>emptyList(), filterChain,
+              virtualHost.filterConfigOverrides());
+          updateResolutionResult();
+          return;
+        }
       }
-      if (!hasRouter) {
-        routingConfig = new RoutingConfig(
-            update.httpMaxStreamDurationNano, null, filterChain, update.filterConfigs,
-            virtualHost.filterConfigOverrides());
-        updateResolutionResult();
-        return;
-      }
-
       List<Route> routes = virtualHost.routes();
       Set<String> clusters = new HashSet<>();
       for (Route route : routes) {
@@ -802,7 +776,7 @@ final class XdsNameResolver extends NameResolver {
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
       routingConfig = new RoutingConfig(
-          update.httpMaxStreamDurationNano, routes, filterChain, update.filterConfigs,
+          update.httpMaxStreamDurationNano, routes, filterChain,
           virtualHost.filterConfigOverrides());
       shouldUpdateResult = false;
       for (String cluster : deletedClusters) {
@@ -878,26 +852,30 @@ final class XdsNameResolver extends NameResolver {
    */
   private static class RoutingConfig {
     private final long fallbackTimeoutNano;
-    // Null if HttpFilter support is enabled but RouterFilter is absent in the filter chain.
-    @Nullable final List<Route> routes;
+    final List<Route> routes;
     // Null if HttpFilter is not supported.
-    @Nullable final List<String> filterChain;
-    final Map<String, FilterConfig> filterConfigs;
+    @Nullable final List<NamedFilter> filterChain;
     final Map<String, FilterConfig> virtualHostOverrideConfig;
 
     private static RoutingConfig empty = new RoutingConfig(
-        0L, Collections.<Route>emptyList(), null, Collections.<String, FilterConfig>emptyMap(),
-        Collections.<String, FilterConfig>emptyMap());
+        0L, Collections.<Route>emptyList(), null, Collections.<String, FilterConfig>emptyMap());
 
     private RoutingConfig(
-        long fallbackTimeoutNano, @Nullable List<Route> routes, @Nullable List<String> filterChain,
-        Map<String, FilterConfig> filterConfigs,
+        long fallbackTimeoutNano, List<Route> routes, @Nullable List<NamedFilter> filterChain,
         Map<String, FilterConfig> virtualHostOverrideConfig) {
       this.fallbackTimeoutNano = fallbackTimeoutNano;
       this.routes = routes;
-      this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
-      this.filterConfigs = Collections.unmodifiableMap(filterConfigs);
+      if (filterChain == null) {
+        this.filterChain = null;
+      } else {
+        checkArgument(!filterChain.isEmpty(), "filterChain is empty");
+        this.filterChain = Collections.unmodifiableList(filterChain);
+      }
       this.virtualHostOverrideConfig = Collections.unmodifiableMap(virtualHostOverrideConfig);
+    }
+
+    private boolean hasLameFilter() {
+      return filterChain != null && Iterables.getLast(filterChain).equals(LAME_FILTER);
     }
   }
 }

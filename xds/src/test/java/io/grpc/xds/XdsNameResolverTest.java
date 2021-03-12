@@ -73,6 +73,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
+import io.grpc.xds.XdsClient.LdsUpdate.NamedFilter;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.io.IOException;
@@ -1409,9 +1410,7 @@ public class XdsNameResolverTest {
           if (!resourceName.equals(ldsResource)) {
             return;
           }
-          ldsWatcher.onChanged(new LdsUpdate(
-              httpMaxStreamDurationNano, virtualHosts, null,
-              ImmutableMap.<String, FilterConfig>of()));
+          ldsWatcher.onChanged(new LdsUpdate(httpMaxStreamDurationNano, virtualHosts, null));
         }
       });
     }
@@ -1426,9 +1425,7 @@ public class XdsNameResolverTest {
           VirtualHost virtualHost = VirtualHost.create("virtual-host",
               Collections.singletonList(AUTHORITY), routes,
               ImmutableMap.<String, FilterConfig>of());
-          ldsWatcher.onChanged(new LdsUpdate(
-              0, Collections.singletonList(virtualHost), null,
-              ImmutableMap.<String, FilterConfig>of()));
+          ldsWatcher.onChanged(new LdsUpdate(0, Collections.singletonList(virtualHost), null));
         }
       });
     }
@@ -1442,9 +1439,9 @@ public class XdsNameResolverTest {
       if (httpFilterFaultConfig == null) {
         httpFilterFaultConfig = FaultConfig.create(null, null, null);
       }
-      final ImmutableMap<String, FilterConfig> filterConfig = ImmutableMap.of(
-          FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig,
-          ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG);
+      final List<NamedFilter> filterChain = ImmutableList.of(
+          new NamedFilter(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
+          new NamedFilter(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -1477,10 +1474,7 @@ public class XdsNameResolverTest {
               Collections.singletonList(route),
               overrideConfig);
           ldsWatcher.onChanged(
-              new LdsUpdate(
-                  0, Collections.singletonList(virtualHost),
-                  ImmutableList.of(FAULT_FILTER_INSTANCE_NAME, ROUTER_FILTER_INSTANCE_NAME),
-                  filterConfig));
+              new LdsUpdate(0, Collections.singletonList(virtualHost), filterChain));
         }
       });
     }
@@ -1493,9 +1487,7 @@ public class XdsNameResolverTest {
           Collections.<String, FilterConfig>emptyMap());
       ldsWatcher.onChanged(
           new LdsUpdate(
-              0, Collections.singletonList(virtualHost),
-              ImmutableList.<String>of(),
-              ImmutableMap.<String, FilterConfig>of()));
+              0, Collections.singletonList(virtualHost), ImmutableList.<NamedFilter>of()));
     }
 
     void deliverRdsNameWithFaultInjection(
@@ -1504,16 +1496,13 @@ public class XdsNameResolverTest {
         httpFilterFaultConfig = FaultConfig.create(
             null, null, null);
       }
-      final ImmutableMap<String, FilterConfig> filterConfig = ImmutableMap.of(
-          FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig,
-          ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG);
+      final ImmutableList<NamedFilter> filterChain = ImmutableList.of(
+          new NamedFilter(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
+          new NamedFilter(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          ldsWatcher.onChanged(new LdsUpdate(
-              0, rdsName,
-              ImmutableList.of(FAULT_FILTER_INSTANCE_NAME, ROUTER_FILTER_INSTANCE_NAME),
-              filterConfig));
+          ldsWatcher.onChanged(new LdsUpdate(0, rdsName, filterChain));
         }
       });
     }
@@ -1526,7 +1515,7 @@ public class XdsNameResolverTest {
             return;
           }
           ldsWatcher.onChanged(
-              new LdsUpdate(0, rdsName, null, ImmutableMap.<String, FilterConfig>of()));
+              new LdsUpdate(0, rdsName, null));
         }
       });
     }

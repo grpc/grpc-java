@@ -41,7 +41,7 @@ enum LameFilter implements Filter, ClientInterceptorBuilder {
   static final FilterConfig LAME_CONFIG = new FilterConfig() {
     @Override
     public String typeUrl() {
-      throw new UnsupportedOperationException();
+      throw new UnsupportedOperationException("shouldn't be called");
     }
   };
 

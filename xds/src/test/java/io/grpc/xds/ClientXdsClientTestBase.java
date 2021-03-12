@@ -412,7 +412,7 @@ public abstract class ClientXdsClientTestBase {
 
     LdsUpdate ldsUpdate = ldsUpdateCaptor.getValue();
     assertThat(ldsUpdate.virtualHosts).hasSize(2);
-    assertThat(ldsUpdate.filterChain).contains("envoy.fault");
+    assertThat(ldsUpdate.filterChain.get(0).name).isEqualTo("envoy.fault");
     FaultConfig faultConfig = (FaultConfig) ldsUpdate.virtualHosts.get(0)
         .filterConfigOverrides().get("envoy.fault");
     assertThat(faultConfig.faultDelay().delayNanos()).isEqualTo(300);

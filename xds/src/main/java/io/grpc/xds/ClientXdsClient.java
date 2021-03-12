@@ -69,6 +69,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsClient.CdsUpdate.HashFunction;
+import io.grpc.xds.XdsClient.LdsUpdate.NamedFilter;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -195,8 +196,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
       boolean parseFilter = enableFaultInjection && isResourceV3;
-      List<String> filterChain = null;
-      Map<String, FilterConfig> filterConfigs = new HashMap<>();
+      List<NamedFilter> filterChain = null;
       if (parseFilter) {
         filterChain = new ArrayList<>();
         List<io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter>
@@ -214,8 +214,7 @@ final class ClientXdsClient extends AbstractXdsClient {
                 "Error parsing HttpFilter: " + filterConfig.errorDetail);
             return;
           }
-          filterChain.add(filterName);
-          filterConfigs.put(filterName, filterConfig.struct);
+          filterChain.add(new NamedFilter(filterName, filterConfig.struct));
         }
       }
 
@@ -232,7 +231,7 @@ final class ClientXdsClient extends AbstractXdsClient {
           }
           virtualHosts.add(virtualHost.getStruct());
         }
-        update = new LdsUpdate(maxStreamDuration, virtualHosts, filterChain, filterConfigs);
+        update = new LdsUpdate(maxStreamDuration, virtualHosts, filterChain);
       } else if (hcm.hasRds()) {
         Rds rds = hcm.getRds();
         if (!rds.getConfigSource().hasAds()) {
@@ -241,7 +240,7 @@ final class ClientXdsClient extends AbstractXdsClient {
           return;
         }
         update =
-            new LdsUpdate(maxStreamDuration, rds.getRouteConfigName(), filterChain, filterConfigs);
+            new LdsUpdate(maxStreamDuration, rds.getRouteConfigName(), filterChain);
         rdsNames.add(rds.getRouteConfigName());
       } else {
         nackResponse(ResourceType.LDS, nonce,

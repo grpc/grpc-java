@@ -57,35 +57,31 @@ abstract class XdsClient {
     @Nullable
     final List<VirtualHost> virtualHosts;
     // Filter instance names. Null if HttpFilter support is not enabled.
-    @Nullable final List<String> filterChain;
-    // Filter configs keyed by instance name.
-    final Map<String, FilterConfig> filterConfigs;
+    @Nullable final List<NamedFilter> filterChain;
     // Server side Listener.
     @Nullable
     final Listener listener;
 
     LdsUpdate(
-        long httpMaxStreamDurationNano, String rdsName, @Nullable List<String> filterChain,
-        Map<String, FilterConfig> filterConfigs) {
-      this(httpMaxStreamDurationNano, rdsName, null, filterChain, filterConfigs);
+        long httpMaxStreamDurationNano, String rdsName,
+        @Nullable List<NamedFilter> filterChain) {
+      this(httpMaxStreamDurationNano, rdsName, null, filterChain);
     }
 
     LdsUpdate(
         long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts,
-        @Nullable List<String> filterChain, Map<String, FilterConfig> filterConfigs) {
-      this(httpMaxStreamDurationNano, null, virtualHosts, filterChain, filterConfigs);
+        @Nullable List<NamedFilter> filterChain) {
+      this(httpMaxStreamDurationNano, null, virtualHosts, filterChain);
     }
 
     private LdsUpdate(
         long httpMaxStreamDurationNano, @Nullable String rdsName,
-        @Nullable List<VirtualHost> virtualHosts, @Nullable List<String> filterChain,
-        Map<String, FilterConfig> filterConfigs) {
+        @Nullable List<VirtualHost> virtualHosts, @Nullable List<NamedFilter> filterChain) {
       this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
       this.rdsName = rdsName;
       this.virtualHosts = virtualHosts == null
           ? null : Collections.unmodifiableList(new ArrayList<>(virtualHosts));
       this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
-      this.filterConfigs = Collections.unmodifiableMap(filterConfigs);
       this.listener = null;
     }
 
@@ -94,14 +90,13 @@ abstract class XdsClient {
       this.httpMaxStreamDurationNano = 0L;
       this.rdsName = null;
       this.filterChain = null;
-      this.filterConfigs = Collections.emptyMap();
       this.virtualHosts = null;
     }
 
     @Override
     public int hashCode() {
       return Objects.hash(
-          httpMaxStreamDurationNano, rdsName, virtualHosts, filterChain, filterConfigs, listener);
+          httpMaxStreamDurationNano, rdsName, virtualHosts, filterChain, listener);
     }
 
     @Override
@@ -117,7 +112,6 @@ abstract class XdsClient {
           && Objects.equals(rdsName, that.rdsName)
           && Objects.equals(virtualHosts, that.virtualHosts)
           && Objects.equals(filterChain, that.filterChain)
-          && Objects.equals(filterConfigs, that.filterConfigs)
           && Objects.equals(listener, that.listener);
     }
 
@@ -132,12 +126,22 @@ abstract class XdsClient {
       }
       if (filterChain != null) {
         toStringHelper.add("filterChain", filterChain);
-        toStringHelper.add("filterConfigs", filterConfigs);
       }
       if (listener != null) {
         toStringHelper.add("listener", listener);
       }
       return toStringHelper.toString();
+    }
+
+    static final class NamedFilter {
+      // filter instance name
+      final String name;
+      final FilterConfig filterConfig;
+
+      NamedFilter(String name, FilterConfig filterConfig) {
+        this.name = name;
+        this.filterConfig = filterConfig;
+      }
     }
   }
 
