@@ -60,7 +60,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
       System.getenv("GRPC_XDS_BOOTSTRAP") != null
           || System.getProperty("io.grpc.xds.bootstrap") != null
           || System.getenv("GRPC_XDS_BOOTSTRAP_CONFIG") != null
-          || System.getProperty("io.grpc.xds.bootstrapValue") != null;
+          || System.getProperty("io.grpc.xds.bootstrapConfig") != null;
 
   private HttpConnectionProvider httpConnectionProvider = HttpConnectionFactory.INSTANCE;
   private final String authority;
