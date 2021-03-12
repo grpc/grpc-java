@@ -93,7 +93,7 @@ public class HelloWorldClientTls {
                 .build();
         try {
             HelloWorldClientTls client = new HelloWorldClientTls(channel);
-            client.greet(args[0]);
+            client.greet(host);
         } finally {
             channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
         }
