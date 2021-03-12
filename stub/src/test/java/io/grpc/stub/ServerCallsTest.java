@@ -288,7 +288,7 @@ public class ServerCallsTest {
               public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
-                serverCallObserver.disableAutoInboundFlowControl();
+                serverCallObserver.disableAutoRequest();
                 return new ServerCalls.NoopStreamObserver<>();
               }
             });

@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -142,7 +143,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       Runnable tooManyPingsRunnable,
       TransportTracer transportTracer,
       Attributes eagAttributes,
-      String authority) {
+      String authority,
+      ChannelLogger negotiationLogger) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
@@ -167,7 +169,8 @@ class NettyClientHandler extends AbstractNettyHandler {
         tooManyPingsRunnable,
         transportTracer,
         eagAttributes,
-        authority);
+        authority,
+        negotiationLogger);
   }
 
   @VisibleForTesting
@@ -184,7 +187,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       Runnable tooManyPingsRunnable,
       TransportTracer transportTracer,
       Attributes eagAttributes,
-      String authority) {
+      String authority,
+      ChannelLogger negotiationLogger) {
     Preconditions.checkNotNull(connection, "connection");
     Preconditions.checkNotNull(frameReader, "frameReader");
     Preconditions.checkNotNull(lifecycleManager, "lifecycleManager");
@@ -235,6 +239,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         decoder,
         encoder,
         settings,
+        negotiationLogger,
         lifecycleManager,
         keepAliveManager,
         stopwatchFactory,
@@ -250,6 +255,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,
       Http2Settings settings,
+      ChannelLogger negotiationLogger,
       ClientTransportLifecycleManager lifecycleManager,
       KeepAliveManager keepAliveManager,
       Supplier<Stopwatch> stopwatchFactory,
@@ -259,7 +265,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       String authority,
       boolean autoFlowControl,
       PingLimiter pingLimiter) {
-    super(/* channelUnused= */ null, decoder, encoder, settings, autoFlowControl, pingLimiter);
+    super(/* channelUnused= */ null, decoder, encoder, settings,
+        negotiationLogger, autoFlowControl, pingLimiter);
     this.lifecycleManager = lifecycleManager;
     this.keepAliveManager = keepAliveManager;
     this.stopwatchFactory = stopwatchFactory;

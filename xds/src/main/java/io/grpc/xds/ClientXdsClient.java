@@ -161,12 +161,17 @@ final class ClientXdsClient extends AbstractXdsClient {
 
     // Unpack HttpConnectionManager messages.
     Map<String, HttpConnectionManager> httpConnectionManagers = new HashMap<>(listeners.size());
+    Map<String, Listener> serverSideListeners = new HashMap<>(listeners.size());
     try {
       for (Listener listener : listeners) {
-        HttpConnectionManager hcm = unpackCompatibleType(
-            listener.getApiListener().getApiListener(), HttpConnectionManager.class,
-            TYPE_URL_HTTP_CONNECTION_MANAGER, TYPE_URL_HTTP_CONNECTION_MANAGER_V2);
-        httpConnectionManagers.put(listener.getName(), hcm);
+        if (listener.hasApiListener()) {
+          HttpConnectionManager hcm = unpackCompatibleType(
+                  listener.getApiListener().getApiListener(), HttpConnectionManager.class,
+                  TYPE_URL_HTTP_CONNECTION_MANAGER, TYPE_URL_HTTP_CONNECTION_MANAGER_V2);
+          httpConnectionManagers.put(listener.getName(), hcm);
+        } else {
+          serverSideListeners.put(listener.getName(), listener);
+        }
       }
     } catch (InvalidProtocolBufferException e) {
       getLogger().log(
@@ -243,6 +248,21 @@ final class ClientXdsClient extends AbstractXdsClient {
             "Listener " + listenerName + " without inline RouteConfiguration or RDS");
         return;
       }
+      ldsUpdates.put(listenerName, update);
+    }
+    // process serverSideListeners if any
+    for (Map.Entry<String, Listener> entry : serverSideListeners.entrySet()) {
+      String listenerName = entry.getKey();
+      Listener listener = entry.getValue();
+      LdsUpdate update;
+
+      StructOrError<EnvoyServerProtoData.Listener> convertedListener =
+              parseServerSideListener(listener);
+      if (convertedListener.getErrorDetail() != null) {
+        nackResponse(ResourceType.LDS, nonce, convertedListener.getErrorDetail());
+        return;
+      }
+      update = new LdsUpdate(convertedListener.getStruct());
       ldsUpdates.put(listenerName, update);
     }
     ackResponse(ResourceType.LDS, versionInfo, nonce);
@@ -332,6 +352,19 @@ final class ClientXdsClient extends AbstractXdsClient {
           "Invalid filter config for HttpFilter [" + filterName + "]: " + filterConfig.errorDetail);
     }
     return StructOrError.fromStruct(filterConfig.struct);
+  }
+
+  @VisibleForTesting static StructOrError<EnvoyServerProtoData.Listener> parseServerSideListener(
+      Listener listener) {
+    try {
+      return StructOrError.fromStruct(
+          EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
+    } catch (InvalidProtocolBufferException e) {
+      return StructOrError.fromError(
+          "Failed to unpack Listener " + listener.getName() + ":" + e.getMessage());
+    } catch (IllegalArgumentException e) {
+      return StructOrError.fromError(e.getMessage());
+    }
   }
 
   private static StructOrError<VirtualHost> parseVirtualHost(

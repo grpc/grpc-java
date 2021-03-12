@@ -54,7 +54,6 @@ import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.http2.StreamBufferingEncoder.Http2ChannelClosedException;
 import io.netty.util.AsciiString;
-import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.SocketAddress;
@@ -68,20 +67,6 @@ import javax.annotation.Nullable;
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
 class NettyClientTransport implements ConnectionClientTransport {
-
-  /**
-   * Get the existing {@link ChannelLogger} key in case a separate, isolated class loader has
-   * already created {@link LOGGER_KEY}.
-   */
-  private static final AttributeKey<ChannelLogger> getOrCreateChannelLogger() {
-    AttributeKey<ChannelLogger> key = AttributeKey.valueOf("channelLogger");
-    if (key == null) {
-      key = AttributeKey.newInstance("channelLogger");
-    }
-    return key;
-  }
-
-  static final AttributeKey<ChannelLogger> LOGGER_KEY = getOrCreateChannelLogger();
 
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
@@ -237,13 +222,13 @@ class NettyClientTransport implements ConnectionClientTransport {
         tooManyPingsRunnable,
         transportTracer,
         eagAttributes,
-        authorityString);
+        authorityString,
+        channelLogger);
 
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
     Bootstrap b = new Bootstrap();
     b.option(ALLOCATOR, Utils.getByteBufAllocator(false));
-    b.attr(LOGGER_KEY, channelLogger);
     b.group(eventLoop);
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.

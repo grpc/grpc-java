@@ -339,12 +339,12 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     Preconditions.checkNotNull(newAddressGroups, "newAddressGroups");
     checkListHasNoNulls(newAddressGroups, "newAddressGroups contains null entry");
     Preconditions.checkArgument(!newAddressGroups.isEmpty(), "newAddressGroups is empty");
+    final List<EquivalentAddressGroup> newImmutableAddressGroups =
+        Collections.unmodifiableList(new ArrayList<>(newAddressGroups));
 
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        List<EquivalentAddressGroup> newImmutableAddressGroups =
-            Collections.unmodifiableList(new ArrayList<>(newAddressGroups));
         ManagedClientTransport savedTransport = null;
         SocketAddress previousAddress = addressIndex.getCurrentAddress();
         addressIndex.updateGroups(newImmutableAddressGroups);

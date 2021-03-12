@@ -875,7 +875,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         tooManyPingsRunnable,
         transportTracer,
         Attributes.EMPTY,
-        "someauthority");
+        "someauthority",
+        null);
   }
 
   @Override
