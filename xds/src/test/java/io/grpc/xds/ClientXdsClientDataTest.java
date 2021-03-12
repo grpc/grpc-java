@@ -41,7 +41,6 @@ import io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.QueryParameter
 import io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration;
 import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay;
-import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.HeaderAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatchAndSubstitute;
@@ -463,24 +462,6 @@ public class ClientXdsClientDataTest {
     ClusterWeight clusterWeight = ClientXdsClient.parseClusterWeight(proto, false).getStruct();
     assertThat(clusterWeight.name()).isEqualTo("cluster-foo");
     assertThat(clusterWeight.weight()).isEqualTo(30);
-  }
-
-  // TODO(zdapeng): add tests for parseClusterWeight with HttpFault.
-
-  // TODO(zdapeng): add tests for parseHttpFault.
-
-  @Test
-  public void parseFaultAbort_withHeaderAbort() {
-    io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort proto =
-        io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
-            .setPercentage(FractionalPercent.newBuilder()
-                .setNumerator(20).setDenominator(DenominatorType.HUNDRED))
-            .setHeaderAbort(HeaderAbort.getDefaultInstance()).build();
-    FaultAbort faultAbort = FaultFilter.parseFaultAbort(proto).struct;
-    assertThat(faultAbort.headerAbort()).isTrue();
-    assertThat(faultAbort.percent().numerator()).isEqualTo(20);
-    assertThat(faultAbort.percent().denominatorType())
-        .isEqualTo(FaultConfig.FractionalPercent.DenominatorType.HUNDRED);
   }
 
   @Test

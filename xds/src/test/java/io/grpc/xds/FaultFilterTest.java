@@ -20,7 +20,10 @@ import static com.google.common.truth.Truth.assertThat;
 
 import com.google.protobuf.Any;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
+import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.HeaderAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
+import io.envoyproxy.envoy.type.v3.FractionalPercent;
+import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.internal.GrpcUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -31,7 +34,7 @@ import org.junit.runners.JUnit4;
 public class FaultFilterTest {
 
   @Test
-  public void parseConfig_withoutTypedStruct() {
+  public void parseFaultAbort_convertHttpStatus() {
     Any rawConfig = Any.pack(
         HTTPFault.newBuilder().setAbort(FaultAbort.newBuilder().setHttpStatus(404)).build());
     FaultConfig faultConfig = FaultFilter.INSTANCE.parseFilterConfig(rawConfig).struct;
@@ -41,5 +44,19 @@ public class FaultFilterTest {
         FaultFilter.INSTANCE.parseFilterConfigOverride(rawConfig).struct;
     assertThat(faultConfigOverride.faultAbort().status().getCode())
         .isEqualTo(GrpcUtil.httpStatusToGrpcStatus(404).getCode());
+  }
+
+  @Test
+  public void parseFaultAbort_withHeaderAbort() {
+    io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort proto =
+        io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
+            .setPercentage(FractionalPercent.newBuilder()
+                .setNumerator(20).setDenominator(DenominatorType.HUNDRED))
+            .setHeaderAbort(HeaderAbort.getDefaultInstance()).build();
+    FaultConfig.FaultAbort faultAbort = FaultFilter.parseFaultAbort(proto).struct;
+    assertThat(faultAbort.headerAbort()).isTrue();
+    assertThat(faultAbort.percent().numerator()).isEqualTo(20);
+    assertThat(faultAbort.percent().denominatorType())
+        .isEqualTo(FaultConfig.FractionalPercent.DenominatorType.HUNDRED);
   }
 }
