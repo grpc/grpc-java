@@ -204,14 +204,16 @@ final class EnvoyProtoData {
     }
 
     Builder toBuilder() {
-      Builder builder = new Builder().setId(id).setCluster(cluster);
-      if (metadata != null) {
-        builder.setMetadata(metadata);
-      }
-      if (locality != null) {
-        builder.setLocality(locality);
-      }
+      Builder builder = new Builder();
+      builder.id = id;
+      builder.cluster = cluster;
+      builder.metadata = metadata;
+      builder.locality = locality;
+      builder.buildVersion = buildVersion;
       builder.listeningAddresses.addAll(listeningAddresses);
+      builder.userAgentName = userAgentName;
+      builder.userAgentVersion = userAgentVersion;
+      builder.clientFeatures.addAll(clientFeatures);
       return builder;
     }
 
