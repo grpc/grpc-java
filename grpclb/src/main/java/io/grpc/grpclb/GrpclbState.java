@@ -95,6 +95,9 @@ final class GrpclbState {
   @VisibleForTesting
   static final Status NO_AVAILABLE_BACKENDS_STATUS =
       Status.UNAVAILABLE.withDescription("LoadBalancer responded without any backends");
+  @VisibleForTesting
+  static final Status NO_FALLBACK_BACKENDS_FOUND_STATUS =
+      Status.UNAVAILABLE.withDescription("Unable to fallback, no fallback addresses found");
 
   @VisibleForTesting
   static final RoundRobinEntry BUFFER_ENTRY = new RoundRobinEntry() {
@@ -143,7 +146,6 @@ final class GrpclbState {
 
   @Nullable
   private ManagedChannel lbCommChannel;
-  private boolean lbSentEmptyBackends = false;
 
   @Nullable
   private LbStream lbStream;
@@ -288,7 +290,7 @@ final class GrpclbState {
   }
 
   /**
-   * Populate the round-robin lists with the fallback backends.
+   * Populate backend servers to be used from the fallback backends.
    */
   private void useFallbackBackends() {
     usingFallbackBackends = true;
@@ -300,7 +302,7 @@ final class GrpclbState {
       newDropList.add(null);
       newBackendAddrList.add(new BackendAddressGroup(eag, null));
     }
-    useRoundRobinLists(newDropList, newBackendAddrList, null);
+    updateServerList(newDropList, newBackendAddrList, null);
   }
 
   private void shutdownLbComm() {
@@ -421,9 +423,9 @@ final class GrpclbState {
   }
 
   /**
-   * Populate the round-robin lists with the given values.
+   * Populate backend servers to be used based on the given list of addresses.
    */
-  private void useRoundRobinLists(
+  private void updateServerList(
       List<DropEntry> newDropList, List<BackendAddressGroup> newBackendAddrList,
       @Nullable GrpclbClientLoadRecorder loadRecorder) {
     logger.log(
@@ -473,7 +475,6 @@ final class GrpclbState {
         final Subchannel subchannel;
         if (newBackendAddrList.isEmpty()) {
           if (subchannels.size() == 1) {
-            cancelFallbackTimer();
             subchannel = subchannels.values().iterator().next();
             subchannel.shutdown();
             subchannels = Collections.emptyMap();
@@ -705,9 +706,8 @@ final class GrpclbState {
       }
       // Stop using fallback backends as soon as a new server list is received from the balancer.
       usingFallbackBackends = false;
-      lbSentEmptyBackends = serverList.getServersList().isEmpty();
       cancelFallbackTimer();
-      useRoundRobinLists(newDropList, newBackendAddrList, loadRecorder);
+      updateServerList(newDropList, newBackendAddrList, loadRecorder);
       maybeUpdatePicker();
     }
 
@@ -775,48 +775,52 @@ final class GrpclbState {
   private void maybeUpdatePicker() {
     List<RoundRobinEntry> pickList;
     ConnectivityState state;
-    switch (config.getMode()) {
-      case ROUND_ROBIN:
-        pickList = new ArrayList<>(backendList.size());
-        Status error = null;
-        boolean hasIdle = false;
-        for (BackendEntry entry : backendList) {
-          Subchannel subchannel = entry.subchannel;
-          Attributes attrs = subchannel.getAttributes();
-          ConnectivityStateInfo stateInfo = attrs.get(STATE_INFO).get();
-          if (stateInfo.getState() == READY) {
-            pickList.add(entry);
-          } else if (stateInfo.getState() == TRANSIENT_FAILURE) {
-            error = stateInfo.getStatus();
-          } else if (stateInfo.getState() == IDLE) {
-            hasIdle = true;
+    if (backendList.isEmpty()) {
+      if (balancerWorking)  {
+        pickList =
+            Collections.<RoundRobinEntry>singletonList(
+                new ErrorEntry(NO_AVAILABLE_BACKENDS_STATUS));
+        state = TRANSIENT_FAILURE;
+      } else if (usingFallbackBackends) {
+        pickList =
+            Collections.<RoundRobinEntry>singletonList(
+                new ErrorEntry(NO_FALLBACK_BACKENDS_FOUND_STATUS));
+        state = TRANSIENT_FAILURE;
+      } else {  // still waiting for LoadBalancer
+        pickList = Collections.singletonList(BUFFER_ENTRY);
+        state = CONNECTING;
+      }
+    } else {
+      switch (config.getMode()) {
+        case ROUND_ROBIN:
+          pickList = new ArrayList<>(backendList.size());
+          Status error = null;
+          boolean hasPending = false;
+          for (BackendEntry entry : backendList) {
+            Subchannel subchannel = entry.subchannel;
+            Attributes attrs = subchannel.getAttributes();
+            ConnectivityStateInfo stateInfo = attrs.get(STATE_INFO).get();
+            if (stateInfo.getState() == READY) {
+              pickList.add(entry);
+            } else if (stateInfo.getState() == TRANSIENT_FAILURE) {
+              error = stateInfo.getStatus();
+            } else {
+              hasPending = true;
+            }
           }
-        }
-        if (pickList.isEmpty()) {
-          if (error != null && !hasIdle) {
-            pickList.add(new ErrorEntry(error));
-            state = TRANSIENT_FAILURE;
+          if (pickList.isEmpty()) {
+            if (hasPending) {
+              pickList.add(BUFFER_ENTRY);
+              state = CONNECTING;
+            } else {
+              pickList.add(new ErrorEntry(error));
+              state = TRANSIENT_FAILURE;
+            }
           } else {
-            pickList.add(BUFFER_ENTRY);
-            state = CONNECTING;
+            state = READY;
           }
-        } else {
-          state = READY;
-        }
-        break;
-      case PICK_FIRST:
-        if (backendList.isEmpty()) {
-          if (lbSentEmptyBackends) {
-            pickList =
-                Collections.<RoundRobinEntry>singletonList(
-                    new ErrorEntry(NO_AVAILABLE_BACKENDS_STATUS));
-            state = TRANSIENT_FAILURE;
-          } else {
-            pickList = Collections.singletonList(BUFFER_ENTRY);
-            // Have not received server addresses
-            state = CONNECTING;
-          }
-        } else {
+          break;
+        case PICK_FIRST:
           checkState(backendList.size() == 1, "Excessive backend entries: %s", backendList);
           BackendEntry onlyEntry = backendList.get(0);
           ConnectivityStateInfo stateInfo =
@@ -837,10 +841,10 @@ final class GrpclbState {
               pickList = Collections.<RoundRobinEntry>singletonList(
                   new IdleSubchannelEntry(onlyEntry.subchannel, syncContext));
           }
-        }
-        break;
-      default:
-        throw new AssertionError("Missing case for " + config.getMode());
+          break;
+        default:
+          throw new AssertionError("Missing case for " + config.getMode());
+      }
     }
     maybeUpdatePicker(state, new RoundRobinPicker(dropList, pickList));
   }
