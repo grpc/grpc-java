@@ -626,4 +626,22 @@ public class EnvoyProtoDataTest {
                     .setDroppedCount(100))
             .build());
   }
+
+  @Test
+  public void nodeToBuilderPropagatesAllAttributes() {
+    Node node = Node.newBuilder()
+        .setId("id")
+        .setCluster("cluster")
+        .setMetadata(ImmutableMap.of("key1", "value1", "key2", "value2"))
+        .setLocality(new Locality("region", "zone", "subzone"))
+        .setBuildVersion("v1")
+        .setUserAgentName("grpc-java")
+        .setUserAgentVersion("v1.0.9")
+        .addListeningAddresses(new Address("localhost", 8080))
+        .addListeningAddresses(new Address("localhost", 8081))
+        .addClientFeatures("feature1")
+        .addClientFeatures("feature2")
+        .build();
+    assertThat(node.toBuilder().build()).isEqualTo(node);
+  }
 }
