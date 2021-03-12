@@ -1175,9 +1175,10 @@ public class GrpclbLoadBalancerTest {
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(CONNECTING));
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
 
-    // Switch subchannel1 to TRANSIENT_FAILURE, making the general state TRANSIENT_FAILURE too.
-    Status error = Status.UNAVAILABLE.withDescription("error1");
+    // Switch all subchannels to TRANSIENT_FAILURE, making the general state TRANSIENT_FAILURE too.
+    Status error = Status.UNAVAILABLE.withDescription("error");
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forTransientFailure(error));
+    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forTransientFailure(error));
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     assertThat(((RoundRobinPicker) pickerCaptor.getValue()).pickList)
         .containsExactly(new ErrorEntry(error));
