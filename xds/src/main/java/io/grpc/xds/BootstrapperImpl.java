@@ -54,9 +54,9 @@ public class BootstrapperImpl extends Bootstrapper {
   private static final String BOOTSTRAP_CONFIG_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP_CONFIG";
   @VisibleForTesting
   static String bootstrapConfigFromEnvVar = System.getenv(BOOTSTRAP_CONFIG_SYS_ENV_VAR);
-  private static final String BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR = "io.grpc.xds.bootstrapValue";
+  private static final String BOOTSTRAP_CONFIG_SYS_PROPERTY = "io.grpc.xds.bootstrapConfig";
   @VisibleForTesting
-  static String bootstrapConfigFromSysProp = System.getProperty(BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR);
+  static String bootstrapConfigFromSysProp = System.getProperty(BOOTSTRAP_CONFIG_SYS_PROPERTY);
   private static final String XDS_V3_SERVER_FEATURE = "xds_v3";
   @VisibleForTesting
   static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
@@ -105,7 +105,7 @@ public class BootstrapperImpl extends Bootstrapper {
               + "- " + BOOTSTRAP_CONFIG_SYS_ENV_VAR + "\n\n"
               + "Java System Properties searched:\n"
               + "- " + BOOTSTRAP_PATH_SYS_PROPERTY + "\n"
-              + "- " + BOOTSTRAP_CONFIG_SYS_PROPERTY_VAR + "\n\n");
+              + "- " + BOOTSTRAP_CONFIG_SYS_PROPERTY + "\n\n");
     }
 
     logger.log(XdsLogLevel.INFO, "Reading bootstrap from " + filePath);
