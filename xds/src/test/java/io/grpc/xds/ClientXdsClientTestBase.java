@@ -32,8 +32,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.StringValue;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
+import io.envoyproxy.envoy.config.listener.v3.FilterChain;
+import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
@@ -64,6 +69,7 @@ import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsClient.ResourceWatcher;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -1284,6 +1290,71 @@ public abstract class ClientXdsClientTestBase {
     // See more test on LoadReportClientTest.java
   }
 
+  private static final String LISTENER_RESOURCE =
+          "grpc/server?xds.resource.listening_address=0.0.0.0:7000";
+
+  @Test
+  public void serverSideListenerFound() throws InvalidProtocolBufferException {
+    Assume.assumeTrue(useProtocolV3());
+    ClientXdsClientTestBase.DiscoveryRpcCall call =
+        startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
+    Listener listener =
+        buildListenerWithFilterChain(
+            LISTENER_RESOURCE, 7000, "0.0.0.0", "google-sds-config-default", "ROOTCA");
+    List<Any> listeners = ImmutableList.of(Any.pack(listener));
+    call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
+    // Client sends an ACK LDS request.
+    call.verifyRequest(
+        ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    assertThat(ldsUpdateCaptor.getValue().listener)
+        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
+
+    listener =
+        buildListenerWithFilterChain(
+            LISTENER_RESOURCE, 7000, "0.0.0.0", "CERT2", "ROOTCA2");
+    listeners = ImmutableList.of(Any.pack(listener));
+    call.sendResponse(ResourceType.LDS, listeners, "1", "0001");
+
+    // Client sends an ACK LDS request.
+    call.verifyRequest(
+        ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "1", "0001", NODE);
+    verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
+    assertThat(ldsUpdateCaptor.getValue().listener)
+        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
+
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+  }
+
+  @Test
+  public void serverSideListenerNotFound() {
+    Assume.assumeTrue(useProtocolV3());
+    ClientXdsClientTestBase.DiscoveryRpcCall call =
+        startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
+    final FilterChain filterChainInbound =
+        ServerXdsClientNewServerApiTest.buildFilterChain(
+            ServerXdsClientNewServerApiTest.buildFilterChainMatch("managed-mtls"),
+            CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+                "google-sds-config-default", "ROOTCA"),
+            ServerXdsClientNewServerApiTest.buildTestFilter("envoy.http_connection_manager"));
+    Listener listener =
+        ServerXdsClientNewServerApiTest.buildListenerWithFilterChain(
+            "grpc/server?xds.resource.listening_address=0.0.0.0:8000",
+            7000,
+            "0.0.0.0",
+            filterChainInbound);
+    List<Any> listeners = ImmutableList.of(Any.pack(listener));
+    call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
+    // Client sends an ACK LDS request.
+    call.verifyRequest(
+        ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
+
+    verifyNoInteractions(ldsResourceWatcher);
+    fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    verify(ldsResourceWatcher).onResourceDoesNotExist(LISTENER_RESOURCE);
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+  }
+
   private DiscoveryRpcCall startResourceWatcher(
       ResourceType type, String name, ResourceWatcher watcher) {
     FakeClock.TaskFilter timeoutTaskFilter;
@@ -1415,5 +1486,27 @@ public abstract class ClientXdsClientTestBase {
         int lbWeight);
 
     protected abstract Message buildDropOverload(String category, int dropPerMillion);
+  }
+
+  static Listener buildListenerWithFilterChain(
+      String name, int portValue, String address, String certName, String validationContextName) {
+    FilterChain filterChain =
+        ServerXdsClientNewServerApiTest.buildFilterChain(
+            ServerXdsClientNewServerApiTest.buildFilterChainMatch(),
+            CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+                certName, validationContextName),
+            ServerXdsClientNewServerApiTest.buildTestFilter("envoy.http_connection_manager"));
+    io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
+        io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
+            .setSocketAddress(
+                SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
+            .build();
+    return Listener.newBuilder()
+        .setName(name)
+        .setAddress(listenerAddress)
+        .setDefaultFilterChain(FilterChain.getDefaultInstance())
+        .addAllFilterChains(Arrays.asList(filterChain))
+        .setTrafficDirection(TrafficDirection.INBOUND)
+        .build();
   }
 }

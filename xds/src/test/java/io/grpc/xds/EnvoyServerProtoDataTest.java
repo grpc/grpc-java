@@ -24,6 +24,7 @@ import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.CidrRange;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.core.v3.TransportSocket;
 import io.envoyproxy.envoy.config.listener.v3.Filter;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
@@ -58,6 +59,7 @@ public class EnvoyServerProtoDataTest {
             .addFilterChains(createOutFilter())
             .addFilterChains(createInFilter())
             .setDefaultFilterChain(createDefaultFilterChain())
+            .setTrafficDirection(TrafficDirection.INBOUND)
             .build();
 
     Listener xdsListener = Listener.fromEnvoyProtoListener(listener);

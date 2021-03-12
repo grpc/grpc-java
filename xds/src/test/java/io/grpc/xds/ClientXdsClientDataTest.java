@@ -25,7 +25,9 @@ import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.Locality;
 import io.envoyproxy.envoy.config.core.v3.RuntimeFractionalPercent;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
+import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.DirectResponseAction;
 import io.envoyproxy.envoy.config.route.v3.FilterAction;
 import io.envoyproxy.envoy.config.route.v3.RedirectAction;
@@ -612,5 +614,17 @@ public class ClientXdsClientDataTest {
             .build();
     StructOrError<LocalityLbEndpoints> struct = ClientXdsClient.parseLocalityLbEndpoints(proto);
     assertThat(struct.getErrorDetail()).isEqualTo("negative priority");
+  }
+
+  @Test
+  public void parseServerSideListener_invalidTrafficDirection() {
+    Listener listener =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.OUTBOUND)
+            .build();
+    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
+        ClientXdsClient.parseServerSideListener(listener);
+    assertThat(struct.getErrorDetail()).isEqualTo("Listener listener1 is not INBOUND");
   }
 }

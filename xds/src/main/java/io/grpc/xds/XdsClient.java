@@ -59,6 +59,9 @@ abstract class XdsClient {
     final boolean hasFaultInjection;
     @Nullable // Can be null even if hasFaultInjection is true.
     final HttpFault httpFault;
+    // Server side Listener.
+    @Nullable
+    final Listener listener;
 
     LdsUpdate(
         long httpMaxStreamDurationNano, String rdsName, boolean hasFaultInjection,
@@ -82,12 +85,22 @@ abstract class XdsClient {
           ? null : Collections.unmodifiableList(new ArrayList<>(virtualHosts));
       this.hasFaultInjection = hasFaultInjection;
       this.httpFault = httpFault;
+      this.listener = null;
+    }
+
+    LdsUpdate(Listener listener) {
+      this.listener = listener;
+      this.httpMaxStreamDurationNano = 0L;
+      this.rdsName = null;
+      this.virtualHosts = null;
+      this.hasFaultInjection = false;
+      this.httpFault = null;
     }
 
     @Override
     public int hashCode() {
       return Objects.hash(
-          httpMaxStreamDurationNano, rdsName, virtualHosts, hasFaultInjection, httpFault);
+          httpMaxStreamDurationNano, rdsName, virtualHosts, hasFaultInjection, httpFault, listener);
     }
 
     @Override
@@ -103,7 +116,8 @@ abstract class XdsClient {
           && Objects.equals(rdsName, that.rdsName)
           && Objects.equals(virtualHosts, that.virtualHosts)
           && hasFaultInjection == that.hasFaultInjection
-          && Objects.equals(httpFault, that.httpFault);
+          && Objects.equals(httpFault, that.httpFault)
+          && Objects.equals(listener, that.listener);
     }
 
     @Override
@@ -118,6 +132,9 @@ abstract class XdsClient {
       if (hasFaultInjection) {
         toStringHelper.add("faultInjectionEnabled", true)
             .add("httpFault", httpFault);
+      }
+      if (listener != null) {
+        toStringHelper.add("listener", listener);
       }
       return toStringHelper.toString();
     }

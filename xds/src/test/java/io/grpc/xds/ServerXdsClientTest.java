@@ -44,6 +44,7 @@ import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.CidrRange;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
+import io.envoyproxy.envoy.api.v2.core.TrafficDirection;
 import io.envoyproxy.envoy.api.v2.core.TransportSocket;
 import io.envoyproxy.envoy.api.v2.listener.Filter;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
@@ -775,6 +776,7 @@ public class ServerXdsClientTest {
             .setName(name)
             .setAddress(listenerAddress)
             .addAllFilterChains(Arrays.asList(filterChains))
+            .setTrafficDirection(TrafficDirection.INBOUND)
             .build();
   }
 
