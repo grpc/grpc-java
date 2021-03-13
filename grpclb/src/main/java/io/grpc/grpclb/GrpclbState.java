@@ -787,61 +787,63 @@ final class GrpclbState {
         pickList = Collections.singletonList(BUFFER_ENTRY);
         state = CONNECTING;
       }
-    } else {
-      switch (config.getMode()) {
-        case ROUND_ROBIN:
-          pickList = new ArrayList<>(backendList.size());
-          Status error = null;
-          boolean hasPending = false;
-          for (BackendEntry entry : backendList) {
-            Subchannel subchannel = entry.subchannel;
-            Attributes attrs = subchannel.getAttributes();
-            ConnectivityStateInfo stateInfo = attrs.get(STATE_INFO).get();
-            if (stateInfo.getState() == READY) {
-              pickList.add(entry);
-            } else if (stateInfo.getState() == TRANSIENT_FAILURE) {
-              error = stateInfo.getStatus();
-            } else {
-              hasPending = true;
-            }
-          }
-          if (pickList.isEmpty()) {
-            if (hasPending) {
-              pickList.add(BUFFER_ENTRY);
-              state = CONNECTING;
-            } else {
-              pickList.add(new ErrorEntry(error));
-              state = TRANSIENT_FAILURE;
-            }
+      maybeUpdatePicker(state, new RoundRobinPicker(dropList, pickList));
+      return;
+    }
+    switch (config.getMode()) {
+      case ROUND_ROBIN:
+        pickList = new ArrayList<>(backendList.size());
+        Status error = null;
+        boolean hasPending = false;
+        for (BackendEntry entry : backendList) {
+          Subchannel subchannel = entry.subchannel;
+          Attributes attrs = subchannel.getAttributes();
+          ConnectivityStateInfo stateInfo = attrs.get(STATE_INFO).get();
+          if (stateInfo.getState() == READY) {
+            pickList.add(entry);
+          } else if (stateInfo.getState() == TRANSIENT_FAILURE) {
+            error = stateInfo.getStatus();
           } else {
-            state = READY;
+            hasPending = true;
           }
-          break;
-        case PICK_FIRST:
-          checkState(backendList.size() == 1, "Excessive backend entries: %s", backendList);
-          BackendEntry onlyEntry = backendList.get(0);
-          ConnectivityStateInfo stateInfo =
-              onlyEntry.subchannel.getAttributes().get(STATE_INFO).get();
-          state = stateInfo.getState();
-          switch (state) {
-            case READY:
-              pickList = Collections.<RoundRobinEntry>singletonList(onlyEntry);
-              break;
-            case TRANSIENT_FAILURE:
-              pickList =
-                  Collections.<RoundRobinEntry>singletonList(new ErrorEntry(stateInfo.getStatus()));
-              break;
-            case CONNECTING:
-              pickList = Collections.singletonList(BUFFER_ENTRY);
-              break;
-            default:
-              pickList = Collections.<RoundRobinEntry>singletonList(
-                  new IdleSubchannelEntry(onlyEntry.subchannel, syncContext));
+        }
+        if (pickList.isEmpty()) {
+          if (hasPending) {
+            pickList.add(BUFFER_ENTRY);
+            state = CONNECTING;
+          } else {
+            pickList.add(new ErrorEntry(error));
+            state = TRANSIENT_FAILURE;
           }
-          break;
-        default:
-          throw new AssertionError("Missing case for " + config.getMode());
+        } else {
+          state = READY;
+        }
+        break;
+      case PICK_FIRST: {
+        checkState(backendList.size() == 1, "Excessive backend entries: %s", backendList);
+        BackendEntry onlyEntry = backendList.get(0);
+        ConnectivityStateInfo stateInfo =
+            onlyEntry.subchannel.getAttributes().get(STATE_INFO).get();
+        state = stateInfo.getState();
+        switch (state) {
+          case READY:
+            pickList = Collections.<RoundRobinEntry>singletonList(onlyEntry);
+            break;
+          case TRANSIENT_FAILURE:
+            pickList =
+                Collections.<RoundRobinEntry>singletonList(new ErrorEntry(stateInfo.getStatus()));
+            break;
+          case CONNECTING:
+            pickList = Collections.singletonList(BUFFER_ENTRY);
+            break;
+          default:
+            pickList = Collections.<RoundRobinEntry>singletonList(
+                new IdleSubchannelEntry(onlyEntry.subchannel, syncContext));
+        }
+        break;
       }
+      default:
+        throw new AssertionError("Missing case for " + config.getMode());
     }
     maybeUpdatePicker(state, new RoundRobinPicker(dropList, pickList));
   }
