@@ -37,6 +37,11 @@ enum RouterFilter implements Filter, ClientInterceptorBuilder {
     public String typeUrl() {
       return RouterFilter.TYPE_URL;
     }
+
+    @Override
+    public String toString() {
+      return "ROUTER_CONFIG";
+    }
   };
 
   @Override

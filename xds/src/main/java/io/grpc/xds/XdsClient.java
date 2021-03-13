@@ -94,28 +94,6 @@ abstract class XdsClient {
     }
 
     @Override
-    public int hashCode() {
-      return Objects.hash(
-          httpMaxStreamDurationNano, rdsName, virtualHosts, filterChain, listener);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      LdsUpdate that = (LdsUpdate) o;
-      return httpMaxStreamDurationNano == that.httpMaxStreamDurationNano
-          && Objects.equals(rdsName, that.rdsName)
-          && Objects.equals(virtualHosts, that.virtualHosts)
-          && Objects.equals(filterChain, that.filterChain)
-          && Objects.equals(listener, that.listener);
-    }
-
-    @Override
     public String toString() {
       ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
       toStringHelper.add("httpMaxStreamDurationNano", httpMaxStreamDurationNano);
@@ -141,6 +119,14 @@ abstract class XdsClient {
       NamedFilter(String name, FilterConfig filterConfig) {
         this.name = name;
         this.filterConfig = filterConfig;
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("name", name)
+            .add("filterConfig", filterConfig)
+            .toString();
       }
     }
   }

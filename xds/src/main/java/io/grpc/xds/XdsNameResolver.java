@@ -728,7 +728,7 @@ final class XdsNameResolver extends NameResolver {
         filterChain = new ArrayList<>(update.filterChain.size());
         for (NamedFilter namedFilter : update.filterChain) {
           filterChain.add(namedFilter);
-          if (namedFilter.filterConfig == RouterFilter.ROUTER_CONFIG) {
+          if (namedFilter.filterConfig.equals(RouterFilter.ROUTER_CONFIG)) {
             hasRouter = true;
             break;
           }
