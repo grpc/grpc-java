@@ -360,7 +360,7 @@ public class XdsSdsClientServerTest {
   }
 
   static void generateListenerUpdateToWatcher(
-          DownstreamTlsContext tlsContext, XdsClient.LdsResourceWatcher registeredWatcher) {
+      DownstreamTlsContext tlsContext, XdsClient.LdsResourceWatcher registeredWatcher) {
     EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0", tlsContext);
     XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
     registeredWatcher.onChanged(listenerUpdate);
