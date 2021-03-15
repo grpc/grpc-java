@@ -42,6 +42,7 @@ import io.envoyproxy.envoy.config.listener.v3.Filter;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
 import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
@@ -1493,10 +1494,6 @@ public abstract class ClientXdsClientTestBase {
     protected abstract Message buildDropOverload(String category, int dropPerMillion);
   }
 
-  private static final String TYPE_URL_HTTP_CONNECTION_MANAGER =
-      "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
-          + ".HttpConnectionManager";
-
   @SuppressWarnings("deprecation")
   static FilterChain buildFilterChain(FilterChainMatch filterChainMatch,
       DownstreamTlsContext tlsContext, Filter...filters) {
@@ -1555,12 +1552,9 @@ public abstract class ClientXdsClientTestBase {
 
   protected Filter buildTestFilter(String name) {
     Assume.assumeTrue(useProtocolV3());
-    return
-        Filter.newBuilder()
-            .setName(name)
-            .setTypedConfig(
-                Any.newBuilder()
-                    .setTypeUrl(TYPE_URL_HTTP_CONNECTION_MANAGER))
-            .build();
+    return Filter.newBuilder()
+        .setName(name)
+        .setTypedConfig(Any.pack(HttpConnectionManager.getDefaultInstance()))
+        .build();
   }
 }
