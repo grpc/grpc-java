@@ -21,6 +21,7 @@ bazel-testlogs
 *.iml
 *.ipr
 *.iws
+.ijwb
 
 # Eclipse
 .classpath
