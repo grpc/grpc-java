@@ -202,6 +202,17 @@ public class XdsClientWrapperForServerSdsTestMisc {
     verify(mockServerWatcher, never()).onError(any(Throwable.class), eq(false));
   }
 
+  @Test
+  public void xdsClientStart_multipleReplacements() {
+    xdsClientWrapperForServerSds.start(xdsClient, "grpc/server?%s and %s and one more %s");
+    ArgumentCaptor<XdsClient.LdsResourceWatcher> listenerWatcherCaptor =
+        ArgumentCaptor.forClass(null);
+    verify(xdsClient)
+        .watchLdsResource(
+            eq("grpc/server?0.0.0.0:7000 and 0.0.0.0:7000 and one more 0.0.0.0:7000"),
+            listenerWatcherCaptor.capture());
+  }
+
   private DownstreamTlsContext sendListenerUpdate(
       SocketAddress localAddress, DownstreamTlsContext tlsContext) throws UnknownHostException {
     when(channel.localAddress()).thenReturn(localAddress);
@@ -218,7 +229,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
     XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         new XdsClientWrapperForServerSds(port);
-    xdsClientWrapperForServerSds.start(mockXdsClient, "grpc/server");
+    xdsClientWrapperForServerSds.start(
+        mockXdsClient, "grpc/server?udpa.resource.listening_address=%s");
     XdsSdsClientServerTest.generateListenerUpdateToWatcher(
         downstreamTlsContext, xdsClientWrapperForServerSds.getListenerWatcher());
     return xdsClientWrapperForServerSds;

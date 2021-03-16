@@ -33,7 +33,8 @@ class XdsServerTestHelper {
       XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
       XdsClient mockXdsClient,
       int port) {
-    xdsClientWrapperForServerSds.start(mockXdsClient, "grpc/server");
+    xdsClientWrapperForServerSds.start(
+        mockXdsClient, "grpc/server?udpa.resource.listening_address=%s");
     ArgumentCaptor<XdsClient.LdsResourceWatcher> listenerWatcherCaptor = ArgumentCaptor
         .forClass(null);
     verify(mockXdsClient)

@@ -114,7 +114,8 @@ public final class XdsClientWrapperForServerSds {
     newServerApi = serverInfo.isUseProtocolV3();
     String grpcServerResourceId = bootstrapInfo.getGrpcServerResourceId();
     if (newServerApi && grpcServerResourceId == null) {
-      throw new IOException("missing grpc_server_resource_name_id value in xds bootstrap");
+      throw new IOException(
+          "missing server_listener_resource_name_template value in xds bootstrap");
     }
     XdsClient xdsClientImpl =
         new ClientXdsClient(
@@ -155,8 +156,7 @@ public final class XdsClientWrapperForServerSds {
             reportError(error.asException(), isResourceAbsent(error));
           }
         };
-    grpcServerResourceId =
-        grpcServerResourceId + "?udpa.resource.listening_address=" + ("0.0.0.0:" + port);
+    grpcServerResourceId = grpcServerResourceId.replaceAll("%s", "0.0.0.0:" + port);
     xdsClient.watchLdsResource(grpcServerResourceId, listenerWatcher);
   }
 
