@@ -44,7 +44,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
@@ -63,8 +62,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
   private final XdsLogger logger = XdsLogger.withLogId(
       InternalLogId.allocate("ring_hash_lb", null));
   private final XxHash64 hashFunc = XxHash64.INSTANCE;
-  private final ConcurrentMap<EquivalentAddressGroup, Subchannel> subchannels =
-      Maps.newConcurrentMap();
+  private final Map<EquivalentAddressGroup, Subchannel> subchannels = Maps.newHashMap();
   private final Helper helper;
 
   private ConnectivityState currentState;
@@ -266,7 +264,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
 
   private static final class RingHashPicker extends SubchannelPicker {
     private final List<RingEntry> ring;
-    // shadow copy of subchannels
+    // shallow copy of subchannels
     private final Map<EquivalentAddressGroup, Subchannel> pickableSubchannels;
 
     private RingHashPicker(
