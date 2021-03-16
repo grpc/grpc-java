@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -51,6 +52,7 @@ import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +64,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -120,11 +124,13 @@ public class RingHashLoadBalancerTest {
   @Test
   public void subchannelLazyConnectUntilPicked() {
     RingHashConfig config = new RingHashConfig(10, 100);
-    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);  // one server
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    assertThat(subchannels).isEmpty();
+    verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
+    Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
+    verify(subchannel, never()).requestConnection();
     verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
 
     // Picking subchannel triggers connection.
@@ -134,9 +140,6 @@ public class RingHashLoadBalancerTest {
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();
-    verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    assertThat(subchannels).hasSize(1);
-    Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
     verify(subchannel).requestConnection();
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
     verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
@@ -146,35 +149,134 @@ public class RingHashLoadBalancerTest {
     verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+    verifyNoMoreInteractions(helper);
   }
 
   @Test
-  public void subchannelNotAutoReconnectAfterDisconnected() {
+  public void subchannelNotAutoReconnectAfterReenteringIdle() {
     RingHashConfig config = new RingHashConfig(10, 100);
-    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);  // one server
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
+    InOrder inOrder = Mockito.inOrder(helper, subchannel);
+    inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    inOrder.verify(subchannel, never()).requestConnection();
 
     // Picking subchannel triggers connection.
     PickSubchannelArgs args = new PickSubchannelArgsImpl(
         TestMethodDescriptors.voidMethod(), new Metadata(),
         CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
     pickerCaptor.getValue().pickSubchannel(args);
-    verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
-    verify(subchannel, times(1)).requestConnection();
+    inOrder.verify(subchannel).requestConnection();
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(
-        Status.UNAUTHENTICATED.withDescription("Permission denied")));
-    verify(helper, times(2)).updateBalancingState(eq(IDLE), pickerCaptor.capture());
-    verify(subchannel, times(1)).requestConnection();
+    inOrder.verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    inOrder.verify(subchannel, never()).requestConnection();
 
     // Picking again triggers reconnection.
     pickerCaptor.getValue().pickSubchannel(args);
-    verify(subchannel, times(2)).requestConnection();
+    inOrder.verify(subchannel).requestConnection();
+  }
+
+  @Test
+  public void updateBalancingStateWhenOverallLbStateChanges() {
+    RingHashConfig config = new RingHashConfig(10, 100);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(2)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));  // initial IDLE
+
+    // Simulates connecting to server0.
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(0))),
+        ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+
+    // Simulates connecting to server1.
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(1))),
+        ConnectivityStateInfo.forNonError(CONNECTING));
+    verifyNoMoreInteractions(helper);
+
+    // Simulates connection to server1 ready.
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(1))),
+        ConnectivityStateInfo.forNonError(READY));
+    verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
+
+    // Simulates connection to server0 fail.
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(0))),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNKNOWN.withDescription("unknown failure")));
+    verifyNoMoreInteractions(helper);
+
+    // Simulates connection to server1 fail.
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(1))),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.PERMISSION_DENIED.withDescription("authentication failed")));
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+
+    verifyNoMoreInteractions(helper);
+  }
+
+  @Test
+  public void updateBalancingStateWhenNewSubchannelEntersReady() {
+    RingHashConfig config = new RingHashConfig(10, 100);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(2)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));  // initial IDLE
+
+    // Simulates connection to server0 ready.
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(0))),
+        ConnectivityStateInfo.forNonError(READY));
+    verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
+
+    // Simulates connection to server1 ready.
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(1))),
+        ConnectivityStateInfo.forNonError(READY));
+    verify(helper, times(2)).updateBalancingState(eq(READY), any(SubchannelPicker.class));
+
+    verifyNoMoreInteractions(helper);
+  }
+
+  @Test
+  public void subchannelStayInTransientFailureUntilBecomeReady() {
+    RingHashConfig config = new RingHashConfig(10, 100);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+
+    // Simulate picks have taken place and subchannels have requested connection.
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(
+          Status.UNAUTHENTICATED.withDescription("Permission denied")));
+    }
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+
+    // Simulate underlying subchannel auto reconnect after backoff.
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
+    }
+    verifyNoMoreInteractions(helper);
+
+    deliverSubchannelState(
+        subchannels.values().iterator().next(), ConnectivityStateInfo.forNonError(READY));
+    verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
   }
 
   @Test
@@ -184,17 +286,22 @@ public class RingHashLoadBalancerTest {
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    InOrder inOrder = Mockito.inOrder(helper);
+    inOrder.verify(helper, times(5)).createSubchannel(any(CreateSubchannelArgs.class));
+    inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
-    // Simulate rpc hash hits one ring entry exactly.
+    // Bring all subchannels to READY so that next pick always succeeds.
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+      inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    }
+
+    // Simulate rpc hash hits one ring entry exactly for server1.
     long rpcHash = hashFunc.hashAsciiString("[FakeSocketAddress-server1]_0");
     PickSubchannelArgs args = new PickSubchannelArgsImpl(
         TestMethodDescriptors.voidMethod(), new Metadata(),
         CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
     pickerCaptor.getValue().pickSubchannel(args);
-    deliverSubchannelState(
-        Iterables.getOnlyElement(subchannels.values()), ConnectivityStateInfo.forNonError(READY));
-    verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     Subchannel subchannel = result.getSubchannel();
     assertThat(subchannel.getAddresses()).isEqualTo(servers.get(1));
@@ -203,7 +310,7 @@ public class RingHashLoadBalancerTest {
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    verify(helper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
+    inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue().pickSubchannel(args).getSubchannel())
         .isSameInstanceAs(subchannel);
   }
@@ -215,17 +322,22 @@ public class RingHashLoadBalancerTest {
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    InOrder inOrder = Mockito.inOrder(helper);
+    inOrder.verify(helper, times(2)).createSubchannel(any(CreateSubchannelArgs.class));
+    inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
 
-    // Simulate rpc hash hits one ring entry exactly.
+    // Bring all subchannels to READY so that next pick always succeeds.
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+      inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    }
+
+    // Simulate rpc hash hits one ring entry exactly for server1.
     long rpcHash = hashFunc.hashAsciiString("[FakeSocketAddress-server1]_0");
     PickSubchannelArgs args = new PickSubchannelArgsImpl(
         TestMethodDescriptors.voidMethod(), new Metadata(),
         CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
     pickerCaptor.getValue().pickSubchannel(args);
-    deliverSubchannelState(
-        Iterables.getOnlyElement(subchannels.values()), ConnectivityStateInfo.forNonError(READY));
-    verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     Subchannel subchannel = result.getSubchannel();
     assertThat(subchannel.getAddresses()).isEqualTo(servers.get(1));
@@ -234,9 +346,84 @@ public class RingHashLoadBalancerTest {
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    verify(helper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
+    inOrder.verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue().pickSubchannel(args).getSubchannel())
         .isSameInstanceAs(subchannel);
+  }
+
+  @Test
+  public void useNextIfTargetSubchannelInTransientFailure() {
+    RingHashConfig config = new RingHashConfig(3, 3);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+    // ring:
+    //   "[FakeSocketAddress-server1]_0"
+    //   "[FakeSocketAddress-server0]_0"
+    //   "[FakeSocketAddress-server2]_0"
+
+    long rpcHash = hashFunc.hashAsciiString("[FakeSocketAddress-server0]_0");
+    PickSubchannelArgs args = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
+
+    // Bring down server0 to force picking server2 (clockwise).
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(0))),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNAVAILABLE.withDescription("unreachable")));
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(1))),
+        ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(2))),
+        ConnectivityStateInfo.forNonError(READY));
+    verify(helper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
+
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(2));
+
+    // Bring down server2 to force picking server1 (clockwise).
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(2))),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNKNOWN.withDescription("unknown failure")));
+    verifyNoMoreInteractions(helper);  // no new picker update
+
+    result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(1));
+  }
+
+  @Test
+  public void failRpcIfAllSubchannelsInTransientFailure() {
+    RingHashConfig config = new RingHashConfig(3, 3);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+
+    // Bring all subchannels to TRANSIENT_FAILURE.
+    for (Subchannel subchannel : subchannels.values()) {
+      deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(
+          Status.UNAVAILABLE.withDescription("unreachable")));
+    }
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+
+    // Picking subchannel triggers connection.
+    PickSubchannelArgs args = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isFalse();
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
   }
 
   @Test
@@ -246,23 +433,12 @@ public class RingHashLoadBalancerTest {
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
-
-    // Warm up by trying to connect to all servers.
-    for (int i = 0; i < 3; i++) {
-      long rpcHash = hashFunc.hashAsciiString(String.format("[FakeSocketAddress-server%d]_0", i));
-      PickSubchannelArgs args = new PickSubchannelArgsImpl(
-          TestMethodDescriptors.voidMethod(), new Metadata(),
-          CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
-      pickerCaptor.getValue().pickSubchannel(args);
-      verify(helper, times(i + 1)).createSubchannel(any(CreateSubchannelArgs.class));
-    }
-    assertThat(subchannels).hasSize(3);
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
     // Bring all subchannels to READY.
     Map<EquivalentAddressGroup, Integer> pickCounts = new HashMap<>();
     for (Subchannel subchannel : subchannels.values()) {
-      verify(subchannel).requestConnection();
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
       pickCounts.put(subchannel.getAddresses(), 0);
     }
@@ -293,23 +469,12 @@ public class RingHashLoadBalancerTest {
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
-
-    // Warm up by trying to connect to all servers.
-    for (int i = 0; i < 3; i++) {
-      long rpcHash = hashFunc.hashAsciiString(String.format("[FakeSocketAddress-server%d]_0", i));
-      PickSubchannelArgs args = new PickSubchannelArgsImpl(
-          TestMethodDescriptors.voidMethod(), new Metadata(),
-          CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
-      pickerCaptor.getValue().pickSubchannel(args);
-      verify(helper, times(i + 1)).createSubchannel(any(CreateSubchannelArgs.class));
-    }
-    assertThat(subchannels).hasSize(3);
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
     // Bring all subchannels to READY.
     Map<EquivalentAddressGroup, Integer> pickCounts = new HashMap<>();
     for (Subchannel subchannel : subchannels.values()) {
-      verify(subchannel).requestConnection();
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
       pickCounts.put(subchannel.getAddresses(), 0);
     }
@@ -348,10 +513,11 @@ public class RingHashLoadBalancerTest {
   @Test
   public void nameResolutionErrorWithActiveSubchannels() {
     RingHashConfig config = new RingHashConfig(10, 100);
-    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
 
     // Picking subchannel triggers subchannel creation and connection.
@@ -359,10 +525,8 @@ public class RingHashLoadBalancerTest {
         TestMethodDescriptors.voidMethod(), new Metadata(),
         CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
     pickerCaptor.getValue().pickSubchannel(args);
-    verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
-    verify(subchannel).requestConnection();
-    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(
+        Iterables.getOnlyElement(subchannels.values()), ConnectivityStateInfo.forNonError(READY));
     verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
 
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("target not found"));
