@@ -35,6 +35,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.StringValue;
+import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
@@ -1294,8 +1295,8 @@ public abstract class ClientXdsClientTestBase {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
-    Message listener =
-        mf.buildListenerWithFilterChain(
+    Listener listener =
+            (Listener)mf.buildListenerWithFilterChain(
             LISTENER_RESOURCE, 7000, "0.0.0.0", "google-sds-config-default", "ROOTCA");
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
@@ -1307,7 +1308,7 @@ public abstract class ClientXdsClientTestBase {
         .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
 
     listener =
-        mf.buildListenerWithFilterChain(
+            (Listener)mf.buildListenerWithFilterChain(
             LISTENER_RESOURCE, 7000, "0.0.0.0", "CERT2", "ROOTCA2");
     listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "1", "0001");
