@@ -100,10 +100,10 @@ public abstract class ClientXdsClientTestBase {
   private static final String RDS_RESOURCE = "route-configuration.googleapis.com";
   private static final String CDS_RESOURCE = "cluster.googleapis.com";
   private static final String EDS_RESOURCE = "cluster-load-assignment.googleapis.com";
-  private static final String VERSION_1 = "42";
-  private static final String VERSION_2 = "43";
   private static final String LISTENER_RESOURCE =
       "grpc/server?xds.resource.listening_address=0.0.0.0:7000";
+  private static final String VERSION_1 = "42";
+  private static final String VERSION_2 = "43";
   private static final Node NODE = Node.newBuilder().build();
 
   private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =

@@ -106,7 +106,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
-  private static final String TYPE_URL_HTTP_CONNECTION_MANAGER =
+  static final String TYPE_URL_HTTP_CONNECTION_MANAGER =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT =
