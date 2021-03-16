@@ -16,10 +16,13 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
@@ -454,8 +457,12 @@ public final class EnvoyServerProtoData {
       return null;
     }
 
-    static Listener fromEnvoyProtoListener(io.envoyproxy.envoy.config.listener.v3.Listener proto)
+    static Listener fromEnvoyProtoListener(Message listener)
         throws InvalidProtocolBufferException {
+      checkArgument(
+          listener instanceof io.envoyproxy.envoy.config.listener.v3.Listener, "listener");
+      io.envoyproxy.envoy.config.listener.v3.Listener proto =
+          (io.envoyproxy.envoy.config.listener.v3.Listener) listener;
       if (!proto.getTrafficDirection().equals(TrafficDirection.INBOUND)) {
         throw new IllegalArgumentException("Listener " + proto.getName() + " is not INBOUND");
       }

@@ -551,6 +551,28 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
                   .setDenominator(DenominatorType.MILLION))
           .build();
     }
+
+    @Override
+    protected Message buildFilterChain(List<String> alpn, Message tlsContext, Message... filters) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected Message buildListenerWithFilterChain(
+        String name, int portValue, String address, Message... filterChains) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected Message buildListenerWithFilterChain(
+        String name, int portValue, String address, String certName, String validationContextName) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected Message buildTestFilter(String name) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**

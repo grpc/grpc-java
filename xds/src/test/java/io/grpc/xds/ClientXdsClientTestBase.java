@@ -35,15 +35,6 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.StringValue;
-import io.envoyproxy.envoy.config.core.v3.SocketAddress;
-import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
-import io.envoyproxy.envoy.config.core.v3.TransportSocket;
-import io.envoyproxy.envoy.config.listener.v3.Filter;
-import io.envoyproxy.envoy.config.listener.v3.FilterChain;
-import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
-import io.envoyproxy.envoy.config.listener.v3.Listener;
-import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
@@ -1303,8 +1294,8 @@ public abstract class ClientXdsClientTestBase {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
-    Listener listener =
-        buildListenerWithFilterChain(
+    Message listener =
+        mf.buildListenerWithFilterChain(
             LISTENER_RESOURCE, 7000, "0.0.0.0", "google-sds-config-default", "ROOTCA");
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
@@ -1316,7 +1307,7 @@ public abstract class ClientXdsClientTestBase {
         .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
 
     listener =
-        buildListenerWithFilterChain(
+        mf.buildListenerWithFilterChain(
             LISTENER_RESOURCE, 7000, "0.0.0.0", "CERT2", "ROOTCA2");
     listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "1", "0001");
@@ -1336,15 +1327,14 @@ public abstract class ClientXdsClientTestBase {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
-    final FilterChain filterChainInbound =
-        buildFilterChain(
-            FilterChainMatch.newBuilder().addAllApplicationProtocols(Arrays.asList("managed-mtls"))
-                .build(),
+    final Message filterChainInbound =
+        mf.buildFilterChain(
+            Arrays.asList("managed-mtls"),
             CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
                 "google-sds-config-default", "ROOTCA"),
-            buildTestFilter("envoy.http_connection_manager"));
-    Listener listener =
-        buildListenerWithFilterChain(
+            mf.buildTestFilter("envoy.http_connection_manager"));
+    Message listener =
+        mf.buildListenerWithFilterChain(
             "grpc/server?xds.resource.listening_address=0.0.0.0:8000",
             7000,
             "0.0.0.0",
@@ -1492,69 +1482,16 @@ public abstract class ClientXdsClientTestBase {
         int lbWeight);
 
     protected abstract Message buildDropOverload(String category, int dropPerMillion);
-  }
 
-  @SuppressWarnings("deprecation")
-  static FilterChain buildFilterChain(FilterChainMatch filterChainMatch,
-      DownstreamTlsContext tlsContext, Filter...filters) {
-    return FilterChain.newBuilder()
-        .setFilterChainMatch(filterChainMatch)
-        .setTransportSocket(
-            tlsContext == null
-                ? TransportSocket.getDefaultInstance()
-                : TransportSocket.newBuilder()
-                    .setName("envoy.transport_sockets.tls")
-                    .setTypedConfig(Any.pack(tlsContext))
-                    .build())
-        .addAllFilters(Arrays.asList(filters))
-        .build();
-  }
+    protected abstract Message buildFilterChain(
+        List<String> alpn, Message tlsContext, Message... filters);
 
-  static Listener buildListenerWithFilterChain(String name, int portValue, String address,
-      FilterChain... filterChains) {
-    io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
-        io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
-            .setSocketAddress(
-                SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
-            .build();
-    return
-        Listener.newBuilder()
-            .setName(name)
-            .setAddress(listenerAddress)
-            .setDefaultFilterChain(FilterChain.getDefaultInstance())
-            .addAllFilterChains(Arrays.asList(filterChains))
-            .setTrafficDirection(TrafficDirection.INBOUND)
-            .build();
-  }
+    protected abstract Message buildListenerWithFilterChain(
+        String name, int portValue, String address, Message... filterChains);
 
-  Listener buildListenerWithFilterChain(
-      String name, int portValue, String address, String certName, String validationContextName) {
-    FilterChain filterChain =
-        buildFilterChain(
-            FilterChainMatch.newBuilder().addAllApplicationProtocols(Arrays.<String>asList())
-                .build(),
-            CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-                certName, validationContextName),
-            buildTestFilter("envoy.http_connection_manager"));
-    io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
-        io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
-            .setSocketAddress(
-                SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
-            .build();
-    return Listener.newBuilder()
-        .setName(name)
-        .setAddress(listenerAddress)
-        .setDefaultFilterChain(FilterChain.getDefaultInstance())
-        .addAllFilterChains(Arrays.asList(filterChain))
-        .setTrafficDirection(TrafficDirection.INBOUND)
-        .build();
-  }
+    protected abstract Message buildListenerWithFilterChain(
+        String name, int portValue, String address, String certName, String validationContextName);
 
-  protected Filter buildTestFilter(String name) {
-    Assume.assumeTrue(useProtocolV3());
-    return Filter.newBuilder()
-        .setName(name)
-        .setTypedConfig(Any.pack(HttpConnectionManager.getDefaultInstance()))
-        .build();
+    protected abstract Message buildTestFilter(String name);
   }
 }
