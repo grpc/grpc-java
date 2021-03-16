@@ -29,18 +29,21 @@ import org.mockito.ArgumentCaptor;
  */
 class XdsServerTestHelper {
 
-  static XdsClient.ListenerWatcher startAndGetWatcher(
+  static XdsClient.LdsResourceWatcher startAndGetWatcher(
       XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
       XdsClient mockXdsClient,
       int port) {
-    xdsClientWrapperForServerSds.start(mockXdsClient);
-    ArgumentCaptor<XdsClient.ListenerWatcher> listenerWatcherCaptor = ArgumentCaptor.forClass(null);
-    verify(mockXdsClient).watchListenerData(eq(port), listenerWatcherCaptor.capture());
+    xdsClientWrapperForServerSds.start(mockXdsClient, "grpc/server");
+    ArgumentCaptor<XdsClient.LdsResourceWatcher> listenerWatcherCaptor = ArgumentCaptor
+        .forClass(null);
+    verify(mockXdsClient)
+        .watchLdsResource(eq("grpc/server?udpa.resource.listening_address=0.0.0.0:" + port),
+            listenerWatcherCaptor.capture());
     return listenerWatcherCaptor.getValue();
   }
 
   /**
-   * Creates a {@link XdsClient.ListenerUpdate} with {@link
+   * Creates a {@link XdsClient.LdsUpdate} with {@link
    * io.grpc.xds.EnvoyServerProtoData.FilterChain} with a destination port and an optional {@link
    * EnvoyServerProtoData.DownstreamTlsContext}.
    *
@@ -48,12 +51,11 @@ class XdsServerTestHelper {
    * @param tlsContext if non-null, used to populate filterChain
    */
   static void generateListenerUpdate(
-      XdsClient.ListenerWatcher registeredWatcher,
+      XdsClient.LdsResourceWatcher registeredWatcher,
       EnvoyServerProtoData.DownstreamTlsContext tlsContext) {
     EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3", tlsContext);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
   }
 
   static int findFreePort() throws IOException {

@@ -57,7 +57,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
   @Mock private Channel channel;
 
   private XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
-  private XdsClient.ListenerWatcher registeredWatcher;
+  private XdsClient.LdsResourceWatcher registeredWatcher;
 
   @Before
   public void setUp() throws IOException {
@@ -68,13 +68,6 @@ public class XdsClientWrapperForServerSdsTestMisc {
   @After
   public void tearDown() {
     xdsClientWrapperForServerSds.shutdown();
-  }
-
-  @Test
-  public void verifyListenerWatcherRegistered() {
-    registeredWatcher =
-            XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, xdsClient, PORT);
-    verify(xdsClient).watchListenerData(eq(PORT), any(XdsClient.ListenerWatcher.class));
   }
 
   @Test
@@ -103,12 +96,15 @@ public class XdsClientWrapperForServerSdsTestMisc {
   @Test
   public void emptyFilterChain_expectNull() throws UnknownHostException {
     registeredWatcher =
-            XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, xdsClient, PORT);
+        XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, xdsClient, PORT);
     InetAddress ipLocalAddress = InetAddress.getByName("10.1.2.3");
     InetSocketAddress localAddress = new InetSocketAddress(ipLocalAddress, PORT);
-    ArgumentCaptor<XdsClient.ListenerWatcher> listenerWatcherCaptor = ArgumentCaptor.forClass(null);
-    verify(xdsClient).watchListenerData(eq(PORT), listenerWatcherCaptor.capture());
-    XdsClient.ListenerWatcher registeredWatcher = listenerWatcherCaptor.getValue();
+    ArgumentCaptor<XdsClient.LdsResourceWatcher> listenerWatcherCaptor = ArgumentCaptor
+        .forClass(null);
+    verify(xdsClient)
+        .watchLdsResource(eq("grpc/server?udpa.resource.listening_address=0.0.0.0:" + PORT),
+            listenerWatcherCaptor.capture());
+    XdsClient.LdsResourceWatcher registeredWatcher = listenerWatcherCaptor.getValue();
     when(channel.localAddress()).thenReturn(localAddress);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
@@ -116,9 +112,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
             "10.1.2.3",
             Collections.<EnvoyServerProtoData.FilterChain>emptyList(),
             null);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext = xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext).isNull();
   }
@@ -223,7 +218,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         new XdsClientWrapperForServerSds(port);
-    xdsClientWrapperForServerSds.start(mockXdsClient);
+    xdsClientWrapperForServerSds.start(mockXdsClient, "grpc/server");
     XdsSdsClientServerTest.generateListenerUpdateToWatcher(
         downstreamTlsContext, xdsClientWrapperForServerSds.getListenerWatcher());
     return xdsClientWrapperForServerSds;

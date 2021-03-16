@@ -75,7 +75,7 @@ public final class XdsClientWrapperForServerSds {
   @Nullable private XdsClient xdsClient;
   private final int port;
   private ScheduledExecutorService timeService;
-  private XdsClient.ListenerWatcher listenerWatcher;
+  private XdsClient.LdsResourceWatcher listenerWatcher;
   private boolean newServerApi;
   @VisibleForTesting final Set<ServerWatcher> serverWatchers = new HashSet<>();
 
@@ -117,29 +117,27 @@ public final class XdsClientWrapperForServerSds {
       throw new IOException("missing grpc_server_resource_name_id value in xds bootstrap");
     }
     XdsClient xdsClientImpl =
-        new ServerXdsClient(
+        new ClientXdsClient(
             channel,
             serverInfo.isUseProtocolV3(),
             node,
             timeService,
             new ExponentialBackoffPolicy.Provider(),
-            GrpcUtil.STOPWATCH_SUPPLIER,
-            "0.0.0.0",
-            grpcServerResourceId);
-    start(xdsClientImpl);
+            GrpcUtil.STOPWATCH_SUPPLIER);
+    start(xdsClientImpl, grpcServerResourceId);
   }
 
   /** Accepts an XdsClient and starts a watch. */
   @VisibleForTesting
-  public void start(XdsClient xdsClient) {
+  public void start(XdsClient xdsClient, String grpcServerResourceId) {
     checkState(this.xdsClient == null, "start() called more than once");
     checkNotNull(xdsClient, "xdsClient");
     this.xdsClient = xdsClient;
     this.listenerWatcher =
-        new XdsClient.ListenerWatcher() {
+        new XdsClient.LdsResourceWatcher() {
           @Override
-          public void onListenerChanged(XdsClient.ListenerUpdate update) {
-            curListener = update.getListener();
+          public void onChanged(XdsClient.LdsUpdate update) {
+            curListener = update.listener;
             reportSuccess();
           }
 
@@ -153,11 +151,13 @@ public final class XdsClientWrapperForServerSds {
           @Override
           public void onError(Status error) {
             logger.log(
-                Level.WARNING, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
+                Level.WARNING, "LdsResourceWatcher in XdsClientWrapperForServerSds: {0}", error);
             reportError(error.asException(), isResourceAbsent(error));
           }
         };
-    xdsClient.watchListenerData(port, listenerWatcher);
+    grpcServerResourceId =
+        grpcServerResourceId + "?udpa.resource.listening_address=" + ("0.0.0.0:" + port);
+    xdsClient.watchLdsResource(grpcServerResourceId, listenerWatcher);
   }
 
   /** Whether the throwable indicates our listener resource is absent/deleted. */
@@ -416,7 +416,7 @@ public final class XdsClientWrapperForServerSds {
   }
 
   @VisibleForTesting
-  XdsClient.ListenerWatcher getListenerWatcher() {
+  XdsClient.LdsResourceWatcher getListenerWatcher() {
     return listenerWatcher;
   }
 

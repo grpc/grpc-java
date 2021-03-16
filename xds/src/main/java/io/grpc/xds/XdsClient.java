@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.base.MoreObjects;
@@ -371,52 +370,6 @@ abstract class XdsClient {
     }
   }
 
-  /**
-   * Updates via resource discovery RPCs using LDS. Includes {@link Listener} object containing
-   * config for security, RBAC or other server side features such as rate limit.
-   */
-  static final class ListenerUpdate implements ResourceUpdate {
-    // TODO(sanjaypujare): flatten structure by moving Listener class members here.
-    private final Listener listener;
-
-    private ListenerUpdate(Listener listener) {
-      this.listener = listener;
-    }
-
-    public Listener getListener() {
-      return listener;
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("listener", listener)
-          .toString();
-    }
-
-    static Builder newBuilder() {
-      return new Builder();
-    }
-
-    static final class Builder {
-      private Listener listener;
-
-      // Use ListenerUpdate.newBuilder().
-      private Builder() {
-      }
-
-      Builder setListener(Listener listener) {
-        this.listener = listener;
-        return this;
-      }
-
-      ListenerUpdate build() {
-        checkState(listener != null, "listener is not set");
-        return new ListenerUpdate(listener);
-      }
-    }
-  }
-
   interface ResourceUpdate {
   }
 
@@ -452,17 +405,6 @@ abstract class XdsClient {
 
   interface EdsResourceWatcher extends ResourceWatcher {
     void onChanged(EdsUpdate update);
-  }
-
-  /**
-   * Listener watcher interface. To be used by {@link XdsServerBuilder}.
-   */
-  interface ListenerWatcher extends ResourceWatcher {
-
-    /**
-     * Called when receiving an update on Listener configuration.
-     */
-    void onListenerChanged(ListenerUpdate update);
   }
 
   /**
@@ -532,13 +474,6 @@ abstract class XdsClient {
    * Unregisters the given EDS resource watcher.
    */
   void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Registers a watcher for a Listener with the given port.
-   */
-  void watchListenerData(int port, ListenerWatcher watcher) {
     throw new UnsupportedOperationException();
   }
 
