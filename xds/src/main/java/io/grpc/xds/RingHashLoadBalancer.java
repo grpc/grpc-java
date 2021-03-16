@@ -344,10 +344,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
 
     @Override
     public int compareTo(RingEntry entry) {
-      if (this.hash == entry.hash) {
-        return 0;
-      }
-      return this.hash > entry.hash ? 1 : -1;  // don't narrow cast, it may overflow
+      return Long.compare(hash, entry.hash);
     }
   }
 
