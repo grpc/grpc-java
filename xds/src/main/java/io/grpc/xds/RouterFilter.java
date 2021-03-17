@@ -50,13 +50,13 @@ enum RouterFilter implements Filter, ClientInterceptorBuilder {
   }
 
   @Override
-  public StructOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
-    return StructOrError.fromStruct(ROUTER_CONFIG);
+  public ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
+    return ConfigOrError.fromConfig(ROUTER_CONFIG);
   }
 
   @Override
-  public StructOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
-    return StructOrError.fromError("Router Filter should not have override config");
+  public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+    return ConfigOrError.fromError("Router Filter should not have override config");
   }
 
   @Nullable

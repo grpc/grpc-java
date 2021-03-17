@@ -479,7 +479,7 @@ public class ClientXdsClientDataTest {
             .setPercentage(FractionalPercent.newBuilder()
                .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
             .setHttpStatus(400).build();
-    FaultAbort res = FaultFilter.parseFaultAbort(proto).struct;
+    FaultAbort res = FaultFilter.parseFaultAbort(proto).config;
     assertThat(res.percent().numerator()).isEqualTo(100);
     assertThat(res.percent().denominatorType())
         .isEqualTo(FaultConfig.FractionalPercent.DenominatorType.TEN_THOUSAND);
@@ -493,7 +493,7 @@ public class ClientXdsClientDataTest {
             .setPercentage(FractionalPercent.newBuilder()
                 .setNumerator(600).setDenominator(DenominatorType.MILLION))
             .setGrpcStatus(Code.DEADLINE_EXCEEDED.value()).build();
-    FaultAbort faultAbort = FaultFilter.parseFaultAbort(proto).struct;
+    FaultAbort faultAbort = FaultFilter.parseFaultAbort(proto).config;
     assertThat(faultAbort.percent().numerator()).isEqualTo(600);
     assertThat(faultAbort.percent().denominatorType())
         .isEqualTo(FaultConfig.FractionalPercent.DenominatorType.MILLION);

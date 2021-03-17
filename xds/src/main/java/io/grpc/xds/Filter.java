@@ -44,13 +44,13 @@ interface Filter {
    * Parses the top-level filter config from raw proto message. The message may be either a {@link
    * com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
    */
-  StructOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage);
+  ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage);
 
   /**
    * Parses the per-filter override filter config from raw proto message. The message may be either
    * a {@link com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
    */
-  StructOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage);
+  ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage);
 
   /** Represents an opaque data structure holding configuration for a filter. */
   interface FilterConfig {
@@ -71,32 +71,33 @@ interface Filter {
         FilterConfig config, @Nullable FilterConfig overrideConfig);
   }
 
-  // TODO(zdapeng): Unify with ClientXdsClient.StructOrError.
-  final class StructOrError<T> {
+  // TODO(zdapeng): Unify with ClientXdsClient.StructOrError, or just have parseFilterConfig() throw
+  //     certain types of Exception.
+  final class ConfigOrError<T> {
     /**
-     * Returns a {@link StructOrError} for the successfully converted data object.
+     * Returns a {@link ConfigOrError} for the successfully converted data object.
      */
-    static <T> StructOrError<T> fromStruct(T struct) {
-      return new StructOrError<>(struct);
+    static <T> ConfigOrError<T> fromConfig(T config) {
+      return new ConfigOrError<>(config);
     }
 
     /**
-     * Returns a {@link StructOrError} for the failure to convert the data object.
+     * Returns a {@link ConfigOrError} for the failure to convert the data object.
      */
-    static <T> StructOrError<T> fromError(String errorDetail) {
-      return new StructOrError<>(errorDetail);
+    static <T> ConfigOrError<T> fromError(String errorDetail) {
+      return new ConfigOrError<>(errorDetail);
     }
 
     final String errorDetail;
-    final T struct;
+    final T config;
 
-    private StructOrError(T struct) {
-      this.struct = checkNotNull(struct, "struct");
+    private ConfigOrError(T config) {
+      this.config = checkNotNull(config, "config");
       this.errorDetail = null;
     }
 
-    private StructOrError(String errorDetail) {
-      this.struct = null;
+    private ConfigOrError(String errorDetail) {
+      this.config = null;
       this.errorDetail = checkNotNull(errorDetail, "errorDetail");
     }
   }

@@ -90,33 +90,33 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
   }
 
   @Override
-  public StructOrError<FaultConfig> parseFilterConfig(Message rawProtoMessage) {
+  public ConfigOrError<FaultConfig> parseFilterConfig(Message rawProtoMessage) {
     HTTPFault httpFaultProto;
     if (!(rawProtoMessage instanceof Any)) {
-      return StructOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+      return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
     }
     Any anyMessage = (Any) rawProtoMessage;
     try {
       httpFaultProto = anyMessage.unpack(HTTPFault.class);
     } catch (InvalidProtocolBufferException e) {
-      return StructOrError.fromError("Invalid proto: " + e);
+      return ConfigOrError.fromError("Invalid proto: " + e);
     }
     return parseHttpFault(httpFaultProto);
   }
 
-  private static StructOrError<FaultConfig> parseHttpFault(HTTPFault httpFault) {
+  private static ConfigOrError<FaultConfig> parseHttpFault(HTTPFault httpFault) {
     FaultDelay faultDelay = null;
     FaultAbort faultAbort = null;
     if (httpFault.hasDelay()) {
       faultDelay = parseFaultDelay(httpFault.getDelay());
     }
     if (httpFault.hasAbort()) {
-      StructOrError<FaultAbort> faultAbortOrError = parseFaultAbort(httpFault.getAbort());
+      ConfigOrError<FaultAbort> faultAbortOrError = parseFaultAbort(httpFault.getAbort());
       if (faultAbortOrError.errorDetail != null) {
-        return StructOrError.fromError(
+        return ConfigOrError.fromError(
             "HttpFault contains invalid FaultAbort: " + faultAbortOrError.errorDetail);
       }
-      faultAbort = faultAbortOrError.struct;
+      faultAbort = faultAbortOrError.config;
     }
     Integer maxActiveFaults = null;
     if (httpFault.hasMaxActiveFaults()) {
@@ -125,7 +125,7 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
         maxActiveFaults = Integer.MAX_VALUE;
       }
     }
-    return StructOrError.fromStruct(FaultConfig.create(faultDelay, faultAbort, maxActiveFaults));
+    return ConfigOrError.fromConfig(FaultConfig.create(faultDelay, faultAbort, maxActiveFaults));
   }
 
   private static FaultDelay parseFaultDelay(
@@ -138,21 +138,21 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
   }
 
   @VisibleForTesting
-  static StructOrError<FaultAbort> parseFaultAbort(
+  static ConfigOrError<FaultAbort> parseFaultAbort(
       io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort faultAbort) {
     FaultConfig.FractionalPercent percent = parsePercent(faultAbort.getPercentage());
     switch (faultAbort.getErrorTypeCase()) {
       case HEADER_ABORT:
-        return StructOrError.fromStruct(FaultAbort.forHeader(percent));
+        return ConfigOrError.fromConfig(FaultAbort.forHeader(percent));
       case HTTP_STATUS:
-        return StructOrError.fromStruct(FaultAbort.forStatus(
+        return ConfigOrError.fromConfig(FaultAbort.forStatus(
             GrpcUtil.httpStatusToGrpcStatus(faultAbort.getHttpStatus()), percent));
       case GRPC_STATUS:
-        return StructOrError.fromStruct(FaultAbort.forStatus(
+        return ConfigOrError.fromConfig(FaultAbort.forStatus(
             Status.fromCodeValue(faultAbort.getGrpcStatus()), percent));
       case ERRORTYPE_NOT_SET:
       default:
-        return StructOrError.fromError(
+        return ConfigOrError.fromError(
             "Unknown error type case: " + faultAbort.getErrorTypeCase());
     }
   }
@@ -172,7 +172,7 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
   }
 
   @Override
-  public StructOrError<FaultConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+  public ConfigOrError<FaultConfig> parseFilterConfigOverride(Message rawProtoMessage) {
     return parseFilterConfig(rawProtoMessage);
   }
 

@@ -57,6 +57,7 @@ import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.Filter.ConfigOrError;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
@@ -344,13 +345,13 @@ final class ClientXdsClient extends AbstractXdsClient {
                 + typeUrl);
       }
     }
-    Filter.StructOrError<? extends FilterConfig> filterConfig = isOverrideConfig
+    ConfigOrError<? extends FilterConfig> filterConfig = isOverrideConfig
         ? filter.parseFilterConfigOverride(rawConfig) : filter.parseFilterConfig(rawConfig);
     if (filterConfig.errorDetail != null) {
       return StructOrError.fromError(
           "Invalid filter config for HttpFilter [" + filterName + "]: " + filterConfig.errorDetail);
     }
-    return StructOrError.fromStruct(filterConfig.struct);
+    return StructOrError.fromStruct(filterConfig.config);
   }
 
   @VisibleForTesting static StructOrError<EnvoyServerProtoData.Listener> parseServerSideListener(

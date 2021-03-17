@@ -37,11 +37,11 @@ public class FaultFilterTest {
   public void parseFaultAbort_convertHttpStatus() {
     Any rawConfig = Any.pack(
         HTTPFault.newBuilder().setAbort(FaultAbort.newBuilder().setHttpStatus(404)).build());
-    FaultConfig faultConfig = FaultFilter.INSTANCE.parseFilterConfig(rawConfig).struct;
+    FaultConfig faultConfig = FaultFilter.INSTANCE.parseFilterConfig(rawConfig).config;
     assertThat(faultConfig.faultAbort().status().getCode())
         .isEqualTo(GrpcUtil.httpStatusToGrpcStatus(404).getCode());
     FaultConfig faultConfigOverride =
-        FaultFilter.INSTANCE.parseFilterConfigOverride(rawConfig).struct;
+        FaultFilter.INSTANCE.parseFilterConfigOverride(rawConfig).config;
     assertThat(faultConfigOverride.faultAbort().status().getCode())
         .isEqualTo(GrpcUtil.httpStatusToGrpcStatus(404).getCode());
   }
@@ -53,7 +53,7 @@ public class FaultFilterTest {
             .setPercentage(FractionalPercent.newBuilder()
                 .setNumerator(20).setDenominator(DenominatorType.HUNDRED))
             .setHeaderAbort(HeaderAbort.getDefaultInstance()).build();
-    FaultConfig.FaultAbort faultAbort = FaultFilter.parseFaultAbort(proto).struct;
+    FaultConfig.FaultAbort faultAbort = FaultFilter.parseFaultAbort(proto).config;
     assertThat(faultAbort.headerAbort()).isTrue();
     assertThat(faultAbort.percent().numerator()).isEqualTo(20);
     assertThat(faultAbort.percent().denominatorType())
