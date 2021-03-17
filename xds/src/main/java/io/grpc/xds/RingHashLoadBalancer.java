@@ -126,7 +126,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
       subchannels.put(addrKey, subchannel);
     }
     double normalizedMinWeight = (double) minWeight / totalWeight;
-    // Scale up the number of hashes per host such that the least-weiighted host gets a whole
+    // Scale up the number of hashes per host such that the least-weighted host gets a whole
     // number of hashes on the the ring. Other hosts might not end up with whole numbers, and
     // that's fine (the ring-building algorithm can handle this). This preserves the original
     // implementation's behavior: when weights aren't provided, all hosts should get an equal
@@ -171,28 +171,6 @@ final class RingHashLoadBalancer extends LoadBalancer {
     }
   }
 
-  private static void shutdownSubchannel(Subchannel subchannel) {
-    subchannel.shutdown();
-    getSubchannelStateInfoRef(subchannel).set(ConnectivityStateInfo.forNonError(SHUTDOWN));
-  }
-
-  /**
-   * Converts list of {@link EquivalentAddressGroup} to {@link EquivalentAddressGroup} set and
-   * remove all attributes. The values are the original EAGs.
-   */
-  private static Map<EquivalentAddressGroup, EquivalentAddressGroup> stripAttrs(
-      List<EquivalentAddressGroup> groupList) {
-    Map<EquivalentAddressGroup, EquivalentAddressGroup> addrs = new HashMap<>(groupList.size() * 2);
-    for (EquivalentAddressGroup group : groupList) {
-      addrs.put(stripAttrs(group), group);
-    }
-    return addrs;
-  }
-
-  private static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
-    return new EquivalentAddressGroup(eag.getAddresses());
-  }
-
   @Override
   public void handleNameResolutionError(Status error) {
     if (currentState != READY) {
@@ -222,23 +200,6 @@ final class RingHashLoadBalancer extends LoadBalancer {
     }
   }
 
-  private static ConnectivityState aggregateState(
-      @Nullable ConnectivityState overallState, ConnectivityState state) {
-    if (overallState == null) {
-      return state;
-    }
-    if (overallState == READY || state == READY) {
-      return READY;
-    }
-    if (overallState == CONNECTING || state == CONNECTING) {
-      return CONNECTING;
-    }
-    if (overallState == IDLE || state == IDLE) {
-      return IDLE;
-    }
-    return overallState;
-  }
-
   private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     if (subchannels.get(stripAttrs(subchannel.getAddresses())) != subchannel) {
       return;
@@ -256,6 +217,46 @@ final class RingHashLoadBalancer extends LoadBalancer {
     }
     subchannelStateRef.set(stateInfo);
     updateBalancingState(currentPicker);
+  }
+
+  private static ConnectivityState aggregateState(
+      @Nullable ConnectivityState overallState, ConnectivityState state) {
+    if (overallState == null) {
+      return state;
+    }
+    if (overallState == READY || state == READY) {
+      return READY;
+    }
+    if (overallState == CONNECTING || state == CONNECTING) {
+      return CONNECTING;
+    }
+    if (overallState == IDLE || state == IDLE) {
+      return IDLE;
+    }
+    return overallState;
+  }
+
+  private static void shutdownSubchannel(Subchannel subchannel) {
+    subchannel.shutdown();
+    getSubchannelStateInfoRef(subchannel).set(ConnectivityStateInfo.forNonError(SHUTDOWN));
+  }
+
+  /**
+   * Converts list of {@link EquivalentAddressGroup} to {@link EquivalentAddressGroup} set and
+   * remove all attributes. The values are the original EAGs.
+   */
+  private static Map<EquivalentAddressGroup, EquivalentAddressGroup> stripAttrs(
+      List<EquivalentAddressGroup> groupList) {
+    Map<EquivalentAddressGroup, EquivalentAddressGroup> addrs =
+        new HashMap<>(groupList.size() * 2);
+    for (EquivalentAddressGroup group : groupList) {
+      addrs.put(stripAttrs(group), group);
+    }
+    return addrs;
+  }
+
+  private static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
+    return new EquivalentAddressGroup(eag.getAddresses());
   }
 
   private static AtomicReference<ConnectivityStateInfo> getSubchannelStateInfoRef(
