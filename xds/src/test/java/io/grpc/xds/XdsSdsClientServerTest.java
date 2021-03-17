@@ -208,8 +208,7 @@ public class XdsSdsClientServerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, CA_PEM_FILE);
     try {
-      XdsClient.ListenerWatcher unused = performMtlsTestAndGetListenerWatcher(upstreamTlsContext,
-          false);
+      performMtlsTestAndGetListenerWatcher(upstreamTlsContext, false);
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       if (sre.getCause() instanceof SSLHandshakeException) {
@@ -287,7 +286,7 @@ public class XdsSdsClientServerTest {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
-    XdsClient.ListenerWatcher listenerWatcher =
+    XdsClient.LdsResourceWatcher listenerWatcher =
         performMtlsTestAndGetListenerWatcher(upstreamTlsContext, false);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
@@ -304,7 +303,7 @@ public class XdsSdsClientServerTest {
     }
   }
 
-  private XdsClient.ListenerWatcher performMtlsTestAndGetListenerWatcher(
+  private XdsClient.LdsResourceWatcher performMtlsTestAndGetListenerWatcher(
       UpstreamTlsContext upstreamTlsContext, boolean newApi)
       throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
@@ -316,7 +315,8 @@ public class XdsSdsClientServerTest {
     buildServerWithFallbackServerCredentials(
         xdsClientWrapperForServerSds, InsecureServerCredentials.create(), downstreamTlsContext);
 
-    XdsClient.ListenerWatcher listenerWatcher = xdsClientWrapperForServerSds.getListenerWatcher();
+    XdsClient.LdsResourceWatcher listenerWatcher = xdsClientWrapperForServerSds
+        .getListenerWatcher();
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = newApi
         ? getBlockingStubNewApi(upstreamTlsContext, "foo.test.google.fr") :
@@ -336,7 +336,7 @@ public class XdsSdsClientServerTest {
     XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         new XdsClientWrapperForServerSds(port);
-    xdsClientWrapperForServerSds.start(mockXdsClient);
+    xdsClientWrapperForServerSds.start(mockXdsClient, "grpc/server");
     buildServerWithFallbackServerCredentials(
         xdsClientWrapperForServerSds, fallbackCredentials, downstreamTlsContext);
   }
@@ -355,16 +355,15 @@ public class XdsSdsClientServerTest {
     XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         new XdsClientWrapperForServerSds(port);
-    xdsClientWrapperForServerSds.start(mockXdsClient);
+    xdsClientWrapperForServerSds.start(mockXdsClient, "grpc/server");
     return xdsClientWrapperForServerSds;
   }
 
   static void generateListenerUpdateToWatcher(
-      DownstreamTlsContext tlsContext, XdsClient.ListenerWatcher registeredWatcher) {
+      DownstreamTlsContext tlsContext, XdsClient.LdsResourceWatcher registeredWatcher) {
     EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0", tlsContext);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
   }
 
   private void buildServer(

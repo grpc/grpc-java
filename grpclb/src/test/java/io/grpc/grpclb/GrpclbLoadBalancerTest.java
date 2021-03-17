@@ -1135,10 +1135,11 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(same(subchannel2), eq(ConnectivityStateInfo.forNonError(READY)));
     verify(subchannelPool)
         .returnSubchannel(same(subchannel3), eq(ConnectivityStateInfo.forNonError(READY)));
-    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     RoundRobinPicker picker10 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker10.dropList).isEmpty();
-    assertThat(picker10.pickList).containsExactly(BUFFER_ENTRY);
+    assertThat(picker10.pickList)
+        .containsExactly(new ErrorEntry(GrpclbState.NO_AVAILABLE_BACKENDS_STATUS));
 
     assertFalse(oobChannel.isShutdown());
     assertEquals(0, lbRequestObservers.size());
@@ -1251,8 +1252,6 @@ public class GrpclbLoadBalancerTest {
       fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
 
       assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
-      List<EquivalentAddressGroup> fallbackList =
-          Arrays.asList(backendList.get(0), backendList.get(1));
       assertThat(logs).containsExactly(
               "INFO: [grpclb-<api.google.com>] Using fallback backends",
               "INFO: [grpclb-<api.google.com>]"
@@ -1264,7 +1263,7 @@ public class GrpclbLoadBalancerTest {
           .inOrder();
 
       // Fall back to the backends from resolver
-      fallbackTestVerifyUseOfFallbackBackendLists(inOrder, fallbackList);
+      fallbackTestVerifyUseOfFallbackBackendLists(inOrder, backendList);
 
       assertFalse(oobChannel.isShutdown());
       verify(lbRequestObserver, never()).onCompleted();
@@ -1282,8 +1281,14 @@ public class GrpclbLoadBalancerTest {
 
     if (timerExpires) {
       // Still in fallback logic, except that the backend list is empty
-      fallbackTestVerifyUseOfFallbackBackendLists(
-          inOrder, Collections.<EquivalentAddressGroup>emptyList());
+      for (Subchannel subchannel : mockSubchannels) {
+        verify(subchannelPool).returnSubchannel(eq(subchannel), any(ConnectivityStateInfo.class));
+      }
+      inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+      RoundRobinPicker picker = (RoundRobinPicker) pickerCaptor.getValue();
+      assertThat(picker.dropList).isEmpty();
+      assertThat(picker.pickList)
+          .containsExactly(new ErrorEntry(GrpclbState.NO_FALLBACK_BACKENDS_FOUND_STATUS));
     }
 
     ////////////////////////////////////////////////////////////////

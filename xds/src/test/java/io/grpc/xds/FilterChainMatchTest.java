@@ -48,7 +48,7 @@ public class FilterChainMatchTest {
   @Mock private Channel channel;
 
   private XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
-  private XdsClient.ListenerWatcher registeredWatcher;
+  private XdsClient.LdsResourceWatcher registeredWatcher;
 
   @Before
   public void setUp() throws IOException {
@@ -80,9 +80,8 @@ public class FilterChainMatchTest {
         new EnvoyServerProtoData.FilterChain(filterChainMatch, tlsContext);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener("listener1", LOCAL_IP, Arrays.asList(filterChain), null);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContext);
@@ -105,9 +104,8 @@ public class FilterChainMatchTest {
         new EnvoyServerProtoData.FilterChain(filterChainMatch, tlsContext);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener("listener1", LOCAL_IP, Arrays.asList(filterChain), null);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContext);
@@ -123,9 +121,8 @@ public class FilterChainMatchTest {
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.<EnvoyServerProtoData.FilterChain>asList(), filterChain);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContext);
@@ -153,9 +150,8 @@ public class FilterChainMatchTest {
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.asList(filterChainWithDestPort), defaultFilterChain);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContextForDefaultFilterChain);
@@ -183,9 +179,8 @@ public class FilterChainMatchTest {
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.asList(filterChainWithMatch), defaultFilterChain);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContextMatch);
@@ -215,9 +210,8 @@ public class FilterChainMatchTest {
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.asList(filterChainWithMismatch), defaultFilterChain);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContextForDefaultFilterChain);
@@ -260,9 +254,8 @@ public class FilterChainMatchTest {
             LOCAL_IP,
             Arrays.asList(filterChainLessSpecific, filterChainMoreSpecific),
             defaultFilterChain);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContextMoreSpecific);
@@ -305,9 +298,8 @@ public class FilterChainMatchTest {
             "FE80:0000:0000:0000:0202:B3FF:FE1E:8329",
             Arrays.asList(filterChainLessSpecific, filterChainMoreSpecific),
             defaultFilterChain);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContextMoreSpecific);
@@ -353,9 +345,8 @@ public class FilterChainMatchTest {
             LOCAL_IP,
             Arrays.asList(filterChainMoreSpecificWith2, filterChainLessSpecific),
             defaultFilterChain);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContextMoreSpecificWith2);
@@ -383,9 +374,8 @@ public class FilterChainMatchTest {
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.asList(filterChainWithMismatch), defaultFilterChain);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContextForDefaultFilterChain);
@@ -413,9 +403,8 @@ public class FilterChainMatchTest {
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.asList(filterChainWithMatch), defaultFilterChain);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContextMatch);
@@ -461,9 +450,8 @@ public class FilterChainMatchTest {
             LOCAL_IP,
             Arrays.asList(filterChainMoreSpecificWith2, filterChainLessSpecific),
             defaultFilterChain);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContextMoreSpecificWith2);
@@ -510,9 +498,8 @@ public class FilterChainMatchTest {
             LOCAL_IP,
             Arrays.asList(filterChainEmptySourcePorts, filterChainSourcePortMatch),
             defaultFilterChain);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContextSourcePortMatch);
@@ -634,9 +621,8 @@ public class FilterChainMatchTest {
             Arrays.asList(
                 filterChain1, filterChain2, filterChain3, filterChain4, filterChain5, filterChain6),
             defaultFilterChain);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContextPicked =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContextPicked).isSameInstanceAs(tlsContext5);

@@ -50,6 +50,7 @@ import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.core.v3.SelfConfigSource;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.core.v3.TransportSocket;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment.Policy;
@@ -59,7 +60,9 @@ import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
 import io.envoyproxy.envoy.config.listener.v3.ApiListener;
+import io.envoyproxy.envoy.config.listener.v3.Filter;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
+import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.Route;
 import io.envoyproxy.envoy.config.route.v3.RouteAction;
@@ -92,7 +95,9 @@ import io.grpc.Context.CancellationListener;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -589,6 +594,81 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
               FractionalPercent.newBuilder()
                   .setNumerator(dropPerMillion)
                   .setDenominator(DenominatorType.MILLION))
+          .build();
+    }
+
+    @SuppressWarnings("deprecation")
+    @Override
+    protected FilterChain buildFilterChain(
+        List<String> alpn, Message tlsContext, Message... filters) {
+      FilterChainMatch filterChainMatch =
+          FilterChainMatch.newBuilder().addAllApplicationProtocols(alpn).build();
+      Filter[] filterArray = new Filter[filters.length];
+      for (int i = 0; i < filters.length; i++) {
+        filterArray[i] = (Filter) filters[i];
+      }
+      return FilterChain.newBuilder()
+          .setFilterChainMatch(filterChainMatch)
+          .setTransportSocket(
+              tlsContext == null
+                  ? TransportSocket.getDefaultInstance()
+                  : TransportSocket.newBuilder()
+                      .setName("envoy.transport_sockets.tls")
+                      .setTypedConfig(Any.pack(tlsContext))
+                      .build())
+          .addAllFilters(Arrays.asList(filterArray))
+          .build();
+    }
+
+    @Override
+    protected Listener buildListenerWithFilterChain(
+        String name, int portValue, String address, Message... filterChains) {
+      io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
+          io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
+              .setSocketAddress(
+                  SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
+              .build();
+      FilterChain[] filterChainsArray = new FilterChain[filterChains.length];
+      for (int i = 0; i < filterChains.length; i++) {
+        filterChainsArray[i] = (FilterChain) filterChains[i];
+      }
+      return Listener.newBuilder()
+          .setName(name)
+          .setAddress(listenerAddress)
+          .setDefaultFilterChain(FilterChain.getDefaultInstance())
+          .addAllFilterChains(Arrays.asList(filterChainsArray))
+          .setTrafficDirection(TrafficDirection.INBOUND)
+          .build();
+    }
+
+    @Override
+    protected Listener buildListenerWithFilterChain(
+        String name, int portValue, String address, String certName, String validationContextName) {
+      FilterChain filterChain =
+          buildFilterChain(
+              Arrays.<String>asList(),
+              CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+                  certName, validationContextName),
+              buildTestFilter("envoy.http_connection_manager"));
+      io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
+          io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
+              .setSocketAddress(
+                  SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
+              .build();
+      return Listener.newBuilder()
+          .setName(name)
+          .setAddress(listenerAddress)
+          .setDefaultFilterChain(FilterChain.getDefaultInstance())
+          .addAllFilterChains(Arrays.asList(filterChain))
+          .setTrafficDirection(TrafficDirection.INBOUND)
+          .build();
+    }
+
+    @Override
+    protected Filter buildTestFilter(String name) {
+      return Filter.newBuilder()
+          .setName(name)
+          .setTypedConfig(Any.pack(HttpConnectionManager.getDefaultInstance()))
           .build();
     }
   }

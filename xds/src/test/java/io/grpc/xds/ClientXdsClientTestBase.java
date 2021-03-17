@@ -34,9 +34,6 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
-import io.envoyproxy.envoy.config.core.v3.SocketAddress;
-import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
-import io.envoyproxy.envoy.config.listener.v3.FilterChain;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
@@ -103,6 +100,8 @@ public abstract class ClientXdsClientTestBase {
   private static final String RDS_RESOURCE = "route-configuration.googleapis.com";
   private static final String CDS_RESOURCE = "cluster.googleapis.com";
   private static final String EDS_RESOURCE = "cluster-load-assignment.googleapis.com";
+  private static final String LISTENER_RESOURCE =
+      "grpc/server?xds.resource.listening_address=0.0.0.0:7000";
   private static final String VERSION_1 = "42";
   private static final String VERSION_2 = "43";
   private static final Node NODE = Node.newBuilder().build();
@@ -1292,16 +1291,13 @@ public abstract class ClientXdsClientTestBase {
     // See more test on LoadReportClientTest.java
   }
 
-  private static final String LISTENER_RESOURCE =
-          "grpc/server?xds.resource.listening_address=0.0.0.0:7000";
-
   @Test
   public void serverSideListenerFound() throws InvalidProtocolBufferException {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
-    Listener listener =
-        buildListenerWithFilterChain(
+    Message listener =
+            mf.buildListenerWithFilterChain(
             LISTENER_RESOURCE, 7000, "0.0.0.0", "google-sds-config-default", "ROOTCA");
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
@@ -1310,10 +1306,10 @@ public abstract class ClientXdsClientTestBase {
         ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().listener)
-        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
+        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener((Listener)listener));
 
     listener =
-        buildListenerWithFilterChain(
+            mf.buildListenerWithFilterChain(
             LISTENER_RESOURCE, 7000, "0.0.0.0", "CERT2", "ROOTCA2");
     listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "1", "0001");
@@ -1323,7 +1319,7 @@ public abstract class ClientXdsClientTestBase {
         ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "1", "0001", NODE);
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().listener)
-        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
+        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener((Listener)listener));
 
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -1333,14 +1329,14 @@ public abstract class ClientXdsClientTestBase {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
-    final FilterChain filterChainInbound =
-        ServerXdsClientNewServerApiTest.buildFilterChain(
-            ServerXdsClientNewServerApiTest.buildFilterChainMatch("managed-mtls"),
+    final Message filterChainInbound =
+        mf.buildFilterChain(
+            Arrays.asList("managed-mtls"),
             CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
                 "google-sds-config-default", "ROOTCA"),
-            ServerXdsClientNewServerApiTest.buildTestFilter("envoy.http_connection_manager"));
-    Listener listener =
-        ServerXdsClientNewServerApiTest.buildListenerWithFilterChain(
+            mf.buildTestFilter("envoy.http_connection_manager"));
+    Message listener =
+        mf.buildListenerWithFilterChain(
             "grpc/server?xds.resource.listening_address=0.0.0.0:8000",
             7000,
             "0.0.0.0",
@@ -1489,27 +1485,16 @@ public abstract class ClientXdsClientTestBase {
         int lbWeight);
 
     protected abstract Message buildDropOverload(String category, int dropPerMillion);
-  }
 
-  static Listener buildListenerWithFilterChain(
-      String name, int portValue, String address, String certName, String validationContextName) {
-    FilterChain filterChain =
-        ServerXdsClientNewServerApiTest.buildFilterChain(
-            ServerXdsClientNewServerApiTest.buildFilterChainMatch(),
-            CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-                certName, validationContextName),
-            ServerXdsClientNewServerApiTest.buildTestFilter("envoy.http_connection_manager"));
-    io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
-        io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
-            .setSocketAddress(
-                SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
-            .build();
-    return Listener.newBuilder()
-        .setName(name)
-        .setAddress(listenerAddress)
-        .setDefaultFilterChain(FilterChain.getDefaultInstance())
-        .addAllFilterChains(Arrays.asList(filterChain))
-        .setTrafficDirection(TrafficDirection.INBOUND)
-        .build();
+    protected abstract Message buildFilterChain(
+        List<String> alpn, Message tlsContext, Message... filters);
+
+    protected abstract Message buildListenerWithFilterChain(
+        String name, int portValue, String address, Message... filterChains);
+
+    protected abstract Message buildListenerWithFilterChain(
+        String name, int portValue, String address, String certName, String validationContextName);
+
+    protected abstract Message buildTestFilter(String name);
   }
 }
