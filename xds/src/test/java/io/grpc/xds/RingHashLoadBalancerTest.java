@@ -75,9 +75,10 @@ import org.mockito.stubbing.Answer;
 /** Unit test for {@link io.grpc.LoadBalancer}. */
 @RunWith(JUnit4.class)
 public class RingHashLoadBalancerTest {
+  private static final Attributes.Key<String> CUSTOM_KEY = Attributes.Key.create("custom-key");
+
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
-
   private final Map<List<EquivalentAddressGroup>, Subchannel> subchannels = new HashMap<>();
   private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners =
       new HashMap<>();
@@ -306,13 +307,22 @@ public class RingHashLoadBalancerTest {
     Subchannel subchannel = result.getSubchannel();
     assertThat(subchannel.getAddresses()).isEqualTo(servers.get(1));
 
-    servers = servers.subList(0, 2);  // only server0 and server1 left
+    List<EquivalentAddressGroup> updatedServers = new ArrayList<>();
+    for (EquivalentAddressGroup addr : servers.subList(0, 2)) {  // only server0 and server1 left
+      Attributes attr = addr.getAttributes().toBuilder().set(CUSTOM_KEY, "custom value").build();
+      updatedServers.add(new EquivalentAddressGroup(addr.getAddresses(), attr));
+    }
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+            .setAddresses(updatedServers).setLoadBalancingPolicyConfig(config).build());
+    verify(subchannels.get(Collections.singletonList(servers.get(0))))
+        .updateAddresses(Collections.singletonList(updatedServers.get(0)));
+    verify(subchannels.get(Collections.singletonList(servers.get(1))))
+        .updateAddresses(Collections.singletonList(updatedServers.get(1)));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue().pickSubchannel(args).getSubchannel())
         .isSameInstanceAs(subchannel);
+    verifyNoMoreInteractions(helper);
   }
 
   @Test
@@ -350,6 +360,7 @@ public class RingHashLoadBalancerTest {
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getValue().pickSubchannel(args).getSubchannel())
         .isSameInstanceAs(subchannel);
+    verifyNoMoreInteractions(helper);
   }
 
   @Test

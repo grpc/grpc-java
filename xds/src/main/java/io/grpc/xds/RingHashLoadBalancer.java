@@ -82,8 +82,6 @@ final class RingHashLoadBalancer extends LoadBalancer {
       return;
     }
     Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(addrList);
-    Set<EquivalentAddressGroup> addedAddrs =
-        Sets.difference(latestAddrs.keySet(),  subchannels.keySet());
     Set<EquivalentAddressGroup> removedAddrs =
         Sets.newHashSet(Sets.difference(subchannels.keySet(), latestAddrs.keySet()));
 
@@ -109,6 +107,23 @@ final class RingHashLoadBalancer extends LoadBalancer {
       } else {
         serverWeights.put(addrKey, weight);
       }
+
+      Subchannel existingSubchannel = subchannels.get(addrKey);
+      if (existingSubchannel != null) {
+        existingSubchannel.updateAddresses(Collections.singletonList(eag));
+        continue;
+      }
+      Attributes attr = Attributes.newBuilder().set(
+          STATE_INFO, new AtomicReference<>(ConnectivityStateInfo.forNonError(IDLE))).build();
+      final Subchannel subchannel = helper.createSubchannel(
+          CreateSubchannelArgs.newBuilder().setAddresses(eag).setAttributes(attr).build());
+      subchannel.start(new SubchannelStateListener() {
+        @Override
+        public void onSubchannelState(ConnectivityStateInfo newState) {
+          processSubchannelState(subchannel, newState);
+        }
+      });
+      subchannels.put(addrKey, subchannel);
     }
     double normalizedMinWeight = (double) minWeight / totalWeight;
     // Scale up the number of hashes per host such that the least-weiighted host gets a whole
@@ -142,20 +157,6 @@ final class RingHashLoadBalancer extends LoadBalancer {
     }
     Collections.sort(ring);
 
-    for (EquivalentAddressGroup addr : addedAddrs) {
-      Attributes attr = Attributes.newBuilder().set(
-          STATE_INFO, new AtomicReference<>(ConnectivityStateInfo.forNonError(IDLE))).build();
-      final Subchannel subchannel = helper.createSubchannel(
-          CreateSubchannelArgs.newBuilder()
-              .setAddresses(latestAddrs.get(addr)).setAttributes(attr).build());
-      subchannel.start(new SubchannelStateListener() {
-        @Override
-        public void onSubchannelState(ConnectivityStateInfo newState) {
-          processSubchannelState(subchannel, newState);
-        }
-      });
-      subchannels.put(addr, subchannel);
-    }
     List<Subchannel> removedSubchannels = new ArrayList<>();
     for (EquivalentAddressGroup addr : removedAddrs) {
       removedSubchannels.add(subchannels.remove(addr));
