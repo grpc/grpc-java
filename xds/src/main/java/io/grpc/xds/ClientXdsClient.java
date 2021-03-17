@@ -334,7 +334,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       typeUrl = typedStruct.getTypeUrl();
       rawConfig = typedStruct.getValue();
     }
-    Filter filter = Filter.Registry.GLOBAL_REGISTRY.get(typeUrl);
+    Filter filter = FilterRegistry.getDefaultRegistry().get(typeUrl);
     if (filter == null) {
       if (isOptional) {
         return null;

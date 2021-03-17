@@ -18,13 +18,10 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.ServerInterceptor;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
@@ -101,36 +98,4 @@ interface Filter {
     }
   }
 
-  /**
-   * A registry for all supported {@link Filter}s. Filters can be queried from the registry
-   * by any of the {@link Filter#typeUrls(), type URLs}.
-   */
-  final class Registry {
-    static Registry GLOBAL_REGISTRY =
-        newRegistry().register(FaultFilter.INSTANCE, RouterFilter.INSTANCE);
-
-    private final Map<String, Filter> supportedFilters = new HashMap<>();
-
-    private Registry() {}
-
-    @VisibleForTesting
-    static Registry newRegistry() {
-      return new Registry();
-    }
-
-    @VisibleForTesting
-    Registry register(Filter... filters) {
-      for (Filter filter : filters) {
-        for (String typeUrl : filter.typeUrls()) {
-          supportedFilters.put(typeUrl, filter);
-        }
-      }
-      return this;
-    }
-
-    @Nullable
-    Filter get(String typeUrl) {
-      return supportedFilters.get(typeUrl);
-    }
-  }
 }

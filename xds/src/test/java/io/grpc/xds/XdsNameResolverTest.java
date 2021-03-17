@@ -145,7 +145,7 @@ public class XdsNameResolverTest {
   public void setUp() {
     originalEnableTimeout = XdsNameResolver.enableTimeout;
     XdsNameResolver.enableTimeout = true;
-    Filter.Registry filterRegistry = Filter.Registry.newRegistry().register(
+    FilterRegistry filterRegistry = FilterRegistry.newRegistry().register(
         new FaultFilter(mockRandom, new AtomicLong()),
         RouterFilter.INSTANCE);
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
@@ -177,7 +177,7 @@ public class XdsNameResolverTest {
       }
     };
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, Filter.Registry.GLOBAL_REGISTRY);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry());
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
@@ -417,7 +417,7 @@ public class XdsNameResolverTest {
     resolver.shutdown();
     reset(mockListener);
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, Filter.Registry.GLOBAL_REGISTRY);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry());
     resolver.start(mockListener);
     xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
