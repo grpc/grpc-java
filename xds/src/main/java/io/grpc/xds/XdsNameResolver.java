@@ -354,7 +354,8 @@ final class XdsNameResolver extends NameResolver {
       do {
         routingCfg = routingConfig;
         selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
-        if (routingCfg.hasLameFilter()) {
+        if (routingCfg.filterChain != null
+            && Iterables.getLast(routingCfg.filterChain).equals(LAME_FILTER)) {
           break;
         }
         for (Route route : routingCfg.routes) {
@@ -430,12 +431,11 @@ final class XdsNameResolver extends NameResolver {
             }
           }
         }
-        if (routingCfg.hasLameFilter()) {
-          return
-              Result.newBuilder()
-                  .setConfig(config)
-                  .setInterceptor(combineInterceptors(filterInterceptors))
-                  .build();
+        if (Iterables.getLast(routingCfg.filterChain).equals(LAME_FILTER)) {
+          return Result.newBuilder()
+              .setConfig(config)
+              .setInterceptor(combineInterceptors(filterInterceptors))
+              .build();
         }
       }
       final String finalCluster = cluster;
@@ -868,10 +868,6 @@ final class XdsNameResolver extends NameResolver {
       checkArgument(filterChain == null || !filterChain.isEmpty(), "filterChain is empty");
       this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
       this.virtualHostOverrideConfig = Collections.unmodifiableMap(virtualHostOverrideConfig);
-    }
-
-    private boolean hasLameFilter() {
-      return filterChain != null && Iterables.getLast(filterChain).equals(LAME_FILTER);
     }
   }
 }
