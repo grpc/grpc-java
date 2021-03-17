@@ -59,8 +59,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
   private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
 
-  private final XdsLogger logger = XdsLogger.withLogId(
-      InternalLogId.allocate("ring_hash_lb", null));
+  private final XdsLogger logger;
   private final XxHash64 hashFunc = XxHash64.INSTANCE;
   private final Map<EquivalentAddressGroup, Subchannel> subchannels = Maps.newHashMap();
   private final Helper helper;
@@ -71,6 +70,8 @@ final class RingHashLoadBalancer extends LoadBalancer {
 
   RingHashLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
+    logger = XdsLogger.withLogId(InternalLogId.allocate("ring_hash_lb", helper.getAuthority()));
+    logger.log(XdsLogLevel.INFO, "Created");
   }
 
   @Override
@@ -180,6 +181,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
 
   @Override
   public void shutdown() {
+    logger.log(XdsLogLevel.INFO, "Shutdown");
     for (Subchannel subchannel : subchannels.values()) {
       shutdownSubchannel(subchannel);
     }

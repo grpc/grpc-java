@@ -75,6 +75,7 @@ import org.mockito.stubbing.Answer;
 /** Unit test for {@link io.grpc.LoadBalancer}. */
 @RunWith(JUnit4.class)
 public class RingHashLoadBalancerTest {
+  private static final String AUTHORITY = "foo.googleapis.com";
   private static final Attributes.Key<String> CUSTOM_KEY = Attributes.Key.create("custom-key");
 
   @Rule
@@ -91,6 +92,7 @@ public class RingHashLoadBalancerTest {
 
   @Before
   public void setUp() {
+    when(helper.getAuthority()).thenReturn(AUTHORITY);
     when(helper.createSubchannel(any(CreateSubchannelArgs.class))).thenAnswer(
         new Answer<Subchannel>() {
           @Override
@@ -112,6 +114,7 @@ public class RingHashLoadBalancerTest {
           }
         });
     loadBalancer = new RingHashLoadBalancer(helper);
+    verify(helper).getAuthority();  // skip this interaction
   }
 
   @After
