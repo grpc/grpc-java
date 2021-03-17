@@ -32,7 +32,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.netty:netty-handler-proxy:4.1.52.Final",
     "io.netty:netty-handler:4.1.52.Final",
     "io.netty:netty-resolver:4.1.52.Final",
-    "io.netty:netty-tcnative-boringssl-static:2.0.34.Final",
+    "io.netty:netty-tcnative-boringssl-static:2.0.36.Final",
     "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.52.Final",
     "io.netty:netty-transport:4.1.52.Final",
     "io.opencensus:opencensus-api:0.24.0",
