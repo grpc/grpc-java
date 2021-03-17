@@ -143,6 +143,7 @@ public class CdsLoadBalancer2Test {
     loadBalancer.shutdown();
     assertThat(xdsClient.watchers).isEmpty();
     assertThat(xdsClientRefs).isEqualTo(0);
+    assertThat(childBalancers).isEmpty();
   }
 
   @Test
