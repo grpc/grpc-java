@@ -865,12 +865,8 @@ final class XdsNameResolver extends NameResolver {
         Map<String, FilterConfig> virtualHostOverrideConfig) {
       this.fallbackTimeoutNano = fallbackTimeoutNano;
       this.routes = routes;
-      if (filterChain == null) {
-        this.filterChain = null;
-      } else {
-        checkArgument(!filterChain.isEmpty(), "filterChain is empty");
-        this.filterChain = Collections.unmodifiableList(filterChain);
-      }
+      checkArgument(filterChain == null || !filterChain.isEmpty(), "filterChain is empty");
+      this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
       this.virtualHostOverrideConfig = Collections.unmodifiableMap(virtualHostOverrideConfig);
     }
 
