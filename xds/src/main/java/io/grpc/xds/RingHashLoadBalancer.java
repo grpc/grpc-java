@@ -275,7 +275,10 @@ final class RingHashLoadBalancer extends LoadBalancer {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      long requestHash = args.getCallOptions().getOption(XdsNameResolver.RPC_HASH_KEY);
+      Long requestHash = args.getCallOptions().getOption(XdsNameResolver.RPC_HASH_KEY);
+      if (requestHash == null) {
+        return PickResult.withError(Status.INTERNAL.withDescription("RPC hash not found"));
+      }
       if (ring.isEmpty()) {
         return PickResult.withNoResult();
       }
