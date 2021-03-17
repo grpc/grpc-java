@@ -112,7 +112,7 @@ public final class XdsClientWrapperForServerSds {
             .keepAliveTime(5, TimeUnit.MINUTES).build();
     timeService = SharedResourceHolder.get(timeServiceResource);
     newServerApi = serverInfo.isUseProtocolV3();
-    String grpcServerResourceId = bootstrapInfo.getGrpcServerResourceId();
+    String grpcServerResourceId = bootstrapInfo.getServerListenerResourceNameTemplate();
     if (newServerApi && grpcServerResourceId == null) {
       throw new IOException(
           "missing server_listener_resource_name_template value in xds bootstrap");

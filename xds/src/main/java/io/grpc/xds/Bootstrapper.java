@@ -106,18 +106,18 @@ public abstract class Bootstrapper {
     private List<ServerInfo> servers;
     private final Node node;
     @Nullable private final Map<String, CertificateProviderInfo> certProviders;
-    @Nullable private final String grpcServerResourceId;
+    @Nullable private final String serverListenerResourceNameTemplate;
 
     @VisibleForTesting
     BootstrapInfo(
         List<ServerInfo> servers,
         Node node,
         Map<String, CertificateProviderInfo> certProviders,
-        String grpcServerResourceId) {
+        String serverListenerResourceNameTemplate) {
       this.servers = servers;
       this.node = node;
       this.certProviders = certProviders;
-      this.grpcServerResourceId = grpcServerResourceId;
+      this.serverListenerResourceNameTemplate = serverListenerResourceNameTemplate;
     }
 
     /**
@@ -140,8 +140,8 @@ public abstract class Bootstrapper {
     }
 
     @Nullable
-    public String getGrpcServerResourceId() {
-      return grpcServerResourceId;
+    public String getServerListenerResourceNameTemplate() {
+      return serverListenerResourceNameTemplate;
     }
   }
 }

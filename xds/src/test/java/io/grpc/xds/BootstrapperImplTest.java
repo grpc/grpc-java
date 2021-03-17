@@ -552,7 +552,7 @@ public class BootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    assertThat(info.getGrpcServerResourceId()).isEqualTo("grpc/serverx=%s");
+    assertThat(info.getServerListenerResourceNameTemplate()).isEqualTo("grpc/serverx=%s");
   }
 
   @Test
