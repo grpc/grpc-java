@@ -547,12 +547,12 @@ public class BootstrapperImplTest {
   public void parseBootstrap_grpcServerResourceId() throws XdsInitializationException {
     String rawData = "{\n"
             + "  \"xds_servers\": [],\n"
-            + "  \"grpc_server_resource_name_id\": \"grpc/serverx\"\n"
+            + "  \"server_listener_resource_name_template\": \"grpc/serverx=%s\"\n"
             + "}";
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    assertThat(info.getGrpcServerResourceId()).isEqualTo("grpc/serverx");
+    assertThat(info.getServerListenerResourceNameTemplate()).isEqualTo("grpc/serverx=%s");
   }
 
   @Test
