@@ -18,14 +18,17 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status.Code;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.JsonParser;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import java.io.IOException;
+import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -34,7 +37,15 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link RingHashLoadBalancerProvider}. */
 @RunWith(JUnit4.class)
 public class RingHashLoadBalancerProviderTest {
+  private static final String AUTHORITY = "foo.googleapis.com";
 
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
   private final RingHashLoadBalancerProvider provider = new RingHashLoadBalancerProvider();
 
   @Test
@@ -45,7 +56,10 @@ public class RingHashLoadBalancerProviderTest {
 
   @Test
   public void providesLoadBalancer() {
-    assertThat(provider.newLoadBalancer(mock(Helper.class)))
+    Helper helper = mock(Helper.class);
+    when(helper.getSynchronizationContext()).thenReturn(syncContext);
+    when(helper.getAuthority()).thenReturn(AUTHORITY);
+    assertThat(provider.newLoadBalancer(helper))
         .isInstanceOf(RingHashLoadBalancer.class);
   }
 
