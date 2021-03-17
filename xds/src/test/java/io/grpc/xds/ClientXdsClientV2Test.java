@@ -277,7 +277,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildHttpFilter(String name, @Nullable Any typedConfig) {
+    protected Message buildHttpFilter(String name, @Nullable Any typedConfig, boolean isOptional) {
       throw new UnsupportedOperationException();
     }
 

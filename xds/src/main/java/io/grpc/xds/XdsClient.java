@@ -27,6 +27,7 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import java.util.ArrayList;
@@ -54,36 +55,32 @@ abstract class XdsClient {
     // The list virtual hosts that make up the route table.
     @Nullable
     final List<VirtualHost> virtualHosts;
-    // Listener contains the HttpFault filter.
-    final boolean hasFaultInjection;
-    @Nullable // Can be null even if hasFaultInjection is true.
-    final HttpFault httpFault;
+    // Filter instance names. Null if HttpFilter support is not enabled.
+    @Nullable final List<NamedFilterConfig> filterChain;
     // Server side Listener.
     @Nullable
     final Listener listener;
 
     LdsUpdate(
-        long httpMaxStreamDurationNano, String rdsName, boolean hasFaultInjection,
-        @Nullable HttpFault httpFault) {
-      this(httpMaxStreamDurationNano, rdsName, null, hasFaultInjection, httpFault);
+        long httpMaxStreamDurationNano, String rdsName,
+        @Nullable List<NamedFilterConfig> filterChain) {
+      this(httpMaxStreamDurationNano, rdsName, null, filterChain);
     }
 
     LdsUpdate(
         long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts,
-        boolean hasFaultInjection, @Nullable HttpFault httpFault) {
-      this(httpMaxStreamDurationNano, null, virtualHosts, hasFaultInjection, httpFault);
+        @Nullable List<NamedFilterConfig> filterChain) {
+      this(httpMaxStreamDurationNano, null, virtualHosts, filterChain);
     }
 
     private LdsUpdate(
         long httpMaxStreamDurationNano, @Nullable String rdsName,
-        @Nullable List<VirtualHost> virtualHosts, boolean hasFaultInjection,
-        @Nullable HttpFault httpFault) {
+        @Nullable List<VirtualHost> virtualHosts, @Nullable List<NamedFilterConfig> filterChain) {
       this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
       this.rdsName = rdsName;
       this.virtualHosts = virtualHosts == null
           ? null : Collections.unmodifiableList(new ArrayList<>(virtualHosts));
-      this.hasFaultInjection = hasFaultInjection;
-      this.httpFault = httpFault;
+      this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
       this.listener = null;
     }
 
@@ -91,15 +88,14 @@ abstract class XdsClient {
       this.listener = listener;
       this.httpMaxStreamDurationNano = 0L;
       this.rdsName = null;
+      this.filterChain = null;
       this.virtualHosts = null;
-      this.hasFaultInjection = false;
-      this.httpFault = null;
     }
 
     @Override
     public int hashCode() {
       return Objects.hash(
-          httpMaxStreamDurationNano, rdsName, virtualHosts, hasFaultInjection, httpFault, listener);
+          httpMaxStreamDurationNano, rdsName, virtualHosts, filterChain, listener);
     }
 
     @Override
@@ -114,8 +110,7 @@ abstract class XdsClient {
       return httpMaxStreamDurationNano == that.httpMaxStreamDurationNano
           && Objects.equals(rdsName, that.rdsName)
           && Objects.equals(virtualHosts, that.virtualHosts)
-          && hasFaultInjection == that.hasFaultInjection
-          && Objects.equals(httpFault, that.httpFault)
+          && Objects.equals(filterChain, that.filterChain)
           && Objects.equals(listener, that.listener);
     }
 
@@ -128,15 +123,15 @@ abstract class XdsClient {
       } else {
         toStringHelper.add("virtualHosts", virtualHosts);
       }
-      if (hasFaultInjection) {
-        toStringHelper.add("faultInjectionEnabled", true)
-            .add("httpFault", httpFault);
+      if (filterChain != null) {
+        toStringHelper.add("filterChain", filterChain);
       }
       if (listener != null) {
         toStringHelper.add("listener", listener);
       }
       return toStringHelper.toString();
     }
+
   }
 
   static final class RdsUpdate implements ResourceUpdate {

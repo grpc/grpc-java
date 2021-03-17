@@ -19,35 +19,31 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.collect.ImmutableList;
 import io.grpc.Status;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import java.util.List;
+import io.grpc.xds.Filter.FilterConfig;
 import javax.annotation.Nullable;
 
 /** Fault injection configurations. */
 @AutoValue
-abstract class HttpFault {
+abstract class FaultConfig implements FilterConfig {
   @Nullable
   abstract FaultDelay faultDelay();
 
   @Nullable
   abstract FaultAbort faultAbort();
 
-  abstract String upstreamCluster();
-
-  abstract ImmutableList<String> downstreamNodes();
-
-  abstract ImmutableList<HeaderMatcher> headers();
-
   @Nullable
   abstract Integer maxActiveFaults();
 
-  static HttpFault create(@Nullable FaultDelay faultDelay, @Nullable FaultAbort faultAbort,
-      String upstreamCluster, List<String> downstreamNodes, List<HeaderMatcher> headers,
+  @Override
+  public final String typeUrl() {
+    return FaultFilter.TYPE_URL;
+  }
+
+  static FaultConfig create(
+      @Nullable FaultDelay faultDelay, @Nullable FaultAbort faultAbort,
       @Nullable Integer maxActiveFaults) {
-    return new AutoValue_HttpFault(faultDelay, faultAbort, upstreamCluster,
-        ImmutableList.copyOf(downstreamNodes), ImmutableList.copyOf(headers), maxActiveFaults);
+    return new AutoValue_FaultConfig(faultDelay, faultAbort, maxActiveFaults);
   }
 
   /** Fault configurations for aborting requests. */
@@ -70,7 +66,7 @@ abstract class HttpFault {
 
     private static FaultDelay create(
         @Nullable Long delayNanos, boolean headerDelay, FractionalPercent percent) {
-      return new AutoValue_HttpFault_FaultDelay(delayNanos, headerDelay, percent);
+      return new AutoValue_FaultConfig_FaultDelay(delayNanos, headerDelay, percent);
     }
   }
 
@@ -95,7 +91,7 @@ abstract class HttpFault {
 
     private static FaultAbort create(
         @Nullable Status status, boolean headerAbort, FractionalPercent percent) {
-      return new AutoValue_HttpFault_FaultAbort(status, headerAbort, percent);
+      return new AutoValue_FaultConfig_FaultAbort(status, headerAbort, percent);
     }
   }
 
@@ -123,7 +119,7 @@ abstract class HttpFault {
 
     static FractionalPercent create(
         int numerator, DenominatorType denominatorType) {
-      return new AutoValue_HttpFault_FractionalPercent(numerator, denominatorType);
+      return new AutoValue_FaultConfig_FractionalPercent(numerator, denominatorType);
     }
   }
 }

@@ -34,8 +34,8 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
-import com.google.protobuf.StringValue;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.config.route.v3.FilterConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
@@ -53,7 +53,7 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
-import io.grpc.xds.HttpFault.FractionalPercent.DenominatorType;
+import io.grpc.xds.FaultConfig.FractionalPercent.DenominatorType;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
 import io.grpc.xds.XdsClient.CdsUpdate;
@@ -383,7 +383,7 @@ public abstract class ClientXdsClientTestBase {
                         mf.buildOpaqueRoutes(1),
                         ImmutableMap.of(
                             "irrelevant",
-                            Any.pack(StringValue.of("irrelevant")),
+                            Any.pack(FilterConfig.newBuilder().setIsOptional(true).build()),
                             "envoy.fault",
                             mf.buildHttpFaultTypedConfig(
                                 300L, 1000, "cluster1", ImmutableList.<String>of(), 100, null, null,
@@ -394,12 +394,15 @@ public abstract class ClientXdsClientTestBase {
                             "envoy.fault",
                             mf.buildHttpFaultTypedConfig(
                                 null, null, "cluster2", ImmutableList.<String>of(), 101, null, 503,
-                                2000)))
-                )),
+                                2000))))),
             ImmutableList.of(
-                mf.buildHttpFilter("irrelevant", null),
-                mf.buildHttpFilter("envoy.fault", null)
-            )));
+                mf.buildHttpFilter("irrelevant", null, true),
+                mf.buildHttpFilter(
+                    "envoy.fault",
+                    mf.buildHttpFaultTypedConfig(
+                        1L, 2, "cluster1", ImmutableList.<String>of(), 3, null, null,
+                        null),
+                    false))));
     call.sendResponse(LDS, listener, VERSION_1, "0000");
 
     // Client sends an ACK LDS request.
@@ -408,24 +411,23 @@ public abstract class ClientXdsClientTestBase {
 
     LdsUpdate ldsUpdate = ldsUpdateCaptor.getValue();
     assertThat(ldsUpdate.virtualHosts).hasSize(2);
-    assertThat(ldsUpdate.hasFaultInjection).isTrue();
-    assertThat(ldsUpdate.httpFault).isNull();
-    HttpFault httpFault = ldsUpdate.virtualHosts.get(0).httpFault();
-    assertThat(httpFault.faultDelay().delayNanos()).isEqualTo(300);
-    assertThat(httpFault.faultDelay().percent().numerator()).isEqualTo(1000);
-    assertThat(httpFault.faultDelay().percent().denominatorType())
+    assertThat(ldsUpdate.filterChain.get(0).name).isEqualTo("envoy.fault");
+    FaultConfig faultConfig = (FaultConfig) ldsUpdate.virtualHosts.get(0)
+        .filterConfigOverrides().get("envoy.fault");
+    assertThat(faultConfig.faultDelay().delayNanos()).isEqualTo(300);
+    assertThat(faultConfig.faultDelay().percent().numerator()).isEqualTo(1000);
+    assertThat(faultConfig.faultDelay().percent().denominatorType())
         .isEqualTo(DenominatorType.MILLION);
-    assertThat(httpFault.faultAbort()).isNull();
-    assertThat(httpFault.upstreamCluster()).isEqualTo("cluster1");
-    assertThat(httpFault.maxActiveFaults()).isEqualTo(100);
-    httpFault = ldsUpdate.virtualHosts.get(1).httpFault();
-    assertThat(httpFault.faultDelay()).isNull();
-    assertThat(httpFault.faultAbort().status().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(httpFault.faultAbort().percent().numerator()).isEqualTo(2000);
-    assertThat(httpFault.faultAbort().percent().denominatorType())
+    assertThat(faultConfig.faultAbort()).isNull();
+    assertThat(faultConfig.maxActiveFaults()).isEqualTo(100);
+    faultConfig = (FaultConfig) ldsUpdate.virtualHosts.get(1)
+        .filterConfigOverrides().get("envoy.fault");
+    assertThat(faultConfig.faultDelay()).isNull();
+    assertThat(faultConfig.faultAbort().status().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(faultConfig.faultAbort().percent().numerator()).isEqualTo(2000);
+    assertThat(faultConfig.faultAbort().percent().denominatorType())
         .isEqualTo(DenominatorType.MILLION);
-    assertThat(httpFault.upstreamCluster()).isEqualTo("cluster2");
-    assertThat(httpFault.maxActiveFaults()).isEqualTo(101);
+    assertThat(faultConfig.maxActiveFaults()).isEqualTo(101);
   }
 
   @Test
@@ -1430,7 +1432,8 @@ public abstract class ClientXdsClientTestBase {
 
     protected abstract Message buildListenerForRds(String name, String rdsResourceName);
 
-    protected abstract Message buildHttpFilter(String name, @Nullable Any typedConfig);
+    protected abstract Message buildHttpFilter(
+        String name, @Nullable Any typedConfig, boolean isOptional);
 
     protected abstract Any buildHttpFaultTypedConfig(
         @Nullable Long delayNanos, @Nullable Integer delayRate, String upstreamCluster,

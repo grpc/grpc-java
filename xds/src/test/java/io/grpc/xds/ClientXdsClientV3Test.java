@@ -287,8 +287,8 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildHttpFilter(String name, @Nullable Any typedConfig) {
-      HttpFilter.Builder builder = HttpFilter.newBuilder().setName(name);
+    protected Message buildHttpFilter(String name, @Nullable Any typedConfig, boolean isOptional) {
+      HttpFilter.Builder builder = HttpFilter.newBuilder().setName(name).setIsOptional(isOptional);
       if (typedConfig != null) {
         builder.setTypedConfig(typedConfig);
       }
