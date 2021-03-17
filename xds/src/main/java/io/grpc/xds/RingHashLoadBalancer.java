@@ -36,6 +36,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
@@ -60,6 +61,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
       Attributes.Key.create("state-info");
 
   private final XdsLogger logger;
+  private final SynchronizationContext syncContext;
   private final XxHash64 hashFunc = XxHash64.INSTANCE;
   private final Map<EquivalentAddressGroup, Subchannel> subchannels = Maps.newHashMap();
   private final Helper helper;
@@ -70,6 +72,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
 
   RingHashLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
+    syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     logger = XdsLogger.withLogId(InternalLogId.allocate("ring_hash_lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
@@ -266,7 +269,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
     return checkNotNull(subchannel.getAttributes().get(STATE_INFO), "STATE_INFO");
   }
 
-  private static final class RingHashPicker extends SubchannelPicker {
+  private final class RingHashPicker extends SubchannelPicker {
     private final List<RingEntry> ring;
     // shallow copy of subchannels
     private final Map<EquivalentAddressGroup, Subchannel> pickableSubchannels;
@@ -332,7 +335,13 @@ final class RingHashLoadBalancer extends LoadBalancer {
         return PickResult.withError(stateInfo.getStatus());
       }
       if (stateInfo.getState() == IDLE) {
-        subchannel.requestConnection();
+        final Subchannel finalSubchannel = subchannel;
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            finalSubchannel.requestConnection();
+          }
+        });
       }
       return PickResult.withNoResult();  // queue the pick and re-process later
     }

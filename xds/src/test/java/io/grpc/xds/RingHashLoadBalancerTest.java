@@ -47,9 +47,11 @@ import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
+import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -80,6 +82,13 @@ public class RingHashLoadBalancerTest {
 
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
   private final Map<List<EquivalentAddressGroup>, Subchannel> subchannels = new HashMap<>();
   private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners =
       new HashMap<>();
@@ -93,6 +102,7 @@ public class RingHashLoadBalancerTest {
   @Before
   public void setUp() {
     when(helper.getAuthority()).thenReturn(AUTHORITY);
+    when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.createSubchannel(any(CreateSubchannelArgs.class))).thenAnswer(
         new Answer<Subchannel>() {
           @Override
@@ -114,7 +124,9 @@ public class RingHashLoadBalancerTest {
           }
         });
     loadBalancer = new RingHashLoadBalancer(helper);
-    verify(helper).getAuthority();  // skip this interaction
+    // Skip uninterested interactions.
+    verify(helper).getAuthority();
+    verify(helper).getSynchronizationContext();
   }
 
   @After
