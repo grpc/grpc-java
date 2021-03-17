@@ -118,6 +118,7 @@ run_test() {
     --kube_context="${KUBE_CONTEXT}" \
     --server_image="${SERVER_IMAGE_NAME}:${GIT_COMMIT}" \
     --client_image="${CLIENT_IMAGE_NAME}:${GIT_COMMIT}" \
+    --td_bootstrap_image=gcr.io/trafficdirector-prod/td-grpc-bootstrap:0.10.0 \
     --xml_output_file="${TEST_XML_OUTPUT_DIR}/${test_name}/sponge_log.xml" \
     --force_cleanup
   set +x
