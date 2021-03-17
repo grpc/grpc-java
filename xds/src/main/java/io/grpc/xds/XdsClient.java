@@ -27,7 +27,7 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import java.util.ArrayList;
@@ -56,26 +56,26 @@ abstract class XdsClient {
     @Nullable
     final List<VirtualHost> virtualHosts;
     // Filter instance names. Null if HttpFilter support is not enabled.
-    @Nullable final List<NamedFilter> filterChain;
+    @Nullable final List<NamedFilterConfig> filterChain;
     // Server side Listener.
     @Nullable
     final Listener listener;
 
     LdsUpdate(
         long httpMaxStreamDurationNano, String rdsName,
-        @Nullable List<NamedFilter> filterChain) {
+        @Nullable List<NamedFilterConfig> filterChain) {
       this(httpMaxStreamDurationNano, rdsName, null, filterChain);
     }
 
     LdsUpdate(
         long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts,
-        @Nullable List<NamedFilter> filterChain) {
+        @Nullable List<NamedFilterConfig> filterChain) {
       this(httpMaxStreamDurationNano, null, virtualHosts, filterChain);
     }
 
     private LdsUpdate(
         long httpMaxStreamDurationNano, @Nullable String rdsName,
-        @Nullable List<VirtualHost> virtualHosts, @Nullable List<NamedFilter> filterChain) {
+        @Nullable List<VirtualHost> virtualHosts, @Nullable List<NamedFilterConfig> filterChain) {
       this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
       this.rdsName = rdsName;
       this.virtualHosts = virtualHosts == null
@@ -132,42 +132,6 @@ abstract class XdsClient {
       return toStringHelper.toString();
     }
 
-    static final class NamedFilter {
-      // filter instance name
-      final String name;
-      final FilterConfig filterConfig;
-
-      NamedFilter(String name, FilterConfig filterConfig) {
-        this.name = name;
-        this.filterConfig = filterConfig;
-      }
-
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-          return false;
-        }
-        NamedFilter that = (NamedFilter) o;
-        return Objects.equals(name, that.name)
-            && Objects.equals(filterConfig, that.filterConfig);
-      }
-
-      @Override
-      public int hashCode() {
-        return Objects.hash(name, filterConfig);
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this)
-            .add("name", name)
-            .add("filterConfig", filterConfig)
-            .toString();
-      }
-    }
   }
 
   static final class RdsUpdate implements ResourceUpdate {

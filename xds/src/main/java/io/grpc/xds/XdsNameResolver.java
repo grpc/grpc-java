@@ -44,6 +44,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.Matchers.FractionMatcher;
 import io.grpc.xds.Matchers.HeaderMatcher;
 import io.grpc.xds.Matchers.PathMatcher;
@@ -55,7 +56,6 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.LdsUpdate;
-import io.grpc.xds.XdsClient.LdsUpdate.NamedFilter;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
@@ -90,8 +90,8 @@ final class XdsNameResolver extends NameResolver {
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
   static final CallOptions.Key<Long> RPC_HASH_KEY =
       CallOptions.Key.create("io.grpc.xds.RPC_HASH_KEY");
-  private static final NamedFilter LAME_FILTER =
-      new NamedFilter(null, LameFilter.LAME_CONFIG);
+  private static final NamedFilterConfig LAME_FILTER =
+      new NamedFilterConfig(null, LameFilter.LAME_CONFIG);
   @VisibleForTesting
   static boolean enableTimeout =
       Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"));
@@ -413,7 +413,7 @@ final class XdsNameResolver extends NameResolver {
                 "Failed to parse service config (method config)"));
       }
       if (routingCfg.filterChain != null) {
-        for (NamedFilter namedFilter : routingCfg.filterChain) {
+        for (NamedFilterConfig namedFilter : routingCfg.filterChain) {
           FilterConfig filterConfig = namedFilter.filterConfig;
           Filter filter;
           if (namedFilter.equals(LAME_FILTER)) {
@@ -722,11 +722,11 @@ final class XdsNameResolver extends NameResolver {
         listener.onResult(emptyResult);
         return;
       }
-      List<NamedFilter> filterChain = null;
+      List<NamedFilterConfig> filterChain = null;
       if (update.filterChain != null) {
         boolean hasRouter = false;
         filterChain = new ArrayList<>(update.filterChain.size());
-        for (NamedFilter namedFilter : update.filterChain) {
+        for (NamedFilterConfig namedFilter : update.filterChain) {
           filterChain.add(namedFilter);
           if (namedFilter.filterConfig.equals(RouterFilter.ROUTER_CONFIG)) {
             hasRouter = true;
@@ -854,14 +854,14 @@ final class XdsNameResolver extends NameResolver {
     private final long fallbackTimeoutNano;
     final List<Route> routes;
     // Null if HttpFilter is not supported.
-    @Nullable final List<NamedFilter> filterChain;
+    @Nullable final List<NamedFilterConfig> filterChain;
     final Map<String, FilterConfig> virtualHostOverrideConfig;
 
     private static RoutingConfig empty = new RoutingConfig(
         0L, Collections.<Route>emptyList(), null, Collections.<String, FilterConfig>emptyMap());
 
     private RoutingConfig(
-        long fallbackTimeoutNano, List<Route> routes, @Nullable List<NamedFilter> filterChain,
+        long fallbackTimeoutNano, List<Route> routes, @Nullable List<NamedFilterConfig> filterChain,
         Map<String, FilterConfig> virtualHostOverrideConfig) {
       this.fallbackTimeoutNano = fallbackTimeoutNano;
       this.routes = routes;

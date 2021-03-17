@@ -66,6 +66,7 @@ import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.Matchers.HeaderMatcher;
 import io.grpc.xds.Matchers.PathMatcher;
 import io.grpc.xds.VirtualHost.Route;
@@ -73,7 +74,6 @@ import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
-import io.grpc.xds.XdsClient.LdsUpdate.NamedFilter;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.io.IOException;
@@ -1439,9 +1439,9 @@ public class XdsNameResolverTest {
       if (httpFilterFaultConfig == null) {
         httpFilterFaultConfig = FaultConfig.create(null, null, null);
       }
-      final List<NamedFilter> filterChain = ImmutableList.of(
-          new NamedFilter(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
-          new NamedFilter(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
+      final List<NamedFilterConfig> filterChain = ImmutableList.of(
+          new NamedFilterConfig(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
+          new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -1487,7 +1487,7 @@ public class XdsNameResolverTest {
           Collections.<String, FilterConfig>emptyMap());
       ldsWatcher.onChanged(
           new LdsUpdate(
-              0, Collections.singletonList(virtualHost), ImmutableList.<NamedFilter>of()));
+              0, Collections.singletonList(virtualHost), ImmutableList.<NamedFilterConfig>of()));
     }
 
     void deliverRdsNameWithFaultInjection(
@@ -1496,9 +1496,9 @@ public class XdsNameResolverTest {
         httpFilterFaultConfig = FaultConfig.create(
             null, null, null);
       }
-      final ImmutableList<NamedFilter> filterChain = ImmutableList.of(
-          new NamedFilter(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
-          new NamedFilter(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
+      final ImmutableList<NamedFilterConfig> filterChain = ImmutableList.of(
+          new NamedFilterConfig(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
+          new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {

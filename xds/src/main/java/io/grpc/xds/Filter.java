@@ -18,10 +18,12 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.MoreObjects;
 import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.ServerInterceptor;
+import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
@@ -69,6 +71,7 @@ interface Filter {
         FilterConfig config, @Nullable FilterConfig overrideConfig);
   }
 
+  // TODO(zdapeng): Unify with ClientXdsClient.StructOrError.
   final class StructOrError<T> {
     /**
      * Returns a {@link StructOrError} for the successfully converted data object.
@@ -98,4 +101,41 @@ interface Filter {
     }
   }
 
+  /** Filter config with instance name. */
+  final class NamedFilterConfig {
+    // filter instance name
+    final String name;
+    final FilterConfig filterConfig;
+
+    NamedFilterConfig(String name, FilterConfig filterConfig) {
+      this.name = name;
+      this.filterConfig = filterConfig;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      NamedFilterConfig that = (NamedFilterConfig) o;
+      return Objects.equals(name, that.name)
+          && Objects.equals(filterConfig, that.filterConfig);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(name, filterConfig);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("name", name)
+          .add("filterConfig", filterConfig)
+          .toString();
+    }
+  }
 }

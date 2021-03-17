@@ -58,6 +58,7 @@ import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.Matchers.FractionMatcher;
@@ -69,7 +70,6 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsClient.CdsUpdate.HashFunction;
-import io.grpc.xds.XdsClient.LdsUpdate.NamedFilter;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -196,7 +196,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
       boolean parseFilter = enableFaultInjection && isResourceV3;
-      List<NamedFilter> filterChain = null;
+      List<NamedFilterConfig> filterChain = null;
       if (parseFilter) {
         filterChain = new ArrayList<>();
         List<io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter>
@@ -214,7 +214,7 @@ final class ClientXdsClient extends AbstractXdsClient {
                 "Error parsing HttpFilter: " + filterConfig.errorDetail);
             return;
           }
-          filterChain.add(new NamedFilter(filterName, filterConfig.struct));
+          filterChain.add(new NamedFilterConfig(filterName, filterConfig.struct));
         }
       }
 
