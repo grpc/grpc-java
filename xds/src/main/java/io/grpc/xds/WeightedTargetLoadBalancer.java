@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.getStreamAggregatedResourcesMethod;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
@@ -24,11 +25,14 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.collect.ImmutableMap;
+import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
@@ -131,6 +135,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     List<WeightedChildPicker> childPickers = new ArrayList<>();
 
     ConnectivityState overallState = null;
+    Status errorStatus = Status.UNAVAILABLE;
     for (String name : targets.keySet()) {
       ChildHelper childHelper = childHelpers.get(name);
       ConnectivityState childState = childHelper.currentState;
@@ -138,13 +143,20 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
       if (READY == childState) {
         int weight = targets.get(name).weight;
         childPickers.add(new WeightedChildPicker(weight, childHelper.currentPicker));
+      } else if (TRANSIENT_FAILURE == overallState) {
+        // do a pick to get more failure details
+        PickSubchannelArgs args = new PickSubchannelArgsImpl(
+            getStreamAggregatedResourcesMethod(),
+            new Metadata(),
+            CallOptions.DEFAULT.withOption(XdsNameResolver.CLUSTER_SELECTION_KEY, name));
+        errorStatus = childHelper.currentPicker.pickSubchannel(args).getStatus();
       }
     }
 
     SubchannelPicker picker;
     if (childPickers.isEmpty()) {
       if (overallState == TRANSIENT_FAILURE) {
-        picker = new ErrorPicker(Status.UNAVAILABLE); // TODO: more details in status
+        picker = new ErrorPicker(errorStatus);
       } else {
         picker = XdsSubchannelPickers.BUFFER_PICKER;
       }

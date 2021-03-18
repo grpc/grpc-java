@@ -312,11 +312,14 @@ public class WeightedTargetLoadBalancerTest {
     verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
 
     // Subchannels to be created for each child balancer.
+    SubchannelPicker mockPicker = mock(SubchannelPicker.class);
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult());
     final SubchannelPicker[] subchannelPickers = new SubchannelPicker[]{
-        mock(SubchannelPicker.class),
-        mock(SubchannelPicker.class),
-        mock(SubchannelPicker.class),
-        mock(SubchannelPicker.class)};
+        mockPicker,
+        mockPicker,
+        mockPicker,
+        mockPicker};
     ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
 
     // One child balancer goes to TRANSIENT_FAILURE.
@@ -364,6 +367,9 @@ public class WeightedTargetLoadBalancerTest {
     // All child balancers go to TRANSIENT_FAILURE.
     childHelpers.get(3).updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS));
     childHelpers.get(0).updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.CANCELLED));
-    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    SubchannelPicker moreInfoErrorPicker = pickerCaptor.getValue();
+    assertThat(moreInfoErrorPicker.pickSubchannel(mock(PickSubchannelArgs.class)).getStatus())
+        .isEqualTo(Status.DATA_LOSS);
   }
 }
