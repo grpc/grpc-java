@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.when;
 
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -218,6 +219,37 @@ public class FilterChainMatchTest {
   }
 
   @Test
+  public void dest0LengthPrefixRange()
+          throws UnknownHostException, InvalidProtocolBufferException {
+    setupChannel(LOCAL_IP, REMOTE_IP, 15000);
+    DownstreamTlsContext tlsContext0Length =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
+    // 10.2.2.0/24 doesn't match LOCAL_IP
+    EnvoyServerProtoData.FilterChainMatch filterChainMatch0Length =
+        new EnvoyServerProtoData.FilterChainMatch(
+            0,
+            Arrays.asList(new EnvoyServerProtoData.CidrRange("10.2.2.0", 0)),
+            Arrays.<String>asList(),
+            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            Arrays.<Integer>asList());
+    EnvoyServerProtoData.FilterChain filterChain0Length =
+        new EnvoyServerProtoData.FilterChain(filterChainMatch0Length, tlsContext0Length);
+    DownstreamTlsContext tlsContextForDefaultFilterChain =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
+    EnvoyServerProtoData.FilterChain defaultFilterChain =
+        new EnvoyServerProtoData.FilterChain(null, tlsContextForDefaultFilterChain);
+    EnvoyServerProtoData.Listener listener =
+        new EnvoyServerProtoData.Listener(
+            "listener1", LOCAL_IP, Arrays.asList(filterChain0Length), defaultFilterChain);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
+    DownstreamTlsContext tlsContext1 =
+        xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
+    assertThat(tlsContext1).isSameInstanceAs(tlsContext0Length);
+  }
+
+  @Test
   public void destPrefixRange_moreSpecificWins()
       throws UnknownHostException, InvalidProtocolBufferException {
     setupChannel(LOCAL_IP, REMOTE_IP, 15000);
@@ -240,6 +272,50 @@ public class FilterChainMatchTest {
         new EnvoyServerProtoData.FilterChainMatch(
             0,
             Arrays.asList(new EnvoyServerProtoData.CidrRange("10.1.2.2", 31)),
+            Arrays.<String>asList(),
+            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            Arrays.<Integer>asList());
+    EnvoyServerProtoData.FilterChain filterChainMoreSpecific =
+        new EnvoyServerProtoData.FilterChain(filterChainMatchMoreSpecific, tlsContextMoreSpecific);
+    EnvoyServerProtoData.FilterChain defaultFilterChain =
+        new EnvoyServerProtoData.FilterChain(null, null);
+    EnvoyServerProtoData.Listener listener =
+        new EnvoyServerProtoData.Listener(
+            "listener1",
+            LOCAL_IP,
+            Arrays.asList(filterChainLessSpecific, filterChainMoreSpecific),
+            defaultFilterChain);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
+    DownstreamTlsContext tlsContext1 =
+        xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
+    assertThat(tlsContext1).isSameInstanceAs(tlsContextMoreSpecific);
+  }
+
+  @Test
+  public void destPrefixRange_emptyListLessSpecific()
+          throws UnknownHostException, InvalidProtocolBufferException {
+    setupChannel(LOCAL_IP, REMOTE_IP, 15000);
+    DownstreamTlsContext tlsContextLessSpecific =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
+    EnvoyServerProtoData.FilterChainMatch filterChainMatchLessSpecific =
+        new EnvoyServerProtoData.FilterChainMatch(
+            0,
+            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            Arrays.<String>asList(),
+            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            Arrays.<Integer>asList());
+    EnvoyServerProtoData.FilterChain filterChainLessSpecific =
+        new EnvoyServerProtoData.FilterChain(filterChainMatchLessSpecific, tlsContextLessSpecific);
+
+    DownstreamTlsContext tlsContextMoreSpecific =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
+    EnvoyServerProtoData.FilterChainMatch filterChainMatchMoreSpecific =
+        new EnvoyServerProtoData.FilterChainMatch(
+            0,
+            Arrays.asList(new EnvoyServerProtoData.CidrRange("8.0.0.0", 5)),
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
@@ -455,6 +531,52 @@ public class FilterChainMatchTest {
     DownstreamTlsContext tlsContext1 =
         xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
     assertThat(tlsContext1).isSameInstanceAs(tlsContextMoreSpecificWith2);
+  }
+
+  @Test
+  public void sourcePrefixRange_2Matchers_expectException()
+          throws UnknownHostException, InvalidProtocolBufferException {
+    setupChannel(LOCAL_IP, REMOTE_IP, 15000);
+    DownstreamTlsContext tlsContext1 =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
+    EnvoyServerProtoData.FilterChainMatch filterChainMatch1 =
+        new EnvoyServerProtoData.FilterChainMatch(
+            0,
+            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            Arrays.<String>asList(),
+            Arrays.asList(
+                new EnvoyServerProtoData.CidrRange("10.4.2.0", 24),
+                new EnvoyServerProtoData.CidrRange("192.168.10.2", 32)),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            Arrays.<Integer>asList());
+    EnvoyServerProtoData.FilterChain filterChain1 =
+        new EnvoyServerProtoData.FilterChain(filterChainMatch1, tlsContext1);
+
+    DownstreamTlsContext tlsContext2 =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
+    EnvoyServerProtoData.FilterChainMatch filterChainMatch2 =
+        new EnvoyServerProtoData.FilterChainMatch(
+            0,
+            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            Arrays.<String>asList(),
+            Arrays.asList(new EnvoyServerProtoData.CidrRange("10.4.2.0", 24)),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            Arrays.<Integer>asList());
+    EnvoyServerProtoData.FilterChain filterChain2 =
+        new EnvoyServerProtoData.FilterChain(filterChainMatch2, tlsContext2);
+    EnvoyServerProtoData.FilterChain defaultFilterChain =
+        new EnvoyServerProtoData.FilterChain(null, null);
+    EnvoyServerProtoData.Listener listener =
+        new EnvoyServerProtoData.Listener(
+            "listener1", LOCAL_IP, Arrays.asList(filterChain1, filterChain2), defaultFilterChain);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
+    try {
+      xdsClientWrapperForServerSds.getDownstreamTlsContext(channel);
+      fail("expect exception!");
+    } catch (IllegalStateException ise) {
+      assertThat(ise).hasMessageThat().isEqualTo("Found 2 matching filter-chains");
+    }
   }
 
   @Test

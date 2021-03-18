@@ -216,9 +216,10 @@ public final class XdsClientWrapperForServerSds {
     filterChains = filterOnIpAddress(filterChains, remoteInetAddr.getAddress(), false);
     filterChains = filterOnSourcePort(filterChains, remoteInetAddr.getPort());
 
-    // if we get more than 1, we ignore filterChains and use the defaultFilerChain
-    // although spec not clear for that case
-    if (filterChains.size() == 1) {
+    if (filterChains.size() > 1) {
+      // close the connection
+      throw new IllegalStateException("Found 2 matching filter-chains");
+    } else if (filterChains.size() == 1) {
       return filterChains.get(0).getDownstreamTlsContext();
     }
     return curListener.getDefaultFilterChain().getDownstreamTlsContext();
@@ -307,10 +308,10 @@ public final class XdsClientWrapperForServerSds {
               ? filterChainMatch.getPrefixRanges()
               : filterChainMatch.getSourcePrefixRanges();
       indexOfMatchingPrefixRange = -1;
-      if (cidrRanges.isEmpty()) { // if there is no CidrRange assume there is perfect match
-        matchingPrefixLength = isIPv6 ? 128 : 32;
-      } else {
+      if (cidrRanges.isEmpty()) { // if there is no CidrRange assume 0-length match
         matchingPrefixLength = 0;
+      } else {
+        matchingPrefixLength = -1;
         int index = 0;
         for (CidrRange cidrRange : cidrRanges) {
           InetAddress cidrAddr = cidrRange.getAddressPrefix();
@@ -357,7 +358,7 @@ public final class XdsClientWrapperForServerSds {
     for (FilterChain filterChain : filterChains) {
       QueueElement element = new QueueElement(filterChain, address, forDestination);
 
-      if (element.matchingPrefixLength > 0) {
+      if (element.matchingPrefixLength >= 0) {
         heap.add(element);
       }
     }
