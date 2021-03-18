@@ -184,10 +184,6 @@ abstract class XdsClient {
     // Only valid if lbPolicy is "ring_hash".
     abstract long maxRingSize();
 
-    // Only valid if lbPolicy is "ring_hash".
-    @Nullable
-    abstract HashFunction hashFunction();
-
     // Alternative resource name to be used in EDS requests.
     /// Only valid for EDS cluster.
     @Nullable
@@ -253,10 +249,6 @@ abstract class XdsClient {
       EDS, LOGICAL_DNS, AGGREGATE
     }
 
-    enum HashFunction {
-      XX_HASH
-    }
-
     // FIXME(chengyuanzhang): delete this after UpstreamTlsContext's toString() is fixed.
     @Override
     public final String toString() {
@@ -266,7 +258,6 @@ abstract class XdsClient {
           .add("lbPolicy", lbPolicy())
           .add("minRingSize", minRingSize())
           .add("maxRingSize", maxRingSize())
-          .add("hashFunction", hashFunction())
           .add("edsServiceName", edsServiceName())
           .add("lrsServerName", lrsServerName())
           .add("maxConcurrentRequests", maxConcurrentRequests())
@@ -286,10 +277,8 @@ abstract class XdsClient {
       // Private do not use.
       protected abstract Builder lbPolicy(String lbPolicy);
 
-      Builder lbPolicy(String lbPolicy, long minRingSize, long maxRingSize,
-          HashFunction hashFunction) {
-        return this.lbPolicy(lbPolicy).minRingSize(minRingSize).maxRingSize(maxRingSize)
-            .hashFunction(checkNotNull(hashFunction, "hashFunction"));
+      Builder lbPolicy(String lbPolicy, long minRingSize, long maxRingSize) {
+        return this.lbPolicy(lbPolicy).minRingSize(minRingSize).maxRingSize(maxRingSize);
       }
 
       // Private do not use.
@@ -297,9 +286,6 @@ abstract class XdsClient {
 
       // Private do not use.
       protected abstract Builder maxRingSize(long maxRingSize);
-
-      // Private do not use.
-      protected abstract Builder hashFunction(HashFunction hashFunction);
 
       // Private do not use.
       protected abstract Builder edsServiceName(String edsServiceName);

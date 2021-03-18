@@ -70,7 +70,6 @@ import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
-import io.grpc.xds.XdsClient.CdsUpdate.HashFunction;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -789,20 +788,21 @@ final class ClientXdsClient extends AbstractXdsClient {
       String lbPolicy = CaseFormat.UPPER_UNDERSCORE.to(
           CaseFormat.LOWER_UNDERSCORE, cluster.getLbPolicy().name());
       if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
-        HashFunction hashFunction;
         RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
-        if (lbConfig.getHashFunction() == RingHashLbConfig.HashFunction.XX_HASH) {
-          hashFunction = HashFunction.XX_HASH;
-        } else {
+        if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH) {
           nackResponse(ResourceType.CDS, nonce,
               "Cluster " + clusterName + ": unsupported ring hash function: "
                   + lbConfig.getHashFunction());
           return;
         }
         updateBuilder.lbPolicy(lbPolicy, lbConfig.getMinimumRingSize().getValue(),
-            lbConfig.getMaximumRingSize().getValue(), hashFunction);
-      } else {
+            lbConfig.getMaximumRingSize().getValue());
+      } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
         updateBuilder.lbPolicy(lbPolicy);
+      } else {
+        nackResponse(ResourceType.CDS, nonce,
+            "Cluster " + clusterName + ": unsupported lb policy: " + cluster.getLbPolicy());
+        return;
       }
       cdsUpdates.put(clusterName, updateBuilder.build());
     }
