@@ -88,6 +88,7 @@ envoy/config/endpoint/v3/load_report.proto
 envoy/config/filter/accesslog/v2/accesslog.proto
 envoy/config/filter/fault/v2/fault.proto
 envoy/config/filter/http/fault/v2/fault.proto
+envoy/config/filter/http/router/v2/router.proto
 envoy/config/filter/network/http_connection_manager/v2/http_connection_manager.proto
 envoy/config/listener/v2/api_listener.proto
 envoy/config/listener/v3/api_listener.proto
@@ -117,6 +118,7 @@ envoy/config/trace/v3/zipkin.proto
 envoy/extensions/clusters/aggregate/v3/cluster.proto
 envoy/extensions/filters/common/fault/v3/fault.proto
 envoy/extensions/filters/http/fault/v3/fault.proto
+envoy/extensions/filters/http/router/v3/router.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
 envoy/extensions/transport_sockets/tls/v3/cert.proto
 envoy/extensions/transport_sockets/tls/v3/common.proto
