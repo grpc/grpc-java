@@ -178,15 +178,13 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
         return;
       }
-      String endpointPickingPolicy = root.result.lbPolicy();
-      LoadBalancerProvider localityPickingLbProvider =
-          lbRegistry.getProvider(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);  // hardcoded
-      LoadBalancerProvider endpointPickingLbProvider =
-          lbRegistry.getProvider(endpointPickingPolicy);
+      LoadBalancerProvider lbProvider = lbRegistry.getProvider(root.result.lbPolicy());
+      Object lbConfig = null;
+      if (root.result.lbPolicy().equals("ring_hash")) {
+        lbConfig = new RingHashConfig(root.result.minRingSize(), root.result.maxRingSize());
+      }
       ClusterResolverConfig config = new ClusterResolverConfig(
-          Collections.unmodifiableList(instances),
-          new PolicySelection(localityPickingLbProvider, null /* by cluster_resolver LB policy */),
-          new PolicySelection(endpointPickingLbProvider, null));
+          Collections.unmodifiableList(instances), new PolicySelection(lbProvider, lbConfig));
       if (childLb == null) {
         childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
       }
