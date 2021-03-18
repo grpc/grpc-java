@@ -277,7 +277,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildHttpFilter(String name, @Nullable Any typedConfig) {
+    protected Message buildHttpFilter(String name, @Nullable Any typedConfig, boolean isOptional) {
       throw new UnsupportedOperationException();
     }
 
@@ -550,6 +550,28 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
                   .setNumerator(dropPerMillion)
                   .setDenominator(DenominatorType.MILLION))
           .build();
+    }
+
+    @Override
+    protected Message buildFilterChain(List<String> alpn, Message tlsContext, Message... filters) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected Message buildListenerWithFilterChain(
+        String name, int portValue, String address, Message... filterChains) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected Message buildListenerWithFilterChain(
+        String name, int portValue, String address, String certName, String validationContextName) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected Message buildTestFilter(String name) {
+      throw new UnsupportedOperationException();
     }
   }
 

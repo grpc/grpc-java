@@ -47,7 +47,6 @@ import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClient.CdsUpdate;
-import io.grpc.xds.XdsClient.CdsUpdate.HashFunction;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -140,6 +139,7 @@ public class CdsLoadBalancer2Test {
     loadBalancer.shutdown();
     assertThat(xdsClient.watchers).isEmpty();
     assertThat(xdsClientRefs).isEqualTo(0);
+    assertThat(childBalancers).isEmpty();
   }
 
   @Test
@@ -238,7 +238,7 @@ public class CdsLoadBalancer2Test {
     // CLUSTER (aggr.) -> [cluster1 (aggr.), cluster2 (logical DNS)]
     CdsUpdate update =
         CdsUpdate.forAggregate(CLUSTER, Arrays.asList(cluster1, cluster2))
-            .lbPolicy("ring_hash", 100L, 1000L, HashFunction.XX_HASH).build();
+            .lbPolicy("ring_hash", 100L, 1000L).build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster1, cluster2);
     assertThat(childBalancers).isEmpty();

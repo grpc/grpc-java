@@ -20,6 +20,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 
 import io.grpc.ChannelCredentials;
+import io.grpc.Metadata;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.TlsChannelCredentials;
@@ -29,6 +30,7 @@ import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.stub.MetadataUtils;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -100,5 +102,18 @@ public class Http2NettyTest extends AbstractInteropTest {
   @Test
   public void tlsInfo() {
     assertX500SubjectDn("CN=testclient, O=Internet Widgits Pty Ltd, ST=Some-State, C=AU");
+  }
+
+  @Test
+  public void contentLengthPermitted() throws Exception {
+    // Some third-party gRPC implementations (e.g., ServiceTalk) include Content-Length. The HTTP/2
+    // code starting in Netty 4.1.60.Final has special-cased handling of Content-Length, and may
+    // call uncommon methods on our custom headers implementation.
+    // https://github.com/grpc/grpc-java/issues/7953
+    Metadata contentLength = new Metadata();
+    contentLength.put(Metadata.Key.of("content-length", Metadata.ASCII_STRING_MARSHALLER), "5");
+    blockingStub
+        .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(contentLength))
+        .emptyCall(EMPTY);
   }
 }

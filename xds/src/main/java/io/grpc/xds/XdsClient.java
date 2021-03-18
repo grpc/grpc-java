@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.base.MoreObjects;
@@ -28,6 +27,7 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import java.util.ArrayList;
@@ -55,36 +55,32 @@ abstract class XdsClient {
     // The list virtual hosts that make up the route table.
     @Nullable
     final List<VirtualHost> virtualHosts;
-    // Listener contains the HttpFault filter.
-    final boolean hasFaultInjection;
-    @Nullable // Can be null even if hasFaultInjection is true.
-    final HttpFault httpFault;
+    // Filter instance names. Null if HttpFilter support is not enabled.
+    @Nullable final List<NamedFilterConfig> filterChain;
     // Server side Listener.
     @Nullable
     final Listener listener;
 
     LdsUpdate(
-        long httpMaxStreamDurationNano, String rdsName, boolean hasFaultInjection,
-        @Nullable HttpFault httpFault) {
-      this(httpMaxStreamDurationNano, rdsName, null, hasFaultInjection, httpFault);
+        long httpMaxStreamDurationNano, String rdsName,
+        @Nullable List<NamedFilterConfig> filterChain) {
+      this(httpMaxStreamDurationNano, rdsName, null, filterChain);
     }
 
     LdsUpdate(
         long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts,
-        boolean hasFaultInjection, @Nullable HttpFault httpFault) {
-      this(httpMaxStreamDurationNano, null, virtualHosts, hasFaultInjection, httpFault);
+        @Nullable List<NamedFilterConfig> filterChain) {
+      this(httpMaxStreamDurationNano, null, virtualHosts, filterChain);
     }
 
     private LdsUpdate(
         long httpMaxStreamDurationNano, @Nullable String rdsName,
-        @Nullable List<VirtualHost> virtualHosts, boolean hasFaultInjection,
-        @Nullable HttpFault httpFault) {
+        @Nullable List<VirtualHost> virtualHosts, @Nullable List<NamedFilterConfig> filterChain) {
       this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
       this.rdsName = rdsName;
       this.virtualHosts = virtualHosts == null
           ? null : Collections.unmodifiableList(new ArrayList<>(virtualHosts));
-      this.hasFaultInjection = hasFaultInjection;
-      this.httpFault = httpFault;
+      this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
       this.listener = null;
     }
 
@@ -92,15 +88,14 @@ abstract class XdsClient {
       this.listener = listener;
       this.httpMaxStreamDurationNano = 0L;
       this.rdsName = null;
+      this.filterChain = null;
       this.virtualHosts = null;
-      this.hasFaultInjection = false;
-      this.httpFault = null;
     }
 
     @Override
     public int hashCode() {
       return Objects.hash(
-          httpMaxStreamDurationNano, rdsName, virtualHosts, hasFaultInjection, httpFault, listener);
+          httpMaxStreamDurationNano, rdsName, virtualHosts, filterChain, listener);
     }
 
     @Override
@@ -115,8 +110,7 @@ abstract class XdsClient {
       return httpMaxStreamDurationNano == that.httpMaxStreamDurationNano
           && Objects.equals(rdsName, that.rdsName)
           && Objects.equals(virtualHosts, that.virtualHosts)
-          && hasFaultInjection == that.hasFaultInjection
-          && Objects.equals(httpFault, that.httpFault)
+          && Objects.equals(filterChain, that.filterChain)
           && Objects.equals(listener, that.listener);
     }
 
@@ -129,15 +123,15 @@ abstract class XdsClient {
       } else {
         toStringHelper.add("virtualHosts", virtualHosts);
       }
-      if (hasFaultInjection) {
-        toStringHelper.add("faultInjectionEnabled", true)
-            .add("httpFault", httpFault);
+      if (filterChain != null) {
+        toStringHelper.add("filterChain", filterChain);
       }
       if (listener != null) {
         toStringHelper.add("listener", listener);
       }
       return toStringHelper.toString();
     }
+
   }
 
   static final class RdsUpdate implements ResourceUpdate {
@@ -189,10 +183,6 @@ abstract class XdsClient {
 
     // Only valid if lbPolicy is "ring_hash".
     abstract long maxRingSize();
-
-    // Only valid if lbPolicy is "ring_hash".
-    @Nullable
-    abstract HashFunction hashFunction();
 
     // Alternative resource name to be used in EDS requests.
     /// Only valid for EDS cluster.
@@ -259,10 +249,6 @@ abstract class XdsClient {
       EDS, LOGICAL_DNS, AGGREGATE
     }
 
-    enum HashFunction {
-      XX_HASH
-    }
-
     // FIXME(chengyuanzhang): delete this after UpstreamTlsContext's toString() is fixed.
     @Override
     public final String toString() {
@@ -272,7 +258,6 @@ abstract class XdsClient {
           .add("lbPolicy", lbPolicy())
           .add("minRingSize", minRingSize())
           .add("maxRingSize", maxRingSize())
-          .add("hashFunction", hashFunction())
           .add("edsServiceName", edsServiceName())
           .add("lrsServerName", lrsServerName())
           .add("maxConcurrentRequests", maxConcurrentRequests())
@@ -292,10 +277,8 @@ abstract class XdsClient {
       // Private do not use.
       protected abstract Builder lbPolicy(String lbPolicy);
 
-      Builder lbPolicy(String lbPolicy, long minRingSize, long maxRingSize,
-          HashFunction hashFunction) {
-        return this.lbPolicy(lbPolicy).minRingSize(minRingSize).maxRingSize(maxRingSize)
-            .hashFunction(checkNotNull(hashFunction, "hashFunction"));
+      Builder lbPolicy(String lbPolicy, long minRingSize, long maxRingSize) {
+        return this.lbPolicy(lbPolicy).minRingSize(minRingSize).maxRingSize(maxRingSize);
       }
 
       // Private do not use.
@@ -303,9 +286,6 @@ abstract class XdsClient {
 
       // Private do not use.
       protected abstract Builder maxRingSize(long maxRingSize);
-
-      // Private do not use.
-      protected abstract Builder hashFunction(HashFunction hashFunction);
 
       // Private do not use.
       protected abstract Builder edsServiceName(String edsServiceName);
@@ -371,52 +351,6 @@ abstract class XdsClient {
     }
   }
 
-  /**
-   * Updates via resource discovery RPCs using LDS. Includes {@link Listener} object containing
-   * config for security, RBAC or other server side features such as rate limit.
-   */
-  static final class ListenerUpdate implements ResourceUpdate {
-    // TODO(sanjaypujare): flatten structure by moving Listener class members here.
-    private final Listener listener;
-
-    private ListenerUpdate(Listener listener) {
-      this.listener = listener;
-    }
-
-    public Listener getListener() {
-      return listener;
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("listener", listener)
-          .toString();
-    }
-
-    static Builder newBuilder() {
-      return new Builder();
-    }
-
-    static final class Builder {
-      private Listener listener;
-
-      // Use ListenerUpdate.newBuilder().
-      private Builder() {
-      }
-
-      Builder setListener(Listener listener) {
-        this.listener = listener;
-        return this;
-      }
-
-      ListenerUpdate build() {
-        checkState(listener != null, "listener is not set");
-        return new ListenerUpdate(listener);
-      }
-    }
-  }
-
   interface ResourceUpdate {
   }
 
@@ -452,17 +386,6 @@ abstract class XdsClient {
 
   interface EdsResourceWatcher extends ResourceWatcher {
     void onChanged(EdsUpdate update);
-  }
-
-  /**
-   * Listener watcher interface. To be used by {@link XdsServerBuilder}.
-   */
-  interface ListenerWatcher extends ResourceWatcher {
-
-    /**
-     * Called when receiving an update on Listener configuration.
-     */
-    void onListenerChanged(ListenerUpdate update);
   }
 
   /**
@@ -532,13 +455,6 @@ abstract class XdsClient {
    * Unregisters the given EDS resource watcher.
    */
   void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Registers a watcher for a Listener with the given port.
-   */
-  void watchListenerData(int port, ListenerWatcher watcher) {
     throw new UnsupportedOperationException();
   }
 

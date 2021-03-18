@@ -61,7 +61,7 @@ public class XdsServerBuilderTest {
   private XdsClient mockXdsClient;
   private XdsServerBuilder builder;
   private ServerWrapperForXds xdsServer;
-  private XdsClient.ListenerWatcher listenerWatcher;
+  private XdsClient.LdsResourceWatcher listenerWatcher;
   private int port;
   private XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
 

@@ -75,7 +75,7 @@ public final class XdsClientWrapperForServerSds {
   @Nullable private XdsClient xdsClient;
   private final int port;
   private ScheduledExecutorService timeService;
-  private XdsClient.ListenerWatcher listenerWatcher;
+  private XdsClient.LdsResourceWatcher listenerWatcher;
   private boolean newServerApi;
   @VisibleForTesting final Set<ServerWatcher> serverWatchers = new HashSet<>();
 
@@ -112,34 +112,33 @@ public final class XdsClientWrapperForServerSds {
             .keepAliveTime(5, TimeUnit.MINUTES).build();
     timeService = SharedResourceHolder.get(timeServiceResource);
     newServerApi = serverInfo.isUseProtocolV3();
-    String grpcServerResourceId = bootstrapInfo.getGrpcServerResourceId();
+    String grpcServerResourceId = bootstrapInfo.getServerListenerResourceNameTemplate();
     if (newServerApi && grpcServerResourceId == null) {
-      throw new IOException("missing grpc_server_resource_name_id value in xds bootstrap");
+      throw new IOException(
+          "missing server_listener_resource_name_template value in xds bootstrap");
     }
     XdsClient xdsClientImpl =
-        new ServerXdsClient(
+        new ClientXdsClient(
             channel,
             serverInfo.isUseProtocolV3(),
             node,
             timeService,
             new ExponentialBackoffPolicy.Provider(),
-            GrpcUtil.STOPWATCH_SUPPLIER,
-            "0.0.0.0",
-            grpcServerResourceId);
-    start(xdsClientImpl);
+            GrpcUtil.STOPWATCH_SUPPLIER);
+    start(xdsClientImpl, grpcServerResourceId);
   }
 
   /** Accepts an XdsClient and starts a watch. */
   @VisibleForTesting
-  public void start(XdsClient xdsClient) {
+  public void start(XdsClient xdsClient, String grpcServerResourceId) {
     checkState(this.xdsClient == null, "start() called more than once");
     checkNotNull(xdsClient, "xdsClient");
     this.xdsClient = xdsClient;
     this.listenerWatcher =
-        new XdsClient.ListenerWatcher() {
+        new XdsClient.LdsResourceWatcher() {
           @Override
-          public void onListenerChanged(XdsClient.ListenerUpdate update) {
-            curListener = update.getListener();
+          public void onChanged(XdsClient.LdsUpdate update) {
+            curListener = update.listener;
             reportSuccess();
           }
 
@@ -153,11 +152,12 @@ public final class XdsClientWrapperForServerSds {
           @Override
           public void onError(Status error) {
             logger.log(
-                Level.WARNING, "ListenerWatcher in XdsClientWrapperForServerSds: {0}", error);
+                Level.WARNING, "LdsResourceWatcher in XdsClientWrapperForServerSds: {0}", error);
             reportError(error.asException(), isResourceAbsent(error));
           }
         };
-    xdsClient.watchListenerData(port, listenerWatcher);
+    grpcServerResourceId = grpcServerResourceId.replaceAll("%s", "0.0.0.0:" + port);
+    xdsClient.watchLdsResource(grpcServerResourceId, listenerWatcher);
   }
 
   /** Whether the throwable indicates our listener resource is absent/deleted. */
@@ -216,9 +216,10 @@ public final class XdsClientWrapperForServerSds {
     filterChains = filterOnIpAddress(filterChains, remoteInetAddr.getAddress(), false);
     filterChains = filterOnSourcePort(filterChains, remoteInetAddr.getPort());
 
-    // if we get more than 1, we ignore filterChains and use the defaultFilerChain
-    // although spec not clear for that case
-    if (filterChains.size() == 1) {
+    if (filterChains.size() > 1) {
+      // close the connection
+      throw new IllegalStateException("Found 2 matching filter-chains");
+    } else if (filterChains.size() == 1) {
       return filterChains.get(0).getDownstreamTlsContext();
     }
     return curListener.getDefaultFilterChain().getDownstreamTlsContext();
@@ -307,10 +308,10 @@ public final class XdsClientWrapperForServerSds {
               ? filterChainMatch.getPrefixRanges()
               : filterChainMatch.getSourcePrefixRanges();
       indexOfMatchingPrefixRange = -1;
-      if (cidrRanges.isEmpty()) { // if there is no CidrRange assume there is perfect match
-        matchingPrefixLength = isIPv6 ? 128 : 32;
-      } else {
+      if (cidrRanges.isEmpty()) { // if there is no CidrRange assume 0-length match
         matchingPrefixLength = 0;
+      } else {
+        matchingPrefixLength = -1;
         int index = 0;
         for (CidrRange cidrRange : cidrRanges) {
           InetAddress cidrAddr = cidrRange.getAddressPrefix();
@@ -357,7 +358,7 @@ public final class XdsClientWrapperForServerSds {
     for (FilterChain filterChain : filterChains) {
       QueueElement element = new QueueElement(filterChain, address, forDestination);
 
-      if (element.matchingPrefixLength > 0) {
+      if (element.matchingPrefixLength >= 0) {
         heap.add(element);
       }
     }
@@ -416,7 +417,7 @@ public final class XdsClientWrapperForServerSds {
   }
 
   @VisibleForTesting
-  XdsClient.ListenerWatcher getListenerWatcher() {
+  XdsClient.LdsResourceWatcher getListenerWatcher() {
     return listenerWatcher;
   }
 

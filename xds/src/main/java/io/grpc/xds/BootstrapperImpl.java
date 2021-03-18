@@ -215,7 +215,8 @@ public class BootstrapperImpl extends Bootstrapper {
         certProviders.put(name, certificateProviderInfo);
       }
     }
-    String grpcServerResourceId = JsonUtil.getString(rawData, "grpc_server_resource_name_id");
+    String grpcServerResourceId =
+        JsonUtil.getString(rawData, "server_listener_resource_name_template");
     return new BootstrapInfo(servers, nodeBuilder.build(), certProviders, grpcServerResourceId);
   }
 

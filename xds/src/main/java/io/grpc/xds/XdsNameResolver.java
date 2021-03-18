@@ -18,22 +18,18 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
-import com.google.common.base.Supplier;
-import com.google.common.base.Suppliers;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
-import com.google.common.util.concurrent.MoreExecutors;
 import com.google.gson.Gson;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
-import io.grpc.Context;
-import io.grpc.Deadline;
+import io.grpc.ClientInterceptors;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.InternalConfigSelector;
@@ -44,12 +40,11 @@ import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
-import io.grpc.internal.DelayedClientCall;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.HttpFault.FaultAbort;
-import io.grpc.xds.HttpFault.FaultDelay;
-import io.grpc.xds.HttpFault.FractionalPercent;
+import io.grpc.xds.Filter.ClientInterceptorBuilder;
+import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.Matchers.FractionMatcher;
 import io.grpc.xds.Matchers.HeaderMatcher;
 import io.grpc.xds.Matchers.PathMatcher;
@@ -66,6 +61,7 @@ import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -76,12 +72,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 /**
@@ -98,29 +90,11 @@ final class XdsNameResolver extends NameResolver {
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
   static final CallOptions.Key<Long> RPC_HASH_KEY =
       CallOptions.Key.create("io.grpc.xds.RPC_HASH_KEY");
+  private static final NamedFilterConfig LAME_FILTER =
+      new NamedFilterConfig(null, LameFilter.LAME_CONFIG);
   @VisibleForTesting
   static boolean enableTimeout =
       Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"));
-  @VisibleForTesting
-  static final Metadata.Key<String> DOWNSTREAM_NODE_KEY =
-      Metadata.Key.of("x-envoy-downstream-service-node", Metadata.ASCII_STRING_MARSHALLER);
-  @VisibleForTesting
-  static final Metadata.Key<String> HEADER_DELAY_KEY =
-      Metadata.Key.of("x-envoy-fault-delay-request", Metadata.ASCII_STRING_MARSHALLER);
-  @VisibleForTesting
-  static final Metadata.Key<String> HEADER_DELAY_PERCENTAGE_KEY =
-      Metadata.Key.of("x-envoy-fault-delay-request-percentage", Metadata.ASCII_STRING_MARSHALLER);
-  @VisibleForTesting
-  static final Metadata.Key<String> HEADER_ABORT_HTTP_STATUS_KEY =
-      Metadata.Key.of("x-envoy-fault-abort-request", Metadata.ASCII_STRING_MARSHALLER);
-  @VisibleForTesting
-  static final Metadata.Key<String> HEADER_ABORT_GRPC_STATUS_KEY =
-      Metadata.Key.of("x-envoy-fault-abort-grpc-request", Metadata.ASCII_STRING_MARSHALLER);
-  @VisibleForTesting
-  static final Metadata.Key<String> HEADER_ABORT_PERCENTAGE_KEY =
-      Metadata.Key.of("x-envoy-fault-abort-request-percentage", Metadata.ASCII_STRING_MARSHALLER);
-  @VisibleForTesting
-  static AtomicLong activeFaultInjectedStreamCounter = new AtomicLong();
 
   private final InternalLogId logId;
   private final XdsLogger logger;
@@ -130,6 +104,7 @@ final class XdsNameResolver extends NameResolver {
   private final ScheduledExecutorService scheduler;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final ThreadSafeRandom random;
+  private final FilterRegistry filterRegistry;
   private final XxHash64 hashFunc = XxHash64.INSTANCE;
   private final ConcurrentMap<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
@@ -144,19 +119,22 @@ final class XdsNameResolver extends NameResolver {
   XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler) {
     this(name, serviceConfigParser, syncContext, scheduler,
-        SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance);
+        SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance,
+        FilterRegistry.getDefaultRegistry());
   }
 
   @VisibleForTesting
   XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
-      XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random) {
+      XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
+      FilterRegistry filterRegistry) {
     authority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
     this.random = checkNotNull(random, "random");
+    this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
     logId = InternalLogId.allocate("xds-resolver", name);
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created resolver for {0}", name);
@@ -370,18 +348,21 @@ final class XdsNameResolver extends NameResolver {
       asciiHeaders.put("content-type", "application/grpc");
       String cluster = null;
       Route selectedRoute = null;
-      HttpFault selectedFaultConfig;
       RoutingConfig routingCfg;
+      Map<String, FilterConfig> selectedOverrideConfigs;
+      List<ClientInterceptor> filterInterceptors = new ArrayList<>();
       do {
         routingCfg = routingConfig;
-        selectedFaultConfig = routingCfg.faultConfig;
+        selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
+        if (routingCfg.filterChain != null
+            && Iterables.getLast(routingCfg.filterChain).equals(LAME_FILTER)) {
+          break;
+        }
         for (Route route : routingCfg.routes) {
           if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
               asciiHeaders, random)) {
             selectedRoute = route;
-            if (routingCfg.applyFaultInjection && route.httpFault() != null) {
-              selectedFaultConfig = route.httpFault();
-            }
+            selectedOverrideConfigs.putAll(route.filterConfigOverrides());
             break;
           }
         }
@@ -403,9 +384,7 @@ final class XdsNameResolver extends NameResolver {
             accumulator += weightedCluster.weight();
             if (select < accumulator) {
               cluster = weightedCluster.name();
-              if (routingCfg.applyFaultInjection && weightedCluster.httpFault() != null) {
-                selectedFaultConfig = weightedCluster.httpFault();
-              }
+              selectedOverrideConfigs.putAll(weightedCluster.filterConfigOverrides());
               break;
             }
           }
@@ -414,12 +393,15 @@ final class XdsNameResolver extends NameResolver {
       // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
       Map<String, ?> rawServiceConfig = Collections.emptyMap();
       if (enableTimeout) {
-        Long timeoutNano = selectedRoute.routeAction().timeoutNano();
-        if (timeoutNano == null) {
-          timeoutNano = routingCfg.fallbackTimeoutNano;
+        Long timeoutNanos = null;
+        if (selectedRoute != null) {
+          timeoutNanos = selectedRoute.routeAction().timeoutNano();
         }
-        if (timeoutNano > 0) {
-          rawServiceConfig = generateServiceConfigWithMethodTimeoutConfig(timeoutNano);
+        if (timeoutNanos == null) {
+          timeoutNanos = routingCfg.fallbackTimeoutNano;
+        }
+        if (timeoutNanos > 0) {
+          rawServiceConfig = generateServiceConfigWithMethodTimeoutConfig(timeoutNanos);
         }
       }
       ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
@@ -430,38 +412,33 @@ final class XdsNameResolver extends NameResolver {
             parsedServiceConfig.getError().augmentDescription(
                 "Failed to parse service config (method config)"));
       }
-      if (selectedFaultConfig != null && selectedFaultConfig.maxActiveFaults() != null
-          && activeFaultInjectedStreamCounter.get() >= selectedFaultConfig.maxActiveFaults()) {
-        selectedFaultConfig = null;
-      }
-      if (selectedFaultConfig != null) {
-        if (!selectedFaultConfig.upstreamCluster().equals(cluster)) {
-          selectedFaultConfig = null;
-        } else if (!selectedFaultConfig.downstreamNodes().isEmpty()) {
-          String downstreamNode = headers.get(DOWNSTREAM_NODE_KEY);
-          if (downstreamNode == null
-              || !selectedFaultConfig.downstreamNodes().contains(downstreamNode)) {
-            selectedFaultConfig = null;
+      if (routingCfg.filterChain != null) {
+        for (NamedFilterConfig namedFilter : routingCfg.filterChain) {
+          FilterConfig filterConfig = namedFilter.filterConfig;
+          Filter filter;
+          if (namedFilter.equals(LAME_FILTER)) {
+            filter = LameFilter.INSTANCE;
+          } else {
+            filter = filterRegistry.get(filterConfig.typeUrl());
+          }
+          if (filter instanceof ClientInterceptorBuilder) {
+            ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
+                .buildClientInterceptor(
+                    filterConfig, selectedOverrideConfigs.get(namedFilter.name),
+                    args, scheduler);
+            if (interceptor != null) {
+              filterInterceptors.add(interceptor);
+            }
           }
         }
-      }
-      if (selectedFaultConfig != null
-          && !matchHeaders(selectedFaultConfig.headers(), asciiHeaders)) {
-        selectedFaultConfig = null;
-      }
-      Long delayNanos = null;
-      Status abortStatus = null;
-      if (selectedFaultConfig != null) {
-        if (selectedFaultConfig.faultDelay() != null) {
-          delayNanos = determineFaultDelayNanos(selectedFaultConfig.faultDelay(), headers);
-        }
-        if (selectedFaultConfig.faultAbort() != null) {
-          abortStatus = determineFaultAbortStatus(selectedFaultConfig.faultAbort(), headers);
+        if (Iterables.getLast(routingCfg.filterChain).equals(LAME_FILTER)) {
+          return Result.newBuilder()
+              .setConfig(config)
+              .setInterceptor(combineInterceptors(filterInterceptors))
+              .build();
         }
       }
       final String finalCluster = cluster;
-      final Long finalDelayNanos = delayNanos;
-      final Status finalAbortStatus = abortStatus;
       final long hash = generateHash(selectedRoute.routeAction().hashPolicies(), asciiHeaders);
       class ClusterSelectionInterceptor implements ClientInterceptor {
         @Override
@@ -471,70 +448,39 @@ final class XdsNameResolver extends NameResolver {
           final CallOptions callOptionsForCluster =
               callOptions.withOption(CLUSTER_SELECTION_KEY, finalCluster)
                   .withOption(RPC_HASH_KEY, hash);
-          Supplier<ClientCall<ReqT, RespT>> configApplyingCallSupplier =
-              new Supplier<ClientCall<ReqT, RespT>>() {
+          return new SimpleForwardingClientCall<ReqT, RespT>(
+              next.newCall(method, callOptionsForCluster)) {
+            @Override
+            public void start(Listener<RespT> listener, Metadata headers) {
+              listener = new SimpleForwardingClientCallListener<RespT>(listener) {
+                boolean committed;
+
                 @Override
-                public ClientCall<ReqT, RespT> get() {
-                  return new SimpleForwardingClientCall<ReqT, RespT>(
-                      next.newCall(method, callOptionsForCluster)) {
-                    @Override
-                    public void start(Listener<RespT> listener, Metadata headers) {
-                      listener = new SimpleForwardingClientCallListener<RespT>(listener) {
-                        boolean committed;
+                public void onHeaders(Metadata headers) {
+                  committed = true;
+                  releaseCluster(finalCluster);
+                  delegate().onHeaders(headers);
+                }
 
-                        @Override
-                        public void onHeaders(Metadata headers) {
-                          committed = true;
-                          releaseCluster(finalCluster);
-                          delegate().onHeaders(headers);
-                        }
-
-                        @Override
-                        public void onClose(Status status, Metadata trailers) {
-                          if (!committed) {
-                            releaseCluster(finalCluster);
-                          }
-                          delegate().onClose(status, trailers);
-                        }
-                      };
-                      delegate().start(listener, headers);
-                    }
-                  };
+                @Override
+                public void onClose(Status status, Metadata trailers) {
+                  if (!committed) {
+                    releaseCluster(finalCluster);
+                  }
+                  delegate().onClose(status, trailers);
                 }
               };
-
-          Executor callExecutor = callOptions.getExecutor();
-          if (callExecutor == null) { // This should never happen in practice because
-            // ManagedChannelImpl.ConfigSelectingClientCall always provides CallOptions with
-            // a callExecutor.
-            // TODO(https://github.com/grpc/grpc-java/issues/7868)
-            callExecutor = MoreExecutors.directExecutor();
-          }
-          if (finalDelayNanos != null && finalAbortStatus != null) {
-            return new ActiveFaultCountingClientCall<>(
-                new DelayInjectedCall<>(
-                    finalDelayNanos, callExecutor, scheduler, callOptionsForCluster.getDeadline(),
-                    Suppliers.ofInstance(
-                        new FailingClientCall<ReqT, RespT>(finalAbortStatus, callExecutor))));
-          }
-          if (finalAbortStatus != null) {
-            return new ActiveFaultCountingClientCall<>(
-                new FailingClientCall<ReqT, RespT>(finalAbortStatus, callExecutor));
-          }
-          if (finalDelayNanos != null) {
-            return new ActiveFaultCountingClientCall<>(
-                new DelayInjectedCall<>(
-                    finalDelayNanos, callExecutor, scheduler, callOptionsForCluster.getDeadline(),
-                    configApplyingCallSupplier));
-          }
-          return configApplyingCallSupplier.get();
+              delegate().start(listener, headers);
+            }
+          };
         }
       }
 
+      filterInterceptors.add(new ClusterSelectionInterceptor());
       return
           Result.newBuilder()
               .setConfig(config)
-              .setInterceptor(new ClusterSelectionInterceptor())
+              .setInterceptor(combineInterceptors(filterInterceptors))
               .build();
     }
 
@@ -597,198 +543,21 @@ final class XdsNameResolver extends NameResolver {
       }
       return hash == null ? random.nextLong() : hash;
     }
-
-    @Nullable
-    private Long determineFaultDelayNanos(FaultDelay faultDelay, Metadata headers) {
-      Long delayNanos;
-      FractionalPercent fractionalPercent = faultDelay.percent();
-      if (faultDelay.headerDelay()) {
-        try {
-          int delayMillis = Integer.parseInt(headers.get(HEADER_DELAY_KEY));
-          delayNanos = TimeUnit.MILLISECONDS.toNanos(delayMillis);
-          String delayPercentageStr = headers.get(HEADER_DELAY_PERCENTAGE_KEY);
-          if (delayPercentageStr != null) {
-            int delayPercentage = Integer.parseInt(delayPercentageStr);
-            if (delayPercentage >= 0 && delayPercentage < fractionalPercent.numerator()) {
-              fractionalPercent =
-                  FractionalPercent.create(delayPercentage, fractionalPercent.denominatorType());
-            }
-          }
-        } catch (NumberFormatException e) {
-          return null; // treated as header_delay not applicable
-        }
-      } else {
-        delayNanos = faultDelay.delayNanos();
-      }
-      if (random.nextInt(1_000_000) >= getRatePerMillion(fractionalPercent)) {
-        return null;
-      }
-      return delayNanos;
-    }
-
-    @Nullable
-    private Status determineFaultAbortStatus(FaultAbort faultAbort, Metadata headers) {
-      Status abortStatus = null;
-      FractionalPercent fractionalPercent = faultAbort.percent();
-      if (faultAbort.headerAbort()) {
-        try {
-          String grpcCodeStr = headers.get(HEADER_ABORT_GRPC_STATUS_KEY);
-          if (grpcCodeStr != null) {
-            int grpcCode = Integer.parseInt(grpcCodeStr);
-            abortStatus = Status.fromCodeValue(grpcCode);
-          }
-          String httpCodeStr = headers.get(HEADER_ABORT_HTTP_STATUS_KEY);
-          if (httpCodeStr != null) {
-            int httpCode = Integer.parseInt(httpCodeStr);
-            abortStatus = GrpcUtil.httpStatusToGrpcStatus(httpCode);
-          }
-          String abortPercentageStr = headers.get(HEADER_ABORT_PERCENTAGE_KEY);
-          if (abortPercentageStr != null) {
-            int abortPercentage =
-                Integer.parseInt(headers.get(HEADER_ABORT_PERCENTAGE_KEY));
-            if (abortPercentage >= 0 && abortPercentage < fractionalPercent.numerator()) {
-              fractionalPercent =
-                  FractionalPercent.create(abortPercentage, fractionalPercent.denominatorType());
-            }
-          }
-        } catch (NumberFormatException e) {
-          return null; // treated as header_abort not applicable
-        }
-      } else {
-        abortStatus = faultAbort.status();
-      }
-      if (random.nextInt(1_000_000) >= getRatePerMillion(fractionalPercent)) {
-        return null;
-      }
-      return abortStatus;
-    }
   }
 
-  private static int getRatePerMillion(FractionalPercent percent) {
-    int numerator = percent.numerator();
-    FractionalPercent.DenominatorType type = percent.denominatorType();
-    switch (type) {
-      case TEN_THOUSAND:
-        numerator *= 100;
-        break;
-      case HUNDRED:
-        numerator *= 10_000;
-        break;
-      case MILLION:
-      default:
-        break;
+  private static ClientInterceptor combineInterceptors(final List<ClientInterceptor> interceptors) {
+    checkArgument(!interceptors.isEmpty(), "empty interceptors");
+    if (interceptors.size() == 1) {
+      return interceptors.get(0);
     }
-
-    if (numerator > 1_000_000 || numerator < 0) {
-      numerator = 1_000_000;
-    }
-    return numerator;
-  }
-
-  /**
-   * A forwarding client call that counts active fault injections.
-   */
-  private final class ActiveFaultCountingClientCall<ReqT, RespT> extends
-      SimpleForwardingClientCall<ReqT, RespT> {
-    ActiveFaultCountingClientCall(ClientCall<ReqT, RespT> faultInjectedDelegate) {
-      super(faultInjectedDelegate);
-      activeFaultInjectedStreamCounter.incrementAndGet();
-    }
-
-    @Override
-    public void start(Listener<RespT> listener, Metadata headers) {
-      listener = new SimpleForwardingClientCallListener<RespT>(listener) {
-        @Override
-        public void onClose(Status status, Metadata trailers) {
-          delegate().onClose(status, trailers);
-          activeFaultInjectedStreamCounter.decrementAndGet();
-        }
-      };
-      delegate().start(listener, headers);
-    }
-  }
-
-  /** A {@link DelayedClientCall} with a fixed delay. */
-  private static final class DelayInjectedCall<ReqT, RespT> extends DelayedClientCall<ReqT, RespT> {
-    final Object lock = new Object();
-    ScheduledFuture<?> delayTask;
-    boolean cancelled;
-
-    DelayInjectedCall(
-        long delayNanos, Executor callExecutor, ScheduledExecutorService scheduler,
-        @Nullable Deadline deadline,
-        final Supplier<? extends ClientCall<ReqT, RespT>> callSupplier) {
-      super(callExecutor, scheduler, deadline);
-      ScheduledFuture<?> task = scheduler.schedule(
-          new Runnable() {
-            @Override
-            public void run() {
-              setCall(callSupplier.get());
-            }
-          },
-          delayNanos,
-          NANOSECONDS);
-      synchronized (lock) {
-        if (cancelled) {
-          task.cancel(false);
-          return;
-        }
-        delayTask = task;
+    return new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        next = ClientInterceptors.interceptForward(next, interceptors);
+        return next.newCall(method, callOptions);
       }
-    }
-
-    @Override
-    protected void callCancelled() {
-      ScheduledFuture<?> savedDelayTask;
-      synchronized (lock) {
-        cancelled = true;
-        savedDelayTask = delayTask;
-      }
-      if (savedDelayTask != null) {
-        savedDelayTask.cancel(false);
-      }
-    }
-  }
-
-  /** An implementation of {@link ClientCall} that fails when started. */
-  private static final class FailingClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
-    final Status error;
-    final Executor callExecutor;
-    final Context context;
-
-    FailingClientCall(Status error, Executor callExecutor) {
-      this.error = error;
-      this.callExecutor = callExecutor;
-      this.context = Context.current();
-    }
-
-    @Override
-    public void start(final ClientCall.Listener<RespT> listener, Metadata headers) {
-      callExecutor.execute(
-          new Runnable() {
-            @Override
-            public void run() {
-              Context previous = context.attach();
-              try {
-                listener.onClose(error, new Metadata());
-              } finally {
-                context.detach(previous);
-              }
-            }
-          });
-    }
-
-    @Override
-    public void request(int numMessages) {}
-
-    @Override
-    public void cancel(String message, Throwable cause) {}
-
-    @Override
-    public void halfClose() {}
-
-    @Override
-    public void sendMessage(ReqT message) {}
+    };
   }
 
   @VisibleForTesting
@@ -872,10 +641,7 @@ final class XdsNameResolver extends NameResolver {
     private String rdsResource;
     @Nullable
     private RdsResourceWatcher rdsWatcher;
-    private long httpMaxStreamDurationNano;
-    private boolean applyFaultInjection;
-    @Nullable
-    private HttpFault httpFilterFaultConfig;
+    private LdsUpdate update;
 
     @Override
     public void onChanged(final LdsUpdate update) {
@@ -886,9 +652,7 @@ final class XdsNameResolver extends NameResolver {
             return;
           }
           logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
-          httpMaxStreamDurationNano = update.httpMaxStreamDurationNano;
-          applyFaultInjection = update.hasFaultInjection;
-          httpFilterFaultConfig = applyFaultInjection ? update.httpFault : null;
+          ResolveState.this.update = update;
           List<VirtualHost> virtualHosts = update.virtualHosts;
           String rdsName = update.rdsName;
           if (rdsName != null && rdsName.equals(rdsResource)) {
@@ -958,11 +722,27 @@ final class XdsNameResolver extends NameResolver {
         listener.onResult(emptyResult);
         return;
       }
-      List<Route> routes = virtualHost.routes();
-      HttpFault faultConfig = httpFilterFaultConfig;
-      if (applyFaultInjection && virtualHost.httpFault() != null) {
-        faultConfig = virtualHost.httpFault();
+      List<NamedFilterConfig> filterChain = null;
+      if (update.filterChain != null) {
+        boolean hasRouter = false;
+        filterChain = new ArrayList<>(update.filterChain.size());
+        for (NamedFilterConfig namedFilter : update.filterChain) {
+          filterChain.add(namedFilter);
+          if (namedFilter.filterConfig.equals(RouterFilter.ROUTER_CONFIG)) {
+            hasRouter = true;
+            break;
+          }
+        }
+        if (!hasRouter) {
+          filterChain.add(LAME_FILTER);
+          routingConfig = new RoutingConfig(
+              update.httpMaxStreamDurationNano, Collections.<Route>emptyList(), filterChain,
+              virtualHost.filterConfigOverrides());
+          updateResolutionResult();
+          return;
+        }
       }
+      List<Route> routes = virtualHost.routes();
       Set<String> clusters = new HashSet<>();
       for (Route route : routes) {
         RouteAction action = route.routeAction();
@@ -996,7 +776,8 @@ final class XdsNameResolver extends NameResolver {
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
       routingConfig = new RoutingConfig(
-          httpMaxStreamDurationNano, routes, applyFaultInjection, faultConfig);
+          update.httpMaxStreamDurationNano, routes, filterChain,
+          virtualHost.filterConfigOverrides());
       shouldUpdateResult = false;
       for (String cluster : deletedClusters) {
         int count = clusterRefs.get(cluster).decrementAndGet();
@@ -1071,21 +852,22 @@ final class XdsNameResolver extends NameResolver {
    */
   private static class RoutingConfig {
     private final long fallbackTimeoutNano;
-    private final List<Route> routes;
-    private final boolean applyFaultInjection;
-    @Nullable
-    private final HttpFault faultConfig;
+    final List<Route> routes;
+    // Null if HttpFilter is not supported.
+    @Nullable final List<NamedFilterConfig> filterChain;
+    final Map<String, FilterConfig> virtualHostOverrideConfig;
 
-    private static final RoutingConfig empty =
-        new RoutingConfig(0L, Collections.<Route>emptyList(), false, null);
+    private static RoutingConfig empty = new RoutingConfig(
+        0L, Collections.<Route>emptyList(), null, Collections.<String, FilterConfig>emptyMap());
 
     private RoutingConfig(
-        long fallbackTimeoutNano, List<Route> routes, boolean applyFaultInjection,
-        HttpFault faultConfig) {
+        long fallbackTimeoutNano, List<Route> routes, @Nullable List<NamedFilterConfig> filterChain,
+        Map<String, FilterConfig> virtualHostOverrideConfig) {
       this.fallbackTimeoutNano = fallbackTimeoutNano;
       this.routes = routes;
-      this.applyFaultInjection = applyFaultInjection;
-      this.faultConfig = faultConfig;
+      checkArgument(filterChain == null || !filterChain.isEmpty(), "filterChain is empty");
+      this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
+      this.virtualHostOverrideConfig = Collections.unmodifiableMap(virtualHostOverrideConfig);
     }
   }
 }

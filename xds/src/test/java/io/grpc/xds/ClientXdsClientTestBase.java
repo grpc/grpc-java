@@ -34,11 +34,8 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
-import com.google.protobuf.StringValue;
-import io.envoyproxy.envoy.config.core.v3.SocketAddress;
-import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
-import io.envoyproxy.envoy.config.listener.v3.FilterChain;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.config.route.v3.FilterConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
@@ -56,12 +53,11 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
-import io.grpc.xds.HttpFault.FractionalPercent.DenominatorType;
+import io.grpc.xds.FaultConfig.FractionalPercent.DenominatorType;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
 import io.grpc.xds.XdsClient.CdsUpdate;
 import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
-import io.grpc.xds.XdsClient.CdsUpdate.HashFunction;
 import io.grpc.xds.XdsClient.EdsResourceWatcher;
 import io.grpc.xds.XdsClient.EdsUpdate;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
@@ -103,6 +99,8 @@ public abstract class ClientXdsClientTestBase {
   private static final String RDS_RESOURCE = "route-configuration.googleapis.com";
   private static final String CDS_RESOURCE = "cluster.googleapis.com";
   private static final String EDS_RESOURCE = "cluster-load-assignment.googleapis.com";
+  private static final String LISTENER_RESOURCE =
+      "grpc/server?xds.resource.listening_address=0.0.0.0:7000";
   private static final String VERSION_1 = "42";
   private static final String VERSION_2 = "43";
   private static final Node NODE = Node.newBuilder().build();
@@ -384,7 +382,7 @@ public abstract class ClientXdsClientTestBase {
                         mf.buildOpaqueRoutes(1),
                         ImmutableMap.of(
                             "irrelevant",
-                            Any.pack(StringValue.of("irrelevant")),
+                            Any.pack(FilterConfig.newBuilder().setIsOptional(true).build()),
                             "envoy.fault",
                             mf.buildHttpFaultTypedConfig(
                                 300L, 1000, "cluster1", ImmutableList.<String>of(), 100, null, null,
@@ -395,12 +393,15 @@ public abstract class ClientXdsClientTestBase {
                             "envoy.fault",
                             mf.buildHttpFaultTypedConfig(
                                 null, null, "cluster2", ImmutableList.<String>of(), 101, null, 503,
-                                2000)))
-                )),
+                                2000))))),
             ImmutableList.of(
-                mf.buildHttpFilter("irrelevant", null),
-                mf.buildHttpFilter("envoy.fault", null)
-            )));
+                mf.buildHttpFilter("irrelevant", null, true),
+                mf.buildHttpFilter(
+                    "envoy.fault",
+                    mf.buildHttpFaultTypedConfig(
+                        1L, 2, "cluster1", ImmutableList.<String>of(), 3, null, null,
+                        null),
+                    false))));
     call.sendResponse(LDS, listener, VERSION_1, "0000");
 
     // Client sends an ACK LDS request.
@@ -409,24 +410,23 @@ public abstract class ClientXdsClientTestBase {
 
     LdsUpdate ldsUpdate = ldsUpdateCaptor.getValue();
     assertThat(ldsUpdate.virtualHosts).hasSize(2);
-    assertThat(ldsUpdate.hasFaultInjection).isTrue();
-    assertThat(ldsUpdate.httpFault).isNull();
-    HttpFault httpFault = ldsUpdate.virtualHosts.get(0).httpFault();
-    assertThat(httpFault.faultDelay().delayNanos()).isEqualTo(300);
-    assertThat(httpFault.faultDelay().percent().numerator()).isEqualTo(1000);
-    assertThat(httpFault.faultDelay().percent().denominatorType())
+    assertThat(ldsUpdate.filterChain.get(0).name).isEqualTo("envoy.fault");
+    FaultConfig faultConfig = (FaultConfig) ldsUpdate.virtualHosts.get(0)
+        .filterConfigOverrides().get("envoy.fault");
+    assertThat(faultConfig.faultDelay().delayNanos()).isEqualTo(300);
+    assertThat(faultConfig.faultDelay().percent().numerator()).isEqualTo(1000);
+    assertThat(faultConfig.faultDelay().percent().denominatorType())
         .isEqualTo(DenominatorType.MILLION);
-    assertThat(httpFault.faultAbort()).isNull();
-    assertThat(httpFault.upstreamCluster()).isEqualTo("cluster1");
-    assertThat(httpFault.maxActiveFaults()).isEqualTo(100);
-    httpFault = ldsUpdate.virtualHosts.get(1).httpFault();
-    assertThat(httpFault.faultDelay()).isNull();
-    assertThat(httpFault.faultAbort().status().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(httpFault.faultAbort().percent().numerator()).isEqualTo(2000);
-    assertThat(httpFault.faultAbort().percent().denominatorType())
+    assertThat(faultConfig.faultAbort()).isNull();
+    assertThat(faultConfig.maxActiveFaults()).isEqualTo(100);
+    faultConfig = (FaultConfig) ldsUpdate.virtualHosts.get(1)
+        .filterConfigOverrides().get("envoy.fault");
+    assertThat(faultConfig.faultDelay()).isNull();
+    assertThat(faultConfig.faultAbort().status().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(faultConfig.faultAbort().percent().numerator()).isEqualTo(2000);
+    assertThat(faultConfig.faultAbort().percent().denominatorType())
         .isEqualTo(DenominatorType.MILLION);
-    assertThat(httpFault.upstreamCluster()).isEqualTo("cluster2");
-    assertThat(httpFault.maxActiveFaults()).isEqualTo(101);
+    assertThat(faultConfig.maxActiveFaults()).isEqualTo(101);
   }
 
   @Test
@@ -660,7 +660,6 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
     assertThat(cdsUpdate.lbPolicy()).isEqualTo("ring_hash");
-    assertThat(cdsUpdate.hashFunction()).isEqualTo(HashFunction.XX_HASH);
     assertThat(cdsUpdate.minRingSize()).isEqualTo(10L);
     assertThat(cdsUpdate.maxRingSize()).isEqualTo(100L);
     assertThat(cdsUpdate.lrsServerName()).isNull();
@@ -1290,16 +1289,13 @@ public abstract class ClientXdsClientTestBase {
     // See more test on LoadReportClientTest.java
   }
 
-  private static final String LISTENER_RESOURCE =
-          "grpc/server?xds.resource.listening_address=0.0.0.0:7000";
-
   @Test
   public void serverSideListenerFound() throws InvalidProtocolBufferException {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
-    Listener listener =
-        buildListenerWithFilterChain(
+    Message listener =
+            mf.buildListenerWithFilterChain(
             LISTENER_RESOURCE, 7000, "0.0.0.0", "google-sds-config-default", "ROOTCA");
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
@@ -1308,10 +1304,10 @@ public abstract class ClientXdsClientTestBase {
         ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().listener)
-        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
+        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener((Listener)listener));
 
     listener =
-        buildListenerWithFilterChain(
+            mf.buildListenerWithFilterChain(
             LISTENER_RESOURCE, 7000, "0.0.0.0", "CERT2", "ROOTCA2");
     listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "1", "0001");
@@ -1321,7 +1317,7 @@ public abstract class ClientXdsClientTestBase {
         ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "1", "0001", NODE);
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().listener)
-        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
+        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener((Listener)listener));
 
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -1331,14 +1327,14 @@ public abstract class ClientXdsClientTestBase {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
-    final FilterChain filterChainInbound =
-        ServerXdsClientNewServerApiTest.buildFilterChain(
-            ServerXdsClientNewServerApiTest.buildFilterChainMatch("managed-mtls"),
+    final Message filterChainInbound =
+        mf.buildFilterChain(
+            Arrays.asList("managed-mtls"),
             CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
                 "google-sds-config-default", "ROOTCA"),
-            ServerXdsClientNewServerApiTest.buildTestFilter("envoy.http_connection_manager"));
-    Listener listener =
-        ServerXdsClientNewServerApiTest.buildListenerWithFilterChain(
+            mf.buildTestFilter("envoy.http_connection_manager"));
+    Message listener =
+        mf.buildListenerWithFilterChain(
             "grpc/server?xds.resource.listening_address=0.0.0.0:8000",
             7000,
             "0.0.0.0",
@@ -1434,7 +1430,8 @@ public abstract class ClientXdsClientTestBase {
 
     protected abstract Message buildListenerForRds(String name, String rdsResourceName);
 
-    protected abstract Message buildHttpFilter(String name, @Nullable Any typedConfig);
+    protected abstract Message buildHttpFilter(
+        String name, @Nullable Any typedConfig, boolean isOptional);
 
     protected abstract Any buildHttpFaultTypedConfig(
         @Nullable Long delayNanos, @Nullable Integer delayRate, String upstreamCluster,
@@ -1486,27 +1483,16 @@ public abstract class ClientXdsClientTestBase {
         int lbWeight);
 
     protected abstract Message buildDropOverload(String category, int dropPerMillion);
-  }
 
-  static Listener buildListenerWithFilterChain(
-      String name, int portValue, String address, String certName, String validationContextName) {
-    FilterChain filterChain =
-        ServerXdsClientNewServerApiTest.buildFilterChain(
-            ServerXdsClientNewServerApiTest.buildFilterChainMatch(),
-            CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-                certName, validationContextName),
-            ServerXdsClientNewServerApiTest.buildTestFilter("envoy.http_connection_manager"));
-    io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
-        io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
-            .setSocketAddress(
-                SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
-            .build();
-    return Listener.newBuilder()
-        .setName(name)
-        .setAddress(listenerAddress)
-        .setDefaultFilterChain(FilterChain.getDefaultInstance())
-        .addAllFilterChains(Arrays.asList(filterChain))
-        .setTrafficDirection(TrafficDirection.INBOUND)
-        .build();
+    protected abstract Message buildFilterChain(
+        List<String> alpn, Message tlsContext, Message... filters);
+
+    protected abstract Message buildListenerWithFilterChain(
+        String name, int portValue, String address, Message... filterChains);
+
+    protected abstract Message buildListenerWithFilterChain(
+        String name, int portValue, String address, String certName, String validationContextName);
+
+    protected abstract Message buildTestFilter(String name);
   }
 }

@@ -129,6 +129,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
     private void shutdown() {
       root.shutdown();
+      if (childLb != null) {
+        childLb.shutdown();
+      }
     }
 
     private void handleClusterDiscovered() {
