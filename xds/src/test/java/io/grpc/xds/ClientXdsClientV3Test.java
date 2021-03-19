@@ -23,12 +23,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.UInt64Value;
 import com.google.protobuf.util.Durations;
+import com.google.rpc.Code;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -87,6 +89,7 @@ import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadReportingServiceImplBase;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
+import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.BindableService;
@@ -188,7 +191,16 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
         ResourceType type, List<String> resources, String versionInfo, String nonce,
         EnvoyProtoData.Node node) {
       verify(requestObserver).onNext(argThat(new DiscoveryRequestMatcher(
-          node.toEnvoyProtoNode(), versionInfo, resources, type.typeUrl(), nonce)));
+          node.toEnvoyProtoNode(), versionInfo, resources, type.typeUrl(), nonce, null, null)));
+    }
+
+    @Override
+    protected void verifyRequestNack(
+        ResourceType type, List<String> resources, String versionInfo, String nonce,
+        EnvoyProtoData.Node node, List<String> errorMessages) {
+      verify(requestObserver).onNext(argThat(new DiscoveryRequestMatcher(
+          node.toEnvoyProtoNode(), versionInfo, resources, type.typeUrl(), nonce,
+          Code.INVALID_ARGUMENT_VALUE, errorMessages)));
     }
 
     @Override
@@ -287,6 +299,15 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
+    protected Message buildListenerInvalid(String name) {
+      return Listener.newBuilder()
+          .setName(name)
+          .setAddress(Address.getDefaultInstance())
+          .setApiListener(ApiListener.newBuilder().setApiListener(FAILING_ANY))
+          .build();
+    }
+
+    @Override
     protected Message buildHttpFilter(String name, @Nullable Any typedConfig, boolean isOptional) {
       HttpFilter.Builder builder = HttpFilter.newBuilder().setName(name).setIsOptional(isOptional);
       if (typedConfig != null) {
@@ -346,6 +367,25 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
+    protected Message buildRouteConfigurationInvalid(String name) {
+      // Invalid Path matcher: Pattern.compile() will throw PatternSyntaxException
+      // when attempting to process SAFE_REGEX RouteMatch malformed safe regex pattern.
+      // I wish there was a simpler way.
+      return RouteConfiguration.newBuilder()
+          .setName(name)
+          .addVirtualHosts(
+              VirtualHost.newBuilder()
+                  .setName("do not care")
+                  .addDomains("do not care")
+                  .addRoutes(
+                      Route.newBuilder()
+                          .setRoute(RouteAction.newBuilder().setCluster("do not care"))
+                          .setMatch(RouteMatch.newBuilder()
+                              .setSafeRegex(RegexMatcher.newBuilder().setRegex("[z-a]")))))
+          .build();
+    }
+
+    @Override
     protected List<Message> buildOpaqueVirtualHosts(int num) {
       List<Message> virtualHosts = new ArrayList<>(num);
       for (int i = 0; i < num; i++) {
@@ -387,6 +427,12 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
         routes.add(route);
       }
       return routes;
+    }
+
+    @Override
+    protected Message buildClusterInvalid(String name) {
+      // Unspecified cluster discovery type
+      return Cluster.newBuilder().setName(name).build();
     }
 
     @Override
@@ -537,6 +583,17 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
+    protected Message buildClusterLoadAssignmentInvalid(String cluster) {
+      // Negative priority LocalityLbEndpoint.
+      return ClusterLoadAssignment.newBuilder()
+          .setClusterName(cluster)
+          .addEndpoints(LocalityLbEndpoints.newBuilder()
+              .setPriority(-1)
+              .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(1)))
+          .build();
+    }
+
+    @Override
     protected Message buildLocalityLbEndpoints(String region, String zone, String subZone,
         List<Message> lbEndpointList, int loadBalancingWeight, int priority) {
       LocalityLbEndpoints.Builder builder = LocalityLbEndpoints.newBuilder();
@@ -683,14 +740,20 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     private final String typeUrl;
     private final Set<String> resources;
     private final String responseNonce;
+    @Nullable private final Integer errorCode;
+    private final List<String> errorMessages;
 
-    private DiscoveryRequestMatcher(Node node, String versionInfo, List<String> resources,
-        String typeUrl, String responseNonce) {
+    private DiscoveryRequestMatcher(
+        Node node, String versionInfo, List<String> resources,
+        String typeUrl, String responseNonce, @Nullable Integer errorCode,
+        @Nullable List<String> errorMessages) {
       this.node = node;
       this.versionInfo = versionInfo;
       this.resources = new HashSet<>(resources);
       this.typeUrl = typeUrl;
       this.responseNonce = responseNonce;
+      this.errorCode = errorCode;
+      this.errorMessages = errorMessages != null ? errorMessages : ImmutableList.<String>of();
     }
 
     @Override
@@ -705,6 +768,13 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
         return false;
       }
       if (!resources.equals(new HashSet<>(argument.getResourceNamesList()))) {
+        return false;
+      }
+      if (errorCode == null && argument.hasErrorDetail()) {
+        return false;
+      }
+      if (errorCode != null
+          && !matchErrorDetail(argument.getErrorDetail(), errorCode, errorMessages)) {
         return false;
       }
       return node.equals(argument.getNode());
