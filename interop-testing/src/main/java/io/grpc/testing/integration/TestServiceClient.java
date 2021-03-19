@@ -288,9 +288,14 @@ public class TestServiceClient {
         break;
 
       case COMPUTE_ENGINE_CHANNEL_CREDENTIALS: {
-        ManagedChannelBuilder<?> builder =
-            Grpc.newChannelBuilderForAddress(
-                serverHost, serverPort, ComputeEngineChannelCredentials.create());
+        ManagedChannelBuilder<?> builder;
+        if (serverPort == 0) {
+          builder = Grpc.newChannelBuilder(serverHost, ComputeEngineChannelCredentials.create());
+        } else {
+          builder =
+              Grpc.newChannelBuilderForAddress(
+                  serverHost, serverPort, ComputeEngineChannelCredentials.create());
+        }
         if (serviceConfig != null) {
           builder.disableServiceConfigLookUp();
           builder.defaultServiceConfig(serviceConfig);
@@ -335,9 +340,14 @@ public class TestServiceClient {
       }
 
       case GOOGLE_DEFAULT_CREDENTIALS: {
-        ManagedChannelBuilder<?> builder =
-            Grpc.newChannelBuilderForAddress(
-                serverHost, serverPort, GoogleDefaultChannelCredentials.create());
+        ManagedChannelBuilder<?> builder;
+        if (serverPort == 0) {
+          builder = Grpc.newChannelBuilder(serverHost, GoogleDefaultChannelCredentials.create());
+        } else {
+          builder =
+              Grpc.newChannelBuilderForAddress(
+                  serverHost, serverPort, GoogleDefaultChannelCredentials.create());
+        }
         if (serviceConfig != null) {
           builder.disableServiceConfigLookUp();
           builder.defaultServiceConfig(serviceConfig);
@@ -458,8 +468,13 @@ public class TestServiceClient {
         }
       }
       if (useGeneric) {
-        ManagedChannelBuilder<?> channelBuilder =
-            Grpc.newChannelBuilderForAddress(serverHost, serverPort, channelCredentials);
+        ManagedChannelBuilder<?> channelBuilder;
+        if (serverPort == 0) {
+          channelBuilder = Grpc.newChannelBuilder(serverHost, channelCredentials);
+        } else {
+          channelBuilder =
+              Grpc.newChannelBuilderForAddress(serverHost, serverPort, channelCredentials);
+        }
         if (serverHostOverride != null) {
           channelBuilder.overrideAuthority(serverHostOverride);
         }
@@ -470,9 +485,13 @@ public class TestServiceClient {
         return channelBuilder;
       }
       if (!useOkHttp) {
-        NettyChannelBuilder nettyBuilder =
-            NettyChannelBuilder.forAddress(serverHost, serverPort, channelCredentials)
-                .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW);
+        NettyChannelBuilder nettyBuilder;
+        if (serverPort == 0) {
+          nettyBuilder = NettyChannelBuilder.forTarget(serverHost, channelCredentials);
+        } else {
+          nettyBuilder = NettyChannelBuilder.forAddress(serverHost, serverPort, channelCredentials);
+        }
+        nettyBuilder.flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW);
         if (serverHostOverride != null) {
           nettyBuilder.overrideAuthority(serverHostOverride);
         }
@@ -488,8 +507,12 @@ public class TestServiceClient {
         return nettyBuilder.intercept(createCensusStatsClientInterceptor());
       }
 
-      OkHttpChannelBuilder okBuilder =
-          OkHttpChannelBuilder.forAddress(serverHost, serverPort, channelCredentials);
+      OkHttpChannelBuilder okBuilder;
+      if (serverPort == 0) {
+        okBuilder = OkHttpChannelBuilder.forTarget(serverHost, channelCredentials);
+      } else {
+        okBuilder = OkHttpChannelBuilder.forAddress(serverHost, serverPort, channelCredentials);
+      }
       if (serverHostOverride != null) {
         // Force the hostname to match the cert the server uses.
         okBuilder.overrideAuthority(
