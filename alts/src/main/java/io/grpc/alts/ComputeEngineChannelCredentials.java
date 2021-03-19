@@ -69,7 +69,6 @@ public final class ComputeEngineChannelCredentials {
     return new GoogleDefaultProtocolNegotiatorFactory(
         /* targetServiceAccounts= */ ImmutableList.<String>of(),
         SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
-        sslContext,
-        null);
+        sslContext);
   }
 }

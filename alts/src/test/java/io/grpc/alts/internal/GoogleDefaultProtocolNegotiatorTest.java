@@ -56,6 +56,7 @@ public final class GoogleDefaultProtocolNegotiatorTest {
   @RunWith(JUnit4.class)
   public abstract static class HandlerSelectionTest {
     private ProtocolNegotiator googleProtocolNegotiator;
+    private Attributes.Key<String> originalClusterNameAttrKey;
     private final ObjectPool<Channel> handshakerChannelPool = new ObjectPool<Channel>() {
 
       @Override
@@ -73,18 +74,22 @@ public final class GoogleDefaultProtocolNegotiatorTest {
     @Before
     public void setUp() throws Exception {
       SslContext sslContext = GrpcSslContexts.forClient().build();
-
+      originalClusterNameAttrKey =
+          AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory.clusterNameAttrKey;
+      AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory.clusterNameAttrKey =
+          getClusterNameAttrKey();
       googleProtocolNegotiator = new AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory(
           ImmutableList.<String>of(),
           handshakerChannelPool,
-          sslContext,
-          getClusterNameAttrKey())
+          sslContext)
           .newNegotiator();
     }
 
     @After
     public void tearDown() {
       googleProtocolNegotiator.close();
+      AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory.clusterNameAttrKey =
+          originalClusterNameAttrKey;
     }
 
     @Nullable
