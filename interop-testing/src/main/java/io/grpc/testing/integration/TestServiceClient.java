@@ -288,14 +288,14 @@ public class TestServiceClient {
         break;
 
       case COMPUTE_ENGINE_CHANNEL_CREDENTIALS: {
-          ManagedChannelBuilder<?> builder;
-          if (serverPort == 0) {
-            builder = Grpc.newChannelBuilder(serverHost, ComputeEngineChannelCredentials.create());
-          } else {
-            builder =
-                Grpc.newChannelBuilderForAddress(
-                    serverHost, serverPort, ComputeEngineChannelCredentials.create());
-          }
+        ManagedChannelBuilder<?> builder;
+        if (serverPort == 0) {
+          builder = Grpc.newChannelBuilder(serverHost, ComputeEngineChannelCredentials.create());
+        } else {
+          builder =
+              Grpc.newChannelBuilderForAddress(
+                  serverHost, serverPort, ComputeEngineChannelCredentials.create());
+        }
         if (serviceConfig != null) {
           builder.disableServiceConfigLookUp();
           builder.defaultServiceConfig(serviceConfig);
@@ -340,14 +340,14 @@ public class TestServiceClient {
       }
 
       case GOOGLE_DEFAULT_CREDENTIALS: {
-          ManagedChannelBuilder<?> builder;
-          if (serverPort == 0) {
-            builder = Grpc.newChannelBuilder(serverHost, GoogleDefaultChannelCredentials.create());
-          } else {
-            builder =
-                Grpc.newChannelBuilderForAddress(
-                    serverHost, serverPort, GoogleDefaultChannelCredentials.create());
-          }
+        ManagedChannelBuilder<?> builder;
+        if (serverPort == 0) {
+          builder = Grpc.newChannelBuilder(serverHost, GoogleDefaultChannelCredentials.create());
+        } else {
+          builder =
+              Grpc.newChannelBuilderForAddress(
+                  serverHost, serverPort, GoogleDefaultChannelCredentials.create());
+        }
         if (serviceConfig != null) {
           builder.disableServiceConfigLookUp();
           builder.defaultServiceConfig(serviceConfig);
