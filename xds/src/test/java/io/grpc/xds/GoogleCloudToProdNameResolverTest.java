@@ -183,7 +183,8 @@ public class GoogleCloudToProdNameResolverTest {
         (List<Map<String, ?>>) bootstrap.get("xds_servers"));
     assertThat(server).containsExactly(
         "server_uri", "directpath-trafficdirector.googleapis.com",
-        "channel_creds", ImmutableList.of(ImmutableMap.of("type", "google_default")));
+        "channel_creds", ImmutableList.of(ImmutableMap.of("type", "google_default")),
+        "server_features", ImmutableList.of("xds_v3"));
   }
 
   @Test
