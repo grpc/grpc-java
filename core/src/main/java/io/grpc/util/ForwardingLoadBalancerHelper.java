@@ -17,7 +17,6 @@
 package io.grpc.util;
 
 import com.google.common.base.MoreObjects;
-import io.grpc.Attributes;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
@@ -42,22 +41,9 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
    */
   protected abstract LoadBalancer.Helper delegate();
 
-  @Deprecated
-  @Override
-  public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
-    return delegate().createSubchannel(addrs, attrs);
-  }
-
   @Override
   public Subchannel createSubchannel(CreateSubchannelArgs args) {
     return delegate().createSubchannel(args);
-  }
-
-  @Deprecated
-  @Override
-  public void updateSubchannelAddresses(
-      Subchannel subchannel, List<EquivalentAddressGroup> addrs) {
-    delegate().updateSubchannelAddresses(subchannel, addrs);
   }
 
   @Override
@@ -66,10 +52,21 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   }
 
   @Override
+  public  ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag, String authority) {
+    return delegate().createOobChannel(eag, authority);
+  }
+
+  @Override
   public void updateOobChannelAddresses(ManagedChannel channel, EquivalentAddressGroup eag) {
     delegate().updateOobChannelAddresses(channel, eag);
   }
 
+  @Override
+  public void updateOobChannelAddresses(ManagedChannel channel, List<EquivalentAddressGroup> eag) {
+    delegate().updateOobChannelAddresses(channel, eag);
+  }
+
+  @Deprecated
   @Override
   public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
     return delegate().createResolvingOobChannelBuilder(target);
@@ -95,18 +92,6 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   @Override
   public void refreshNameResolution() {
     delegate().refreshNameResolution();
-  }
-
-  @Override
-  @Deprecated
-  public void runSerialized(Runnable task) {
-    delegate().runSerialized(task);
-  }
-
-  @Deprecated
-  @Override
-  public NameResolver.Factory getNameResolverFactory() {
-    return delegate().getNameResolverFactory();
   }
 
   @Override

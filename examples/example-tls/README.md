@@ -2,8 +2,13 @@ Hello World Example with TLS
 ==============================================
 
 The example require grpc-java to already be built. You are strongly encouraged
-to check out a git release tag, since there will already be a build of grpc
-available. Otherwise you must follow [COMPILING](../COMPILING.md).
+to **check out a git release tag**, since there will already be a build of grpc
+available:
+```
+git checkout v<major>.<minor>.<patch>
+```
+
+Otherwise you must follow [COMPILING](../COMPILING.md).
 
 To build the example,
 

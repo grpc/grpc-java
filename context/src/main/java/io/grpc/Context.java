@@ -826,17 +826,21 @@ public class Context {
     @CanIgnoreReturnValue
     public boolean cancel(Throwable cause) {
       boolean triggeredCancel = false;
+      ScheduledFuture<?> localPendingDeadline = null;
       synchronized (this) {
         if (!cancelled) {
           cancelled = true;
           if (pendingDeadline != null) {
             // If we have a scheduled cancellation pending attempt to cancel it.
-            pendingDeadline.cancel(false);
+            localPendingDeadline = pendingDeadline;
             pendingDeadline = null;
           }
           this.cancellationCause = cause;
           triggeredCancel = true;
         }
+      }
+      if (localPendingDeadline != null) {
+        localPendingDeadline.cancel(false);
       }
       if (triggeredCancel) {
         notifyAndClearListeners();

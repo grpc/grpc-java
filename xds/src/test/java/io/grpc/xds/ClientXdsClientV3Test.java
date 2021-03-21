@@ -27,6 +27,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
+import com.google.protobuf.UInt64Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
@@ -35,6 +36,8 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.CustomClusterType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig.HashFunction;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ApiConfigSource;
@@ -47,6 +50,7 @@ import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.core.v3.SelfConfigSource;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.core.v3.TransportSocket;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment.Policy;
@@ -56,7 +60,9 @@ import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
 import io.envoyproxy.envoy.config.listener.v3.ApiListener;
+import io.envoyproxy.envoy.config.listener.v3.Filter;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
+import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.Route;
 import io.envoyproxy.envoy.config.route.v3.RouteAction;
@@ -64,7 +70,13 @@ import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
+import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay;
+import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay.HeaderDelay;
+import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
+import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.HeaderAbort;
+import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
@@ -80,12 +92,16 @@ import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
+import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
 import org.junit.runner.RunWith;
@@ -168,8 +184,9 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected void verifyRequest(EnvoyProtoData.Node node, String versionInfo,
-        List<String> resources, ResourceType type, String nonce) {
+    protected void verifyRequest(
+        ResourceType type, List<String> resources, String versionInfo, String nonce,
+        EnvoyProtoData.Node node) {
       verify(requestObserver).onNext(argThat(new DiscoveryRequestMatcher(
           node.toEnvoyProtoNode(), versionInfo, resources, type.typeUrl(), nonce)));
     }
@@ -180,8 +197,8 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected void sendResponse(String versionInfo, List<Any> resources, ResourceType type,
-        String nonce) {
+    protected void sendResponse(
+        ResourceType type, List<Any> resources, String versionInfo, String nonce) {
       DiscoveryResponse response =
           DiscoveryResponse.newBuilder()
               .setVersionInfo(versionInfo)
@@ -233,8 +250,10 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
 
   private static class MessageFactoryV3 extends MessageFactory {
 
+    @SuppressWarnings("unchecked")
     @Override
-    protected Message buildListener(String name, Message routeConfiguration) {
+    protected Message buildListener(
+        String name, Message routeConfiguration, List<? extends Message> httpFilters) {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(Address.getDefaultInstance())
@@ -242,7 +261,9 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
           .setApiListener(
               ApiListener.newBuilder().setApiListener(Any.pack(
                   HttpConnectionManager.newBuilder()
-                      .setRouteConfig((RouteConfiguration) routeConfiguration).build())))
+                      .setRouteConfig((RouteConfiguration) routeConfiguration)
+                      .addAllHttpFilters((List<HttpFilter>) httpFilters)
+                      .build())))
           .build();
     }
 
@@ -263,6 +284,55 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
                                       .setAds(AggregatedConfigSource.getDefaultInstance())))
                       .build())))
           .build();
+    }
+
+    @Override
+    protected Message buildHttpFilter(String name, @Nullable Any typedConfig, boolean isOptional) {
+      HttpFilter.Builder builder = HttpFilter.newBuilder().setName(name).setIsOptional(isOptional);
+      if (typedConfig != null) {
+        builder.setTypedConfig(typedConfig);
+      }
+      return builder.build();
+    }
+
+    @Override
+    protected Any buildHttpFaultTypedConfig(
+        @Nullable Long delayNanos, @Nullable Integer delayRate, String upstreamCluster,
+        List<String> downstreamNodes, @Nullable Integer maxActiveFaults, @Nullable Status status,
+        @Nullable Integer httpCode, @Nullable Integer abortRate) {
+      HTTPFault.Builder builder = HTTPFault.newBuilder();
+      if (delayRate != null) {
+        FaultDelay.Builder delayBuilder = FaultDelay.newBuilder();
+        delayBuilder.setPercentage(
+            FractionalPercent.newBuilder()
+                .setNumerator(delayRate).setDenominator(DenominatorType.MILLION));
+        if (delayNanos != null) {
+          delayBuilder.setFixedDelay(Durations.fromNanos(delayNanos));
+        } else {
+          delayBuilder.setHeaderDelay(HeaderDelay.newBuilder());
+        }
+        builder.setDelay(delayBuilder);
+      }
+      if (abortRate != null) {
+        FaultAbort.Builder abortBuilder = FaultAbort.newBuilder();
+        abortBuilder.setPercentage(
+            FractionalPercent.newBuilder()
+                .setNumerator(abortRate).setDenominator(DenominatorType.MILLION));
+        if (status != null) {
+          abortBuilder.setGrpcStatus(status.getCode().value());
+        } else if (httpCode != null) {
+          abortBuilder.setHttpStatus(httpCode);
+        } else {
+          abortBuilder.setHeaderAbort(HeaderAbort.newBuilder());
+        }
+        builder.setAbort(abortBuilder);
+      }
+      builder.setUpstreamCluster(upstreamCluster);
+      builder.addAllDownstreamNodes(downstreamNodes);
+      if (maxActiveFaults != null) {
+        builder.setMaxActiveFaults(UInt32Value.of(maxActiveFaults));
+      }
+      return Any.pack(builder.build());
     }
 
     @Override
@@ -293,12 +363,38 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       return virtualHosts;
     }
 
+    @SuppressWarnings("unchecked")
+    @Override
+    protected Message buildVirtualHost(
+        List<? extends Message> routes, Map<String, Any> typedConfigMap) {
+      return VirtualHost.newBuilder()
+          .setName("do not care")
+          .addDomains("do not care")
+          .addAllRoutes((List<Route>) routes)
+          .putAllTypedPerFilterConfig(typedConfigMap)
+          .build();
+    }
+
+    @Override
+    protected List<? extends Message> buildOpaqueRoutes(int num) {
+      List<Route> routes = new ArrayList<>(num);
+      for (int i = 0; i < num; i++) {
+        Route route =
+            Route.newBuilder()
+                .setRoute(RouteAction.newBuilder().setCluster("do not care"))
+                .setMatch(RouteMatch.newBuilder().setPrefix("do not care"))
+                .build();
+        routes.add(route);
+      }
+      return routes;
+    }
+
     @Override
     protected Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
-        boolean enableLrs, @Nullable Message upstreamTlsContext,
-        @Nullable Message circuitBreakers) {
-      Cluster.Builder builder =
-          initClusterBuilder(clusterName, enableLrs, upstreamTlsContext, circuitBreakers);
+        String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
+        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+      Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
+          enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.EDS);
       EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
       edsClusterConfigBuilder.setEdsConfig(
@@ -311,34 +407,49 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildLogicalDnsCluster(String clusterName, boolean enableLrs,
+    protected Message buildLogicalDnsCluster(String clusterName, String lbPolicy,
+        @Nullable Message ringHashLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
-      Cluster.Builder builder =
-          initClusterBuilder(clusterName, enableLrs, upstreamTlsContext, circuitBreakers);
+      Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
+          enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.LOGICAL_DNS);
       return builder.build();
     }
 
     @Override
-    protected Message buildAggregateCluster(String clusterName, List<String> clusters) {
+    protected Message buildAggregateCluster(String clusterName, String lbPolicy,
+        @Nullable Message ringHashLbConfig, List<String> clusters) {
       ClusterConfig clusterConfig = ClusterConfig.newBuilder().addAllClusters(clusters).build();
       CustomClusterType type =
           CustomClusterType.newBuilder()
               .setName(ClientXdsClient.AGGREGATE_CLUSTER_TYPE_NAME)
               .setTypedConfig(Any.pack(clusterConfig))
               .build();
-      return Cluster.newBuilder()
-          .setName(clusterName)
-          .setLbPolicy(LbPolicy.ROUND_ROBIN)
-          .setClusterType(type)
-          .build();
+      Cluster.Builder builder = Cluster.newBuilder().setName(clusterName).setClusterType(type);
+      if (lbPolicy.equals("round_robin")) {
+        builder.setLbPolicy(LbPolicy.ROUND_ROBIN);
+      } else if (lbPolicy.equals("ring_hash")) {
+        builder.setLbPolicy(LbPolicy.RING_HASH);
+        builder.setRingHashLbConfig((RingHashLbConfig) ringHashLbConfig);
+      } else {
+        throw new AssertionError("Invalid LB policy");
+      }
+      return builder.build();
     }
 
-    private Cluster.Builder initClusterBuilder(String clusterName, boolean enableLrs,
+    private Cluster.Builder initClusterBuilder(String clusterName, String lbPolicy,
+        @Nullable Message ringHashLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
       Cluster.Builder builder = Cluster.newBuilder();
       builder.setName(clusterName);
-      builder.setLbPolicy(LbPolicy.ROUND_ROBIN);
+      if (lbPolicy.equals("round_robin")) {
+        builder.setLbPolicy(LbPolicy.ROUND_ROBIN);
+      } else if (lbPolicy.equals("ring_hash")) {
+        builder.setLbPolicy(LbPolicy.RING_HASH);
+        builder.setRingHashLbConfig((RingHashLbConfig) ringHashLbConfig);
+      } else {
+        throw new AssertionError("Invalid LB policy");
+      }
       if (enableLrs) {
         builder.setLrsServer(
             ConfigSource.newBuilder()
@@ -354,6 +465,22 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
         builder.setCircuitBreakers((CircuitBreakers) circuitBreakers);
       }
       return builder;
+    }
+
+    @Override
+    protected Message buildRingHashLbConfig(String hashFunction, long minRingSize,
+        long maxRingSize) {
+      RingHashLbConfig.Builder builder = RingHashLbConfig.newBuilder();
+      if (hashFunction.equals("xx_hash")) {
+        builder.setHashFunction(HashFunction.XX_HASH);
+      } else if (hashFunction.equals("murmur_hash_2")) {
+        builder.setHashFunction(HashFunction.MURMUR_HASH_2);
+      } else {
+        throw new AssertionError("Invalid hash function");
+      }
+      builder.setMinimumRingSize(UInt64Value.newBuilder().setValue(minRingSize).build());
+      builder.setMaximumRingSize(UInt64Value.newBuilder().setValue(maxRingSize).build());
+      return builder.build();
     }
 
     @Override
@@ -467,6 +594,81 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
               FractionalPercent.newBuilder()
                   .setNumerator(dropPerMillion)
                   .setDenominator(DenominatorType.MILLION))
+          .build();
+    }
+
+    @SuppressWarnings("deprecation")
+    @Override
+    protected FilterChain buildFilterChain(
+        List<String> alpn, Message tlsContext, Message... filters) {
+      FilterChainMatch filterChainMatch =
+          FilterChainMatch.newBuilder().addAllApplicationProtocols(alpn).build();
+      Filter[] filterArray = new Filter[filters.length];
+      for (int i = 0; i < filters.length; i++) {
+        filterArray[i] = (Filter) filters[i];
+      }
+      return FilterChain.newBuilder()
+          .setFilterChainMatch(filterChainMatch)
+          .setTransportSocket(
+              tlsContext == null
+                  ? TransportSocket.getDefaultInstance()
+                  : TransportSocket.newBuilder()
+                      .setName("envoy.transport_sockets.tls")
+                      .setTypedConfig(Any.pack(tlsContext))
+                      .build())
+          .addAllFilters(Arrays.asList(filterArray))
+          .build();
+    }
+
+    @Override
+    protected Listener buildListenerWithFilterChain(
+        String name, int portValue, String address, Message... filterChains) {
+      io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
+          io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
+              .setSocketAddress(
+                  SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
+              .build();
+      FilterChain[] filterChainsArray = new FilterChain[filterChains.length];
+      for (int i = 0; i < filterChains.length; i++) {
+        filterChainsArray[i] = (FilterChain) filterChains[i];
+      }
+      return Listener.newBuilder()
+          .setName(name)
+          .setAddress(listenerAddress)
+          .setDefaultFilterChain(FilterChain.getDefaultInstance())
+          .addAllFilterChains(Arrays.asList(filterChainsArray))
+          .setTrafficDirection(TrafficDirection.INBOUND)
+          .build();
+    }
+
+    @Override
+    protected Listener buildListenerWithFilterChain(
+        String name, int portValue, String address, String certName, String validationContextName) {
+      FilterChain filterChain =
+          buildFilterChain(
+              Arrays.<String>asList(),
+              CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+                  certName, validationContextName),
+              buildTestFilter("envoy.http_connection_manager"));
+      io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
+          io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
+              .setSocketAddress(
+                  SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
+              .build();
+      return Listener.newBuilder()
+          .setName(name)
+          .setAddress(listenerAddress)
+          .setDefaultFilterChain(FilterChain.getDefaultInstance())
+          .addAllFilterChains(Arrays.asList(filterChain))
+          .setTrafficDirection(TrafficDirection.INBOUND)
+          .build();
+    }
+
+    @Override
+    protected Filter buildTestFilter(String name) {
+      return Filter.newBuilder()
+          .setName(name)
+          .setTypedConfig(Any.pack(HttpConnectionManager.getDefaultInstance()))
           .build();
     }
   }

@@ -63,7 +63,6 @@ import io.grpc.lb.v1.ServerList;
 import io.grpc.stub.StreamObserver;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -95,6 +94,9 @@ final class GrpclbState {
   @VisibleForTesting
   static final Status NO_AVAILABLE_BACKENDS_STATUS =
       Status.UNAVAILABLE.withDescription("LoadBalancer responded without any backends");
+  @VisibleForTesting
+  static final Status NO_FALLBACK_BACKENDS_FOUND_STATUS =
+      Status.UNAVAILABLE.withDescription("Unable to fallback, no fallback addresses found");
 
   @VisibleForTesting
   static final RoundRobinEntry BUFFER_ENTRY = new RoundRobinEntry() {
@@ -108,6 +110,8 @@ final class GrpclbState {
         return "BUFFER_ENTRY";
       }
     };
+  @VisibleForTesting
+  static final String NO_USE_AUTHORITY_SUFFIX = "-notIntendedToBeUsed";
 
   enum Mode {
     ROUND_ROBIN,
@@ -143,7 +147,6 @@ final class GrpclbState {
 
   @Nullable
   private ManagedChannel lbCommChannel;
-  private boolean lbSentEmptyBackends = false;
 
   @Nullable
   private LbStream lbStream;
@@ -203,9 +206,20 @@ final class GrpclbState {
     if (config.getMode() == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
       subchannel.requestConnection();
     }
-    subchannel.getAttributes().get(STATE_INFO).set(newState);
-    maybeUseFallbackBackends();
-    maybeUpdatePicker();
+    AtomicReference<ConnectivityStateInfo> stateInfoRef =
+        subchannel.getAttributes().get(STATE_INFO);
+    // If all RR servers are unhealthy, it's possible that at least one connection is CONNECTING at
+    // every moment which causes RR to stay in CONNECTING. It's better to keep the TRANSIENT_FAILURE
+    // state in that case so that fail-fast RPCs can fail fast.
+    boolean keepState =
+        config.getMode() == Mode.ROUND_ROBIN
+        && stateInfoRef.get().getState() == TRANSIENT_FAILURE
+        && (newState.getState() == CONNECTING || newState.getState() == IDLE);
+    if (!keepState) {
+      stateInfoRef.set(newState);
+      maybeUseFallbackBackends();
+      maybeUpdatePicker();
+    }
   }
 
   /**
@@ -213,7 +227,8 @@ final class GrpclbState {
    * not yet connected.
    */
   void handleAddresses(
-      List<LbAddressGroup> newLbAddressGroups, List<EquivalentAddressGroup> newBackendServers) {
+      List<EquivalentAddressGroup> newLbAddressGroups,
+      List<EquivalentAddressGroup> newBackendServers) {
     logger.log(
         ChannelLogLevel.DEBUG,
         "[grpclb-<{0}>] Resolved addresses: lb addresses {0}, backends: {1}",
@@ -226,13 +241,13 @@ final class GrpclbState {
       shutdownLbComm();
       syncContext.execute(new FallbackModeTask());
     } else {
-      LbAddressGroup newLbAddressGroup = flattenLbAddressGroups(newLbAddressGroups);
-      startLbComm(newLbAddressGroup);
+      startLbComm(newLbAddressGroups);
       // Avoid creating a new RPC just because the addresses were updated, as it can cause a
       // stampeding herd. The current RPC may be on a connection to an address not present in
       // newLbAddressGroups, but we're considering that "okay". If we detected the RPC is to an
       // outdated backend, we could choose to re-create the RPC.
       if (lbStream == null) {
+        cancelLbRpcRetryTimer();
         startLbRpc();
       }
       // Start the fallback timer if it's never started
@@ -276,7 +291,7 @@ final class GrpclbState {
   }
 
   /**
-   * Populate the round-robin lists with the fallback backends.
+   * Populate backend servers to be used from the fallback backends.
    */
   private void useFallbackBackends() {
     usingFallbackBackends = true;
@@ -288,7 +303,7 @@ final class GrpclbState {
       newDropList.add(null);
       newBackendAddrList.add(new BackendAddressGroup(eag, null));
     }
-    useRoundRobinLists(newDropList, newBackendAddrList, null);
+    updateServerList(newDropList, newBackendAddrList, null);
   }
 
   private void shutdownLbComm() {
@@ -306,24 +321,20 @@ final class GrpclbState {
     }
   }
 
-  private void startLbComm(LbAddressGroup lbAddressGroup) {
-    checkNotNull(lbAddressGroup, "lbAddressGroup");
+  private void startLbComm(List<EquivalentAddressGroup> overrideAuthorityEags) {
+    checkNotNull(overrideAuthorityEags, "overrideAuthorityEags");
+    assert !overrideAuthorityEags.isEmpty();
+    String doNotUseAuthority = overrideAuthorityEags.get(0).getAttributes()
+        .get(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE) + NO_USE_AUTHORITY_SUFFIX;
     if (lbCommChannel == null) {
-      lbCommChannel = helper.createOobChannel(
-          lbAddressGroup.getAddresses(), lbAddressGroup.getAuthority());
+      lbCommChannel = helper.createOobChannel(overrideAuthorityEags, doNotUseAuthority);
       logger.log(
           ChannelLogLevel.DEBUG,
-          "[grpclb-<{0}>] Created grpclb channel: address={1}, authority={2}",
+          "[grpclb-<{0}>] Created grpclb channel: EAG={1}",
           serviceName,
-          lbAddressGroup.getAddresses(),
-          lbAddressGroup.getAuthority());
-    } else if (lbAddressGroup.getAuthority().equals(lbCommChannel.authority())) {
-      helper.updateOobChannelAddresses(lbCommChannel, lbAddressGroup.getAddresses());
+          overrideAuthorityEags);
     } else {
-      // Full restart of channel
-      shutdownLbComm();
-      lbCommChannel = helper.createOobChannel(
-          lbAddressGroup.getAddresses(), lbAddressGroup.getAuthority());
+      helper.updateOobChannelAddresses(lbCommChannel, overrideAuthorityEags);
     }
   }
 
@@ -357,6 +368,7 @@ final class GrpclbState {
   private void cancelLbRpcRetryTimer() {
     if (lbRpcRetryTimer != null) {
       lbRpcRetryTimer.cancel();
+      lbRpcRetryTimer = null;
     }
   }
 
@@ -408,9 +420,9 @@ final class GrpclbState {
   }
 
   /**
-   * Populate the round-robin lists with the given values.
+   * Populate backend servers to be used based on the given list of addresses.
    */
-  private void useRoundRobinLists(
+  private void updateServerList(
       List<DropEntry> newDropList, List<BackendAddressGroup> newBackendAddrList,
       @Nullable GrpclbClientLoadRecorder loadRecorder) {
     logger.log(
@@ -460,7 +472,6 @@ final class GrpclbState {
         final Subchannel subchannel;
         if (newBackendAddrList.isEmpty()) {
           if (subchannels.size() == 1) {
-            cancelFallbackTimer();
             subchannel = subchannels.values().iterator().next();
             subchannel.shutdown();
             subchannels = Collections.emptyMap();
@@ -692,9 +703,8 @@ final class GrpclbState {
       }
       // Stop using fallback backends as soon as a new server list is received from the balancer.
       usingFallbackBackends = false;
-      lbSentEmptyBackends = serverList.getServersList().isEmpty();
       cancelFallbackTimer();
-      useRoundRobinLists(newDropList, newBackendAddrList, loadRecorder);
+      updateServerList(newDropList, newBackendAddrList, loadRecorder);
       maybeUpdatePicker();
     }
 
@@ -762,11 +772,29 @@ final class GrpclbState {
   private void maybeUpdatePicker() {
     List<RoundRobinEntry> pickList;
     ConnectivityState state;
+    if (backendList.isEmpty()) {
+      if (balancerWorking)  {
+        pickList =
+            Collections.<RoundRobinEntry>singletonList(
+                new ErrorEntry(NO_AVAILABLE_BACKENDS_STATUS));
+        state = TRANSIENT_FAILURE;
+      } else if (usingFallbackBackends) {
+        pickList =
+            Collections.<RoundRobinEntry>singletonList(
+                new ErrorEntry(NO_FALLBACK_BACKENDS_FOUND_STATUS));
+        state = TRANSIENT_FAILURE;
+      } else {  // still waiting for balancer
+        pickList = Collections.singletonList(BUFFER_ENTRY);
+        state = CONNECTING;
+      }
+      maybeUpdatePicker(state, new RoundRobinPicker(dropList, pickList));
+      return;
+    }
     switch (config.getMode()) {
       case ROUND_ROBIN:
         pickList = new ArrayList<>(backendList.size());
         Status error = null;
-        boolean hasIdle = false;
+        boolean hasPending = false;
         for (BackendEntry entry : backendList) {
           Subchannel subchannel = entry.subchannel;
           Attributes attrs = subchannel.getAttributes();
@@ -775,57 +803,45 @@ final class GrpclbState {
             pickList.add(entry);
           } else if (stateInfo.getState() == TRANSIENT_FAILURE) {
             error = stateInfo.getStatus();
-          } else if (stateInfo.getState() == IDLE) {
-            hasIdle = true;
+          } else {
+            hasPending = true;
           }
         }
         if (pickList.isEmpty()) {
-          if (error != null && !hasIdle) {
-            pickList.add(new ErrorEntry(error));
-            state = TRANSIENT_FAILURE;
-          } else {
+          if (hasPending) {
             pickList.add(BUFFER_ENTRY);
             state = CONNECTING;
+          } else {
+            pickList.add(new ErrorEntry(error));
+            state = TRANSIENT_FAILURE;
           }
         } else {
           state = READY;
         }
         break;
-      case PICK_FIRST:
-        if (backendList.isEmpty()) {
-          if (lbSentEmptyBackends) {
+      case PICK_FIRST: {
+        checkState(backendList.size() == 1, "Excessive backend entries: %s", backendList);
+        BackendEntry onlyEntry = backendList.get(0);
+        ConnectivityStateInfo stateInfo =
+            onlyEntry.subchannel.getAttributes().get(STATE_INFO).get();
+        state = stateInfo.getState();
+        switch (state) {
+          case READY:
+            pickList = Collections.<RoundRobinEntry>singletonList(onlyEntry);
+            break;
+          case TRANSIENT_FAILURE:
             pickList =
-                Collections.<RoundRobinEntry>singletonList(
-                    new ErrorEntry(NO_AVAILABLE_BACKENDS_STATUS));
-            state = TRANSIENT_FAILURE;
-          } else {
+                Collections.<RoundRobinEntry>singletonList(new ErrorEntry(stateInfo.getStatus()));
+            break;
+          case CONNECTING:
             pickList = Collections.singletonList(BUFFER_ENTRY);
-            // Have not received server addresses
-            state = CONNECTING;
-          }
-        } else {
-          checkState(backendList.size() == 1, "Excessive backend entries: %s", backendList);
-          BackendEntry onlyEntry = backendList.get(0);
-          ConnectivityStateInfo stateInfo =
-              onlyEntry.subchannel.getAttributes().get(STATE_INFO).get();
-          state = stateInfo.getState();
-          switch (state) {
-            case READY:
-              pickList = Collections.<RoundRobinEntry>singletonList(onlyEntry);
-              break;
-            case TRANSIENT_FAILURE:
-              pickList =
-                  Collections.<RoundRobinEntry>singletonList(new ErrorEntry(stateInfo.getStatus()));
-              break;
-            case CONNECTING:
-              pickList = Collections.singletonList(BUFFER_ENTRY);
-              break;
-            default:
-              pickList = Collections.<RoundRobinEntry>singletonList(
-                  new IdleSubchannelEntry(onlyEntry.subchannel, syncContext));
-          }
+            break;
+          default:
+            pickList = Collections.<RoundRobinEntry>singletonList(
+                new IdleSubchannelEntry(onlyEntry.subchannel, syncContext));
         }
         break;
+      }
       default:
         throw new AssertionError("Missing case for " + config.getMode());
     }
@@ -852,47 +868,6 @@ final class GrpclbState {
         picker.pickList,
         picker.dropList);
     helper.updateBalancingState(state, picker);
-  }
-
-  private LbAddressGroup flattenLbAddressGroups(List<LbAddressGroup> groupList) {
-    assert !groupList.isEmpty();
-    List<EquivalentAddressGroup> eags = new ArrayList<>(groupList.size());
-    String authority = groupList.get(0).getAuthority();
-    for (LbAddressGroup group : groupList) {
-      if (!authority.equals(group.getAuthority())) {
-        // TODO(ejona): Allow different authorities for different addresses. Requires support from
-        // Helper.
-        logger.log(ChannelLogLevel.WARNING,
-            "[grpclb-<{0}>] Multiple authorities found for LB. "
-            + "Skipping addresses for {1} in preference to {2}",
-            serviceName,
-            group.getAuthority(),
-            authority);
-      } else {
-        eags.add(group.getAddresses());
-      }
-    }
-    // ALTS code can use the presence of ATTR_LB_ADDR_AUTHORITY to select ALTS instead of TLS, with
-    // Netty.
-    // TODO(ejona): The process here is a bit of a hack because ATTR_LB_ADDR_AUTHORITY isn't
-    // actually used in the normal case. https://github.com/grpc/grpc-java/issues/4618 should allow
-    // this to be more obvious.
-    Attributes attrs = Attributes.newBuilder()
-        .set(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY, authority)
-        .build();
-    return new LbAddressGroup(flattenEquivalentAddressGroup(eags, attrs), authority);
-  }
-
-  /**
-   * Flattens list of EquivalentAddressGroup objects into one EquivalentAddressGroup object.
-   */
-  private static EquivalentAddressGroup flattenEquivalentAddressGroup(
-      List<EquivalentAddressGroup> groupList, Attributes attrs) {
-    List<SocketAddress> addrs = new ArrayList<>();
-    for (EquivalentAddressGroup group : groupList) {
-      addrs.addAll(group.getAddresses());
-    }
-    return new EquivalentAddressGroup(addrs, attrs);
   }
 
   private static Attributes createSubchannelAttrs() {

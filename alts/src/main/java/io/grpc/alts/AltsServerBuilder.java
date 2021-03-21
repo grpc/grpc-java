@@ -20,6 +20,7 @@ import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingServerBuilder;
 import io.grpc.HandlerRegistry;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -38,7 +39,7 @@ import java.util.concurrent.TimeUnit;
  * a production server on Google Cloud Platform.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4151")
-public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
+public final class AltsServerBuilder extends ForwardingServerBuilder<AltsServerBuilder> {
   private final NettyServerBuilder delegate;
   private final AltsServerCredentials.Builder credentialsBuilder =
       new AltsServerCredentials.Builder();
@@ -66,6 +67,11 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
   public AltsServerBuilder setHandshakerAddressForTesting(String handshakerAddress) {
     credentialsBuilder.setHandshakerAddressForTesting(handshakerAddress);
     return this;
+  }
+
+  @Override
+  protected ServerBuilder<?> delegate() {
+    return delegate;
   }
 
   /** {@inheritDoc} */

@@ -50,7 +50,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>Implementations <strong>don't need to be thread-safe</strong>.  All methods are guaranteed to
  * be called sequentially.  Additionally, all methods that have side-effects, i.e.,
  * {@link #start(Listener2)}, {@link #shutdown} and {@link #refresh} are called from the same
- * {@link SynchronizationContext} as returned by {@link Helper#getSynchronizationContext}.
+ * {@link SynchronizationContext} as returned by {@link Args#getSynchronizationContext}.
  *
  * @since 1.0.0
  */
@@ -132,94 +132,6 @@ public abstract class NameResolver {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public abstract static class Factory {
     /**
-     * The port number used in case the target or the underlying naming system doesn't provide a
-     * port number.
-     *
-     * @deprecated this will be deleted along with {@link #newNameResolver(URI, Attributes)} in
-     *             a future release.
-     *
-     * @since 1.0.0
-     */
-    @Deprecated
-    public static final Attributes.Key<Integer> PARAMS_DEFAULT_PORT =
-        Attributes.Key.create("params-default-port");
-
-    /**
-     * If the NameResolver wants to support proxy, it should inquire this {@link ProxyDetector}.
-     * See documentation on {@link ProxyDetector} about how proxies work in gRPC.
-     *
-     * @deprecated this will be deleted along with {@link #newNameResolver(URI, Attributes)} in
-     *             a future release
-     */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
-    @Deprecated
-    public static final Attributes.Key<ProxyDetector> PARAMS_PROXY_DETECTOR =
-        Attributes.Key.create("params-proxy-detector");
-
-    @Deprecated
-    private static final Attributes.Key<SynchronizationContext> PARAMS_SYNC_CONTEXT =
-        Attributes.Key.create("params-sync-context");
-
-    @Deprecated
-    private static final Attributes.Key<ServiceConfigParser> PARAMS_PARSER =
-        Attributes.Key.create("params-parser");
-
-    /**
-     * Creates a {@link NameResolver} for the given target URI, or {@code null} if the given URI
-     * cannot be resolved by this factory. The decision should be solely based on the scheme of the
-     * URI.
-     *
-     * @param targetUri the target URI to be resolved, whose scheme must not be {@code null}
-     * @param params optional parameters. Canonical keys are defined as {@code PARAMS_*} fields in
-     *               {@link Factory}.
-     *
-     * @deprecated Implement {@link #newNameResolver(URI, NameResolver.Helper)} instead.  This is
-     *             going to be deleted in a future release.
-     *
-     * @since 1.0.0
-     */
-    @Nullable
-    @Deprecated
-    public NameResolver newNameResolver(URI targetUri, final Attributes params) {
-      Args args = Args.newBuilder()
-          .setDefaultPort(params.get(PARAMS_DEFAULT_PORT))
-          .setProxyDetector(params.get(PARAMS_PROXY_DETECTOR))
-          .setSynchronizationContext(params.get(PARAMS_SYNC_CONTEXT))
-          .setServiceConfigParser(params.get(PARAMS_PARSER))
-          .build();
-      return newNameResolver(targetUri, args);
-    }
-
-    /**
-     * Creates a {@link NameResolver} for the given target URI, or {@code null} if the given URI
-     * cannot be resolved by this factory. The decision should be solely based on the scheme of the
-     * URI.
-     *
-     * @param targetUri the target URI to be resolved, whose scheme must not be {@code null}
-     * @param helper utility that may be used by the NameResolver implementation
-     *
-     * @since 1.19.0
-     * @deprecated implement {@link #newNameResolver(URI, NameResolver.Args)} instead
-     */
-    @Deprecated
-    @Nullable
-    public NameResolver newNameResolver(URI targetUri, final Helper helper) {
-      return newNameResolver(
-          targetUri,
-          Attributes.newBuilder()
-              .set(PARAMS_DEFAULT_PORT, helper.getDefaultPort())
-              .set(PARAMS_PROXY_DETECTOR, helper.getProxyDetector())
-              .set(PARAMS_SYNC_CONTEXT, helper.getSynchronizationContext())
-              .set(PARAMS_PARSER, new ServiceConfigParser() {
-                  @Override
-                  public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
-                    return helper.parseServiceConfig(rawServiceConfig);
-                  }
-                })
-              .build());
-    }
-
-    /**
      * Creates a {@link NameResolver} for the given target URI, or {@code null} if the given URI
      * cannot be resolved by this factory. The decision should be solely based on the scheme of the
      * URI.
@@ -229,31 +141,7 @@ public abstract class NameResolver {
      *
      * @since 1.21.0
      */
-    @SuppressWarnings("deprecation")
-    // TODO(zhangkun83): make it abstract method after all other overrides have been deleted
-    public NameResolver newNameResolver(URI targetUri, final Args args) {
-      return newNameResolver(targetUri, new Helper() {
-          @Override
-          public int getDefaultPort() {
-            return args.getDefaultPort();
-          }
-
-          @Override
-          public ProxyDetector getProxyDetector() {
-            return args.getProxyDetector();
-          }
-
-          @Override
-          public SynchronizationContext getSynchronizationContext() {
-            return args.getSynchronizationContext();
-          }
-
-          @Override
-          public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
-            return args.getServiceConfigParser().parseServiceConfig(rawServiceConfig);
-          }
-        });
-    }
+    public abstract NameResolver newNameResolver(URI targetUri, final Args args);
 
     /**
      * Returns the default scheme, which will be used to construct a URI when {@link
@@ -349,57 +237,6 @@ public abstract class NameResolver {
   @Retention(RetentionPolicy.SOURCE)
   @Documented
   public @interface ResolutionResultAttr {}
-
-  /**
-   * A utility object passed to {@link Factory#newNameResolver(URI, NameResolver.Helper)}.
-   *
-   * @since 1.19.0
-   * @deprecated use {@link Args} instead.
-   */
-  @Deprecated
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
-  public abstract static class Helper {
-    /**
-     * The port number used in case the target or the underlying naming system doesn't provide a
-     * port number.
-     *
-     * @since 1.19.0
-     */
-    public abstract int getDefaultPort();
-
-    /**
-     * If the NameResolver wants to support proxy, it should inquire this {@link ProxyDetector}.
-     * See documentation on {@link ProxyDetector} about how proxies work in gRPC.
-     *
-     * @since 1.19.0
-     */
-    public abstract ProxyDetector getProxyDetector();
-
-    /**
-     * Returns the {@link SynchronizationContext} where {@link #start(Listener2)}, {@link #shutdown}
-     * and {@link #refresh} are run from.
-     *
-     * @since 1.20.0
-     */
-    public SynchronizationContext getSynchronizationContext() {
-      throw new UnsupportedOperationException("Not implemented");
-    }
-
-    /**
-     * Parses and validates the service configuration chosen by the name resolver.  This will
-     * return a {@link ConfigOrError} which contains either the successfully parsed config, or the
-     * {@link Status} representing the failure to parse.  Implementations are expected to not throw
-     * exceptions but return a Status representing the failure.  The value inside the
-     * {@link ConfigOrError} should implement {@code equals()} and {@code hashCode()}.
-     *
-     * @param rawServiceConfig The {@link Map} representation of the service config
-     * @return a tuple of the fully parsed and validated channel configuration, else the Status.
-     * @since 1.20.0
-     */
-    public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
-      throw new UnsupportedOperationException("should have been implemented");
-    }
-  }
 
   /**
    * Information that a {@link Factory} uses to create a {@link NameResolver}.
@@ -745,7 +582,7 @@ public abstract class NameResolver {
     }
 
     /**
-     * Gets the Service Config parsed by {@link NameResolver.Helper#parseServiceConfig(Map)}.
+     * Gets the Service Config parsed by {@link Args#getServiceConfigParser}.
      *
      * @since 1.21.0
      */
@@ -822,7 +659,7 @@ public abstract class NameResolver {
       }
 
       /**
-       * Sets the Service Config parsed by {@link NameResolver.Helper#parseServiceConfig(Map)}.
+       * Sets the Service Config parsed by {@link Args#getServiceConfigParser}.
        * This field is optional.
        *
        * @since 1.21.0

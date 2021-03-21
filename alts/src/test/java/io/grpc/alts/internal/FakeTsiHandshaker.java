@@ -210,7 +210,7 @@ public class FakeTsiHandshaker implements TsiHandshaker {
 
   @Override
   public Object extractPeerObject() {
-    return AltsAuthContext.getDefaultInstance();
+    return AltsInternalContext.getDefaultInstance();
   }
 
   @Override

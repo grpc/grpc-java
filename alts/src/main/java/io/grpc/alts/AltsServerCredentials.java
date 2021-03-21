@@ -76,7 +76,7 @@ public final class AltsServerCredentials {
     }
 
     InternalProtocolNegotiator.ProtocolNegotiator buildProtocolNegotiator() {
-      if (!CheckGcpEnvironment.isOnGcp()) {
+      if (!InternalCheckGcpEnvironment.isOnGcp()) {
         if (enableUntrustedAlts) {
           logger.log(
               Level.WARNING,

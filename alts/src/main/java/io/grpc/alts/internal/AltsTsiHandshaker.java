@@ -120,7 +120,7 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
   @Override
   public Object extractPeerObject() throws GeneralSecurityException {
     Preconditions.checkState(!isInProgress(), "Handshake is not complete.");
-    return new AltsAuthContext(handshaker.getResult());
+    return new AltsInternalContext(handshaker.getResult());
   }
 
   /** Creates a new TsiHandshaker for use by the client. */

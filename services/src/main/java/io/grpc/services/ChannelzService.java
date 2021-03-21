@@ -22,6 +22,7 @@ import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ServerList;
 import io.grpc.InternalChannelz.ServerSocketsList;
+import io.grpc.InternalChannelz.ServerStats;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.Status;
@@ -29,6 +30,8 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.channelz.v1.ChannelzGrpc;
 import io.grpc.channelz.v1.GetChannelRequest;
 import io.grpc.channelz.v1.GetChannelResponse;
+import io.grpc.channelz.v1.GetServerRequest;
+import io.grpc.channelz.v1.GetServerResponse;
 import io.grpc.channelz.v1.GetServerSocketsRequest;
 import io.grpc.channelz.v1.GetServerSocketsResponse;
 import io.grpc.channelz.v1.GetServersRequest;
@@ -117,6 +120,33 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
     GetServersResponse resp;
     try {
       resp = ChannelzProtoUtil.toGetServersResponse(servers);
+    } catch (StatusRuntimeException e) {
+      responseObserver.onError(e);
+      return;
+    }
+
+    responseObserver.onNext(resp);
+    responseObserver.onCompleted();
+  }
+
+  /** Returns a server. */
+  @Override
+  public void getServer(
+      GetServerRequest request, StreamObserver<GetServerResponse> responseObserver) {
+    InternalInstrumented<ServerStats> s = channelz.getServer(request.getServerId());
+    if (s == null) {
+      responseObserver.onError(
+          Status.NOT_FOUND.withDescription("Can't find server " + request.getServerId())
+              .asRuntimeException());
+      return;
+    }
+
+    GetServerResponse resp;
+    try {
+      resp = GetServerResponse
+          .newBuilder()
+          .setServer(ChannelzProtoUtil.toServer(s))
+          .build();
     } catch (StatusRuntimeException e) {
       responseObserver.onError(e);
       return;

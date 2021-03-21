@@ -317,10 +317,16 @@ public class WeightedTargetLoadBalancerTest {
         mock(SubchannelPicker.class),
         mock(SubchannelPicker.class),
         mock(SubchannelPicker.class)};
+    final SubchannelPicker[] failurePickers = new SubchannelPicker[]{
+        new ErrorPicker(Status.CANCELLED),
+        new ErrorPicker(Status.ABORTED),
+        new ErrorPicker(Status.DATA_LOSS),
+        new ErrorPicker(Status.DATA_LOSS)
+    };
     ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(null);
 
     // One child balancer goes to TRANSIENT_FAILURE.
-    childHelpers.get(1).updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.ABORTED));
+    childHelpers.get(1).updateBalancingState(TRANSIENT_FAILURE, failurePickers[1]);
     verify(helper, never()).updateBalancingState(
         eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
     verify(helper, times(2)).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
@@ -353,7 +359,7 @@ public class WeightedTargetLoadBalancerTest {
             new WeightedChildPicker(weights[3], subchannelPickers[3]));
 
     // One of READY child balancers goes to TRANSIENT_FAILURE.
-    childHelpers.get(2).updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS));
+    childHelpers.get(2).updateBalancingState(TRANSIENT_FAILURE, failurePickers[2]);
     verify(helper, times(4)).updateBalancingState(eq(READY), pickerCaptor.capture());
     overallPicker = (WeightedRandomPicker) pickerCaptor.getValue();
     assertThat(overallPicker.weightedChildPickers)
@@ -362,8 +368,15 @@ public class WeightedTargetLoadBalancerTest {
             new WeightedChildPicker(weights[3], subchannelPickers[3]));
 
     // All child balancers go to TRANSIENT_FAILURE.
-    childHelpers.get(3).updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS));
-    childHelpers.get(0).updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.CANCELLED));
-    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+    childHelpers.get(3).updateBalancingState(TRANSIENT_FAILURE, failurePickers[3]);
+    childHelpers.get(0).updateBalancingState(TRANSIENT_FAILURE, failurePickers[0]);
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    overallPicker = (WeightedRandomPicker) pickerCaptor.getValue();
+    assertThat(overallPicker.weightedChildPickers)
+        .containsExactly(
+            new WeightedChildPicker(weights[0], failurePickers[0]),
+            new WeightedChildPicker(weights[1], failurePickers[1]),
+            new WeightedChildPicker(weights[2], failurePickers[2]),
+            new WeightedChildPicker(weights[3], failurePickers[3]));
   }
 }

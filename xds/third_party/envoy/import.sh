@@ -16,13 +16,14 @@
 # Update VERSION then in this directory run ./import.sh
 
 set -e
-BRANCH=master
+BRANCH=main
 # import VERSION from one of the google internal CLs
-VERSION=af17f954653afcab6a189673e3500b2e988f1aef
+VERSION=ac9a2637336decdcc52c24add5e8fc39edebb962
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
 TARGET_PROTO_BASE_DIR=src/main/proto
+# Sorted alphabetically.
 FILES=(
 envoy/annotations/deprecation.proto
 envoy/annotations/resource.proto
@@ -87,33 +88,37 @@ envoy/config/endpoint/v3/load_report.proto
 envoy/config/filter/accesslog/v2/accesslog.proto
 envoy/config/filter/fault/v2/fault.proto
 envoy/config/filter/http/fault/v2/fault.proto
+envoy/config/filter/http/router/v2/router.proto
 envoy/config/filter/network/http_connection_manager/v2/http_connection_manager.proto
 envoy/config/listener/v2/api_listener.proto
 envoy/config/listener/v3/api_listener.proto
 envoy/config/listener/v3/listener.proto
 envoy/config/listener/v3/listener_components.proto
 envoy/config/listener/v3/udp_listener_config.proto
+envoy/config/rbac/v2/rbac.proto
 envoy/config/route/v3/route.proto
 envoy/config/route/v3/route_components.proto
 envoy/config/route/v3/scoped_route.proto
-envoy/config/trace/v2/http_tracer.proto
-envoy/config/trace/v2/trace.proto
 envoy/config/trace/v2/datadog.proto
 envoy/config/trace/v2/dynamic_ot.proto
+envoy/config/trace/v2/http_tracer.proto
 envoy/config/trace/v2/lightstep.proto
 envoy/config/trace/v2/opencensus.proto
 envoy/config/trace/v2/service.proto
+envoy/config/trace/v2/trace.proto
 envoy/config/trace/v2/zipkin.proto
-envoy/config/trace/v3/http_tracer.proto
-envoy/config/trace/v3/trace.proto
 envoy/config/trace/v3/datadog.proto
 envoy/config/trace/v3/dynamic_ot.proto
+envoy/config/trace/v3/http_tracer.proto
 envoy/config/trace/v3/lightstep.proto
 envoy/config/trace/v3/opencensus.proto
 envoy/config/trace/v3/service.proto
+envoy/config/trace/v3/trace.proto
 envoy/config/trace/v3/zipkin.proto
-envoy/config/rbac/v2/rbac.proto
 envoy/extensions/clusters/aggregate/v3/cluster.proto
+envoy/extensions/filters/common/fault/v3/fault.proto
+envoy/extensions/filters/http/fault/v3/fault.proto
+envoy/extensions/filters/http/router/v3/router.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
 envoy/extensions/transport_sockets/tls/v3/cert.proto
 envoy/extensions/transport_sockets/tls/v3/common.proto
@@ -126,17 +131,17 @@ envoy/service/discovery/v3/discovery.proto
 envoy/service/load_stats/v2/lrs.proto
 envoy/service/load_stats/v3/lrs.proto
 envoy/type/http.proto
+envoy/type/matcher/metadata.proto
+envoy/type/matcher/number.proto
+envoy/type/matcher/path.proto
 envoy/type/matcher/regex.proto
 envoy/type/matcher/string.proto
-envoy/type/matcher/metadata.proto
-envoy/type/matcher/path.proto
-envoy/type/matcher/value.proto
-envoy/type/matcher/number.proto
 envoy/type/matcher/v3/metadata.proto
 envoy/type/matcher/v3/number.proto
 envoy/type/matcher/v3/regex.proto
 envoy/type/matcher/v3/string.proto
 envoy/type/matcher/v3/value.proto
+envoy/type/matcher/value.proto
 envoy/type/metadata/v2/metadata.proto
 envoy/type/metadata/v3/metadata.proto
 envoy/type/percent.proto

@@ -39,7 +39,9 @@ import static io.netty.handler.codec.http2.Http2Exception.connectionError;
 import static io.netty.util.AsciiString.isUpperCase;
 
 import com.google.common.io.BaseEncoding;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Metadata;
+import io.netty.handler.codec.CharSequenceValueConverter;
 import io.netty.handler.codec.http2.DefaultHttp2HeadersDecoder;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
@@ -158,6 +160,44 @@ class GrpcHttp2HeadersUtils {
         }
       }
       return returnValues;
+    }
+
+    @CanIgnoreReturnValue
+    @Override
+    public boolean remove(CharSequence csName) {
+      AsciiString name = requireAsciiString(csName);
+      int i = 0;
+      for (; i < namesAndValuesIdx; i += 2) {
+        if (equals(name, namesAndValues[i])) {
+          break;
+        }
+      }
+      if (i >= namesAndValuesIdx) {
+        return false;
+      }
+      int dest = i;
+      for (; i < namesAndValuesIdx; i += 2) {
+        if (equals(name, namesAndValues[i])) {
+          continue;
+        }
+        values[dest / 2] = values[i / 2];
+        namesAndValues[dest] = namesAndValues[i];
+        namesAndValues[dest + 1] = namesAndValues[i + 1];
+        dest += 2;
+      }
+      namesAndValuesIdx = dest;
+      return true;
+    }
+
+    @Override
+    public Http2Headers set(CharSequence name, CharSequence value) {
+      remove(name);
+      return add(name, value);
+    }
+
+    @Override
+    public Http2Headers setLong(CharSequence name, long value) {
+      return set(name, AsciiString.of(CharSequenceValueConverter.INSTANCE.convertLong(value)));
     }
 
     /**
@@ -353,9 +393,6 @@ class GrpcHttp2HeadersUtils {
       return scheme;
     }
 
-    /**
-     * This method is called in tests only.
-     */
     @Override
     public List<CharSequence> getAll(CharSequence csName) {
       AsciiString name = requireAsciiString(csName);
@@ -367,6 +404,21 @@ class GrpcHttp2HeadersUtils {
         return Collections.singletonList((CharSequence) te);
       }
       return super.getAll(csName);
+    }
+
+    @Override
+    public boolean remove(CharSequence csName) {
+      AsciiString name = requireAsciiString(csName);
+      if (isPseudoHeader(name)) {
+        // This code should never be reached.
+        throw new IllegalArgumentException("Use direct accessor methods for pseudo headers.");
+      }
+      if (equals(TE_HEADER, name)) {
+        boolean wasPresent = te != null;
+        te = null;
+        return wasPresent;
+      }
+      return super.remove(name);
     }
 
     /**
