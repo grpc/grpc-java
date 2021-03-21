@@ -18,7 +18,7 @@ package io.grpc.binder.util;
 
 import static android.os.Looper.getMainLooper;
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.fail;
 import static org.robolectric.Shadows.shadowOf;
 import static org.robolectric.annotation.LooperMode.Mode.PAUSED;
 
@@ -35,7 +35,6 @@ import io.grpc.binder.util.Bindable.Observer;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.function.ThrowingRunnable;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
@@ -250,12 +249,14 @@ public final class ServiceBindingTest {
   }
 
   private void assertNoLockHeld() {
-    assertThrows(IllegalMonitorStateException.class, new ThrowingRunnable() {
-      @Override
-      public void run() throws InterruptedException {
-        binding.wait(1);
-      }
-    });
+    try {
+      binding.wait(1);
+      fail("Lock held on binding");
+    } catch (IllegalMonitorStateException ime) {
+      // Expected.
+    } catch (InterruptedException inte) {
+      throw new AssertionError("Interrupted exception when we shouldn't have been able to wait.", inte);
+    }
   }
 
   private class TestObserver implements Bindable.Observer {

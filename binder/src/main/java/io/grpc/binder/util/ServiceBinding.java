@@ -119,15 +119,10 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       state = State.BINDING;
       Intent bindIntent = new Intent(bindAction);
       bindIntent.setComponent(targetComponent);
-      final Status bindResult = bindInternal(sourceContext, bindIntent, this, Context.BIND_AUTO_CREATE);
+      Status bindResult = bindInternal(sourceContext, bindIntent, this, Context.BIND_AUTO_CREATE);
       if (!bindResult.isOk()) {
         state = State.UNBOUND;
-        mainThreadExecutor.execute(new Runnable() {
-          @Override
-          public void run() {
-            notifyUnbound(bindResult);
-          }
-        });
+        mainThreadExecutor.execute(() -> notifyUnbound(bindResult));
       }
     }
   }
@@ -154,7 +149,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   }
 
   @AnyThread
-  void unbindInternal(final Status reason) {
+  void unbindInternal(Status reason) {
     Context unbindFrom = null;
     synchronized (this) {
       if (state == State.BINDING || state == State.BOUND) {
@@ -162,12 +157,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       }
       state = State.UNBOUND;
     }
-    mainThreadExecutor.execute(new Runnable() {
-      @Override
-      public void run() {
-        notifyUnbound(reason);
-      }
-    });
+    mainThreadExecutor.execute(() -> notifyUnbound(reason));
     if (unbindFrom != null) {
       unbindFrom.unbindService(this);
     }
@@ -217,5 +207,4 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   synchronized boolean isSourceContextCleared() {
     return sourceContext == null;
   }
-
 }

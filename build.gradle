@@ -182,7 +182,7 @@ subprojects {
             bouncycastle: 'org.bouncycastle:bcpkix-jdk15on:1.67',
 
             // Test dependencies.
-            junit: 'junit:junit:4.13',
+            junit: 'junit:junit:4.12',
             mockito: 'org.mockito:mockito-core:3.3.3',
             truth: 'com.google.truth:truth:1.0.1',
             guava_testlib: "com.google.guava:guava-testlib:${guavaVersion}",

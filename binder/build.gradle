@@ -7,6 +7,11 @@ description = 'gRPC BinderChannel'
 
 android {
     compileSdkVersion 29
+    compileOptions {
+        sourceCompatibility 1.8
+        targetCompatibility 1.8
+    }
+
     defaultConfig {
         consumerProguardFiles "proguard-rules.txt"
         minSdkVersion 16
