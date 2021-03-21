@@ -27,7 +27,6 @@ pluginManagement {
 
 rootProject.name = "grpc"
 include ":grpc-api"
-include ":grpc-binder"
 include ":grpc-core"
 include ":grpc-context"
 include ":grpc-stub"
@@ -52,7 +51,6 @@ include ":grpc-bom"
 include ":grpc-rls"
 
 project(':grpc-api').projectDir = "$rootDir/api" as File
-project(':grpc-binder').projectDir = "$rootDir/binder" as File
 project(':grpc-core').projectDir = "$rootDir/core" as File
 project(':grpc-context').projectDir = "$rootDir/context" as File
 project(':grpc-stub').projectDir = "$rootDir/stub" as File
@@ -93,4 +91,6 @@ if (settings.hasProperty('skipAndroid') && skipAndroid.toBoolean()) {
     project(':grpc-android').projectDir = "$rootDir/android" as File
     include ":grpc-android-interop-testing"
     project(':grpc-android-interop-testing').projectDir = "$rootDir/android-interop-testing" as File
+    include ":grpc-binder"
+    project(':grpc-binder').projectDir = "$rootDir/binder" as File
 }
