@@ -16,6 +16,7 @@
 
 package io.grpc.binder.util;
 
+import static android.content.Context.BIND_AUTO_CREATE;
 import static android.os.Looper.getMainLooper;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
@@ -75,6 +76,7 @@ public final class ServiceBindingTest {
     return new ServiceBindingBuilder()
         .setSourceContext(appContext)
         .setTargetComponent(serviceComponent)
+        .setFlags(BIND_AUTO_CREATE)
         .setObserver(observer);
   }
 
@@ -289,6 +291,7 @@ public final class ServiceBindingTest {
     private Observer observer;
     private ComponentName targetComponent;
     private String bindAction;
+    private int bindServiceFlags;
 
     public ServiceBindingBuilder setSourceContext(Context sourceContext) {
       this.sourceContext = sourceContext;
@@ -297,6 +300,11 @@ public final class ServiceBindingTest {
 
     public ServiceBindingBuilder setBindingAction(String bindAction) {
       this.bindAction = bindAction;
+      return this;
+    }
+
+    public ServiceBindingBuilder setFlags(int bindServiceFlags) {
+      this.bindServiceFlags = bindServiceFlags;
       return this;
     }
 
@@ -316,6 +324,7 @@ public final class ServiceBindingTest {
           sourceContext,
           targetComponent,
           bindAction,
+          bindServiceFlags,
           observer);
     }
   }
