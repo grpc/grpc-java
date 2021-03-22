@@ -1499,26 +1499,21 @@ final class ClientXdsClient extends AbstractXdsClient {
       return !watchers.isEmpty();
     }
 
-    // TODO(sergiitk): when CDS, EDS updated, replace with onData(ParsedResource ...).
-    void onData(ResourceUpdate data, Any resource, String version, long updateTime) {
+    void onData(ParsedResource parsedResource, String version, long updateTime) {
       if (respTimer != null && respTimer.isPending()) {
         respTimer.cancel();
         respTimer = null;
       }
-      this.metadata = ResourceMetadata.newResourceMetadataAcked(resource, version, updateTime);
+      this.metadata = ResourceMetadata
+          .newResourceMetadataAcked(parsedResource.getRawResource(), version, updateTime);
       ResourceUpdate oldData = this.data;
-      this.data = data;
+      this.data = parsedResource.getResourceUpdate();
       absent = false;
       if (!Objects.equals(oldData, data)) {
         for (ResourceWatcher watcher : watchers) {
           notifyWatcher(watcher, data);
         }
       }
-    }
-
-    void onData(ParsedResource parsedResource, String version, long updateTime) {
-      onData(parsedResource.getResourceUpdate(), parsedResource.getRawResource(), version,
-          updateTime);
     }
 
     void onAbsent() {
