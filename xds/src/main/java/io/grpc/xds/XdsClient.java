@@ -22,6 +22,7 @@ import com.google.auto.value.AutoValue;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.Any;
 import io.grpc.Status;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -386,6 +387,109 @@ abstract class XdsClient {
 
   interface EdsResourceWatcher extends ResourceWatcher {
     void onChanged(EdsUpdate update);
+  }
+
+  /**
+   * Captures ResourceSubscriber metadata, used by the xDS config dump.
+   */
+  static final class ResourceMetadata {
+    private final String version;
+    private final ResourceMetadataStatus status;
+    private final long updateTime;
+    @Nullable private final Any rawResource;
+    @Nullable private final UpdateFailureState errorState;
+
+    private ResourceMetadata(
+        ResourceMetadataStatus status, String version, long updateTime, @Nullable Any rawResource,
+        @Nullable UpdateFailureState errorState) {
+      this.status = checkNotNull(status, "status");
+      this.version = checkNotNull(version, "version");
+      this.updateTime = updateTime;
+      this.rawResource = rawResource;
+      this.errorState = errorState;
+    }
+
+    static ResourceMetadata newResourceMetadataUnknown() {
+      return new ResourceMetadata(ResourceMetadataStatus.UNKNOWN, "", 0, null, null);
+    }
+
+    static ResourceMetadata newResourceMetadataRequested() {
+      return new ResourceMetadata(ResourceMetadataStatus.REQUESTED, "", 0, null, null);
+    }
+
+    static ResourceMetadata newResourceMetadataDoesNotExist() {
+      return new ResourceMetadata(ResourceMetadataStatus.DOES_NOT_EXIST, "", 0, null, null);
+    }
+
+    static ResourceMetadata newResourceMetadataAcked(
+        Any resource, String version, long updateTime) {
+      checkNotNull(resource, "resource");
+      return new ResourceMetadata(
+          ResourceMetadataStatus.ACKED, version, updateTime, resource, null);
+    }
+
+    static ResourceMetadata newResourceMetadataNacked(
+        ResourceMetadata metadata, String failedVersion, long failedUpdateTime,
+        String failedDetails) {
+      checkNotNull(metadata, "metadata");
+      return new ResourceMetadata(ResourceMetadataStatus.NACKED,
+          metadata.getVersion(), metadata.getUpdateTime(), metadata.getRawResource(),
+          new UpdateFailureState(failedVersion, failedUpdateTime, failedDetails));
+    }
+
+    String getVersion() {
+      return version;
+    }
+
+    ResourceMetadataStatus getStatus() {
+      return status;
+    }
+
+    long getUpdateTime() {
+      return updateTime;
+    }
+
+    @Nullable
+    Any getRawResource() {
+      return rawResource;
+    }
+
+    @Nullable
+    UpdateFailureState getErrorState() {
+      return errorState;
+    }
+
+    enum ResourceMetadataStatus {
+      UNKNOWN, REQUESTED, DOES_NOT_EXIST, ACKED, NACKED
+    }
+
+    static final class UpdateFailureState {
+      private final String failedVersion;
+      private final long failedUpdateTime;
+      private final String failedDetails;
+
+      private UpdateFailureState(
+          String failedVersion, long failedUpdateTime, String failedDetails) {
+        this.failedVersion = checkNotNull(failedVersion, "failedVersion");
+        this.failedUpdateTime = failedUpdateTime;
+        this.failedDetails = checkNotNull(failedDetails, "failedDetails");
+      }
+
+      /** The rejected version string of the last failed update attempt. */
+      String getFailedVersion() {
+        return failedVersion;
+      }
+
+      /** Details about the last failed update attempt. */
+      long getFailedUpdateTime() {
+        return failedUpdateTime;
+      }
+
+      /** Timestamp of the last failed update attempt. */
+      String getFailedDetails() {
+        return failedDetails;
+      }
+    }
   }
 
   /**
