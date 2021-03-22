@@ -190,11 +190,11 @@ final class ClientXdsClient extends AbstractXdsClient {
         versionInfo, nonce, unpackedResources);
 
     if (!errors.isEmpty()) {
-      handleResourcesNacked(ResourceType.LDS, unpackedResources, versionInfo, nonce, errors);
+      handleResourcesRejected(ResourceType.LDS, unpackedResources, versionInfo, nonce, errors);
       return;
     }
 
-    handleResourcesAcked(ResourceType.LDS, parsedResources, versionInfo, nonce, true);
+    handleResourcesAccepted(ResourceType.LDS, parsedResources, versionInfo, nonce);
     for (String resource : rdsResourceSubscribers.keySet()) {
       if (!retainedRdsResources.contains(resource)) {
         ResourceSubscriber subscriber = rdsResourceSubscribers.get(resource);
@@ -730,9 +730,9 @@ final class ClientXdsClient extends AbstractXdsClient {
         versionInfo, nonce, unpackedResources);
 
     if (!errors.isEmpty()) {
-      handleResourcesNacked(ResourceType.RDS, unpackedResources, versionInfo, nonce, errors);
+      handleResourcesRejected(ResourceType.RDS, unpackedResources, versionInfo, nonce, errors);
     } else {
-      handleResourcesAcked(ResourceType.RDS, parsedResources, versionInfo, nonce, false);
+      handleResourcesAccepted(ResourceType.RDS, parsedResources, versionInfo, nonce);
     }
   }
 
@@ -796,11 +796,11 @@ final class ClientXdsClient extends AbstractXdsClient {
         versionInfo, nonce, unpackedResources);
 
     if (!errors.isEmpty()) {
-      handleResourcesNacked(ResourceType.CDS, unpackedResources, versionInfo, nonce, errors);
+      handleResourcesRejected(ResourceType.CDS, unpackedResources, versionInfo, nonce, errors);
       return;
     }
 
-    handleResourcesAcked(ResourceType.CDS, parsedResources, versionInfo, nonce, true);
+    handleResourcesAccepted(ResourceType.CDS, parsedResources, versionInfo, nonce);
     // CDS responses represents the state of the world, EDS resources not referenced in CDS
     // resources should be deleted.
     for (String resource : edsResourceSubscribers.keySet()) {
@@ -977,9 +977,9 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
 
     if (!errors.isEmpty()) {
-      handleResourcesNacked(ResourceType.EDS, unpackedResources, versionInfo, nonce, errors);
+      handleResourcesRejected(ResourceType.EDS, unpackedResources, versionInfo, nonce, errors);
     } else {
-      handleResourcesAcked(ResourceType.EDS, parsedResources, versionInfo, nonce, false);
+      handleResourcesAccepted(ResourceType.EDS, parsedResources, versionInfo, nonce);
     }
   }
 
@@ -1180,16 +1180,6 @@ final class ClientXdsClient extends AbstractXdsClient {
     return metadataMap;
   }
 
-  @Nullable
-  ResourceMetadata getSubscribedResourceMetadata(
-      ResourceType type, String resourceName) {
-    Map<String, ResourceSubscriber> resources = getSubscribedResourcesMap(type);
-    if (resources.isEmpty() || !resources.containsKey(resourceName)) {
-      return null;
-    }
-    return resources.get(resourceName).metadata;
-  }
-
   @Override
   void watchLdsResource(final String resourceName, final LdsResourceWatcher watcher) {
     getSyncContext().execute(new Runnable() {
@@ -1374,30 +1364,30 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private void handleResourcesAcked(
+  private void handleResourcesAccepted(
       ResourceType type, Map<String, ParsedResource> parsedResources, String version,
-      String nonce, boolean callOnAbsent) {
+      String nonce) {
     ackResponse(type, version, nonce);
 
     long updateTime = timeProvider.currentTimeNanos();
     for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
       String resourceName = entry.getKey();
       ResourceSubscriber subscriber = entry.getValue();
-
-      // Notify the watchers of the new data, or (optionally) of a subscribed resource absence from
-      // the ADS update.
+      // Notify the watchers.
       if (parsedResources.containsKey(resourceName)) {
         subscriber.onData(parsedResources.get(resourceName), version, updateTime);
-      } else if (callOnAbsent) {
+      } else if (type == ResourceType.LDS || type == ResourceType.CDS) {
+        // For State of the World services, notify watchers when their watched resource is missing
+        // from the ADS update.
         subscriber.onAbsent();
       }
     }
   }
 
-  private void handleResourcesNacked(
+  private void handleResourcesRejected(
       ResourceType type, Set<String> unpackedResourceNames, String version,
       String nonce, List<String> errors) {
-    String errorDetail = combineErrors(errors);
+    String errorDetail = Joiner.on('\n').join(errors);
     getLogger().log(XdsLogLevel.WARNING,
         "Failed processing {0} Response version {1} nonce {2}. Errors:\n{3}",
         type, version, nonce, errorDetail);
@@ -1413,10 +1403,6 @@ final class ClientXdsClient extends AbstractXdsClient {
         subscriber.onRejected(version, updateTime, errorDetail);
       }
     }
-  }
-
-  private static String combineErrors(List<String> errors) {
-    return Joiner.on('\n').join(errors);
   }
 
   /**

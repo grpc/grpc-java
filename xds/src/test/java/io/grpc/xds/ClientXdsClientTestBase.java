@@ -361,7 +361,8 @@ public abstract class ClientXdsClientTestBase {
   private ResourceMetadata verifyResourceMetadata(
       ResourceType type, String resourceName, Any rawResource, ResourceMetadataStatus status,
       String versionInfo, long updateTime, boolean hasErrorState) {
-    ResourceMetadata resourceMetadata = xdsClient.getSubscribedResourceMetadata(type, resourceName);
+    ResourceMetadata resourceMetadata =
+        xdsClient.getSubscribedResourcesMetadata(type).get(resourceName);
     assertThat(resourceMetadata).isNotNull();
     String name = type.toString() + " resource '" + resourceName + "' metadata field ";
     assertWithMessage(name + "status").that(resourceMetadata.getStatus()).isEqualTo(status);
