@@ -327,9 +327,9 @@ public abstract class ClientXdsClientTestBase {
   /** Verify the resource to be acked. */
   private void verifyResourceMetadataAcked(
       ResourceType type, String resourceName, Any rawResource, String versionInfo,
-      long updateTime) {
+      long updateTimeNanos) {
     verifyResourceMetadata(type, resourceName, rawResource, ResourceMetadataStatus.ACKED,
-        versionInfo, updateTime, false);
+        versionInfo, updateTimeNanos, false);
   }
 
   /**
@@ -338,7 +338,7 @@ public abstract class ClientXdsClientTestBase {
    */
   private void verifyResourceMetadataNacked(
       ResourceType type, String resourceName, Any rawResource, String versionInfo,
-      long updateTime, String failedVersion, long failedUpdateTime,
+      long updateTime, String failedVersion, long failedUpdateTimeNanos,
       List<String> failedDetails) {
     ResourceMetadata resourceMetadata =
         verifyResourceMetadata(type, resourceName, rawResource, ResourceMetadataStatus.NACKED,
@@ -349,8 +349,8 @@ public abstract class ClientXdsClientTestBase {
     String name = type.toString() + " resource '" + resourceName + "' metadata error ";
     assertWithMessage(name + "failedVersion").that(errorState.getFailedVersion())
         .isEqualTo(failedVersion);
-    assertWithMessage(name + "failedUpdateTime").that(errorState.getFailedUpdateTime())
-        .isEqualTo(failedUpdateTime);
+    assertWithMessage(name + "failedUpdateTimeNanos").that(errorState.getFailedUpdateTimeNanos())
+        .isEqualTo(failedUpdateTimeNanos);
     List<String> errors = Splitter.on('\n').splitToList(errorState.getFailedDetails());
     for (int i = 0; i < errors.size(); i++) {
       assertWithMessage(name + "failedDetails line " + i).that(errors.get(i))
@@ -360,7 +360,7 @@ public abstract class ClientXdsClientTestBase {
 
   private ResourceMetadata verifyResourceMetadata(
       ResourceType type, String resourceName, Any rawResource, ResourceMetadataStatus status,
-      String versionInfo, long updateTime, boolean hasErrorState) {
+      String versionInfo, long updateTimeNanos, boolean hasErrorState) {
     ResourceMetadata resourceMetadata =
         xdsClient.getSubscribedResourcesMetadata(type).get(resourceName);
     assertThat(resourceMetadata).isNotNull();
@@ -369,8 +369,8 @@ public abstract class ClientXdsClientTestBase {
     assertWithMessage(name + "version").that(resourceMetadata.getVersion()).isEqualTo(versionInfo);
     assertWithMessage(name + "rawResource").that(resourceMetadata.getRawResource())
         .isEqualTo(rawResource);
-    assertWithMessage(name + "updateTime").that(resourceMetadata.getUpdateTime())
-        .isEqualTo(updateTime);
+    assertWithMessage(name + "updateTimeNanos").that(resourceMetadata.getUpdateTimeNanos())
+        .isEqualTo(updateTimeNanos);
     if (hasErrorState) {
       assertWithMessage(name + "errorState").that(resourceMetadata.getErrorState()).isNotNull();
     } else {

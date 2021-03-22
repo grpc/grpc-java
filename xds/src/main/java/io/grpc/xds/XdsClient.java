@@ -395,16 +395,16 @@ abstract class XdsClient {
   static final class ResourceMetadata {
     private final String version;
     private final ResourceMetadataStatus status;
-    private final long updateTime;
+    private final long updateTimeNanos;
     @Nullable private final Any rawResource;
     @Nullable private final UpdateFailureState errorState;
 
     private ResourceMetadata(
-        ResourceMetadataStatus status, String version, long updateTime, @Nullable Any rawResource,
-        @Nullable UpdateFailureState errorState) {
+        ResourceMetadataStatus status, String version, long updateTimeNanos,
+        @Nullable Any rawResource, @Nullable UpdateFailureState errorState) {
       this.status = checkNotNull(status, "status");
       this.version = checkNotNull(version, "version");
-      this.updateTime = updateTime;
+      this.updateTimeNanos = updateTimeNanos;
       this.rawResource = rawResource;
       this.errorState = errorState;
     }
@@ -433,45 +433,65 @@ abstract class XdsClient {
         String failedDetails) {
       checkNotNull(metadata, "metadata");
       return new ResourceMetadata(ResourceMetadataStatus.NACKED,
-          metadata.getVersion(), metadata.getUpdateTime(), metadata.getRawResource(),
+          metadata.getVersion(), metadata.getUpdateTimeNanos(), metadata.getRawResource(),
           new UpdateFailureState(failedVersion, failedUpdateTime, failedDetails));
     }
 
+    /** The last successfully updated version of the resource. */
     String getVersion() {
       return version;
     }
 
+    /** The client status of this resource. */
     ResourceMetadataStatus getStatus() {
       return status;
     }
 
-    long getUpdateTime() {
-      return updateTime;
+    /** The timestamp when the resource was last successfully updated. */
+    long getUpdateTimeNanos() {
+      return updateTimeNanos;
     }
 
+    /** The last successfully updated xDS resource as it was returned by the server. */
     @Nullable
     Any getRawResource() {
       return rawResource;
     }
 
+    /** The metadata capturing the error details of the last rejected update of the resource. */
     @Nullable
     UpdateFailureState getErrorState() {
       return errorState;
     }
 
+    /**
+     * Resource status from the view of a xDS client, which tells the synchronization
+     * status between the xDS client and the xDS server.
+     *
+     * <p>This is a native representation of xDS ConfigDump ClientResourceStatus, see
+     * <a href="https://github.com/envoyproxy/envoy/blob/main/api/envoy/admin/v3/config_dump.proto">
+     * config_dump.proto</a>
+     */
     enum ResourceMetadataStatus {
       UNKNOWN, REQUESTED, DOES_NOT_EXIST, ACKED, NACKED
     }
 
+    /**
+     * Captures error metadata of failed resource updates.
+     *
+     * <p>This is a native representation of xDS ConfigDump UpdateFailureState, see
+     * <a href="https://github.com/envoyproxy/envoy/blob/main/api/envoy/admin/v3/config_dump.proto">
+     * config_dump.proto</a>
+     */
     static final class UpdateFailureState {
       private final String failedVersion;
-      private final long failedUpdateTime;
+      private final long failedUpdateTimeNanos;
       private final String failedDetails;
 
       private UpdateFailureState(
-          String failedVersion, long failedUpdateTime, String failedDetails) {
+          String failedVersion, long failedUpdateTimeNanos, String failedDetails) {
         this.failedVersion = checkNotNull(failedVersion, "failedVersion");
-        this.failedUpdateTime = failedUpdateTime;
+        this.failedUpdateTimeNanos = failedUpdateTimeNanos;
         this.failedDetails = checkNotNull(failedDetails, "failedDetails");
       }
 
@@ -481,8 +501,8 @@ abstract class XdsClient {
       }
 
       /** Details about the last failed update attempt. */
-      long getFailedUpdateTime() {
-        return failedUpdateTime;
+      long getFailedUpdateTimeNanos() {
+        return failedUpdateTimeNanos;
       }
 
       /** Timestamp of the last failed update attempt. */
