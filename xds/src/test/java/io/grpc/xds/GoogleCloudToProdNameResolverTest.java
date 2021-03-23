@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -250,7 +251,13 @@ public class GoogleCloudToProdNameResolverTest {
     }
 
     @Override
-    public ObjectPool<XdsClient> getXdsClientPool() {
+    @Nullable
+    public ObjectPool<XdsClient> get() {
+      throw new UnsupportedOperationException("Should not be called");
+    }
+
+    @Override
+    public ObjectPool<XdsClient> getOrCreate() {
       throw new UnsupportedOperationException("Should not be called");
     }
   }
