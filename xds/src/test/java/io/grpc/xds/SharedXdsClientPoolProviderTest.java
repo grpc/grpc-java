@@ -62,7 +62,8 @@ public class SharedXdsClientPoolProviderTest {
     SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider(bootstrapper);
     thrown.expect(XdsInitializationException.class);
     thrown.expectMessage("No xDS server provided");
-    provider.getXdsClientPool();
+    provider.getOrCreate();
+    assertThat(provider.get()).isNull();
   }
 
   @Test
@@ -73,9 +74,12 @@ public class SharedXdsClientPoolProviderTest {
     when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
 
     SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider(bootstrapper);
-    ObjectPool<XdsClient> xdsClientPool = provider.getXdsClientPool();
+    assertThat(provider.get()).isNull();
+    ObjectPool<XdsClient> xdsClientPool = provider.getOrCreate();
     verify(bootstrapper).bootstrap();
-    assertThat(provider.getXdsClientPool()).isSameInstanceAs(xdsClientPool);
+    assertThat(provider.getOrCreate()).isSameInstanceAs(xdsClientPool);
+    assertThat(provider.get()).isNotNull();
+    assertThat(provider.get()).isSameInstanceAs(xdsClientPool);
     verifyNoMoreInteractions(bootstrapper);
   }
 

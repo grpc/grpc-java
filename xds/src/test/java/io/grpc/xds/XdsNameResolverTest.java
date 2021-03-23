@@ -171,7 +171,13 @@ public class XdsNameResolverTest {
       }
 
       @Override
-      public ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException {
+      @Nullable
+      public ObjectPool<XdsClient> get() {
+        throw new UnsupportedOperationException("Should not be called");
+      }
+
+      @Override
+      public ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
         throw new XdsInitializationException("Fail to read bootstrap file");
       }
     };
@@ -1432,7 +1438,13 @@ public class XdsNameResolverTest {
     }
 
     @Override
-    public ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException {
+    @Nullable
+    public ObjectPool<XdsClient> get() {
+      throw new UnsupportedOperationException("Should not be called");
+    }
+
+    @Override
+    public ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {

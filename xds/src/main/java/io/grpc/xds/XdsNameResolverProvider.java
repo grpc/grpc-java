@@ -79,7 +79,10 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
   interface XdsClientPoolFactory {
     void setBootstrapOverride(Map<String, ?> bootstrap);
 
-    ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException;
+    @Nullable
+    ObjectPool<XdsClient> get();
+
+    ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException;
   }
 
   /**
