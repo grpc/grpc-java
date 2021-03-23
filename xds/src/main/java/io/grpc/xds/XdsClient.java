@@ -390,7 +390,7 @@ abstract class XdsClient {
   }
 
   /**
-   * Captures ResourceSubscriber metadata, used by the xDS config dump.
+   * The metadata of the xDS resource; used by the xDS config dump.
    */
   static final class ResourceMetadata {
     private final String version;
