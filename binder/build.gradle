@@ -40,3 +40,4 @@ dependencies {
     }
     testImplementation libraries.truth
 }
+[publishMavenPublicationToMavenRepository]*.onlyIf { false }

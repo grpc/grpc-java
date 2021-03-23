@@ -139,9 +139,11 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       }
       return Status.OK;
     } catch (SecurityException e) {
-      return Status.PERMISSION_DENIED.withCause(e);
+      return Status.PERMISSION_DENIED.withCause(e).withDescription(
+          "SecurityException from bindService");
     } catch (RuntimeException e) {
-      return Status.INTERNAL.withCause(e);
+      return Status.INTERNAL.withCause(e).withDescription(;
+          "RuntimeException from bindService");
     }
   }
 

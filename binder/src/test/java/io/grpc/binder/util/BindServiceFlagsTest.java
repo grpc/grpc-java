@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.frameworks.client.data.android.binder;
+package io.grpc.binder.util;
 
 import static com.google.common.truth.Truth.assertThat;
 

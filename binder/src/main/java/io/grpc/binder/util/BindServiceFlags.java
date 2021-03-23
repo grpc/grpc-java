@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.frameworks.client.data.android.binder;
+package io.grpc.binder.util;
 
 import static android.content.Context.BIND_ABOVE_CLIENT;
 import static android.content.Context.BIND_ADJUST_WITH_ACTIVITY;
