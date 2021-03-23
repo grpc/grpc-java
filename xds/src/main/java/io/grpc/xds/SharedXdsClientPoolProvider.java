@@ -26,6 +26,7 @@ import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Node;
@@ -134,7 +135,8 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
               .build();
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
           xdsClient = new ClientXdsClient(channel, useProtocolV3, node, scheduler,
-              new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER);
+              new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER,
+              TimeProvider.SYSTEM_TIME_PROVIDER);
         }
         refCount++;
         return xdsClient;

@@ -23,6 +23,7 @@ import static io.grpc.xds.EnvoyServerProtoData.TRANSPORT_SOCKET_NAME_TLS;
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.CaseFormat;
+import com.google.common.base.Joiner;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
@@ -52,6 +53,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -126,160 +128,166 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final Map<String, ResourceSubscriber> edsResourceSubscribers = new HashMap<>();
   private final LoadStatsManager2 loadStatsManager;
   private final LoadReportClient lrsClient;
+  private final TimeProvider timeProvider;
   private boolean reportingLoad;
 
-  ClientXdsClient(ManagedChannel channel, boolean useProtocolV3, Node node,
+  ClientXdsClient(
+      ManagedChannel channel, boolean useProtocolV3, Node node,
       ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier) {
+      Supplier<Stopwatch> stopwatchSupplier, TimeProvider timeProvider) {
     super(channel, useProtocolV3, node, timeService, backoffPolicyProvider, stopwatchSupplier);
     loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
+    this.timeProvider = timeProvider;
     lrsClient = new LoadReportClient(loadStatsManager, channel, useProtocolV3, node,
         getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
   }
 
   @Override
   protected void handleLdsResponse(String versionInfo, List<Any> resources, String nonce) {
-    // Unpack Listener messages.
-    List<Listener> listeners = new ArrayList<>(resources.size());
-    List<String> listenerNames = new ArrayList<>(resources.size());
-    boolean isResourceV3 = false;
-    try {
-      for (Any res : resources) {
-        if (res.getTypeUrl().equals(ResourceType.LDS.typeUrl())) {
-          isResourceV3 = true;
-        }
-        Listener listener = unpackCompatibleType(res, Listener.class, ResourceType.LDS.typeUrl(),
+    Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
+    Set<String> unpackedResources = new HashSet<>(resources.size());
+    List<String> errors = new ArrayList<>();
+    Set<String> retainedRdsResources = new HashSet<>();
+
+    for (int i = 0; i < resources.size(); i++) {
+      Any resource = resources.get(i);
+
+      // Unpack the Listener.
+      boolean isResourceV3 = resource.getTypeUrl().equals(ResourceType.LDS.typeUrl());
+      Listener listener;
+      try {
+        listener = unpackCompatibleType(resource, Listener.class, ResourceType.LDS.typeUrl(),
             ResourceType.LDS.typeUrlV2());
-        listeners.add(listener);
-        listenerNames.add(listener.getName());
+      } catch (InvalidProtocolBufferException e) {
+        errors.add("LDS response Resource index " + i + " - can't decode Listener: " + e);
+        continue;
       }
-    } catch (InvalidProtocolBufferException e) {
-      getLogger().log(XdsLogLevel.WARNING, "Failed to unpack Listeners in LDS response {0}", e);
-      nackResponse(ResourceType.LDS, nonce, "Malformed LDS response: " + e);
-      return;
-    }
-    getLogger().log(XdsLogLevel.INFO, "Received LDS response for resources: {0}", listenerNames);
+      String listenerName = listener.getName();
+      unpackedResources.add(listenerName);
 
-    // Unpack HttpConnectionManager messages.
-    Map<String, HttpConnectionManager> httpConnectionManagers = new HashMap<>(listeners.size());
-    Map<String, Listener> serverSideListeners = new HashMap<>(listeners.size());
-    try {
-      for (Listener listener : listeners) {
+      // Process Listener into LdsUpdate.
+      LdsUpdate ldsUpdate;
+      try {
         if (listener.hasApiListener()) {
-          HttpConnectionManager hcm = unpackCompatibleType(
-                  listener.getApiListener().getApiListener(), HttpConnectionManager.class,
-                  TYPE_URL_HTTP_CONNECTION_MANAGER, TYPE_URL_HTTP_CONNECTION_MANAGER_V2);
-          httpConnectionManagers.put(listener.getName(), hcm);
+          ldsUpdate = processClientSideListener(listener, enableFaultInjection && isResourceV3);
         } else {
-          serverSideListeners.put(listener.getName(), listener);
+          ldsUpdate = processServerSideListener(listener);
         }
+      } catch (ResourceInvalidException e) {
+        errors.add(
+            "LDS response Listener '" + listenerName + "' validation error: " + e.getMessage());
+        continue;
       }
-    } catch (InvalidProtocolBufferException e) {
-      getLogger().log(
-          XdsLogLevel.WARNING,
-          "Failed to unpack HttpConnectionManagers in Listeners of LDS response {0}", e);
-      nackResponse(ResourceType.LDS, nonce, "Malformed LDS response: " + e);
+
+      // LdsUpdate parsed successfully.
+      parsedResources.put(listenerName, new ParsedResource(ldsUpdate, resource));
+      if (ldsUpdate.rdsName != null) {
+        retainedRdsResources.add(ldsUpdate.rdsName);
+      }
+    }
+    getLogger().log(XdsLogLevel.INFO,
+        "Received LDS Response version {0} nonce {1}. Parsed resources: {2}",
+        versionInfo, nonce, unpackedResources);
+
+    if (!errors.isEmpty()) {
+      handleResourcesRejected(ResourceType.LDS, unpackedResources, versionInfo, nonce, errors);
       return;
     }
 
-    Map<String, LdsUpdate> ldsUpdates = new HashMap<>();
-    Set<String> rdsNames = new HashSet<>();
-    for (Map.Entry<String, HttpConnectionManager> entry : httpConnectionManagers.entrySet()) {
-      LdsUpdate update;
-      String listenerName = entry.getKey();
-      HttpConnectionManager hcm = entry.getValue();
-      long maxStreamDuration = 0;
-      if (hcm.hasCommonHttpProtocolOptions()) {
-        HttpProtocolOptions options = hcm.getCommonHttpProtocolOptions();
-        if (options.hasMaxStreamDuration()) {
-          maxStreamDuration = Durations.toNanos(options.getMaxStreamDuration());
-        }
-      }
-      boolean parseFilter = enableFaultInjection && isResourceV3;
-      List<NamedFilterConfig> filterChain = null;
-      if (parseFilter) {
-        filterChain = new ArrayList<>();
-        List<io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter>
-            httpFilters = hcm.getHttpFiltersList();
-        for (io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
-                 httpFilter : httpFilters) {
-          String filterName = httpFilter.getName();
-          StructOrError<FilterConfig> filterConfig = parseHttpFilter(httpFilter);
-          if (filterConfig == null) {
-            continue;
-          }
-          if (filterConfig.errorDetail != null) {
-            nackResponse(
-                ResourceType.LDS, nonce,
-                "Error parsing HttpFilter: " + filterConfig.errorDetail);
-            return;
-          }
-          filterChain.add(new NamedFilterConfig(filterName, filterConfig.struct));
-        }
-      }
-
-      if (hcm.hasRouteConfig()) {
-        List<VirtualHost> virtualHosts = new ArrayList<>();
-        for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
-            : hcm.getRouteConfig().getVirtualHostsList()) {
-          StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseFilter);
-          if (virtualHost.getErrorDetail() != null) {
-            nackResponse(ResourceType.LDS, nonce,
-                "Listener " + listenerName + " contains invalid virtual host: "
-                    + virtualHost.getErrorDetail());
-            return;
-          }
-          virtualHosts.add(virtualHost.getStruct());
-        }
-        update = new LdsUpdate(maxStreamDuration, virtualHosts, filterChain);
-      } else if (hcm.hasRds()) {
-        Rds rds = hcm.getRds();
-        if (!rds.getConfigSource().hasAds()) {
-          nackResponse(ResourceType.LDS, nonce,
-              "Listener " + listenerName + " with RDS config_source not set to ADS");
-          return;
-        }
-        update =
-            new LdsUpdate(maxStreamDuration, rds.getRouteConfigName(), filterChain);
-        rdsNames.add(rds.getRouteConfigName());
-      } else {
-        nackResponse(ResourceType.LDS, nonce,
-            "Listener " + listenerName + " without inline RouteConfiguration or RDS");
-        return;
-      }
-      ldsUpdates.put(listenerName, update);
-    }
-    // process serverSideListeners if any
-    for (Map.Entry<String, Listener> entry : serverSideListeners.entrySet()) {
-      String listenerName = entry.getKey();
-      Listener listener = entry.getValue();
-      LdsUpdate update;
-
-      StructOrError<EnvoyServerProtoData.Listener> convertedListener =
-              parseServerSideListener(listener);
-      if (convertedListener.getErrorDetail() != null) {
-        nackResponse(ResourceType.LDS, nonce, convertedListener.getErrorDetail());
-        return;
-      }
-      update = new LdsUpdate(convertedListener.getStruct());
-      ldsUpdates.put(listenerName, update);
-    }
-    ackResponse(ResourceType.LDS, versionInfo, nonce);
-
-    for (String resource : ldsResourceSubscribers.keySet()) {
-      ResourceSubscriber subscriber = ldsResourceSubscribers.get(resource);
-      if (ldsUpdates.containsKey(resource)) {
-        subscriber.onData(ldsUpdates.get(resource));
-      } else {
-        subscriber.onAbsent();
-      }
-    }
+    handleResourcesAccepted(ResourceType.LDS, parsedResources, versionInfo, nonce);
     for (String resource : rdsResourceSubscribers.keySet()) {
-      if (!rdsNames.contains(resource)) {
+      if (!retainedRdsResources.contains(resource)) {
         ResourceSubscriber subscriber = rdsResourceSubscribers.get(resource);
         subscriber.onAbsent();
       }
     }
+  }
+
+  private static LdsUpdate processClientSideListener(Listener listener, boolean parseFilter)
+      throws ResourceInvalidException {
+    // Unpack HttpConnectionManager from the Listener.
+    HttpConnectionManager hcm;
+    try {
+      hcm = unpackCompatibleType(
+          listener.getApiListener().getApiListener(), HttpConnectionManager.class,
+          TYPE_URL_HTTP_CONNECTION_MANAGER, TYPE_URL_HTTP_CONNECTION_MANAGER_V2);
+    } catch (InvalidProtocolBufferException e) {
+      throw new ResourceInvalidException(
+          "Could not parse HttpConnectionManager config from ApiListener", e);
+    }
+
+    // Obtain max_stream_duration from Http Protocol Options.
+    long maxStreamDuration = 0;
+    if (hcm.hasCommonHttpProtocolOptions()) {
+      HttpProtocolOptions options = hcm.getCommonHttpProtocolOptions();
+      if (options.hasMaxStreamDuration()) {
+        maxStreamDuration = Durations.toNanos(options.getMaxStreamDuration());
+      }
+    }
+
+    // Parse filters.
+    List<NamedFilterConfig> filterChain = null;
+    if (parseFilter) {
+      filterChain = new ArrayList<>();
+      List<io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter>
+          httpFilters = hcm.getHttpFiltersList();
+      for (io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
+               httpFilter : httpFilters) {
+        String filterName = httpFilter.getName();
+        StructOrError<FilterConfig> filterConfig = parseHttpFilter(httpFilter);
+        if (filterConfig == null) {
+          continue;
+        }
+        if (filterConfig.getErrorDetail() != null) {
+          throw new ResourceInvalidException(
+              "HttpConnectionManager contains invalid HttpFault filter: "
+                  + filterConfig.getErrorDetail());
+        }
+        filterChain.add(new NamedFilterConfig(filterName, filterConfig.struct));
+      }
+    }
+
+    // Parse RDS info.
+    if (hcm.hasRouteConfig()) {
+      // Found inlined route_config. Parse it to find the cluster_name.
+      List<VirtualHost> virtualHosts = new ArrayList<>();
+      for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
+          : hcm.getRouteConfig().getVirtualHostsList()) {
+        StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseFilter);
+        if (virtualHost.getErrorDetail() != null) {
+          throw new ResourceInvalidException("HttpConnectionManager contains invalid virtual host: "
+              + virtualHost.getErrorDetail());
+        }
+        virtualHosts.add(virtualHost.getStruct());
+      }
+      return new LdsUpdate(maxStreamDuration, virtualHosts, filterChain);
+    }
+
+    if (hcm.hasRds()) {
+      // Found RDS.
+      Rds rds = hcm.getRds();
+      if (!rds.hasConfigSource()) {
+        throw new ResourceInvalidException("HttpConnectionManager missing config_source for RDS.");
+      }
+      if (!rds.getConfigSource().hasAds()) {
+        throw new ResourceInvalidException(
+            "HttpConnectionManager ConfigSource for RDS does not specify ADS.");
+      }
+      return new LdsUpdate(maxStreamDuration, rds.getRouteConfigName(), filterChain);
+    }
+
+    throw new ResourceInvalidException(
+        "HttpConnectionManager neither has inlined route_config nor RDS.");
+  }
+
+  private static LdsUpdate processServerSideListener(Listener listener)
+      throws ResourceInvalidException {
+    StructOrError<EnvoyServerProtoData.Listener> convertedListener =
+        parseServerSideListener(listener);
+    if (convertedListener.getErrorDetail() != null) {
+      throw new ResourceInvalidException(convertedListener.getErrorDetail());
+    }
+    return new LdsUpdate(convertedListener.getStruct());
   }
 
   @VisibleForTesting
@@ -684,144 +692,162 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @Override
   protected void handleRdsResponse(String versionInfo, List<Any> resources, String nonce) {
-    // Unpack RouteConfiguration messages.
-    Map<String, RouteConfiguration> routeConfigs = new HashMap<>(resources.size());
-    boolean isResourceV3 = false;
-    try {
-      for (Any res : resources) {
-        if (res.getTypeUrl().equals(ResourceType.RDS.typeUrl())) {
-          isResourceV3 = true;
-        }
-        RouteConfiguration rc =
-            unpackCompatibleType(res, RouteConfiguration.class, ResourceType.RDS.typeUrl(),
-                ResourceType.RDS.typeUrlV2());
-        routeConfigs.put(rc.getName(), rc);
-      }
-    } catch (InvalidProtocolBufferException e) {
-      getLogger().log(
-          XdsLogLevel.WARNING, "Failed to unpack RouteConfiguration in RDS response {0}", e);
-      nackResponse(ResourceType.RDS, nonce, "Malformed RDS response: " + e);
-      return;
-    }
-    getLogger().log(
-        XdsLogLevel.INFO, "Received RDS response for resources: {0}", routeConfigs.keySet());
+    Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
+    Set<String> unpackedResources = new HashSet<>(resources.size());
+    List<String> errors = new ArrayList<>();
 
-    Map<String, RdsUpdate> rdsUpdates = new HashMap<>();
-    boolean parseFilter = enableFaultInjection && isResourceV3;
-    for (Map.Entry<String, RouteConfiguration> entry : routeConfigs.entrySet()) {
-      String routeConfigName = entry.getKey();
-      RouteConfiguration routeConfig = entry.getValue();
-      List<VirtualHost> virtualHosts =
-          new ArrayList<>(routeConfig.getVirtualHostsCount());
-      for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
-          : routeConfig.getVirtualHostsList()) {
-        StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseFilter);
-        if (virtualHost.getErrorDetail() != null) {
-          nackResponse(ResourceType.RDS, nonce, "RouteConfiguration " + routeConfigName
-              + " contains invalid virtual host: " + virtualHost.getErrorDetail());
-          return;
-        }
-        virtualHosts.add(virtualHost.getStruct());
-      }
-      rdsUpdates.put(routeConfigName, new RdsUpdate(virtualHosts));
-    }
-    ackResponse(ResourceType.RDS, versionInfo, nonce);
+    for (int i = 0; i < resources.size(); i++) {
+      Any resource = resources.get(i);
 
-    for (String resource : rdsResourceSubscribers.keySet()) {
-      if (rdsUpdates.containsKey(resource)) {
-        ResourceSubscriber subscriber = rdsResourceSubscribers.get(resource);
-        subscriber.onData(rdsUpdates.get(resource));
+      // Unpack the RouteConfiguration.
+      RouteConfiguration routeConfig;
+      try {
+        routeConfig = unpackCompatibleType(resource, RouteConfiguration.class,
+            ResourceType.RDS.typeUrl(), ResourceType.RDS.typeUrlV2());
+      } catch (InvalidProtocolBufferException e) {
+        errors.add("RDS response Resource index " + i + " - can't decode RouteConfiguration: " + e);
+        continue;
       }
+      String routeConfigName = routeConfig.getName();
+      unpackedResources.add(routeConfigName);
+
+      // Process RouteConfiguration into RdsUpdate.
+      RdsUpdate rdsUpdate;
+      boolean isResourceV3 = resource.getTypeUrl().equals(ResourceType.RDS.typeUrl());
+      try {
+        rdsUpdate = processRouteConfiguration(routeConfig, enableFaultInjection && isResourceV3);
+      } catch (ResourceInvalidException e) {
+        errors.add(
+            "RDS response RouteConfiguration '" + routeConfigName + "' validation error: " + e
+                .getMessage());
+        continue;
+      }
+
+      parsedResources.put(routeConfigName, new ParsedResource(rdsUpdate, resource));
     }
+    getLogger().log(XdsLogLevel.INFO,
+        "Received RDS Response version {0} nonce {1}. Parsed resources: {2}",
+        versionInfo, nonce, unpackedResources);
+
+    if (!errors.isEmpty()) {
+      handleResourcesRejected(ResourceType.RDS, unpackedResources, versionInfo, nonce, errors);
+    } else {
+      handleResourcesAccepted(ResourceType.RDS, parsedResources, versionInfo, nonce);
+    }
+  }
+
+  private static RdsUpdate processRouteConfiguration(
+      RouteConfiguration routeConfig, boolean parseFilter) throws ResourceInvalidException {
+    List<VirtualHost> virtualHosts = new ArrayList<>(routeConfig.getVirtualHostsCount());
+    for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
+        : routeConfig.getVirtualHostsList()) {
+      StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseFilter);
+      if (virtualHost.getErrorDetail() != null) {
+        throw new ResourceInvalidException(
+            "RouteConfiguration contains invalid virtual host: " + virtualHost.getErrorDetail());
+      }
+      virtualHosts.add(virtualHost.getStruct());
+    }
+    return new RdsUpdate(virtualHosts);
   }
 
   @Override
   protected void handleCdsResponse(String versionInfo, List<Any> resources, String nonce) {
-    // Unpack Cluster messages.
-    List<Cluster> clusters = new ArrayList<>(resources.size());
-    List<String> clusterNames = new ArrayList<>(resources.size());
-    try {
-      for (Any res : resources) {
-        Cluster cluster = unpackCompatibleType(res, Cluster.class, ResourceType.CDS.typeUrl(),
-            ResourceType.CDS.typeUrlV2());
-        clusters.add(cluster);
-        clusterNames.add(cluster.getName());
-      }
-    } catch (InvalidProtocolBufferException e) {
-      getLogger().log(XdsLogLevel.WARNING, "Failed to unpack Clusters in CDS response {0}", e);
-      nackResponse(ResourceType.CDS, nonce, "Malformed CDS response: " + e);
-      return;
-    }
-    getLogger().log(XdsLogLevel.INFO, "Received CDS response for resources: {0}", clusterNames);
+    Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
+    Set<String> unpackedResources = new HashSet<>(resources.size());
+    List<String> errors = new ArrayList<>();
+    Set<String> retainedEdsResources = new HashSet<>();
 
-    Map<String, CdsUpdate> cdsUpdates = new HashMap<>();
-    // CDS responses represents the state of the world, EDS resources not referenced in CDS
-    // resources should be deleted.
-    Set<String> edsResources = new HashSet<>();  // retained EDS resources
-    for (Cluster cluster : clusters) {
+    for (int i = 0; i < resources.size(); i++) {
+      Any resource = resources.get(i);
+
+      // Unpack the Cluster.
+      Cluster cluster;
+      try {
+        cluster = unpackCompatibleType(
+            resource, Cluster.class, ResourceType.CDS.typeUrl(), ResourceType.CDS.typeUrlV2());
+      } catch (InvalidProtocolBufferException e) {
+        errors.add("CDS response Resource index " + i + " - can't decode Cluster: " + e);
+        continue;
+      }
       String clusterName = cluster.getName();
+
       // Management server is required to always send newly requested resources, even if they
       // may have been sent previously (proactively). Thus, client does not need to cache
       // unrequested resources.
       if (!cdsResourceSubscribers.containsKey(clusterName)) {
         continue;
       }
-      StructOrError<CdsUpdate.Builder> structOrError;
-      switch (cluster.getClusterDiscoveryTypeCase()) {
-        case TYPE:
-          structOrError = parseNonAggregateCluster(cluster, edsResources);
-          break;
-        case CLUSTER_TYPE:
-          structOrError = parseAggregateCluster(cluster);
-          break;
-        case CLUSTERDISCOVERYTYPE_NOT_SET:
-        default:
-          nackResponse(ResourceType.CDS, nonce,
-              "Cluster " + clusterName + ": cluster discovery type unspecified");
-          return;
-      }
-      if (structOrError.getErrorDetail() != null) {
-        nackResponse(ResourceType.CDS, nonce, structOrError.errorDetail);
-        return;
-      }
-      CdsUpdate.Builder updateBuilder = structOrError.getStruct();
-      String lbPolicy = CaseFormat.UPPER_UNDERSCORE.to(
-          CaseFormat.LOWER_UNDERSCORE, cluster.getLbPolicy().name());
-      if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
-        RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
-        if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH) {
-          nackResponse(ResourceType.CDS, nonce,
-              "Cluster " + clusterName + ": unsupported ring hash function: "
-                  + lbConfig.getHashFunction());
-          return;
-        }
-        updateBuilder.lbPolicy(lbPolicy, lbConfig.getMinimumRingSize().getValue(),
-            lbConfig.getMaximumRingSize().getValue());
-      } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
-        updateBuilder.lbPolicy(lbPolicy);
-      } else {
-        nackResponse(ResourceType.CDS, nonce,
-            "Cluster " + clusterName + ": unsupported lb policy: " + cluster.getLbPolicy());
-        return;
-      }
-      cdsUpdates.put(clusterName, updateBuilder.build());
-    }
-    ackResponse(ResourceType.CDS, versionInfo, nonce);
+      unpackedResources.add(clusterName);
 
-    for (String resource : cdsResourceSubscribers.keySet()) {
-      ResourceSubscriber subscriber = cdsResourceSubscribers.get(resource);
-      if (cdsUpdates.containsKey(resource)) {
-        subscriber.onData(cdsUpdates.get(resource));
-      } else {
-        subscriber.onAbsent();
+      // Process Cluster into CdsUpdate.
+      CdsUpdate cdsUpdate;
+      try {
+        cdsUpdate = processCluster(cluster, retainedEdsResources);
+      } catch (ResourceInvalidException e) {
+        errors.add(
+            "CDS response Cluster '" + clusterName + "' validation error: " + e.getMessage());
+        continue;
       }
+      parsedResources.put(clusterName, new ParsedResource(cdsUpdate, resource));
     }
+    getLogger().log(XdsLogLevel.INFO,
+        "Received CDS Response version {0} nonce {1}. Parsed resources: {2}",
+        versionInfo, nonce, unpackedResources);
+
+    if (!errors.isEmpty()) {
+      handleResourcesRejected(ResourceType.CDS, unpackedResources, versionInfo, nonce, errors);
+      return;
+    }
+
+    handleResourcesAccepted(ResourceType.CDS, parsedResources, versionInfo, nonce);
+    // CDS responses represents the state of the world, EDS resources not referenced in CDS
+    // resources should be deleted.
     for (String resource : edsResourceSubscribers.keySet()) {
       ResourceSubscriber subscriber = edsResourceSubscribers.get(resource);
-      if (!edsResources.contains(resource)) {
+      if (!retainedEdsResources.contains(resource)) {
         subscriber.onAbsent();
       }
     }
+  }
+
+  private static CdsUpdate processCluster(Cluster cluster, Set<String> retainedEdsResources)
+      throws ResourceInvalidException {
+    StructOrError<CdsUpdate.Builder> structOrError;
+    switch (cluster.getClusterDiscoveryTypeCase()) {
+      case TYPE:
+        structOrError = parseNonAggregateCluster(cluster, retainedEdsResources);
+        break;
+      case CLUSTER_TYPE:
+        structOrError = parseAggregateCluster(cluster);
+        break;
+      case CLUSTERDISCOVERYTYPE_NOT_SET:
+      default:
+        throw new ResourceInvalidException("Unspecified cluster discovery type");
+    }
+    if (structOrError.getErrorDetail() != null) {
+      throw new ResourceInvalidException(structOrError.getErrorDetail());
+    }
+
+    CdsUpdate.Builder updateBuilder = structOrError.getStruct();
+    String lbPolicy = CaseFormat.UPPER_UNDERSCORE.to(
+        CaseFormat.LOWER_UNDERSCORE, cluster.getLbPolicy().name());
+
+    if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
+      RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
+      if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH) {
+        throw new ResourceInvalidException(
+            "Unsupported ring hash function: " + lbConfig.getHashFunction());
+      }
+      updateBuilder.lbPolicy(lbPolicy, lbConfig.getMinimumRingSize().getValue(),
+          lbConfig.getMaximumRingSize().getValue());
+    } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
+      updateBuilder.lbPolicy(lbPolicy);
+    } else {
+      throw new ResourceInvalidException("Unsupported lb policy: " + cluster.getLbPolicy());
+    }
+
+    return updateBuilder.build();
   }
 
   private static StructOrError<CdsUpdate.Builder> parseAggregateCluster(Cluster cluster) {
@@ -909,28 +935,26 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @Override
   protected void handleEdsResponse(String versionInfo, List<Any> resources, String nonce) {
-    // Unpack ClusterLoadAssignment messages.
-    List<ClusterLoadAssignment> clusterLoadAssignments = new ArrayList<>(resources.size());
-    List<String> claNames = new ArrayList<>(resources.size());
-    try {
-      for (Any res : resources) {
-        ClusterLoadAssignment assignment =
-            unpackCompatibleType(res, ClusterLoadAssignment.class, ResourceType.EDS.typeUrl(),
-                ResourceType.EDS.typeUrlV2());
-        clusterLoadAssignments.add(assignment);
-        claNames.add(assignment.getClusterName());
-      }
-    } catch (InvalidProtocolBufferException e) {
-      getLogger().log(
-          XdsLogLevel.WARNING, "Failed to unpack ClusterLoadAssignments in EDS response {0}", e);
-      nackResponse(ResourceType.EDS, nonce, "Malformed EDS response: " + e);
-      return;
-    }
-    getLogger().log(XdsLogLevel.INFO, "Received EDS response for resources: {0}", claNames);
+    Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
+    Set<String> unpackedResources = new HashSet<>(resources.size());
+    List<String> errors = new ArrayList<>();
 
-    Map<String, EdsUpdate> edsUpdates = new HashMap<>();
-    for (ClusterLoadAssignment assignment : clusterLoadAssignments) {
+    for (int i = 0; i < resources.size(); i++) {
+      Any resource = resources.get(i);
+
+      // Unpack the ClusterLoadAssignment.
+      ClusterLoadAssignment assignment;
+      try {
+        assignment =
+            unpackCompatibleType(resource, ClusterLoadAssignment.class, ResourceType.EDS.typeUrl(),
+                ResourceType.EDS.typeUrlV2());
+      } catch (InvalidProtocolBufferException e) {
+        errors.add(
+            "EDS response Resource index " + i + " - can't decode ClusterLoadAssignment: " + e);
+        continue;
+      }
       String clusterName = assignment.getClusterName();
+
       // Skip information for clusters not requested.
       // Management server is required to always send newly requested resources, even if they
       // may have been sent previously (proactively). Thus, client does not need to cache
@@ -938,51 +962,63 @@ final class ClientXdsClient extends AbstractXdsClient {
       if (!edsResourceSubscribers.containsKey(clusterName)) {
         continue;
       }
-      Set<Integer> priorities = new HashSet<>();
-      Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
-      List<DropOverload> dropOverloads = new ArrayList<>();
-      int maxPriority = -1;
-      for (io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints localityLbEndpointsProto
-          : assignment.getEndpointsList()) {
-        StructOrError<LocalityLbEndpoints> localityLbEndpoints =
-            parseLocalityLbEndpoints(localityLbEndpointsProto);
-        if (localityLbEndpoints == null) {
-          continue;
-        }
-        if (localityLbEndpoints.getErrorDetail() != null) {
-          nackResponse(ResourceType.EDS, nonce, "ClusterLoadAssignment " + clusterName + ": "
-              + localityLbEndpoints.getErrorDetail());
-          return;
-        }
-        maxPriority = Math.max(maxPriority, localityLbEndpoints.getStruct().priority());
-        priorities.add(localityLbEndpoints.getStruct().priority());
-        // Note endpoints with health status other than HEALTHY and UNKNOWN are still
-        // handed over to watching parties. It is watching parties' responsibility to
-        // filter out unhealthy endpoints. See EnvoyProtoData.LbEndpoint#isHealthy().
-        localityLbEndpointsMap.put(
-            parseLocality(localityLbEndpointsProto.getLocality()),
-            localityLbEndpoints.getStruct());
-      }
-      if (priorities.size() != maxPriority + 1) {
-        nackResponse(ResourceType.EDS, nonce,
-            "ClusterLoadAssignment " + clusterName + " : sparse priorities.");
-        return;
-      }
-      for (ClusterLoadAssignment.Policy.DropOverload dropOverloadProto
-          : assignment.getPolicy().getDropOverloadsList()) {
-        dropOverloads.add(parseDropOverload(dropOverloadProto));
-      }
-      EdsUpdate update = new EdsUpdate(clusterName, localityLbEndpointsMap, dropOverloads);
-      edsUpdates.put(clusterName, update);
-    }
-    ackResponse(ResourceType.EDS, versionInfo, nonce);
+      unpackedResources.add(clusterName);
 
-    for (String resource : edsResourceSubscribers.keySet()) {
-      ResourceSubscriber subscriber = edsResourceSubscribers.get(resource);
-      if (edsUpdates.containsKey(resource)) {
-        subscriber.onData(edsUpdates.get(resource));
+      // Process ClusterLoadAssignment into EdsUpdate.
+      EdsUpdate edsUpdate;
+      try {
+        edsUpdate = processClusterLoadAssignment(assignment);
+      } catch (ResourceInvalidException e) {
+        errors.add("EDS response ClusterLoadAssignment '" + clusterName
+            + "' validation error: " + e.getMessage());
+        continue;
       }
+      parsedResources.put(clusterName, new ParsedResource(edsUpdate, resource));
     }
+
+    if (!errors.isEmpty()) {
+      handleResourcesRejected(ResourceType.EDS, unpackedResources, versionInfo, nonce, errors);
+    } else {
+      handleResourcesAccepted(ResourceType.EDS, parsedResources, versionInfo, nonce);
+    }
+  }
+
+  private static EdsUpdate processClusterLoadAssignment(ClusterLoadAssignment assignment)
+      throws ResourceInvalidException {
+    Set<Integer> priorities = new HashSet<>();
+    Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
+    List<DropOverload> dropOverloads = new ArrayList<>();
+    int maxPriority = -1;
+    for (io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints localityLbEndpointsProto
+        : assignment.getEndpointsList()) {
+      StructOrError<LocalityLbEndpoints> structOrError =
+          parseLocalityLbEndpoints(localityLbEndpointsProto);
+      if (structOrError == null) {
+        continue;
+      }
+      if (structOrError.getErrorDetail() != null) {
+        throw new ResourceInvalidException(structOrError.getErrorDetail());
+      }
+
+      LocalityLbEndpoints localityLbEndpoints = structOrError.getStruct();
+      maxPriority = Math.max(maxPriority, localityLbEndpoints.priority());
+      priorities.add(localityLbEndpoints.priority());
+      // Note endpoints with health status other than HEALTHY and UNKNOWN are still
+      // handed over to watching parties. It is watching parties' responsibility to
+      // filter out unhealthy endpoints. See EnvoyProtoData.LbEndpoint#isHealthy().
+      localityLbEndpointsMap.put(
+          parseLocality(localityLbEndpointsProto.getLocality()),
+          localityLbEndpoints);
+    }
+    if (priorities.size() != maxPriority + 1) {
+      throw new ResourceInvalidException("ClusterLoadAssignment has sparse priorities");
+    }
+
+    for (ClusterLoadAssignment.Policy.DropOverload dropOverloadProto
+        : assignment.getPolicy().getDropOverloadsList()) {
+      dropOverloads.add(parseDropOverload(dropOverloadProto));
+    }
+    return new EdsUpdate(assignment.getClusterName(), localityLbEndpointsMap, dropOverloads);
   }
 
   private static Locality parseLocality(io.envoyproxy.envoy.config.core.v3.Locality proto) {
@@ -1113,22 +1149,35 @@ final class ClientXdsClient extends AbstractXdsClient {
     cleanUpResourceTimers();
   }
 
-  @Nullable
-  @Override
-  Collection<String> getSubscribedResources(ResourceType type) {
+  private Map<String, ResourceSubscriber> getSubscribedResourcesMap(ResourceType type) {
     switch (type) {
       case LDS:
-        return ldsResourceSubscribers.isEmpty() ? null : ldsResourceSubscribers.keySet();
+        return ldsResourceSubscribers;
       case RDS:
-        return rdsResourceSubscribers.isEmpty() ? null : rdsResourceSubscribers.keySet();
+        return rdsResourceSubscribers;
       case CDS:
-        return cdsResourceSubscribers.isEmpty() ? null : cdsResourceSubscribers.keySet();
+        return cdsResourceSubscribers;
       case EDS:
-        return edsResourceSubscribers.isEmpty() ? null : edsResourceSubscribers.keySet();
+        return edsResourceSubscribers;
       case UNKNOWN:
       default:
         throw new AssertionError("Unknown resource type");
     }
+  }
+
+  @Nullable
+  @Override
+  Collection<String> getSubscribedResources(ResourceType type) {
+    Map<String, ResourceSubscriber> resources = getSubscribedResourcesMap(type);
+    return resources.isEmpty() ? null : resources.keySet();
+  }
+
+  Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
+    Map<String, ResourceMetadata> metadataMap = new HashMap<>();
+    for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
+      metadataMap.put(entry.getKey(), entry.getValue().metadata);
+    }
+    return metadataMap;
   }
 
   @Override
@@ -1315,6 +1364,65 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
+  private void handleResourcesAccepted(
+      ResourceType type, Map<String, ParsedResource> parsedResources, String version,
+      String nonce) {
+    ackResponse(type, version, nonce);
+
+    long updateTime = timeProvider.currentTimeNanos();
+    for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
+      String resourceName = entry.getKey();
+      ResourceSubscriber subscriber = entry.getValue();
+      // Notify the watchers.
+      if (parsedResources.containsKey(resourceName)) {
+        subscriber.onData(parsedResources.get(resourceName), version, updateTime);
+      } else if (type == ResourceType.LDS || type == ResourceType.CDS) {
+        // For State of the World services, notify watchers when their watched resource is missing
+        // from the ADS update.
+        subscriber.onAbsent();
+      }
+    }
+  }
+
+  private void handleResourcesRejected(
+      ResourceType type, Set<String> unpackedResourceNames, String version,
+      String nonce, List<String> errors) {
+    String errorDetail = Joiner.on('\n').join(errors);
+    getLogger().log(XdsLogLevel.WARNING,
+        "Failed processing {0} Response version {1} nonce {2}. Errors:\n{3}",
+        type, version, nonce, errorDetail);
+    nackResponse(type, nonce, errorDetail);
+
+    long updateTime = timeProvider.currentTimeNanos();
+    for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
+      String resourceName = entry.getKey();
+      ResourceSubscriber subscriber = entry.getValue();
+
+      // Attach error details to the subscribed resources that included in the ADS update.
+      if (unpackedResourceNames.contains(resourceName)) {
+        subscriber.onRejected(version, updateTime, errorDetail);
+      }
+    }
+  }
+
+  private static final class ParsedResource {
+    private final ResourceUpdate resourceUpdate;
+    private final Any rawResource;
+
+    private ParsedResource(ResourceUpdate resourceUpdate, Any rawResource) {
+      this.resourceUpdate = checkNotNull(resourceUpdate, "resourceUpdate");
+      this.rawResource = checkNotNull(rawResource, "rawResource");
+    }
+
+    private ResourceUpdate getResourceUpdate() {
+      return resourceUpdate;
+    }
+
+    private Any getRawResource() {
+      return rawResource;
+    }
+  }
+
   /**
    * Tracks a single subscribed resource.
    */
@@ -1325,10 +1433,14 @@ final class ClientXdsClient extends AbstractXdsClient {
     private ResourceUpdate data;
     private boolean absent;
     private ScheduledHandle respTimer;
+    private ResourceMetadata metadata;
 
     ResourceSubscriber(ResourceType type, String resource) {
       this.type = type;
       this.resource = resource;
+      // Initialize metadata in UNKNOWN state to cover the case when resource subscriber,
+      // is created but not yet requested because the client is in backoff.
+      this.metadata = ResourceMetadata.newResourceMetadataUnknown();
       if (isInBackoff()) {
         return;
       }
@@ -1369,6 +1481,8 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
 
+      // Initial fetch scheduled or rescheduled, transition metadata state to REQUESTED.
+      metadata = ResourceMetadata.newResourceMetadataRequested();
       respTimer = getSyncContext().schedule(
           new ResourceNotFound(), INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS,
           getTimeService());
@@ -1385,13 +1499,15 @@ final class ClientXdsClient extends AbstractXdsClient {
       return !watchers.isEmpty();
     }
 
-    void onData(ResourceUpdate data) {
+    void onData(ParsedResource parsedResource, String version, long updateTime) {
       if (respTimer != null && respTimer.isPending()) {
         respTimer.cancel();
         respTimer = null;
       }
+      this.metadata = ResourceMetadata
+          .newResourceMetadataAcked(parsedResource.getRawResource(), version, updateTime);
       ResourceUpdate oldData = this.data;
-      this.data = data;
+      this.data = parsedResource.getResourceUpdate();
       absent = false;
       if (!Objects.equals(oldData, data)) {
         for (ResourceWatcher watcher : watchers) {
@@ -1408,6 +1524,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       if (!absent) {
         data = null;
         absent = true;
+        metadata = ResourceMetadata.newResourceMetadataDoesNotExist();
         for (ResourceWatcher watcher : watchers) {
           watcher.onResourceDoesNotExist(resource);
         }
@@ -1422,6 +1539,11 @@ final class ClientXdsClient extends AbstractXdsClient {
       for (ResourceWatcher watcher : watchers) {
         watcher.onError(error);
       }
+    }
+
+    void onRejected(String rejectedVersion, long rejectedTime, String rejectedDetails) {
+      metadata = ResourceMetadata
+          .newResourceMetadataNacked(metadata, rejectedVersion, rejectedTime, rejectedDetails);
     }
 
     private void notifyWatcher(ResourceWatcher watcher, ResourceUpdate update) {
@@ -1442,6 +1564,18 @@ final class ClientXdsClient extends AbstractXdsClient {
         default:
           throw new AssertionError("should never be here");
       }
+    }
+  }
+
+  private static final class ResourceInvalidException extends Exception {
+    private static final long serialVersionUID = 0L;
+
+    public ResourceInvalidException(String message) {
+      super(message, null, false, false);
+    }
+
+    public ResourceInvalidException(String message, Throwable cause) {
+      super(cause != null ? message + ": " + cause.getMessage() : message, cause, false, false);
     }
   }
 

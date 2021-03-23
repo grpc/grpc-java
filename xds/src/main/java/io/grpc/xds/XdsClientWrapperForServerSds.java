@@ -29,6 +29,7 @@ import io.grpc.Status;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.TimeProvider;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
@@ -124,7 +125,8 @@ public final class XdsClientWrapperForServerSds {
             node,
             timeService,
             new ExponentialBackoffPolicy.Provider(),
-            GrpcUtil.STOPWATCH_SUPPLIER);
+            GrpcUtil.STOPWATCH_SUPPLIER,
+            TimeProvider.SYSTEM_TIME_PROVIDER);
     start(xdsClientImpl, grpcServerResourceId);
   }
 
