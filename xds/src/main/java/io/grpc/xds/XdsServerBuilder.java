@@ -48,8 +48,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
 /**
- * A version of {@link ServerBuilder} to create xDS managed servers that will use SDS to set up SSL
- * with peers. Note, this is not ready to use yet.
+ * A version of {@link ServerBuilder} to create xDS managed servers.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
 public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBuilder> {
@@ -71,7 +70,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     return delegate;
   }
 
-  /** Set the {@link XdsServingStatusListener}. */
+  /** Set the {@link XdsServingStatusListener} to receive "serving" and "not serving" states. */
   public XdsServerBuilder xdsServingStatusListener(
       XdsServingStatusListener xdsServingStatusListener) {
     this.xdsServingStatusListener =
@@ -111,11 +110,18 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     return new ServerWrapperForXds(delegate, xdsClient, xdsServingStatusListener);
   }
 
+  /**
+   * Returns the delegate {@link NettyServerBuilder} to allow experimental level
+   * transport-specific configuration. Note this API will always be experimental.
+   */
   public ServerBuilder<?> transportBuilder() {
     return delegate;
   }
 
-  /** Watcher to receive error notifications from xDS control plane during {@code start()}. */
+  /**
+   * Applications can register this listener to receive "serving" and "not serving" states of
+   * the server using {@link #xdsServingStatusListener(XdsServingStatusListener)}.
+   */
   public interface XdsServingStatusListener {
 
     /** Callback invoked when server begins serving. */
@@ -127,7 +133,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     void onNotServing(Throwable throwable);
   }
 
-  /** Default implementation that logs at WARNING level. */
+  /** Default implementation of {@link XdsServingStatusListener} that logs at WARNING level. */
   private static class DefaultListener implements XdsServingStatusListener {
     XdsLogger xdsLogger;
     boolean notServing;
