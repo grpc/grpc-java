@@ -1,4 +1,5 @@
 plugins {
+    id "maven-publish"
     id "com.android.library"
     id "ru.vyarus.animalsniffer"
 }
@@ -40,4 +41,5 @@ dependencies {
     }
     testImplementation libraries.truth
 }
+
 [publishMavenPublicationToMavenRepository]*.onlyIf { false }

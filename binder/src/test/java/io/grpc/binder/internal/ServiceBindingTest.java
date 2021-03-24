@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.binder.util;
+package io.grpc.binder.internal;
 
 import static android.content.Context.BIND_AUTO_CREATE;
 import static android.os.Looper.getMainLooper;

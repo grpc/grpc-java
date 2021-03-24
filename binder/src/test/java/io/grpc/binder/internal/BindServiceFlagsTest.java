@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.binder.util;
+package io.grpc.binder.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 

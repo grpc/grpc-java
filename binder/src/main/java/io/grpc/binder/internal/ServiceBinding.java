@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.binder.util;
+package io.grpc.binder.internal;
 
 import android.content.ComponentName;
 import android.content.Context;
@@ -142,7 +142,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       return Status.PERMISSION_DENIED.withCause(e).withDescription(
           "SecurityException from bindService");
     } catch (RuntimeException e) {
-      return Status.INTERNAL.withCause(e).withDescription(;
+      return Status.INTERNAL.withCause(e).withDescription(
           "RuntimeException from bindService");
     }
   }
