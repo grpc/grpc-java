@@ -80,7 +80,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
   }
 
   @Override
-  public void close() {
+  public synchronized void close() {
     shutdown = true;
     if (scheduledFuture != null) {
       scheduledFuture.cancel(true);
@@ -89,7 +89,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
     getWatcher().close();
   }
 
-  private void scheduleNextRefreshCertificate(long delayInSeconds) {
+  private synchronized void scheduleNextRefreshCertificate(long delayInSeconds) {
     if (!shutdown) {
       scheduledFuture = scheduledExecutorService.schedule(this, delayInSeconds, TimeUnit.SECONDS);
     }

@@ -104,6 +104,7 @@ final class FileWatcherCertificateProviderProvider implements CertificateProvide
       try {
         Duration duration = Durations.parse(refreshIntervalString);
         configObj.refrehInterval = duration.getSeconds();
+        checkArgument(configObj.refrehInterval > 0L, "refreshInterval needs to be greater than 0");
       } catch (ParseException e) {
         throw new IllegalArgumentException(e);
       }
