@@ -33,7 +33,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -74,7 +73,6 @@ import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
-import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.io.IOException;
 import java.util.Arrays;
@@ -103,6 +101,7 @@ import org.mockito.junit.MockitoRule;
 @RunWith(JUnit4.class)
 public class XdsNameResolverTest {
   private static final String AUTHORITY = "foo.googleapis.com:80";
+  private static final String RDS_RESOURCE_NAME = "route-configuration.googleapis.com";
   private static final String FAULT_FILTER_INSTANCE_NAME = "envoy.fault";
   private static final String ROUTER_FILTER_INSTANCE_NAME = "envoy.router";
   @Rule
@@ -190,39 +189,140 @@ public class XdsNameResolverTest {
   public void resolving_ldsResourceNotFound() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    assertThat(xdsClient.ldsResource).isEqualTo(AUTHORITY);
-    assertThat(xdsClient.ldsWatcher).isNotNull();
-    xdsClient.deliverLdsResourceNotFound(AUTHORITY);
+    xdsClient.deliverLdsResourceNotFound();
     assertEmptyResolutionResult();
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void resolving_ldsResourceUpdateRdsName() {
-    String rdsResource = "route-configuration-foo.googleapis.com";
+    Route route1 = Route.create(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+        RouteAction.forCluster(
+            cluster1, Collections.<HashPolicy>emptyList(), TimeUnit.SECONDS.toNanos(15L)),
+        ImmutableMap.<String, FilterConfig>of());
+    Route route2 = Route.create(RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
+        RouteAction.forCluster(
+            cluster2, Collections.<HashPolicy>emptyList(), TimeUnit.SECONDS.toNanos(20L)),
+        ImmutableMap.<String, FilterConfig>of());
+
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverRdsName(AUTHORITY, rdsResource);
-    RdsResourceWatcher rdsWatcher = xdsClient.rdsWatcher;
-    assertThat(rdsWatcher).isNotNull();
-    assertThat(xdsClient.rdsResource).isEqualTo(rdsResource);
-    rdsResource = "route-configuration-bar.googleapis.com";
-    xdsClient.deliverRdsName(AUTHORITY, rdsResource);
-    assertThat(xdsClient.rdsResource).isEqualTo(rdsResource);
-    assertThat(xdsClient.rdsWatcher).isNotSameInstanceAs(rdsWatcher);
+    xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
+    assertThat(xdsClient.rdsResource).isEqualTo(RDS_RESOURCE_NAME);
+    VirtualHost virtualHost =
+        VirtualHost.create("virtualhost", Collections.singletonList(AUTHORITY),
+            Collections.singletonList(route1),
+            ImmutableMap.<String, FilterConfig>of());
+    xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    assertServiceConfigForLoadBalancingConfig(
+        Collections.singletonList(cluster1),
+        (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
+
+    reset(mockListener);
+    ArgumentCaptor<ResolutionResult> resultCaptor =
+        ArgumentCaptor.forClass(ResolutionResult.class);
+    String alternativeRdsResource = "route-configuration-alter.googleapis.com";
+    xdsClient.deliverLdsUpdateForRdsName(alternativeRdsResource);
+    assertThat(xdsClient.rdsResource).isEqualTo(alternativeRdsResource);
+    virtualHost =
+        VirtualHost.create("virtualhost-alter", Collections.singletonList(AUTHORITY),
+            Collections.singletonList(route2),
+            ImmutableMap.<String, FilterConfig>of());
+    xdsClient.deliverRdsUpdate(alternativeRdsResource, Collections.singletonList(virtualHost));
+    // Two new service config updates triggered:
+    //  - with load balancing config being able to select cluster1 and cluster2
+    //  - with load balancing config being able to select cluster2 only
+    verify(mockListener, times(2)).onResult(resultCaptor.capture());
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2),
+        (Map<String, ?>) resultCaptor.getAllValues().get(0).getServiceConfig().getConfig());
+    assertServiceConfigForLoadBalancingConfig(
+        Collections.singletonList(cluster2),
+        (Map<String, ?>) resultCaptor.getValue().getServiceConfig().getConfig());
   }
 
   @Test
   public void resolving_rdsResourceNotFound() {
-    String rdsResource = "route-configuration.googleapis.com";
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    assertThat(xdsClient.ldsResource).isEqualTo(AUTHORITY);
-    assertThat(xdsClient.ldsWatcher).isNotNull();
-    xdsClient.deliverRdsName(AUTHORITY, rdsResource);
-    assertThat(xdsClient.rdsResource).isEqualTo(rdsResource);
-    assertThat(xdsClient.rdsWatcher).isNotNull();
-    xdsClient.deliverRdsResourceNotFound(rdsResource);
+    xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
+    xdsClient.deliverRdsResourceNotFound(RDS_RESOURCE_NAME);
     assertEmptyResolutionResult();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void resolving_ldsResourceRevokedAndAddedBack() {
+    Route route = Route.create(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+        RouteAction.forCluster(
+            cluster1, Collections.<HashPolicy>emptyList(), TimeUnit.SECONDS.toNanos(15L)),
+        ImmutableMap.<String, FilterConfig>of());
+
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
+    assertThat(xdsClient.rdsResource).isEqualTo(RDS_RESOURCE_NAME);
+    VirtualHost virtualHost =
+        VirtualHost.create("virtualhost", Collections.singletonList(AUTHORITY),
+            Collections.singletonList(route),
+            ImmutableMap.<String, FilterConfig>of());
+    xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    assertServiceConfigForLoadBalancingConfig(
+        Collections.singletonList(cluster1),
+        (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
+
+    reset(mockListener);
+    xdsClient.deliverLdsResourceNotFound();  // revoke LDS resource
+    assertThat(xdsClient.rdsResource).isNull();  // stop subscribing to stale RDS resource
+    assertEmptyResolutionResult();
+
+    reset(mockListener);
+    xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
+    // No name resolution result until new RDS resource update is received. Do not use stale config
+    verifyNoInteractions(mockListener);
+    assertThat(xdsClient.rdsResource).isEqualTo(RDS_RESOURCE_NAME);
+    xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    assertServiceConfigForLoadBalancingConfig(
+        Collections.singletonList(cluster1),
+        (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void resolving_rdsResourceRevokedAndAddedBack() {
+    Route route = Route.create(RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+        RouteAction.forCluster(
+            cluster1, Collections.<HashPolicy>emptyList(), TimeUnit.SECONDS.toNanos(15L)),
+        ImmutableMap.<String, FilterConfig>of());
+
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
+    assertThat(xdsClient.rdsResource).isEqualTo(RDS_RESOURCE_NAME);
+    VirtualHost virtualHost =
+        VirtualHost.create("virtualhost", Collections.singletonList(AUTHORITY),
+            Collections.singletonList(route),
+            ImmutableMap.<String, FilterConfig>of());
+    xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    assertServiceConfigForLoadBalancingConfig(
+        Collections.singletonList(cluster1),
+        (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
+
+    reset(mockListener);
+    xdsClient.deliverRdsResourceNotFound(RDS_RESOURCE_NAME);  // revoke RDS resource
+    assertEmptyResolutionResult();
+
+    // Simulate management server adds back the previously used RDS resource.
+    reset(mockListener);
+    xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    assertServiceConfigForLoadBalancingConfig(
+        Collections.singletonList(cluster1),
+        (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
   }
 
   @Test
@@ -238,11 +338,9 @@ public class XdsNameResolverTest {
 
   @Test
   public void resolving_encounterErrorLdsAndRdsWatchers() {
-    String rdsResource = "route-configuration.googleapis.com";
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverRdsName(AUTHORITY, rdsResource);
-    assertThat(xdsClient.rdsWatcher).isNotNull();
+    xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
     xdsClient.deliverError(Status.UNAVAILABLE.withDescription("server unreachable"));
     verify(mockListener, times(2)).onError(errorCaptor.capture());
     for (Status error : errorCaptor.getAllValues()) {
@@ -255,18 +353,16 @@ public class XdsNameResolverTest {
   public void resolving_matchingVirtualHostNotFoundInLdsResource() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverLdsUpdate(AUTHORITY, 0L, buildUnmatchedVirtualHosts());
+    xdsClient.deliverLdsUpdate(0L, buildUnmatchedVirtualHosts());
     assertEmptyResolutionResult();
   }
 
   @Test
   public void resolving_matchingVirtualHostNotFoundInRdsResource() {
-    String rdsResource = "route-configuration.googleapis.com";
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverRdsName(AUTHORITY, rdsResource);
-    assertThat(xdsClient.rdsWatcher).isNotNull();
-    xdsClient.deliverRdsUpdate(rdsResource, buildUnmatchedVirtualHosts());
+    xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
+    xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, buildUnmatchedVirtualHosts());
     assertEmptyResolutionResult();
   }
 
@@ -299,7 +395,7 @@ public class XdsNameResolverTest {
     VirtualHost virtualHost = VirtualHost.create("does not matter",
         Collections.singletonList(AUTHORITY), Collections.singletonList(route),
         ImmutableMap.<String, FilterConfig>of());
-    xdsClient.deliverLdsUpdate(AUTHORITY, 0L, Collections.singletonList(virtualHost));
+    xdsClient.deliverLdsUpdate(0L, Collections.singletonList(virtualHost));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
@@ -317,7 +413,7 @@ public class XdsNameResolverTest {
     VirtualHost virtualHost = VirtualHost.create("does not matter",
         Collections.singletonList(AUTHORITY), Collections.singletonList(route),
         ImmutableMap.<String, FilterConfig>of());
-    xdsClient.deliverLdsUpdate(AUTHORITY, TimeUnit.SECONDS.toNanos(5L),
+    xdsClient.deliverLdsUpdate(TimeUnit.SECONDS.toNanos(5L),
         Collections.singletonList(virtualHost));
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
@@ -351,7 +447,6 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
-        AUTHORITY,
         Collections.singletonList(
             Route.create(
                 RouteMatch.withPathExactOnly(
@@ -389,7 +484,6 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
-        AUTHORITY,
         Collections.singletonList(
             Route.create(
                 RouteMatch.withPathExactOnly(
@@ -421,7 +515,6 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
-        AUTHORITY,
         Collections.singletonList(
             Route.create(
                 RouteMatch.withPathExactOnly(
@@ -453,7 +546,6 @@ public class XdsNameResolverTest {
     reset(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
-        AUTHORITY,
         Arrays.asList(
             Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
@@ -493,7 +585,6 @@ public class XdsNameResolverTest {
     reset(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
-        AUTHORITY,
         Arrays.asList(
             Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
@@ -529,7 +620,6 @@ public class XdsNameResolverTest {
     reset(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
-        AUTHORITY,
         Arrays.asList(
             Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
@@ -549,7 +639,6 @@ public class XdsNameResolverTest {
         (Map<String, ?>) result.getServiceConfig().getConfig());
 
     xdsClient.deliverLdsUpdate(
-        AUTHORITY,
         Arrays.asList(
             Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
@@ -571,7 +660,6 @@ public class XdsNameResolverTest {
     assertCallSelectResult(call1, configSelector, cluster1, 15.0);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
-        AUTHORITY,
         Collections.singletonList(
             Route.create(
                 RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
@@ -579,7 +667,6 @@ public class XdsNameResolverTest {
                     TimeUnit.SECONDS.toNanos(15L)),
                 ImmutableMap.<String, FilterConfig>of())));
     xdsClient.deliverLdsUpdate(
-        AUTHORITY,
         Arrays.asList(
             Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
@@ -602,7 +689,6 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
-        AUTHORITY,
         Collections.singletonList(
             Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
@@ -666,7 +752,6 @@ public class XdsNameResolverTest {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
-        AUTHORITY,
         Arrays.asList(
             Route.create(
                 RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
@@ -1162,14 +1247,15 @@ public class XdsNameResolverTest {
         FaultAbort.forStatus(
             Status.UNAUTHENTICATED, FaultConfig.FractionalPercent.perMillion(1000_000)),
         null);
-    xdsClient.deliverRdsNameWithFaultInjection(AUTHORITY, httpFilterFaultConfig);
+    xdsClient.deliverLdsUpdateForRdsNameWithFaultInjection(
+        RDS_RESOURCE_NAME, httpFilterFaultConfig);
 
     // Route fault config override
     FaultConfig routeFaultConfig = FaultConfig.create(
         null,
         FaultAbort.forStatus(Status.UNKNOWN, FaultConfig.FractionalPercent.perMillion(1000_000)),
         null);
-    xdsClient.deliverRdsUpdateWithFaultInjection(null, routeFaultConfig, null);
+    xdsClient.deliverRdsUpdateWithFaultInjection(RDS_RESOURCE_NAME, null, routeFaultConfig, null);
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
@@ -1362,72 +1448,56 @@ public class XdsNameResolverTest {
   }
 
   private class FakeXdsClient extends XdsClient {
-    private String ldsResource;
+    // Should never be subscribing to more than one LDS and RDS resource at any point of time.
+    private String ldsResource;  // should always be AUTHORITY
     private String rdsResource;
     private LdsResourceWatcher ldsWatcher;
     private RdsResourceWatcher rdsWatcher;
 
     @Override
     void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
-      Preconditions.checkArgument(ldsResource == null && ldsWatcher == null, "already watched");
+      assertThat(ldsResource).isNull();
+      assertThat(ldsWatcher).isNull();
+      assertThat(resourceName).isEqualTo(AUTHORITY);
       ldsResource = resourceName;
       ldsWatcher = watcher;
     }
 
     @Override
     void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
-      Preconditions.checkArgument(resourceName.equals(ldsResource), "unknown resource");
-      Preconditions.checkArgument(watcher.equals(ldsWatcher), "unknown watcher");
+      assertThat(ldsResource).isNotNull();
+      assertThat(ldsWatcher).isNotNull();
+      assertThat(resourceName).isEqualTo(AUTHORITY);
       ldsResource = null;
       ldsWatcher = null;
     }
 
     @Override
     void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
-      Preconditions.checkArgument(rdsResource == null && rdsWatcher == null, "already watched");
+      assertThat(rdsResource).isNull();
+      assertThat(rdsWatcher).isNull();
       rdsResource = resourceName;
       rdsWatcher = watcher;
     }
 
     @Override
     void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
-      Preconditions.checkArgument(resourceName.equals(rdsResource), "unknown resource");
-      Preconditions.checkArgument(watcher.equals(rdsWatcher), "unknown watcher");
+      assertThat(rdsResource).isNotNull();
+      assertThat(rdsWatcher).isNotNull();
       rdsResource = null;
       rdsWatcher = null;
     }
 
-    @Override
-    void shutdown() {
-      // no-op
+    void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
+      ldsWatcher.onChanged(new LdsUpdate(httpMaxStreamDurationNano, virtualHosts, null));
     }
 
-    void deliverLdsUpdate(final String resourceName, final long httpMaxStreamDurationNano,
-        final List<VirtualHost> virtualHosts) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (!resourceName.equals(ldsResource)) {
-            return;
-          }
-          ldsWatcher.onChanged(new LdsUpdate(httpMaxStreamDurationNano, virtualHosts, null));
-        }
-      });
-    }
-
-    void deliverLdsUpdate(final String resourceName, final List<Route> routes) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (!resourceName.equals(ldsResource)) {
-            return;
-          }
-          VirtualHost virtualHost = VirtualHost.create("virtual-host",
-              Collections.singletonList(AUTHORITY), routes,
+    void deliverLdsUpdate(final List<Route> routes) {
+      VirtualHost virtualHost =
+          VirtualHost.create(
+              "virtual-host", Collections.singletonList(AUTHORITY), routes,
               ImmutableMap.<String, FilterConfig>of());
-          ldsWatcher.onChanged(new LdsUpdate(0, Collections.singletonList(virtualHost), null));
-        }
-      });
+      ldsWatcher.onChanged(new LdsUpdate(0L, Collections.singletonList(virtualHost), null));
     }
 
     void deliverLdsUpdateWithFaultInjection(
@@ -1439,44 +1509,38 @@ public class XdsNameResolverTest {
       if (httpFilterFaultConfig == null) {
         httpFilterFaultConfig = FaultConfig.create(null, null, null);
       }
-      final List<NamedFilterConfig> filterChain = ImmutableList.of(
+      List<NamedFilterConfig> filterChain = ImmutableList.of(
           new NamedFilterConfig(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
           new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          ImmutableMap<String, FilterConfig> overrideConfig = weightedClusterFaultConfig == null
-              ? ImmutableMap.<String, FilterConfig>of()
-              : ImmutableMap.<String, FilterConfig>of(
-                  FAULT_FILTER_INSTANCE_NAME, weightedClusterFaultConfig);
-          ClusterWeight clusterWeight =
-              ClusterWeight.create(
-                  cluster, 100,
-                  overrideConfig);
-          overrideConfig = routeFaultConfig == null
-              ? ImmutableMap.<String, FilterConfig>of()
-              : ImmutableMap.<String, FilterConfig>of(FAULT_FILTER_INSTANCE_NAME, routeFaultConfig);
-          Route route = Route.create(
-              RouteMatch.create(
-                  PathMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
-              RouteAction.forWeightedClusters(
-                  Collections.singletonList(clusterWeight),
-                  Collections.<HashPolicy>emptyList(),
-                  null),
+      ImmutableMap<String, FilterConfig> overrideConfig = weightedClusterFaultConfig == null
+          ? ImmutableMap.<String, FilterConfig>of()
+          : ImmutableMap.<String, FilterConfig>of(
+              FAULT_FILTER_INSTANCE_NAME, weightedClusterFaultConfig);
+      ClusterWeight clusterWeight =
+          ClusterWeight.create(
+              cluster, 100,
               overrideConfig);
-          overrideConfig = virtualHostFaultConfig == null
-              ? ImmutableMap.<String, FilterConfig>of()
-              : ImmutableMap.<String, FilterConfig>of(
-                  FAULT_FILTER_INSTANCE_NAME, virtualHostFaultConfig);
-          VirtualHost virtualHost = VirtualHost.create(
-              "virtual-host",
-              Collections.singletonList(AUTHORITY),
-              Collections.singletonList(route),
-              overrideConfig);
-          ldsWatcher.onChanged(
-              new LdsUpdate(0, Collections.singletonList(virtualHost), filterChain));
-        }
-      });
+      overrideConfig = routeFaultConfig == null
+          ? ImmutableMap.<String, FilterConfig>of()
+          : ImmutableMap.<String, FilterConfig>of(FAULT_FILTER_INSTANCE_NAME, routeFaultConfig);
+      Route route = Route.create(
+          RouteMatch.create(
+              PathMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
+          RouteAction.forWeightedClusters(
+              Collections.singletonList(clusterWeight),
+              Collections.<HashPolicy>emptyList(),
+              null),
+          overrideConfig);
+      overrideConfig = virtualHostFaultConfig == null
+          ? ImmutableMap.<String, FilterConfig>of()
+          : ImmutableMap.<String, FilterConfig>of(
+              FAULT_FILTER_INSTANCE_NAME, virtualHostFaultConfig);
+      VirtualHost virtualHost = VirtualHost.create(
+          "virtual-host",
+          Collections.singletonList(AUTHORITY),
+          Collections.singletonList(route),
+          overrideConfig);
+      ldsWatcher.onChanged(new LdsUpdate(0L, Collections.singletonList(virtualHost), filterChain));
     }
 
     void deliverLdsUpdateWithNoRouterFilter() {
@@ -1485,123 +1549,86 @@ public class XdsNameResolverTest {
           Collections.singletonList(AUTHORITY),
           Collections.<Route>emptyList(),
           Collections.<String, FilterConfig>emptyMap());
-      ldsWatcher.onChanged(
-          new LdsUpdate(
-              0, Collections.singletonList(virtualHost), ImmutableList.<NamedFilterConfig>of()));
+      ldsWatcher.onChanged(new LdsUpdate(
+          0L, Collections.singletonList(virtualHost), ImmutableList.<NamedFilterConfig>of()));
     }
 
-    void deliverRdsNameWithFaultInjection(
-        final String rdsName, FaultConfig httpFilterFaultConfig) {
+    void deliverLdsUpdateForRdsNameWithFaultInjection(
+        final String rdsName, @Nullable FaultConfig httpFilterFaultConfig) {
       if (httpFilterFaultConfig == null) {
         httpFilterFaultConfig = FaultConfig.create(
             null, null, null);
       }
-      final ImmutableList<NamedFilterConfig> filterChain = ImmutableList.of(
+      ImmutableList<NamedFilterConfig> filterChain = ImmutableList.of(
           new NamedFilterConfig(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
           new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          ldsWatcher.onChanged(new LdsUpdate(0, rdsName, filterChain));
-        }
-      });
+      ldsWatcher.onChanged(new LdsUpdate(0L, rdsName, filterChain));
     }
 
-    void deliverRdsName(final String resourceName, final String rdsName) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (!resourceName.equals(ldsResource)) {
-            return;
-          }
-          ldsWatcher.onChanged(
-              new LdsUpdate(0, rdsName, null));
-        }
-      });
+    void deliverLdsUpdateForRdsName(String rdsName) {
+      ldsWatcher.onChanged(new LdsUpdate(0, rdsName, null));
     }
 
-    void deliverLdsResourceNotFound(final String resourceName) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (!resourceName.equals(ldsResource)) {
-            return;
-          }
-          ldsWatcher.onResourceDoesNotExist(ldsResource);
-        }
-      });
+    void deliverLdsResourceNotFound() {
+      ldsWatcher.onResourceDoesNotExist(AUTHORITY);
     }
 
     void deliverRdsUpdateWithFaultInjection(
-        final FaultConfig virtualHostFaultConfig, final FaultConfig routFaultConfig,
-        final FaultConfig weightedClusterFaultConfig) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          ImmutableMap<String, FilterConfig> overrideConfig = weightedClusterFaultConfig == null
-              ? ImmutableMap.<String, FilterConfig>of()
-              : ImmutableMap.<String, FilterConfig>of(
-                  FAULT_FILTER_INSTANCE_NAME, weightedClusterFaultConfig);
-          ClusterWeight clusterWeight =
-              ClusterWeight.create(cluster1, 100, overrideConfig);
-          overrideConfig = routFaultConfig == null
-              ? ImmutableMap.<String, FilterConfig>of()
-              : ImmutableMap.<String, FilterConfig>of(FAULT_FILTER_INSTANCE_NAME, routFaultConfig);
-          Route route = Route.create(
-              RouteMatch.create(
-                  PathMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
-              RouteAction.forWeightedClusters(
-                  Collections.singletonList(clusterWeight),
-                  Collections.<HashPolicy>emptyList(),
-                  null),
-              overrideConfig);
-          overrideConfig = virtualHostFaultConfig == null
-              ? ImmutableMap.<String, FilterConfig>of()
-              : ImmutableMap.<String, FilterConfig>of(
-                  FAULT_FILTER_INSTANCE_NAME, virtualHostFaultConfig);
-          VirtualHost virtualHost = VirtualHost.create(
-              "virtual-host",
-              Collections.singletonList(AUTHORITY),
-              Collections.singletonList(route),
-              overrideConfig);
-          rdsWatcher.onChanged(new RdsUpdate(Collections.singletonList(virtualHost)));
-        }
-      });
+        String resourceName, @Nullable FaultConfig virtualHostFaultConfig,
+        @Nullable FaultConfig routFaultConfig, @Nullable FaultConfig weightedClusterFaultConfig) {
+      if (!resourceName.equals(rdsResource)) {
+        return;
+      }
+      ImmutableMap<String, FilterConfig> overrideConfig = weightedClusterFaultConfig == null
+          ? ImmutableMap.<String, FilterConfig>of()
+          : ImmutableMap.<String, FilterConfig>of(
+              FAULT_FILTER_INSTANCE_NAME, weightedClusterFaultConfig);
+      ClusterWeight clusterWeight =
+          ClusterWeight.create(cluster1, 100, overrideConfig);
+      overrideConfig = routFaultConfig == null
+          ? ImmutableMap.<String, FilterConfig>of()
+          : ImmutableMap.<String, FilterConfig>of(FAULT_FILTER_INSTANCE_NAME, routFaultConfig);
+      Route route = Route.create(
+          RouteMatch.create(
+              PathMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
+          RouteAction.forWeightedClusters(
+              Collections.singletonList(clusterWeight),
+              Collections.<HashPolicy>emptyList(),
+              null),
+          overrideConfig);
+      overrideConfig = virtualHostFaultConfig == null
+          ? ImmutableMap.<String, FilterConfig>of()
+          : ImmutableMap.<String, FilterConfig>of(
+              FAULT_FILTER_INSTANCE_NAME, virtualHostFaultConfig);
+      VirtualHost virtualHost = VirtualHost.create(
+          "virtual-host",
+          Collections.singletonList(AUTHORITY),
+          Collections.singletonList(route),
+          overrideConfig);
+      rdsWatcher.onChanged(new RdsUpdate(Collections.singletonList(virtualHost)));
     }
 
-    void deliverRdsUpdate(final String resourceName, final List<VirtualHost> virtualHosts) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
-        }
-      });
+    void deliverRdsUpdate(String resourceName, List<VirtualHost> virtualHosts) {
+      if (!resourceName.equals(rdsResource)) {
+        return;
+      }
+      rdsWatcher.onChanged(new RdsUpdate(virtualHosts));
     }
 
-    void deliverRdsResourceNotFound(final String resourceName) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (!resourceName.equals(rdsResource)) {
-            return;
-          }
-          rdsWatcher.onResourceDoesNotExist(rdsResource);
-        }
-      });
+    void deliverRdsResourceNotFound(String resourceName) {
+      if (!resourceName.equals(rdsResource)) {
+        return;
+      }
+      rdsWatcher.onResourceDoesNotExist(rdsResource);
     }
 
     void deliverError(final Status error) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          if (ldsWatcher != null) {
-            ldsWatcher.onError(error);
-          }
-          if (rdsWatcher != null) {
-            rdsWatcher.onError(error);
-          }
-        }
-      });
+      if (ldsWatcher != null) {
+        ldsWatcher.onError(error);
+      }
+      if (rdsWatcher != null) {
+        rdsWatcher.onError(error);
+      }
     }
   }
 
