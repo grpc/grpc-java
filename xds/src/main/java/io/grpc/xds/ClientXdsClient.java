@@ -25,6 +25,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.CaseFormat;
 import com.google.common.base.Joiner;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
@@ -101,7 +102,8 @@ final class ClientXdsClient extends AbstractXdsClient {
   static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
   @VisibleForTesting
   static boolean enableFaultInjection =
-      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"));
+      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"))
+          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"));
 
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
