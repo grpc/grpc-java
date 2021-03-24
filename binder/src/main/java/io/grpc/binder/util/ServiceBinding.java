@@ -66,12 +66,12 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   private State state;
 
   // The following fields are intentionally not guarded, since (aside from the constructor),
-  // they're only used on the main thread. The constructor contains a synchronized block
+  // they're only modified in the main thread. The constructor contains a synchronized block
   // to ensure there's a write barrier when these fields are first written.
 
   @Nullable private Context sourceContext; // Only null in the unbound state.
 
-  private State reportedState;
+  private State reportedState; // Only used on the main thread.
 
   @AnyThread
   ServiceBinding(
