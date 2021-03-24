@@ -642,7 +642,7 @@ final class XdsNameResolver extends NameResolver {
     @Nullable
     private Set<String> existingClusters;  // clusters to which new requests can be routed
     @Nullable
-    private RouteConfigState routeConfigState;
+    private RouteDiscoveryState routeDiscoveryState;
 
     @Override
     public void onChanged(final LdsUpdate update) {
@@ -659,10 +659,10 @@ final class XdsNameResolver extends NameResolver {
           if (virtualHosts != null) {
             updateRoutes(virtualHosts, update.httpMaxStreamDurationNano, update.filterChain);
           } else {
-            routeConfigState = new RouteConfigState(
+            routeDiscoveryState = new RouteDiscoveryState(
                 rdsName, update.httpMaxStreamDurationNano, update.filterChain);
             logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
-            xdsClient.watchRdsResource(rdsName, routeConfigState);
+            xdsClient.watchRdsResource(rdsName, routeDiscoveryState);
           }
         }
       });
@@ -806,11 +806,11 @@ final class XdsNameResolver extends NameResolver {
     }
 
     private void cleanUpRouteConfigState() {
-      if (routeConfigState != null) {
-        String rdsName = routeConfigState.resourceName;
+      if (routeDiscoveryState != null) {
+        String rdsName = routeDiscoveryState.resourceName;
         logger.log(XdsLogLevel.INFO, "Stop watching RDS resource {0}", rdsName);
-        xdsClient.cancelRdsResourceWatch(rdsName, routeConfigState);
-        routeConfigState = null;
+        xdsClient.cancelRdsResourceWatch(rdsName, routeDiscoveryState);
+        routeDiscoveryState = null;
       }
     }
 
@@ -818,13 +818,13 @@ final class XdsNameResolver extends NameResolver {
      * Discovery state for RouteConfiguration resource. One instance for each Listener resource
      * update.
      */
-    private class RouteConfigState implements RdsResourceWatcher {
+    private class RouteDiscoveryState implements RdsResourceWatcher {
       private final String resourceName;
       private final long httpMaxStreamDurationNano;
       @Nullable
       private final List<NamedFilterConfig> filterConfigs;
 
-      private RouteConfigState(String resourceName, long httpMaxStreamDurationNano,
+      private RouteDiscoveryState(String resourceName, long httpMaxStreamDurationNano,
           @Nullable List<NamedFilterConfig> filterConfigs) {
         this.resourceName = resourceName;
         this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
@@ -836,7 +836,7 @@ final class XdsNameResolver extends NameResolver {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            if (RouteConfigState.this != routeConfigState) {
+            if (RouteDiscoveryState.this != routeDiscoveryState) {
               return;
             }
             logger.log(XdsLogLevel.INFO, "Received RDS resource update: {0}", update);
@@ -850,7 +850,7 @@ final class XdsNameResolver extends NameResolver {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            if (RouteConfigState.this != routeConfigState) {
+            if (RouteDiscoveryState.this != routeDiscoveryState) {
               return;
             }
             listener.onError(error);
@@ -863,7 +863,7 @@ final class XdsNameResolver extends NameResolver {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            if (RouteConfigState.this != routeConfigState) {
+            if (RouteDiscoveryState.this != routeDiscoveryState) {
               return;
             }
             logger.log(XdsLogLevel.INFO, "RDS resource {0} unavailable", resourceName);
