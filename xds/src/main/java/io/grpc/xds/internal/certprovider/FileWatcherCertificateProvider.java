@@ -19,9 +19,7 @@ package io.grpc.xds.internal.certprovider;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.InternalLogId;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.internal.sds.trust.CertificateUtils;
 
@@ -34,27 +32,28 @@ import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 // TODO(sanjaypujare): abstract out common functionality into an an abstract superclass
 /** Implementation of {@link CertificateProvider} for file watching cert provider. */
-final class FileWatcherCertificateProvider extends CertificateProvider {
+final class FileWatcherCertificateProvider extends CertificateProvider implements Runnable {
   private static final Logger logger =
       Logger.getLogger(FileWatcherCertificateProvider.class.getName());
 
-  private final SynchronizationContext syncContext;
   private final ScheduledExecutorService scheduledExecutorService;
   private final TimeProvider timeProvider;
   private final Path certFile;
   private final Path keyFile;
   private final Path trustFile;
   private final long refreshIntervalInSeconds;
-  @VisibleForTesting SynchronizationContext.ScheduledHandle scheduledHandle;
+  @VisibleForTesting ScheduledFuture<?> scheduledFuture;
   private FileTime lastModifiedTimeCert;
   private FileTime lastModifiedTimeKey;
   private FileTime lastModifiedTimeRoot;
+  private boolean shutdown;
 
   FileWatcherCertificateProvider(
       DistributorWatcher watcher,
@@ -73,34 +72,6 @@ final class FileWatcherCertificateProvider extends CertificateProvider {
     this.keyFile = Paths.get(checkNotNull(keyFile, "keyFile"));
     this.trustFile = Paths.get(checkNotNull(trustFile, "trustFile"));
     this.refreshIntervalInSeconds = refreshIntervalInSeconds;
-    this.syncContext = createSynchronizationContext(certFile);
-  }
-
-  private SynchronizationContext createSynchronizationContext(String details) {
-    final InternalLogId logId =
-        InternalLogId.allocate("DynamicReloadingCertificateProvider", details);
-    return new SynchronizationContext(
-        new Thread.UncaughtExceptionHandler() {
-          private boolean panicMode;
-
-          @Override
-          public void uncaughtException(Thread t, Throwable e) {
-            logger.log(
-                Level.SEVERE,
-                "[" + logId + "] Uncaught exception in the SynchronizationContext. Panic!",
-                e);
-            panic(e);
-          }
-
-          void panic(final Throwable t) {
-            if (panicMode) {
-              // Preserve the first panic information
-              return;
-            }
-            panicMode = true;
-            close();
-          }
-        });
   }
 
   @Override
@@ -109,18 +80,19 @@ final class FileWatcherCertificateProvider extends CertificateProvider {
   }
 
   @Override
-  public void close() {
-    if (scheduledHandle != null) {
-      scheduledHandle.cancel();
-      scheduledHandle = null;
+  public synchronized void close() {
+    shutdown = true;
+    if (scheduledFuture != null) {
+      scheduledFuture.cancel(true);
+      scheduledFuture = null;
     }
     getWatcher().close();
   }
 
-  private void scheduleNextRefreshCertificate(long delayInSeconds) {
-    RefreshCertificateTask runnable = new RefreshCertificateTask();
-    scheduledHandle =
-        syncContext.schedule(runnable, delayInSeconds, TimeUnit.SECONDS, scheduledExecutorService);
+  private synchronized void scheduleNextRefreshCertificate(long delayInSeconds) {
+    if (!shutdown) {
+      scheduledFuture = scheduledExecutorService.schedule(this, delayInSeconds, TimeUnit.SECONDS);
+    }
   }
 
   @VisibleForTesting
@@ -199,11 +171,17 @@ final class FileWatcherCertificateProvider extends CertificateProvider {
             - timeProvider.currentTimeNanos());
   }
 
-  @VisibleForTesting
-  class RefreshCertificateTask implements Runnable {
-    @Override
-    public void run() {
-      checkAndReloadCertificates();
+  @Override
+  public void run() {
+    if (!shutdown) {
+      try {
+        checkAndReloadCertificates();
+      } catch (Throwable t) {
+        logger.log(Level.SEVERE, "Uncaught exception!", t);
+        if (t instanceof InterruptedException) {
+          Thread.currentThread().interrupt();
+        }
+      }
     }
   }
 
