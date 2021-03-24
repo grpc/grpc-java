@@ -717,21 +717,10 @@ final class XdsNameResolver extends NameResolver {
         cleanUpRoutes();
         return;
       }
+
+      // A router filter is required for request routing. For backward compatibility, routing
+      // is always enabled for gRPC clients without HttpFilter support.
       List<Route> routes = virtualHost.routes();
-
-      // Populate all clusters to which requests can be routed to through the virtual host.
-      Set<String> clusters = new HashSet<>();
-      for (Route route : routes) {
-        RouteAction action = route.routeAction();
-        if (action.cluster() != null) {
-          clusters.add(action.cluster());
-        } else if (action.weightedClusters() != null) {
-          for (ClusterWeight weighedCluster : action.weightedClusters()) {
-            clusters.add(weighedCluster.name());
-          }
-        }
-      }
-
       List<NamedFilterConfig> filterChain = null;
       if (filterConfigs != null) {
         boolean hasRouter = false;
@@ -748,7 +737,19 @@ final class XdsNameResolver extends NameResolver {
           // selectable clusters should be reclaimed.
           filterChain.add(LAME_FILTER);
           routes = Collections.emptyList();
-          clusters = Collections.emptySet();
+        }
+      }
+
+      // Populate all clusters to which requests can be routed to through the virtual host.
+      Set<String> clusters = new HashSet<>();
+      for (Route route : routes) {
+        RouteAction action = route.routeAction();
+        if (action.cluster() != null) {
+          clusters.add(action.cluster());
+        } else if (action.weightedClusters() != null) {
+          for (ClusterWeight weighedCluster : action.weightedClusters()) {
+            clusters.add(weighedCluster.name());
+          }
         }
       }
 
