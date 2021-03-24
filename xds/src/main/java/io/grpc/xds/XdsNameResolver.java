@@ -655,7 +655,7 @@ final class XdsNameResolver extends NameResolver {
           logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
           List<VirtualHost> virtualHosts = update.virtualHosts;
           String rdsName = update.rdsName;
-          cleanUpRouteConfigState();
+          cleanUpRouteDiscoveryState();
           if (virtualHosts != null) {
             updateRoutes(virtualHosts, update.httpMaxStreamDurationNano, update.filterChain);
           } else {
@@ -690,7 +690,7 @@ final class XdsNameResolver extends NameResolver {
             return;
           }
           logger.log(XdsLogLevel.INFO, "LDS resource {0} unavailable", resourceName);
-          cleanUpRouteConfigState();
+          cleanUpRouteDiscoveryState();
           cleanUpRoutes();
         }
       });
@@ -704,7 +704,7 @@ final class XdsNameResolver extends NameResolver {
     private void stop() {
       logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", authority);
       stopped = true;
-      cleanUpRouteConfigState();
+      cleanUpRouteDiscoveryState();
       xdsClient.cancelLdsResourceWatch(authority, this);
     }
 
@@ -806,7 +806,7 @@ final class XdsNameResolver extends NameResolver {
       listener.onResult(emptyResult);
     }
 
-    private void cleanUpRouteConfigState() {
+    private void cleanUpRouteDiscoveryState() {
       if (routeDiscoveryState != null) {
         String rdsName = routeDiscoveryState.resourceName;
         logger.log(XdsLogLevel.INFO, "Stop watching RDS resource {0}", rdsName);
