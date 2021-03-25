@@ -46,7 +46,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.annotation.Nullable;
 
 /**
  * A {@link LoadBalancer} that provides consistent hashing based load balancing to upstream hosts.
@@ -59,6 +58,8 @@ import javax.annotation.Nullable;
 final class RingHashLoadBalancer extends LoadBalancer {
   private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
+  private static final Status RPC_HASH_NOT_FOUND =
+      Status.INTERNAL.withDescription("RPC hash not found");
 
   private final XdsLogger logger;
   private final SynchronizationContext syncContext;
@@ -139,6 +140,25 @@ final class RingHashLoadBalancer extends LoadBalancer {
     double scale = Math.min(
         Math.ceil(normalizedMinWeight * config.minRingSize) / normalizedMinWeight,
         (double) config.maxRingSize);
+    List<RingEntry> ring = buildRing(serverWeights, totalWeight, scale);
+
+    // Shut down subchannels for delisted addresses.
+    List<Subchannel> removedSubchannels = new ArrayList<>();
+    for (EquivalentAddressGroup addr : removedAddrs) {
+      removedSubchannels.add(subchannels.remove(addr));
+    }
+
+    // Update the picker before shutting down the subchannels, to reduce the chance of race
+    // between picking a subchannel and shutting it down.
+    updateBalancingState(new RingHashPicker(
+        Collections.unmodifiableList(ring), ImmutableMap.copyOf(subchannels)));
+    for (Subchannel subchann : removedSubchannels) {
+      shutdownSubchannel(subchann);
+    }
+  }
+
+  private List<RingEntry> buildRing(
+      Map<EquivalentAddressGroup, Long> serverWeights, long totalWeight, double scale) {
     List<RingEntry> ring = new ArrayList<>();
     double currentHashes = 0.0;
     double targetHashes = 0.0;
@@ -160,19 +180,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
       }
     }
     Collections.sort(ring);
-
-    List<Subchannel> removedSubchannels = new ArrayList<>();
-    for (EquivalentAddressGroup addr : removedAddrs) {
-      removedSubchannels.add(subchannels.remove(addr));
-    }
-
-    // Update the picker before shutting down the subchannels, to reduce the chance of race
-    // between picking a subchannel and shutting it down.
-    updateBalancingState(new RingHashPicker(
-        Collections.unmodifiableList(ring), ImmutableMap.copyOf(subchannels)));
-    for (Subchannel subchann : removedSubchannels) {
-      shutdownSubchannel(subchann);
-    }
+    return Collections.unmodifiableList(ring);
   }
 
   @Override
@@ -192,11 +200,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
 
   private void updateBalancingState(SubchannelPicker picker) {
     checkState(!subchannels.isEmpty(), "no subchannel has been created");
-    ConnectivityState overallState = null;
-    for (Subchannel subchannel : subchannels.values()) {
-      ConnectivityStateInfo stateInfo = getSubchannelStateInfoRef(subchannel).get();
-      overallState = aggregateState(overallState, stateInfo.getState());
-    }
+    ConnectivityState overallState = aggregateState(subchannels.values());
     if (overallState != currentState || picker != currentPicker || subchannelEnteredReady) {
       helper.updateBalancingState(overallState, picker);
       currentState = overallState;
@@ -224,21 +228,44 @@ final class RingHashLoadBalancer extends LoadBalancer {
     updateBalancingState(currentPicker);
   }
 
-  private static ConnectivityState aggregateState(
-      @Nullable ConnectivityState overallState, ConnectivityState state) {
-    if (overallState == null) {
-      return state;
+  /**
+   * Aggregates the connectivity states of a group of subchannels for overall connectivity state.
+   *
+   * <p>Aggregation rules (in order of dominance):
+   * <ol>
+   *   <li>If there is at least one subchannel in READY state, overall state is READY<li/>
+   *   <li>If there are <em>2 or more<em/> subchannels in TRANSIENT_FAILURE, overall state is
+   *   TRANSIENT_FAILURE<li/>
+   *   <li>If there is at least one subchannel in CONNECTING state, overall state is
+   *   CONNECTING<li/>
+   *   <li>If there is at least one subchannel in IDLE state, overall state is IDLE<li/>
+   *   <li>Otherwise, overall state is TRANSIENT_FAILURE<li/>
+   * <ol/>
+   */
+  private static ConnectivityState aggregateState(Iterable<Subchannel> subchannels) {
+    int failureCount = 0;
+    boolean hasIdle = false;
+    boolean hasConnecting = false;
+    for (Subchannel subchannel : subchannels) {
+      ConnectivityState state = getSubchannelStateInfoRef(subchannel).get().getState();
+      if (state == READY) {
+        return state;
+      }
+      if (state == TRANSIENT_FAILURE) {
+        failureCount++;
+      } else if (state == CONNECTING) {
+        hasConnecting = true;
+      } else if (state == IDLE) {
+        hasIdle = true;
+      }
     }
-    if (overallState == READY || state == READY) {
-      return READY;
+    if (failureCount >= 2) {
+      return TRANSIENT_FAILURE;
     }
-    if (overallState == CONNECTING || state == CONNECTING) {
+    if (hasConnecting) {
       return CONNECTING;
     }
-    if (overallState == IDLE || state == IDLE) {
-      return IDLE;
-    }
-    return overallState;
+    return hasIdle ? IDLE : TRANSIENT_FAILURE;
   }
 
   private static void shutdownSubchannel(Subchannel subchannel) {
@@ -284,12 +311,13 @@ final class RingHashLoadBalancer extends LoadBalancer {
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       Long requestHash = args.getCallOptions().getOption(XdsNameResolver.RPC_HASH_KEY);
       if (requestHash == null) {
-        return PickResult.withError(Status.INTERNAL.withDescription("RPC hash not found"));
+        return PickResult.withError(RPC_HASH_NOT_FOUND);
       }
       if (ring.isEmpty()) {
         return PickResult.withNoResult();
       }
-      // Find the nearest corresponding host clockwise around the ring.
+
+      // Find the ring entry with hash next to (clockwise) the RPC's hash.
       int low = 0;
       int high = ring.size();
       int mid;
