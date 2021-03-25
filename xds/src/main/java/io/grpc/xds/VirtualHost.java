@@ -45,7 +45,6 @@ abstract class VirtualHost {
   // The list of routes that will be matched, in order, for incoming requests.
   abstract ImmutableList<Route> routes();
 
-  @Nullable
   abstract ImmutableMap<String, FilterConfig> filterConfigOverrides();
 
   public static VirtualHost create(
@@ -61,7 +60,6 @@ abstract class VirtualHost {
 
     abstract RouteAction routeAction();
 
-    @Nullable
     abstract ImmutableMap<String, FilterConfig> filterConfigOverrides();
 
     static Route create(
@@ -134,7 +132,6 @@ abstract class VirtualHost {
 
         abstract int weight();
 
-        @Nullable
         abstract ImmutableMap<String, FilterConfig> filterConfigOverrides();
 
         static ClusterWeight create(

@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.CDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
@@ -28,6 +29,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -47,6 +49,7 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.FakeClock.TaskFilter;
+import io.grpc.internal.TimeProvider;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Endpoints.DropOverload;
@@ -64,6 +67,9 @@ import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsUpdate;
+import io.grpc.xds.XdsClient.ResourceMetadata;
+import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
+import io.grpc.xds.XdsClient.ResourceMetadata.UpdateFailureState;
 import io.grpc.xds.XdsClient.ResourceWatcher;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.IOException;
@@ -103,7 +109,9 @@ public abstract class ClientXdsClientTestBase {
       "grpc/server?xds.resource.listening_address=0.0.0.0:7000";
   private static final String VERSION_1 = "42";
   private static final String VERSION_2 = "43";
+  private static final String VERSION_3 = "44";
   private static final Node NODE = Node.newBuilder().build();
+  private static final Any FAILING_ANY = MessageFactory.FAILING_ANY;
 
   private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
       new FakeClock.TaskFilter() {
@@ -154,6 +162,16 @@ public abstract class ClientXdsClientTestBase {
   protected final AtomicBoolean adsEnded = new AtomicBoolean(true);
   protected final AtomicBoolean lrsEnded = new AtomicBoolean(true);
   private final MessageFactory mf = createMessageFactory();
+
+  private static final long TIME_INCREMENT = TimeUnit.SECONDS.toNanos(1);
+  /** Fake time provider increments time TIME_INCREMENT each call. */
+  private final TimeProvider timeProvider = new TimeProvider() {
+    private long count;
+    @Override
+    public long currentTimeNanos() {
+      return ++count * TIME_INCREMENT;
+    }
+  };
 
   private static final int VHOST_SIZE = 2;
   // LDS test resources.
@@ -216,12 +234,15 @@ public abstract class ClientXdsClientTestBase {
 
   @Before
   public void setUp() throws IOException {
-    originalEnableFaultInjection = ClientXdsClient.enableFaultInjection;
-    ClientXdsClient.enableFaultInjection = true;
+    // Init mocks.
     MockitoAnnotations.initMocks(this);
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(20L, 200L);
+
+    // Start the server and the client.
+    originalEnableFaultInjection = ClientXdsClient.enableFaultInjection;
+    ClientXdsClient.enableFaultInjection = true;
     final String serverName = InProcessServerBuilder.generateName();
     cleanupRule.register(
         InProcessServerBuilder
@@ -241,7 +262,8 @@ public abstract class ClientXdsClientTestBase {
             EnvoyProtoData.Node.newBuilder().build(),
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier());
+            fakeClock.getStopwatchSupplier(),
+            timeProvider);
 
     assertThat(resourceDiscoveryCalls).isEmpty();
     assertThat(loadReportCalls).isEmpty();
@@ -264,6 +286,98 @@ public abstract class ClientXdsClientTestBase {
   protected abstract BindableService createLrsService();
 
   protected abstract MessageFactory createMessageFactory();
+
+  protected static boolean matchErrorDetail(
+      com.google.rpc.Status errorDetail, int expectedCode, List<String> expectedMessages) {
+    if (expectedCode != errorDetail.getCode()) {
+      return false;
+    }
+    List<String> errors = Splitter.on('\n').splitToList(errorDetail.getMessage());
+    if (errors.size() != expectedMessages.size()) {
+      return false;
+    }
+    for (int i = 0; i < errors.size(); i++) {
+      if (!errors.get(i).startsWith(expectedMessages.get(i))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private void verifySubscribedResourcesMetadataSizes(
+      int ldsSize, int cdsSize, int rdsSize, int edsSize) {
+    assertThat(xdsClient.getSubscribedResourcesMetadata(LDS)).hasSize(ldsSize);
+    assertThat(xdsClient.getSubscribedResourcesMetadata(CDS)).hasSize(cdsSize);
+    assertThat(xdsClient.getSubscribedResourcesMetadata(RDS)).hasSize(rdsSize);
+    assertThat(xdsClient.getSubscribedResourcesMetadata(EDS)).hasSize(edsSize);
+  }
+
+  /** Verify the resource requested, but not updated. */
+  private void verifyResourceMetadataRequested(ResourceType type, String resourceName) {
+    verifyResourceMetadata(
+        type, resourceName, null, ResourceMetadataStatus.REQUESTED, "", 0, false);
+  }
+
+  /** Verify that the requested resource does not exist. */
+  private void verifyResourceMetadataDoesNotExist(ResourceType type, String resourceName) {
+    verifyResourceMetadata(
+        type, resourceName, null, ResourceMetadataStatus.DOES_NOT_EXIST, "", 0, false);
+  }
+
+  /** Verify the resource to be acked. */
+  private void verifyResourceMetadataAcked(
+      ResourceType type, String resourceName, Any rawResource, String versionInfo,
+      long updateTimeNanos) {
+    verifyResourceMetadata(type, resourceName, rawResource, ResourceMetadataStatus.ACKED,
+        versionInfo, updateTimeNanos, false);
+  }
+
+  /**
+   * Verify the resource to be nacked, and every i-th line of error details to begin with
+   * corresponding i-th element of {@code List<String> failedDetails}.
+   */
+  private void verifyResourceMetadataNacked(
+      ResourceType type, String resourceName, Any rawResource, String versionInfo,
+      long updateTime, String failedVersion, long failedUpdateTimeNanos,
+      List<String> failedDetails) {
+    ResourceMetadata resourceMetadata =
+        verifyResourceMetadata(type, resourceName, rawResource, ResourceMetadataStatus.NACKED,
+            versionInfo, updateTime, true);
+
+    UpdateFailureState errorState = resourceMetadata.getErrorState();
+    assertThat(errorState).isNotNull();
+    String name = type.toString() + " resource '" + resourceName + "' metadata error ";
+    assertWithMessage(name + "failedVersion").that(errorState.getFailedVersion())
+        .isEqualTo(failedVersion);
+    assertWithMessage(name + "failedUpdateTimeNanos").that(errorState.getFailedUpdateTimeNanos())
+        .isEqualTo(failedUpdateTimeNanos);
+    List<String> errors = Splitter.on('\n').splitToList(errorState.getFailedDetails());
+    for (int i = 0; i < errors.size(); i++) {
+      assertWithMessage(name + "failedDetails line " + i).that(errors.get(i))
+          .startsWith(failedDetails.get(i));
+    }
+  }
+
+  private ResourceMetadata verifyResourceMetadata(
+      ResourceType type, String resourceName, Any rawResource, ResourceMetadataStatus status,
+      String versionInfo, long updateTimeNanos, boolean hasErrorState) {
+    ResourceMetadata resourceMetadata =
+        xdsClient.getSubscribedResourcesMetadata(type).get(resourceName);
+    assertThat(resourceMetadata).isNotNull();
+    String name = type.toString() + " resource '" + resourceName + "' metadata field ";
+    assertWithMessage(name + "status").that(resourceMetadata.getStatus()).isEqualTo(status);
+    assertWithMessage(name + "version").that(resourceMetadata.getVersion()).isEqualTo(versionInfo);
+    assertWithMessage(name + "rawResource").that(resourceMetadata.getRawResource())
+        .isEqualTo(rawResource);
+    assertWithMessage(name + "updateTimeNanos").that(resourceMetadata.getUpdateTimeNanos())
+        .isEqualTo(updateTimeNanos);
+    if (hasErrorState) {
+      assertWithMessage(name + "errorState").that(resourceMetadata.getErrorState()).isNotNull();
+    } else {
+      assertWithMessage(name + "errorState").that(resourceMetadata.getErrorState()).isNull();
+    }
+    return resourceMetadata;
+  }
 
   /**
    * Helper method to validate {@link XdsClient.EdsUpdate} created for the test CDS resource
@@ -295,9 +409,111 @@ public abstract class ClientXdsClientTestBase {
     // Client sends an ACK LDS request.
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verifyNoInteractions(ldsResourceWatcher);
+    verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+    // Server failed to return subscribed resource within expected time window.
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+  }
+
+  @Test
+  public void ldsResponseErrorHandling_allResourcesFailedUnpack() {
+    DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
+    verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
+    call.sendResponse(LDS, ImmutableList.of(FAILING_ANY, FAILING_ANY), VERSION_1, "0000");
+
+    // Resulting metadata unchanged because the response has no identifiable subscribed resources.
+    verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+    // The response NACKed with errors indicating indices of the failed resources.
+    call.verifyRequestNack(LDS, LDS_RESOURCE, "", "0000", NODE, ImmutableList.of(
+        "LDS response Resource index 0 - can't decode Listener: ",
+        "LDS response Resource index 1 - can't decode Listener: "));
+    verifyNoInteractions(ldsResourceWatcher);
+  }
+
+  @Test
+  public void ldsResponseErrorHandling_someResourcesFailedUnpack() {
+    DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
+    verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
+
+    // Correct resource is in the middle to ensure processing continues on errors.
+    List<Any> resources = ImmutableList.of(FAILING_ANY, testListenerRds, FAILING_ANY);
+    call.sendResponse(LDS, resources, VERSION_1, "0000");
+
+    // All errors recorded in the metadata of successfully unpacked subscribed resources.
+    List<String> errors = ImmutableList.of(
+        "LDS response Resource index 0 - can't decode Listener: ",
+        "LDS response Resource index 2 - can't decode Listener: ");
+    verifyResourceMetadataNacked(LDS, LDS_RESOURCE, null, "", 0, VERSION_1, TIME_INCREMENT, errors);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+    // The response is NACKed with the same error message.
+    call.verifyRequestNack(LDS, LDS_RESOURCE, "", "0000", NODE, errors);
+    verifyNoInteractions(ldsResourceWatcher);
+  }
+
+  /**
+   * Tests a subscribed LDS resource transitioned to and from the invalid state.
+   *
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
+   * A40-csds-support.md</a>.
+   */
+  @Test
+  public void ldsResponseErrorHandling_subscribedResourceInvalid() {
+    List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
+    xdsClient.watchLdsResource("A", ldsResourceWatcher);
+    xdsClient.watchLdsResource("B", ldsResourceWatcher);
+    xdsClient.watchLdsResource("C", ldsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+    verifyResourceMetadataRequested(LDS, "A");
+    verifyResourceMetadataRequested(LDS, "B");
+    verifyResourceMetadataRequested(LDS, "C");
+    verifySubscribedResourcesMetadataSizes(3, 0, 0, 0);
+
+    // LDS -> {A, B, C}, version 1
+    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
+        "A", Any.pack(mf.buildListenerForRds("A", "A.1")),
+        "B", Any.pack(mf.buildListenerForRds("B", "B.1")),
+        "C", Any.pack(mf.buildListenerForRds("C", "C.1")));
+    call.sendResponse(LDS, resourcesV1.values().asList(), VERSION_1, "0000");
+    // {A, B, C} -> ACK, version 1
+    verifyResourceMetadataAcked(LDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(LDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    call.verifyRequest(LDS, subscribedResourceNames, VERSION_1, "0000", NODE);
+
+    // LDS -> {A, B}, version 2
+    // Failed to parse endpoint B
+    ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
+        "A", Any.pack(mf.buildListenerForRds("A", "A.2")),
+        "B", Any.pack(mf.buildListenerInvalid("B")));
+    call.sendResponse(LDS, resourcesV2.values().asList(), VERSION_2, "0001");
+    // {A, B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
+    // {C} -> ACK, version 1
+    List<String> errorsV2 = ImmutableList.of("LDS response Listener 'B' validation error: ");
+    verifyResourceMetadataNacked(LDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT,
+        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+    verifyResourceMetadataNacked(LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
+        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+    verifyResourceMetadataAcked(LDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    call.verifyRequestNack(LDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
+
+    // LDS -> {B, C} version 3
+    ImmutableMap<String, Any> resourcesV3 = ImmutableMap.of(
+        "B", Any.pack(mf.buildListenerForRds("B", "B.3")),
+        "C", Any.pack(mf.buildListenerForRds("C", "C.3")));
+    call.sendResponse(LDS, resourcesV3.values().asList(), VERSION_3, "0002");
+    // {A} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
+    // {B, C} -> ACK, version 3
+    verifyResourceMetadataDoesNotExist(LDS, "A");
+    verifyResourceMetadataAcked(LDS, "B", resourcesV3.get("B"), VERSION_3, TIME_INCREMENT * 3);
+    verifyResourceMetadataAcked(LDS, "C", resourcesV3.get("C"), VERSION_3, TIME_INCREMENT * 3);
+    call.verifyRequest(LDS, subscribedResourceNames, VERSION_3, "0002", NODE);
+    verifySubscribedResourcesMetadataSizes(3, 0, 0, 0);
   }
 
   @Test
@@ -310,6 +526,8 @@ public abstract class ClientXdsClientTestBase {
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
   }
 
   @Test
@@ -322,6 +540,8 @@ public abstract class ClientXdsClientTestBase {
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
   }
 
   @Test
@@ -337,6 +557,8 @@ public abstract class ClientXdsClientTestBase {
     verify(watcher).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
     call.verifyNoMoreRequest();
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
   }
 
   @Test
@@ -349,23 +571,29 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchLdsResource(LDS_RESOURCE, watcher);
     verify(watcher).onResourceDoesNotExist(LDS_RESOURCE);
     call.verifyNoMoreRequest();
+    verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
   }
 
   @Test
   public void ldsResourceUpdated() {
     DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
+    verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
 
     // Initial LDS response.
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
 
     // Updated LDS response.
     call.sendResponse(LDS, testListenerRds, VERSION_2, "0001");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_2, "0001", NODE);
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_2, TIME_INCREMENT * 2);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
   }
 
   @Test
@@ -407,6 +635,8 @@ public abstract class ClientXdsClientTestBase {
     // Client sends an ACK LDS request.
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, listener, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
 
     LdsUpdate ldsUpdate = ldsUpdateCaptor.getValue();
     assertThat(ldsUpdate.virtualHosts).hasSize(2);
@@ -432,17 +662,22 @@ public abstract class ClientXdsClientTestBase {
   @Test
   public void ldsResourceDeleted() {
     DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
+    verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
 
     // Initial LDS response.
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
 
     // Empty LDS response deletes the listener.
     call.sendResponse(LDS, Collections.<Any>emptyList(), VERSION_2, "0001");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_2, "0001", NODE);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
+    verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
   }
 
   @Test
@@ -455,12 +690,18 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchLdsResource(ldsResourceTwo, watcher2);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.verifyRequest(LDS, ImmutableList.of(LDS_RESOURCE, ldsResourceTwo), "", "", NODE);
+    // Both LDS resources were requested.
+    verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
+    verifyResourceMetadataRequested(LDS, ldsResourceTwo);
+    verifySubscribedResourcesMetadataSizes(2, 0, 0, 0);
 
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(ldsResourceTwo);
     verify(watcher2).onResourceDoesNotExist(ldsResourceTwo);
-    // Both LDS resources were requested.
+    verifyResourceMetadataDoesNotExist(LDS, LDS_RESOURCE);
+    verifyResourceMetadataDoesNotExist(LDS, ldsResourceTwo);
+    verifySubscribedResourcesMetadataSizes(2, 0, 0, 0);
 
     Any listenerTwo = Any.pack(mf.buildListenerForRds(ldsResourceTwo, RDS_RESOURCE));
     call.sendResponse(LDS, ImmutableList.of(testListenerVhosts, listenerTwo), VERSION_1, "0000");
@@ -475,6 +716,10 @@ public abstract class ClientXdsClientTestBase {
     verify(watcher2).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
     assertThat(ldsUpdateCaptor.getValue().virtualHosts).isNull();
+    // Metadata of both listeners is stored.
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(LDS, ldsResourceTwo, listenerTwo, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(2, 0, 0, 0);
   }
 
   @Test
@@ -486,11 +731,116 @@ public abstract class ClientXdsClientTestBase {
 
     // Client sends an ACK RDS request.
     call.verifyRequest(RDS, RDS_RESOURCE, VERSION_1, "0000", NODE);
-    // Unknown RDS resource.
     verifyNoInteractions(rdsResourceWatcher);
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
+    // Server failed to return subscribed resource within expected time window.
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
+  }
+
+  @Test
+  public void rdsResponseErrorHandling_allResourcesFailedUnpack() {
+    DiscoveryRpcCall call = startResourceWatcher(RDS, RDS_RESOURCE, rdsResourceWatcher);
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+    call.sendResponse(RDS, ImmutableList.of(FAILING_ANY, FAILING_ANY), VERSION_1, "0000");
+
+    // Resulting metadata unchanged because the response has no identifiable subscribed resources.
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
+    // The response NACKed with errors indicating indices of the failed resources.
+    call.verifyRequestNack(RDS, RDS_RESOURCE, "", "0000", NODE, ImmutableList.of(
+        "RDS response Resource index 0 - can't decode RouteConfiguration: ",
+        "RDS response Resource index 1 - can't decode RouteConfiguration: "));
+    verifyNoInteractions(rdsResourceWatcher);
+  }
+
+  @Test
+  public void rdsResponseErrorHandling_someResourcesFailedUnpack() {
+    DiscoveryRpcCall call = startResourceWatcher(RDS, RDS_RESOURCE, rdsResourceWatcher);
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+
+    // Correct resource is in the middle to ensure processing continues on errors.
+    List<Any> resources = ImmutableList.of(FAILING_ANY, testRouteConfig, FAILING_ANY);
+    call.sendResponse(RDS, resources, VERSION_1, "0000");
+
+    // All errors recorded in the metadata of successfully unpacked subscribed resources.
+    List<String> errors = ImmutableList.of(
+        "RDS response Resource index 0 - can't decode RouteConfiguration: ",
+        "RDS response Resource index 2 - can't decode RouteConfiguration: ");
+    verifyResourceMetadataNacked(RDS, RDS_RESOURCE, null, "", 0, VERSION_1, TIME_INCREMENT, errors);
+    verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
+    // The response is NACKed with the same error message.
+    call.verifyRequestNack(RDS, RDS_RESOURCE, "", "0000", NODE, errors);
+    verifyNoInteractions(rdsResourceWatcher);
+  }
+
+  /**
+   * Tests a subscribed RDS resource transitioned to and from the invalid state.
+   *
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
+   * A40-csds-support.md</a>.
+   */
+  @Test
+  public void rdsResponseErrorHandling_subscribedResourceInvalid() {
+    List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
+    xdsClient.watchRdsResource("A", rdsResourceWatcher);
+    xdsClient.watchRdsResource("B", rdsResourceWatcher);
+    xdsClient.watchRdsResource("C", rdsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+    verifyResourceMetadataRequested(RDS, "A");
+    verifyResourceMetadataRequested(RDS, "B");
+    verifyResourceMetadataRequested(RDS, "C");
+    verifySubscribedResourcesMetadataSizes(0, 0, 3, 0);
+
+    // RDS -> {A, B, C}, version 1
+    List<Message> vhostsV1 = mf.buildOpaqueVirtualHosts(1);
+    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
+        "A", Any.pack(mf.buildRouteConfiguration("A", vhostsV1)),
+        "B", Any.pack(mf.buildRouteConfiguration("B", vhostsV1)),
+        "C", Any.pack(mf.buildRouteConfiguration("C", vhostsV1)));
+    call.sendResponse(RDS, resourcesV1.values().asList(), VERSION_1, "0000");
+    // {A, B, C} -> ACK, version 1
+    verifyResourceMetadataAcked(RDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(RDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(RDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    call.verifyRequest(RDS, subscribedResourceNames, VERSION_1, "0000", NODE);
+
+    // RDS -> {A, B}, version 2
+    // Failed to parse endpoint B
+    ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
+        "A", Any.pack(mf.buildRouteConfiguration("A", mf.buildOpaqueVirtualHosts(2))),
+        "B", Any.pack(mf.buildRouteConfigurationInvalid("B")));
+    call.sendResponse(RDS, resourcesV2.values().asList(), VERSION_2, "0001");
+    // {A, B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
+    // {C} -> ACK, version 1
+    List<String> errorsV2 =
+        ImmutableList.of("RDS response RouteConfiguration 'B' validation error: ");
+    verifyResourceMetadataNacked(RDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT,
+        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+    verifyResourceMetadataNacked(RDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
+        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+    verifyResourceMetadataAcked(RDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    call.verifyRequestNack(RDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
+
+    // RDS -> {B, C} version 3
+    List<Message> vhostsV3 = mf.buildOpaqueVirtualHosts(3);
+    ImmutableMap<String, Any> resourcesV3 = ImmutableMap.of(
+        "B", Any.pack(mf.buildRouteConfiguration("B", vhostsV3)),
+        "C", Any.pack(mf.buildRouteConfiguration("C", vhostsV3)));
+    call.sendResponse(RDS, resourcesV3.values().asList(), VERSION_3, "0002");
+    // {A} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
+    // {B, C} -> ACK, version 3
+    verifyResourceMetadataNacked(RDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT,
+        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+    verifyResourceMetadataAcked(RDS, "B", resourcesV3.get("B"), VERSION_3, TIME_INCREMENT * 3);
+    verifyResourceMetadataAcked(RDS, "C", resourcesV3.get("C"), VERSION_3, TIME_INCREMENT * 3);
+    call.verifyRequest(RDS, subscribedResourceNames, VERSION_3, "0002", NODE);
+    verifySubscribedResourcesMetadataSizes(0, 0, 3, 0);
   }
 
   @Test
@@ -503,6 +853,8 @@ public abstract class ClientXdsClientTestBase {
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
     assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
   }
 
   @Test
@@ -518,6 +870,8 @@ public abstract class ClientXdsClientTestBase {
     verify(watcher).onChanged(rdsUpdateCaptor.capture());
     assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
     call.verifyNoMoreRequest();
+    verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
   }
 
   @Test
@@ -530,17 +884,21 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchRdsResource(RDS_RESOURCE, watcher);
     verify(watcher).onResourceDoesNotExist(RDS_RESOURCE);
     call.verifyNoMoreRequest();
+    verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
   }
 
   @Test
   public void rdsResourceUpdated() {
     DiscoveryRpcCall call = startResourceWatcher(RDS, RDS_RESOURCE, rdsResourceWatcher);
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
 
     // Initial RDS response.
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
     call.verifyRequest(RDS, RDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
     assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
 
     // Updated RDS response.
     Any routeConfigUpdated =
@@ -551,26 +909,42 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(RDS, RDS_RESOURCE, VERSION_2, "0001", NODE);
     verify(rdsResourceWatcher, times(2)).onChanged(rdsUpdateCaptor.capture());
     assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(4);
+    verifyResourceMetadataAcked(RDS, RDS_RESOURCE, routeConfigUpdated, VERSION_2,
+        TIME_INCREMENT * 2);
+    verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
   }
 
   @Test
   public void rdsResourceDeletedByLds() {
     xdsClient.watchLdsResource(LDS_RESOURCE, ldsResourceWatcher);
     xdsClient.watchRdsResource(RDS_RESOURCE, rdsResourceWatcher);
+    verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
 
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
 
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
     assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT * 2);
+    verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
 
     call.sendResponse(LDS, testListenerVhosts, VERSION_2, "0001");
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
+    verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
+    verifyResourceMetadataAcked(
+        LDS, LDS_RESOURCE, testListenerVhosts, VERSION_2, TIME_INCREMENT * 3);
+    verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
   }
 
   @Test
@@ -583,17 +957,26 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchRdsResource(rdsResourceTwo, watcher2);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.verifyRequest(RDS, Arrays.asList(RDS_RESOURCE, rdsResourceTwo), "", "", NODE);
+    // Both RDS resources were requested.
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+    verifyResourceMetadataRequested(RDS, rdsResourceTwo);
+    verifySubscribedResourcesMetadataSizes(0, 0, 2, 0);
 
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(rdsResourceTwo);
     verify(watcher2).onResourceDoesNotExist(rdsResourceTwo);
-    // Both RDS resources were requested.
+    verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
+    verifyResourceMetadataDoesNotExist(RDS, rdsResourceTwo);
+    verifySubscribedResourcesMetadataSizes(0, 0, 2, 0);
 
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
     assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
     verifyNoMoreInteractions(watcher1, watcher2);
+    verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataDoesNotExist(RDS, rdsResourceTwo);
+    verifySubscribedResourcesMetadataSizes(0, 0, 2, 0);
 
     Any routeConfigTwo =
         Any.pack(mf.buildRouteConfiguration(rdsResourceTwo, mf.buildOpaqueVirtualHosts(4)));
@@ -603,6 +986,9 @@ public abstract class ClientXdsClientTestBase {
     verify(watcher2).onChanged(rdsUpdateCaptor.capture());
     assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(4);
     verifyNoMoreInteractions(rdsResourceWatcher);
+    verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(RDS, rdsResourceTwo, routeConfigTwo, VERSION_2, TIME_INCREMENT * 2);
+    verifySubscribedResourcesMetadataSizes(0, 0, 2, 0);
   }
 
   @Test
@@ -619,10 +1005,110 @@ public abstract class ClientXdsClientTestBase {
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
     verifyNoInteractions(cdsResourceWatcher);
-
+    verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+    // Server failed to return subscribed resource within expected time window.
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+  }
+
+  @Test
+  public void cdsResponseErrorHandling_allResourcesFailedUnpack() {
+    DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
+    verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
+    call.sendResponse(CDS, ImmutableList.of(FAILING_ANY, FAILING_ANY), VERSION_1, "0000");
+
+    // Resulting metadata unchanged because the response has no identifiable subscribed resources.
+    verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+    // The response NACKed with errors indicating indices of the failed resources.
+    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(
+        "CDS response Resource index 0 - can't decode Cluster: ",
+        "CDS response Resource index 1 - can't decode Cluster: "));
+    verifyNoInteractions(cdsResourceWatcher);
+  }
+
+  @Test
+  public void cdsResponseErrorHandling_someResourcesFailedUnpack() {
+    DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
+    verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
+
+    // Correct resource is in the middle to ensure processing continues on errors.
+    List<Any> resources = ImmutableList.of(FAILING_ANY, testClusterRoundRobin, FAILING_ANY);
+    call.sendResponse(CDS, resources, VERSION_1, "0000");
+
+    // All errors recorded in the metadata of successfully unpacked subscribed resources.
+    List<String> errors = ImmutableList.of(
+        "CDS response Resource index 0 - can't decode Cluster: ",
+        "CDS response Resource index 2 - can't decode Cluster: ");
+    verifyResourceMetadataNacked(CDS, CDS_RESOURCE, null, "", 0, VERSION_1, TIME_INCREMENT, errors);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+    // The response is NACKed with the same error message.
+    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, errors);
+    verifyNoInteractions(cdsResourceWatcher);
+  }
+
+  /**
+   * Tests a subscribed CDS resource transitioned to and from the invalid state.
+   *
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
+   * A40-csds-support.md</a>.
+   */
+  @Test
+  public void cdsResponseErrorHandling_subscribedResourceInvalid() {
+    List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
+    xdsClient.watchCdsResource("A", cdsResourceWatcher);
+    xdsClient.watchCdsResource("B", cdsResourceWatcher);
+    xdsClient.watchCdsResource("C", cdsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+    verifyResourceMetadataRequested(CDS, "A");
+    verifyResourceMetadataRequested(CDS, "B");
+    verifyResourceMetadataRequested(CDS, "C");
+    verifySubscribedResourcesMetadataSizes(0, 3, 0, 0);
+
+    // CDS -> {A, B, C}, version 1
+    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
+        "A", Any.pack(mf.buildEdsCluster("A", "A.1", "round_robin", null, false, null, null)),
+        "B", Any.pack(mf.buildEdsCluster("B", "B.1", "round_robin", null, false, null, null)),
+        "C", Any.pack(mf.buildEdsCluster("C", "C.1", "round_robin", null, false, null, null)));
+    call.sendResponse(CDS, resourcesV1.values().asList(), VERSION_1, "0000");
+    // {A, B, C} -> ACK, version 1
+    verifyResourceMetadataAcked(CDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(CDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(CDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    call.verifyRequest(CDS, subscribedResourceNames, VERSION_1, "0000", NODE);
+
+    // CDS -> {A, B}, version 2
+    // Failed to parse endpoint B
+    ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
+        "A", Any.pack(mf.buildEdsCluster("A", "A.2", "round_robin", null, false, null, null)),
+        "B", Any.pack(mf.buildClusterInvalid("B")));
+    call.sendResponse(CDS, resourcesV2.values().asList(), VERSION_2, "0001");
+    // {A, B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
+    // {C} -> ACK, version 1
+    List<String> errorsV2 = ImmutableList.of("CDS response Cluster 'B' validation error: ");
+    verifyResourceMetadataNacked(CDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT,
+        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+    verifyResourceMetadataNacked(CDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
+        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+    verifyResourceMetadataAcked(CDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    call.verifyRequestNack(CDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
+
+    // CDS -> {B, C} version 3
+    ImmutableMap<String, Any> resourcesV3 = ImmutableMap.of(
+        "B", Any.pack(mf.buildEdsCluster("B", "B.3", "round_robin", null, false, null, null)),
+        "C", Any.pack(mf.buildEdsCluster("C", "C.3", "round_robin", null, false, null, null)));
+    call.sendResponse(CDS, resourcesV3.values().asList(), VERSION_3, "0002");
+    // {A} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
+    // {B, C} -> ACK, version 3
+    verifyResourceMetadataDoesNotExist(CDS, "A");
+    verifyResourceMetadataAcked(CDS, "B", resourcesV3.get("B"), VERSION_3, TIME_INCREMENT * 3);
+    verifyResourceMetadataAcked(CDS, "C", resourcesV3.get("C"), VERSION_3, TIME_INCREMENT * 3);
+    call.verifyRequest(CDS, subscribedResourceNames, VERSION_3, "0002", NODE);
   }
 
   @Test
@@ -642,6 +1128,9 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
+        TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
 
   @Test
@@ -666,6 +1155,8 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterRingHash, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
 
   @Test
@@ -685,6 +1176,8 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.AGGREGATE);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo("round_robin");
     assertThat(cdsUpdate.prioritizedClusterNames()).containsExactlyElementsIn(candidates).inOrder();
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterAggregate, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
 
   @Test
@@ -706,6 +1199,9 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.lrsServerName()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isEqualTo(200L);
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterCircuitBreakers, VERSION_1,
+        TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
 
   /**
@@ -744,6 +1240,8 @@ public abstract class ClientXdsClientTestBase {
             .getGoogleGrpc()
             .getTargetUri())
         .isEqualTo("unix:/var/uds2");
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
 
   @Test
@@ -766,6 +1264,9 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     call.verifyNoMoreRequest();
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
+        TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
 
   }
 
@@ -778,11 +1279,14 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchCdsResource(CDS_RESOURCE, watcher);
     verify(watcher).onResourceDoesNotExist(CDS_RESOURCE);
     call.verifyNoMoreRequest();
+    verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
 
   @Test
   public void cdsResourceUpdated() {
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
+    verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
 
     // Initial CDS response.
     Any clusterDns =
@@ -797,6 +1301,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.lrsServerName()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterDns, VERSION_1, TIME_INCREMENT);
 
     // Updated CDS response.
     String edsService = "eds-service-bar.googleapis.com";
@@ -813,11 +1318,14 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_2, TIME_INCREMENT * 2);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
 
   @Test
   public void cdsResourceDeleted() {
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
+    verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
 
     // Initial CDS response.
     call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
@@ -831,11 +1339,16 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.lrsServerName()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
+        TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
 
     // Empty CDS response deletes the cluster.
     call.sendResponse(CDS, Collections.<Any>emptyList(), VERSION_2, "0001");
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_2, "0001", NODE);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
+    verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
   }
 
   @Test
@@ -848,11 +1361,17 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchCdsResource(cdsResourceTwo, watcher2);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.verifyRequest(CDS, Arrays.asList(CDS_RESOURCE, cdsResourceTwo), "", "", NODE);
+    verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
+    verifyResourceMetadataRequested(CDS, cdsResourceTwo);
+    verifySubscribedResourcesMetadataSizes(0, 2, 0, 0);
 
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(cdsResourceWatcher).onResourceDoesNotExist(CDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(cdsResourceTwo);
     verify(watcher2).onResourceDoesNotExist(cdsResourceTwo);
+    verifyResourceMetadataDoesNotExist(CDS, CDS_RESOURCE);
+    verifyResourceMetadataDoesNotExist(CDS, cdsResourceTwo);
+    verifySubscribedResourcesMetadataSizes(0, 2, 0, 0);
 
     String edsService = "eds-service-bar.googleapis.com";
     List<Any> clusters = ImmutableList.of(
@@ -886,6 +1405,10 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    // Metadata of both clusters is stored.
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusters.get(0), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(CDS, cdsResourceTwo, clusters.get(1), VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 2, 0, 0);
   }
 
   @Test
@@ -900,9 +1423,118 @@ public abstract class ClientXdsClientTestBase {
     // Client sent an ACK EDS request.
     call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
     verifyNoInteractions(edsResourceWatcher);
+    verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
+    // Server failed to return subscribed resource within expected time window.
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
+  }
+
+  @Test
+  public void edsResponseErrorHandling_allResourcesFailedUnpack() {
+    DiscoveryRpcCall call = startResourceWatcher(EDS, EDS_RESOURCE, edsResourceWatcher);
+    verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
+    call.sendResponse(EDS, ImmutableList.of(FAILING_ANY, FAILING_ANY), VERSION_1, "0000");
+
+    // Resulting metadata unchanged because the response has no identifiable subscribed resources.
+    verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
+    // The response NACKed with errors indicating indices of the failed resources.
+    call.verifyRequestNack(EDS, EDS_RESOURCE, "", "0000", NODE, ImmutableList.of(
+        "EDS response Resource index 0 - can't decode ClusterLoadAssignment: ",
+        "EDS response Resource index 1 - can't decode ClusterLoadAssignment: "));
+    verifyNoInteractions(edsResourceWatcher);
+  }
+
+  @Test
+  public void edsResponseErrorHandling_someResourcesFailedUnpack() {
+    DiscoveryRpcCall call = startResourceWatcher(EDS, EDS_RESOURCE, edsResourceWatcher);
+    verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
+
+    // Correct resource is in the middle to ensure processing continues on errors.
+    List<Any> resources = ImmutableList.of(FAILING_ANY, testClusterLoadAssignment, FAILING_ANY);
+    call.sendResponse(EDS, resources, VERSION_1, "0000");
+
+    // All errors recorded in the metadata of successfully unpacked subscribed resources.
+    List<String> errors = ImmutableList.of(
+        "EDS response Resource index 0 - can't decode ClusterLoadAssignment: ",
+        "EDS response Resource index 2 - can't decode ClusterLoadAssignment: ");
+    verifyResourceMetadataNacked(EDS, EDS_RESOURCE, null, "", 0, VERSION_1, TIME_INCREMENT, errors);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
+    // The response is NACKed with the same error message.
+    call.verifyRequestNack(EDS, EDS_RESOURCE, "", "0000", NODE, errors);
+    verifyNoInteractions(edsResourceWatcher);
+  }
+
+  /**
+   * Tests a subscribed EDS resource transitioned to and from the invalid state.
+   *
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A40-csds-support.md#ads-parsing-logic-update-continue-after-first-error">
+   * A40-csds-support.md</a>.
+   */
+  @Test
+  public void edsResponseErrorHandling_subscribedResourceInvalid() {
+    List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
+    xdsClient.watchEdsResource("A", edsResourceWatcher);
+    xdsClient.watchEdsResource("B", edsResourceWatcher);
+    xdsClient.watchEdsResource("C", edsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+    verifyResourceMetadataRequested(EDS, "A");
+    verifyResourceMetadataRequested(EDS, "B");
+    verifyResourceMetadataRequested(EDS, "C");
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 3);
+
+    // EDS -> {A, B, C}, version 1
+    List<Message> dropOverloads = ImmutableList.of(mf.buildDropOverload("lb", 200));
+    List<Message> endpointsV1 = ImmutableList.of(lbEndpointHealthy);
+    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
+        "A", Any.pack(mf.buildClusterLoadAssignment("A", endpointsV1, dropOverloads)),
+        "B", Any.pack(mf.buildClusterLoadAssignment("B", endpointsV1, dropOverloads)),
+        "C", Any.pack(mf.buildClusterLoadAssignment("C", endpointsV1, dropOverloads)));
+    call.sendResponse(EDS, resourcesV1.values().asList(), VERSION_1, "0000");
+    // {A, B, C} -> ACK, version 1
+    verifyResourceMetadataAcked(EDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(EDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(EDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    call.verifyRequest(EDS, subscribedResourceNames, VERSION_1, "0000", NODE);
+
+    // EDS -> {A, B}, version 2
+    // Failed to parse endpoint B
+    List<Message> endpointsV2 = ImmutableList.of(lbEndpointHealthy, lbEndpointEmpty);
+    ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
+        "A", Any.pack(mf.buildClusterLoadAssignment("A", endpointsV2, dropOverloads)),
+        "B", Any.pack(mf.buildClusterLoadAssignmentInvalid("B")));
+    call.sendResponse(EDS, resourcesV2.values().asList(), VERSION_2, "0001");
+    // {A, B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
+    // {C} -> ACK, version 1
+    List<String> errorsV2 =
+        ImmutableList.of("EDS response ClusterLoadAssignment 'B' validation error: ");
+    verifyResourceMetadataNacked(EDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT,
+        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+    verifyResourceMetadataNacked(EDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
+        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+    verifyResourceMetadataAcked(EDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+    call.verifyRequestNack(EDS, subscribedResourceNames, VERSION_1, "0001", NODE, errorsV2);
+
+    // EDS -> {B, C} version 3
+    List<Message> endpointsV3 =
+        ImmutableList.of(lbEndpointHealthy, lbEndpointEmpty, lbEndpointZeroWeight);
+    ImmutableMap<String, Any> resourcesV3 = ImmutableMap.of(
+        "B", Any.pack(mf.buildClusterLoadAssignment("B", endpointsV3, dropOverloads)),
+        "C", Any.pack(mf.buildClusterLoadAssignment("C", endpointsV3, dropOverloads)));
+    call.sendResponse(EDS, resourcesV3.values().asList(), VERSION_3, "0002");
+    // {A} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
+    // {B, C} -> ACK, version 3
+    verifyResourceMetadataNacked(EDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT,
+        VERSION_2, TIME_INCREMENT * 2, errorsV2);
+    verifyResourceMetadataAcked(EDS, "B", resourcesV3.get("B"), VERSION_3, TIME_INCREMENT * 3);
+    verifyResourceMetadataAcked(EDS, "C", resourcesV3.get("C"), VERSION_3, TIME_INCREMENT * 3);
+    call.verifyRequest(EDS, subscribedResourceNames, VERSION_3, "0002", NODE);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 3);
   }
 
   @Test
@@ -914,6 +1546,9 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
     validateTestClusterLoadAssigment(edsUpdateCaptor.getValue());
+    verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
+        TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
   }
 
   @Test
@@ -929,6 +1564,9 @@ public abstract class ClientXdsClientTestBase {
     verify(watcher).onChanged(edsUpdateCaptor.capture());
     validateTestClusterLoadAssigment(edsUpdateCaptor.getValue());
     call.verifyNoMoreRequest();
+    verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
+        TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
   }
 
   @Test
@@ -940,11 +1578,14 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchEdsResource(EDS_RESOURCE, watcher);
     verify(watcher).onResourceDoesNotExist(EDS_RESOURCE);
     call.verifyNoMoreRequest();
+    verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
   }
 
   @Test
   public void edsResourceUpdated() {
     DiscoveryRpcCall call = startResourceWatcher(EDS, EDS_RESOURCE, edsResourceWatcher);
+    verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
 
     // Initial EDS response.
     call.sendResponse(EDS, testClusterLoadAssignment, VERSION_1, "0000");
@@ -952,6 +1593,8 @@ public abstract class ClientXdsClientTestBase {
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
     validateTestClusterLoadAssigment(edsUpdate);
+    verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
+        TIME_INCREMENT);
 
     // Updated EDS response.
     Any updatedClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
@@ -970,6 +1613,9 @@ public abstract class ClientXdsClientTestBase {
             LocalityLbEndpoints.create(
                 ImmutableList.of(
                     LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
+    verifyResourceMetadataAcked(EDS, EDS_RESOURCE, updatedClusterLoadAssignment, VERSION_2,
+        TIME_INCREMENT * 2);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
   }
 
   @Test
@@ -981,6 +1627,11 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchEdsResource(resource, edsWatcher);
     xdsClient.watchCdsResource(CDS_RESOURCE, cdsResourceWatcher);
     xdsClient.watchEdsResource(EDS_RESOURCE, edsResourceWatcher);
+    verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
+    verifyResourceMetadataRequested(CDS, resource);
+    verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
+    verifyResourceMetadataRequested(EDS, resource);
+    verifySubscribedResourcesMetadataSizes(0, 2, 0, 2);
 
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     List<Any> clusters = ImmutableList.of(
@@ -996,6 +1647,10 @@ public abstract class ClientXdsClientTestBase {
     cdsUpdate = cdsUpdateCaptor.getValue();
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(EDS_RESOURCE);
     assertThat(cdsUpdate.lrsServerName()).isNull();
+    verifyResourceMetadataAcked(CDS, resource, clusters.get(0), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusters.get(1), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
+    verifyResourceMetadataRequested(EDS, resource);
 
     List<Any> clusterLoadAssignments =
         ImmutableList.of(
@@ -1017,6 +1672,14 @@ public abstract class ClientXdsClientTestBase {
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
     assertThat(edsUpdateCaptor.getValue().clusterName).isEqualTo(EDS_RESOURCE);
 
+    verifyResourceMetadataAcked(
+        EDS, EDS_RESOURCE, clusterLoadAssignments.get(0), VERSION_1, TIME_INCREMENT * 2);
+    verifyResourceMetadataAcked(
+        EDS, resource, clusterLoadAssignments.get(1), VERSION_1, TIME_INCREMENT * 2);
+    // CDS not changed.
+    verifyResourceMetadataAcked(CDS, resource, clusters.get(0), VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusters.get(1), VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 2, 0, 2);
 
     clusters = ImmutableList.of(
         Any.pack(mf.buildEdsCluster(resource, null, "round_robin", null, true, null,
@@ -1027,6 +1690,12 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdateCaptor.getValue().edsServiceName()).isNull();
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     verifyNoMoreInteractions(cdsWatcher, edsWatcher);
+    verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
+    verifyResourceMetadataAcked(
+        EDS, resource, clusterLoadAssignments.get(1), VERSION_1, TIME_INCREMENT * 2);  // no change
+    verifyResourceMetadataAcked(CDS, resource, clusters.get(0), VERSION_2, TIME_INCREMENT * 3);
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusters.get(1), VERSION_2, TIME_INCREMENT * 3);
+    verifySubscribedResourcesMetadataSizes(0, 2, 0, 2);
   }
 
   @Test
@@ -1039,18 +1708,27 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchEdsResource(edsResourceTwo, watcher2);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.verifyRequest(EDS, Arrays.asList(EDS_RESOURCE, edsResourceTwo), "", "", NODE);
+    verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
+    verifyResourceMetadataRequested(EDS, edsResourceTwo);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 2);
 
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
     verify(watcher1).onResourceDoesNotExist(edsResourceTwo);
     verify(watcher2).onResourceDoesNotExist(edsResourceTwo);
-    // Both EDS resources were requested.
+    verifyResourceMetadataDoesNotExist(EDS, EDS_RESOURCE);
+    verifyResourceMetadataDoesNotExist(EDS, edsResourceTwo);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 2);
 
     call.sendResponse(EDS, testClusterLoadAssignment, VERSION_1, "0000");
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
     validateTestClusterLoadAssigment(edsUpdate);
     verifyNoMoreInteractions(watcher1, watcher2);
+    verifyResourceMetadataAcked(
+        EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataDoesNotExist(EDS, edsResourceTwo);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 2);
 
     Any clusterLoadAssignmentTwo = Any.pack(
         mf.buildClusterLoadAssignment(edsResourceTwo,
@@ -1081,7 +1759,11 @@ public abstract class ClientXdsClientTestBase {
                 ImmutableList.of(
                     LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
     verifyNoMoreInteractions(edsResourceWatcher);
-
+    verifyResourceMetadataAcked(
+        EDS, edsResourceTwo, clusterLoadAssignmentTwo, VERSION_2, TIME_INCREMENT * 2);
+    verifyResourceMetadataAcked(
+        EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 2);
   }
 
   @Test
@@ -1394,6 +2076,16 @@ public abstract class ClientXdsClientTestBase {
       verifyRequest(type, ImmutableList.of(resource), versionInfo, nonce, node);
     }
 
+    protected abstract void verifyRequestNack(
+        ResourceType type, List<String> resources, String versionInfo, String nonce, Node node,
+        List<String> errorMessages);
+
+    protected void verifyRequestNack(
+        ResourceType type, String resource, String versionInfo, String nonce, Node node,
+        List<String> errorMessages) {
+      verifyRequestNack(type, ImmutableList.of(resource), versionInfo, nonce, node, errorMessages);
+    }
+
     protected abstract void verifyNoMoreRequest();
 
     protected abstract void sendResponse(
@@ -1419,6 +2111,8 @@ public abstract class ClientXdsClientTestBase {
   }
 
   protected abstract static class MessageFactory {
+    /** Throws {@link InvalidProtocolBufferException} on {@link Any#unpack(Class)}. */
+    protected static final Any FAILING_ANY = Any.newBuilder().setTypeUrl("fake").build();
 
     protected final Message buildListener(String name, Message routeConfiguration) {
       return buildListener(name, routeConfiguration, Collections.<Message>emptyList());
@@ -1429,6 +2123,8 @@ public abstract class ClientXdsClientTestBase {
         String name, Message routeConfiguration, List<? extends Message> httpFilters);
 
     protected abstract Message buildListenerForRds(String name, String rdsResourceName);
+
+    protected abstract Message buildListenerInvalid(String name);
 
     protected abstract Message buildHttpFilter(
         String name, @Nullable Any typedConfig, boolean isOptional);
@@ -1441,12 +2137,16 @@ public abstract class ClientXdsClientTestBase {
     protected abstract Message buildRouteConfiguration(String name,
         List<Message> virtualHostList);
 
+    protected abstract Message buildRouteConfigurationInvalid(String name);
+
     protected abstract List<Message> buildOpaqueVirtualHosts(int num);
 
     protected abstract Message buildVirtualHost(
         List<? extends Message> routes, Map<String, Any> typedConfigMap);
 
     protected abstract List<? extends Message> buildOpaqueRoutes(int num);
+
+    protected abstract Message buildClusterInvalid(String name);
 
     protected abstract Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
         String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
@@ -1469,6 +2169,8 @@ public abstract class ClientXdsClientTestBase {
 
     protected abstract Message buildClusterLoadAssignment(String cluster,
         List<Message> localityLbEndpoints, List<Message> dropOverloads);
+
+    protected abstract Message buildClusterLoadAssignmentInvalid(String cluster);
 
     protected abstract Message buildLocalityLbEndpoints(String region, String zone, String subZone,
         List<Message> lbEndpointList, int loadBalancingWeight, int priority);

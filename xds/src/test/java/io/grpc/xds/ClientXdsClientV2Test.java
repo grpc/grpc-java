@@ -23,12 +23,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.UInt64Value;
 import com.google.protobuf.util.Durations;
+import com.google.rpc.Code;
 import io.envoyproxy.envoy.api.v2.Cluster;
 import io.envoyproxy.envoy.api.v2.Cluster.CustomClusterType;
 import io.envoyproxy.envoy.api.v2.Cluster.DiscoveryType;
@@ -81,6 +83,7 @@ import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
+import io.envoyproxy.envoy.type.matcher.RegexMatcher;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
@@ -178,7 +181,16 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
         ResourceType type, List<String> resources, String versionInfo, String nonce,
         EnvoyProtoData.Node node) {
       verify(requestObserver).onNext(argThat(new DiscoveryRequestMatcher(
-          node.toEnvoyProtoNodeV2(), versionInfo, resources, type.typeUrlV2(), nonce)));
+          node.toEnvoyProtoNodeV2(), versionInfo, resources, type.typeUrlV2(), nonce, null, null)));
+    }
+
+    @Override
+    protected void verifyRequestNack(
+        ResourceType type, List<String> resources, String versionInfo, String nonce,
+        EnvoyProtoData.Node node, List<String> errorMessages) {
+      verify(requestObserver).onNext(argThat(new DiscoveryRequestMatcher(
+          node.toEnvoyProtoNodeV2(), versionInfo, resources, type.typeUrlV2(), nonce,
+          Code.INVALID_ARGUMENT_VALUE, errorMessages)));
     }
 
     @Override
@@ -277,6 +289,15 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
+    protected Message buildListenerInvalid(String name) {
+      return Listener.newBuilder()
+          .setName(name)
+          .setAddress(Address.getDefaultInstance())
+          .setApiListener(ApiListener.newBuilder().setApiListener(FAILING_ANY))
+          .build();
+    }
+
+    @Override
     protected Message buildHttpFilter(String name, @Nullable Any typedConfig, boolean isOptional) {
       throw new UnsupportedOperationException();
     }
@@ -297,6 +318,25 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
         builder.addVirtualHosts((VirtualHost) virtualHost);
       }
       return builder.build();
+    }
+
+    @Override
+    protected Message buildRouteConfigurationInvalid(String name) {
+      // Invalid Path matcher: Pattern.compile() will throw PatternSyntaxException
+      // when attempting to process SAFE_REGEX RouteMatch malformed safe regex pattern.
+      // I wish there was a simpler way.
+      return RouteConfiguration.newBuilder()
+          .setName(name)
+          .addVirtualHosts(
+              VirtualHost.newBuilder()
+                  .setName("do not care")
+                  .addDomains("do not care")
+                  .addRoutes(
+                      Route.newBuilder()
+                          .setRoute(RouteAction.newBuilder().setCluster("do not care"))
+                          .setMatch(RouteMatch.newBuilder()
+                              .setSafeRegex(RegexMatcher.newBuilder().setRegex("[z-a]")))))
+          .build();
     }
 
     @Override
@@ -342,6 +382,12 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
         routes.add(route);
       }
       return routes;
+    }
+
+    @Override
+    protected Message buildClusterInvalid(String name) {
+      // Unspecified cluster discovery type
+      return Cluster.newBuilder().setName(name).build();
     }
 
     @Override
@@ -492,6 +538,17 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
+    protected Message buildClusterLoadAssignmentInvalid(String cluster) {
+      // Negative priority LocalityLbEndpoint.
+      return ClusterLoadAssignment.newBuilder()
+          .setClusterName(cluster)
+          .addEndpoints(LocalityLbEndpoints.newBuilder()
+              .setPriority(-1)
+              .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(1)))
+          .build();
+    }
+
+    @Override
     protected Message buildLocalityLbEndpoints(String region, String zone, String subZone,
         List<Message> lbEndpointList, int loadBalancingWeight, int priority) {
       LocalityLbEndpoints.Builder builder = LocalityLbEndpoints.newBuilder();
@@ -585,14 +642,19 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     private final String typeUrl;
     private final Set<String> resources;
     private final String responseNonce;
+    @Nullable private final Integer errorCode;
+    private final List<String> errorMessages;
 
     private DiscoveryRequestMatcher(Node node, String versionInfo, List<String> resources,
-        String typeUrl, String responseNonce) {
+        String typeUrl, String responseNonce, @Nullable Integer errorCode,
+        @Nullable List<String> errorMessages) {
       this.node = node;
       this.versionInfo = versionInfo;
       this.resources = new HashSet<>(resources);
       this.typeUrl = typeUrl;
       this.responseNonce = responseNonce;
+      this.errorCode = errorCode;
+      this.errorMessages = errorMessages != null ? errorMessages : ImmutableList.<String>of();
     }
 
     @Override
@@ -607,6 +669,13 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
         return false;
       }
       if (!resources.equals(new HashSet<>(argument.getResourceNamesList()))) {
+        return false;
+      }
+      if (errorCode == null && argument.hasErrorDetail()) {
+        return false;
+      }
+      if (errorCode != null
+          && !matchErrorDetail(argument.getErrorDetail(), errorCode, errorMessages)) {
         return false;
       }
       return node.equals(argument.getNode());
