@@ -52,6 +52,7 @@ import io.grpc.internal.FailingClientStream;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
@@ -169,6 +170,7 @@ abstract class BinderTransport
     // receive any data.
   }
 
+  private final ObjectPool<ScheduledExecutorService> executorServicePool;
   private final ScheduledExecutorService scheduledExecutorService;
   private final InternalLogId logId;
   private final LeakSafeOneWayBinder incomingBinder;
@@ -206,12 +208,13 @@ abstract class BinderTransport
   private volatile boolean transmitWindowFull;
 
   private BinderTransport(
-      ScheduledExecutorService scheduledExecutorService,
+      ObjectPool<ScheduledExecutorService> executorServicePool,
       Attributes attributes,
       InternalLogId logId) {
-    this.scheduledExecutorService = scheduledExecutorService;
+    this.executorServicePool = executorServicePool;
     this.attributes = attributes;
     this.logId = logId;
+    scheduledExecutorService = executorServicePool.getObject();
     incomingBinder = new LeakSafeOneWayBinder(this);
     ongoingCalls = new ConcurrentHashMap<>();
     numOutgoingBytes = new AtomicLong();
@@ -249,6 +252,10 @@ abstract class BinderTransport
   abstract void notifyShutdown(Status shutdownStatus);
 
   abstract void notifyTerminated();
+
+  void releaseExecutors() {
+    executorServicePool.returnObject(scheduledExecutorService);
+  }
 
   @GuardedBy("this")
   boolean inState(TransportState transportState) {
@@ -304,6 +311,7 @@ abstract class BinderTransport
               }
             }
             notifyTerminated();
+            releaseExecutors();
           });
     }
   }
@@ -539,7 +547,8 @@ abstract class BinderTransport
   static final class BinderClientTransport extends BinderTransport
       implements ConnectionClientTransport, Bindable.Observer {
 
-    private final Executor blockingExecutor;
+    private final ObjectPool<? extends Executor> offloadExecutorPool;
+    private final Executor offloadExecutor;
     private final SecurityPolicy securityPolicy;
     private final Bindable serviceBinding;
     /** Number of ongoing calls which keep this transport "in-use". */
@@ -557,17 +566,18 @@ abstract class BinderTransport
         AndroidComponentAddress targetAddress,
         BindServiceFlags bindServiceFlags,
         Executor mainThreadExecutor,
-        ScheduledExecutorService scheduledExecutorService,
-        Executor blockingExecutor,
+        ObjectPool<ScheduledExecutorService> executorServicePool,
+        ObjectPool<? extends Executor> offloadExecutorPool,
         SecurityPolicy securityPolicy,
         InboundParcelablePolicy inboundParcelablePolicy,
         Attributes eagAttrs) {
       super(
-          scheduledExecutorService,
+          executorServicePool,
           buildClientAttributes(eagAttrs, sourceContext, targetAddress, inboundParcelablePolicy),
           buildLogId(sourceContext, targetAddress));
-      this.blockingExecutor = blockingExecutor;
+      this.offloadExecutorPool = offloadExecutorPool;
       this.securityPolicy = securityPolicy;
+      this.offloadExecutor = offloadExecutorPool.getObject();
       numInUseStreams = new AtomicInteger();
       pingTracker = new PingTracker(TimeProvider.SYSTEM_TIME_PROVIDER, (id) -> sendPing(id));
 
@@ -579,6 +589,12 @@ abstract class BinderTransport
               ApiConstants.ACTION_BIND,
               bindServiceFlags.toInteger(),
               this);
+    }
+
+    @Override
+    void releaseExecutors() {
+      super.releaseExecutors();
+      offloadExecutorPool.returnObject(offloadExecutor);
     }
 
     @Override
@@ -698,7 +714,7 @@ abstract class BinderTransport
           shutdownInternal(
               Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
         } else {
-          blockingExecutor.execute(() -> checkSecurityPolicy(binder));
+          offloadExecutor.execute(() -> checkSecurityPolicy(binder));
         }
       }
     }
@@ -790,11 +806,11 @@ abstract class BinderTransport
     @Nullable private ServerTransportListener serverTransportListener;
 
     BinderServerTransport(
-        ScheduledExecutorService scheduledExecutorService,
+        ObjectPool<ScheduledExecutorService> executorServicePool,
         Attributes attributes,
         List<ServerStreamTracer.Factory> streamTracerFactories,
         IBinder callbackBinder) {
-      super(scheduledExecutorService, attributes, buildLogId(attributes));
+      super(executorServicePool, attributes, buildLogId(attributes));
       this.streamTracerFactories = streamTracerFactories;
       setOutgoingBinder(callbackBinder);
     }
@@ -804,6 +820,7 @@ abstract class BinderTransport
       if (isShutdown()) {
         setState(TransportState.SHUTDOWN_TERMINATED);
         notifyTerminated();
+        releaseExecutors();
       } else {
         sendSetupTransaction();
         // Check we're not shutdown again, since a failure inside sendSetupTransaction (or a

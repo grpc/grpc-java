@@ -31,6 +31,7 @@ import com.google.common.util.concurrent.testing.TestingExecutors;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransportListener;
 import java.util.concurrent.ScheduledExecutorService;
@@ -67,7 +68,10 @@ public final class BinderServerTransportTest {
   public void setUp() throws Exception {
     transport =
         new BinderTransport.BinderServerTransport(
-            executorService, Attributes.EMPTY, ImmutableList.of(), mockBinder);
+            new FixedObjectPool<>(executorService),
+            Attributes.EMPTY,
+            ImmutableList.of(),
+            mockBinder);
   }
 
   @Test
