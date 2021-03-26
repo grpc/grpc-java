@@ -191,6 +191,8 @@ subprojects {
             androidx_annotation: "androidx.annotation:annotation:1.1.0",
             androidx_core: "androidx.core:core:1.3.0",
             androidx_test: "androidx.test:core:1.3.0",
+            androidx_test_rules: "androidx.test:rules:1.3.0",
+            androidx_test_ext_junit: "androidx.test.ext:junit:1.1.2",
             robolectric: "org.robolectric:robolectric:4.4",
 
             // Benchmark dependencies
