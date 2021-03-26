@@ -74,7 +74,6 @@ import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.handler.codec.http2.Http2StreamVisitor;
-import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.codec.http2.WeightedFairQueueByteDistributor;
 import io.netty.handler.logging.LogLevel;
 import io.perfmark.PerfMark;
