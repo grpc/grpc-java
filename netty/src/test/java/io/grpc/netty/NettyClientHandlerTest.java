@@ -384,6 +384,95 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
+  public void receivedGoAway_shouldNotFailBufferedStreamWithStreamIdLessThanLastId()
+      throws Exception {
+    ClientStreamListener streamListener1 = mock(ClientStreamListener.class);
+    NettyClientStream.TransportState streamTransportState1 = new TransportStateImpl(
+        handler(),
+        channel().eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        transportTracer);
+    streamTransportState1.setListener(streamListener1);
+    ClientStreamListener streamListener2 = mock(ClientStreamListener.class);
+    NettyClientStream.TransportState streamTransportState2 = new TransportStateImpl(
+        handler(),
+        channel().eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        transportTracer);
+    streamTransportState2.setListener(streamListener2);
+    // MAX_CONCURRENT_STREAMS=1
+    receiveMaxConcurrentStreams(1);
+    ChannelFuture future1 = writeQueue().enqueue(
+        newCreateStreamCommand(grpcHeaders, streamTransportState1), true);
+    ChannelFuture future2 = writeQueue().enqueue(
+        newCreateStreamCommand(grpcHeaders, streamTransportState2), true);
+
+    // GOAWAY
+    channelRead(goAwayFrame(Integer.MAX_VALUE));
+    assertTrue(future1.isSuccess());
+    verify(streamListener1).onReady();
+    channel().runPendingTasks();
+    if (future2.cause() != null ) {
+      throw new AssertionError(future2.cause());
+    }
+    assertFalse(future2.isDone());
+    verify(streamListener2, never()).onReady();
+
+    // Let the first stream complete, then the pending stream will be activated.
+    Http2Headers headers = new DefaultHttp2Headers().status(STATUS_OK)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC);
+    channelRead(headersFrame(streamId, headers));
+    channelRead(grpcDataFrame(streamId, false, contentAsArray()));
+    channelRead(trailersFrame(
+        streamId,
+        new DefaultHttp2Headers().set(AsciiString.of("grpc-status"), AsciiString.of("0"))));
+    streamTransportState1.requestMessagesFromDeframerForTesting(1);
+    verify(streamListener1).closed(eq(Status.OK), any(RpcProgress.class),
+        any(Metadata.class));
+    channel().runPendingTasks();
+    if (future2.cause() != null) {
+      throw new AssertionError(future2.cause());
+    }
+    assertTrue(future2.isSuccess());
+    verify(streamListener2).onReady();
+  }
+
+  @Test
+  public void receivedGoAway_shouldRefuseBufferedStreamWithStreamIdGreaterThanLastId()
+      throws Exception {
+    ClientStreamListener streamListener1 = mock(ClientStreamListener.class);
+    NettyClientStream.TransportState streamTransportState1 = new TransportStateImpl(
+        handler(),
+        channel().eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        transportTracer);
+    streamTransportState1.setListener(streamListener1);
+    ClientStreamListener streamListener2 = mock(ClientStreamListener.class);
+    NettyClientStream.TransportState streamTransportState2 = new TransportStateImpl(
+        handler(),
+        channel().eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        transportTracer);
+    streamTransportState2.setListener(streamListener2);
+    // MAX_CONCURRENT_STREAMS=1
+    receiveMaxConcurrentStreams(1);
+    ChannelFuture future1 = writeQueue().enqueue(
+        newCreateStreamCommand(grpcHeaders, streamTransportState1), true);
+    ChannelFuture future2 = writeQueue().enqueue(
+        newCreateStreamCommand(grpcHeaders, streamTransportState2), true);
+
+    // GOAWAY
+    channelRead(goAwayFrame(streamId));
+    assertTrue(future1.isSuccess());
+    verify(streamListener1).onReady();
+    assertThat(future2.cause()).isNotNull();
+    assertThat(Status.fromThrowable(future2.cause()).getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(Status.fromThrowable(future2.cause()).getDescription()).isEqualTo(
+        "Abrupt GOAWAY closed unsent stream. HTTP/2 error code: NO_ERROR");
+    verify(streamListener2).closed(any(Status.class), eq(RpcProgress.REFUSED), any(Metadata.class));
+  }
+
+  @Test
   public void receivedResetWithRefuseCode() throws Exception {
     ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
     channelRead(rstStreamFrame(streamId, (int) Http2Error.REFUSED_STREAM.code() ));

@@ -292,6 +292,12 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     return captureWrite(ctx);
   }
 
+  protected final ByteBuf trailersFrame(int streamId, Http2Headers headers) {
+    ChannelHandlerContext ctx = newMockContext();
+    new DefaultHttp2FrameWriter().writeHeaders(ctx, streamId, headers, 0, true, newPromise());
+    return captureWrite(ctx);
+  }
+
   protected final ByteBuf goAwayFrame(int lastStreamId) {
     return goAwayFrame(lastStreamId, 0, Unpooled.EMPTY_BUFFER);
   }
