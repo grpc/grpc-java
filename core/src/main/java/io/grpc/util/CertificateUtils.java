@@ -37,7 +37,7 @@ import java.util.regex.Pattern;
 /**
  * Contains certificate/key PEM file utility method(s).
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/XXX")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
 public final class CertificateUtils {
   private static CertificateFactory factory;
   private static final Pattern KEY_PATTERN = Pattern.compile(
