@@ -73,7 +73,11 @@ public final class CertificateUtils {
     if (!m.find()) {
       throw new KeyException("could not find a PKCS #8 private key in input stream");
     }
-    String keyContent = m.group(1).replace("\n", "");
+    // Using System.lineSeparator() here would cause
+    // [Undefined reference | android-api-level-14-4.0_r4] io.grpc.util.(CertificateUtils.java:76)
+    // Is it not supported on Android?
+    String keyContent =
+        m.group(1).replace(System.getProperty("line.separator"), "");
     byte[] decodedKeyBytes = BASE64_ENCODING.decode(keyContent);
     KeyFactory keyFactory = KeyFactory.getInstance("RSA");
     PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decodedKeyBytes);

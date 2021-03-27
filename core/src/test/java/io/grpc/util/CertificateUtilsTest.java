@@ -28,7 +28,6 @@ import java.security.KeyException;
 import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.security.spec.InvalidKeySpecException;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -92,13 +91,14 @@ public class CertificateUtilsTest {
   }
 
   @Test
-  public void readBadContentKeyFile() throws Exception {
+  public void readBadContentKeyFile() {
     InputStream in = new ByteArrayInputStream(BAD_PEM_CONTENT.getBytes(Charsets.UTF_8));
     try {
       CertificateUtils.getPrivateKey(in);
       Assert.fail("no exception thrown");
-    } catch (InvalidKeySpecException expected) {
-      // The error messages for OpenJDK 11 and 8 are different, so only check if an error is thrown.
+    } catch (Exception expected) {
+      // The error messages for OpenJDK 11 and 8 are different, and for Windows it will generate a
+      // different exception, so we only check if a general exception is thrown.
     }
   }
 
