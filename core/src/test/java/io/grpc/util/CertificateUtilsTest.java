@@ -98,9 +98,7 @@ public class CertificateUtilsTest {
       CertificateUtils.getPrivateKey(in);
       Assert.fail("no exception thrown");
     } catch (InvalidKeySpecException expected) {
-      assertThat(expected)
-          .hasMessageThat()
-          .contains("Detect premature EOF");
+      // The error messages for OpenJDK 11 and 8 are different, so only check if an error is thrown.
     }
   }
 
