@@ -115,7 +115,7 @@ public final class CsdsService extends
       return true;
     } catch (StatusException e) {
       responseObserver.onError(e);
-    } catch (Exception e) {
+    } catch (RuntimeException e) {
       logger.log(Level.WARNING, "Unexpected error while building CSDS config dump", e);
       responseObserver.onError(new StatusException(
           Status.INTERNAL.withDescription("Unexpected internal error").withCause(e)));

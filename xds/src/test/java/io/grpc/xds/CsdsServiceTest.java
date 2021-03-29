@@ -90,7 +90,7 @@ public class CsdsServiceTest {
     }
 
     @Override
-    Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
+    ImmutableMap<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
       return ImmutableMap.of();
     }
   };
@@ -139,7 +139,7 @@ public class CsdsServiceTest {
     public void fetchClientConfig_unexpectedException() {
       XdsClient throwingXdsClient = new XdsClient() {
         @Override
-        Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
+        ImmutableMap<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
           throw new IllegalArgumentException("IllegalArgumentException");
         }
       };
@@ -193,7 +193,7 @@ public class CsdsServiceTest {
       requestObserver.onCompleted();
 
       List<ClientStatusResponse> responses = responseObserver.getValues();
-      assertThat(responses.size()).isEqualTo(3);
+      assertThat(responses).hasSize(3);
       // Empty response on XdsClient not ready.
       assertThat(responses.get(0)).isEqualTo(ClientStatusResponse.getDefaultInstance());
       // The following calls return ClientConfig's successfully.
@@ -215,7 +215,7 @@ public class CsdsServiceTest {
       requestObserver.onCompleted();
 
       List<ClientStatusResponse> responses = responseObserver.getValues();
-      assertThat(responses.size()).isEqualTo(1);
+      assertThat(responses).hasSize(1);
       verifyResponse(responses.get(0));
       assertThat(responseObserver.getError()).isNotNull();
       verifyRequestInvalidResponseStatus(Status.fromThrowable(responseObserver.getError()));
@@ -233,7 +233,7 @@ public class CsdsServiceTest {
       requestObserver.onError(new StatusRuntimeException(Status.DATA_LOSS));
 
       List<ClientStatusResponse> responses = responseObserver.getValues();
-      assertThat(responses.size()).isEqualTo(1);
+      assertThat(responses).hasSize(1);
       verifyResponse(responses.get(0));
       // Server quietly closes its side.
       assertThat(responseObserver.getError()).isNull();
@@ -696,7 +696,7 @@ public class CsdsServiceTest {
         }
 
         @Override
-        Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
+        ImmutableMap<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
           switch (type) {
             case LDS:
               return ImmutableMap.of("subscribedResourceName." + type.name(), METADATA_ACKED_LDS);
@@ -824,7 +824,7 @@ public class CsdsServiceTest {
   /** Verify PerXdsConfig fields that are expected to be omitted. */
   private static void verifyPerXdsConfigEmptyFields(PerXdsConfig perXdsConfig) {
     assertThat(perXdsConfig.getStatusValue()).isEqualTo(0);
-    @SuppressWarnings("deprecation")
+    @SuppressWarnings("deprecation") // ensure this deprecated field hasn't been filled
     int clientStatusValue = perXdsConfig.getClientStatusValue();
     assertThat(clientStatusValue).isEqualTo(0);
   }
