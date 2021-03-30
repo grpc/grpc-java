@@ -669,6 +669,10 @@ public class RingHashLoadBalancerTest {
     verifyNoMoreInteractions(helper);
   }
 
+  private void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo state) {
+    subchannelStateListeners.get(subchannel).onSubchannelState(state);
+  }
+
   private static List<EquivalentAddressGroup> createWeightedServerAddrs(long... weights) {
     List<EquivalentAddressGroup> addrs = new ArrayList<>();
     for (int i = 0; i < weights.length; i++) {
@@ -691,10 +695,6 @@ public class RingHashLoadBalancerTest {
       }
     }
     return addrs;
-  }
-
-  private void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo state) {
-    subchannelStateListeners.get(subchannel).onSubchannelState(state);
   }
 
   private static class FakeSocketAddress extends SocketAddress {
