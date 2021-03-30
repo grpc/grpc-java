@@ -58,10 +58,10 @@ final class RingHashLoadBalancer extends LoadBalancer {
       Attributes.Key.create("state-info");
   private static final Status RPC_HASH_NOT_FOUND =
       Status.INTERNAL.withDescription("RPC hash not found");
+  private static final XxHash64 hashFunc = XxHash64.INSTANCE;
 
   private final XdsLogger logger;
   private final SynchronizationContext syncContext;
-  private final XxHash64 hashFunc = XxHash64.INSTANCE;
   private final Map<EquivalentAddressGroup, Subchannel> subchannels = new HashMap<>();
   private final Helper helper;
 
@@ -153,7 +153,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
     }
   }
 
-  private List<RingEntry> buildRing(
+  private static List<RingEntry> buildRing(
       Map<EquivalentAddressGroup, Long> serverWeights, long totalWeight, double scale) {
     List<RingEntry> ring = new ArrayList<>();
     double currentHashes = 0.0;
