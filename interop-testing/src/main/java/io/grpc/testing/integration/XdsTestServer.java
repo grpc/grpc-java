@@ -31,7 +31,7 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
-import io.grpc.services.ChannelzService;
+import io.grpc.services.AdminInterface;
 import io.grpc.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.SimpleRequest;
@@ -54,7 +54,6 @@ public final class XdsTestServer {
       Context.key("rpc-behavior");
   private static final String CALL_BEHAVIOR_KEEP_OPEN_VALUE = "keep-open";
   private static final String CALL_BEHAVIOR_SLEEP_VALUE = "sleep-";
-  private static final int CHANNELZ_MAX_PAGE_SIZE = 100;
 
   private static Logger logger = Logger.getLogger(XdsTestServer.class.getName());
 
@@ -180,7 +179,7 @@ public final class XdsTestServer {
               .addService(new XdsUpdateHealthServiceImpl(health))
               .addService(health.getHealthService())
               .addService(ProtoReflectionService.newInstance())
-              .addService(ChannelzService.newInstance(CHANNELZ_MAX_PAGE_SIZE))
+              .addServices(AdminInterface.getStandardServices())
               .build()
               .start();
     } else {
@@ -192,7 +191,7 @@ public final class XdsTestServer {
               .addService(new XdsUpdateHealthServiceImpl(health))
               .addService(health.getHealthService())
               .addService(ProtoReflectionService.newInstance())
-              .addService(ChannelzService.newInstance(CHANNELZ_MAX_PAGE_SIZE))
+              .addServices(AdminInterface.getStandardServices())
               .build()
               .start();
       maintenanceServer = null;
