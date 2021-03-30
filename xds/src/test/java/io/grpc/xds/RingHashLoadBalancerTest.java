@@ -669,11 +669,6 @@ public class RingHashLoadBalancerTest {
     verifyNoMoreInteractions(helper);
   }
 
-  @Test
-  public void aggregateSubchannelStates() {
-
-  }
-
   private static List<EquivalentAddressGroup> createWeightedServerAddrs(long... weights) {
     List<EquivalentAddressGroup> addrs = new ArrayList<>();
     for (int i = 0; i < weights.length; i++) {
