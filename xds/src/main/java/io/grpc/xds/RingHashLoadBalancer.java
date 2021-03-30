@@ -26,8 +26,6 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
@@ -42,10 +40,10 @@ import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A {@link LoadBalancer} that provides consistent hashing based load balancing to upstream hosts.
@@ -56,7 +54,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * addition or removal of one host from a set of N hosts will affect only 1/N requests.
  */
 final class RingHashLoadBalancer extends LoadBalancer {
-  private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
+  private static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
   private static final Status RPC_HASH_NOT_FOUND =
       Status.INTERNAL.withDescription("RPC hash not found");
@@ -64,12 +62,11 @@ final class RingHashLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
   private final SynchronizationContext syncContext;
   private final XxHash64 hashFunc = XxHash64.INSTANCE;
-  private final Map<EquivalentAddressGroup, Subchannel> subchannels = Maps.newHashMap();
+  private final Map<EquivalentAddressGroup, Subchannel> subchannels = new HashMap<>();
   private final Helper helper;
 
+  private List<RingEntry> ring;
   private ConnectivityState currentState;
-  private SubchannelPicker currentPicker;
-  private boolean subchannelEnteredReady;
 
   RingHashLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -119,7 +116,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
         continue;
       }
       Attributes attr = Attributes.newBuilder().set(
-          STATE_INFO, new AtomicReference<>(ConnectivityStateInfo.forNonError(IDLE))).build();
+          STATE_INFO, new Ref<>(ConnectivityStateInfo.forNonError(IDLE))).build();
       final Subchannel subchannel = helper.createSubchannel(
           CreateSubchannelArgs.newBuilder().setAddresses(eag).setAttributes(attr).build());
       subchannel.start(new SubchannelStateListener() {
@@ -140,7 +137,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
     double scale = Math.min(
         Math.ceil(normalizedMinWeight * config.minRingSize) / normalizedMinWeight,
         (double) config.maxRingSize);
-    List<RingEntry> ring = buildRing(serverWeights, totalWeight, scale);
+    ring = buildRing(serverWeights, totalWeight, scale);
 
     // Shut down subchannels for delisted addresses.
     List<Subchannel> removedSubchannels = new ArrayList<>();
@@ -150,8 +147,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
 
     // Update the picker before shutting down the subchannels, to reduce the chance of race
     // between picking a subchannel and shutting it down.
-    updateBalancingState(new RingHashPicker(
-        Collections.unmodifiableList(ring), ImmutableMap.copyOf(subchannels)));
+    updateBalancingState();
     for (Subchannel subchann : removedSubchannels) {
       shutdownSubchannel(subchann);
     }
@@ -198,34 +194,31 @@ final class RingHashLoadBalancer extends LoadBalancer {
     }
   }
 
-  private void updateBalancingState(SubchannelPicker picker) {
+  private void updateBalancingState() {
     checkState(!subchannels.isEmpty(), "no subchannel has been created");
     ConnectivityState overallState = aggregateState(subchannels.values());
-    if (overallState != currentState || picker != currentPicker || subchannelEnteredReady) {
-      helper.updateBalancingState(overallState, picker);
-      currentState = overallState;
-      currentPicker = picker;
-      subchannelEnteredReady = false;
-    }
+    RingHashPicker picker = new RingHashPicker(syncContext, ring, subchannels);
+    // TODO(chengyuanzhang): avoid unnecessary reprocess caused by duplicated server addr updates
+    helper.updateBalancingState(overallState, picker);
+    currentState = overallState;
   }
 
   private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     if (subchannels.get(stripAttrs(subchannel.getAddresses())) != subchannel) {
       return;
     }
-    AtomicReference<ConnectivityStateInfo> subchannelStateRef =
-        getSubchannelStateInfoRef(subchannel);
+    Ref<ConnectivityStateInfo> subchannelStateRef = getSubchannelStateInfoRef(subchannel);
 
     // Don't proactively reconnect if the subchannel enters IDLE, even if previously was connected.
     // If the subchannel was previously in TRANSIENT_FAILURE, it is considered to stay in
     // TRANSIENT_FAILURE until it becomes READY.
-    if (stateInfo.getState().equals(READY)) {
-      subchannelEnteredReady = true;
-    } else if (subchannelStateRef.get().getState().equals(TRANSIENT_FAILURE)) {
-      return;
+    if (subchannelStateRef.value.getState() == TRANSIENT_FAILURE) {
+      if (stateInfo.getState() == CONNECTING || stateInfo.getState() == IDLE) {
+        return;
+      }
     }
-    subchannelStateRef.set(stateInfo);
-    updateBalancingState(currentPicker);
+    subchannelStateRef.value = stateInfo;
+    updateBalancingState();
   }
 
   /**
@@ -233,21 +226,21 @@ final class RingHashLoadBalancer extends LoadBalancer {
    *
    * <p>Aggregation rules (in order of dominance):
    * <ol>
-   *   <li>If there is at least one subchannel in READY state, overall state is READY<li/>
-   *   <li>If there are <em>2 or more<em/> subchannels in TRANSIENT_FAILURE, overall state is
-   *   TRANSIENT_FAILURE<li/>
+   *   <li>If there is at least one subchannel in READY state, overall state is READY</li>
+   *   <li>If there are <em>more than 2</em> subchannels in TRANSIENT_FAILURE, overall state is
+   *   TRANSIENT_FAILURE</li>
    *   <li>If there is at least one subchannel in CONNECTING state, overall state is
-   *   CONNECTING<li/>
-   *   <li>If there is at least one subchannel in IDLE state, overall state is IDLE<li/>
-   *   <li>Otherwise, overall state is TRANSIENT_FAILURE<li/>
-   * <ol/>
+   *   CONNECTING</li>
+   *   <li>If there is at least one subchannel in IDLE state, overall state is IDLE</li>
+   *   <li>Otherwise, overall state is TRANSIENT_FAILURE</li>
+   * </ol>
    */
   private static ConnectivityState aggregateState(Iterable<Subchannel> subchannels) {
     int failureCount = 0;
     boolean hasIdle = false;
     boolean hasConnecting = false;
     for (Subchannel subchannel : subchannels) {
-      ConnectivityState state = getSubchannelStateInfoRef(subchannel).get().getState();
+      ConnectivityState state = getSubchannelStateInfoRef(subchannel).value.getState();
       if (state == READY) {
         return state;
       }
@@ -259,7 +252,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
         hasIdle = true;
       }
     }
-    if (failureCount >= 2) {
+    if (failureCount > 2) {
       return TRANSIENT_FAILURE;
     }
     if (hasConnecting) {
@@ -270,7 +263,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
 
   private static void shutdownSubchannel(Subchannel subchannel) {
     subchannel.shutdown();
-    getSubchannelStateInfoRef(subchannel).set(ConnectivityStateInfo.forNonError(SHUTDOWN));
+    getSubchannelStateInfoRef(subchannel).value = ConnectivityStateInfo.forNonError(SHUTDOWN);
   }
 
   /**
@@ -291,20 +284,29 @@ final class RingHashLoadBalancer extends LoadBalancer {
     return new EquivalentAddressGroup(eag.getAddresses());
   }
 
-  private static AtomicReference<ConnectivityStateInfo> getSubchannelStateInfoRef(
+  private static Ref<ConnectivityStateInfo> getSubchannelStateInfoRef(
       Subchannel subchannel) {
     return checkNotNull(subchannel.getAttributes().get(STATE_INFO), "STATE_INFO");
   }
 
-  private final class RingHashPicker extends SubchannelPicker {
+  private static final class RingHashPicker extends SubchannelPicker {
+    private final SynchronizationContext syncContext;
     private final List<RingEntry> ring;
-    // shallow copy of subchannels
-    private final Map<EquivalentAddressGroup, Subchannel> pickableSubchannels;
+    // Avoid synchronization between pickSubchannel and subchannel's connectivity state change,
+    // freeze picker's view of subchannel's connectivity state.
+    private final Map<EquivalentAddressGroup, SubchannelView> pickableSubchannels;  // read-only
 
     private RingHashPicker(
-        List<RingEntry> ring, Map<EquivalentAddressGroup, Subchannel> pickableSubchannels) {
+        SynchronizationContext syncContext, List<RingEntry> ring,
+        Map<EquivalentAddressGroup, Subchannel> subchannels) {
+      this.syncContext = syncContext;
       this.ring = ring;
-      this.pickableSubchannels = pickableSubchannels;
+      pickableSubchannels = new HashMap<>(subchannels.size());
+      for (Map.Entry<EquivalentAddressGroup, Subchannel> entry : subchannels.entrySet()) {
+        Subchannel subchannel = entry.getValue();
+        ConnectivityStateInfo stateInfo = subchannel.getAttributes().get(STATE_INFO).value;
+        pickableSubchannels.put(entry.getKey(), new SubchannelView(subchannel, stateInfo));
+      }
     }
 
     @Override
@@ -343,35 +345,60 @@ final class RingHashLoadBalancer extends LoadBalancer {
         }
       }
 
-      // Try finding the first non-TRANSIENT_FAILURE connection.
-      int attempt = 0;
-      Subchannel subchannel;
-      ConnectivityStateInfo stateInfo;
-      do {
-        int index = (mid + attempt) % ring.size();
+      // Try finding a READY subchannel. Starting from the ring entry next to the RPC's hash.
+      // If the one of the first two subchannels is not in TRANSIENT_FAILURE, return result
+      // based on that subchaannel. Otherwise, fail the pick unless a READY subchannel is found.
+      // Meanwhile, trigger connection for the first subchannel that is in IDLE if no subchannel
+      // before it is in CONNECTING or READY.
+      boolean hasPending = false;
+      Set<EquivalentAddressGroup> attemptedAddrs = new HashSet<>();
+      for (int i = 0; i < ring.size(); i++) {
+        int index = (mid + i) % ring.size();
         EquivalentAddressGroup addrKey = ring.get(index).addrKey;
-        subchannel = pickableSubchannels.get(addrKey);
-        stateInfo = getSubchannelStateInfoRef(subchannel).get();
-        attempt++;
-      } while (attempt < ring.size() && stateInfo.getState() == TRANSIENT_FAILURE);
-
-      if (stateInfo.getState() == READY) {
-        return PickResult.withSubchannel(subchannel);
-      }
-      if (stateInfo.getState() == TRANSIENT_FAILURE) {  // all connections in TRANSIENT_FAILRE
-        // TODO(chengyuanzhang): shall we use some other error?
-        return PickResult.withError(stateInfo.getStatus());
-      }
-      if (stateInfo.getState() == IDLE) {
-        final Subchannel finalSubchannel = subchannel;
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            finalSubchannel.requestConnection();
+        if (attemptedAddrs.contains(addrKey)) {
+          continue;
+        }
+        attemptedAddrs.add(addrKey);
+        SubchannelView subchannel = pickableSubchannels.get(addrKey);
+        if (subchannel.stateInfo.getState() == READY) {
+          return PickResult.withSubchannel(subchannel.subchannel);
+        }
+        if (subchannel.stateInfo.getState() == TRANSIENT_FAILURE) {
+          continue;
+        }
+        if (!hasPending) {  // first non-failing subchannel
+          if (subchannel.stateInfo.getState() == IDLE) {
+            final Subchannel finalSubchannel = subchannel.subchannel;
+            syncContext.execute(new Runnable() {
+              @Override
+              public void run() {
+                finalSubchannel.requestConnection();
+              }
+            });
           }
-        });
+          if (attemptedAddrs.size() <= 2) {  // done if this is the first or second two subchannel
+            return PickResult.withNoResult();  // queue the pick and re-process later
+          }
+          hasPending = true;
+        }
       }
-      return PickResult.withNoResult();  // queue the pick and re-process later
+      // Fail the pick with error status of the original subchannel hit by hash.
+      SubchannelView originalSubchannel = pickableSubchannels.get(ring.get(mid).addrKey);
+      return PickResult.withError(originalSubchannel.stateInfo.getStatus());
+    }
+  }
+
+  /**
+   * An unmodifiable view of a subchannel with state not subject to its real connectivity
+   * state changes.
+   */
+  private static final class SubchannelView {
+    private final Subchannel subchannel;
+    private final ConnectivityStateInfo stateInfo;
+
+    private SubchannelView(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+      this.subchannel = subchannel;
+      this.stateInfo = stateInfo;
     }
   }
 
@@ -387,6 +414,17 @@ final class RingHashLoadBalancer extends LoadBalancer {
     @Override
     public int compareTo(RingEntry entry) {
       return Long.compare(hash, entry.hash);
+    }
+  }
+
+  /**
+   * A lighter weight Reference than AtomicReference.
+   */
+  private static final class Ref<T> {
+    T value;
+
+    Ref(T value) {
+      this.value = value;
     }
   }
 

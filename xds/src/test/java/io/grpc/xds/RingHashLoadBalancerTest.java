@@ -23,9 +23,11 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -198,71 +200,95 @@ public class RingHashLoadBalancerTest {
   }
 
   @Test
-  public void updateBalancingStateWhenOverallLbStateChanges() {
+  public void aggregateSubchannelStates_connectingReadyIdleFailure() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);
+    InOrder inOrder = Mockito.inOrder(helper);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    verify(helper, times(2)).createSubchannel(any(CreateSubchannelArgs.class));
-    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));  // initial IDLE
+    inOrder.verify(helper, times(2)).createSubchannel(any(CreateSubchannelArgs.class));
+    inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
-    // Simulates connecting to server0.
+    // one in CONNECTING, one in IDLE
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(0))),
         ConnectivityStateInfo.forNonError(CONNECTING));
-    verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
 
-    // Simulates connecting to server1.
+    // two in CONNECTING
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(1))),
         ConnectivityStateInfo.forNonError(CONNECTING));
-    verifyNoMoreInteractions(helper);
+    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
 
-    // Simulates connection to server1 ready.
+    // one in CONNECTING, one in READY
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(1))),
         ConnectivityStateInfo.forNonError(READY));
-    verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
+    inOrder.verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
 
-    // Simulates connection to server0 fail.
+    // one in TRANSIENT_FAILURE, one in READY
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(0))),
         ConnectivityStateInfo.forTransientFailure(
             Status.UNKNOWN.withDescription("unknown failure")));
-    verifyNoMoreInteractions(helper);
+    inOrder.verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
 
-    // Simulates connection to server1 fail.
+    // one in TRANSIENT_FAILURE, one in IDLE
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(1))),
-        ConnectivityStateInfo.forTransientFailure(
-            Status.PERMISSION_DENIED.withDescription("authentication failed")));
-    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+        ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
     verifyNoMoreInteractions(helper);
   }
 
   @Test
-  public void updateBalancingStateWhenNewSubchannelEntersReady() {
+  public void aggregateSubchannelStates_moreThanTwoSubchannelsInTransientFailure() {
     RingHashConfig config = new RingHashConfig(10, 100);
-    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1, 1);
+    InOrder inOrder = Mockito.inOrder(helper);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    verify(helper, times(2)).createSubchannel(any(CreateSubchannelArgs.class));
-    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));  // initial IDLE
+    inOrder.verify(helper, times(4)).createSubchannel(any(CreateSubchannelArgs.class));
+    inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
-    // Simulates connection to server0 ready.
+    // one in TRANSIENT_FAILURE, three in IDLE
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(0))),
-        ConnectivityStateInfo.forNonError(READY));
-    verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNAVAILABLE.withDescription("not found")));
+    inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
-    // Simulates connection to server1 ready.
+    // two in TRANSIENT_FAILURE, two in IDLE
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(1))),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNAVAILABLE.withDescription("also not found")));
+    inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+
+    // two in TRANSIENT_FAILURE, one in CONNECTING, one in IDLE
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(2))),
+        ConnectivityStateInfo.forNonError(CONNECTING));
+    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+
+    // three in TRANSIENT_FAILURE, one in CONNECTING
+    // The overall state is dominated by the three in TRANSIENT_FAILURE.
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(3))),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNAVAILABLE.withDescription("connection lost")));
+    inOrder.verify(helper)
+        .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+
+    // three in TRANSIENT_FAILURE, one in READY
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(2))),
         ConnectivityStateInfo.forNonError(READY));
-    verify(helper, times(2)).updateBalancingState(eq(READY), any(SubchannelPicker.class));
+    inOrder.verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
 
     verifyNoMoreInteractions(helper);
   }
@@ -275,21 +301,27 @@ public class RingHashLoadBalancerTest {
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
-    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+    reset(helper);
 
     // Simulate picks have taken place and subchannels have requested connection.
     for (Subchannel subchannel : subchannels.values()) {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(
           Status.UNAUTHENTICATED.withDescription("Permission denied")));
     }
+
+    // Stays in IDLE when until there are more than two subchannels in TRANSIENT_FAILURE.
+    verify(helper, times(2)).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
+    verifyNoMoreInteractions(helper);
     // Simulate underlying subchannel auto reconnect after backoff.
     for (Subchannel subchannel : subchannels.values()) {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
     }
     verifyNoMoreInteractions(helper);
 
+    // Simulate one subchannel enters READY.
     deliverSubchannelState(
         subchannels.values().iterator().next(), ConnectivityStateInfo.forNonError(READY));
     verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
@@ -379,14 +411,16 @@ public class RingHashLoadBalancerTest {
   }
 
   @Test
-  public void useNextIfTargetSubchannelInTransientFailure() {
+  public void skipFailingHosts_pickNextNonFailingHostInFirstTwoHosts() {
+    // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
     verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
-    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));  // initial IDLE
+    reset(helper);
     // ring:
     //   "[FakeSocketAddress-server1]_0"
     //   "[FakeSocketAddress-server0]_0"
@@ -397,37 +431,109 @@ public class RingHashLoadBalancerTest {
         TestMethodDescriptors.voidMethod(), new Metadata(),
         CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
 
-    // Bring down server0 to force picking server2 (clockwise).
+    // Bring down server0 to force trying server2.
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(0))),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNAVAILABLE.withDescription("unreachable")));
+    verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getSubchannel()).isNull();  // buffer request
+    verify(subchannels.get(Collections.singletonList(servers.get(2))))
+        .requestConnection();  // kick off connection to server2
+
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(2))),
+        ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+
+    result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getSubchannel()).isNull();  // buffer request
+
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(2))),
+        ConnectivityStateInfo.forNonError(READY));
+    verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+
+    result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(2));
+  }
+
+  @Test
+  public void skipFailingHosts_firstTwoHostsFailed_pickNextFirstReady() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(4, 4);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(4)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));  // initial IDLE
+    reset(helper);
+    // ring:
+    //   "[FakeSocketAddress-server3]_0"
+    //   "[FakeSocketAddress-server1]_0"
+    //   "[FakeSocketAddress-server0]_0"
+    //   "[FakeSocketAddress-server2]_0"
+
+    long rpcHash = hashFunc.hashAsciiString("[FakeSocketAddress-server0]_0");
+    PickSubchannelArgs args = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
+
+    // Bring down server0 and server2 to force trying other servers.
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(0))),
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("unreachable")));
     deliverSubchannelState(
-        subchannels.get(Collections.singletonList(servers.get(1))),
-        ConnectivityStateInfo.forNonError(READY));
-    deliverSubchannelState(
-        subchannels.get(Collections.singletonList(servers.get(2))),
-        ConnectivityStateInfo.forNonError(READY));
-    verify(helper, times(2)).updateBalancingState(eq(READY), pickerCaptor.capture());
-
-    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
-    assertThat(result.getStatus().isOk()).isTrue();
-    assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(2));
-
-    // Bring down server2 to force picking server1 (clockwise).
-    deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(2))),
         ConnectivityStateInfo.forTransientFailure(
-            Status.UNKNOWN.withDescription("unknown failure")));
-    verifyNoMoreInteractions(helper);  // no new picker update
+            Status.PERMISSION_DENIED.withDescription("permission denied")));
+    verify(helper, times(2)).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC
+    assertThat(result.getStatus().getCode())
+        .isEqualTo(Code.UNAVAILABLE);  // with error status for the original server hit by hash
+    assertThat(result.getStatus().getDescription()).isEqualTo("unreachable");
+    verify(subchannels.get(Collections.singletonList(servers.get(3))))
+        .requestConnection();  // kickoff connection to server3 (next first non-failing)
+    verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
+        .requestConnection();  // no excessive connection
+
+    // Now connecting to server3.
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(3))),
+        ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
 
     result = pickerCaptor.getValue().pickSubchannel(args);
-    assertThat(result.getStatus().isOk()).isTrue();
-    assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(1));
+    assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC
+    assertThat(result.getStatus().getCode())
+        .isEqualTo(Code.UNAVAILABLE);  // with error status for the original server hit by hash
+    assertThat(result.getStatus().getDescription()).isEqualTo("unreachable");
+    verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
+        .requestConnection();  // no excessive connection (server3 connection already in progress)
+
+    // Simulate server1 becomes READY.
+    deliverSubchannelState(
+        subchannels.get(Collections.singletonList(servers.get(1))),
+        ConnectivityStateInfo.forNonError(READY));
+    verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+
+    result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();  // succeed
+    assertThat(result.getSubchannel().getAddresses()).isEqualTo(servers.get(1));  // with server1
   }
 
   @Test
-  public void failRpcIfAllSubchannelsInTransientFailure() {
+  public void allSubchannelsInTransientFailure() {
+    // Map each server address to exactly one ring entry.
     RingHashConfig config = new RingHashConfig(3, 3);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     loadBalancer.handleResolvedAddresses(
@@ -439,17 +545,21 @@ public class RingHashLoadBalancerTest {
     // Bring all subchannels to TRANSIENT_FAILURE.
     for (Subchannel subchannel : subchannels.values()) {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(
-          Status.UNAVAILABLE.withDescription("unreachable")));
+          Status.UNAVAILABLE.withDescription(
+              subchannel.getAddresses().getAddresses() + " unreachable")));
     }
-    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verify(helper, atLeastOnce())
+        .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
 
-    // Picking subchannel triggers connection.
+    // Picking subchannel triggers connection. RPC hash hits server0.
     PickSubchannelArgs args = new PickSubchannelArgsImpl(
         TestMethodDescriptors.voidMethod(), new Metadata(),
         CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isFalse();
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .isEqualTo("[FakeSocketAddress-server0] unreachable");
   }
 
   @Test
@@ -557,6 +667,11 @@ public class RingHashLoadBalancerTest {
 
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("target not found"));
     verifyNoMoreInteractions(helper);
+  }
+
+  @Test
+  public void aggregateSubchannelStates() {
+
   }
 
   private static List<EquivalentAddressGroup> createWeightedServerAddrs(long... weights) {
