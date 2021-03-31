@@ -245,7 +245,7 @@ public class RingHashLoadBalancerTest {
   }
 
   @Test
-  public void aggregateSubchannelStates_moreThanTwoSubchannelsInTransientFailure() {
+  public void aggregateSubchannelStates_twoOrMoreSubchannelsInTransientFailure() {
     RingHashConfig config = new RingHashConfig(10, 100);
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1, 1);
     InOrder inOrder = Mockito.inOrder(helper);
@@ -267,16 +267,18 @@ public class RingHashLoadBalancerTest {
         subchannels.get(Collections.singletonList(servers.get(1))),
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("also not found")));
-    inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+    inOrder.verify(helper)
+        .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
     // two in TRANSIENT_FAILURE, one in CONNECTING, one in IDLE
+    // The overall state is dominated by the two in TRANSIENT_FAILURE.
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(2))),
         ConnectivityStateInfo.forNonError(CONNECTING));
-    inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+    inOrder.verify(helper)
+        .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
     // three in TRANSIENT_FAILURE, one in CONNECTING
-    // The overall state is dominated by the three in TRANSIENT_FAILURE.
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(3))),
         ConnectivityStateInfo.forTransientFailure(
@@ -310,9 +312,10 @@ public class RingHashLoadBalancerTest {
           Status.UNAUTHENTICATED.withDescription("Permission denied")));
     }
 
-    // Stays in IDLE when until there are more than two subchannels in TRANSIENT_FAILURE.
-    verify(helper, times(2)).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
-    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+    // Stays in IDLE when until there are two or more subchannels in TRANSIENT_FAILURE.
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+    verify(helper, times(2))
+        .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
     verifyNoMoreInteractions(helper);
     // Simulate underlying subchannel auto reconnect after backoff.
@@ -494,7 +497,7 @@ public class RingHashLoadBalancerTest {
         subchannels.get(Collections.singletonList(servers.get(2))),
         ConnectivityStateInfo.forTransientFailure(
             Status.PERMISSION_DENIED.withDescription("permission denied")));
-    verify(helper, times(2)).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
 
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC
@@ -510,7 +513,7 @@ public class RingHashLoadBalancerTest {
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(3))),
         ConnectivityStateInfo.forNonError(CONNECTING));
-    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(helper, times(2)).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
 
     result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC

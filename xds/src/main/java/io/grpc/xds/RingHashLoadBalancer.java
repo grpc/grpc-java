@@ -252,7 +252,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
         hasIdle = true;
       }
     }
-    if (failureCount > 2) {
+    if (failureCount >= 2) {
       return TRANSIENT_FAILURE;
     }
     if (hasConnecting) {
