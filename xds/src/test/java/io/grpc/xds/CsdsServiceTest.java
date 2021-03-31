@@ -49,6 +49,7 @@ import io.envoyproxy.envoy.service.status.v3.ClientStatusRequest;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusResponse;
 import io.envoyproxy.envoy.service.status.v3.PerXdsConfig;
 import io.envoyproxy.envoy.type.matcher.v3.NodeMatcher;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
@@ -60,6 +61,7 @@ import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.XdsClient.ResourceMetadata;
 import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -80,8 +82,13 @@ public class CsdsServiceTest {
       EnvoyProtoData.Node.newBuilder().setId(NODE_ID).build();
   private static final XdsClient XDS_CLIENT_NO_RESOURCES = new XdsClient() {
     @Override
-    EnvoyProtoData.Node getNode() {
-      return BOOTSTRAP_NODE;
+    Bootstrapper.BootstrapInfo getBootstrapInfo() {
+      return new Bootstrapper.BootstrapInfo(
+          Arrays.asList(
+             new Bootstrapper.ServerInfo("", InsecureChannelCredentials.create(), false)),
+          BOOTSTRAP_NODE,
+          null,
+          null);
     }
 
     @Override
@@ -686,8 +693,11 @@ public class CsdsServiceTest {
     public void getClientConfigForXdsClient_subscribedResourcesToPerXdsConfig() {
       ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(new XdsClient() {
         @Override
-        EnvoyProtoData.Node getNode() {
-          return BOOTSTRAP_NODE;
+        Bootstrapper.BootstrapInfo getBootstrapInfo() {
+          return new Bootstrapper.BootstrapInfo(Arrays.asList(
+                  new Bootstrapper.ServerInfo(
+                              "", InsecureChannelCredentials.create(), false)),
+                  BOOTSTRAP_NODE, null,null);
         }
 
         @Override

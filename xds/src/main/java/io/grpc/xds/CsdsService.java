@@ -162,7 +162,7 @@ public final class CsdsService extends
         xdsClient.getSubscribedResourcesMetadata(ResourceType.EDS));
 
     return ClientConfig.newBuilder()
-        .setNode(xdsClient.getNode().toEnvoyProtoNode())
+        .setNode(xdsClient.getBootstrapInfo().getNode().toEnvoyProtoNode())
         .addXdsConfig(PerXdsConfig.newBuilder().setListenerConfig(ldsConfig))
         .addXdsConfig(PerXdsConfig.newBuilder().setRouteConfig(rdsConfig))
         .addXdsConfig(PerXdsConfig.newBuilder().setClusterConfig(cdsConfig))

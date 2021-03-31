@@ -40,6 +40,7 @@ import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -255,11 +256,18 @@ public abstract class ClientXdsClientTestBase {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
+    Bootstrapper.BootstrapInfo bootstrapInfo =
+        new Bootstrapper.BootstrapInfo(
+            Arrays.asList(
+                new Bootstrapper.ServerInfo(
+                    "", InsecureChannelCredentials.create(), useProtocolV3())),
+            EnvoyProtoData.Node.newBuilder().build(),
+            null,
+            null);
     xdsClient =
         new ClientXdsClient(
             channel,
-            useProtocolV3(),
-            EnvoyProtoData.Node.newBuilder().build(),
+            bootstrapInfo,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
