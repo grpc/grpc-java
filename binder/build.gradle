@@ -40,6 +40,8 @@ dependencies {
         exclude group: 'com.google.auto.service', module: 'auto-service'
     }
     testImplementation libraries.truth
+    androidTestImplementation libraries.androidx_test_rules
+    androidTestImplementation libraries.androidx_test_ext_junit
+    androidTestImplementation libraries.truth
 }
-
 [publishMavenPublicationToMavenRepository]*.onlyIf { false }
