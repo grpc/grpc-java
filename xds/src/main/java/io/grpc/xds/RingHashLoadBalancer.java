@@ -227,7 +227,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
    * <p>Aggregation rules (in order of dominance):
    * <ol>
    *   <li>If there is at least one subchannel in READY state, overall state is READY</li>
-   *   <li>If there are <em>more than 2</em> subchannels in TRANSIENT_FAILURE, overall state is
+   *   <li>If there are <em>2 or more</em> subchannels in TRANSIENT_FAILURE, overall state is
    *   TRANSIENT_FAILURE</li>
    *   <li>If there is at least one subchannel in CONNECTING state, overall state is
    *   CONNECTING</li>
