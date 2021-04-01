@@ -90,7 +90,7 @@ public class CsdsServiceTest {
     }
 
     @Override
-    ImmutableMap<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
+    Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
       return ImmutableMap.of();
     }
   };
@@ -139,7 +139,7 @@ public class CsdsServiceTest {
     public void fetchClientConfig_unexpectedException() {
       XdsClient throwingXdsClient = new XdsClient() {
         @Override
-        ImmutableMap<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
+        Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
           throw new IllegalArgumentException("IllegalArgumentException");
         }
       };
@@ -696,7 +696,7 @@ public class CsdsServiceTest {
         }
 
         @Override
-        ImmutableMap<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
+        Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
           switch (type) {
             case LDS:
               return ImmutableMap.of("subscribedResourceName." + type.name(), METADATA_ACKED_LDS);
