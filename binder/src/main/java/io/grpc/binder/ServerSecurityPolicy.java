@@ -27,9 +27,6 @@ import javax.annotation.CheckReturnValue;
  * A security policy for a gRPC server.
  *
  * Contains a default policy, and optional policies for each server.
- *
- * This is package visible because we want this package to retain control over
- * any new policies for now.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class ServerSecurityPolicy {

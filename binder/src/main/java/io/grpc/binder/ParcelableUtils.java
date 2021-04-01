@@ -40,7 +40,7 @@ public final class ParcelableUtils {
    */
   public static <P extends Parcelable> Metadata.Key<P> metadataKey(
       String name, Parcelable.Creator<P> creator) {
-    return InternalMetadataHelper.createParcelableMetadataKey(name, creator, true);
+    return InternalMetadataHelper.createParcelableMetadataKey(name, creator, false);
   }
 
   /**
