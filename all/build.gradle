@@ -23,6 +23,9 @@ def subprojects = [
     project(':grpc-testing'),
     project(':grpc-xds'),
 ]
+if (!settings.hasProperty('skipAndroid') || !skipAndroid.toBoolean()) {
+  subprojects.append(project(':grpc-binder'))
+}
 
 for (subproject in rootProject.subprojects) {
     if (subproject == project) {
