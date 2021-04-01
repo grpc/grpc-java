@@ -759,25 +759,6 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
-  public void parseServerSideListener_nonHcmFilter() {
-    FilterChain filterChain =
-        buildFilterChain(
-            Filter.newBuilder()
-                .setName("xyz")
-                .setTypedConfig(Any.pack(HttpConnectionManager.getDefaultInstance()))
-                .build());
-    Listener listener =
-        Listener.newBuilder()
-            .setName("listener1")
-            .setTrafficDirection(TrafficDirection.INBOUND)
-            .addFilterChains(filterChain)
-            .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
-    assertThat(struct.getErrorDetail()).isEqualTo("filter xyz not supported.");
-  }
-
-  @Test
   public void parseServerSideListener_configDiscoveryFilter() {
     Filter filter =
         Filter.newBuilder()
@@ -855,24 +836,6 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
-  public void parseServerSideListener_unsupportedHttpFilter() {
-    Filter filter =
-        buildHttpConnectionManager(
-            "envoy.http_connection_manager", HttpFilter.newBuilder().setName("hf").build());
-    FilterChain filterChain = buildFilterChain(filter);
-    Listener listener =
-        Listener.newBuilder()
-            .setName("listener1")
-            .setTrafficDirection(TrafficDirection.INBOUND)
-            .addFilterChains(filterChain)
-            .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
-    assertThat(struct.getErrorDetail())
-        .isEqualTo("http-connection-manager has unsupported http-filter:hf");
-  }
-
-  @Test
   public void parseServerSideListener_configDiscoveryHttpFilter() {
     Filter filter =
         buildHttpConnectionManager(
@@ -937,7 +900,6 @@ public class ClientXdsClientDataTest {
     return FilterChain.newBuilder()
         .setFilterChainMatch(
             FilterChainMatch.newBuilder()
-                .addAllApplicationProtocols(Arrays.asList("managed-mtls"))
                 .build())
         .setTransportSocket(TransportSocket.getDefaultInstance())
         .addAllFilters(Arrays.asList(filters))

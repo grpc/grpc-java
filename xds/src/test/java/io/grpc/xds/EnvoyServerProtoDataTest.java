@@ -73,7 +73,7 @@ public class EnvoyServerProtoDataTest {
     EnvoyServerProtoData.FilterChainMatch inFilterChainMatch = inFilter.getFilterChainMatch();
     assertThat(inFilterChainMatch).isNotNull();
     assertThat(inFilterChainMatch.getDestinationPort()).isEqualTo(8000);
-    assertThat(inFilterChainMatch.getApplicationProtocols()).containsExactly("managed-mtls");
+    assertThat(inFilterChainMatch.getApplicationProtocols()).isEmpty();
     assertThat(inFilterChainMatch.getPrefixRanges())
         .containsExactly(new EnvoyServerProtoData.CidrRange("10.20.0.15", 32));
     assertThat(inFilterChainMatch.getSourcePrefixRanges())
@@ -114,7 +114,6 @@ public class EnvoyServerProtoDataTest {
                             .setAddressPrefix("10.30.3.0")
                             .setPrefixLen(UInt32Value.of(24))
                             .build())
-                    .addApplicationProtocols("managed-mtls")
                     .setSourceType(FilterChainMatch.ConnectionSourceType.EXTERNAL)
                     .addSourcePorts(200)
                     .addSourcePorts(300)
