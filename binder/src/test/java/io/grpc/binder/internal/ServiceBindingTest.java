@@ -32,7 +32,7 @@ import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.binder.util.Bindable.Observer;
+import io.grpc.binder.internal.Bindable.Observer;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
