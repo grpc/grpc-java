@@ -83,6 +83,7 @@ public class GrpcSslContexts {
 
   private static final String SUN_PROVIDER_NAME = "SunJSSE";
   private static final String IBM_PROVIDER_NAME = "IBMJSSE2";
+  private static final String OPENJSSE_PROVIDER_NAME = "OpenJSSE";
 
   /**
    * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
@@ -199,7 +200,8 @@ public class GrpcSslContexts {
         throw new IllegalArgumentException(
             jdkProvider.getName() + " selected, but Java 9+ and Jetty NPN/ALPN unavailable");
       }
-    } else if (IBM_PROVIDER_NAME.equals(jdkProvider.getName())) {
+    } else if (IBM_PROVIDER_NAME.equals(jdkProvider.getName())
+        || OPENJSSE_PROVIDER_NAME.equals(jdkProvider.getName())) {
       if (JettyTlsUtil.isJava9AlpnAvailable()) {
         apc = ALPN;
       } else {
@@ -254,7 +256,8 @@ public class GrpcSslContexts {
             || JettyTlsUtil.isJava9AlpnAvailable()) {
           return provider;
         }
-      } else if (IBM_PROVIDER_NAME.equals(provider.getName())) {
+      } else if (IBM_PROVIDER_NAME.equals(provider.getName())
+          || OPENJSSE_PROVIDER_NAME.equals(provider.getName())) {
         if (JettyTlsUtil.isJava9AlpnAvailable()) {
           return provider;
         }
