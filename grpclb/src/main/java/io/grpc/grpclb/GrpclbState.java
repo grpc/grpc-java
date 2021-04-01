@@ -95,8 +95,20 @@ final class GrpclbState {
   static final Status NO_AVAILABLE_BACKENDS_STATUS =
       Status.UNAVAILABLE.withDescription("LoadBalancer responded without any backends");
   @VisibleForTesting
-  static final Status NO_FALLBACK_BACKENDS_FOUND_STATUS =
-      Status.UNAVAILABLE.withDescription("Unable to fallback, no fallback addresses found");
+  static final String NO_FALLBACK_BACKENDS_ERROR =
+      "Unable to fallback, no fallback addresses found";
+  @VisibleForTesting
+  static final Status BALANCER_TIMEOUT_STATUS =
+      Status.UNAVAILABLE.withDescription("Timeout waiting for remote balancer");
+  @VisibleForTesting
+  static final Status BALANCER_REQUESTED_FALLBACK_STATUS =
+      Status.UNAVAILABLE.withDescription("Fallback requested by balancer");
+  // This error status should never be propagated to RPC failures, as "no backend or balancer
+  // addresses found" should be directly handled as a name resolution error. So in cases of no
+  // balancer address, fallback should never fail.
+  private static final Status NO_LB_ADDRESS_PROVIDED_STATUS =
+      Status.UNAVAILABLE.withDescription("No balancer address found");
+
 
   @VisibleForTesting
   static final RoundRobinEntry BUFFER_ENTRY = new RoundRobinEntry() {
@@ -137,6 +149,10 @@ final class GrpclbState {
   private ScheduledHandle fallbackTimer;
   private List<EquivalentAddressGroup> fallbackBackendList = Collections.emptyList();
   private boolean usingFallbackBackends;
+  // Reason to fallback, will be used as RPC's error message if fail to fallback (e.g., no
+  // fallback addresses found).
+  @Nullable
+  private Status fallbackReason;
   // True if the current balancer has returned a serverlist.  Will be reset to false when lost
   // connection to a balancer.
   private boolean balancerWorking;
@@ -239,6 +255,7 @@ final class GrpclbState {
       // No balancer address: close existing balancer connection and enter fallback mode
       // immediately.
       shutdownLbComm();
+      fallbackReason = NO_LB_ADDRESS_PROVIDED_STATUS;
       syncContext.execute(new FallbackModeTask());
     } else {
       startLbComm(newLbAddressGroups);
@@ -252,6 +269,7 @@ final class GrpclbState {
       }
       // Start the fallback timer if it's never started
       if (fallbackTimer == null) {
+        fallbackReason = BALANCER_TIMEOUT_STATUS;
         fallbackTimer = syncContext.schedule(
             new FallbackModeTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS, timerService);
       }
@@ -275,15 +293,20 @@ final class GrpclbState {
   }
 
   private void maybeUseFallbackBackends() {
-    if (balancerWorking) {
+    if (balancerWorking || usingFallbackBackends) {
       return;
     }
-    if (usingFallbackBackends) {
-      return;
-    }
+    // Balancer RPC should have either been broken or timed out.
+    checkState(fallbackReason != null, "no reason to fallback");
     for (Subchannel subchannel : subchannels.values()) {
-      if (subchannel.getAttributes().get(STATE_INFO).get().getState() == READY) {
+      ConnectivityStateInfo stateInfo = subchannel.getAttributes().get(STATE_INFO).get();
+      if (stateInfo.getState() == READY) {
         return;
+      }
+      // If we do have balancer-provided backends, use one of its error in the error message if
+      // fail to fallback.
+      if (stateInfo.getState() == TRANSIENT_FAILURE) {
+        fallbackReason = stateInfo.getStatus();
       }
     }
     // Fallback conditions met
@@ -658,7 +681,9 @@ final class GrpclbState {
       }
 
       if (typeCase == LoadBalanceResponseTypeCase.FALLBACK_RESPONSE) {
+        // Force entering fallback requested by balancer.
         cancelFallbackTimer();
+        fallbackReason = BALANCER_REQUESTED_FALLBACK_STATUS;
         useFallbackBackends();
         maybeUpdatePicker();
         return;
@@ -701,8 +726,9 @@ final class GrpclbState {
           newBackendAddrList.add(new BackendAddressGroup(eag, token));
         }
       }
-      // Stop using fallback backends as soon as a new server list is received from the balancer.
+      // Exit fallback as soon as a new server list is received from the balancer.
       usingFallbackBackends = false;
+      fallbackReason = null;
       cancelFallbackTimer();
       updateServerList(newDropList, newBackendAddrList, loadRecorder);
       maybeUpdatePicker();
@@ -717,6 +743,7 @@ final class GrpclbState {
       cleanUp();
       propagateError(error);
       balancerWorking = false;
+      fallbackReason = error;
       maybeUseFallbackBackends();
       maybeUpdatePicker();
 
@@ -773,15 +800,16 @@ final class GrpclbState {
     List<RoundRobinEntry> pickList;
     ConnectivityState state;
     if (backendList.isEmpty()) {
-      if (balancerWorking)  {
+      // Note balancer (is working) may enforce using fallback backends, and that fallback may
+      // fail. So we should check if currently in fallback first.
+      if (usingFallbackBackends) {
+        pickList = Collections.<RoundRobinEntry>singletonList(new ErrorEntry(
+            fallbackReason.augmentDescription(NO_FALLBACK_BACKENDS_ERROR)));
+        state = TRANSIENT_FAILURE;
+      } else if (balancerWorking)  {
         pickList =
             Collections.<RoundRobinEntry>singletonList(
                 new ErrorEntry(NO_AVAILABLE_BACKENDS_STATUS));
-        state = TRANSIENT_FAILURE;
-      } else if (usingFallbackBackends) {
-        pickList =
-            Collections.<RoundRobinEntry>singletonList(
-                new ErrorEntry(NO_FALLBACK_BACKENDS_FOUND_STATUS));
         state = TRANSIENT_FAILURE;
       } else {  // still waiting for balancer
         pickList = Collections.singletonList(BUFFER_ENTRY);

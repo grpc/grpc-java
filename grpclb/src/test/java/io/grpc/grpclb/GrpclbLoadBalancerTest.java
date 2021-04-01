@@ -1284,11 +1284,16 @@ public class GrpclbLoadBalancerTest {
       for (Subchannel subchannel : mockSubchannels) {
         verify(subchannelPool).returnSubchannel(eq(subchannel), any(ConnectivityStateInfo.class));
       }
+
+      // RPC error status includes message of balancer RPC timeout
       inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-      RoundRobinPicker picker = (RoundRobinPicker) pickerCaptor.getValue();
-      assertThat(picker.dropList).isEmpty();
-      assertThat(picker.pickList)
-          .containsExactly(new ErrorEntry(GrpclbState.NO_FALLBACK_BACKENDS_FOUND_STATUS));
+      PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+      assertThat(result.getStatus().getCode())
+          .isEqualTo(GrpclbState.BALANCER_TIMEOUT_STATUS.getCode());
+      assertThat(result.getStatus().getDescription())
+          .startsWith(GrpclbState.BALANCER_TIMEOUT_STATUS.getDescription());
+      assertThat(result.getStatus().getDescription())
+          .contains(GrpclbState.NO_FALLBACK_BACKENDS_ERROR);
     }
 
     ////////////////////////////////////////////////////////////////
@@ -1408,6 +1413,24 @@ public class GrpclbLoadBalancerTest {
         eq(LoadBalanceRequest.newBuilder().setInitialRequest(
             InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build()));
+
+    //////////////////////////////////////////////////////////////////////
+    // Name resolver sends new resolution results without any backend addr
+    //////////////////////////////////////////////////////////////////////
+    deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList);
+
+    // Still in fallback logic, except that the backend list is empty
+    for (Subchannel subchannel : mockSubchannels) {
+      verify(subchannelPool).returnSubchannel(eq(subchannel), any(ConnectivityStateInfo.class));
+    }
+
+    // RPC error status includes error of balancer stream
+    inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().getCode()).isEqualTo(streamError.getCode());
+    assertThat(result.getStatus().getDescription()).startsWith(streamError.getDescription());
+    assertThat(result.getStatus().getDescription())
+        .contains(GrpclbState.NO_FALLBACK_BACKENDS_ERROR);
   }
 
   @Test
@@ -1434,6 +1457,24 @@ public class GrpclbLoadBalancerTest {
     assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
     verify(helper, never())
         .createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>anyList(), anyString());
+    logs.clear();
+
+    ///////////////////////////////////////////////////////////////////////////////////////
+    // Name resolver sends new resolution results without any backend addr or balancer addr
+    ///////////////////////////////////////////////////////////////////////////////////////
+    deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(),
+        Collections.<EquivalentAddressGroup>emptyList());
+    assertThat(logs).containsExactly(
+        "DEBUG: [grpclb-<api.google.com>] Error: Status{code=UNAVAILABLE, "
+            + "description=No backend or balancer addresses found, cause=null}");
+
+    // Keep using existing fallback addresses without interruption
+    for (Subchannel subchannel : mockSubchannels) {
+      verify(subchannelPool, never())
+          .returnSubchannel(eq(subchannel), any(ConnectivityStateInfo.class));
+    }
+    verify(helper, never())
+        .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
   }
 
   @Test
@@ -1531,12 +1572,79 @@ public class GrpclbLoadBalancerTest {
     }
     assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
 
+    // No subchannel to fallback backends should have been created if no fallback happened
     if (!(balancerBroken && allSubchannelsBroken)) {
       verify(subchannelPool, never()).takeOrCreateSubchannel(
           eq(backendList.get(0)), any(Attributes.class));
       verify(subchannelPool, never()).takeOrCreateSubchannel(
           eq(backendList.get(1)), any(Attributes.class));
     }
+  }
+
+  @Test
+  public void grpclbFallback_allLost_failToFallback() {
+    long loadReportIntervalMillis = 1983;
+    InOrder inOrder = inOrder(helper, mockLbService, subchannelPool);
+
+    // Create balancer and (empty) backend addresses
+    List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
+    deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList);
+
+    inOrder.verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+        eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
+
+    // Attempted to connect to balancer
+    assertEquals(1, fakeOobChannels.size());
+    fakeOobChannels.poll();
+    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+
+    verify(lbRequestObserver).onNext(
+        eq(LoadBalanceRequest.newBuilder().setInitialRequest(
+            InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build()));
+    lbResponseObserver.onNext(buildInitialResponse(loadReportIntervalMillis));
+    // We don't care if these methods have been run.
+    inOrder.verify(helper, atLeast(0)).getSynchronizationContext();
+    inOrder.verify(helper, atLeast(0)).getScheduledExecutorService();
+
+    inOrder.verifyNoMoreInteractions();
+
+    // Balancer returns a server list
+    List<ServerEntry> serverList = Arrays.asList(
+        new ServerEntry("127.0.0.1", 2000, "token0001"),
+        new ServerEntry("127.0.0.1", 2010, "token0002"));
+    lbResponseObserver.onNext(buildInitialResponse());
+    lbResponseObserver.onNext(buildLbResponse(serverList));
+
+    List<Subchannel> subchannels = fallbackTestVerifyUseOfBalancerBackendLists(inOrder, serverList);
+
+    // Break connections
+    lbResponseObserver.onError(Status.UNAVAILABLE.asException());
+    // A new stream to LB is created
+    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    assertEquals(1, lbRequestObservers.size());
+
+    // Break all subchannel connections
+    Status error = Status.UNAUTHENTICATED.withDescription("Permission denied");
+    for (Subchannel subchannel : subchannels) {
+      deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(error));
+    }
+
+    // Recycle all subchannels
+    for (Subchannel subchannel : subchannels) {
+      verify(subchannelPool).returnSubchannel(eq(subchannel), any(ConnectivityStateInfo.class));
+    }
+
+    // RPC error status includes errors of subchannels to balancer-provided backends
+    inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().getCode()).isEqualTo(error.getCode());
+    assertThat(result.getStatus().getDescription()).startsWith(error.getDescription());
+    assertThat(result.getStatus().getDescription())
+        .contains(GrpclbState.NO_FALLBACK_BACKENDS_ERROR);
   }
 
   private List<Subchannel> fallbackTestVerifyUseOfFallbackBackendLists(
@@ -1958,6 +2066,7 @@ public class GrpclbLoadBalancerTest {
     assertThat(mockSubchannels).isEmpty();
     verify(subchannel).shutdown();
 
+    // RPC error status includes message of no backends provided by balancer
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     RoundRobinPicker errorPicker = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(errorPicker.pickList)
@@ -2445,7 +2554,7 @@ public class GrpclbLoadBalancerTest {
         new BackendEntry(subchannel2, getLoadRecorder(), "token0002"))
         .inOrder();
 
-    // enter fallback mode
+    // Balancer forces entering fallback mode
     lbResponseObserver.onNext(buildLbFallbackResponse());
 
     // existing subchannels must be returned immediately to gracefully shutdown.
@@ -2459,6 +2568,26 @@ public class GrpclbLoadBalancerTest {
 
     assertFalse(oobChannel.isShutdown());
     verify(lbRequestObserver, never()).onCompleted();
+
+    //////////////////////////////////////////////////////////////////////
+    // Name resolver sends new resolution results without any backend addr
+    //////////////////////////////////////////////////////////////////////
+    deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(), grpclbBalancerList);
+
+    // Still in fallback logic, except that the backend list is empty
+    for (Subchannel subchannel : mockSubchannels) {
+      verify(subchannelPool).returnSubchannel(eq(subchannel), any(ConnectivityStateInfo.class));
+    }
+
+    // RPC error status includes message of fallback requested by balancer
+    inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().getCode())
+        .isEqualTo(GrpclbState.BALANCER_REQUESTED_FALLBACK_STATUS.getCode());
+    assertThat(result.getStatus().getDescription())
+        .startsWith(GrpclbState.BALANCER_REQUESTED_FALLBACK_STATUS.getDescription());
+    assertThat(result.getStatus().getDescription())
+        .contains(GrpclbState.NO_FALLBACK_BACKENDS_ERROR);
 
     // exit fall back by providing two new backends
     ServerEntry backend2a = new ServerEntry("127.0.0.1", 8000, "token1001");
