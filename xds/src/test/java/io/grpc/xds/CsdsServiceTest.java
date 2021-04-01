@@ -76,6 +76,7 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link CsdsService}. */
 @RunWith(Enclosed.class)
 public class CsdsServiceTest {
+  private static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String NODE_ID =
       "projects/42/networks/default/nodes/5c85b298-6f5b-4722-b74a-f7d1f0ccf5ad";
   private static final EnvoyProtoData.Node BOOTSTRAP_NODE =
@@ -85,7 +86,7 @@ public class CsdsServiceTest {
     Bootstrapper.BootstrapInfo getBootstrapInfo() {
       return new Bootstrapper.BootstrapInfo(
           Arrays.asList(
-             new Bootstrapper.ServerInfo("", InsecureChannelCredentials.create(), false)),
+             new Bootstrapper.ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), false)),
           BOOTSTRAP_NODE,
           null,
           null);
@@ -696,7 +697,7 @@ public class CsdsServiceTest {
         Bootstrapper.BootstrapInfo getBootstrapInfo() {
           return new Bootstrapper.BootstrapInfo(Arrays.asList(
                   new Bootstrapper.ServerInfo(
-                              "", InsecureChannelCredentials.create(), false)),
+                          SERVER_URI, InsecureChannelCredentials.create(), false)),
                   BOOTSTRAP_NODE, null,null);
         }
 
