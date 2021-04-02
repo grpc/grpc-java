@@ -211,6 +211,7 @@ public class RlsLoadBalancerTest {
 
     // search subchannel is down, rescue subchannel is connecting
     searchSubchannel.updateState(ConnectivityStateInfo.forTransientFailure(Status.NOT_FOUND));
+
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
 
@@ -471,6 +472,11 @@ public class RlsLoadBalancerTest {
     @Override
     public void updateBalancingState(
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {
+      // no-op
+    }
+
+    @Override
+    public void refreshNameResolution() {
       // no-op
     }
 
