@@ -27,7 +27,6 @@ import io.grpc.Status;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.Filter.NamedFilterConfig;
@@ -529,9 +528,9 @@ abstract class XdsClient {
   }
 
   /**
-   * Returns gRPC representation of {@link io.envoyproxy.envoy.config.core.v3.Node}.
+   * Returns the config used to bootstrap this XdsClient {@link Bootstrapper.BootstrapInfo}.
    */
-  Node getNode() {
+  Bootstrapper.BootstrapInfo getBootstrapInfo() {
     throw new UnsupportedOperationException();
   }
 

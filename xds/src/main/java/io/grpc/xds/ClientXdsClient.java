@@ -58,7 +58,6 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.Filter.ConfigOrError;
 import io.grpc.xds.Filter.FilterConfig;
@@ -134,13 +133,14 @@ final class ClientXdsClient extends AbstractXdsClient {
   private boolean reportingLoad;
 
   ClientXdsClient(
-      ManagedChannel channel, boolean useProtocolV3, Node node,
+      ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo,
       ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier, TimeProvider timeProvider) {
-    super(channel, useProtocolV3, node, timeService, backoffPolicyProvider, stopwatchSupplier);
+    super(channel, bootstrapInfo, timeService, backoffPolicyProvider, stopwatchSupplier);
     loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
     this.timeProvider = timeProvider;
-    lrsClient = new LoadReportClient(loadStatsManager, channel, useProtocolV3, node,
+    lrsClient = new LoadReportClient(loadStatsManager, channel,
+        bootstrapInfo.getServers().get(0).isUseProtocolV3(), bootstrapInfo.getNode(),
         getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
   }
 

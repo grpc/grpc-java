@@ -29,7 +29,6 @@ import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
-import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -92,10 +91,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           if (bootstrapInfo.getServers().isEmpty()) {
             throw new XdsInitializationException("No xDS server provided");
           }
-          ServerInfo serverInfo = bootstrapInfo.getServers().get(0);  // use first server
-          ref = xdsClientPool = new RefCountedXdsClientObjectPool(serverInfo.getTarget(),
-              serverInfo.getChannelCredentials(), serverInfo.isUseProtocolV3(),
-              bootstrapInfo.getNode());
+          ref = xdsClientPool = new RefCountedXdsClientObjectPool(bootstrapInfo);
         }
       }
     }
@@ -109,10 +105,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @ThreadSafe
   @VisibleForTesting
   static class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
-    private final String target;
-    private final ChannelCredentials channelCredentials;
-    private final Node node;
-    private final boolean useProtocolV3;
+    private final BootstrapInfo bootstrapInfo;
     private final Object lock = new Object();
     @GuardedBy("lock")
     private ScheduledExecutorService scheduler;
@@ -124,23 +117,22 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private int refCount;
 
     @VisibleForTesting
-    RefCountedXdsClientObjectPool(String target, ChannelCredentials channelCredentials,
-        boolean useProtocolV3, Node node) {
-      this.target = checkNotNull(target, "target");
-      this.channelCredentials = checkNotNull(channelCredentials, "channelCredentials");
-      this.useProtocolV3 = useProtocolV3;
-      this.node = checkNotNull(node, "node");
+    RefCountedXdsClientObjectPool(BootstrapInfo bootstrapInfo) {
+      this.bootstrapInfo = checkNotNull(bootstrapInfo);
     }
 
     @Override
     public XdsClient getObject() {
       synchronized (lock) {
         if (refCount == 0) {
+          ServerInfo serverInfo = bootstrapInfo.getServers().get(0);  // use first server
+          String target = serverInfo.getTarget();
+          ChannelCredentials channelCredentials = serverInfo.getChannelCredentials();
           channel = Grpc.newChannelBuilder(target, channelCredentials)
               .keepAliveTime(5, TimeUnit.MINUTES)
               .build();
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
-          xdsClient = new ClientXdsClient(channel, useProtocolV3, node, scheduler,
+          xdsClient = new ClientXdsClient(channel, bootstrapInfo, scheduler,
               new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER,
               TimeProvider.SYSTEM_TIME_PROVIDER);
         }
