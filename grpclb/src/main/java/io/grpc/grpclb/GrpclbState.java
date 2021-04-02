@@ -255,8 +255,7 @@ final class GrpclbState {
       // No balancer address: close existing balancer connection and enter fallback mode
       // immediately.
       shutdownLbComm();
-      fallbackReason = NO_LB_ADDRESS_PROVIDED_STATUS;
-      syncContext.execute(new FallbackModeTask());
+      syncContext.execute(new FallbackModeTask(NO_LB_ADDRESS_PROVIDED_STATUS));
     } else {
       startLbComm(newLbAddressGroups);
       // Avoid creating a new RPC just because the addresses were updated, as it can cause a
@@ -269,9 +268,9 @@ final class GrpclbState {
       }
       // Start the fallback timer if it's never started
       if (fallbackTimer == null) {
-        fallbackReason = BALANCER_TIMEOUT_STATUS;
         fallbackTimer = syncContext.schedule(
-            new FallbackModeTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS, timerService);
+            new FallbackModeTask(BALANCER_TIMEOUT_STATUS), FALLBACK_TIMEOUT_MS,
+            TimeUnit.MILLISECONDS, timerService);
       }
     }
     fallbackBackendList = newBackendServers;
@@ -551,8 +550,17 @@ final class GrpclbState {
 
   @VisibleForTesting
   class FallbackModeTask implements Runnable {
+    private final Status reason;
+
+    private FallbackModeTask(Status reason) {
+      this.reason = reason;
+    }
+
     @Override
     public void run() {
+      // Timer should have been cancelled if entered fallback early.
+      checkState(!usingFallbackBackends, "already in fallback");
+      fallbackReason = reason;
       maybeUseFallbackBackends();
       maybeUpdatePicker();
     }
