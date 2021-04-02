@@ -102,6 +102,7 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public abstract class ClientXdsClientTestBase {
+  private static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String LDS_RESOURCE = "listener.googleapis.com";
   private static final String RDS_RESOURCE = "route-configuration.googleapis.com";
   private static final String CDS_RESOURCE = "cluster.googleapis.com";
@@ -260,7 +261,7 @@ public abstract class ClientXdsClientTestBase {
         new Bootstrapper.BootstrapInfo(
             Arrays.asList(
                 new Bootstrapper.ServerInfo(
-                    "", InsecureChannelCredentials.create(), useProtocolV3())),
+                    SERVER_URI, InsecureChannelCredentials.create(), useProtocolV3())),
             EnvoyProtoData.Node.newBuilder().build(),
             null,
             null);
