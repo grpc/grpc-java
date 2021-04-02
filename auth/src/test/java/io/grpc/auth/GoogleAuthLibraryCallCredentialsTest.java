@@ -394,7 +394,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
     Map<?, ?> header = (Map<?, ?>) JsonParser.parse(jsonHeader);
     assertEquals("test-private-key-id", header.get("kid"));
     Map<?, ?> payload = (Map<?, ?>) JsonParser.parse(jsonPayload);
-    assertEquals("https://example.com:123/a.service", payload.get("aud"));
+    assertEquals("https://example.com/", payload.get("aud"));
     assertEquals("test-email@example.com", payload.get("iss"));
     assertEquals("test-email@example.com", payload.get("sub"));
   }
