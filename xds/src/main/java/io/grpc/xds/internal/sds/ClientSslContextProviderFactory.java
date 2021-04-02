@@ -21,64 +21,53 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.certprovider.CertProviderClientSslContextProvider;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 import java.util.concurrent.Executors;
 
 /** Factory to create client-side SslContextProvider from UpstreamTlsContext. */
 final class ClientSslContextProviderFactory
-    implements ValueFactory<UpstreamTlsContext, SslContextProvider> {
+    implements ValueFactory<UpstreamTlsContext, SslContextProvider, Bootstrapper.BootstrapInfo> {
 
-  private final Bootstrapper bootstrapper;
   private final CertProviderClientSslContextProvider.Factory
       certProviderClientSslContextProviderFactory;
 
-  ClientSslContextProviderFactory(Bootstrapper bootstrapper) {
-    this(bootstrapper, CertProviderClientSslContextProvider.Factory.getInstance());
+  ClientSslContextProviderFactory() {
+    this(CertProviderClientSslContextProvider.Factory.getInstance());
   }
 
-  ClientSslContextProviderFactory(
-      Bootstrapper bootstrapper, CertProviderClientSslContextProvider.Factory factory) {
-    this.bootstrapper = bootstrapper;
+  ClientSslContextProviderFactory(CertProviderClientSslContextProvider.Factory factory) {
     this.certProviderClientSslContextProviderFactory = factory;
   }
 
   /** Creates an SslContextProvider from the given UpstreamTlsContext. */
   @Override
-  public SslContextProvider create(UpstreamTlsContext upstreamTlsContext) {
+  public SslContextProvider create(
+      UpstreamTlsContext upstreamTlsContext, Bootstrapper.BootstrapInfo bootstrapInfo) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
     checkNotNull(
         upstreamTlsContext.getCommonTlsContext(),
         "upstreamTlsContext should have CommonTlsContext");
     if (CommonTlsContextUtil.hasCertProviderInstance(
             upstreamTlsContext.getCommonTlsContext())) {
-      try {
-        Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.bootstrap();
-        return certProviderClientSslContextProviderFactory.getProvider(
-                upstreamTlsContext,
-                bootstrapInfo.getNode().toEnvoyProtoNode(),
-                bootstrapInfo.getCertProviders());
-      } catch (XdsInitializationException e) {
-        throw new RuntimeException(e);
-      }
+      return certProviderClientSslContextProviderFactory.getProvider(
+          upstreamTlsContext,
+          bootstrapInfo.getNode().toEnvoyProtoNode(),
+          bootstrapInfo.getCertProviders());
     } else if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
         upstreamTlsContext.getCommonTlsContext())) {
       return SecretVolumeClientSslContextProvider.getProvider(upstreamTlsContext);
     } else if (CommonTlsContextUtil.hasAllSecretsUsingSds(
         upstreamTlsContext.getCommonTlsContext())) {
-      try {
-        return SdsClientSslContextProvider.getProvider(
-            upstreamTlsContext,
-            bootstrapper.bootstrap().getNode().toEnvoyProtoNodeV2(),
-            Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-                .setNameFormat("client-sds-sslcontext-provider-%d")
-                .setDaemon(true)
-                .build()),
-            /* channelExecutor= */ null);
-      } catch (XdsInitializationException e) {
-        throw new RuntimeException(e);
-      }
+      return SdsClientSslContextProvider.getProvider(
+          upstreamTlsContext,
+          bootstrapInfo.getNode().toEnvoyProtoNodeV2(),
+          Executors.newSingleThreadExecutor(
+              new ThreadFactoryBuilder()
+                  .setNameFormat("client-sds-sslcontext-provider-%d")
+                  .setDaemon(true)
+                  .build()),
+          /* channelExecutor= */ null);
     }
     throw new UnsupportedOperationException("Unsupported configurations in UpstreamTlsContext!");
   }

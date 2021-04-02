@@ -21,65 +21,53 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
-import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.certprovider.CertProviderServerSslContextProvider;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 import java.util.concurrent.Executors;
 
 /** Factory to create server-side SslContextProvider from DownstreamTlsContext. */
 final class ServerSslContextProviderFactory
-    implements ValueFactory<DownstreamTlsContext, SslContextProvider> {
+    implements ValueFactory<DownstreamTlsContext, SslContextProvider, Bootstrapper.BootstrapInfo> {
 
-  private final Bootstrapper bootstrapper;
   private final CertProviderServerSslContextProvider.Factory
       certProviderServerSslContextProviderFactory;
 
-  ServerSslContextProviderFactory(Bootstrapper bootstrapper) {
-    this(bootstrapper, CertProviderServerSslContextProvider.Factory.getInstance());
+  ServerSslContextProviderFactory() {
+    this(CertProviderServerSslContextProvider.Factory.getInstance());
   }
 
-  ServerSslContextProviderFactory(
-      Bootstrapper bootstrapper, CertProviderServerSslContextProvider.Factory factory) {
-    this.bootstrapper = bootstrapper;
+  ServerSslContextProviderFactory(CertProviderServerSslContextProvider.Factory factory) {
     this.certProviderServerSslContextProviderFactory = factory;
   }
 
   /** Creates a SslContextProvider from the given DownstreamTlsContext. */
   @Override
   public SslContextProvider create(
-      DownstreamTlsContext downstreamTlsContext) {
+      DownstreamTlsContext downstreamTlsContext, Bootstrapper.BootstrapInfo bootstrapInfo) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
     checkNotNull(
         downstreamTlsContext.getCommonTlsContext(),
         "downstreamTlsContext should have CommonTlsContext");
     if (CommonTlsContextUtil.hasCertProviderInstance(
             downstreamTlsContext.getCommonTlsContext())) {
-      try {
-        Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.bootstrap();
-        return certProviderServerSslContextProviderFactory.getProvider(
-                downstreamTlsContext,
-                bootstrapInfo.getNode().toEnvoyProtoNode(),
-                bootstrapInfo.getCertProviders());
-      } catch (XdsInitializationException e) {
-        throw new RuntimeException(e);
-      }
+      return certProviderServerSslContextProviderFactory.getProvider(
+          downstreamTlsContext,
+          bootstrapInfo.getNode().toEnvoyProtoNode(),
+          bootstrapInfo.getCertProviders());
     } else if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
         downstreamTlsContext.getCommonTlsContext())) {
       return SecretVolumeServerSslContextProvider.getProvider(downstreamTlsContext);
     } else if (CommonTlsContextUtil.hasAllSecretsUsingSds(
         downstreamTlsContext.getCommonTlsContext())) {
-      try {
-        return SdsServerSslContextProvider.getProvider(
-            downstreamTlsContext,
-            bootstrapper.bootstrap().getNode().toEnvoyProtoNodeV2(),
-            Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-                .setNameFormat("server-sds-sslcontext-provider-%d")
-                .setDaemon(true)
-                .build()),
-            /* channelExecutor= */ null);
-      } catch (XdsInitializationException e) {
-        throw new RuntimeException(e);
-      }
+      return SdsServerSslContextProvider.getProvider(
+          downstreamTlsContext,
+          bootstrapInfo.getNode().toEnvoyProtoNodeV2(),
+          Executors.newSingleThreadExecutor(
+              new ThreadFactoryBuilder()
+                  .setNameFormat("server-sds-sslcontext-provider-%d")
+                  .setDaemon(true)
+                  .build()),
+          /* channelExecutor= */ null);
     }
     throw new UnsupportedOperationException("Unsupported configurations in DownstreamTlsContext!");
   }

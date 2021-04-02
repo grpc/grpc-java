@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.xds.Bootstrapper;
-import io.grpc.xds.BootstrapperImpl;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
@@ -36,20 +35,26 @@ public final class TlsContextManagerImpl implements TlsContextManager {
 
   private static TlsContextManagerImpl instance;
 
-  private final ReferenceCountingMap<UpstreamTlsContext, SslContextProvider> mapForClients;
-  private final ReferenceCountingMap<DownstreamTlsContext, SslContextProvider> mapForServers;
+  private final ReferenceCountingMap<
+          UpstreamTlsContext, SslContextProvider, Bootstrapper.BootstrapInfo>
+      mapForClients;
+  private final ReferenceCountingMap<
+          DownstreamTlsContext, SslContextProvider, Bootstrapper.BootstrapInfo>
+      mapForServers;
 
   /** Create a TlsContextManagerImpl instance using the passed in {@link Bootstrapper}. */
-  @VisibleForTesting public TlsContextManagerImpl(Bootstrapper bootstrapper) {
+  @VisibleForTesting public TlsContextManagerImpl() {
     this(
-        new ClientSslContextProviderFactory(bootstrapper),
-        new ServerSslContextProviderFactory(bootstrapper));
+        new ClientSslContextProviderFactory(),
+        new ServerSslContextProviderFactory());
   }
 
   @VisibleForTesting
   TlsContextManagerImpl(
-      ValueFactory<UpstreamTlsContext, SslContextProvider> clientFactory,
-      ValueFactory<DownstreamTlsContext, SslContextProvider> serverFactory) {
+      ValueFactory<UpstreamTlsContext, SslContextProvider, Bootstrapper.BootstrapInfo>
+          clientFactory,
+      ValueFactory<DownstreamTlsContext, SslContextProvider, Bootstrapper.BootstrapInfo>
+          serverFactory) {
     checkNotNull(clientFactory, "clientFactory");
     checkNotNull(serverFactory, "serverFactory");
     mapForClients = new ReferenceCountingMap<>(clientFactory);
@@ -59,29 +64,29 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   /** Gets the TlsContextManagerImpl singleton. */
   public static synchronized TlsContextManagerImpl getInstance() {
     if (instance == null) {
-      instance = new TlsContextManagerImpl(new BootstrapperImpl());
+      instance = new TlsContextManagerImpl();
     }
     return instance;
   }
 
   @Override
   public SslContextProvider findOrCreateServerSslContextProvider(
-      DownstreamTlsContext downstreamTlsContext) {
+          DownstreamTlsContext downstreamTlsContext, Bootstrapper.BootstrapInfo bootstrapInfo) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
     CommonTlsContext.Builder builder = downstreamTlsContext.getCommonTlsContext().toBuilder();
     downstreamTlsContext =
         new DownstreamTlsContext(
             builder.build(), downstreamTlsContext.isRequireClientCertificate());
-    return mapForServers.get(downstreamTlsContext);
+    return mapForServers.get(downstreamTlsContext, bootstrapInfo);
   }
 
   @Override
   public SslContextProvider findOrCreateClientSslContextProvider(
-      UpstreamTlsContext upstreamTlsContext) {
+          UpstreamTlsContext upstreamTlsContext, Bootstrapper.BootstrapInfo bootstrapInfo) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
     CommonTlsContext.Builder builder = upstreamTlsContext.getCommonTlsContext().toBuilder();
     upstreamTlsContext = new UpstreamTlsContext(builder.build());
-    return mapForClients.get(upstreamTlsContext);
+    return mapForClients.get(upstreamTlsContext, bootstrapInfo);
   }
 
   @Override

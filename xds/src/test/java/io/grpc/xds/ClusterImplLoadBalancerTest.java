@@ -27,6 +27,7 @@ import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -83,6 +84,9 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class ClusterImplLoadBalancerTest {
+  private static final String SERVER_URI = "trafficdirector.googleapis.com";
+  private static final EnvoyProtoData.Node BOOTSTRAP_NODE =
+      EnvoyProtoData.Node.newBuilder().build();
   private static final String AUTHORITY = "api.google.com";
   private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "service.googleapis.com";
@@ -756,6 +760,17 @@ public class ClusterImplLoadBalancerTest {
 
   private final class FakeXdsClient extends XdsClient {
     @Override
+    public Bootstrapper.BootstrapInfo getBootstrapInfo() {
+      return new Bootstrapper.BootstrapInfo(
+              Arrays.asList(
+                      new Bootstrapper.ServerInfo(SERVER_URI, InsecureChannelCredentials.create(),
+                      true)),
+              BOOTSTRAP_NODE,
+              null,
+              null);
+    }
+
+    @Override
     ClusterDropStats addClusterDropStats(String clusterName, @Nullable String edsServiceName) {
       return loadStatsManager.getClusterDropStats(clusterName, edsServiceName);
     }
@@ -770,7 +785,7 @@ public class ClusterImplLoadBalancerTest {
   private static final class FakeTlsContextManager implements TlsContextManager {
     @Override
     public SslContextProvider findOrCreateClientSslContextProvider(
-        UpstreamTlsContext upstreamTlsContext) {
+            UpstreamTlsContext upstreamTlsContext, Bootstrapper.BootstrapInfo bootstrapInfo) {
       SslContextProvider sslContextProvider = mock(SslContextProvider.class);
       when(sslContextProvider.getUpstreamTlsContext()).thenReturn(upstreamTlsContext);
       return sslContextProvider;
@@ -785,7 +800,7 @@ public class ClusterImplLoadBalancerTest {
 
     @Override
     public SslContextProvider findOrCreateServerSslContextProvider(
-        DownstreamTlsContext downstreamTlsContext) {
+            DownstreamTlsContext downstreamTlsContext, Bootstrapper.BootstrapInfo bootstrapInfo) {
       throw new UnsupportedOperationException("should not be called");
     }
 

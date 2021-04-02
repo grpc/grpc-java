@@ -273,7 +273,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       }
       sslContextProviderSupplier =
           tlsContext != null
-              ? new SslContextProviderSupplier(tlsContext, tlsContextManager)
+              ? new SslContextProviderSupplier(
+                  tlsContext, tlsContextManager, xdsClient.getBootstrapInfo())
               : null;
     }
 

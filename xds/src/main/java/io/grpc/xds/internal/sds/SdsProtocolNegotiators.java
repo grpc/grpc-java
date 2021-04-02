@@ -31,6 +31,7 @@ import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.ProtocolNegotiationEvent;
+import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
@@ -368,7 +369,8 @@ public final class SdsProtocolNegotiators {
                   this,
                   null,
                   new ServerSdsHandler(
-                      grpcHandler, downstreamTlsContext, fallbackProtocolNegotiator));
+                      grpcHandler, downstreamTlsContext, fallbackProtocolNegotiator,
+                      xdsClientWrapperForServerSds.getBootstrapInfo()));
           ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
           ctx.fireUserEventTriggered(pne);
           return;
@@ -385,11 +387,13 @@ public final class SdsProtocolNegotiators {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final DownstreamTlsContext downstreamTlsContext;
     @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
+    private final Bootstrapper.BootstrapInfo bootstrapInfo;
 
     ServerSdsHandler(
             GrpcHttp2ConnectionHandler grpcHandler,
             DownstreamTlsContext downstreamTlsContext,
-            ProtocolNegotiator fallbackProtocolNegotiator) {
+            ProtocolNegotiator fallbackProtocolNegotiator,
+            Bootstrapper.BootstrapInfo bootstrapInfo) {
       super(
           // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
           // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
@@ -404,6 +408,7 @@ public final class SdsProtocolNegotiators {
       this.grpcHandler = grpcHandler;
       this.downstreamTlsContext = downstreamTlsContext;
       this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
+      this.bootstrapInfo = bootstrapInfo;
     }
 
     @Override
@@ -415,7 +420,7 @@ public final class SdsProtocolNegotiators {
       try {
         sslContextProviderTemp =
             TlsContextManagerImpl.getInstance()
-                .findOrCreateServerSslContextProvider(downstreamTlsContext);
+                .findOrCreateServerSslContextProvider(downstreamTlsContext, bootstrapInfo);
       } catch (Exception e) {
         if (fallbackProtocolNegotiator == null) {
           ctx.fireExceptionCaught(new CertStoreException("No certificate source found!", e));

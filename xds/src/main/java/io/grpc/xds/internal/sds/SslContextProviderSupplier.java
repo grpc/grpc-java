@@ -19,6 +19,7 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.netty.handler.ssl.SslContext;
 
@@ -33,13 +34,18 @@ public final class SslContextProviderSupplier implements Closeable {
 
   private final UpstreamTlsContext upstreamTlsContext;
   private final TlsContextManager tlsContextManager;
+  private final Bootstrapper.BootstrapInfo bootstrapInfo;
   private SslContextProvider sslContextProvider;
   private boolean shutdown;
 
+  /** Constructs an instance. */
   public SslContextProviderSupplier(
-      UpstreamTlsContext upstreamTlsContext, TlsContextManager tlsContextManager) {
+      UpstreamTlsContext upstreamTlsContext,
+      TlsContextManager tlsContextManager,
+      Bootstrapper.BootstrapInfo bootstrapInfo) {
     this.upstreamTlsContext = upstreamTlsContext;
     this.tlsContextManager = tlsContextManager;
+    this.bootstrapInfo = bootstrapInfo;
   }
 
   public UpstreamTlsContext getUpstreamTlsContext() {
@@ -52,11 +58,11 @@ public final class SslContextProviderSupplier implements Closeable {
     checkState(!shutdown, "Supplier is shutdown!");
     if (sslContextProvider == null) {
       sslContextProvider =
-          tlsContextManager.findOrCreateClientSslContextProvider(upstreamTlsContext);
+          tlsContextManager.findOrCreateClientSslContextProvider(upstreamTlsContext, bootstrapInfo);
     }
     // we want to increment the ref-count so call findOrCreate again...
     final SslContextProvider toRelease =
-        tlsContextManager.findOrCreateClientSslContextProvider(upstreamTlsContext);
+        tlsContextManager.findOrCreateClientSslContextProvider(upstreamTlsContext, bootstrapInfo);
     sslContextProvider.addCallback(
         new SslContextProvider.Callback(callback.getExecutor()) {
 

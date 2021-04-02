@@ -36,12 +36,12 @@ import javax.annotation.concurrent.ThreadSafe;
  * @param <V> Value type for the map - it should be a {@link Closeable}
  */
 @ThreadSafe
-public final class ReferenceCountingMap<K, V extends Closeable> {
+public final class ReferenceCountingMap<K, V extends Closeable, C> {
 
   private final Map<K, Instance<V>> instances = new HashMap<>();
-  private final ValueFactory<K, V> valueFactory;
+  private final ValueFactory<K, V, C> valueFactory;
 
-  public ReferenceCountingMap(ValueFactory<K, V> valueFactory) {
+  public ReferenceCountingMap(ValueFactory<K, V, C> valueFactory) {
     checkNotNull(valueFactory, "valueFactory");
     this.valueFactory = valueFactory;
   }
@@ -51,15 +51,15 @@ public final class ReferenceCountingMap<K, V extends Closeable> {
    * using the provided {@link ValueFactory &lt;K, V&gt;}
    */
   @CheckReturnValue
-  public V get(K key) {
+  public V get(K key, C creationContext) {
     checkNotNull(key, "key");
-    return getInternal(key);
+    return getInternal(key, creationContext);
   }
 
   /**
    * Releases an instance of the given value.
    *
-   * <p>The instance must have been obtained from {@link #get(Object)}. Otherwise will throw
+   * <p>The instance must have been obtained from {@link #get(Object, Object)}. Otherwise will throw
    * IllegalArgumentException.
    *
    * <p>Caller must not release a reference more than once. It's advised that you clear the
@@ -75,10 +75,10 @@ public final class ReferenceCountingMap<K, V extends Closeable> {
     return releaseInternal(key, value);
   }
 
-  private synchronized V getInternal(K key) {
+  private synchronized V getInternal(K key, C creationContext) {
     Instance<V> instance = instances.get(key);
     if (instance == null) {
-      instance = new Instance<>(valueFactory.create(key));
+      instance = new Instance<>(valueFactory.create(key, creationContext));
       instances.put(key, instance);
       return instance.value;
     } else {
@@ -102,8 +102,8 @@ public final class ReferenceCountingMap<K, V extends Closeable> {
   }
 
   /** A factory to create a value from the given key. */
-  public interface ValueFactory<K, V extends Closeable> {
-    V create(K key);
+  public interface ValueFactory<K, V extends Closeable, C> {
+    V create(K key, C creationContext);
   }
 
   private static final class Instance<V extends Closeable> {

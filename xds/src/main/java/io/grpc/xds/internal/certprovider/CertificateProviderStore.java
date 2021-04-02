@@ -38,7 +38,7 @@ public final class CertificateProviderStore {
 
   private static CertificateProviderStore instance;
   private final CertificateProviderRegistry certificateProviderRegistry;
-  private final ReferenceCountingMap<CertProviderKey, CertificateProvider> certProviderMap;
+  private final ReferenceCountingMap<CertProviderKey, CertificateProvider, Object> certProviderMap;
 
   /** Opaque Handle returned by {@link #createOrGetProvider}. */
   @VisibleForTesting
@@ -119,13 +119,13 @@ public final class CertificateProviderStore {
   }
 
   private final class CertProviderFactory
-      implements ReferenceCountingMap.ValueFactory<CertProviderKey, CertificateProvider> {
+      implements ReferenceCountingMap.ValueFactory<CertProviderKey, CertificateProvider, Object> {
 
     private CertProviderFactory() {
     }
 
     @Override
-    public CertificateProvider create(CertProviderKey key) {
+    public CertificateProvider create(CertProviderKey key, Object creationContext) {
       CertificateProviderProvider certProviderProvider =
           certificateProviderRegistry.getProvider(key.pluginName);
       if (certProviderProvider == null) {
@@ -182,7 +182,7 @@ public final class CertificateProviderStore {
       Watcher watcher,
       boolean notifyCertUpdates) {
     CertProviderKey key = new CertProviderKey(certName, pluginName, notifyCertUpdates, config);
-    CertificateProvider provider = certProviderMap.get(key);
+    CertificateProvider provider = certProviderMap.get(key, null);
     CertificateProvider.DistributorWatcher distWatcher = provider.getWatcher();
     distWatcher.addWatcher(watcher);
     return new Handle(key, watcher, provider);

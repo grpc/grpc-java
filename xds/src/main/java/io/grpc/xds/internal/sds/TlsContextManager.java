@@ -16,6 +16,7 @@
 
 package io.grpc.xds.internal.sds;
 
+import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 
@@ -23,11 +24,11 @@ public interface TlsContextManager {
 
   /** Creates a SslContextProvider. Used for retrieving a server-side SslContext. */
   SslContextProvider findOrCreateServerSslContextProvider(
-      DownstreamTlsContext downstreamTlsContext);
+      DownstreamTlsContext downstreamTlsContext, Bootstrapper.BootstrapInfo bootstrapInfo);
 
   /** Creates a SslContextProvider. Used for retrieving a client-side SslContext. */
   SslContextProvider findOrCreateClientSslContextProvider(
-      UpstreamTlsContext upstreamTlsContext);
+      UpstreamTlsContext upstreamTlsContext, Bootstrapper.BootstrapInfo bootstrapInfo);
 
   /**
    * Releases an instance of the given client-side {@link SslContextProvider}.

@@ -92,6 +92,10 @@ public final class XdsClientWrapperForServerSds {
     return xdsClient != null;
   }
 
+  public Bootstrapper.BootstrapInfo getBootstrapInfo() {
+    return xdsClient.getBootstrapInfo();
+  }
+
   /** Creates an XdsClient and starts a watch. */
   public void createXdsClientAndStart() throws IOException {
     checkState(xdsClient == null, "start() called more than once");

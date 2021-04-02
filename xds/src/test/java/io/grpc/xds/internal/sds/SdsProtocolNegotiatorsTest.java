@@ -193,7 +193,7 @@ public class SdsProtocolNegotiatorsTest {
         .thenReturn(
             Attributes.newBuilder()
                 .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
-                    new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
+                    new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager, null))
                 .build());
     ChannelHandler newHandler = pn.newHandler(mockHandler);
     assertThat(newHandler).isNotNull();
@@ -206,7 +206,8 @@ public class SdsProtocolNegotiatorsTest {
         buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProviderSupplier sslContextProviderSupplier =
-        new SslContextProviderSupplier(upstreamTlsContext, TlsContextManagerImpl.getInstance());
+        new SslContextProviderSupplier(upstreamTlsContext, TlsContextManagerImpl.getInstance(),
+        null);
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
     pipeline.addLast(clientSdsHandler);
@@ -369,7 +370,8 @@ public class SdsProtocolNegotiatorsTest {
         buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProviderSupplier sslContextProviderSupplier =
-        new SslContextProviderSupplier(upstreamTlsContext, TlsContextManagerImpl.getInstance());
+        new SslContextProviderSupplier(upstreamTlsContext, TlsContextManagerImpl.getInstance(),
+        null);
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
 

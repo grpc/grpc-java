@@ -41,9 +41,9 @@ public class ReferenceCountingMapTest {
   @Rule public final MockitoRule mockitoRule = MockitoJUnit.rule();
 
   @Mock
-  ValueFactory<Integer, SslContextProvider> mockFactory;
+  ValueFactory<Integer, SslContextProvider, Object> mockFactory;
 
-  ReferenceCountingMap<Integer, SslContextProvider> map;
+  ReferenceCountingMap<Integer, SslContextProvider, Object> map;
 
   @Before
   public void setUp() {
@@ -53,11 +53,11 @@ public class ReferenceCountingMapTest {
   @Test
   public void referenceCountingMap_getAndRelease_closeCalled() throws InterruptedException {
     SslContextProvider valueFor3 = getTypedMock();
-    when(mockFactory.create(3)).thenReturn(valueFor3);
-    SslContextProvider val = map.get(3);
+    when(mockFactory.create(3, null)).thenReturn(valueFor3);
+    SslContextProvider val = map.get(3, null);
     assertThat(val).isSameInstanceAs(valueFor3);
     verify(valueFor3, never()).close();
-    val = map.get(3);
+    val = map.get(3, null);
     assertThat(val).isSameInstanceAs(valueFor3);
     // at this point ref-count is 2
     assertThat(map.release(3, val)).isNull();
@@ -74,11 +74,11 @@ public class ReferenceCountingMapTest {
   public void referenceCountingMap_distinctElements() throws InterruptedException {
     SslContextProvider valueFor3 = getTypedMock();
     SslContextProvider valueFor4 = getTypedMock();
-    when(mockFactory.create(3)).thenReturn(valueFor3);
-    when(mockFactory.create(4)).thenReturn(valueFor4);
-    SslContextProvider val3 = map.get(3);
+    when(mockFactory.create(3, null)).thenReturn(valueFor3);
+    when(mockFactory.create(4, null)).thenReturn(valueFor4);
+    SslContextProvider val3 = map.get(3, null);
     assertThat(val3).isSameInstanceAs(valueFor3);
-    SslContextProvider val4 = map.get(4);
+    SslContextProvider val4 = map.get(4, null);
     assertThat(val4).isSameInstanceAs(valueFor4);
     assertThat(map.release(3, val3)).isNull();
     verify(valueFor3, times(1)).close();
@@ -92,10 +92,10 @@ public class ReferenceCountingMapTest {
       throws InterruptedException {
     SslContextProvider valueFor3 = getTypedMock();
     SslContextProvider valueFor4 = getTypedMock();
-    when(mockFactory.create(3)).thenReturn(valueFor3);
-    when(mockFactory.create(4)).thenReturn(valueFor4);
-    SslContextProvider unused = map.get(3);
-    SslContextProvider val4 = map.get(4);
+    when(mockFactory.create(3, null)).thenReturn(valueFor3);
+    when(mockFactory.create(4, null)).thenReturn(valueFor4);
+    SslContextProvider unused = map.get(3, null);
+    SslContextProvider val4 = map.get(4, null);
     // now provide wrong key (3) and value (val4) combination
     try {
       map.release(3, val4);
@@ -108,8 +108,8 @@ public class ReferenceCountingMapTest {
   @Test
   public void referenceCountingMap_excessRelease_expectException() throws InterruptedException {
     SslContextProvider valueFor4 = getTypedMock();
-    when(mockFactory.create(4)).thenReturn(valueFor4);
-    SslContextProvider val = map.get(4);
+    when(mockFactory.create(4, null)).thenReturn(valueFor4);
+    SslContextProvider val = map.get(4, null);
     assertThat(val).isSameInstanceAs(valueFor4);
     // at this point ref-count is 1
     map.release(4, val);
@@ -125,16 +125,16 @@ public class ReferenceCountingMapTest {
   @Test
   public void referenceCountingMap_releaseAndGet_differentInstance() throws InterruptedException {
     SslContextProvider valueFor4 = getTypedMock();
-    when(mockFactory.create(4)).thenReturn(valueFor4);
-    SslContextProvider val = map.get(4);
+    when(mockFactory.create(4, null)).thenReturn(valueFor4);
+    SslContextProvider val = map.get(4, null);
     assertThat(val).isSameInstanceAs(valueFor4);
     // at this point ref-count is 1
     map.release(4, val);
     // at this point ref-count is 0 and val is removed
     // should get another instance for 4
     SslContextProvider valueFor4a = getTypedMock();
-    when(mockFactory.create(4)).thenReturn(valueFor4a);
-    val = map.get(4);
+    when(mockFactory.create(4, null)).thenReturn(valueFor4a);
+    val = map.get(4, null);
     assertThat(val).isSameInstanceAs(valueFor4a);
     // verify it is a different instance from before
     assertThat(valueFor4).isNotSameInstanceAs(valueFor4a);

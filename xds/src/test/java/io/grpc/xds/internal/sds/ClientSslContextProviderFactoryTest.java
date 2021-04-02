@@ -54,7 +54,6 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 public class ClientSslContextProviderFactoryTest {
 
-  Bootstrapper bootstrapper;
   CertificateProviderRegistry certificateProviderRegistry;
   CertificateProviderStore certificateProviderStore;
   CertProviderClientSslContextProvider.Factory certProviderClientSslContextProviderFactory;
@@ -62,14 +61,12 @@ public class ClientSslContextProviderFactoryTest {
 
   @Before
   public void setUp() {
-    bootstrapper = mock(Bootstrapper.class);
     certificateProviderRegistry = new CertificateProviderRegistry();
     certificateProviderStore = new CertificateProviderStore(certificateProviderRegistry);
     certProviderClientSslContextProviderFactory =
         new CertProviderClientSslContextProvider.Factory(certificateProviderStore);
     clientSslContextProviderFactory =
-        new ClientSslContextProviderFactory(
-            bootstrapper, certProviderClientSslContextProviderFactory);
+        new ClientSslContextProviderFactory(certProviderClientSslContextProviderFactory);
   }
 
   @Test
@@ -79,7 +76,7 @@ public class ClientSslContextProviderFactoryTest {
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProvider sslContextProvider =
-        clientSslContextProviderFactory.create(upstreamTlsContext);
+        clientSslContextProviderFactory.create(upstreamTlsContext, null);
     assertThat(sslContextProvider).isNotNull();
   }
 
@@ -92,7 +89,7 @@ public class ClientSslContextProviderFactoryTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContext(commonTlsContext);
 
     try {
-      clientSslContextProviderFactory.create(upstreamTlsContext);
+      clientSslContextProviderFactory.create(upstreamTlsContext, null);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("unexpected TlsCertificateSdsSecretConfigs");
@@ -112,7 +109,7 @@ public class ClientSslContextProviderFactoryTest {
 
     try {
       SslContextProvider unused =
-          clientSslContextProviderFactory.create(upstreamTlsContext);
+          clientSslContextProviderFactory.create(upstreamTlsContext, null);
       Assert.fail("no exception thrown");
     } catch (IllegalStateException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("incorrect ValidationContextTypeCase");
@@ -134,9 +131,8 @@ public class ClientSslContextProviderFactoryTest {
             /* staticCertValidationContext= */ null);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
-        clientSslContextProviderFactory.create(upstreamTlsContext);
+        clientSslContextProviderFactory.create(upstreamTlsContext, bootstrapInfo);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
   }
@@ -161,9 +157,8 @@ public class ClientSslContextProviderFactoryTest {
     upstreamTlsContext = new UpstreamTlsContext(builder.build());
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
-        clientSslContextProviderFactory.create(upstreamTlsContext);
+        clientSslContextProviderFactory.create(upstreamTlsContext, bootstrapInfo);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
   }
@@ -184,9 +179,8 @@ public class ClientSslContextProviderFactoryTest {
                     /* staticCertValidationContext= */ null);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
-            clientSslContextProviderFactory.create(upstreamTlsContext);
+            clientSslContextProviderFactory.create(upstreamTlsContext, bootstrapInfo);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
   }
@@ -214,9 +208,8 @@ public class ClientSslContextProviderFactoryTest {
                     staticCertValidationContext);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
-            clientSslContextProviderFactory.create(upstreamTlsContext);
+            clientSslContextProviderFactory.create(upstreamTlsContext, bootstrapInfo);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
   }
@@ -241,33 +234,11 @@ public class ClientSslContextProviderFactoryTest {
             /* staticCertValidationContext= */ null);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
-        clientSslContextProviderFactory.create(upstreamTlsContext);
+        clientSslContextProviderFactory.create(upstreamTlsContext, bootstrapInfo);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
     verifyWatcher(sslContextProvider, watcherCaptor[1]);
-  }
-
-  @Test
-  public void createCertProviderClientSslContextProvider_exception()
-      throws XdsInitializationException {
-    UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContextForCertProviderInstance(
-            "gcp_id",
-            "cert-default",
-            "gcp_id",
-            "root-default",
-            /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null);
-    when(bootstrapper.bootstrap())
-        .thenThrow(new XdsInitializationException("test exception"));
-    try {
-      clientSslContextProviderFactory.create(upstreamTlsContext);
-      Assert.fail("no exception thrown");
-    } catch (RuntimeException expected) {
-      assertThat(expected).hasMessageThat().contains("test exception");
-    }
   }
 
   @Test
@@ -275,7 +246,7 @@ public class ClientSslContextProviderFactoryTest {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(null, null, null);
     try {
-      clientSslContextProviderFactory.create(upstreamTlsContext);
+      clientSslContextProviderFactory.create(upstreamTlsContext, null);
       Assert.fail("no exception thrown");
     } catch (UnsupportedOperationException expected) {
       assertThat(expected)
@@ -288,7 +259,7 @@ public class ClientSslContextProviderFactoryTest {
   public void createNullCommonTlsContext_exception() throws IOException {
     UpstreamTlsContext upstreamTlsContext = new UpstreamTlsContext(null);
     try {
-      clientSslContextProviderFactory.create(upstreamTlsContext);
+      clientSslContextProviderFactory.create(upstreamTlsContext, null);
       Assert.fail("no exception thrown");
     } catch (NullPointerException expected) {
       assertThat(expected)
