@@ -1926,7 +1926,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
         @Override
         void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
-          handleInternalSubchannelState(newState);
           checkState(listener != null, "listener is null");
           listener.onSubchannelState(newState);
         }

@@ -2096,42 +2096,25 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void refreshNameResolution_whenSubchannelConnectionFailed_notIdle() {
-    subtestNameResolutionRefreshWhenConnectionFailed(false, false);
-  }
-
-  @Test
   public void refreshNameResolution_whenOobChannelConnectionFailed_notIdle() {
-    subtestNameResolutionRefreshWhenConnectionFailed(true, false);
-  }
-
-  @Test
-  public void notRefreshNameResolution_whenSubchannelConnectionFailed_idle() {
-    subtestNameResolutionRefreshWhenConnectionFailed(false, true);
+    subtestNameResolutionRefreshWhenConnectionFailed(false);
   }
 
   @Test
   public void notRefreshNameResolution_whenOobChannelConnectionFailed_idle() {
-    subtestNameResolutionRefreshWhenConnectionFailed(true, true);
+    subtestNameResolutionRefreshWhenConnectionFailed(true);
   }
 
-  private void subtestNameResolutionRefreshWhenConnectionFailed(
-      boolean isOobChannel, boolean isIdle) {
+  private void subtestNameResolutionRefreshWhenConnectionFailed(boolean isIdle) {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
-    if (isOobChannel) {
-      OobChannel oobChannel = (OobChannel) helper.createOobChannel(
-          Collections.singletonList(addressGroup), "oobAuthority");
-      oobChannel.getSubchannel().requestConnection();
-    } else {
-      Subchannel subchannel =
-          createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
-      requestConnectionSafely(helper, subchannel);
-    }
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oobAuthority");
+    oobChannel.getSubchannel().requestConnection();
 
     MockClientTransportInfo transportInfo = transports.poll();
     assertNotNull(transportInfo);
