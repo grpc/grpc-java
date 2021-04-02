@@ -528,7 +528,7 @@ abstract class XdsClient {
   }
 
   /**
-   * Returns {@link Bootstrapper.BootstrapInfo}.
+   * Returns the config used to bootstrap this XdsClient {@link Bootstrapper.BootstrapInfo}.
    */
   Bootstrapper.BootstrapInfo getBootstrapInfo() {
     throw new UnsupportedOperationException();
