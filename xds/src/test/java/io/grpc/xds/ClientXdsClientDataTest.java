@@ -884,6 +884,28 @@ public class ClientXdsClientDataTest {
                 + "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault");
   }
 
+  @Test
+  public void parseServerSideListener_missingTypeUrlHttpFilter() {
+    Filter filter =
+        buildHttpConnectionManager(
+            "envoy.http_connection_manager",
+            HttpFilter.newBuilder().setName("envoy.filters.http.router").build());
+    FilterChain filterChain = buildFilterChain(filter);
+    Listener listener =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .addFilterChains(filterChain)
+            .build();
+    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
+        ClientXdsClient.parseServerSideListener(listener);
+    assertThat(struct.getErrorDetail())
+        .isEqualTo(
+            "http-connection-manager http-filter envoy.filters.http.router should have "
+                + "typed-config type "
+                + "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router");
+  }
+
   static Filter buildHttpConnectionManager(String name, HttpFilter... httpFilters) {
     return Filter.newBuilder()
         .setName(name)

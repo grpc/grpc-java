@@ -427,6 +427,12 @@ public final class EnvoyServerProtoData {
                   "http-connection-manager http-filter " + httpFilterName
                       + " has unsupported typed-config type:" + any.getTypeUrl());
             }
+          } else {
+            throw new IllegalArgumentException(
+                "http-connection-manager http-filter "
+                    + httpFilterName
+                    + " should have typed-config type "
+                    + "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router");
           }
         }
       }
