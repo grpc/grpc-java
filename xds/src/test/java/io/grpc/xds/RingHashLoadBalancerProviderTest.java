@@ -17,11 +17,13 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import io.grpc.InternalServiceProviders;
 import io.grpc.LoadBalancer.Helper;
-import io.grpc.LoadBalancerRegistry;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -50,8 +52,13 @@ public class RingHashLoadBalancerProviderTest {
 
   @Test
   public void provided() {
-    LoadBalancerRegistry registry = LoadBalancerRegistry.getDefaultRegistry();
-    assertThat(registry.getProvider("ring_hash")).isInstanceOf(RingHashLoadBalancerProvider.class);
+    for (LoadBalancerProvider current : InternalServiceProviders.getCandidatesViaServiceLoader(
+        LoadBalancerProvider.class, getClass().getClassLoader())) {
+      if (current instanceof RingHashLoadBalancerProvider) {
+        return;
+      }
+    }
+    fail("RingHashLoadBalancerProvider not registered");
   }
 
   @Test

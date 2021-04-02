@@ -32,6 +32,9 @@ import java.util.Map;
 @Internal
 public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
 
+  private static final boolean enableRingHash =
+      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH"));
+
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
     return new RingHashLoadBalancer(helper);
@@ -39,7 +42,7 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public boolean isAvailable() {
-    return true;
+    return enableRingHash;
   }
 
   @Override
