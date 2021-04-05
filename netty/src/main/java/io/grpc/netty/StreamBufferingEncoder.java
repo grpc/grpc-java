@@ -60,8 +60,6 @@ import java.util.TreeMap;
  * <p>This implementation makes the buffering mostly transparent and is expected to be used as a
  * drop-in decorator of {@link io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder}.
  */
-// This is a temporary copy of {@link io.netty.handler.codec.http2.DecoratingHttp2ConnectionEncoder}
-// with a bug fix that is not available yet in the latest netty release.
 class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
 
   /**
@@ -155,7 +153,11 @@ class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
     if (closed) {
       return promise.setFailure(new Http2ChannelClosedException());
     }
-    if (isExistingStream(streamId) || canCreateStream()) {
+    if (isExistingStream(streamId) || connection().goAwayReceived()) {
+      return super.writeHeaders(ctx, streamId, headers, streamDependency, weight,
+          exclusive, padding, endOfStream, promise);
+    }
+    if (canCreateStream()) {
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight,
           exclusive, padding, endOfStream, promise);
     }
