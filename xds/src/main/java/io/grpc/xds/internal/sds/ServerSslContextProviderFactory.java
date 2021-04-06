@@ -31,6 +31,7 @@ final class ServerSslContextProviderFactory
     implements ValueFactory<DownstreamTlsContext, SslContextProvider> {
 
   private final Bootstrapper bootstrapper;
+  private Bootstrapper.BootstrapInfo bootstrapInfo;
   private final CertProviderServerSslContextProvider.Factory
       certProviderServerSslContextProviderFactory;
 
@@ -55,7 +56,9 @@ final class ServerSslContextProviderFactory
     if (CommonTlsContextUtil.hasCertProviderInstance(
             downstreamTlsContext.getCommonTlsContext())) {
       try {
-        Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.bootstrap();
+        if (bootstrapInfo == null) {
+          bootstrapInfo = bootstrapper.bootstrap();
+        }
         return certProviderServerSslContextProviderFactory.getProvider(
                 downstreamTlsContext,
                 bootstrapInfo.getNode().toEnvoyProtoNode(),
@@ -69,9 +72,12 @@ final class ServerSslContextProviderFactory
     } else if (CommonTlsContextUtil.hasAllSecretsUsingSds(
         downstreamTlsContext.getCommonTlsContext())) {
       try {
+        if (bootstrapInfo == null) {
+          bootstrapInfo = bootstrapper.bootstrap();
+        }
         return SdsServerSslContextProvider.getProvider(
             downstreamTlsContext,
-            bootstrapper.bootstrap().getNode().toEnvoyProtoNodeV2(),
+            bootstrapInfo.getNode().toEnvoyProtoNodeV2(),
             Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
                 .setNameFormat("server-sds-sslcontext-provider-%d")
                 .setDaemon(true)
