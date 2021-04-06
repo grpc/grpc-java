@@ -49,7 +49,7 @@ import java.util.Set;
  * A {@link LoadBalancer} that provides consistent hashing based load balancing to upstream hosts.
  * It implements the "Ketama" hashing that maps hosts onto a circle (the "ring") by hashing its
  * addresses. Each request is routed to a host by hashing some property of the request and finding
- * the neaerest corresponding host clockwise around the ring. Each host is placed on the ring some
+ * the nearest corresponding host clockwise around the ring. Each host is placed on the ring some
  * number of times proportional to its weight. With the ring partitioned appropriately, the
  * addition or removal of one host from a set of N hosts will affect only 1/N requests.
  */
@@ -172,7 +172,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
         ring.add(new RingEntry(hash, addrKey));
         i++;
         currentHashes++;
-        sb.deleteCharAt(sb.length() - 1);
+        sb.setLength(sb.length() - 1);
       }
     }
     Collections.sort(ring);
