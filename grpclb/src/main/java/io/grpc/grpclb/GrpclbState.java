@@ -752,6 +752,7 @@ final class GrpclbState {
       propagateError(error);
       balancerWorking = false;
       fallbackReason = error;
+      cancelFallbackTimer();
       maybeUseFallbackBackends();
       maybeUpdatePicker();
 

@@ -1401,6 +1401,9 @@ public class GrpclbLoadBalancerTest {
     Status streamError = Status.UNAVAILABLE.withDescription("OOB stream broken");
     lbResponseObserver.onError(streamError.asException());
 
+    // Fallback time has been short-circuited
+    assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
+
     // Fall back to the backends from resolver
     fallbackTestVerifyUseOfFallbackBackendLists(
         inOrder, Arrays.asList(backendList.get(0), backendList.get(1)));
