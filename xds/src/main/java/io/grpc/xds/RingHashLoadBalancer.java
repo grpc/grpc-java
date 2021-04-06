@@ -312,9 +312,6 @@ final class RingHashLoadBalancer extends LoadBalancer {
       if (requestHash == null) {
         return PickResult.withError(RPC_HASH_NOT_FOUND);
       }
-      if (ring.isEmpty()) {
-        return PickResult.withNoResult();
-      }
 
       // Find the ring entry with hash next to (clockwise) the RPC's hash.
       int low = 0;
