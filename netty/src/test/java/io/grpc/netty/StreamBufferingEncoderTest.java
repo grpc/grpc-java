@@ -81,6 +81,7 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.mockito.verification.VerificationMode;
 
+// This is a temporary copy of io.netty.handler.codec.http2.DecoratingHttp2ConnectionEncoderTest.
 /**
  * Tests for {@link StreamBufferingEncoder}.
  */

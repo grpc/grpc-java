@@ -41,6 +41,8 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.TreeMap;
 
+// This is a temporary copy of {@link io.netty.handler.codec.http2.DecoratingHttp2ConnectionEncoder}
+// with a bug fix that is not available yet in the latest netty release.
 /**
  * Implementation of a {@link Http2ConnectionEncoder} that dispatches all method call to another
  * {@link Http2ConnectionEncoder}, until {@code SETTINGS_MAX_CONCURRENT_STREAMS} is reached.
@@ -153,9 +155,13 @@ class StreamBufferingEncoder extends DecoratingHttp2ConnectionEncoder {
     if (closed) {
       return promise.setFailure(new Http2ChannelClosedException());
     }
-    if (isExistingStream(streamId) || connection().goAwayReceived()) {
+    if (isExistingStream(streamId)) {
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight,
           exclusive, padding, endOfStream, promise);
+    }
+    if (connection().goAwayReceived()) {
+      promise.setFailure(new Http2Exception(Http2Error.NO_ERROR, "GOAWAY received"));
+      return promise;
     }
     if (canCreateStream()) {
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight,
