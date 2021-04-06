@@ -90,8 +90,6 @@ final class RingHashLoadBalancer extends LoadBalancer {
     RingHashConfig config = (RingHashConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
     Map<EquivalentAddressGroup, Long> serverWeights = new HashMap<>();
     long totalWeight = 0L;
-    long minWeight = Long.MAX_VALUE;
-    long maxWeight = Long.MIN_VALUE;
     for (EquivalentAddressGroup eag : addrList) {
       Long weight = eag.getAttributes().get(InternalXdsAttributes.ATTR_SERVER_WEIGHT);
       // Support two ways of server weighing: either multiple instances of the same address
@@ -100,8 +98,6 @@ final class RingHashLoadBalancer extends LoadBalancer {
       if (weight == null) {
         weight = 1L;
       }
-      minWeight = Math.min(minWeight, weight);
-      maxWeight = Math.max(maxWeight, weight);
       totalWeight += weight;
       EquivalentAddressGroup addrKey = stripAttrs(eag);
       if (serverWeights.containsKey(addrKey)) {
@@ -127,6 +123,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
       });
       subchannels.put(addrKey, subchannel);
     }
+    long minWeight = Collections.min(serverWeights.values());
     double normalizedMinWeight = (double) minWeight / totalWeight;
     // Scale up the number of hashes per host such that the least-weighted host gets a whole
     // number of hashes on the the ring. Other hosts might not end up with whole numbers, and
