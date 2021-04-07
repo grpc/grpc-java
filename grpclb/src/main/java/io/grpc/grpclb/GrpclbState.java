@@ -95,14 +95,14 @@ final class GrpclbState {
   static final Status NO_AVAILABLE_BACKENDS_STATUS =
       Status.UNAVAILABLE.withDescription("LoadBalancer responded without any backends");
   @VisibleForTesting
-  static final String NO_FALLBACK_BACKENDS_ERROR =
-      "Unable to fallback, no fallback addresses found";
-  @VisibleForTesting
   static final Status BALANCER_TIMEOUT_STATUS =
       Status.UNAVAILABLE.withDescription("Timeout waiting for remote balancer");
   @VisibleForTesting
   static final Status BALANCER_REQUESTED_FALLBACK_STATUS =
       Status.UNAVAILABLE.withDescription("Fallback requested by balancer");
+  @VisibleForTesting
+  static final Status NO_FALLBACK_BACKENDS_STATUS =
+      Status.UNAVAILABLE.withDescription("Unable to fallback, no fallback addresses found");
   // This error status should never be propagated to RPC failures, as "no backend or balancer
   // addresses found" should be directly handled as a name resolution error. So in cases of no
   // balancer address, fallback should never fail.
@@ -423,8 +423,10 @@ final class GrpclbState {
   void propagateError(Status status) {
     logger.log(ChannelLogLevel.DEBUG, "[grpclb-<{0}>] Error: {1}", serviceName, status);
     if (backendList.isEmpty()) {
+      Status error =
+          Status.UNAVAILABLE.withCause(status.getCause()).withDescription(status.getDescription());
       maybeUpdatePicker(
-          TRANSIENT_FAILURE, new RoundRobinPicker(dropList, Arrays.asList(new ErrorEntry(status))));
+          TRANSIENT_FAILURE, new RoundRobinPicker(dropList, Arrays.asList(new ErrorEntry(error))));
     }
   }
 
@@ -723,7 +725,7 @@ final class GrpclbState {
           } catch (UnknownHostException e) {
             propagateError(
                 Status.UNAVAILABLE
-                    .withDescription("Host for server not found: " + server)
+                    .withDescription("Invalid backend address: " + server)
                     .withCause(e));
             continue;
           }
@@ -812,8 +814,11 @@ final class GrpclbState {
       // Note balancer (is working) may enforce using fallback backends, and that fallback may
       // fail. So we should check if currently in fallback first.
       if (usingFallbackBackends) {
-        pickList = Collections.<RoundRobinEntry>singletonList(new ErrorEntry(
-            fallbackReason.augmentDescription(NO_FALLBACK_BACKENDS_ERROR)));
+        Status error =
+            NO_FALLBACK_BACKENDS_STATUS
+                .withCause(fallbackReason.getCause())
+                .augmentDescription(fallbackReason.getDescription());
+        pickList = Collections.<RoundRobinEntry>singletonList(new ErrorEntry(error));
         state = TRANSIENT_FAILURE;
       } else if (balancerWorking)  {
         pickList =

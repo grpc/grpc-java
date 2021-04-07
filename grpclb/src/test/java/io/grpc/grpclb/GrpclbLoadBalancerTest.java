@@ -792,14 +792,16 @@ public class GrpclbLoadBalancerTest {
         "INFO: [grpclb-<api.google.com>] Created",
         "DEBUG: [grpclb-<api.google.com>] Error: " + error,
         "INFO: [grpclb-<api.google.com>] Update balancing state to TRANSIENT_FAILURE: picks="
-            + "[Status{code=NOT_FOUND, description=www.google.com not found, cause=null}],"
+            + "[Status{code=UNAVAILABLE, description=www.google.com not found, cause=null}],"
             + " drops=[]")
         .inOrder();
     logs.clear();
 
     RoundRobinPicker picker = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker.dropList).isEmpty();
-    assertThat(picker.pickList).containsExactly(new ErrorEntry(error));
+    PickResult result = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription()).isEqualTo(error.getDescription());
 
     // Recover with a subsequent success
     List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(1);
@@ -832,7 +834,9 @@ public class GrpclbLoadBalancerTest {
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     RoundRobinPicker picker = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker.dropList).isEmpty();
-    assertThat(picker.pickList).containsExactly(new ErrorEntry(error));
+    PickResult result = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription()).isEqualTo(error.getDescription());
     assertFalse(oobChannel.isShutdown());
 
     // Simulate receiving LB response
@@ -1289,11 +1293,11 @@ public class GrpclbLoadBalancerTest {
       inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
       PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
       assertThat(result.getStatus().getCode())
-          .isEqualTo(GrpclbState.BALANCER_TIMEOUT_STATUS.getCode());
+          .isEqualTo(Code.UNAVAILABLE);
       assertThat(result.getStatus().getDescription())
-          .startsWith(GrpclbState.BALANCER_TIMEOUT_STATUS.getDescription());
+          .startsWith(GrpclbState.NO_FALLBACK_BACKENDS_STATUS.getDescription());
       assertThat(result.getStatus().getDescription())
-          .contains(GrpclbState.NO_FALLBACK_BACKENDS_ERROR);
+          .contains(GrpclbState.BALANCER_TIMEOUT_STATUS.getDescription());
     }
 
     ////////////////////////////////////////////////////////////////
@@ -1430,10 +1434,10 @@ public class GrpclbLoadBalancerTest {
     // RPC error status includes error of balancer stream
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
-    assertThat(result.getStatus().getCode()).isEqualTo(streamError.getCode());
-    assertThat(result.getStatus().getDescription()).startsWith(streamError.getDescription());
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription())
-        .contains(GrpclbState.NO_FALLBACK_BACKENDS_ERROR);
+        .startsWith(GrpclbState.NO_FALLBACK_BACKENDS_STATUS.getDescription());
+    assertThat(result.getStatus().getDescription()).contains(streamError.getDescription());
   }
 
   @Test
@@ -1644,10 +1648,10 @@ public class GrpclbLoadBalancerTest {
     // RPC error status includes errors of subchannels to balancer-provided backends
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
-    assertThat(result.getStatus().getCode()).isEqualTo(error.getCode());
-    assertThat(result.getStatus().getDescription()).startsWith(error.getDescription());
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription())
-        .contains(GrpclbState.NO_FALLBACK_BACKENDS_ERROR);
+        .startsWith(GrpclbState.NO_FALLBACK_BACKENDS_STATUS.getDescription());
+    assertThat(result.getStatus().getDescription()).contains(error.getDescription());
   }
 
   private List<Subchannel> fallbackTestVerifyUseOfFallbackBackendLists(
@@ -2585,12 +2589,11 @@ public class GrpclbLoadBalancerTest {
     // RPC error status includes message of fallback requested by balancer
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
-    assertThat(result.getStatus().getCode())
-        .isEqualTo(GrpclbState.BALANCER_REQUESTED_FALLBACK_STATUS.getCode());
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription())
-        .startsWith(GrpclbState.BALANCER_REQUESTED_FALLBACK_STATUS.getDescription());
+        .startsWith(GrpclbState.NO_FALLBACK_BACKENDS_STATUS.getDescription());
     assertThat(result.getStatus().getDescription())
-        .contains(GrpclbState.NO_FALLBACK_BACKENDS_ERROR);
+        .contains(GrpclbState.BALANCER_REQUESTED_FALLBACK_STATUS.getDescription());
 
     // exit fall back by providing two new backends
     ServerEntry backend2a = new ServerEntry("127.0.0.1", 8000, "token1001");
