@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.protobuf.services;
 
 import io.grpc.BinaryLog;
 import io.grpc.ExperimentalApi;

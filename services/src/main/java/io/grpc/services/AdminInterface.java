@@ -19,6 +19,7 @@ package io.grpc.services;
 import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
 import io.grpc.ServerServiceDefinition;
+import io.grpc.protobuf.services.ChannelzService;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;

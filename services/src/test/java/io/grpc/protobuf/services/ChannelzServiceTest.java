@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.protobuf.services;
 
 import static com.google.common.truth.Truth.assertWithMessage;
 import static org.junit.Assert.assertEquals;
@@ -35,9 +35,9 @@ import io.grpc.channelz.v1.GetSubchannelRequest;
 import io.grpc.channelz.v1.GetSubchannelResponse;
 import io.grpc.channelz.v1.GetTopChannelsRequest;
 import io.grpc.channelz.v1.GetTopChannelsResponse;
-import io.grpc.services.ChannelzTestHelper.TestChannel;
-import io.grpc.services.ChannelzTestHelper.TestServer;
-import io.grpc.services.ChannelzTestHelper.TestSocket;
+import io.grpc.protobuf.services.ChannelzTestHelper.TestChannel;
+import io.grpc.protobuf.services.ChannelzTestHelper.TestServer;
+import io.grpc.protobuf.services.ChannelzTestHelper.TestSocket;
 import io.grpc.stub.StreamObserver;
 import java.util.concurrent.ExecutionException;
 import org.junit.Test;

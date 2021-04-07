@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.services.internal;
+package io.grpc.protobuf.services.internal;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
@@ -23,7 +23,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
-import io.grpc.services.HealthCheckingLoadBalancerUtil;
+import io.grpc.protobuf.services.HealthCheckingLoadBalancerUtil;
 import java.util.Map;
 
 /**
