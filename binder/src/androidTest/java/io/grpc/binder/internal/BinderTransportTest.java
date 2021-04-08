@@ -70,7 +70,7 @@ public final class BinderTransportTest extends AbstractTransportTest {
 
     HostServices.configureService(addr,
         HostServices.serviceParamsBuilder()
-            .setBinderSupplier(() -> binderServer.getHostBinder())
+            .setRawBinderSupplier(() -> binderServer.getHostBinder())
             .build());
 
     return binderServer;

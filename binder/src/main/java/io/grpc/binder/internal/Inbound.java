@@ -726,7 +726,7 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
     final boolean lastBlockOfMessage;
 
     TransactionData(InputStream stream, byte[] block, int numBytes, boolean lastBlockOfMessage) {
-      this.stream = null;
+      this.stream = stream;
       this.block = block;
       this.numBytes = numBytes;
       this.lastBlockOfMessage = lastBlockOfMessage;

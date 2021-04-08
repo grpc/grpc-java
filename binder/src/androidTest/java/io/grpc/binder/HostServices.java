@@ -67,7 +67,7 @@ public final class HostServices {
     abstract Executor transactionExecutor();
 
     @Nullable
-    abstract Supplier<IBinder> binderSupplier();
+    abstract Supplier<IBinder> rawBinderSupplier();
 
     public abstract Builder toBuilder();
 
@@ -77,7 +77,7 @@ public final class HostServices {
 
     @AutoValue.Builder
     public abstract static class Builder {
-      abstract Builder setBinderSupplier(Supplier<IBinder> binderSupplier);
+      public abstract Builder setRawBinderSupplier(Supplier<IBinder> binderSupplier);
       /**
        * If set, this executor will be used to pass any inbound transactions to the server. This can
        * be used to simulate delayed, re-ordered, or dropped packets.
@@ -179,7 +179,7 @@ public final class HostServices {
         activeServices.put(cls, this);
         checkState(serviceParams.containsKey(cls));
         params = serviceParams.get(cls);
-        binderSupplier = params.binderSupplier();
+        binderSupplier = params.rawBinderSupplier();
       }
     }
 

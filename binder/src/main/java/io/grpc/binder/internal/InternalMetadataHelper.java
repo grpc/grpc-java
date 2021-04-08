@@ -20,20 +20,7 @@ import android.os.Parcelable;
 import io.grpc.Metadata;
 
 /**
- * Helper class for reading & writing metadata to parcels.
- *
- * <p>Metadata is written to a parcel as a single int for the number of name/value pairs, followed
- * by the following pattern for each pair.
- *
- * <ol>
- *   <li>name length (int)
- *   <li>name (byte[])
- *   <li>value length OR sentinel (int)
- *   <li>value (byte[] OR Parcelable)
- * </ol>
- *
- * The sentinel int at the start of a value may indicate bad metadata. When this happens, no more
- * data follows the sentinel.
+ * Accessor class for using MetadataHelper outside this package.
  */
 public final class InternalMetadataHelper {
 
