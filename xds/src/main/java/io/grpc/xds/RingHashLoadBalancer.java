@@ -40,7 +40,6 @@ import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -291,6 +290,8 @@ final class RingHashLoadBalancer extends LoadBalancer {
     private final List<RingEntry> ring;
     // Avoid synchronization between pickSubchannel and subchannel's connectivity state change,
     // freeze picker's view of subchannel's connectivity state.
+    // TODO(chengyuanzhang): can be more performance-friendly with
+    //  IdentityHashMap<Subchannel, ConnectivityStateInfo> and RingEntry contains Subchannel.
     private final Map<EquivalentAddressGroup, SubchannelView> pickableSubchannels;  // read-only
 
     private RingHashPicker(
@@ -344,18 +345,28 @@ final class RingHashLoadBalancer extends LoadBalancer {
       // based on that subchannel. Otherwise, fail the pick unless a READY subchannel is found.
       // Meanwhile, trigger connection for the first subchannel that is in IDLE if no subchannel
       // before it is in CONNECTING or READY.
-      boolean hasPending = false;
-      Set<EquivalentAddressGroup> attemptedAddrs = new HashSet<>();
+      boolean hasPending = false;  // true if having subchannel(s) in CONNECTING or IDLE
+      boolean canBuffer = true;  // true if RPCs can be buffered with a pending subchannel
+      Subchannel firstSubchannel = null;
+      Subchannel secondSubchannel = null;
       for (int i = 0; i < ring.size(); i++) {
         int index = (mid + i) % ring.size();
         EquivalentAddressGroup addrKey = ring.get(index).addrKey;
-        if (attemptedAddrs.contains(addrKey)) {
-          continue;
-        }
-        attemptedAddrs.add(addrKey);
         SubchannelView subchannel = pickableSubchannels.get(addrKey);
         if (subchannel.stateInfo.getState() == READY) {
           return PickResult.withSubchannel(subchannel.subchannel);
+        }
+
+        // RPCs can be buffered if any of the first two subchannels is pending. Otherwise, RPCs
+        // are failed unless there is a READY connection.
+        if (firstSubchannel == null) {
+          firstSubchannel = subchannel.subchannel;
+        } else if (subchannel.subchannel != firstSubchannel) {
+          if (secondSubchannel == null) {
+            secondSubchannel = subchannel.subchannel;
+          } else if (subchannel.subchannel != secondSubchannel) {
+            canBuffer = false;
+          }
         }
         if (subchannel.stateInfo.getState() == TRANSIENT_FAILURE) {
           continue;
@@ -370,7 +381,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
               }
             });
           }
-          if (attemptedAddrs.size() <= 2) {  // done if this is the first or second two subchannel
+          if (canBuffer) {  // done if this is the first or second two subchannel
             return PickResult.withNoResult();  // queue the pick and re-process later
           }
           hasPending = true;
