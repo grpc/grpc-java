@@ -41,6 +41,7 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
 import java.security.GeneralSecurityException;
 import java.util.List;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
@@ -194,11 +195,12 @@ public final class AltsProtocolNegotiator {
    */
   public static final class GoogleDefaultProtocolNegotiatorFactory
       implements InternalProtocolNegotiator.ClientFactory {
+    @VisibleForTesting
+    @Nullable
+    static Attributes.Key<String> clusterNameAttrKey = loadClusterNameAttrKey();
     private final ImmutableList<String> targetServiceAccounts;
     private final ObjectPool<Channel> handshakerChannelPool;
     private final SslContext sslContext;
-    @Nullable
-    private final Attributes.Key<String> clusterNameAttrKey;
 
     /**
      * Creates Negotiator Factory, which will either use the targetServiceAccounts and
@@ -207,12 +209,10 @@ public final class AltsProtocolNegotiator {
     public GoogleDefaultProtocolNegotiatorFactory(
         List<String> targetServiceAccounts,
         ObjectPool<Channel> handshakerChannelPool,
-        SslContext sslContext,
-        @Nullable Attributes.Key<String> clusterNameAttrKey) {
+        SslContext sslContext) {
       this.targetServiceAccounts = ImmutableList.copyOf(targetServiceAccounts);
       this.handshakerChannelPool = checkNotNull(handshakerChannelPool, "handshakerChannelPool");
       this.sslContext = checkNotNull(sslContext, "sslContext");
-      this.clusterNameAttrKey = clusterNameAttrKey;
     }
 
     @Override
@@ -227,6 +227,26 @@ public final class AltsProtocolNegotiator {
     @Override
     public int getDefaultPort() {
       return 443;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Nullable
+    private static Attributes.Key<String> loadClusterNameAttrKey() {
+      Attributes.Key<String> key = null;
+      try {
+        Class<?> klass = Class.forName("io.grpc.xds.InternalXdsAttributes");
+        key = (Attributes.Key<String>) klass.getField("ATTR_CLUSTER_NAME").get(null);
+      } catch (ClassNotFoundException e) {
+        logger.log(Level.FINE,
+            "Unable to load xDS endpoint cluster name key, this may be expected", e);
+      } catch (NoSuchFieldException e) {
+        logger.log(Level.FINE,
+            "Unable to load xDS endpoint cluster name key, this may be expected", e);
+      } catch (IllegalAccessException e) {
+        logger.log(Level.FINE,
+            "Unable to load xDS endpoint cluster name key, this may be expected", e);
+      }
+      return key;
     }
   }
 

@@ -21,35 +21,21 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
-import io.grpc.BinaryLog;
-import io.grpc.BindableService;
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
-import io.grpc.HandlerRegistry;
 import io.grpc.Internal;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
-import io.grpc.ServerInterceptor;
-import io.grpc.ServerServiceDefinition;
-import io.grpc.ServerStreamTracer;
-import io.grpc.ServerTransportFilter;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 import io.grpc.xds.internal.sds.ServerWrapperForXds;
-import java.io.File;
-import java.io.InputStream;
-import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.annotation.Nullable;
+import java.util.logging.Logger;
 
 /**
- * A version of {@link ServerBuilder} to create xDS managed servers that will use SDS to set up SSL
- * with peers. Note, this is not ready to use yet.
+ * A version of {@link ServerBuilder} to create xDS managed servers.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
 public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBuilder> {
@@ -68,10 +54,11 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   @Override
   @Internal
   protected ServerBuilder<?> delegate() {
+    checkState(!isServerBuilt.get(), "Server already built!");
     return delegate;
   }
 
-  /** Set the {@link XdsServingStatusListener}. */
+  /** Set the {@link XdsServingStatusListener} to receive "serving" and "not serving" states. */
   public XdsServerBuilder xdsServingStatusListener(
       XdsServingStatusListener xdsServingStatusListener) {
     this.xdsServingStatusListener =
@@ -111,11 +98,18 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     return new ServerWrapperForXds(delegate, xdsClient, xdsServingStatusListener);
   }
 
+  /**
+   * Returns the delegate {@link NettyServerBuilder} to allow experimental level
+   * transport-specific configuration. Note this API will always be experimental.
+   */
   public ServerBuilder<?> transportBuilder() {
     return delegate;
   }
 
-  /** Watcher to receive error notifications from xDS control plane during {@code start()}. */
+  /**
+   * Applications can register this listener to receive "serving" and "not serving" states of
+   * the server using {@link #xdsServingStatusListener(XdsServingStatusListener)}.
+   */
   public interface XdsServingStatusListener {
 
     /** Callback invoked when server begins serving. */
@@ -127,13 +121,15 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     void onNotServing(Throwable throwable);
   }
 
-  /** Default implementation that logs at WARNING level. */
+  /** Default implementation of {@link XdsServingStatusListener} that logs at WARNING level. */
   private static class DefaultListener implements XdsServingStatusListener {
-    XdsLogger xdsLogger;
+    private final Logger logger;
+    private final String prefix;
     boolean notServing;
 
     DefaultListener(String prefix) {
-      xdsLogger = XdsLogger.withPrefix(prefix);
+      logger = Logger.getLogger(DefaultListener.class.getName());
+      this.prefix = prefix;
       notServing = true;
     }
 
@@ -142,110 +138,14 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     public void onServing() {
       if (notServing) {
         notServing = false;
-        xdsLogger.log(XdsLogger.XdsLogLevel.WARNING, "Entering serving state.");
+        logger.warning("[" + prefix + "] Entering serving state.");
       }
     }
 
     @Override
     public void onNotServing(Throwable throwable) {
-      xdsLogger.log(XdsLogger.XdsLogLevel.WARNING, throwable.getMessage());
+      logger.warning("[" + prefix + "] " + throwable.getMessage());
       notServing = true;
     }
-  }
-
-  @Override
-  public XdsServerBuilder directExecutor() {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.directExecutor();
-  }
-
-  @Override
-  public XdsServerBuilder executor(@Nullable Executor executor) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.executor(executor);
-  }
-
-  @Override
-  public XdsServerBuilder addService(ServerServiceDefinition service) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.addService(service);
-  }
-
-  @Override
-  public XdsServerBuilder addService(BindableService bindableService) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.addService(bindableService);
-  }
-
-  @Override
-  public XdsServerBuilder intercept(ServerInterceptor interceptor) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.intercept(interceptor);
-  }
-
-  @Override
-  public XdsServerBuilder addTransportFilter(ServerTransportFilter filter) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.addTransportFilter(filter);
-  }
-
-  @Override
-  public XdsServerBuilder addStreamTracerFactory(ServerStreamTracer.Factory factory) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.addStreamTracerFactory(factory);
-  }
-
-  @Override
-  public XdsServerBuilder fallbackHandlerRegistry(@Nullable HandlerRegistry fallbackRegistry) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.fallbackHandlerRegistry(fallbackRegistry);
-  }
-
-  @Override
-  public XdsServerBuilder useTransportSecurity(File certChain, File privateKey) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.useTransportSecurity(certChain, privateKey);
-  }
-
-  @Override
-  public XdsServerBuilder useTransportSecurity(InputStream certChain, InputStream privateKey) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.useTransportSecurity(certChain, privateKey);
-  }
-
-  @Override
-  public XdsServerBuilder decompressorRegistry(@Nullable DecompressorRegistry registry) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.decompressorRegistry(registry);
-  }
-
-  @Override
-  public XdsServerBuilder compressorRegistry(@Nullable CompressorRegistry registry) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.compressorRegistry(registry);
-  }
-
-  @Override
-  public XdsServerBuilder handshakeTimeout(long timeout, TimeUnit unit) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.handshakeTimeout(timeout, unit);
-  }
-
-  @Override
-  public XdsServerBuilder maxInboundMessageSize(int bytes) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.maxInboundMessageSize(bytes);
-  }
-
-  @Override
-  public XdsServerBuilder maxInboundMetadataSize(int bytes) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.maxInboundMetadataSize(bytes);
-  }
-
-  @Override
-  public XdsServerBuilder setBinaryLog(BinaryLog binaryLog) {
-    checkState(!isServerBuilt.get(), "Server already built!");
-    return super.setBinaryLog(binaryLog);
   }
 }

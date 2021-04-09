@@ -386,9 +386,6 @@ public final class EnvoyServerProtoData {
 
     private static void validateFilter(Filter filter)
         throws InvalidProtocolBufferException, IllegalArgumentException {
-      if (!"envoy.http_connection_manager".equals(filter.getName())) {
-        throw new IllegalArgumentException("filter " + filter.getName() + " not supported.");
-      }
       if (filter.hasConfigDiscovery()) {
         throw new IllegalArgumentException(
             "filter " + filter.getName() + " with config_discovery not supported");
@@ -417,10 +414,6 @@ public final class EnvoyServerProtoData {
               "http-connection-manager has non-unique http-filter name:" + httpFilterName);
         }
         if (!httpFilter.getIsOptional()) {
-          if (!"envoy.router".equals(httpFilterName)) {
-            throw new IllegalArgumentException(
-                "http-connection-manager has unsupported http-filter:" + httpFilterName);
-          }
           if (httpFilter.hasConfigDiscovery()) {
             throw new IllegalArgumentException(
                 "http-connection-manager http-filter " + httpFilterName
@@ -434,6 +427,12 @@ public final class EnvoyServerProtoData {
                   "http-connection-manager http-filter " + httpFilterName
                       + " has unsupported typed-config type:" + any.getTypeUrl());
             }
+          } else {
+            throw new IllegalArgumentException(
+                "http-connection-manager http-filter "
+                    + httpFilterName
+                    + " should have typed-config type "
+                    + "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router");
           }
         }
       }
@@ -564,7 +563,7 @@ public final class EnvoyServerProtoData {
       // reject if filer-chain-match
       // - has server_name
       // - transport protocol is other than "raw_buffer"
-      // - application_protocols is non-empty (for now accept "managed-mtls")
+      // - application_protocols is non-empty
       if (!filterChainMatch.getServerNamesList().isEmpty()) {
         return false;
       }
@@ -573,8 +572,7 @@ public final class EnvoyServerProtoData {
         return false;
       }
       List<String> appProtocols = filterChainMatch.getApplicationProtocolsList();
-      return appProtocols.isEmpty()
-          || appProtocols.contains("managed-mtls"); // TODO(sanjaypujare): remove once TD fixed
+      return appProtocols.isEmpty();
     }
 
     public String getName() {

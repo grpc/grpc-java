@@ -62,6 +62,9 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
           || System.getenv("GRPC_XDS_BOOTSTRAP_CONFIG") != null
           || System.getProperty("io.grpc.xds.bootstrapConfig") != null;
 
+  private static final String serverUriOverride =
+      System.getenv("GRPC_TEST_ONLY_GOOGLE_C2P_RESOLVER_TRAFFIC_DIRECTOR_URI");
+
   private HttpConnectionProvider httpConnectionProvider = HttpConnectionFactory.INSTANCE;
   private final String authority;
   private final SynchronizationContext syncContext;
@@ -177,9 +180,14 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
           ImmutableMap.of("TRAFFICDIRECTOR_DIRECTPATH_C2P_IPV6_CAPABLE", true));
     }
     ImmutableMap.Builder<String, Object> serverBuilder = ImmutableMap.builder();
-    serverBuilder.put("server_uri", "directpath-trafficdirector.googleapis.com");
+    String server_uri = "directpath-trafficdirector.googleapis.com";
+    if (serverUriOverride != null && serverUriOverride.length() > 0) {
+      server_uri = serverUriOverride;
+    }
+    serverBuilder.put("server_uri", server_uri);
     serverBuilder.put("channel_creds",
         ImmutableList.of(ImmutableMap.of("type", "google_default")));
+    serverBuilder.put("server_features", ImmutableList.of("xds_v3"));
     return ImmutableMap.of(
         "node", nodeBuilder.build(),
         "xds_servers", ImmutableList.of(serverBuilder.build()));

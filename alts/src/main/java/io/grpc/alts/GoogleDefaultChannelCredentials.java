@@ -18,7 +18,6 @@ package io.grpc.alts;
 
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.collect.ImmutableList;
-import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.CompositeChannelCredentials;
@@ -32,8 +31,6 @@ import io.grpc.netty.InternalNettyChannelCredentials;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.netty.handler.ssl.SslContext;
 import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.net.ssl.SSLException;
 
 /**
@@ -42,8 +39,6 @@ import javax.net.ssl.SSLException;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
 public final class GoogleDefaultChannelCredentials {
-  private static Logger logger = Logger.getLogger(GoogleDefaultChannelCredentials.class.getName());
-
   private GoogleDefaultChannelCredentials() {}
 
   /**
@@ -66,7 +61,6 @@ public final class GoogleDefaultChannelCredentials {
     return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
   }
 
-  @SuppressWarnings("unchecked")
   private static InternalProtocolNegotiator.ClientFactory createClientFactory() {
     SslContext sslContext;
     try {
@@ -74,25 +68,9 @@ public final class GoogleDefaultChannelCredentials {
     } catch (SSLException e) {
       throw new RuntimeException(e);
     }
-    Attributes.Key<String> clusterNameAttrKey = null;
-    try {
-      Class<?> klass = Class.forName("io.grpc.xds.InternalXdsAttributes");
-      clusterNameAttrKey =
-          (Attributes.Key<String>) klass.getField("ATTR_CLUSTER_NAME").get(null);
-    } catch (ClassNotFoundException e) {
-      logger.log(Level.FINE,
-          "Unable to load xDS endpoint cluster name key, this may be expected", e);
-    } catch (NoSuchFieldException e) {
-      logger.log(Level.FINE,
-          "Unable to load xDS endpoint cluster name key, this may be expected", e);
-    } catch (IllegalAccessException e) {
-      logger.log(Level.FINE,
-          "Unable to load xDS endpoint cluster name key, this may be expected", e);
-    }
     return new GoogleDefaultProtocolNegotiatorFactory(
         /* targetServiceAccounts= */ ImmutableList.<String>of(),
         SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
-        sslContext,
-        clusterNameAttrKey);
+        sslContext);
   }
 }

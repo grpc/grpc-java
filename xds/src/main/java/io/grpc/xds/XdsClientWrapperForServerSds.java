@@ -29,7 +29,7 @@ import io.grpc.Status;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
-import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.internal.TimeProvider;
 import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -105,7 +105,6 @@ public final class XdsClientWrapperForServerSds {
     } catch (XdsInitializationException e) {
       throw new IOException(e);
     }
-    Node node = bootstrapInfo.getNode();
     Bootstrapper.ServerInfo serverInfo = bootstrapInfo.getServers().get(0);  // use first server
     ManagedChannel channel =
         Grpc.newChannelBuilder(serverInfo.getTarget(), serverInfo.getChannelCredentials())
@@ -120,11 +119,11 @@ public final class XdsClientWrapperForServerSds {
     XdsClient xdsClientImpl =
         new ClientXdsClient(
             channel,
-            serverInfo.isUseProtocolV3(),
-            node,
+            bootstrapInfo,
             timeService,
             new ExponentialBackoffPolicy.Provider(),
-            GrpcUtil.STOPWATCH_SUPPLIER);
+            GrpcUtil.STOPWATCH_SUPPLIER,
+            TimeProvider.SYSTEM_TIME_PROVIDER);
     start(xdsClientImpl, grpcServerResourceId);
   }
 

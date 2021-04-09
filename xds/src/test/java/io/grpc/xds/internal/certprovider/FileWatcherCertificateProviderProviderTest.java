@@ -110,6 +110,22 @@ public class FileWatcherCertificateProviderProviderTest {
   }
 
   @Test
+  public void createProvider_zeroRefreshInterval() throws IOException {
+    CertificateProvider.DistributorWatcher distWatcher =
+            new CertificateProvider.DistributorWatcher();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(ZERO_REFRESH_INTERVAL);
+    ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
+    when(scheduledExecutorServiceFactory.create()).thenReturn(mockService);
+    try {
+      provider.createCertificateProvider(map, distWatcher, true);
+      fail("exception expected");
+    } catch (IllegalArgumentException iae) {
+      assertThat(iae).hasMessageThat().isEqualTo("refreshInterval needs to be greater than 0");
+    }
+  }
+
+  @Test
   public void createProvider_missingCert_expectException() throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
@@ -182,5 +198,13 @@ public class FileWatcherCertificateProviderProviderTest {
       "{\n"
           + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates.pem\","
           + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key.pem\""
+          + "      }";
+
+  private static final String ZERO_REFRESH_INTERVAL =
+      "{\n"
+          + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates2.pem\","
+          + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key3.pem\","
+          + "        \"ca_certificate_file\": \"/var/run/gke-spiffe/certs/ca_certificates4.pem\","
+          + "        \"refresh_interval\": \"0s\""
           + "      }";
 }

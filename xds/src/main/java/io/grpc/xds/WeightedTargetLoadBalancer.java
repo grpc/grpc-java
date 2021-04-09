@@ -131,20 +131,23 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     List<WeightedChildPicker> childPickers = new ArrayList<>();
 
     ConnectivityState overallState = null;
+    List<WeightedChildPicker> errorPickers = new ArrayList<>();
     for (String name : targets.keySet()) {
       ChildHelper childHelper = childHelpers.get(name);
       ConnectivityState childState = childHelper.currentState;
       overallState = aggregateState(overallState, childState);
+      int weight = targets.get(name).weight;
       if (READY == childState) {
-        int weight = targets.get(name).weight;
         childPickers.add(new WeightedChildPicker(weight, childHelper.currentPicker));
+      } else if (TRANSIENT_FAILURE == childState) {
+        errorPickers.add(new WeightedChildPicker(weight, childHelper.currentPicker));
       }
     }
 
     SubchannelPicker picker;
     if (childPickers.isEmpty()) {
       if (overallState == TRANSIENT_FAILURE) {
-        picker = new ErrorPicker(Status.UNAVAILABLE); // TODO: more details in status
+        picker = new WeightedRandomPicker(errorPickers);
       } else {
         picker = XdsSubchannelPickers.BUFFER_PICKER;
       }
