@@ -71,7 +71,7 @@ final class BinderTransportSecurity {
 
   /**
    * Intercepts server calls and ensures they're authorized before allowing them to proceed.
-   * Authentication state is fetched from the call attrubites, inherited from the transport.
+   * Authentication state is fetched from the call attributes, inherited from the transport.
    */
   private static final class ServerAuthInterceptor implements ServerInterceptor {
     @Override
@@ -109,9 +109,19 @@ final class BinderTransportSecurity {
     @CheckReturnValue
     Status checkAuthorization(MethodDescriptor<?, ?> method) {
       String serviceName = method.getServiceName();
-      Status authorization = serviceAuthorization.get(serviceName);
-      if (authorization == null) {
-        authorization = policy.checkAuthorizationForService(uid, serviceName);
+      // Only cache decisions if the method can be sampled for tracing,
+      // which is true for all generated methods. Otherwise, programatically
+      // created methods could casue this cahe to grow unbounded.
+      boolean useCache = method.isSampledToLocalTracing();
+      Status authorization;
+      if (useCache) {
+        authorization = serviceAuthorization.get(serviceName);
+        if (authorization != null) {
+          return authorization;
+        }
+      }
+      authorization = policy.checkAuthorizationForService(uid, serviceName);
+      if (useCache) {
         serviceAuthorization.putIfAbsent(serviceName, authorization);
       }
       return authorization;

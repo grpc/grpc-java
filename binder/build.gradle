@@ -46,7 +46,6 @@ repositories {
 
 dependencies {
     api project(':grpc-core')
-    api project(':grpc-testing')
     api project(':grpc-protobuf-lite')
 
     guavaDependency 'implementation'
@@ -65,6 +64,7 @@ dependencies {
     testImplementation libraries.truth
 
     androidTestAnnotationProcessor libraries.autovalue
+    androidTestImplementation project(':grpc-testing')
     androidTestImplementation libraries.autovalue_annotation
     androidTestImplementation libraries.junit
     androidTestImplementation libraries.androidx_core

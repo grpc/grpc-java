@@ -120,6 +120,8 @@ final class BinderServer implements InternalServer, LeakSafeOneWayBinder.Transac
     if (!shutdown) {
       shutdown = true;
       if (useSharedTimer) {
+        // TODO: Transports may still be using this resource. They should 
+        // be managing its use as well.
         SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, executorService);
       }
       // Break the connection to the binder. We'll receive no more transactions.

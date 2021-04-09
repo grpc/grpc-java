@@ -279,7 +279,7 @@ abstract class BinderTransport
 
   @Override
   public synchronized void binderDied() {
-    shutdownInternal(Status.UNAVAILABLE, true);
+    shutdownInternal(Status.UNAVAILABLE.withDescription("binderDied"), true);
   }
 
   @GuardedBy("this")
@@ -320,7 +320,8 @@ abstract class BinderTransport
     parcel.writeStrongBinder(incomingBinder);
     try {
       if (!iBinder.transact(SETUP_TRANSPORT, parcel, null, IBinder.FLAG_ONEWAY)) {
-        shutdownInternal(Status.UNAVAILABLE, true);
+        shutdownInternal(
+            Status.UNAVAILABLE.withDescription("Failed sending SETUP_TRANSPORT transaction"), true);
       }
     } catch (RemoteException re) {
       shutdownInternal(statusFromRemoteException(re), true);
@@ -388,7 +389,7 @@ abstract class BinderTransport
     int dataSize = parcel.dataSize();
     try {
       if (!outgoingBinder.transact(callId, parcel, null, IBinder.FLAG_ONEWAY)) {
-        throw Status.UNAVAILABLE.asException();
+        throw Status.UNAVAILABLE.withDescription("Failed sending transaction").asException();
       }
     } catch (RemoteException re) {
       throw statusFromRemoteException(re).asException();
@@ -423,7 +424,8 @@ abstract class BinderTransport
             handleAcknowledgedBytes(parcel.readLong());
             break;
           case SHUTDOWN_TRANSPORT:
-            shutdownInternal(Status.UNAVAILABLE, true);
+            shutdownInternal(
+                Status.UNAVAILABLE.withDescription("transport shutdown by peer"), true);
             break;
           case SETUP_TRANSPORT:
             handleSetupTransport(parcel);
@@ -502,7 +504,8 @@ abstract class BinderTransport
     parcel.writeLong(n);
     try {
       if (!iBinder.transact(ACKNOWLEDGE_BYTES, parcel, null, IBinder.FLAG_ONEWAY)) {
-        shutdownInternal(Status.UNAVAILABLE, true);
+        shutdownInternal(
+            Status.UNAVAILABLE.withDescription("Failed sending ack bytes transaction"), true);
       }
     } catch (RemoteException re) {
       shutdownInternal(statusFromRemoteException(re), true);
@@ -514,7 +517,7 @@ abstract class BinderTransport
   final void handleAcknowledgedBytes(long numBytes) {
     // The remote side has acknowledged reception of rpc data.
     // (update with Math.max in case transactions are delivered out of order).
-    acknowledgedOutgoingBytes = Math.max(acknowledgedOutgoingBytes, numBytes);
+    acknowledgedOutgoingBytes = wrapAwareMax(acknowledgedOutgoingBytes, numBytes);
     if ((numOutgoingBytes.get() - acknowledgedOutgoingBytes) < TRANSACTION_BYTES_WINDOW
         && transmitWindowFull) {
       logger.log(Level.FINE, 
@@ -525,6 +528,10 @@ abstract class BinderTransport
         inbound.onTransportReady();
       }
     }
+  }
+
+  private static final long wrapAwareMax(long a, long b) {
+    return a - b < 0 ? b : a;
   }
 
   /** Concrete client-side transport implementation. */
@@ -684,10 +691,14 @@ abstract class BinderTransport
       if (inState(TransportState.SETUP)) {
         int version = parcel.readInt();
         IBinder binder = parcel.readStrongBinder();
-        if (version == WIRE_FORMAT_VERSION && binder != null) {
-          blockingExecutor.execute(() -> checkSecurityPolicy(binder));
+        if (version != WIRE_FORMAT_VERSION) {
+          shutdownInternal(
+              Status.UNAVAILABLE.withDescription("Wire format version mismatch"), true);
+        } else if (binder == null) {
+          shutdownInternal(
+              Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
         } else {
-          shutdownInternal(Status.UNAVAILABLE, true);
+          blockingExecutor.execute(() -> checkSecurityPolicy(binder));
         }
       }
     }
@@ -810,7 +821,7 @@ abstract class BinderTransport
 
     synchronized Status startStream(ServerStream stream, String methodName, Metadata headers) {
       if (isShutdown()) {
-        return Status.UNAVAILABLE.withDescription("transport shutdown");
+        return Status.UNAVAILABLE.withDescription("transport is shutdown");
       } else {
         serverTransportListener.streamCreated(stream, methodName, headers);
         return Status.OK;
