@@ -23,6 +23,8 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableSet;
@@ -139,6 +141,11 @@ public class ClientSslContextProviderFactoryTest {
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    // verify that bootstrapInfo is cached...
+    sslContextProvider =
+        clientSslContextProviderFactory.create(upstreamTlsContext);
+    assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
+    verify(bootstrapper, times(1)).bootstrap();
   }
 
   @Test

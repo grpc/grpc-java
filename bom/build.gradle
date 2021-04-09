@@ -12,7 +12,12 @@ publishing {
 
       pom.withXml {
         // Generate bom using subprojects
-        def internalProjects = [project.name, 'grpc-gae-interop-testing-jdk8', 'grpc-compiler']
+        def internalProjects = [
+          project.name,
+          'grpc-binder',
+          'grpc-compiler',
+          'grpc-gae-interop-testing-jdk8',
+        ]
 
         def dependencyManagement = asNode().appendNode('dependencyManagement')
         def dependencies = dependencyManagement.appendNode('dependencies')
