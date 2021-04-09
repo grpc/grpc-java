@@ -233,12 +233,14 @@ public class RingHashLoadBalancerTest {
         subchannels.get(Collections.singletonList(servers.get(0))),
         ConnectivityStateInfo.forTransientFailure(
             Status.UNKNOWN.withDescription("unknown failure")));
+    inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
 
     // one in TRANSIENT_FAILURE, one in IDLE
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(1))),
         ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
     verifyNoMoreInteractions(helper);
@@ -260,6 +262,7 @@ public class RingHashLoadBalancerTest {
         subchannels.get(Collections.singletonList(servers.get(0))),
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("not found")));
+    inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
     // two in TRANSIENT_FAILURE, two in IDLE
@@ -267,6 +270,7 @@ public class RingHashLoadBalancerTest {
         subchannels.get(Collections.singletonList(servers.get(1))),
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("also not found")));
+    inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper)
         .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
@@ -283,6 +287,7 @@ public class RingHashLoadBalancerTest {
         subchannels.get(Collections.singletonList(servers.get(3))),
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("connection lost")));
+    inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper)
         .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
@@ -311,6 +316,7 @@ public class RingHashLoadBalancerTest {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(
           Status.UNAUTHENTICATED.withDescription("Permission denied")));
     }
+    verify(helper, times(3)).refreshNameResolution();
 
     // Stays in IDLE when until there are two or more subchannels in TRANSIENT_FAILURE.
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
