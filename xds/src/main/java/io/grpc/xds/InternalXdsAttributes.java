@@ -68,5 +68,12 @@ public final class InternalXdsAttributes {
   static final Attributes.Key<Locality> ATTR_LOCALITY =
       Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.locality");
 
+  /**
+   * Endpoint weight for load balancing purposes.
+   */
+  @EquivalentAddressGroup.Attr
+  static final Attributes.Key<Long> ATTR_SERVER_WEIGHT =
+      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.serverWeight");
+
   private InternalXdsAttributes() {}
 }
