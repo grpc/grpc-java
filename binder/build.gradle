@@ -46,7 +46,6 @@ repositories {
 
 dependencies {
     api project(':grpc-core')
-    api project(':grpc-protobuf-lite')
 
     guavaDependency 'implementation'
     implementation libraries.androidx_annotation

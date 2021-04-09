@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import android.os.Parcel;
 import android.os.Parcelable;
-import io.grpc.protobuf.lite.ProtoLiteUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -37,7 +36,7 @@ import javax.annotation.Nullable;
  * we intentionally don't support unmarshalling back to a parcelable.
  *
  * <p>This class really just wraps a Parcelable instance and masquerardes as an inputstream. See
- * {@link ProtoLiteUtils} for a similar example of this pattern.
+ * {@code ProtoLiteUtils} for a similar example of this pattern.
  *
  * <p>An instance of this class maybe be created from two sources.
  *

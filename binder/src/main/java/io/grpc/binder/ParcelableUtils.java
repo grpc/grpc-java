@@ -20,12 +20,11 @@ import android.os.Parcelable;
 import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.binder.internal.InternalMetadataHelper;
-import io.grpc.protobuf.lite.ProtoLiteUtils;
 
 /**
  * Utility methods for using Android Parcelable objects with gRPC.
  *
- * <p>This class models the same pattern as the {@link ProtoLiteUtils} class.
+ * <p>This class models the same pattern as the {@code ProtoLiteUtils} class.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class ParcelableUtils {
