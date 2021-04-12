@@ -57,6 +57,7 @@ subprojects {
         nettyVersion = '4.1.52.Final'
         guavaVersion = '30.0-android'
         googleauthVersion = '0.25.2'
+        googlehttpVersion = '1.39.1'
         protobufVersion = '3.12.0'
         protocVersion = protobufVersion
         opencensusVersion = '0.28.0'
@@ -155,6 +156,7 @@ subprojects {
             google_api_protos: 'com.google.api.grpc:proto-google-common-protos:2.0.1',
             google_auth_credentials: "com.google.auth:google-auth-library-credentials:${googleauthVersion}",
             google_auth_oauth2_http: "com.google.auth:google-auth-library-oauth2-http:${googleauthVersion}",
+            google_http_client_jackson2: "com.google.http-client:google-http-client-jackson2:${googlehttpVersion}",
             okhttp: 'com.squareup.okhttp:okhttp:2.7.4',
             okio: 'com.squareup.okio:okio:1.17.5',
             opencensus_api: "io.opencensus:opencensus-api:${opencensusVersion}",
@@ -254,16 +256,6 @@ subprojects {
             dependencies.runtimeOnly project(':grpc-context')
             censusApiDependency 'runtimeOnly'
             guavaDependency 'runtimeOnly'
-
-            // We can remove this dependency override once org.apache.httpcomponents:httpclient:4.5.13
-            // is released with org.apache.httpcomponents:httpcore:4.4.14 dependency, and
-            // com.google.http-client:google-http-client:1.39.1 is upgraded with them.
-            // https://github.com/grpc/grpc-java/issues/8037
-            configurations.all {
-                resolutionStrategy {
-                    force 'org.apache.httpcomponents:httpcore:4.4.14'
-                }
-            }
         }
 
         // A util function to config perfmark dependency with transitive
@@ -299,6 +291,16 @@ subprojects {
         ])) {
             runtimeClasspath {
                 resolutionStrategy.failOnVersionConflict()
+
+                // We can remove this dependency override once org.apache.httpcomponents:httpclient:4.5.13
+                // is released with org.apache.httpcomponents:httpcore:4.4.14 dependency, and
+                // com.google.http-client:google-http-client:1.39.1 is upgraded with them.
+                // https://github.com/grpc/grpc-java/issues/8037
+                configurations.all {
+                    resolutionStrategy {
+                        force 'org.apache.httpcomponents:httpcore:4.4.14'
+                    }
+                }
             }
         }
     }
