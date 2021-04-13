@@ -2127,7 +2127,6 @@ public abstract class ClientXdsClientTestBase {
       return buildListener(name, routeConfiguration, Collections.<Message>emptyList());
     }
 
-    @SuppressWarnings("unchecked")
     protected abstract Message buildListener(
         String name, Message routeConfiguration, List<? extends Message> httpFilters);
 
