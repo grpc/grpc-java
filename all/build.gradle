@@ -24,12 +24,13 @@ def subprojects = [
     project(':grpc-xds'),
 ]
 
-for (subproject in rootProject.subprojects) {
+for (subproject in subprojects) {
     if (subproject == project) {
         continue
     }
     evaluationDependsOn(subproject.path)
 }
+evaluationDependsOn(':grpc-interop-testing')
 
 dependencies {
     api subprojects.minus([project(':grpc-protobuf-lite')])
