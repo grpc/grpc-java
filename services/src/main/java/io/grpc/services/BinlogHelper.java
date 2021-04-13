@@ -19,7 +19,7 @@ package io.grpc.services;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.protobuf.services.BinaryLogProvider.BYTEARRAY_MARSHALLER;
+import static io.grpc.services.BinaryLogProvider.BYTEARRAY_MARSHALLER;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
