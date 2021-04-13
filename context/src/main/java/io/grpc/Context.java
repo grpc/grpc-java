@@ -955,7 +955,12 @@ public class Context {
   }
 
   /**
-   * Key for indexing values stored in a context.
+   * Key for indexing values stored in a context. Keys use reference equality and Context does not
+   * provide a mechanism to loop over Keys. This means there is no way to access a Key's value from
+   * a Context without having access to the Key instance itself. This allows strong control over
+   * what code can get/set a key in the Context. For example, you might manage access to Key similar
+   * to a ThreadLocal using Java visibility (private/protected). Generally Keys are stored in static
+   * fields.
    */
   public static final class Key<T> {
     private final String name;
