@@ -1850,7 +1850,7 @@ public class OkHttpClientTransportTest {
 
   @Test
   public void proxy_200() throws Exception {
-    ServerSocket serverSocket = new ServerSocket(0);
+    ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getLoopbackAddress());
     InetSocketAddress targetAddress = InetSocketAddress.createUnresolved("theservice", 80);
     clientTransport = new OkHttpClientTransport(
         targetAddress,
@@ -1907,7 +1907,7 @@ public class OkHttpClientTransportTest {
 
   @Test
   public void proxy_500() throws Exception {
-    ServerSocket serverSocket = new ServerSocket(0);
+    ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getLoopbackAddress());
     InetSocketAddress targetAddress = InetSocketAddress.createUnresolved("theservice", 80);
     clientTransport = new OkHttpClientTransport(
         targetAddress,
@@ -1963,7 +1963,7 @@ public class OkHttpClientTransportTest {
 
   @Test
   public void proxy_immediateServerClose() throws Exception {
-    ServerSocket serverSocket = new ServerSocket(0);
+    ServerSocket serverSocket = new ServerSocket(0, 0, InetAddress.getLoopbackAddress());
     InetSocketAddress targetAddress = InetSocketAddress.createUnresolved("theservice", 80);
     clientTransport = new OkHttpClientTransport(
         targetAddress,
