@@ -59,7 +59,7 @@ java_library(
         "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
-        "@io_grpc_grpc_proto//:reflection_java_proto_deprecated",
+        "@io_grpc_grpc_proto//:reflection_java_proto",
     ],
 )
 
@@ -85,9 +85,9 @@ java_library(
 
 java_grpc_library(
     name = "_reflection_java_grpc",
-    srcs = ["@io_grpc_grpc_proto//:reflection_proto_deprecated"],
+    srcs = ["@io_grpc_grpc_proto//:reflection_proto"],
     visibility = ["//visibility:private"],
-    deps = ["@io_grpc_grpc_proto//:reflection_java_proto_deprecated"],
+    deps = ["@io_grpc_grpc_proto//:reflection_java_proto"],
 )
 
 java_grpc_library(

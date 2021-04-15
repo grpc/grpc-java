@@ -8,14 +8,6 @@ plugins {
 
 description = "gRPC: Services"
 
-[compileJava].each() {
-    // v1alpha of reflection.proto is deprecated at the file level.
-    // Without this workaround, the project can not compile.
-    it.options.compilerArgs += [
-        "-Xlint:-deprecation",
-    ]
-}
-
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
@@ -52,7 +44,7 @@ jacocoTestReport {
                 '**/io/grpc/binarylog/v1/**',
                 '**/io/grpc/channelz/v1/**',
                 '**/io/grpc/health/v1/**',
-                '**/io/grpc/reflection/v1alpha/**',
+                '**/io/grpc/reflection/v1/**',
         ])
     }
 }
