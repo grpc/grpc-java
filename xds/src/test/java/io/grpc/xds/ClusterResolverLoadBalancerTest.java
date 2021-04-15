@@ -452,6 +452,7 @@ public class ClusterResolverLoadBalancerTest {
     assertAddressesEqual(Arrays.asList(endpoint1, endpoint2), childBalancer.addresses);
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void onlyLogicalDnsCluster_handleRefreshNameResolution() {
     deliverConfigWithSingleLogicalDnsCluster();
@@ -460,6 +461,7 @@ public class ClusterResolverLoadBalancerTest {
     FakeNameResolver resolver = Iterables.getOnlyElement(resolvers);
     resolver.deliverEndpointAddresses(Arrays.asList(endpoint1, endpoint2));
     assertThat(resolver.refreshCount).isEqualTo(0);
+    verify(helper).ignoreRefreshNameResolutionCheck();
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     childBalancer.helper.refreshNameResolution();
     assertThat(resolver.refreshCount).isEqualTo(1);
@@ -509,6 +511,7 @@ public class ClusterResolverLoadBalancerTest {
     inOrder.verifyNoMoreInteractions();
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void onlyLogicalDnsCluster_refreshNameResolutionRaceWithResolutionError() {
     InOrder inOrder = Mockito.inOrder(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
@@ -519,6 +522,7 @@ public class ClusterResolverLoadBalancerTest {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertAddressesEqual(Collections.singletonList(endpoint), childBalancer.addresses);
     assertThat(resolver.refreshCount).isEqualTo(0);
+    verify(helper).ignoreRefreshNameResolutionCheck();
 
     childBalancer.helper.refreshNameResolution();
     assertThat(resolver.refreshCount).isEqualTo(1);
