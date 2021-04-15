@@ -1067,12 +1067,16 @@ public abstract class LoadBalancer {
      * the future and load balancers are completely responsible for triggering the refresh.
      * See <a href="https://github.com/grpc/grpc-java/issues/8088">#8088</a> for the background.
      *
-     * @deprecated Do NOT use.
+     * <p>This should rarely be used, but sometimes the address for the subchannel wasn't
+     * provided by the name resolver and a refresh needs to be directed somewhere else instead.
+     * Then you can call this method to disable the short-tem check for detecting LoadBalancers
+     * that need to be updated for the new expected behavior.
+     *
+     * @since 1.38.0
      */
-    @Deprecated
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8088")
     public void ignoreRefreshNameResolutionCheck() {
-      throw new UnsupportedOperationException();
+      // no-op
     }
 
     /**

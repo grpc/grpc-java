@@ -452,7 +452,6 @@ public class ClusterResolverLoadBalancerTest {
     assertAddressesEqual(Arrays.asList(endpoint1, endpoint2), childBalancer.addresses);
   }
 
-  @SuppressWarnings("deprecation")
   @Test
   public void onlyLogicalDnsCluster_handleRefreshNameResolution() {
     deliverConfigWithSingleLogicalDnsCluster();
@@ -511,7 +510,6 @@ public class ClusterResolverLoadBalancerTest {
     inOrder.verifyNoMoreInteractions();
   }
 
-  @SuppressWarnings("deprecation")
   @Test
   public void onlyLogicalDnsCluster_refreshNameResolutionRaceWithResolutionError() {
     InOrder inOrder = Mockito.inOrder(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);

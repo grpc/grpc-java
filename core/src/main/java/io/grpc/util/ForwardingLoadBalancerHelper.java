@@ -94,7 +94,6 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
     delegate().refreshNameResolution();
   }
 
-  @Deprecated
   @Override
   public void ignoreRefreshNameResolutionCheck() {
     delegate().ignoreRefreshNameResolutionCheck();

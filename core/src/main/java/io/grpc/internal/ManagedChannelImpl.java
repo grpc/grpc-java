@@ -1467,7 +1467,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.execute(new LoadBalancerRefreshNameResolution());
     }
 
-    @Deprecated
     @Override
     public void ignoreRefreshNameResolutionCheck() {
       ignoreRefreshNsCheck = true;
