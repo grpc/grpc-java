@@ -1514,6 +1514,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
         @Override
         void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
+          // TODO(chengyuanzhang): change to let LB policies explicitly manage OOB channel's
+          //  state and refresh name resolution if necessary.
           handleInternalSubchannelState(newState);
           oobChannel.handleSubchannelStateChange(newState);
         }
