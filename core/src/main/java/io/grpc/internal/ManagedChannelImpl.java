@@ -117,6 +117,7 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 final class ManagedChannelImpl extends ManagedChannel implements
     InternalInstrumented<ChannelStats> {
+  @VisibleForTesting
   static final Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
 
   // Matching this pattern means the target string is a URI target or at least intended to be one.
