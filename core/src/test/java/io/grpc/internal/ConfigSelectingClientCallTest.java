@@ -135,6 +135,9 @@ public class ConfigSelectingClientCallTest {
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
     verify(callListener).onClose(statusCaptor.capture(), any(Metadata.class));
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.FAILED_PRECONDITION);
+
+    // The call should not delegate to null and fail methods with NPE.
+    configSelectingClientCall.request(1);
   }
 
   private final class TestChannel extends Channel {
