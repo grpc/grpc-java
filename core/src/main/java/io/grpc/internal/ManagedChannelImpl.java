@@ -1179,6 +1179,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       return delegate;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void start(Listener<RespT> observer, Metadata headers) {
       PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
@@ -1186,6 +1187,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       Status status = result.getStatus();
       if (!status.isOk()) {
         executeCloseObserverInContext(observer, status);
+        delegate = (ClientCall<ReqT, RespT>) NOOP_CALL;
         return;
       }
       ClientInterceptor interceptor = result.getInterceptor();
@@ -1225,6 +1227,29 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
     }
   }
+
+  private static final ClientCall<Object, Object> NOOP_CALL = new ClientCall<Object, Object>() {
+    @Override
+    public void start(Listener<Object> responseListener, Metadata headers) {}
+
+    @Override
+    public void request(int numMessages) {}
+
+    @Override
+    public void cancel(String message, Throwable cause) {}
+
+    @Override
+    public void halfClose() {}
+
+    @Override
+    public void sendMessage(Object message) {}
+
+    // Always returns {@code false}, since this is only used when the startup of the call fails.
+    @Override
+    public boolean isReady() {
+      return false;
+    }
+  };
 
   /**
    * Terminate the channel if termination conditions are met.
