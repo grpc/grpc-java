@@ -1942,8 +1942,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             if (!helper.ignoreRefreshNsCheck && !helper.nsRefreshedByLb) {
               logger.log(Level.WARNING,
                   "LoadBalancer should call Helper.refreshNameResolution() to refresh name "
-                      + "resolution if subchannel connection is broken. This will no longer happen"
-                      + " automatically in the future releases");
+                      + "resolution if subchannel state becomes TRANSIENT_FAILURE or IDLE. "
+                      + "This will no longer happen automatically in the future releases");
               refreshAndResetNameResolution();
               helper.nsRefreshedByLb = true;
             }
