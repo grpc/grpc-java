@@ -130,10 +130,10 @@ public final class ChannelzProtoUtilTest {
       .setLastCallStartedTimestamp(Timestamps.fromNanos(4))
       .build();
   private final Subchannel subchannelProto = Subchannel
-      .newBuilder()
-      .setRef(subchannelRef)
-      .setData(subchannelData)
-      .build();
+        .newBuilder()
+        .setRef(subchannelRef)
+        .setData(subchannelData)
+        .build();
 
   private final TestServer server = new TestServer();
   private final ServerRef serverRef = ServerRef
@@ -177,9 +177,9 @@ public final class ChannelzProtoUtilTest {
       .setName("SO_TIMEOUT")
       .setAdditional(
           Any.pack(SocketOptionTimeout
-              .newBuilder()
-              .setDuration(Durations.fromMillis(200))
-              .build())
+          .newBuilder()
+          .setDuration(Durations.fromMillis(200))
+          .build())
       ).build();
 
   private final SocketOption sockOptAdditional = SocketOption
@@ -445,10 +445,10 @@ public final class ChannelzProtoUtilTest {
     assertEquals(
         Security.newBuilder().setTls(
             Tls.newBuilder()
-                .setStandardName("TLS_NULL_WITH_NULL_NULL")
-                .setLocalCertificate(ByteString.copyFrom("localcert", Charsets.UTF_8))
-                .setRemoteCertificate(ByteString.copyFrom("remotecert", Charsets.UTF_8)))
-            .build(),
+            .setStandardName("TLS_NULL_WITH_NULL_NULL")
+            .setLocalCertificate(ByteString.copyFrom("localcert", Charsets.UTF_8))
+            .setRemoteCertificate(ByteString.copyFrom("remotecert", Charsets.UTF_8)))
+        .build(),
         ChannelzProtoUtil.toSocket(socket).getSecurity());
 
     socket.security = new InternalChannelz.Security(
@@ -456,9 +456,9 @@ public final class ChannelzProtoUtilTest {
     assertEquals(
         Security.newBuilder().setTls(
             Tls.newBuilder()
-                .setStandardName("TLS_NULL_WITH_NULL_NULL")
-                .setRemoteCertificate(ByteString.copyFrom("remotecert", Charsets.UTF_8)))
-            .build(),
+            .setStandardName("TLS_NULL_WITH_NULL_NULL")
+            .setRemoteCertificate(ByteString.copyFrom("remotecert", Charsets.UTF_8)))
+        .build(),
         ChannelzProtoUtil.toSocket(socket).getSecurity());
 
     socket.security = new InternalChannelz.Security(
@@ -469,7 +469,7 @@ public final class ChannelzProtoUtilTest {
                 .setStandardName("TLS_NULL_WITH_NULL_NULL")
                 .setLocalCertificate(ByteString.copyFrom("localcert", Charsets.UTF_8)))
             .build(),
-        ChannelzProtoUtil.toSocket(socket).getSecurity());
+            ChannelzProtoUtil.toSocket(socket).getSecurity());
   }
 
   @Test
@@ -479,11 +479,11 @@ public final class ChannelzProtoUtilTest {
     Any packed = Any.pack(contents);
     socket.security
         = new InternalChannelz.Security(
-        new InternalChannelz.OtherSecurity("other_security", packed));
+            new InternalChannelz.OtherSecurity("other_security", packed));
     assertEquals(
         Security.newBuilder().setOther(
             OtherSecurity.newBuilder().setName("other_security").setValue(packed))
-            .build(),
+        .build(),
         ChannelzProtoUtil.toSocket(socket).getSecurity());
   }
 

@@ -27,7 +27,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Tests for {@link TempFileSink}.
+ * Tests for {@link io.grpc.services.TempFileSink}.
  */
 @RunWith(JUnit4.class)
 public class TempFileSinkTest {

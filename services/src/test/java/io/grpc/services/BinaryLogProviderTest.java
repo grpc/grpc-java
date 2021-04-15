@@ -331,11 +331,11 @@ public class BinaryLogProviderTest {
 
         @Override
         public void sendMessage(ReqT message) {
-          byte[] bytes = (byte[]) message;
-          binlogReq.add(bytes);
-          ByteArrayInputStream input = new ByteArrayInputStream(bytes);
-          ReqT dup = method.parseRequest(input);
-          super.sendMessage(dup);
+            byte[] bytes = (byte[]) message;
+            binlogReq.add(bytes);
+            ByteArrayInputStream input = new ByteArrayInputStream(bytes);
+            ReqT dup = method.parseRequest(input);
+            super.sendMessage(dup);
         }
       };
     }
@@ -356,11 +356,11 @@ public class BinaryLogProviderTest {
       ServerCall<ReqT, RespT> wCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
         @Override
         public void sendMessage(RespT message) {
-          byte[] bytes = (byte[]) message;
-          binlogResp.add(bytes);
-          ByteArrayInputStream input = new ByteArrayInputStream(bytes);
-          RespT dup = call.getMethodDescriptor().parseResponse(input);
-          super.sendMessage(dup);
+            byte[] bytes = (byte[]) message;
+            binlogResp.add(bytes);
+            ByteArrayInputStream input = new ByteArrayInputStream(bytes);
+            RespT dup = call.getMethodDescriptor().parseResponse(input);
+            super.sendMessage(dup);
         }
       };
       final ServerCall.Listener<ReqT> oListener = next.startCall(wCall, headers);

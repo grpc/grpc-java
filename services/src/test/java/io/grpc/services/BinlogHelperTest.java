@@ -115,22 +115,22 @@ public final class BinlogHelperTest {
       Metadata.Key.of("c", Metadata.ASCII_STRING_MARSHALLER);
   private static final MetadataEntry ENTRY_A =
       MetadataEntry
-          .newBuilder()
-          .setKey(KEY_A.name())
-          .setValue(ByteString.copyFrom(DATA_A.getBytes(US_ASCII)))
-          .build();
+            .newBuilder()
+            .setKey(KEY_A.name())
+            .setValue(ByteString.copyFrom(DATA_A.getBytes(US_ASCII)))
+            .build();
   private static final MetadataEntry ENTRY_B =
-      MetadataEntry
-          .newBuilder()
-          .setKey(KEY_B.name())
-          .setValue(ByteString.copyFrom(DATA_B.getBytes(US_ASCII)))
-          .build();
+        MetadataEntry
+            .newBuilder()
+            .setKey(KEY_B.name())
+            .setValue(ByteString.copyFrom(DATA_B.getBytes(US_ASCII)))
+            .build();
   private static final MetadataEntry ENTRY_C =
-      MetadataEntry
-          .newBuilder()
-          .setKey(KEY_C.name())
-          .setValue(ByteString.copyFrom(DATA_C.getBytes(US_ASCII)))
-          .build();
+        MetadataEntry
+            .newBuilder()
+            .setKey(KEY_C.name())
+            .setValue(ByteString.copyFrom(DATA_C.getBytes(US_ASCII)))
+            .build();
   private static final long CALL_ID = 0x1112131415161718L;
   private static final int HEADER_LIMIT = 10;
   private static final int MESSAGE_LIMIT = Integer.MAX_VALUE;
@@ -289,9 +289,9 @@ public final class BinlogHelperTest {
   public void configBinLog_multiConfig_withGlobal() throws Exception {
     String configStr =
         "*{h},"
-            + "package.both256/*{h:256;m:256},"
-            + "package.service1/both128{h:128;m:128},"
-            + "package.service2/method_messageOnly{m}";
+        + "package.both256/*{h:256;m:256},"
+        + "package.service1/both128{h:128;m:128},"
+        + "package.service2/method_messageOnly{m}";
     assertSameLimits(HEADER_FULL, makeLog(configStr, "otherpackage.service/method"));
 
     assertSameLimits(BOTH_256, makeLog(configStr, "package.both256/method1"));
@@ -312,8 +312,8 @@ public final class BinlogHelperTest {
   public void configBinLog_multiConfig_noGlobal() throws Exception {
     String configStr =
         "package.both256/*{h:256;m:256},"
-            + "package.service1/both128{h:128;m:128},"
-            + "package.service2/method_messageOnly{m}";
+        + "package.service1/both128{h:128;m:128},"
+        + "package.service2/method_messageOnly{m}";
     assertNull(makeLog(configStr, "otherpackage.service/method"));
 
     assertSameLimits(BOTH_256, makeLog(configStr, "package.both256/method1"));
@@ -450,12 +450,12 @@ public final class BinlogHelperTest {
             .setType(EventType.EVENT_TYPE_CLIENT_HEADER)
             .setClientHeader(
                 ClientHeader.newBuilder().setMetadata(
-                    io.grpc.binarylog.v1.Metadata
-                        .newBuilder()
-                        .addEntry(ENTRY_A)
-                        .addEntry(ENTRY_B)
-                        .addEntry(ENTRY_C)
-                        .build()))
+                io.grpc.binarylog.v1.Metadata
+                    .newBuilder()
+                    .addEntry(ENTRY_A)
+                    .addEntry(ENTRY_B)
+                    .addEntry(ENTRY_C)
+                    .build()))
             .build(),
         metadataToProtoTestHelper(
             EventType.EVENT_TYPE_CLIENT_HEADER, nonEmptyMetadata, Integer.MAX_VALUE));
