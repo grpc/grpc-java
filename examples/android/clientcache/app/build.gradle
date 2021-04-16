@@ -2,6 +2,10 @@ apply plugin: 'com.android.application'
 apply plugin: 'com.google.protobuf'
 
 android {
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
     compileSdkVersion 27
 
     defaultConfig {
