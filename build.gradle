@@ -151,6 +151,7 @@ subprojects {
             cronet_embedded: 'org.chromium.net:cronet-embedded:66.3359.158',
             gson: "com.google.code.gson:gson:2.8.6",
             guava: "com.google.guava:guava:${guavaVersion}",
+            httpcore: "org.apache.httpcomponents:httpcore:4.4.14",
             javax_annotation: 'org.apache.tomcat:annotations-api:6.0.53',
             jsr305: 'com.google.code.findbugs:jsr305:3.0.2',
             google_api_protos: 'com.google.api.grpc:proto-google-common-protos:2.0.1',
@@ -252,10 +253,12 @@ subprojects {
                 exclude group: 'com.google.guava', module: 'guava'
                 exclude group: 'io.grpc', module: 'grpc-context'
                 exclude group: 'io.opencensus', module: 'opencensus-api'
+                exclude group: 'org.apache.httpcomponents', module: 'httpcore'
             }
             dependencies.runtimeOnly project(':grpc-context')
             censusApiDependency 'runtimeOnly'
             guavaDependency 'runtimeOnly'
+            dependencies.runtimeOnly libraries.httpcore
         }
 
         // A util function to config perfmark dependency with transitive
@@ -291,16 +294,6 @@ subprojects {
         ])) {
             runtimeClasspath {
                 resolutionStrategy.failOnVersionConflict()
-
-                // We can remove this dependency override once org.apache.httpcomponents:httpclient:4.5.13
-                // is released with org.apache.httpcomponents:httpcore:4.4.14 dependency, and
-                // com.google.http-client:google-http-client:1.39.1 is upgraded with them.
-                // https://github.com/grpc/grpc-java/issues/8037
-                configurations.all {
-                    resolutionStrategy {
-                        force 'org.apache.httpcomponents:httpcore:4.4.14'
-                    }
-                }
             }
         }
     }
