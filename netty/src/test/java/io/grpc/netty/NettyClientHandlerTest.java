@@ -384,6 +384,36 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
+  public void receivedGoAway_shouldFailBufferedStreamsExceedingMaxConcurrentStreams()
+      throws Exception {
+    NettyClientStream.TransportState streamTransportState1 = new TransportStateImpl(
+        handler(),
+        channel().eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        transportTracer);
+    streamTransportState1.setListener(mock(ClientStreamListener.class));
+    NettyClientStream.TransportState streamTransportState2 = new TransportStateImpl(
+        handler(),
+        channel().eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        transportTracer);
+    streamTransportState2.setListener(mock(ClientStreamListener.class));
+    receiveMaxConcurrentStreams(1);
+    ChannelFuture future1 = writeQueue().enqueue(
+        newCreateStreamCommand(grpcHeaders, streamTransportState1), true);
+    ChannelFuture future2 = writeQueue().enqueue(
+        newCreateStreamCommand(grpcHeaders, streamTransportState2), true);
+
+    // GOAWAY
+    channelRead(goAwayFrame(Integer.MAX_VALUE));
+    assertTrue(future1.isSuccess());
+    assertTrue(future2.isDone());
+    assertThat(Status.fromThrowable(future2.cause()).getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(future2.cause().getMessage()).contains(
+        "Abrupt GOAWAY closed unsent stream. HTTP/2 error code: NO_ERROR");
+  }
+
+  @Test
   public void receivedResetWithRefuseCode() throws Exception {
     ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
     channelRead(rstStreamFrame(streamId, (int) Http2Error.REFUSED_STREAM.code() ));
