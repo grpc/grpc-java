@@ -378,7 +378,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertEquals(Status.UNAVAILABLE.getCode(), captor.getValue().getCode());
     assertEquals(
         "Abrupt GOAWAY closed unsent stream. HTTP/2 error code: CANCEL, "
-          + "debug data: this is a test",
+          + "debug data: this is a test\nstream id: 3, GOAWAY Last-Stream-ID:0",
         captor.getValue().getDescription());
     assertTrue(future.isDone());
   }
@@ -411,6 +411,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertThat(Status.fromThrowable(future2.cause()).getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(future2.cause().getMessage()).contains(
         "Abrupt GOAWAY closed unsent stream. HTTP/2 error code: NO_ERROR");
+    assertThat(future2.cause().getMessage()).contains(
+        "At MAX_CONCURRENT_STREAMS limit");
   }
 
   @Test
