@@ -18,6 +18,7 @@ package io.grpc.services;
 
 import io.grpc.BinaryLog;
 import io.grpc.ExperimentalApi;
+import io.grpc.protobuf.services.BinaryLogSink;
 import java.io.IOException;
 
 /**
