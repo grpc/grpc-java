@@ -274,8 +274,10 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     private final class RefreshableHelper extends ForwardingLoadBalancerHelper {
       private final Helper delegate;
 
+      @SuppressWarnings("deprecation")
       private RefreshableHelper(Helper delegate) {
         this.delegate = checkNotNull(delegate, "delegate");
+        delegate.ignoreRefreshNameResolutionCheck();
       }
 
       @Override

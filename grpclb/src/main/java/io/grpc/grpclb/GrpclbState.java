@@ -222,6 +222,10 @@ final class GrpclbState {
     if (config.getMode() == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
       subchannel.requestConnection();
     }
+    if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
+      helper.refreshNameResolution();
+    }
+
     AtomicReference<ConnectivityStateInfo> stateInfoRef =
         subchannel.getAttributes().get(STATE_INFO);
     // If all RR servers are unhealthy, it's possible that at least one connection is CONNECTING at
