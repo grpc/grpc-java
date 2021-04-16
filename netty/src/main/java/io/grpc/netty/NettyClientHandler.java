@@ -74,6 +74,7 @@ import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.handler.codec.http2.Http2StreamVisitor;
+import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.codec.http2.WeightedFairQueueByteDistributor;
 import io.netty.handler.logging.LogLevel;
 import io.perfmark.PerfMark;
@@ -568,20 +569,22 @@ class NettyClientHandler extends AbstractNettyHandler {
       }
       return;
     }
-    if (connection().goAwayReceived()
-        && streamId > connection().local().lastStreamKnownByPeer()) {
-      // This should only be reachable during onGoAwayReceived, as otherwise
-      // getShutdownThrowable() != null
-      command.stream().setNonExistent();
-      Status s = abruptGoAwayStatus;
-      if (s == null) {
-        // Should be impossible, but handle psuedo-gracefully
-        s = Status.INTERNAL.withDescription(
-            "Failed due to abrupt GOAWAY, but can't find GOAWAY details");
+    if (connection().goAwayReceived()) {
+      if (streamId > connection().local().lastStreamKnownByPeer()
+           || connection().local().numActiveStreams() == connection().local().maxActiveStreams()) {
+        // This should only be reachable during onGoAwayReceived, as otherwise
+        // getShutdownThrowable() != null
+        command.stream().setNonExistent();
+        Status s = abruptGoAwayStatus;
+        if (s == null) {
+          // Should be impossible, but handle psuedo-gracefully
+          s = Status.INTERNAL.withDescription(
+              "Failed due to abrupt GOAWAY, but can't find GOAWAY details");
+        }
+        command.stream().transportReportStatus(s, RpcProgress.REFUSED, true, new Metadata());
+        promise.setFailure(s.asRuntimeException());
+        return;
       }
-      command.stream().transportReportStatus(s, RpcProgress.REFUSED, true, new Metadata());
-      promise.setFailure(s.asRuntimeException());
-      return;
     }
 
     NettyClientStream.TransportState stream = command.stream();
@@ -608,6 +611,14 @@ class NettyClientHandler extends AbstractNettyHandler {
     // Create an intermediate promise so that we can intercept the failure reported back to the
     // application.
     ChannelPromise tempPromise = ctx().newPromise();
+    if (connection().goAwayReceived()
+        && connection().local().numActiveStreams() == connection().local().maxActiveStreams()) {
+      Status status = Status.UNAVAILABLE.withCause(
+          new Http2Exception(Http2Error.REFUSED_STREAM, "GOAWAY received"));
+      stream.transportReportStatus(status, RpcProgress.REFUSED, true, new Metadata());
+      promise.setFailure(status.asRuntimeException());
+      return;
+    }
     encoder().writeHeaders(ctx(), streamId, headers, 0, isGet, tempPromise)
         .addListener(new ChannelFutureListener() {
           @Override

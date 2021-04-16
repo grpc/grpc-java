@@ -384,7 +384,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
-  public void receivedGoAway_shouldFailBufferedStreams()
+  public void receivedGoAway_shouldFailBufferedStreamsExceedingMaxConcurrentStreams()
       throws Exception {
     NettyClientStream.TransportState streamTransportState1 = new TransportStateImpl(
         handler(),
@@ -406,10 +406,11 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     // GOAWAY
     channelRead(goAwayFrame(Integer.MAX_VALUE));
-    assertTrue(future1.isDone());
-    assertThat(future1.cause().getMessage()).contains("GOAWAY received");
+    assertTrue(future1.isSuccess());
     assertTrue(future2.isDone());
-    assertThat(future2.cause().getMessage()).contains("GOAWAY received");
+    assertThat(Status.fromThrowable(future2.cause()).getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(future2.cause().getMessage()).contains(
+        "Abrupt GOAWAY closed unsent stream. HTTP/2 error code: NO_ERROR");
   }
 
   @Test
