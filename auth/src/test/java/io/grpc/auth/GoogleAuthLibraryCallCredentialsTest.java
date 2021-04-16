@@ -394,7 +394,11 @@ public class GoogleAuthLibraryCallCredentialsTest {
     Map<?, ?> header = (Map<?, ?>) JsonParser.parse(jsonHeader);
     assertEquals("test-private-key-id", header.get("kid"));
     Map<?, ?> payload = (Map<?, ?>) JsonParser.parse(jsonPayload);
-    assertEquals("https://example.com:123/a.service", payload.get("aud"));
+    // google-auth-library-java 0.25.2 began stripping the grpc service name from the audience.
+    // Allow tests to pass with both the old and new versions for a while to avoid an atomic upgrade
+    // everywhere google-auth-library-java is used.
+    assertTrue("https://example.com/".equals(payload.get("aud"))
+        || "https://example.com:123/a.service".equals(payload.get("aud")));
     assertEquals("test-email@example.com", payload.get("iss"));
     assertEquals("test-email@example.com", payload.get("sub"));
   }
