@@ -31,7 +31,7 @@ import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
  * {@link ServingStatus#SERVING}.
  */
 @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/4696")
-public final class HealthStatusManager {
+public class HealthStatusManager {
   /**
    * The special "service name" that represent all services on a GRPC server.  It is an empty
    * string.

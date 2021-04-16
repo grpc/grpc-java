@@ -16,12 +16,7 @@
 
 package io.grpc.services;
 
-import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
-import io.grpc.reflection.v1alpha.ServerReflectionGrpc;
-import io.grpc.reflection.v1alpha.ServerReflectionRequest;
-import io.grpc.reflection.v1alpha.ServerReflectionResponse;
-import io.grpc.stub.StreamObserver;
 
 /**
  * Provides a reflection service for Protobuf services (including the reflection service itself).
@@ -34,24 +29,7 @@ import io.grpc.stub.StreamObserver;
  */
 @Deprecated
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-public final class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase {
-  private final io.grpc.protobuf.services.ProtoReflectionService delegate;
-
-  private ProtoReflectionService() {
-    delegate = (io.grpc.protobuf.services.ProtoReflectionService)
-        io.grpc.protobuf.services.ProtoReflectionService.newInstance();
-  }
-
-  /**
-   * Creates a instance of {@link io.grpc.protobuf.services.ProtoReflectionService}.
-   */
-  public static BindableService newInstance() {
-    return new ProtoReflectionService();
-  }
-
-  @Override
-  public StreamObserver<ServerReflectionRequest> serverReflectionInfo(
-      StreamObserver<ServerReflectionResponse> responseObserver) {
-    return delegate.serverReflectionInfo(responseObserver);
-  }
+public final class ProtoReflectionService
+    extends io.grpc.protobuf.services.ProtoReflectionService {
+  private ProtoReflectionService() {}
 }

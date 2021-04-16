@@ -16,9 +16,7 @@
 
 package io.grpc.services;
 
-import com.google.protobuf.MessageLite;
 import io.grpc.ExperimentalApi;
-import java.io.Closeable;
 
 /**
  * A class that accepts binary log messages.
@@ -27,9 +25,5 @@ import java.io.Closeable;
  */
 @Deprecated
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4017")
-public interface BinaryLogSink extends Closeable {
-  /**
-   * Writes the {@code message} to the destination.
-   */
-  void write(MessageLite message);
+public interface BinaryLogSink extends io.grpc.protobuf.services.BinaryLogSink {
 }

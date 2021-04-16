@@ -62,14 +62,14 @@ import javax.annotation.concurrent.GuardedBy;
  * extension.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2222")
-public final class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase {
+public class ProtoReflectionService extends ServerReflectionGrpc.ServerReflectionImplBase {
 
   private final Object lock = new Object();
 
   @GuardedBy("lock")
   private final Map<Server, ServerReflectionIndex> serverReflectionIndexes = new WeakHashMap<>();
 
-  private ProtoReflectionService() {}
+  protected ProtoReflectionService() {}
 
   /**
    * Creates a instance of {@link ProtoReflectionService}.

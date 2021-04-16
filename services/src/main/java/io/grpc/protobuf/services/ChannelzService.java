@@ -16,7 +16,6 @@
 
 package io.grpc.protobuf.services;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ExperimentalApi;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
@@ -48,7 +47,7 @@ import io.grpc.stub.StreamObserver;
  * The channelz service provides stats about a running gRPC process.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4206")
-public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
+public class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
   private final InternalChannelz channelz;
   private final int maxPageSize;
 
@@ -59,8 +58,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
     return new ChannelzService(InternalChannelz.instance(), maxPageSize);
   }
 
-  @VisibleForTesting
-  ChannelzService(InternalChannelz channelz, int maxPageSize) {
+  protected ChannelzService(InternalChannelz channelz, int maxPageSize) {
     this.channelz = channelz;
     this.maxPageSize = maxPageSize;
   }
