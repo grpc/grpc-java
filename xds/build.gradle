@@ -57,6 +57,7 @@ dependencies {
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
         exclude group: 'io.grpc', module: 'grpc-context'
         exclude group: 'org.apache.httpcomponents', module: 'httpcore'
+        exclude group: 'junit', module: 'junit'
     }
     runtimeOnly libraries.httpcore
 
