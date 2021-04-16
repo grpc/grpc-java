@@ -569,20 +569,22 @@ class NettyClientHandler extends AbstractNettyHandler {
       }
       return;
     }
-    if (connection().goAwayReceived()
-        && streamId > connection().local().lastStreamKnownByPeer()) {
-      // This should only be reachable during onGoAwayReceived, as otherwise
-      // getShutdownThrowable() != null
-      command.stream().setNonExistent();
-      Status s = abruptGoAwayStatus;
-      if (s == null) {
-        // Should be impossible, but handle psuedo-gracefully
-        s = Status.INTERNAL.withDescription(
-            "Failed due to abrupt GOAWAY, but can't find GOAWAY details");
+    if (connection().goAwayReceived()) {
+      if (streamId > connection().local().lastStreamKnownByPeer()
+           || connection().local().numActiveStreams() == connection().local().maxActiveStreams()) {
+        // This should only be reachable during onGoAwayReceived, as otherwise
+        // getShutdownThrowable() != null
+        command.stream().setNonExistent();
+        Status s = abruptGoAwayStatus;
+        if (s == null) {
+          // Should be impossible, but handle psuedo-gracefully
+          s = Status.INTERNAL.withDescription(
+              "Failed due to abrupt GOAWAY, but can't find GOAWAY details");
+        }
+        command.stream().transportReportStatus(s, RpcProgress.REFUSED, true, new Metadata());
+        promise.setFailure(s.asRuntimeException());
+        return;
       }
-      command.stream().transportReportStatus(s, RpcProgress.REFUSED, true, new Metadata());
-      promise.setFailure(s.asRuntimeException());
-      return;
     }
 
     NettyClientStream.TransportState stream = command.stream();
