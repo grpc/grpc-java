@@ -7,15 +7,10 @@ java_library(
     srcs = [
         "src/main/java/io/grpc/protobuf/services/BinaryLogProvider.java",
         "src/main/java/io/grpc/protobuf/services/BinaryLogProviderImpl.java",
-        "src/main/java/io/grpc/services/BinaryLogProviderImpl.java",
         "src/main/java/io/grpc/protobuf/services/BinaryLogSink.java",
-        "src/main/java/io/grpc/services/BinaryLogSink.java",
         "src/main/java/io/grpc/protobuf/services/BinlogHelper.java",
-        "src/main/java/io/grpc/services/BinlogHelper.java",
         "src/main/java/io/grpc/protobuf/services/InetAddressUtil.java",
-        "src/main/java/io/grpc/services/InetAddressUtil.java",
         "src/main/java/io/grpc/protobuf/services/TempFileSink.java",
-        "src/main/java/io/grpc/services/TempFileSink.java",
     ],
     deps = [
         "//api",
@@ -32,7 +27,6 @@ java_library(
     name = "channelz",
     srcs = [
         "src/main/java/io/grpc/protobuf/services/ChannelzProtoUtil.java",
-        "src/main/java/io/grpc/services/ChannelzProtoUtil.java",
         "src/main/java/io/grpc/protobuf/services/ChannelzService.java",
         "src/main/java/io/grpc/services/ChannelzService.java",
     ],
