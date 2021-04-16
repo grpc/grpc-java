@@ -572,17 +572,18 @@ class NettyClientHandler extends AbstractNettyHandler {
     if (connection().goAwayReceived()) {
       Status s = abruptGoAwayStatus;
       int maxActiveStreams = connection().local().maxActiveStreams();
+      int lastStreamId = connection().local().lastStreamKnownByPeer();
       if (s == null) {
         // Should be impossible, but handle pseudo-gracefully
         s = Status.INTERNAL.withDescription(
             "Failed due to abrupt GOAWAY, but can't find GOAWAY details");
-      } else if (streamId > connection().local().lastStreamKnownByPeer()) {
-        s = s.augmentDescription("stream id: " + streamId);
+      } else if (streamId > lastStreamId) {
+        s = s.augmentDescription(
+            "stream id: " + streamId + ", GOAWAY Last-Stream-ID:" + lastStreamId);
       } else if (connection().local().numActiveStreams() == maxActiveStreams) {
         s = s.augmentDescription("At MAX_CONCURRENT_STREAMS limit. limit: " + maxActiveStreams);
       }
-      if (streamId > connection().local().lastStreamKnownByPeer()
-           || connection().local().numActiveStreams() == maxActiveStreams) {
+      if (streamId > lastStreamId || connection().local().numActiveStreams() == maxActiveStreams) {
         // This should only be reachable during onGoAwayReceived, as otherwise
         // getShutdownThrowable() != null
         command.stream().setNonExistent();
