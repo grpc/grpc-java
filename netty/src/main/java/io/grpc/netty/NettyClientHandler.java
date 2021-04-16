@@ -611,14 +611,6 @@ class NettyClientHandler extends AbstractNettyHandler {
     // Create an intermediate promise so that we can intercept the failure reported back to the
     // application.
     ChannelPromise tempPromise = ctx().newPromise();
-    if (connection().goAwayReceived()
-        && connection().local().numActiveStreams() == connection().local().maxActiveStreams()) {
-      Status status = Status.UNAVAILABLE.withCause(
-          new Http2Exception(Http2Error.REFUSED_STREAM, "GOAWAY received"));
-      stream.transportReportStatus(status, RpcProgress.REFUSED, true, new Metadata());
-      promise.setFailure(status.asRuntimeException());
-      return;
-    }
     encoder().writeHeaders(ctx(), streamId, headers, 0, isGet, tempPromise)
         .addListener(new ChannelFutureListener() {
           @Override
