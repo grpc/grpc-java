@@ -6,7 +6,6 @@ java_library(
     name = "binarylog",
     srcs = [
         "src/main/java/io/grpc/protobuf/services/BinaryLogProvider.java",
-        "src/main/java/io/grpc/services/BinaryLogProvider.java",
         "src/main/java/io/grpc/protobuf/services/BinaryLogProviderImpl.java",
         "src/main/java/io/grpc/services/BinaryLogProviderImpl.java",
         "src/main/java/io/grpc/protobuf/services/BinaryLogSink.java",
@@ -54,7 +53,6 @@ java_library(
     name = "reflection",
     srcs = [
         "src/main/java/io/grpc/protobuf/services/ProtoReflectionService.java",
-        "src/main/java/io/grpc/services/ProtoReflectionService.java",
     ],
     deps = [
         ":_reflection_java_grpc",
