@@ -178,7 +178,7 @@ abstract class XdsClient {
     abstract ClusterType clusterType();
 
     // Endpoint-level load balancing policy.
-    abstract String lbPolicy();
+    abstract LbPolicy lbPolicy();
 
     // Only valid if lbPolicy is "ring_hash".
     abstract long minRingSize();
@@ -251,6 +251,10 @@ abstract class XdsClient {
       EDS, LOGICAL_DNS, AGGREGATE
     }
 
+    enum LbPolicy {
+      ROUND_ROBIN, RING_HASH
+    }
+
     // FIXME(chengyuanzhang): delete this after UpstreamTlsContext's toString() is fixed.
     @Override
     public final String toString() {
@@ -270,38 +274,37 @@ abstract class XdsClient {
 
     @AutoValue.Builder
     abstract static class Builder {
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder clusterName(String clusterName);
 
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder clusterType(ClusterType clusterType);
 
-      // Private do not use.
-      protected abstract Builder lbPolicy(String lbPolicy);
+      abstract Builder lbPolicy(LbPolicy lbPolicy);
 
-      Builder lbPolicy(String lbPolicy, long minRingSize, long maxRingSize) {
+      Builder lbPolicy(LbPolicy lbPolicy, long minRingSize, long maxRingSize) {
         return this.lbPolicy(lbPolicy).minRingSize(minRingSize).maxRingSize(maxRingSize);
       }
 
-      // Private do not use.
+      // Private, use lbPolicy(LbPolicy, long, long).
       protected abstract Builder minRingSize(long minRingSize);
 
-      // Private do not use.
+      // Private, use lbPolicy(.LbPolicy, long, long)
       protected abstract Builder maxRingSize(long maxRingSize);
 
-      // Private do not use.
+      // Private, use CdsUpdate.forEds() instead.
       protected abstract Builder edsServiceName(String edsServiceName);
 
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder lrsServerName(String lrsServerName);
 
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder maxConcurrentRequests(Long maxConcurrentRequests);
 
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder upstreamTlsContext(UpstreamTlsContext upstreamTlsContext);
 
-      // Private do not use.
+      // Private, use CdsUpdate.forAggregate() instead.
       protected abstract Builder prioritizedClusterNames(List<String> prioritizedClusterNames);
 
       abstract CdsUpdate build();

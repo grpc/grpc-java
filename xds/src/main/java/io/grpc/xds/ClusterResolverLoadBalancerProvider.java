@@ -67,19 +67,17 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
   static final class ClusterResolverConfig {
     // Ordered list of clusters to be resolved.
     final List<DiscoveryMechanism> discoveryMechanisms;
-    final PolicySelection localityPickingPolicy;
-    final PolicySelection endpointPickingPolicy;
+    // Endpoint-level load balancing policy with config (round_robin or ring_hash).
+    final PolicySelection lbPolicy;
 
-    ClusterResolverConfig(List<DiscoveryMechanism> discoveryMechanisms,
-        PolicySelection localityPickingPolicy, PolicySelection endpointPickingPolicy) {
+    ClusterResolverConfig(List<DiscoveryMechanism> discoveryMechanisms, PolicySelection lbPolicy) {
       this.discoveryMechanisms = checkNotNull(discoveryMechanisms, "discoveryMechanisms");
-      this.localityPickingPolicy = checkNotNull(localityPickingPolicy, "localityPickingPolicy");
-      this.endpointPickingPolicy = checkNotNull(endpointPickingPolicy, "endpointPickingPolicy");
+      this.lbPolicy = checkNotNull(lbPolicy, "lbPolicy");
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(discoveryMechanisms, localityPickingPolicy, endpointPickingPolicy);
+      return Objects.hash(discoveryMechanisms, lbPolicy);
     }
 
     @Override
@@ -92,16 +90,14 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       }
       ClusterResolverConfig that = (ClusterResolverConfig) o;
       return discoveryMechanisms.equals(that.discoveryMechanisms)
-          && localityPickingPolicy.equals(that.localityPickingPolicy)
-          && endpointPickingPolicy.equals(that.endpointPickingPolicy);
+          && lbPolicy.equals(that.lbPolicy);
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("discoveryMechanisms", discoveryMechanisms)
-          .add("localityPickingPolicy", localityPickingPolicy)
-          .add("endpointPickingPolicy", endpointPickingPolicy)
+          .add("lbPolicy", lbPolicy)
           .toString();
     }
 
