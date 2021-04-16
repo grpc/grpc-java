@@ -55,7 +55,7 @@ subprojects {
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
         nettyVersion = '4.1.52.Final'
-        guavaVersion = '30.0-android'
+        guavaVersion = '30.1-android'
         googleauthVersion = '0.22.2'
         protobufVersion = '3.12.0'
         protocVersion = protobufVersion
