@@ -70,6 +70,7 @@ import io.grpc.binarylog.v1.Trailer;
 import io.grpc.internal.NoopClientCall;
 import io.grpc.internal.NoopServerCall;
 import io.grpc.protobuf.StatusProto;
+import io.grpc.protobuf.services.BinaryLogSink;
 import io.grpc.services.BinlogHelper.FactoryImpl;
 import io.grpc.services.BinlogHelper.MaybeTruncated;
 import io.grpc.services.BinlogHelper.SinkWriter;

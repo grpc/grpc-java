@@ -20,6 +20,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.CallOptions;
 import io.grpc.ClientInterceptor;
 import io.grpc.ServerInterceptor;
+import io.grpc.protobuf.services.BinaryLogSink;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;

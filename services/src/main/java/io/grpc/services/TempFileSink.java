@@ -29,7 +29,7 @@ import java.util.logging.Logger;
  * The output file goes to the JVM's temp dir with a prefix of BINARY_INFO. The proto messages
  * are written serially using {@link MessageLite#writeDelimitedTo(OutputStream)}.
  */
-class TempFileSink implements BinaryLogSink {
+class TempFileSink implements io.grpc.protobuf.services.BinaryLogSink {
   private static final Logger logger = Logger.getLogger(TempFileSink.class.getName());
 
   private final String outPath;

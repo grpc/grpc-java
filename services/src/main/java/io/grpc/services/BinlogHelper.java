@@ -52,6 +52,7 @@ import io.grpc.binarylog.v1.Address;
 import io.grpc.binarylog.v1.GrpcLogEntry;
 import io.grpc.binarylog.v1.GrpcLogEntry.EventType;
 import io.grpc.binarylog.v1.Message;
+import io.grpc.protobuf.services.BinaryLogSink;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
