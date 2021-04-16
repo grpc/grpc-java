@@ -84,10 +84,8 @@ public class CertificateUtilsTest {
       CertificateUtils.getPrivateKey(in);
       Assert.fail("no exception thrown");
     } catch (InvalidKeySpecException expected) {
-      System.out.println(expected.toString());
-      assertThat(expected)
-          .hasMessageThat()
-          .contains("Short read of DER length");
+      // The error messages for OpenJDK 11 and 8 are different, and for Windows it will generate a
+      // different exception, so we only check if a general exception is thrown.
     }
   }
 
