@@ -19,6 +19,7 @@ package io.grpc.services;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.protobuf.services.BinaryLogProvider.BYTEARRAY_MARSHALLER;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
@@ -245,7 +246,7 @@ final class BinlogHelper {
           eventType == EventType.EVENT_TYPE_CLIENT_MESSAGE
               || eventType == EventType.EVENT_TYPE_SERVER_MESSAGE,
           "event type must correspond to client message or server message");
-      if (marshaller != io.grpc.protobuf.services.BinaryLogProvider.BYTEARRAY_MARSHALLER) {
+      if (marshaller != BYTEARRAY_MARSHALLER) {
         throw new IllegalStateException("Expected the BinaryLog's ByteArrayMarshaller");
       }
       MaybeTruncated<Message.Builder> pair = createMessageProto((byte[]) message, maxMessageBytes);
