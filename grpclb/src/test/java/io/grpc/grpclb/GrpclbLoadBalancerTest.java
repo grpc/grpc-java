@@ -1003,6 +1003,7 @@ public class GrpclbLoadBalancerTest {
     verify(subchannel1).requestConnection();
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(IDLE));
     verify(subchannel1, times(2)).requestConnection();
+    inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     assertThat(logs).containsExactly(
         "INFO: [grpclb-<api.google.com>] Update balancing state to READY: picks="
@@ -1022,6 +1023,7 @@ public class GrpclbLoadBalancerTest {
     ConnectivityStateInfo errorState1 =
         ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription("error1"));
     deliverSubchannelState(subchannel1, errorState1);
+    inOrder.verify(helper).refreshNameResolution();
     inOrder.verifyNoMoreInteractions();
 
     // If no subchannel is READY, some with error and the others are IDLE, will report CONNECTING
@@ -1183,7 +1185,9 @@ public class GrpclbLoadBalancerTest {
     // Switch all subchannels to TRANSIENT_FAILURE, making the general state TRANSIENT_FAILURE too.
     Status error = Status.UNAVAILABLE.withDescription("error");
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(helper).refreshNameResolution();
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     assertThat(((RoundRobinPicker) pickerCaptor.getValue()).pickList)
         .containsExactly(new ErrorEntry(error));
@@ -1191,6 +1195,7 @@ public class GrpclbLoadBalancerTest {
     // Switch subchannel1 to IDLE, then to CONNECTING, which are ignored since the previous
     // subchannel state is TRANSIENT_FAILURE. General state is unchanged.
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(helper).refreshNameResolution();
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
     inOrder.verifyNoMoreInteractions();
 
@@ -1549,11 +1554,13 @@ public class GrpclbLoadBalancerTest {
       lbResponseObserver = lbResponseObserverCaptor.getValue();
       assertEquals(1, lbRequestObservers.size());
       lbRequestObserver = lbRequestObservers.poll();
+      inOrder.verify(helper).refreshNameResolution();
     }
     if (allSubchannelsBroken) {
       for (Subchannel subchannel : subchannels) {
         // A READY subchannel transits to IDLE when receiving a go-away
         deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
+        inOrder.verify(helper).refreshNameResolution();
       }
     }
 
@@ -1566,6 +1573,7 @@ public class GrpclbLoadBalancerTest {
       // connections are lost
       for (Subchannel subchannel : subchannels) {
         deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
+        inOrder.verify(helper).refreshNameResolution();
       }
 
       // Exit fallback mode or cancel fallback timer when receiving a new server list from balancer

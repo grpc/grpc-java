@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.CONNECTING;
+import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
@@ -83,6 +84,9 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     ConnectivityState currentState = stateInfo.getState();
     if (currentState == SHUTDOWN) {
       return;
+    }
+    if (stateInfo.getState() == TRANSIENT_FAILURE || stateInfo.getState() == IDLE) {
+      helper.refreshNameResolution();
     }
 
     SubchannelPicker picker;

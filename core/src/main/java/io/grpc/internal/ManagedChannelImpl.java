@@ -117,6 +117,7 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 final class ManagedChannelImpl extends ManagedChannel implements
     InternalInstrumented<ChannelStats> {
+  @VisibleForTesting
   static final Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
 
   // Matching this pattern means the target string is a URI target or at least intended to be one.
@@ -1440,6 +1441,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private final class LbHelperImpl extends LoadBalancer.Helper {
     AutoConfiguredLoadBalancer lb;
+    boolean nsRefreshedByLb;
+    boolean ignoreRefreshNsCheck;
 
     @Override
     public AbstractSubchannel createSubchannel(CreateSubchannelArgs args) {
@@ -1478,6 +1481,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void refreshNameResolution() {
       syncContext.throwIfNotInThisSynchronizationContext();
+      nsRefreshedByLb = true;
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
@@ -1486,6 +1490,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       syncContext.execute(new LoadBalancerRefreshNameResolution());
+    }
+
+    @Override
+    public void ignoreRefreshNameResolutionCheck() {
+      ignoreRefreshNsCheck = true;
     }
 
     @Override
@@ -1530,6 +1539,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
         @Override
         void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
+          // TODO(chengyuanzhang): change to let LB policies explicitly manage OOB channel's
+          //  state and refresh name resolution if necessary.
           handleInternalSubchannelState(newState);
           oobChannel.handleSubchannelStateChange(newState);
         }
@@ -1951,9 +1962,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
         @Override
         void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
-          handleInternalSubchannelState(newState);
           checkState(listener != null, "listener is null");
           listener.onSubchannelState(newState);
+          if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
+            if (!helper.ignoreRefreshNsCheck && !helper.nsRefreshedByLb) {
+              logger.log(Level.WARNING,
+                  "LoadBalancer should call Helper.refreshNameResolution() to refresh name "
+                      + "resolution if subchannel state becomes TRANSIENT_FAILURE or IDLE. "
+                      + "This will no longer happen automatically in the future releases");
+              refreshAndResetNameResolution();
+              helper.nsRefreshedByLb = true;
+            }
+          }
         }
 
         @Override

@@ -203,6 +203,9 @@ final class RingHashLoadBalancer extends LoadBalancer {
     if (subchannels.get(stripAttrs(subchannel.getAddresses())) != subchannel) {
       return;
     }
+    if (stateInfo.getState() == TRANSIENT_FAILURE || stateInfo.getState() == IDLE) {
+      helper.refreshNameResolution();
+    }
     Ref<ConnectivityStateInfo> subchannelStateRef = getSubchannelStateInfoRef(subchannel);
 
     // Don't proactively reconnect if the subchannel enters IDLE, even if previously was connected.

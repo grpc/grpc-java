@@ -139,6 +139,9 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     if (subchannels.get(stripAttrs(subchannel.getAddresses())) != subchannel) {
       return;
     }
+    if (stateInfo.getState() == TRANSIENT_FAILURE || stateInfo.getState() == IDLE) {
+      helper.refreshNameResolution();
+    }
     if (stateInfo.getState() == IDLE) {
       subchannel.requestConnection();
     }
