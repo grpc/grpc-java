@@ -24,10 +24,10 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
-import java.security.KeyException;
 import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.security.spec.InvalidKeySpecException;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -83,10 +83,11 @@ public class CertificateUtilsTest {
     try {
       CertificateUtils.getPrivateKey(in);
       Assert.fail("no exception thrown");
-    } catch (KeyException expected) {
+    } catch (InvalidKeySpecException expected) {
+      System.out.println(expected.toString());
       assertThat(expected)
           .hasMessageThat()
-          .contains("could not find a PKCS #8 private key in input stream");
+          .contains("Short read of DER length");
     }
   }
 

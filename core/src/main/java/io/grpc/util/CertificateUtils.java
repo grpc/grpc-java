@@ -16,13 +16,11 @@
 
 package io.grpc.util;
 
-import com.google.common.base.Charsets;
 import com.google.common.io.BaseEncoding;
-import com.google.common.io.CharStreams;
 import io.grpc.ExperimentalApi;
+import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.security.KeyException;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
 import java.security.cert.Certificate;
@@ -31,20 +29,12 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Collection;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Contains certificate/key PEM file utility method(s).
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
 public final class CertificateUtils {
-  private static final Pattern KEY_PATTERN = Pattern.compile(
-      "-----BEGIN\\s+.*PRIVATE\\s+KEY-----" + // Header
-          "([a-z0-9+/=\\r\\n]+)" +                             // Base64 text
-          "-----END\\s+.*PRIVATE\\s+KEY-----",                  // Footer
-      Pattern.CASE_INSENSITIVE);
-
   /**
    * Generates X509Certificate array from a PEM file.
    * The PEM file should contain one or more items in Base64 encoding, each with
@@ -70,14 +60,23 @@ public final class CertificateUtils {
    */
   public static PrivateKey getPrivateKey(InputStream inputStream)
       throws Exception {
-    String key = CharStreams.toString(new InputStreamReader(inputStream, Charsets.UTF_8));
-    Matcher m = KEY_PATTERN.matcher(key);
-    if (!m.find() || m.groupCount() != 1) {
-      throw new KeyException("could not find a PKCS #8 private key in input stream");
+    BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"));
+    String line;
+    while ((line = reader.readLine()) != null) {
+      line = line.replace(System.getProperty("line.separator"), "");
+      if ("-----BEGIN PRIVATE KEY-----".equals(line)) {
+        break;
+      }
     }
-    String keyContent =
-        m.group(1).replace(System.getProperty("line.separator"), "");
-    byte[] decodedKeyBytes = BaseEncoding.base64().decode(keyContent);
+    StringBuilder keyContent = new StringBuilder();
+    while ((line = reader.readLine()) != null) {
+      line = line.replace(System.getProperty("line.separator"), "");
+      if ("-----END PRIVATE KEY-----".equals(line)) {
+        break;
+      }
+      keyContent.append(line);
+    }
+    byte[] decodedKeyBytes = BaseEncoding.base64().decode(keyContent.toString());
     KeyFactory keyFactory = KeyFactory.getInstance("RSA");
     PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decodedKeyBytes);
     return keyFactory.generatePrivate(keySpec);
