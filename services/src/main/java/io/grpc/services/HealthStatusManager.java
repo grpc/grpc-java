@@ -16,6 +16,7 @@
 
 package io.grpc.services;
 
+import io.grpc.BindableService;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 
 /**
@@ -31,5 +32,59 @@ import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
  */
 @Deprecated
 @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/4696")
-public final class HealthStatusManager extends io.grpc.protobuf.services.HealthStatusManager {
+public final class HealthStatusManager {
+  /**
+   * The special "service name" that represent all services on a GRPC server.  It is an empty
+   * string.
+   */
+  public static final String SERVICE_NAME_ALL_SERVICES =
+      io.grpc.protobuf.services.HealthStatusManager.SERVICE_NAME_ALL_SERVICES;
+
+  private io.grpc.protobuf.services.HealthStatusManager delegate;
+
+  /**
+   * Creates a new health service instance.
+   */
+  public HealthStatusManager() {
+    delegate = new io.grpc.protobuf.services.HealthStatusManager();
+  }
+
+  /**
+   * Gets the health check service created in the constructor.
+   */
+  public BindableService getHealthService() {
+    return delegate.getHealthService();
+  }
+
+  /**
+   * Updates the status of the server.
+   * @param service the name of some aspect of the server that is associated with a health status.
+   *     This name can have no relation with the gRPC services that the server is running with.
+   *     It can also be an empty String {@code ""} per the gRPC specification.
+   * @param status is one of the values {@link ServingStatus#SERVING},
+   *     {@link ServingStatus#NOT_SERVING} and {@link ServingStatus#UNKNOWN}.
+   */
+  public void setStatus(String service, ServingStatus status) {
+    delegate.setStatus(service, status);
+  }
+
+  /**
+   * Clears the health status record of a service. The health service will respond with NOT_FOUND
+   * error on checking the status of a cleared service.
+   * @param service the name of some aspect of the server that is associated with a health status.
+   *     This name can have no relation with the gRPC services that the server is running with.
+   *     It can also be an empty String {@code ""} per the gRPC specification.
+   */
+  public void clearStatus(String service) {
+    delegate.clearStatus(service);
+  }
+
+  /**
+   * enterTerminalState causes the health status manager to mark all services as not serving, and
+   * prevents future updates to services.  This method is meant to be called prior to server
+   * shutdown as a way to indicate that clients should redirect their traffic elsewhere.
+   */
+  public void enterTerminalState() {
+    delegate.enterTerminalState();
+  }
 }

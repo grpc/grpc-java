@@ -21,7 +21,7 @@ import io.grpc.ExperimentalApi;
 import java.io.IOException;
 
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4017")
-public class BinaryLogs {
+public final class BinaryLogs {
   /**
    * Creates a binary log that writes to a temp file. <b>Warning:</b> this implementation is
    * not performance optimized, and RPCs will experience back pressure if disk IO does not keep
@@ -49,5 +49,5 @@ public class BinaryLogs {
     return new BinaryLogProviderImpl(sink, configStr);
   }
 
-  protected BinaryLogs() {}
+  private BinaryLogs() {}
 }

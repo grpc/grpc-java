@@ -17,7 +17,7 @@
 package io.grpc.services;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.services.BinaryLogProvider.BYTEARRAY_MARSHALLER;
+import static io.grpc.protobuf.services.BinaryLogProvider.BYTEARRAY_MARSHALLER;
 import static io.grpc.services.BinlogHelper.createMetadataProto;
 import static io.grpc.services.BinlogHelper.getPeerSocket;
 import static org.junit.Assert.assertEquals;

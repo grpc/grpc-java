@@ -25,9 +25,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
 /**
- * The default implementation of a {@link BinaryLogProvider}.
+ * The default implementation of a {@link io.grpc.protobuf.services.BinaryLogProvider}.
  */
-class BinaryLogProviderImpl extends BinaryLogProvider {
+class BinaryLogProviderImpl extends io.grpc.protobuf.services.BinaryLogProvider {
   // avoid using 0 because proto3 long fields default to 0 when unset
   private static final AtomicLong counter = new AtomicLong(1);
 
