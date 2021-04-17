@@ -14,17 +14,12 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.protobuf.services;
 
 import io.grpc.BinaryLog;
 import io.grpc.ExperimentalApi;
-import io.grpc.protobuf.services.BinaryLogSink;
 import java.io.IOException;
 
-/**
- * @deprecated Use {@link io.grpc.protobuf.services.BinaryLogs} instead.
- */
-@Deprecated
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4017")
 public final class BinaryLogs {
   /**
@@ -33,7 +28,7 @@ public final class BinaryLogs {
    * up.
    */
   public static BinaryLog createBinaryLog() throws IOException {
-    return io.grpc.protobuf.services.BinaryLogs.createBinaryLog();
+    return new BinaryLogProviderImpl();
   }
 
   /**
@@ -41,7 +36,7 @@ public final class BinaryLogs {
    */
   @Deprecated
   public static BinaryLog createBinaryLog(BinaryLogSink sink) throws IOException {
-    return io.grpc.protobuf.services.BinaryLogs.createBinaryLog(sink);
+    return new BinaryLogProviderImpl(sink);
   }
 
   /**
@@ -51,7 +46,7 @@ public final class BinaryLogs {
    *   A16-binary-logging</a>.
    */
   public static BinaryLog createBinaryLog(BinaryLogSink sink, String configStr) throws IOException {
-    return io.grpc.protobuf.services.BinaryLogs.createBinaryLog(sink, configStr);
+    return new BinaryLogProviderImpl(sink, configStr);
   }
 
   private BinaryLogs() {}

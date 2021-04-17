@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.protobuf.services;
 
 import static org.junit.Assert.assertEquals;
 
 import io.grpc.binarylog.v1.GrpcLogEntry;
+import io.grpc.protobuf.services.TempFileSink;
 import java.io.DataInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -27,7 +28,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Tests for {@link io.grpc.services.TempFileSink}.
+ * Tests for {@link TempFileSink}.
  */
 @RunWith(JUnit4.class)
 public class TempFileSinkTest {

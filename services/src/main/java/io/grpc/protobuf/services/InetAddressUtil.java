@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.protobuf.services;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;

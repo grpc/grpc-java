@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.protobuf.services;
 
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;

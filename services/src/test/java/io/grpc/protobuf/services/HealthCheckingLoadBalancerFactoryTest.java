@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.protobuf.services;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
@@ -68,7 +68,7 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.services.HealthCheckingLoadBalancerFactory.SubchannelImpl;
+import io.grpc.protobuf.services.HealthCheckingLoadBalancerFactory.SubchannelImpl;
 import io.grpc.stub.StreamObserver;
 import java.net.SocketAddress;
 import java.text.MessageFormat;

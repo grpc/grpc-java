@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.protobuf.services;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;

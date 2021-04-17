@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.protobuf.services;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.BindableService;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
@@ -27,33 +29,29 @@ import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
  *
  * <p>The default, empty-string, service name, {@link #SERVICE_NAME_ALL_SERVICES}, is initialized to
  * {@link ServingStatus#SERVING}.
- *
- * @deprecated Use {@link io.grpc.protobuf.services.HealthStatusManager} instead.
  */
-@Deprecated
 @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/4696")
 public final class HealthStatusManager {
   /**
    * The special "service name" that represent all services on a GRPC server.  It is an empty
    * string.
    */
-  public static final String SERVICE_NAME_ALL_SERVICES =
-      io.grpc.protobuf.services.HealthStatusManager.SERVICE_NAME_ALL_SERVICES;
+  public static final String SERVICE_NAME_ALL_SERVICES = "";
 
-  private io.grpc.protobuf.services.HealthStatusManager delegate;
+  private final HealthServiceImpl healthService;
 
   /**
    * Creates a new health service instance.
    */
   public HealthStatusManager() {
-    delegate = new io.grpc.protobuf.services.HealthStatusManager();
+    healthService = new HealthServiceImpl();
   }
 
   /**
    * Gets the health check service created in the constructor.
    */
   public BindableService getHealthService() {
-    return delegate.getHealthService();
+    return healthService;
   }
 
   /**
@@ -65,7 +63,8 @@ public final class HealthStatusManager {
    *     {@link ServingStatus#NOT_SERVING} and {@link ServingStatus#UNKNOWN}.
    */
   public void setStatus(String service, ServingStatus status) {
-    delegate.setStatus(service, status);
+    checkNotNull(status, "status");
+    healthService.setStatus(service, status);
   }
 
   /**
@@ -76,7 +75,7 @@ public final class HealthStatusManager {
    *     It can also be an empty String {@code ""} per the gRPC specification.
    */
   public void clearStatus(String service) {
-    delegate.clearStatus(service);
+    healthService.clearStatus(service);
   }
 
   /**
@@ -85,6 +84,6 @@ public final class HealthStatusManager {
    * shutdown as a way to indicate that clients should redirect their traffic elsewhere.
    */
   public void enterTerminalState() {
-    delegate.enterTerminalState();
+    healthService.enterTerminalState();
   }
 }

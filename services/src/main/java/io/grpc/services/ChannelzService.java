@@ -16,17 +16,7 @@
 
 package io.grpc.services;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ExperimentalApi;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.ChannelStats;
-import io.grpc.InternalChannelz.ServerList;
-import io.grpc.InternalChannelz.ServerSocketsList;
-import io.grpc.InternalChannelz.ServerStats;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalInstrumented;
-import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
 import io.grpc.channelz.v1.ChannelzGrpc;
 import io.grpc.channelz.v1.GetChannelRequest;
 import io.grpc.channelz.v1.GetChannelResponse;
@@ -46,189 +36,70 @@ import io.grpc.stub.StreamObserver;
 
 /**
  * The channelz service provides stats about a running gRPC process.
+ *
+ * @deprecated Use {@link io.grpc.protobuf.services.ChannelzService} instead.
  */
+@Deprecated
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4206")
 public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
-  private final InternalChannelz channelz;
-  private final int maxPageSize;
+  private final io.grpc.protobuf.services.ChannelzService delegate;
 
   /**
    * Creates an instance.
    */
   public static ChannelzService newInstance(int maxPageSize) {
-    return new ChannelzService(InternalChannelz.instance(), maxPageSize);
+    return new ChannelzService(maxPageSize);
   }
 
-  @VisibleForTesting
-  ChannelzService(InternalChannelz channelz, int maxPageSize) {
-    this.channelz = channelz;
-    this.maxPageSize = maxPageSize;
+  private ChannelzService(int maxPageSize) {
+    delegate = io.grpc.protobuf.services.ChannelzService.newInstance(maxPageSize);
   }
 
   /** Returns top level channel aka {@link io.grpc.ManagedChannel}. */
   @Override
   public void getTopChannels(
       GetTopChannelsRequest request, StreamObserver<GetTopChannelsResponse> responseObserver) {
-    InternalChannelz.RootChannelList rootChannels
-        = channelz.getRootChannels(request.getStartChannelId(), maxPageSize);
-
-    GetTopChannelsResponse resp;
-    try {
-      resp = ChannelzProtoUtil.toGetTopChannelResponse(rootChannels);
-    } catch (StatusRuntimeException e) {
-      responseObserver.onError(e);
-      return;
-    }
-
-    responseObserver.onNext(resp);
-    responseObserver.onCompleted();
+    delegate.getTopChannels(request, responseObserver);
   }
 
   /** Returns a top level channel aka {@link io.grpc.ManagedChannel}. */
   @Override
   public void getChannel(
       GetChannelRequest request, StreamObserver<GetChannelResponse> responseObserver) {
-    InternalInstrumented<ChannelStats> s = channelz.getRootChannel(request.getChannelId());
-    if (s == null) {
-      responseObserver.onError(
-          Status.NOT_FOUND.withDescription("Can't find channel " + request.getChannelId())
-              .asRuntimeException());
-      return;
-    }
-
-    GetChannelResponse resp;
-    try {
-      resp = GetChannelResponse
-          .newBuilder()
-          .setChannel(ChannelzProtoUtil.toChannel(s))
-          .build();
-    } catch (StatusRuntimeException e) {
-      responseObserver.onError(e);
-      return;
-    }
-
-    responseObserver.onNext(resp);
-    responseObserver.onCompleted();
+    delegate.getChannel(request, responseObserver);
   }
 
   /** Returns servers. */
   @Override
   public void getServers(
       GetServersRequest request, StreamObserver<GetServersResponse> responseObserver) {
-    ServerList servers = channelz.getServers(request.getStartServerId(), maxPageSize);
-
-    GetServersResponse resp;
-    try {
-      resp = ChannelzProtoUtil.toGetServersResponse(servers);
-    } catch (StatusRuntimeException e) {
-      responseObserver.onError(e);
-      return;
-    }
-
-    responseObserver.onNext(resp);
-    responseObserver.onCompleted();
+    delegate.getServers(request, responseObserver);
   }
 
   /** Returns a server. */
   @Override
   public void getServer(
       GetServerRequest request, StreamObserver<GetServerResponse> responseObserver) {
-    InternalInstrumented<ServerStats> s = channelz.getServer(request.getServerId());
-    if (s == null) {
-      responseObserver.onError(
-          Status.NOT_FOUND.withDescription("Can't find server " + request.getServerId())
-              .asRuntimeException());
-      return;
-    }
-
-    GetServerResponse resp;
-    try {
-      resp = GetServerResponse
-          .newBuilder()
-          .setServer(ChannelzProtoUtil.toServer(s))
-          .build();
-    } catch (StatusRuntimeException e) {
-      responseObserver.onError(e);
-      return;
-    }
-
-    responseObserver.onNext(resp);
-    responseObserver.onCompleted();
+    delegate.getServer(request, responseObserver);
   }
 
   /** Returns a subchannel. */
   @Override
   public void getSubchannel(
       GetSubchannelRequest request, StreamObserver<GetSubchannelResponse> responseObserver) {
-    InternalInstrumented<ChannelStats> s = channelz.getSubchannel(request.getSubchannelId());
-    if (s == null) {
-      responseObserver.onError(
-          Status.NOT_FOUND.withDescription("Can't find subchannel " + request.getSubchannelId())
-              .asRuntimeException());
-      return;
-    }
-
-    GetSubchannelResponse resp;
-    try {
-      resp = GetSubchannelResponse
-          .newBuilder()
-          .setSubchannel(ChannelzProtoUtil.toSubchannel(s))
-          .build();
-    } catch (StatusRuntimeException e) {
-      responseObserver.onError(e);
-      return;
-    }
-
-    responseObserver.onNext(resp);
-    responseObserver.onCompleted();
+    delegate.getSubchannel(request, responseObserver);
   }
 
   /** Returns a socket. */
   @Override
   public void getSocket(
       GetSocketRequest request, StreamObserver<GetSocketResponse> responseObserver) {
-    InternalInstrumented<SocketStats> s = channelz.getSocket(request.getSocketId());
-    if (s == null) {
-      responseObserver.onError(
-          Status.NOT_FOUND.withDescription("Can't find socket " + request.getSocketId())
-              .asRuntimeException());
-      return;
-    }
-
-    GetSocketResponse resp;
-    try {
-      resp =
-          GetSocketResponse.newBuilder().setSocket(ChannelzProtoUtil.toSocket(s)).build();
-    } catch (StatusRuntimeException e) {
-      responseObserver.onError(e);
-      return;
-    }
-
-    responseObserver.onNext(resp);
-    responseObserver.onCompleted();
+    delegate.getSocket(request, responseObserver);
   }
 
   @Override
   public void getServerSockets(
       GetServerSocketsRequest request, StreamObserver<GetServerSocketsResponse> responseObserver) {
-    ServerSocketsList serverSockets
-        = channelz.getServerSockets(request.getServerId(), request.getStartSocketId(), maxPageSize);
-    if (serverSockets == null) {
-      responseObserver.onError(
-          Status.NOT_FOUND.withDescription("Can't find server " + request.getServerId())
-              .asRuntimeException());
-      return;
-    }
-
-    GetServerSocketsResponse resp;
-    try {
-      resp = ChannelzProtoUtil.toGetServerSocketsResponse(serverSockets);
-    } catch (StatusRuntimeException e) {
-      responseObserver.onError(e);
-      return;
-    }
-
-    responseObserver.onNext(resp);
-    responseObserver.onCompleted();
+    delegate.getServerSockets(request, responseObserver);
   }
 }

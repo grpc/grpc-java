@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.protobuf.services;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.InternalChannelz.id;
@@ -74,10 +74,10 @@ import io.grpc.channelz.v1.SocketOptionTimeout;
 import io.grpc.channelz.v1.SocketRef;
 import io.grpc.channelz.v1.Subchannel;
 import io.grpc.channelz.v1.SubchannelRef;
-import io.grpc.services.ChannelzTestHelper.TestChannel;
-import io.grpc.services.ChannelzTestHelper.TestListenSocket;
-import io.grpc.services.ChannelzTestHelper.TestServer;
-import io.grpc.services.ChannelzTestHelper.TestSocket;
+import io.grpc.protobuf.services.ChannelzTestHelper.TestChannel;
+import io.grpc.protobuf.services.ChannelzTestHelper.TestListenSocket;
+import io.grpc.protobuf.services.ChannelzTestHelper.TestServer;
+import io.grpc.protobuf.services.ChannelzTestHelper.TestSocket;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;

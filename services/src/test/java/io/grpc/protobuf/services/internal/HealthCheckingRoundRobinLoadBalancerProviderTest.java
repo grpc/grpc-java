@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.services.internal;
+package io.grpc.protobuf.services.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -25,7 +25,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Tests for {@link InternalHealthCheckingRoundRobinLoadBalancerProvider}.
+ * Tests for {@link HealthCheckingRoundRobinLoadBalancerProvider}.
  */
 @RunWith(JUnit4.class)
 public class HealthCheckingRoundRobinLoadBalancerProviderTest {

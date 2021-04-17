@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.protobuf.services;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.services.BinaryLogProvider.BYTEARRAY_MARSHALLER;
-import static io.grpc.services.BinlogHelper.createMetadataProto;
-import static io.grpc.services.BinlogHelper.getPeerSocket;
+import static io.grpc.protobuf.services.BinaryLogProvider.BYTEARRAY_MARSHALLER;
+import static io.grpc.protobuf.services.BinlogHelper.createMetadataProto;
+import static io.grpc.protobuf.services.BinlogHelper.getPeerSocket;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -70,11 +70,11 @@ import io.grpc.binarylog.v1.Trailer;
 import io.grpc.internal.NoopClientCall;
 import io.grpc.internal.NoopServerCall;
 import io.grpc.protobuf.StatusProto;
-import io.grpc.services.BinlogHelper.FactoryImpl;
-import io.grpc.services.BinlogHelper.MaybeTruncated;
-import io.grpc.services.BinlogHelper.SinkWriter;
-import io.grpc.services.BinlogHelper.SinkWriterImpl;
-import io.grpc.services.BinlogHelper.TimeProvider;
+import io.grpc.protobuf.services.BinlogHelper.FactoryImpl;
+import io.grpc.protobuf.services.BinlogHelper.MaybeTruncated;
+import io.grpc.protobuf.services.BinlogHelper.SinkWriter;
+import io.grpc.protobuf.services.BinlogHelper.SinkWriterImpl;
+import io.grpc.protobuf.services.BinlogHelper.TimeProvider;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
