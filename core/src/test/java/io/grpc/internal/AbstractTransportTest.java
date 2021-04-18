@@ -1920,7 +1920,8 @@ public abstract class AbstractTransportTest {
     // If this times out, the server probably isn't noticing the metadata size
     Status status = clientStreamListener.status.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     List<Status.Code> codeOptions = Arrays.asList(
-        Status.Code.UNKNOWN, Status.Code.RESOURCE_EXHAUSTED, Status.Code.INTERNAL);
+        Status.Code.UNKNOWN, Status.Code.RESOURCE_EXHAUSTED, Status.Code.INTERNAL,
+        Status.Code.UNAVAILABLE);
     if (!codeOptions.contains(status.getCode())) {
       fail("Status code was not expected: " + status);
     }
