@@ -25,7 +25,6 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageLite;
 import com.google.protobuf.Parser;
 import io.grpc.ExperimentalApi;
-import io.grpc.HasByteBuffer;
 import io.grpc.KnownLength;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
@@ -36,9 +35,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Utility methods for using protobuf with grpc.
@@ -53,32 +49,10 @@ public final class ProtoLiteUtils {
   private static final int BUF_SIZE = 8192;
 
   /**
-   * Assume Java 9+ if it isn't Java 7 or Java 8.
-   */
-  @VisibleForTesting
-  static final boolean IS_JAVA9_OR_HIGHER;
-
-  /**
    * The same value as {@link io.grpc.internal.GrpcUtil#DEFAULT_MAX_MESSAGE_SIZE}.
    */
   @VisibleForTesting
   static final int DEFAULT_MAX_MESSAGE_SIZE = 4 * 1024 * 1024;
-
-  /**
-   * Threshold for passing {@link ByteBuffer}s directly into Protobuf.
-   */
-  @VisibleForTesting
-  static final int MESSAGE_ZERO_COPY_THRESHOLD = 64 * 1024;
-
-  static {
-    boolean isJava9OrHigher = true;
-    try {
-      Class.forName("java.lang.StackWalker");
-    } catch (ClassNotFoundException e) {
-      isJava9OrHigher = false;
-    }
-    IS_JAVA9_OR_HIGHER = isJava9OrHigher;
-  }
 
   /**
    * Sets the global registry for proto marshalling shared across all servers and clients.
@@ -199,23 +173,7 @@ public final class ProtoLiteUtils {
       try {
         if (stream instanceof KnownLength) {
           int size = stream.available();
-          if (size == 0) {
-            return defaultInstance;
-          }
-          if (IS_JAVA9_OR_HIGHER
-              && size >= MESSAGE_ZERO_COPY_THRESHOLD
-              && stream instanceof HasByteBuffer
-              && ((HasByteBuffer) stream).getByteBufferSupported()
-              && stream.markSupported()) {
-            List<ByteBuffer> buffers = new ArrayList<>();
-            stream.mark(size);
-            while (stream.available() != 0) {
-              ByteBuffer buffer = ((HasByteBuffer) stream).getByteBuffer();
-              stream.skip(buffer.remaining());
-              buffers.add(buffer);
-            }
-            cis = CodedInputStream.newInstance(buffers);
-          } else if (size > 0 && size <= DEFAULT_MAX_MESSAGE_SIZE) {
+          if (size > 0 && size <= DEFAULT_MAX_MESSAGE_SIZE) {
             Reference<byte[]> ref;
             // buf should not be used after this method has returned.
             byte[] buf;
@@ -239,6 +197,8 @@ public final class ProtoLiteUtils {
               throw new RuntimeException("size inaccurate: " + size + " != " + position);
             }
             cis = CodedInputStream.newInstance(buf, 0, size);
+          } else if (size == 0) {
+            return defaultInstance;
           }
         }
       } catch (IOException e) {

@@ -22,7 +22,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 
-import com.google.common.base.Strings;
 import com.google.common.io.ByteStreams;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Empty;
@@ -30,7 +29,6 @@ import com.google.protobuf.Enum;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Type;
 import io.grpc.Drainable;
-import io.grpc.HasByteBuffer;
 import io.grpc.KnownLength;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
@@ -42,10 +40,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.Arrays;
-import javax.annotation.Nullable;
-import org.junit.Assume;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -233,20 +228,6 @@ public class ProtoLiteUtilsTest {
   }
 
   @Test
-  public void parseFromKnownLengthByteBufferInputStream() {
-    Assume.assumeTrue(ProtoLiteUtils.IS_JAVA9_OR_HIGHER);
-    Marshaller<Type> marshaller = ProtoLiteUtils.marshaller(Type.getDefaultInstance());
-    Type expect =
-        Type.newBuilder()
-            .setName(Strings.repeat("M", ProtoLiteUtils.MESSAGE_ZERO_COPY_THRESHOLD))
-            .build();
-
-    Type result = marshaller.parse(
-        new CustomKnownLengthByteBufferInputStream(expect.toByteString().asReadOnlyByteBuffer()));
-    assertEquals(expect, result);
-  }
-
-  @Test
   public void defaultMaxMessageSize() {
     assertEquals(GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE, ProtoLiteUtils.DEFAULT_MAX_MESSAGE_SIZE);
   }
@@ -271,57 +252,6 @@ public class ProtoLiteUtilsTest {
       }
 
       return source[position++];
-    }
-  }
-
-  private static final class CustomKnownLengthByteBufferInputStream extends InputStream
-      implements KnownLength, HasByteBuffer {
-    private ByteBuffer source;
-
-    private CustomKnownLengthByteBufferInputStream(ByteBuffer source) {
-      this.source = source;
-    }
-
-    @Override
-    public int available() throws IOException {
-      return source.remaining();
-    }
-
-    @Override
-    public synchronized void mark(int readlimit) {
-      source.mark();
-    }
-
-    @Override
-    public synchronized void reset() throws IOException {
-      source.reset();
-    }
-
-    @Override
-    public boolean markSupported() {
-      return true;
-    }
-
-    @Override
-    public int read() throws IOException {
-      throw new UnsupportedOperationException("should not be called");
-    }
-
-    @Override
-    public long skip(long n) throws IOException {
-      source.position((int) (source.position() + n));
-      return n;
-    }
-
-    @Override
-    public boolean getByteBufferSupported() {
-      return true;
-    }
-
-    @Nullable
-    @Override
-    public ByteBuffer getByteBuffer() {
-      return source.slice();
     }
   }
 }
