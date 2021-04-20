@@ -331,23 +331,12 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
-  public void receivedGoAwayShouldCancelBufferedStream() throws Exception {
-    // Force the stream to be buffered.
-    receiveMaxConcurrentStreams(0);
-    ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
-    channelRead(goAwayFrame(0));
-    assertTrue(future.isDone());
-    assertFalse(future.isSuccess());
-    Status status = Status.fromThrowable(future.cause());
-    assertEquals(Status.Code.UNAVAILABLE, status.getCode());
-    assertEquals("HTTP/2 error code: NO_ERROR\nReceived Goaway", status.getDescription());
-  }
-
-  @Test
   public void receivedGoAwayShouldRefuseLaterStreamId() throws Exception {
     ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
     channelRead(goAwayFrame(streamId - 1));
-    verify(streamListener).closed(any(Status.class), eq(REFUSED), any(Metadata.class));
+    // This _should_ be REFUSED, but we purposefully use PROCESSED. See comment for
+    // abruptGoAwayStatusConservative in NettyClientHandler
+    verify(streamListener).closed(any(Status.class), eq(PROCESSED), any(Metadata.class));
     assertTrue(future.isDone());
   }
 
@@ -376,6 +365,57 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
+  public void receivedAbruptGoAwayShouldFailRacingQueuedStreamid() throws Exception {
+    // This command has not actually been executed yet
+    ChannelFuture future = writeQueue().enqueue(
+        newCreateStreamCommand(grpcHeaders, streamTransportState), true);
+    // Read a GOAWAY that indicates our stream can't be sent
+    channelRead(goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
+
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(streamListener).closed(captor.capture(), same(REFUSED),
+        ArgumentMatchers.<Metadata>notNull());
+    assertEquals(Status.UNAVAILABLE.getCode(), captor.getValue().getCode());
+    assertEquals(
+        "Abrupt GOAWAY closed unsent stream. HTTP/2 error code: CANCEL, "
+          + "debug data: this is a test\nstream id: 3, GOAWAY Last-Stream-ID:0",
+        captor.getValue().getDescription());
+    assertTrue(future.isDone());
+  }
+
+  @Test
+  public void receivedGoAway_shouldFailBufferedStreamsExceedingMaxConcurrentStreams()
+      throws Exception {
+    NettyClientStream.TransportState streamTransportState1 = new TransportStateImpl(
+        handler(),
+        channel().eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        transportTracer);
+    streamTransportState1.setListener(mock(ClientStreamListener.class));
+    NettyClientStream.TransportState streamTransportState2 = new TransportStateImpl(
+        handler(),
+        channel().eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        transportTracer);
+    streamTransportState2.setListener(mock(ClientStreamListener.class));
+    receiveMaxConcurrentStreams(1);
+    ChannelFuture future1 = writeQueue().enqueue(
+        newCreateStreamCommand(grpcHeaders, streamTransportState1), true);
+    ChannelFuture future2 = writeQueue().enqueue(
+        newCreateStreamCommand(grpcHeaders, streamTransportState2), true);
+
+    // GOAWAY
+    channelRead(goAwayFrame(Integer.MAX_VALUE));
+    assertTrue(future1.isSuccess());
+    assertTrue(future2.isDone());
+    assertThat(Status.fromThrowable(future2.cause()).getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(future2.cause().getMessage()).contains(
+        "Abrupt GOAWAY closed unsent stream. HTTP/2 error code: NO_ERROR");
+    assertThat(future2.cause().getMessage()).contains(
+        "At MAX_CONCURRENT_STREAMS limit");
+  }
+
+  @Test
   public void receivedResetWithRefuseCode() throws Exception {
     ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
     channelRead(rstStreamFrame(streamId, (int) Http2Error.REFUSED_STREAM.code() ));
@@ -398,15 +438,18 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // Read a GOAWAY that indicates our stream was never processed by the server.
     channelRead(goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(streamListener).closed(captor.capture(), same(REFUSED),
+    // See comment for abruptGoAwayStatusConservative in NettyClientHandler
+    verify(streamListener).closed(captor.capture(), same(PROCESSED),
         ArgumentMatchers.<Metadata>notNull());
     assertEquals(Status.CANCELLED.getCode(), captor.getValue().getCode());
-    assertEquals("HTTP/2 error code: CANCEL\nReceived Goaway\nthis is a test",
+    assertEquals(
+        "Abrupt GOAWAY closed sent stream. HTTP/2 error code: CANCEL, "
+          + "debug data: this is a test",
         captor.getValue().getDescription());
   }
 
   @Test
-  public void receivedGoAwayShouldFailUnknownBufferedStreams() throws Exception {
+  public void receivedGoAwayShouldFailBufferedStreams() throws Exception {
     receiveMaxConcurrentStreams(0);
 
     ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
@@ -416,8 +459,10 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertTrue(future.isDone());
     assertFalse(future.isSuccess());
     Status status = Status.fromThrowable(future.cause());
-    assertEquals(Status.CANCELLED.getCode(), status.getCode());
-    assertEquals("HTTP/2 error code: CANCEL\nReceived Goaway\nthis is a test",
+    assertEquals(Status.UNAVAILABLE.getCode(), status.getCode());
+    assertEquals(
+        "GOAWAY closed buffered stream. HTTP/2 error code: CANCEL, "
+          + "debug data: this is a test",
         status.getDescription());
   }
 
@@ -431,8 +476,10 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertTrue(future.isDone());
     assertFalse(future.isSuccess());
     Status status = Status.fromThrowable(future.cause());
-    assertEquals(Status.CANCELLED.getCode(), status.getCode());
-    assertEquals("HTTP/2 error code: CANCEL\nReceived Goaway\nthis is a test",
+    assertEquals(Status.UNAVAILABLE.getCode(), status.getCode());
+    assertEquals(
+        "GOAWAY shut down transport. HTTP/2 error code: CANCEL, "
+          + "debug data: this is a test",
         status.getDescription());
   }
 
@@ -713,6 +760,68 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertEquals(1, transportTracer.getStats().keepAlivesSent);
   }
 
+  @Test
+  public void bdpPingAvoidsTooManyPingsOnSpecialServers() throws Exception {
+    // gRPC servers limit PINGs based on what they _send_. Some servers limit PINGs based on what is
+    // _received_.
+    createStream();
+    handler().setAutoTuneFlowControl(true);
+
+    Http2Headers headers = new DefaultHttp2Headers().status(STATUS_OK)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC);
+    channelRead(headersFrame(3, headers));
+    channelRead(dataFrame(3, false, content()));
+    verifyWrite().writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    channelRead(pingFrame(true, 1234));
+
+    channelRead(dataFrame(3, false, content()));
+    verifyWrite(times(2)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    channelRead(pingFrame(true, 1234));
+
+    channelRead(dataFrame(3, false, content()));
+    // No ping was sent
+    verifyWrite(times(2)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+  }
+
+  @Test
+  public void bdpPingAllowedAfterSendingData() throws Exception {
+    // gRPC servers limit PINGs based on what they _send_. Some servers limit PINGs based on what is
+    // _received_.
+    flowControlWindow = 64 * 1024;
+    manualSetUp();
+    createStream();
+    handler().setAutoTuneFlowControl(true);
+
+    ByteBuf content = Unpooled.buffer(64 * 1024 + 1024);
+    content.writerIndex(content.capacity());
+    ChannelFuture future
+        = enqueue(new SendGrpcFrameCommand(streamTransportState, content, false));
+    assertFalse(future.isDone()); // flow control limits send
+
+    Http2Headers headers = new DefaultHttp2Headers().status(STATUS_OK)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC);
+    channelRead(headersFrame(3, headers));
+    channelRead(dataFrame(3, false, content()));
+    verifyWrite().writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    channelRead(pingFrame(true, 1234));
+
+    channelRead(dataFrame(3, false, content()));
+    verifyWrite(times(2)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+    channelRead(pingFrame(true, 1234));
+
+    channelRead(dataFrame(3, false, content()));
+    // No ping was sent
+    verifyWrite(times(2)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+
+    channelRead(windowUpdate(0, 2024));
+    channelRead(windowUpdate(3, 2024));
+    assertTrue(future.isDone());
+    assertTrue(future.isSuccess());
+    // But now one is sent
+    channelRead(dataFrame(3, false, content()));
+    verifyWrite(times(3)).writePing(eq(ctx()), eq(false), eq(1234L), any(ChannelPromise.class));
+  }
+
   @Override
   public void dataPingAckIsRecognized() throws Exception {
     super.dataPingAckIsRecognized();
@@ -798,7 +907,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         tooManyPingsRunnable,
         transportTracer,
         Attributes.EMPTY,
-        "someauthority");
+        "someauthority",
+        null);
   }
 
   @Override

@@ -195,12 +195,8 @@ public class ServerCallsTest {
     } catch (StatusRuntimeException expected) {
       // Expected
     }
-    try {
-      callObserver.get().onCompleted();
-      fail("Expected cancellation exception when onCallHandler not set");
-    } catch (StatusRuntimeException expected) {
-      // Expected
-    }
+    // No exception
+    callObserver.get().onCompleted();
   }
 
   @Test
@@ -292,7 +288,7 @@ public class ServerCallsTest {
               public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
-                serverCallObserver.disableAutoInboundFlowControl();
+                serverCallObserver.disableAutoRequest();
                 return new ServerCalls.NoopStreamObserver<>();
               }
             });

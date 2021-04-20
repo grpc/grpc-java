@@ -1,3 +1,7 @@
+# Security Policy
+
+For information on gRPC Security Policy and reporting potentional security issues, please see [gRPC CVE Process](https://github.com/grpc/proposal/blob/master/P4-grpc-cve-process.md).
+
 # Authentication
 
 gRPC supports a number of different mechanisms for asserting identity between an client and server. This document provides code samples demonstrating how to provide SSL/TLS encryption support and identity assertions in Java, as well as passing OAuth2 tokens to services that support it.
@@ -232,13 +236,8 @@ import java.security.Security;
 ...
 
 // Somewhere in main()
-Security.insertProviderAt(
-    Conscrypt.newProviderBuilder().provideTrustManager(false).build(), 1);
+Security.insertProviderAt(Conscrypt.newProvider(), 1);
 ```
-
-Note: according to [Conscrypt Implementation Notes](https://github.com/google/conscrypt/blob/2.4.0/IMPLEMENTATION_NOTES.md#hostname-verification),
-its default `HostnameVerifier` on OpenJDK always fails. This can be worked 
-around by disabling its default `TrustManager` implementation as shown above.
 
 ### TLS with Jetty ALPN
 
@@ -404,7 +403,8 @@ grpc-netty version | netty-handler version | netty-tcnative-boringssl-static ver
 1.25.x-1.27.x      | 4.1.42.Final          | 2.0.26.Final
 1.28.x             | 4.1.45.Final          | 2.0.28.Final
 1.29.x-1.31.x      | 4.1.48.Final          | 2.0.30.Final
-1.32.x-            | 4.1.51.Final          | 2.0.31.Final
+1.32.x-1.34.x      | 4.1.51.Final          | 2.0.31.Final
+1.35.x-            | 4.1.52.Final          | 2.0.34.Final
 
 _(grpc-netty-shaded avoids issues with keeping these versions in sync.)_
 

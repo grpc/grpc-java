@@ -42,6 +42,7 @@ import org.mockito.junit.MockitoRule;
  */
 @RunWith(JUnit4.class)
 public class WeightedRandomPickerTest {
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
 
@@ -95,6 +96,11 @@ public class WeightedRandomPickerTest {
       assertThat(nextInt).isAtLeast(0);
       assertThat(nextInt).isLessThan(bound);
       return nextInt;
+    }
+
+    @Override
+    public long nextLong() {
+      throw new UnsupportedOperationException("Should not be called");
     }
   }
 

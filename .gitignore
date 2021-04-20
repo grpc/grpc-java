@@ -21,6 +21,7 @@ bazel-testlogs
 *.iml
 *.ipr
 *.iws
+.ijwb
 
 # Eclipse
 .classpath
@@ -35,3 +36,6 @@ bin
 # Emacs
 *~
 \#*\#
+
+# ARM tests
+qemu-arm-static

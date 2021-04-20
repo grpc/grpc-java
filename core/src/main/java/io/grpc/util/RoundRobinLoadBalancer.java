@@ -130,14 +130,17 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleNameResolutionError(Status error) {
-    // ready pickers aren't affected by status changes
-    updateBalancingState(TRANSIENT_FAILURE,
-        currentPicker instanceof ReadyPicker ? currentPicker : new EmptyPicker(error));
+    if (currentState != READY)  {
+      updateBalancingState(TRANSIENT_FAILURE, new EmptyPicker(error));
+    }
   }
 
   private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     if (subchannels.get(stripAttrs(subchannel.getAddresses())) != subchannel) {
       return;
+    }
+    if (stateInfo.getState() == TRANSIENT_FAILURE || stateInfo.getState() == IDLE) {
+      helper.refreshNameResolution();
     }
     if (stateInfo.getState() == IDLE) {
       subchannel.requestConnection();

@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
@@ -31,7 +32,8 @@ import java.util.List;
 import java.util.Map;
 
 /** Provider for priority load balancing policy. */
-final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
+@Internal
+public final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public boolean isAvailable() {
@@ -59,10 +61,10 @@ final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
   }
 
   static final class PriorityLbConfig {
-    final Map<String, PolicySelection> childConfigs;
+    final Map<String, PriorityChildConfig> childConfigs;
     final List<String> priorities;
 
-    PriorityLbConfig(Map<String, PolicySelection> childConfigs, List<String> priorities) {
+    PriorityLbConfig(Map<String, PriorityChildConfig> childConfigs, List<String> priorities) {
       this.childConfigs = Collections.unmodifiableMap(checkNotNull(childConfigs, "childConfigs"));
       this.priorities = Collections.unmodifiableList(checkNotNull(priorities, "priorities"));
       checkArgument(!priorities.isEmpty(), "priority list is empty");
@@ -83,6 +85,16 @@ final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
           .add("childConfigs", childConfigs)
           .add("priorities", priorities)
           .toString();
+    }
+
+    static final class PriorityChildConfig {
+      final PolicySelection policySelection;
+      final boolean ignoreReresolution;
+
+      PriorityChildConfig(PolicySelection policySelection, boolean ignoreReresolution) {
+        this.policySelection = checkNotNull(policySelection, "policySelection");
+        this.ignoreReresolution = ignoreReresolution;
+      }
     }
   }
 }

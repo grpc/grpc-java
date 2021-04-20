@@ -38,6 +38,10 @@ public final class CertificateProviderRegistry {
   public static synchronized CertificateProviderRegistry getInstance() {
     if (instance == null) {
       instance = new CertificateProviderRegistry();
+      // TODO(sanjaypujare): replace with Java's SPI mechanism and META-INF resource
+      instance.register(new FileWatcherCertificateProviderProvider());
+      instance.register(new DynamicReloadingCertificateProviderProvider());
+      instance.register(new MeshCaCertificateProviderProvider());
     }
     return instance;
   }

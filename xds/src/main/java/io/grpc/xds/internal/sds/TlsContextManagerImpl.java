@@ -19,6 +19,9 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.BootstrapperImpl;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
@@ -36,8 +39,11 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   private final ReferenceCountingMap<UpstreamTlsContext, SslContextProvider> mapForClients;
   private final ReferenceCountingMap<DownstreamTlsContext, SslContextProvider> mapForServers;
 
-  private TlsContextManagerImpl() {
-    this(new ClientSslContextProviderFactory(), new ServerSslContextProviderFactory());
+  /** Create a TlsContextManagerImpl instance using the passed in {@link Bootstrapper}. */
+  @VisibleForTesting public TlsContextManagerImpl(Bootstrapper bootstrapper) {
+    this(
+        new ClientSslContextProviderFactory(bootstrapper),
+        new ServerSslContextProviderFactory(bootstrapper));
   }
 
   @VisibleForTesting
@@ -53,7 +59,7 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   /** Gets the TlsContextManagerImpl singleton. */
   public static synchronized TlsContextManagerImpl getInstance() {
     if (instance == null) {
-      instance = new TlsContextManagerImpl();
+      instance = new TlsContextManagerImpl(new BootstrapperImpl());
     }
     return instance;
   }
@@ -62,6 +68,10 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   public SslContextProvider findOrCreateServerSslContextProvider(
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
+    CommonTlsContext.Builder builder = downstreamTlsContext.getCommonTlsContext().toBuilder();
+    downstreamTlsContext =
+        new DownstreamTlsContext(
+            builder.build(), downstreamTlsContext.isRequireClientCertificate());
     return mapForServers.get(downstreamTlsContext);
   }
 
@@ -69,6 +79,8 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   public SslContextProvider findOrCreateClientSslContextProvider(
       UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
+    CommonTlsContext.Builder builder = upstreamTlsContext.getCommonTlsContext().toBuilder();
+    upstreamTlsContext = new UpstreamTlsContext(builder.build());
     return mapForClients.get(upstreamTlsContext);
   }
 

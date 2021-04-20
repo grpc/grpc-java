@@ -75,6 +75,7 @@ import org.mockito.stubbing.Answer;
 public class AbstractClientStreamTest {
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;

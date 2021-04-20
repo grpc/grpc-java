@@ -16,15 +16,14 @@
 
 package io.grpc;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.Contexts.interceptCall;
 import static io.grpc.Contexts.statusFromCancelled;
-import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -240,7 +239,7 @@ public class ContextsTest {
     executorService.command.run();
 
     assertTrue(cancellableContext.isCancelled());
-    assertThat(cancellableContext.cancellationCause(), instanceOf(TimeoutException.class));
+    assertThat(cancellableContext.cancellationCause()).isInstanceOf(TimeoutException.class);
 
     Status status = statusFromCancelled(cancellableContext);
     assertNotNull(status);

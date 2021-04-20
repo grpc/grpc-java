@@ -29,7 +29,6 @@ import io.grpc.internal.JsonParser;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedPolicySelection;
 import io.grpc.xds.WeightedTargetLoadBalancerProvider.WeightedTargetConfig;
-import java.util.HashMap;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -129,11 +128,11 @@ public class WeightedTargetLoadBalancerProviderTest {
             "target_1",
             new WeightedPolicySelection(
                 10,
-                new PolicySelection(lbProviderFoo, new HashMap<String, Object>(), fooConfig)),
+                new PolicySelection(lbProviderFoo, fooConfig)),
             "target_2",
             new WeightedPolicySelection(
                 20,
-                new PolicySelection(lbProviderBar, new HashMap<String, Object>(), barConfig)))));
+                new PolicySelection(lbProviderBar, barConfig)))));
     assertThat(parsedConfig).isEqualTo(expectedConfig);
   }
 }

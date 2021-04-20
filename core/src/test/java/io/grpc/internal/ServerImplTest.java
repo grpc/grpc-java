@@ -44,7 +44,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -76,12 +75,12 @@ import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
+import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
 import io.grpc.internal.testing.SingleMessageProducer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.util.MutableHandlerRegistry;
 import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -90,7 +89,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -139,6 +137,7 @@ public class ServerImplTest {
       };
   private static final String AUTHORITY = "some_authority";
 
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   @BeforeClass
@@ -164,7 +163,7 @@ public class ServerImplTest {
     };
   @Mock
   private ObjectPool<Executor> executorPool;
-  private Builder builder = new Builder();
+  private ServerImplBuilder builder;
   private MutableHandlerRegistry mutableFallbackRegistry = new MutableHandlerRegistry();
   private HandlerRegistry fallbackRegistry = mock(
       HandlerRegistry.class,
@@ -201,6 +200,14 @@ public class ServerImplTest {
   @Before
   public void startUp() throws IOException {
     MockitoAnnotations.initMocks(this);
+    builder = new ServerImplBuilder(
+        new ClientTransportServersBuilder() {
+          @Override
+          public InternalServer buildClientTransportServers(
+              List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+            throw new UnsupportedOperationException();
+          }
+        });
     builder.channelz = channelz;
     builder.ticker = timer.getDeadlineTicker();
     streamTracerFactories = Arrays.asList(streamTracerFactory);
@@ -217,39 +224,19 @@ public class ServerImplTest {
   }
 
   @Test
-  public void multiport() throws Exception {
-    final CountDownLatch starts = new CountDownLatch(2);
-    final CountDownLatch shutdowns = new CountDownLatch(2);
-
-    final class Serv extends SimpleServer {
+  public void getListenSockets() throws Exception {
+    int port = 800;
+    final List<InetSocketAddress> addresses =
+        Collections.singletonList(new InetSocketAddress(800));
+    transportServer = new SimpleServer() {
       @Override
-      public void start(ServerListener listener) throws IOException {
-        super.start(listener);
-        starts.countDown();
+      public List<InetSocketAddress> getListenSocketAddresses() {
+        return addresses;
       }
-
-      @Override
-      public void shutdown() {
-        super.shutdown();
-        shutdowns.countDown();
-      }
-    }
-
-    SimpleServer transportServer1 = new Serv();
-    SimpleServer transportServer2 = new Serv();
-    assertNull(server);
-    builder.fallbackHandlerRegistry(fallbackRegistry);
-    builder.executorPool = executorPool;
-    server = new ServerImpl(
-        builder, ImmutableList.of(transportServer1, transportServer2), SERVER_CONTEXT);
-
-    server.start();
-    assertTrue(starts.await(1, TimeUnit.SECONDS));
-    assertEquals(2, shutdowns.getCount());
-
-    server.shutdown();
-    assertTrue(shutdowns.await(1, TimeUnit.SECONDS));
-    assertTrue(server.awaitTermination(1, TimeUnit.SECONDS));
+    };
+    createAndStartServer();
+    assertEquals(port, server.getPort());
+    assertThat(server.getListenSockets()).isEqualTo(addresses);
   }
 
   @Test
@@ -1122,15 +1109,22 @@ public class ServerImplTest {
   @Test
   public void getPort() throws Exception {
     final InetSocketAddress addr = new InetSocketAddress(65535);
+    final List<InetSocketAddress> addrs = Collections.singletonList(addr);
     transportServer = new SimpleServer() {
       @Override
-      public SocketAddress getListenSocketAddress() {
+      public InetSocketAddress getListenSocketAddress() {
         return addr;
+      }
+
+      @Override
+      public List<InetSocketAddress> getListenSocketAddresses() {
+        return addrs;
       }
     };
     createAndStartServer();
 
     assertThat(server.getPort()).isEqualTo(addr.getPort());
+    assertThat(server.getListenSockets()).isEqualTo(addrs);
   }
 
   @Test
@@ -1422,7 +1416,7 @@ public class ServerImplTest {
 
     builder.fallbackHandlerRegistry(fallbackRegistry);
     builder.executorPool = executorPool;
-    server = new ServerImpl(builder, Collections.singletonList(transportServer), SERVER_CONTEXT);
+    server = new ServerImpl(builder, transportServer, SERVER_CONTEXT);
   }
 
   private void verifyExecutorsAcquired() {
@@ -1461,7 +1455,17 @@ public class ServerImplTest {
     }
 
     @Override
+    public List<InetSocketAddress> getListenSocketAddresses() {
+      return Collections.singletonList(new InetSocketAddress(12345));
+    }
+
+    @Override
     public InternalInstrumented<SocketStats> getListenSocketStats() {
+      return null;
+    }
+
+    @Override
+    public List<InternalInstrumented<SocketStats>> getListenSocketStatsList() {
       return null;
     }
 
@@ -1504,17 +1508,6 @@ public class ServerImplTest {
       SettableFuture<SocketStats> ret = SettableFuture.create();
       ret.set(null);
       return ret;
-    }
-  }
-
-  private static class Builder extends AbstractServerImplBuilder<Builder> {
-    @Override protected List<InternalServer> buildTransportServers(
-        List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override public Builder useTransportSecurity(File f1, File f2)  {
-      throw new UnsupportedOperationException();
     }
   }
 

@@ -47,6 +47,7 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils.StandardLoadBalancerProvider;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
+import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -137,14 +138,18 @@ public class PriorityLoadBalancerTest {
     Attributes attributes =
         Attributes.newBuilder().set(Attributes.Key.create("fakeKey"), "fakeValue").build();
     Object fooConfig0 = new Object();
-    PolicySelection fooPolicy0 = new PolicySelection(fooLbProvider, null, fooConfig0);
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, fooConfig0), true);
     Object barConfig0 = new Object();
-    PolicySelection barPolicy0 = new PolicySelection(barLbProvider, null, barConfig0);
+    PriorityChildConfig priorityChildConfig1 =
+        new PriorityChildConfig(new PolicySelection(barLbProvider, barConfig0), true);
     Object fooConfig1 = new Object();
-    PolicySelection fooPolicy1 = new PolicySelection(fooLbProvider, null, fooConfig1);
+    PriorityChildConfig priorityChildConfig2 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, fooConfig1), true);
     PriorityLbConfig priorityLbConfig =
         new PriorityLbConfig(
-            ImmutableMap.of("p0", fooPolicy0, "p1", barPolicy0, "p2", fooPolicy1),
+            ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1,
+                "p2", priorityChildConfig2),
             ImmutableList.of("p0", "p1", "p2"));
     priorityLb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -190,9 +195,11 @@ public class PriorityLoadBalancerTest {
     newEag = AddressFilter.setPathFilter(newEag, ImmutableList.of("p1"));
     List<EquivalentAddressGroup> newAddresses = ImmutableList.of(newEag);
     Object newBarConfig = new Object();
-    PolicySelection newBarPolicy = new PolicySelection(barLbProvider, null, newBarConfig);
     PriorityLbConfig newPriorityLbConfig =
-        new PriorityLbConfig(ImmutableMap.of("p1", newBarPolicy), ImmutableList.of("p1"));
+        new PriorityLbConfig(
+            ImmutableMap.of("p1",
+                new PriorityChildConfig(new PolicySelection(barLbProvider, newBarConfig), true)),
+            ImmutableList.of("p1"));
     priorityLb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(newAddresses)
@@ -217,12 +224,14 @@ public class PriorityLoadBalancerTest {
   @Test
   public void handleNameResolutionError() {
     Object fooConfig0 = new Object();
-    PolicySelection fooPolicy0 = new PolicySelection(fooLbProvider, null, fooConfig0);
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, fooConfig0), true);
     Object fooConfig1 = new Object();
-    PolicySelection fooPolicy1 = new PolicySelection(fooLbProvider, null, fooConfig1);
+    PriorityChildConfig priorityChildConfig1 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, fooConfig1), true);
 
     PriorityLbConfig priorityLbConfig =
-        new PriorityLbConfig(ImmutableMap.of("p0", fooPolicy0), ImmutableList.of("p0"));
+        new PriorityLbConfig(ImmutableMap.of("p0", priorityChildConfig0), ImmutableList.of("p0"));
     priorityLb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
@@ -234,7 +243,7 @@ public class PriorityLoadBalancerTest {
     verify(fooLb0).handleNameResolutionError(status);
 
     priorityLbConfig =
-        new PriorityLbConfig(ImmutableMap.of("p1", fooPolicy1), ImmutableList.of("p1"));
+        new PriorityLbConfig(ImmutableMap.of("p1", priorityChildConfig1), ImmutableList.of("p1"));
     priorityLb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
@@ -253,13 +262,18 @@ public class PriorityLoadBalancerTest {
 
   @Test
   public void typicalPriorityFailOverFlow() {
-    PolicySelection policy0 = new PolicySelection(fooLbProvider, null, new Object());
-    PolicySelection policy1 = new PolicySelection(fooLbProvider, null, new Object());
-    PolicySelection policy2 = new PolicySelection(fooLbProvider, null, new Object());
-    PolicySelection policy3 = new PolicySelection(fooLbProvider, null, new Object());
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
+    PriorityChildConfig priorityChildConfig1 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
+    PriorityChildConfig priorityChildConfig2 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
+    PriorityChildConfig priorityChildConfig3 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
     PriorityLbConfig priorityLbConfig =
         new PriorityLbConfig(
-            ImmutableMap.of("p0", policy0, "p1", policy1, "p2", policy2, "p3", policy3),
+            ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1,
+                "p2", priorityChildConfig2, "p3", priorityChildConfig3),
             ImmutableList.of("p0", "p1", "p2", "p3"));
     priorityLb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -281,7 +295,7 @@ public class PriorityLoadBalancerTest {
             return PickResult.withSubchannel(subchannel0);
           }
         });
-    assertLatestSubchannelPicker(subchannel0);
+    assertCurrentPickerPicksSubchannel(subchannel0);
 
     // p0 fails over to p1 immediately.
     helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.ABORTED));
@@ -308,7 +322,7 @@ public class PriorityLoadBalancerTest {
             return PickResult.withSubchannel(subchannel1);
           }
         });
-    assertLatestSubchannelPicker(subchannel1);
+    assertCurrentPickerPicksSubchannel(subchannel1);
 
     // p0 gets back to READY
     final Subchannel subchannel2 = mock(Subchannel.class);
@@ -320,11 +334,11 @@ public class PriorityLoadBalancerTest {
             return PickResult.withSubchannel(subchannel2);
           }
         });
-    assertLatestSubchannelPicker(subchannel2);
+    assertCurrentPickerPicksSubchannel(subchannel2);
 
     // p2 fails but does not affect overall picker
     helper2.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
-    assertLatestSubchannelPicker(subchannel2);
+    assertCurrentPickerPicksSubchannel(subchannel2);
 
     // p0 fails over to p3 immediately since p1 already timeout and p2 already in TRANSIENT_FAILURE.
     helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
@@ -334,9 +348,14 @@ public class PriorityLoadBalancerTest {
     LoadBalancer balancer3 = Iterables.getLast(fooBalancers);
     Helper helper3 = Iterables.getLast(fooHelpers);
 
-    // p3 fails then the channel should go to TRANSIENT_FAILURE
-    helper3.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
-    assertLatestConnectivityState(TRANSIENT_FAILURE);
+    // p3 timeout then the channel should go to TRANSIENT_FAILURE
+    fakeClock.forwardTime(10, TimeUnit.SECONDS);
+    assertCurrentPickerReturnsError(Status.Code.UNAVAILABLE, "timeout");
+
+    // p3 fails then the picker should have error status updated
+    helper3.updateBalancingState(
+        TRANSIENT_FAILURE, new ErrorPicker(Status.DATA_LOSS.withDescription("foo")));
+    assertCurrentPickerReturnsError(Status.Code.DATA_LOSS, "foo");
 
     // p2 gets back to READY
     final Subchannel subchannel3 = mock(Subchannel.class);
@@ -348,7 +367,7 @@ public class PriorityLoadBalancerTest {
             return PickResult.withSubchannel(subchannel3);
           }
         });
-    assertLatestSubchannelPicker(subchannel3);
+    assertCurrentPickerPicksSubchannel(subchannel3);
 
     // p0 gets back to READY
     final Subchannel subchannel4 = mock(Subchannel.class);
@@ -360,11 +379,11 @@ public class PriorityLoadBalancerTest {
             return PickResult.withSubchannel(subchannel4);
           }
         });
-    assertLatestSubchannelPicker(subchannel4);
+    assertCurrentPickerPicksSubchannel(subchannel4);
 
     // p0 fails over to p2 and picker is updated to p2's existing picker.
     helper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
-    assertLatestSubchannelPicker(subchannel3);
+    assertCurrentPickerPicksSubchannel(subchannel3);
 
     // Deactivate child balancer get deleted.
     fakeClock.forwardTime(15, TimeUnit.MINUTES);
@@ -374,16 +393,53 @@ public class PriorityLoadBalancerTest {
     verify(balancer3).shutdown();
   }
 
+  @Test
+  public void bypassReresolutionRequestsIfConfiged() {
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
+    PriorityChildConfig priorityChildConfig1 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), false);
+    PriorityLbConfig priorityLbConfig =
+        new PriorityLbConfig(
+            ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
+            ImmutableList.of("p0", "p1"));
+    priorityLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+    Helper priorityHelper0 = Iterables.getOnlyElement(fooHelpers);  // priority p0
+    priorityHelper0.refreshNameResolution();
+    verify(helper, never()).refreshNameResolution();
+
+    // Simulate fallback to priority p1.
+    priorityHelper0.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(Status.UNAVAILABLE));
+    assertThat(fooHelpers).hasSize(2);
+    Helper priorityHelper1 = Iterables.getLast(fooHelpers);
+    priorityHelper1.refreshNameResolution();
+    verify(helper).refreshNameResolution();
+  }
+
   private void assertLatestConnectivityState(ConnectivityState expectedState) {
     verify(helper, atLeastOnce())
         .updateBalancingState(connectivityStateCaptor.capture(), pickerCaptor.capture());
     assertThat(connectivityStateCaptor.getValue()).isEqualTo(expectedState);
   }
 
-  private void assertLatestSubchannelPicker(Subchannel expectedSubchannelToPick) {
+  private void assertCurrentPickerReturnsError(
+      Status.Code expectedCode, String expectedDescription) {
+    assertLatestConnectivityState(TRANSIENT_FAILURE);
+    Status error =
+        pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class)).getStatus();
+    assertThat(error.getCode()).isEqualTo(expectedCode);
+    if (expectedDescription != null) {
+      assertThat(error.getDescription()).contains(expectedDescription);
+    }
+  }
+
+  private void assertCurrentPickerPicksSubchannel(Subchannel expectedSubchannelToPick) {
     assertLatestConnectivityState(READY);
-    assertThat(
-            pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class)).getSubchannel())
-        .isEqualTo(expectedSubchannelToPick);
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(pickResult.getSubchannel()).isEqualTo(expectedSubchannelToPick);
   }
 }

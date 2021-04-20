@@ -1126,7 +1126,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxConnectionAgeInNanos,
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
-        permitKeepAliveTimeInNanos);
+        permitKeepAliveTimeInNanos,
+        Attributes.EMPTY);
   }
 
   @Override

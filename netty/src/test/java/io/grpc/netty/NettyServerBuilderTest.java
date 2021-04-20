@@ -26,7 +26,6 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.Rule;
 import org.junit.Test;
@@ -40,17 +39,18 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class NettyServerBuilderTest {
 
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private NettyServerBuilder builder = NettyServerBuilder.forPort(8080);
 
   @Test
-  public void createMultipleServers() {
+  public void addMultipleListenAddresses() {
     builder.addListenAddress(new InetSocketAddress(8081));
-    List<NettyServer> servers =
+    NettyServer server =
         builder.buildTransportServers(ImmutableList.<ServerStreamTracer.Factory>of());
 
-    Truth.assertThat(servers).hasSize(2);
+    Truth.assertThat(server.getListenSocketAddresses()).hasSize(2);
   }
 
   @Test

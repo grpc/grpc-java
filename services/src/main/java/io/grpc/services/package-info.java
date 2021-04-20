@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// TODO(chengyuanzhang): update description after deleting classes with protobuf dependency that
+//  have already been moved.
 /**
  * Service definitions and utilities for the pre-defined gRPC services.
  */

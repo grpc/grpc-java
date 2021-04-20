@@ -101,6 +101,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
+import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
 import org.junit.Before;
@@ -325,8 +326,14 @@ public class NettyClientTransportTest {
     } catch (ExecutionException ex) {
       StatusException sre = (StatusException) ex.getCause();
       assertEquals(Status.Code.UNAVAILABLE, sre.getStatus().getCode());
-      assertThat(sre.getCause()).isInstanceOf(SSLHandshakeException.class);
-      assertThat(sre.getCause().getMessage()).contains("SSLV3_ALERT_HANDSHAKE_FAILURE");
+      if (sre.getCause() instanceof SSLHandshakeException) {
+        assertThat(sre).hasCauseThat().isInstanceOf(SSLHandshakeException.class);
+        assertThat(sre).hasCauseThat().hasMessageThat().contains("SSLV3_ALERT_HANDSHAKE_FAILURE");
+      } else {
+        // Client cert verification is after handshake in TLSv1.3
+        assertThat(sre).hasCauseThat().hasCauseThat().isInstanceOf(SSLException.class);
+        assertThat(sre).hasCauseThat().hasMessageThat().contains("CERTIFICATE_REQUIRED");
+      }
     }
   }
 
@@ -529,7 +536,7 @@ public class NettyClientTransportTest {
       Throwable rootCause = getRootCause(e);
       Status status = ((StatusException) rootCause).getStatus();
       assertEquals(Status.Code.INTERNAL, status.getCode());
-      assertEquals("HTTP/2 error code: PROTOCOL_ERROR\nReceived Rst Stream",
+      assertEquals("RST_STREAM closed stream. HTTP/2 error code: PROTOCOL_ERROR",
           status.getDescription());
     }
   }
@@ -766,7 +773,7 @@ public class NettyClientTransportTest {
 
   private void startServer(int maxStreamsPerConnection, int maxHeaderListSize) throws IOException {
     server = new NettyServer(
-        TestUtils.testServerAddress(new InetSocketAddress(0)),
+        TestUtils.testServerAddresses(new InetSocketAddress(0)),
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
         new HashMap<ChannelOption<?>, Object>(),
@@ -779,6 +786,7 @@ public class NettyClientTransportTest {
         DEFAULT_SERVER_KEEPALIVE_TIME_NANOS, DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS,
         MAX_CONNECTION_IDLE_NANOS_DISABLED,
         MAX_CONNECTION_AGE_NANOS_DISABLED, MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE, true, 0,
+        Attributes.EMPTY,
         channelz);
     server.start(serverListener);
     address = TestUtils.testServerAddress((InetSocketAddress) server.getListenSocketAddress());

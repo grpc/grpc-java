@@ -22,10 +22,11 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
-import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -114,11 +115,8 @@ public class PickFirstLoadBalancerTest {
   }
 
   @After
-  @SuppressWarnings("deprecation")
   public void tearDown() throws Exception {
     verifyNoMoreInteractions(mockArgs);
-    verify(mockHelper, never()).createSubchannel(
-        ArgumentMatchers.<EquivalentAddressGroup>anyList(), any(Attributes.class));
   }
 
   @Test
@@ -162,6 +160,38 @@ public class PickFirstLoadBalancerTest {
     inOrder.verify(mockSubchannel).requestConnection();
 
     verify(mockSubchannel, times(2)).requestConnection();
+  }
+
+  @Test
+  public void refreshNameResolutionAfterSubchannelConnectionBroken() {
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+    verify(mockHelper).createSubchannel(any(CreateSubchannelArgs.class));
+
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel);
+    inOrder.verify(mockSubchannel).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    assertSame(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
+    inOrder.verify(mockSubchannel).requestConnection();
+
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    assertNull(pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
+    Status error = Status.UNAUTHENTICATED.withDescription("permission denied");
+    stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper).refreshNameResolution();
+    inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    assertSame(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
+    // Simulate receiving go-away so the subchannel transit to IDLE.
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(mockHelper).refreshNameResolution();
+    inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+
+    verifyNoMoreInteractions(mockHelper, mockSubchannel);
   }
 
   @Test
@@ -229,10 +259,12 @@ public class PickFirstLoadBalancerTest {
 
     Status error = Status.UNAVAILABLE.withDescription("boom!");
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
+    inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
     assertEquals(Status.OK, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
@@ -298,6 +330,7 @@ public class PickFirstLoadBalancerTest {
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+    inOrder.verify(mockHelper).refreshNameResolution();
     inOrder.verify(mockHelper).updateBalancingState(
         eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 

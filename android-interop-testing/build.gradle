@@ -25,6 +25,10 @@ android {
             }
         }
     }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
     compileSdkVersion 26
 
     defaultConfig {
@@ -49,8 +53,8 @@ android {
 dependencies {
     implementation 'com.android.support:appcompat-v7:26.1.0'
     implementation 'com.android.support:multidex:1.0.3'
-    implementation 'com.android.support:support-annotations:27.1.1'
-    implementation 'com.google.android.gms:play-services-base:15.0.1'
+    implementation 'com.android.support:support-annotations:26.1.0'
+    implementation 'com.google.android.gms:play-services-base:16.1.0'
 
     implementation project(':grpc-auth'),
             project(':grpc-census'),
@@ -93,6 +97,7 @@ tasks.withType(JavaCompile) {
     options.compilerArgs += [
             "-Xlint:-cast"
     ]
+    appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
     // Reuses source code from grpc-interop-testing, which targets Java 7 (no method references)
     options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
 }

@@ -59,7 +59,8 @@ import io.grpc.internal.StreamListener;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -96,7 +97,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   @GuardedBy("this")
   private Status shutdownStatus;
   @GuardedBy("this")
-  private Set<InProcessStream> streams = new HashSet<>();
+  private final Set<InProcessStream> streams = Collections.newSetFromMap(
+          new IdentityHashMap<InProcessStream, Boolean>());
   @GuardedBy("this")
   private List<ServerStreamTracer.Factory> serverStreamTracerFactories;
   private final Attributes attributes;

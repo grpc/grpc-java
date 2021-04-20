@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,91 +17,73 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 
-import io.grpc.Metadata;
-import io.grpc.ServerStreamTracer;
-import java.io.File;
-import java.util.List;
+import com.google.common.base.Defaults;
+import io.grpc.ForwardingTestUtil;
+import io.grpc.Server;
+import io.grpc.ServerBuilder;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Collections;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link AbstractServerImplBuilder}. */
+/**
+ * Unit tests for {@link AbstractServerImplBuilderTest}.
+ */
 @RunWith(JUnit4.class)
 public class AbstractServerImplBuilderTest {
+  private final ServerBuilder<?> mockDelegate = mock(ServerBuilder.class);
 
-  private static final ServerStreamTracer.Factory DUMMY_USER_TRACER =
-      new ServerStreamTracer.Factory() {
-        @Override
-        public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
-          throw new UnsupportedOperationException();
-        }
-      };
+  private final AbstractServerImplBuilder<?> testServerBuilder = new TestBuilder();
 
-  private Builder builder = new Builder();
-
-  @Test
-  public void getTracerFactories_default() {
-    builder.addStreamTracerFactory(DUMMY_USER_TRACER);
-
-    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
-
-    assertEquals(3, factories.size());
-    assertThat(factories.get(0).getClass().getName())
-        .isEqualTo("io.grpc.census.CensusStatsModule$ServerTracerFactory");
-    assertThat(factories.get(1).getClass().getName())
-        .isEqualTo("io.grpc.census.CensusTracingModule$ServerTracerFactory");
-    assertThat(factories.get(2)).isSameInstanceAs(DUMMY_USER_TRACER);
-  }
-
-  @Test
-  public void getTracerFactories_disableStats() {
-    builder.addStreamTracerFactory(DUMMY_USER_TRACER);
-    builder.setStatsEnabled(false);
-
-    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
-
-    assertEquals(2, factories.size());
-    assertThat(factories.get(0).getClass().getName())
-        .isEqualTo("io.grpc.census.CensusTracingModule$ServerTracerFactory");
-    assertThat(factories.get(1)).isSameInstanceAs(DUMMY_USER_TRACER);
-  }
-
-  @Test
-  public void getTracerFactories_disableTracing() {
-    builder.addStreamTracerFactory(DUMMY_USER_TRACER);
-    builder.setTracingEnabled(false);
-
-    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
-
-    assertEquals(2, factories.size());
-    assertThat(factories.get(0).getClass().getName())
-        .isEqualTo("io.grpc.census.CensusStatsModule$ServerTracerFactory");
-    assertThat(factories.get(1)).isSameInstanceAs(DUMMY_USER_TRACER);
-  }
-
-  @Test
-  public void getTracerFactories_disableBoth() {
-    builder.addStreamTracerFactory(DUMMY_USER_TRACER);
-    builder.setTracingEnabled(false);
-    builder.setStatsEnabled(false);
-    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
-    assertThat(factories).containsExactly(DUMMY_USER_TRACER);
-  }
-
-  static class Builder extends AbstractServerImplBuilder<Builder> {
-
+  private final class TestBuilder extends AbstractServerImplBuilder<TestBuilder> {
     @Override
-    protected List<io.grpc.internal.InternalServer> buildTransportServers(
-        List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Builder useTransportSecurity(File certChain, File privateKey) {
-      throw new UnsupportedOperationException();
+    protected ServerBuilder<?> delegate() {
+      return mockDelegate;
     }
   }
 
+  @Test
+  public void allMethodsForwarded() throws Exception {
+    ForwardingTestUtil.testMethodsForwarded(
+        ServerBuilder.class,
+        mockDelegate,
+        testServerBuilder,
+        Collections.<Method>emptyList());
+  }
+
+  @Test
+  public void allBuilderMethodsReturnThis() throws Exception {
+    for (Method method : ServerBuilder.class.getDeclaredMethods()) {
+      if (Modifier.isStatic(method.getModifiers())
+          || Modifier.isPrivate(method.getModifiers())
+          || Modifier.isFinal(method.getModifiers())) {
+        continue;
+      }
+      if (method.getName().equals("build")) {
+        continue;
+      }
+      Class<?>[] argTypes = method.getParameterTypes();
+      Object[] args = new Object[argTypes.length];
+      for (int i = 0; i < argTypes.length; i++) {
+        args[i] = Defaults.defaultValue(argTypes[i]);
+      }
+
+      Object returnedValue = method.invoke(testServerBuilder, args);
+
+      assertThat(returnedValue).isSameInstanceAs(testServerBuilder);
+    }
+  }
+
+  @Test
+  public void buildReturnsDelegateBuildByDefault() {
+    Server server = mock(Server.class);
+    doReturn(server).when(mockDelegate).build();
+
+    assertThat(testServerBuilder.build()).isSameInstanceAs(server);
+  }
 }

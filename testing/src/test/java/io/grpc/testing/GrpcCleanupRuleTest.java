@@ -51,6 +51,7 @@ import org.mockito.InOrder;
 public class GrpcCleanupRuleTest {
   public static final FakeClock fakeClock = new FakeClock();
 
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
   public ExpectedException thrown = ExpectedException.none();
 

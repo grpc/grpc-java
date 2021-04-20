@@ -16,23 +16,10 @@
 
 package io.grpc.alts;
 
-import com.google.auth.oauth2.ComputeEngineCredentials;
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
-import io.grpc.CallCredentials;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.Status;
-import io.grpc.alts.internal.AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory;
-import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.SharedResourcePool;
-import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.InternalNettyChannelBuilder;
-import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.NettyChannelBuilder;
-import io.netty.handler.ssl.SslContext;
-import javax.net.ssl.SSLException;
 
 /**
  * {@code ManagedChannelBuilder} for Google Compute Engine. This class sets up a secure channel
@@ -44,27 +31,7 @@ public final class ComputeEngineChannelBuilder
   private final NettyChannelBuilder delegate;
 
   private ComputeEngineChannelBuilder(String target) {
-    delegate = NettyChannelBuilder.forTarget(target);
-    SslContext sslContext;
-    try {
-      sslContext = GrpcSslContexts.forClient().build();
-    } catch (SSLException e) {
-      throw new RuntimeException(e);
-    }
-    InternalNettyChannelBuilder.setProtocolNegotiatorFactory(
-        delegate(),
-        new GoogleDefaultProtocolNegotiatorFactory(
-            /* targetServiceAccounts= */ ImmutableList.<String>of(),
-            SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
-            sslContext));
-    CallCredentials credentials = MoreCallCredentials.from(ComputeEngineCredentials.create());
-    Status status = Status.OK;
-    if (!CheckGcpEnvironment.isOnGcp()) {
-      status =
-          Status.INTERNAL.withDescription(
-              "Compute Engine Credentials can only be used on Google Cloud Platform");
-    }
-    delegate().intercept(new CallCredentialsInterceptor(credentials, status));
+    delegate = NettyChannelBuilder.forTarget(target, ComputeEngineChannelCredentials.create());
   }
 
   /** "Overrides" the static method in {@link ManagedChannelBuilder}. */
@@ -80,20 +47,5 @@ public final class ComputeEngineChannelBuilder
   @Override
   protected NettyChannelBuilder delegate() {
     return delegate;
-  }
-
-  @VisibleForTesting
-  ProtocolNegotiator getProtocolNegotiatorForTest() {
-    SslContext sslContext;
-    try {
-      sslContext = GrpcSslContexts.forClient().build();
-    } catch (SSLException e) {
-      throw new RuntimeException(e);
-    }
-    return new GoogleDefaultProtocolNegotiatorFactory(
-        /* targetServiceAccounts= */ ImmutableList.<String>of(),
-        SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
-        sslContext)
-        .buildProtocolNegotiator();
   }
 }

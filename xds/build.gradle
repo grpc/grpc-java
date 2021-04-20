@@ -1,3 +1,5 @@
+import java.util.jar.JarFile
+
 plugins {
     id "java"
     id "maven-publish"
@@ -13,7 +15,13 @@ description = "gRPC: XDS plugin"
     it.options.compilerArgs += [
         // valueOf(int) in RoutingPriority has been deprecated
         "-Xlint:-deprecation",
+        // only has AutoValue annotation processor
+        "-Xlint:-processing",
     ]
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/build/generated/sources/annotationProcessor/java/.*",
+            "|")
 }
 
 evaluationDependsOn(project(':grpc-core').path)
@@ -27,7 +35,8 @@ dependencies {
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.gson,
             libraries.re2j,
-            libraries.bouncycastle
+            libraries.bouncycastle,
+            libraries.autovalue_annotation
     def nettyDependency = implementation project(':grpc-netty')
 
     implementation (libraries.opencensus_proto) {
@@ -44,6 +53,7 @@ dependencies {
 
     testImplementation project(':grpc-core').sourceSets.test.output
 
+    annotationProcessor libraries.autovalue
     compileOnly libraries.javax_annotation,
             // At runtime use the epoll included in grpc-netty-shaded
             libraries.netty_epoll
@@ -64,12 +74,20 @@ dependencies {
 
 sourceSets {
     main {
+        java {
+            srcDir "${projectDir}/third_party/zero-allocation-hashing/main/java"
+        }
         proto {
             srcDir 'third_party/envoy/src/main/proto'
             srcDir 'third_party/protoc-gen-validate/src/main/proto'
             srcDir 'third_party/udpa/src/main/proto'
             srcDir 'third_party/googleapis/src/main/proto'
             srcDir 'third_party/istio/src/main/proto'
+        }
+    }
+    test {
+        java {
+            srcDir "${projectDir}/third_party/zero-allocation-hashing/test/java"
         }
     }
 }
@@ -81,32 +99,76 @@ jar {
 }
 
 javadoc {
+    // Exclusions here should generally also be relocated
+    exclude 'com/github/udpa/**'
+    exclude 'com/google/security/**'
+    exclude 'io/envoyproxy/**'
+    // Need to clean up the class structure to reduce how much is exposed
+    exclude 'io/grpc/xds/*LoadBalancer*'
+    exclude 'io/grpc/xds/Bootstrapper.java'
+    exclude 'io/grpc/xds/Envoy*'
+    exclude 'io/grpc/xds/XdsAttributes.java'
+    exclude 'io/grpc/xds/XdsClientWrapperForServerSds.java'
+    exclude 'io/grpc/xds/XdsInitializationException.java'
+    exclude 'io/grpc/xds/XdsNameResolverProvider.java'
     exclude 'io/grpc/xds/internal/**'
-    // At the moment there is no public API. Should probably clean up the class structure to reduce
-    // how much is exposed
-    exclude 'io/grpc/xds/**'
+    exclude 'io/grpc/xds/Internal*'
 }
 
+def prefixName = 'io.grpc.xds'
 shadowJar {
     classifier = null
     dependencies {
         include(project(':grpc-xds'))
     }
-    relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
-    relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
-    relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
+    // Relocated packages commonly need exclusions in jacocoTestReport and javadoc
+    relocate 'com.github.udpa', "${prefixName}.shaded.com.github.udpa"
+    relocate 'com.google.api.expr', "${prefixName}.shaded.com.google.api.expr"
+    relocate 'com.google.security', "${prefixName}.shaded.com.google.security"
+    // TODO: missing java_package option in .proto
+    relocate 'envoy.annotations', "${prefixName}.shaded.envoy.annotations"
+    relocate 'io.envoyproxy', "${prefixName}.shaded.io.envoyproxy"
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
-    relocate 'com.google.security', 'io.grpc.xds.shaded.com.google.security'
+    // TODO: missing java_package option in .proto
+    relocate 'udpa.annotations', "${prefixName}.shaded.udpa.annotations"
     exclude "**/*.proto"
+}
+
+task checkPackageLeakage(dependsOn: shadowJar) {
+    doLast {
+        def jarEntryPrefixName = prefixName.replaceAll('\\.', '/')
+        shadowJar.outputs.getFiles().each { jar ->
+            def package_leak_detected = false
+            JarFile jf = new JarFile(jar)
+            jf.entries().each { entry ->
+                if (entry.name.endsWith(".class") && !entry.name.startsWith(
+                        jarEntryPrefixName)) {
+                    package_leak_detected = true
+                    println "WARNING: package leaked, may need relocation: " +
+                            entry.name
+                }
+            }
+            jf.close()
+            if (package_leak_detected) {
+                throw new TaskExecutionException(shadowJar,
+                        new IllegalStateException("Resource leakage detected!"))
+            }
+        }
+    }
+}
+
+test {
+    dependsOn checkPackageLeakage
 }
 
 jacocoTestReport {
     classDirectories.from = sourceSets.main.output.collect {
         fileTree(dir: it,
-        exclude: [
-                '**/com/google/api/**',
-                '**/com/github/**',
+        exclude: [ // Exclusions here should generally also be relocated
+                '**/com/github/udpa/**',
+                '**/com/google/api/expr/**',
+                '**/com/google/security/**',
                 '**/envoy/annotations/**',
                 '**/io/envoyproxy/**',
                 '**/udpa/annotations/**',
@@ -117,8 +179,9 @@ jacocoTestReport {
 publishing {
     publications {
         maven(MavenPublication) {
-            artifact shadowJar
-            artifacts.removeAll { it.classifier == 'original' }
+            // We want this to throw an exception if it isn't working
+            def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
+            artifacts.remove(originalJar)
 
             pom.withXml {
                 def dependenciesNode = new Node(null, 'dependencies')

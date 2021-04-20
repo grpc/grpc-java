@@ -14,7 +14,6 @@ dependencies {
     runtimeOnly libraries.netty_tcnative,
             libraries.netty_epoll
     testShadowImplementation files(shadowJar),
-            configurations.shadow,
             project(':grpc-testing-proto'),
             project(':grpc-testing'),
             libraries.truth
@@ -47,6 +46,9 @@ publishing {
         maven(MavenPublication) {
             // Ideally swap to project.shadow.component(it) when it isn't broken for project deps
             artifact shadowJar
+            // Empty jars are not published via withJavadocJar() and withSourcesJar()
+            artifact javadocJar
+            artifact sourcesJar
 
             pom.withXml {
                 def dependencies = asNode().appendNode('dependencies')

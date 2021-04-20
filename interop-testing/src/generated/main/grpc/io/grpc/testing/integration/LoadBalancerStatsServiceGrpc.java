@@ -1,19 +1,6 @@
 package io.grpc.testing.integration;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  * <pre>
@@ -59,6 +46,37 @@ public final class LoadBalancerStatsServiceGrpc {
       }
     }
     return getGetClientStatsMethod;
+  }
+
+  private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest,
+      io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> getGetClientAccumulatedStatsMethod;
+
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "GetClientAccumulatedStats",
+      requestType = io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest.class,
+      responseType = io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
+  public static io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest,
+      io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> getGetClientAccumulatedStatsMethod() {
+    io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest, io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> getGetClientAccumulatedStatsMethod;
+    if ((getGetClientAccumulatedStatsMethod = LoadBalancerStatsServiceGrpc.getGetClientAccumulatedStatsMethod) == null) {
+      synchronized (LoadBalancerStatsServiceGrpc.class) {
+        if ((getGetClientAccumulatedStatsMethod = LoadBalancerStatsServiceGrpc.getGetClientAccumulatedStatsMethod) == null) {
+          LoadBalancerStatsServiceGrpc.getGetClientAccumulatedStatsMethod = getGetClientAccumulatedStatsMethod =
+              io.grpc.MethodDescriptor.<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest, io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "GetClientAccumulatedStats"))
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
+                  io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse.getDefaultInstance()))
+              .setSchemaDescriptor(new LoadBalancerStatsServiceMethodDescriptorSupplier("GetClientAccumulatedStats"))
+              .build();
+        }
+      }
+    }
+    return getGetClientAccumulatedStatsMethod;
   }
 
   /**
@@ -119,18 +137,35 @@ public final class LoadBalancerStatsServiceGrpc {
      */
     public void getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerStatsResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(getGetClientStatsMethod(), responseObserver);
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getGetClientStatsMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * Gets the accumulated stats for RPCs sent by a test client.
+     * </pre>
+     */
+    public void getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> responseObserver) {
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getGetClientAccumulatedStatsMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             getGetClientStatsMethod(),
-            asyncUnaryCall(
+            io.grpc.stub.ServerCalls.asyncUnaryCall(
               new MethodHandlers<
                 io.grpc.testing.integration.Messages.LoadBalancerStatsRequest,
                 io.grpc.testing.integration.Messages.LoadBalancerStatsResponse>(
                   this, METHODID_GET_CLIENT_STATS)))
+          .addMethod(
+            getGetClientAccumulatedStatsMethod(),
+            io.grpc.stub.ServerCalls.asyncUnaryCall(
+              new MethodHandlers<
+                io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest,
+                io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse>(
+                  this, METHODID_GET_CLIENT_ACCUMULATED_STATS)))
           .build();
     }
   }
@@ -159,8 +194,19 @@ public final class LoadBalancerStatsServiceGrpc {
      */
     public void getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerStatsResponse> responseObserver) {
-      asyncUnaryCall(
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getGetClientStatsMethod(), getCallOptions()), request, responseObserver);
+    }
+
+    /**
+     * <pre>
+     * Gets the accumulated stats for RPCs sent by a test client.
+     * </pre>
+     */
+    public void getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> responseObserver) {
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
+          getChannel().newCall(getGetClientAccumulatedStatsMethod(), getCallOptions()), request, responseObserver);
     }
   }
 
@@ -187,8 +233,18 @@ public final class LoadBalancerStatsServiceGrpc {
      * </pre>
      */
     public io.grpc.testing.integration.Messages.LoadBalancerStatsResponse getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request) {
-      return blockingUnaryCall(
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetClientStatsMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * Gets the accumulated stats for RPCs sent by a test client.
+     * </pre>
+     */
+    public io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request) {
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+          getChannel(), getGetClientAccumulatedStatsMethod(), getCallOptions(), request);
     }
   }
 
@@ -216,12 +272,24 @@ public final class LoadBalancerStatsServiceGrpc {
      */
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.LoadBalancerStatsResponse> getClientStats(
         io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request) {
-      return futureUnaryCall(
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getGetClientStatsMethod(), getCallOptions()), request);
+    }
+
+    /**
+     * <pre>
+     * Gets the accumulated stats for RPCs sent by a test client.
+     * </pre>
+     */
+    public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> getClientAccumulatedStats(
+        io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request) {
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
+          getChannel().newCall(getGetClientAccumulatedStatsMethod(), getCallOptions()), request);
     }
   }
 
   private static final int METHODID_GET_CLIENT_STATS = 0;
+  private static final int METHODID_GET_CLIENT_ACCUMULATED_STATS = 1;
 
   private static final class MethodHandlers<Req, Resp> implements
       io.grpc.stub.ServerCalls.UnaryMethod<Req, Resp>,
@@ -243,6 +311,10 @@ public final class LoadBalancerStatsServiceGrpc {
         case METHODID_GET_CLIENT_STATS:
           serviceImpl.getClientStats((io.grpc.testing.integration.Messages.LoadBalancerStatsRequest) request,
               (io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerStatsResponse>) responseObserver);
+          break;
+        case METHODID_GET_CLIENT_ACCUMULATED_STATS:
+          serviceImpl.getClientAccumulatedStats((io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest) request,
+              (io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse>) responseObserver);
           break;
         default:
           throw new AssertionError();
@@ -306,6 +378,7 @@ public final class LoadBalancerStatsServiceGrpc {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new LoadBalancerStatsServiceFileDescriptorSupplier())
               .addMethod(getGetClientStatsMethod())
+              .addMethod(getGetClientAccumulatedStatsMethod())
               .build();
         }
       }

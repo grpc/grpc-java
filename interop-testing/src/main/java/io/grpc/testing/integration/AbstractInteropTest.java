@@ -64,7 +64,6 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.census.InternalCensusStatsAccessor;
 import io.grpc.census.internal.DeprecatedCensusConstants;
-import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
@@ -148,6 +147,12 @@ public abstract class AbstractInteropTest {
   /** Must be at least {@link #unaryPayloadLength()}, plus some to account for encoding overhead. */
   public static final int MAX_MESSAGE_SIZE = 16 * 1024 * 1024;
 
+  /**
+   * Use a small flow control to help detect flow control bugs. Don't use 64KiB to test
+   * SETTINGS/WINDOW_UPDATE exchange.
+   */
+  public static final int TEST_FLOW_CONTROL_WINDOW = 65 * 1024;
+
   private static final FakeTagger tagger = new FakeTagger();
   private static final FakeTagContextBinarySerializer tagContextBinarySerializer =
       new FakeTagContextBinarySerializer();
@@ -165,7 +170,7 @@ public abstract class AbstractInteropTest {
 
   private ScheduledExecutorService testServiceExecutor;
   private Server server;
-  private boolean customCensusModulePresent;
+  private Server handshakerServer;
 
   private final LinkedBlockingQueue<ServerStreamTracerInfo> serverStreamTracers =
       new LinkedBlockingQueue<>();
@@ -219,6 +224,7 @@ public abstract class AbstractInteropTest {
   protected static final Empty EMPTY = Empty.getDefaultInstance();
 
   private void startServer() {
+    maybeStartHandshakerServer();
     ServerBuilder<?> builder = getServerBuilder();
     if (builder == null) {
       server = null;
@@ -239,25 +245,22 @@ public abstract class AbstractInteropTest {
                 new TestServiceImpl(testServiceExecutor),
                 allInterceptors))
         .addStreamTracerFactory(serverStreamTracerFactory);
-    if (builder instanceof AbstractServerImplBuilder) {
-      customCensusModulePresent = true;
-      ServerStreamTracer.Factory censusTracerFactory =
-          InternalCensusStatsAccessor
-              .getServerStreamTracerFactory(
-                  tagger, tagContextBinarySerializer, serverStatsRecorder,
-                  GrpcUtil.STOPWATCH_SUPPLIER,
-                  true, true, true, false /* real-time metrics */);
-      AbstractServerImplBuilder<?> sb = (AbstractServerImplBuilder<?>) builder;
-      io.grpc.internal.TestingAccessor.setStatsEnabled(sb, false);
-      sb.addStreamTracerFactory(censusTracerFactory);
-    }
-    if (metricsExpected()) {
-      assertThat(builder).isInstanceOf(AbstractServerImplBuilder.class);
-    }
+
     try {
       server = builder.build().start();
     } catch (IOException ex) {
       throw new RuntimeException(ex);
+    }
+  }
+
+  private void maybeStartHandshakerServer() {
+    ServerBuilder<?> handshakerServerBuilder = getHandshakerServerBuilder();
+    if (handshakerServerBuilder != null) {
+      try {
+        handshakerServer = handshakerServerBuilder.build().start();
+      } catch (IOException ex) {
+        throw new RuntimeException(ex);
+      }
     }
   }
 
@@ -267,6 +270,9 @@ public abstract class AbstractInteropTest {
     }
     if (testServiceExecutor != null) {
       testServiceExecutor.shutdown();
+    }
+    if (handshakerServer != null) {
+      handshakerServer.shutdownNow();
     }
   }
 
@@ -358,6 +364,11 @@ public abstract class AbstractInteropTest {
     return null;
   }
 
+  @Nullable
+  protected ServerBuilder<?> getHandshakerServerBuilder() {
+    return null;
+  }
+
   protected final ClientInterceptor createCensusStatsClientInterceptor() {
     return
         InternalCensusStatsAccessor
@@ -365,6 +376,20 @@ public abstract class AbstractInteropTest {
                 tagger, tagContextBinarySerializer, clientStatsRecorder,
                 GrpcUtil.STOPWATCH_SUPPLIER,
                 true, true, true, false /* real-time metrics */);
+  }
+
+  protected final ServerStreamTracer.Factory createCustomCensusTracerFactory() {
+    return InternalCensusStatsAccessor.getServerStreamTracerFactory(
+        tagger, tagContextBinarySerializer, serverStatsRecorder,
+        GrpcUtil.STOPWATCH_SUPPLIER,
+        true, true, true, false /* real-time metrics */);
+  }
+
+  /**
+   * Override this when custom census module presence is different from {@link #metricsExpected()}.
+   */
+  protected boolean customCensusModulePresent() {
+    return metricsExpected();
   }
 
   /**
@@ -1504,7 +1529,7 @@ public abstract class AbstractInteropTest {
   @Test(timeout = 10000)
   public void censusContextsPropagated() {
     Assume.assumeTrue("Skip the test because server is not in the same process.", server != null);
-    Assume.assumeTrue(customCensusModulePresent);
+    Assume.assumeTrue(customCensusModulePresent());
     Span clientParentSpan = Tracing.getTracer().spanBuilder("Test.interopTest").startSpan();
     // A valid ID is guaranteed to be unique, so we can verify it is actually propagated.
     assertTrue(clientParentSpan.getContext().getTraceId().isValid());

@@ -35,10 +35,20 @@ import javax.annotation.Nullable;
  */
 public class CompositeReadableBuffer extends AbstractReadableBuffer {
 
+  private final Deque<ReadableBuffer> readableBuffers;
+  private final Deque<ReadableBuffer> rewindableBuffers;
   private int readableBytes;
-  private final Deque<ReadableBuffer> readableBuffers = new ArrayDeque<>();
-  private final Deque<ReadableBuffer> rewindableBuffers = new ArrayDeque<>();
   private boolean marked;
+
+  public CompositeReadableBuffer(int initialCapacity) {
+    readableBuffers = new ArrayDeque<>(initialCapacity);
+    rewindableBuffers = new ArrayDeque<>(initialCapacity);
+  }
+
+  public CompositeReadableBuffer() {
+    readableBuffers = new ArrayDeque<>();
+    rewindableBuffers = new ArrayDeque<>();
+  }
 
   /**
    * Adds a new {@link ReadableBuffer} at the end of the buffer list. After a buffer is added, it is
@@ -76,86 +86,95 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
     return readableBytes;
   }
 
+  private static final NoThrowReadOperation<Void> UBYTE_OP =
+      new NoThrowReadOperation<Void>() {
+        @Override
+        public int read(ReadableBuffer buffer, int length, Void unused, int value) {
+          return buffer.readUnsignedByte();
+        }
+      };
+
   @Override
   public int readUnsignedByte() {
-    ReadOperation op = new ReadOperation() {
-      @Override
-      int readInternal(ReadableBuffer buffer, int length) {
-        return buffer.readUnsignedByte();
-      }
-    };
-    execute(op, 1);
-    return op.value;
+    return executeNoThrow(UBYTE_OP, 1, null, 0);
   }
+
+  private static final NoThrowReadOperation<Void> SKIP_OP =
+      new NoThrowReadOperation<Void>() {
+        @Override
+        public int read(ReadableBuffer buffer, int length, Void unused, int unused2) {
+          buffer.skipBytes(length);
+          return 0;
+        }
+      };
 
   @Override
   public void skipBytes(int length) {
-    execute(new ReadOperation() {
-      @Override
-      public int readInternal(ReadableBuffer buffer, int length) {
-        buffer.skipBytes(length);
-        return 0;
-      }
-    }, length);
+    executeNoThrow(SKIP_OP, length, null, 0);
   }
 
+  private static final NoThrowReadOperation<byte[]> BYTE_ARRAY_OP =
+      new NoThrowReadOperation<byte[]>() {
+        @Override
+        public int read(ReadableBuffer buffer, int length, byte[] dest, int offset) {
+          buffer.readBytes(dest, offset, length);
+          return offset + length;
+        }
+      };
+
   @Override
-  public void readBytes(final byte[] dest, final int destOffset, int length) {
-    execute(new ReadOperation() {
-      int currentOffset = destOffset;
-      @Override
-      public int readInternal(ReadableBuffer buffer, int length) {
-        buffer.readBytes(dest, currentOffset, length);
-        currentOffset += length;
-        return 0;
-      }
-    }, length);
+  public void readBytes(byte[] dest, int destOffset, int length) {
+    executeNoThrow(BYTE_ARRAY_OP, length, dest, destOffset);
   }
 
-  @Override
-  public void readBytes(final ByteBuffer dest) {
-    execute(new ReadOperation() {
-      @Override
-      public int readInternal(ReadableBuffer buffer, int length) {
-        // Change the limit so that only lengthToCopy bytes are available.
-        int prevLimit = dest.limit();
-        ((Buffer) dest).limit(dest.position() + length);
+  private static final NoThrowReadOperation<ByteBuffer> BYTE_BUF_OP =
+      new NoThrowReadOperation<ByteBuffer>() {
+        @Override
+        public int read(ReadableBuffer buffer, int length, ByteBuffer dest, int unused) {
+          // Change the limit so that only lengthToCopy bytes are available.
+          int prevLimit = dest.limit();
+          ((Buffer) dest).limit(dest.position() + length);
+          // Write the bytes and restore the original limit.
+          buffer.readBytes(dest);
+          ((Buffer) dest).limit(prevLimit);
+          return 0;
+        }
+      };
 
-        // Write the bytes and restore the original limit.
-        buffer.readBytes(dest);
-        ((Buffer) dest).limit(prevLimit);
-        return 0;
-      }
-    }, dest.remaining());
+  @Override
+  public void readBytes(ByteBuffer dest) {
+    executeNoThrow(BYTE_BUF_OP, dest.remaining(), dest, 0);
   }
 
-  @Override
-  public void readBytes(final OutputStream dest, int length) throws IOException {
-    ReadOperation op = new ReadOperation() {
-      @Override
-      public int readInternal(ReadableBuffer buffer, int length) throws IOException {
-        buffer.readBytes(dest, length);
-        return 0;
-      }
-    };
-    execute(op, length);
+  private static final ReadOperation<OutputStream> STREAM_OP =
+      new ReadOperation<OutputStream>() {
+        @Override
+        public int read(ReadableBuffer buffer, int length, OutputStream dest, int unused)
+            throws IOException {
+          buffer.readBytes(dest, length);
+          return 0;
+        }
+      };
 
-    // If an exception occurred, throw it.
-    if (op.isError()) {
-      throw op.ex;
-    }
+  @Override
+  public void readBytes(OutputStream dest, int length) throws IOException {
+    execute(STREAM_OP, length, dest, 0);
   }
 
+  private static final NoThrowReadOperation<CompositeReadableBuffer> COMPOSITE_OP =
+      new NoThrowReadOperation<CompositeReadableBuffer>() {
+        @Override
+        public int read(ReadableBuffer buffer, int length, CompositeReadableBuffer dest,
+            int unused) {
+          dest.addBuffer(buffer.readBytes(length));
+          return 0;
+        }
+      };
+
   @Override
-  public CompositeReadableBuffer readBytes(int length) {
+  public ReadableBuffer readBytes(int length) {
     final CompositeReadableBuffer newBuffer = new CompositeReadableBuffer();
-    execute(new ReadOperation() {
-      @Override
-      int readInternal(ReadableBuffer buffer, int length) {
-        newBuffer.addBuffer(buffer.readBytes(length));
-        return 0;
-      }
-    }, length);
+    executeNoThrow(COMPOSITE_OP, length, newBuffer, 0);
     return newBuffer;
   }
 
@@ -222,7 +241,7 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
    * Executes the given {@link ReadOperation} against the {@link ReadableBuffer}s required to
    * satisfy the requested {@code length}.
    */
-  private void execute(ReadOperation op, int length) {
+  private <T> int execute(ReadOperation<T> op, int length, T dest, int value) throws IOException {
     checkReadable(length);
 
     if (!readableBuffers.isEmpty()) {
@@ -234,10 +253,7 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
       int lengthToCopy = Math.min(length, buffer.readableBytes());
 
       // Perform the read operation for this buffer.
-      op.read(buffer, lengthToCopy);
-      if (op.isError()) {
-        return;
-      }
+      value = op.read(buffer, lengthToCopy, dest, value);
 
       length -= lengthToCopy;
       readableBytes -= lengthToCopy;
@@ -246,6 +262,16 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
     if (length > 0) {
       // Should never get here.
       throw new AssertionError("Failed executing read operation");
+    }
+
+    return value;
+  }
+
+  private <T> int executeNoThrow(NoThrowReadOperation<T> op, int length, T dest, int value) {
+    try {
+      return execute(op, length, dest, value);
+    } catch (IOException e) {
+      throw new AssertionError(e); // shouldn't happen
     }
   }
 
@@ -268,32 +294,23 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   }
 
   /**
-   * A simple read operation to perform on a single {@link ReadableBuffer}. All state management for
-   * the buffers is done by {@link CompositeReadableBuffer#execute(ReadOperation, int)}.
+   * A simple read operation to perform on a single {@link ReadableBuffer}.
+   * All state management for the buffers is done by
+   * {@link CompositeReadableBuffer#execute(ReadOperation, int, Object, int)}.
    */
-  private abstract static class ReadOperation {
+  private interface ReadOperation<T> {
     /**
-     * Only used by {@link CompositeReadableBuffer#readUnsignedByte()}.
+     * This method can also be used to simultaneously perform operation-specific int-valued
+     * aggregation over the sequence of buffers in a {@link CompositeReadableBuffer}.
+     * {@code value} is the return value from the prior buffer, or the "initial" value passed
+     * to {@code execute()} in the case of the first buffer. {@code execute()} returns the value
+     * returned by the operation called on the last buffer.
      */
-    int value;
+    int read(ReadableBuffer buffer, int length, T dest, int value) throws IOException;
+  }
 
-    /**
-     * Only used by {@link CompositeReadableBuffer#readBytes(OutputStream, int)}.
-     */
-    IOException ex;
-
-    final void read(ReadableBuffer buffer, int length) {
-      try {
-        value = readInternal(buffer, length);
-      } catch (IOException e) {
-        ex = e;
-      }
-    }
-
-    final boolean isError() {
-      return ex != null;
-    }
-
-    abstract int readInternal(ReadableBuffer buffer, int length) throws IOException;
+  private interface NoThrowReadOperation<T> extends ReadOperation<T> {
+    @Override
+    int read(ReadableBuffer buffer, int length, T dest, int value);
   }
 }

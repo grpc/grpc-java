@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import io.grpc.Internal;
 import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourcePool;
 import io.netty.channel.socket.nio.NioSocketChannel;
 
@@ -28,22 +29,16 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 @Internal
 public final class InternalNettyChannelBuilder {
 
-  /**
-   * Checks authority upon channel construction.  The purpose of this interface is to raise the
-   * visibility of {@link NettyChannelBuilder.OverrideAuthorityChecker}.
-   */
-  public interface OverrideAuthorityChecker extends NettyChannelBuilder.OverrideAuthorityChecker {}
+  public static void disableCheckAuthority(NettyChannelBuilder builder) {
+    builder.disableCheckAuthority();
+  }
 
-  public static void overrideAuthorityChecker(
-      NettyChannelBuilder channelBuilder, OverrideAuthorityChecker authorityChecker) {
-    channelBuilder.overrideAuthorityChecker(authorityChecker);
+  public static void enableCheckAuthority(NettyChannelBuilder builder) {
+    builder.enableCheckAuthority();
   }
 
   /** A class that provides a Netty handler to control protocol negotiation. */
-  public interface ProtocolNegotiatorFactory
-      extends NettyChannelBuilder.ProtocolNegotiatorFactory {
-
-    @Override
+  public interface ProtocolNegotiatorFactory {
     InternalProtocolNegotiator.ProtocolNegotiator buildProtocolNegotiator();
   }
 
@@ -52,7 +47,24 @@ public final class InternalNettyChannelBuilder {
    * and {@code SslContext}.
    */
   public static void setProtocolNegotiatorFactory(
-      NettyChannelBuilder builder, ProtocolNegotiatorFactory protocolNegotiator) {
+      NettyChannelBuilder builder, final ProtocolNegotiatorFactory protocolNegotiator) {
+    builder.protocolNegotiatorFactory(new ProtocolNegotiator.ClientFactory() {
+      @Override public ProtocolNegotiator newNegotiator() {
+        return protocolNegotiator.buildProtocolNegotiator();
+      }
+
+      @Override public int getDefaultPort() {
+        return GrpcUtil.DEFAULT_PORT_SSL;
+      }
+    });
+  }
+
+  /**
+   * Sets the {@link ProtocolNegotiatorFactory} to be used. Overrides any specified negotiation type
+   * and {@code SslContext}.
+   */
+  public static void setProtocolNegotiatorFactory(
+      NettyChannelBuilder builder, InternalProtocolNegotiator.ClientFactory protocolNegotiator) {
     builder.protocolNegotiatorFactory(protocolNegotiator);
   }
 
@@ -66,6 +78,10 @@ public final class InternalNettyChannelBuilder {
 
   public static void setStatsRecordStartedRpcs(NettyChannelBuilder builder, boolean value) {
     builder.setStatsRecordStartedRpcs(value);
+  }
+
+  public static void setStatsRecordFinishedRpcs(NettyChannelBuilder builder, boolean value) {
+    builder.setStatsRecordFinishedRpcs(value);
   }
 
   public static void setStatsRecordRealTimeMetrics(NettyChannelBuilder builder, boolean value) {

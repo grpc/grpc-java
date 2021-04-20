@@ -19,6 +19,7 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
@@ -31,8 +32,6 @@ import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.util.concurrent.Executor;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * A SslContextProvider is a "container" or provider of SslContext. This is used by gRPC-xds to
@@ -42,22 +41,24 @@ import java.util.logging.Logger;
  */
 public abstract class SslContextProvider implements Closeable {
 
-  private static final Logger logger = Logger.getLogger(SslContextProvider.class.getName());
-
   protected final BaseTlsContext tlsContext;
 
-  abstract static class Callback {
+  @VisibleForTesting public abstract static class Callback {
     private final Executor executor;
 
     protected Callback(Executor executor) {
       this.executor = executor;
     }
 
+    @VisibleForTesting public Executor getExecutor() {
+      return executor;
+    }
+
     /** Informs callee of new/updated SslContext. */
-    abstract void updateSecret(SslContext sslContext);
+    @VisibleForTesting public abstract void updateSecret(SslContext sslContext);
 
     /** Informs callee of an exception that was generated. */
-    abstract void onException(Throwable throwable);
+    @VisibleForTesting protected abstract void onException(Throwable throwable);
   }
 
   protected SslContextProvider(BaseTlsContext tlsContext) {
@@ -117,13 +118,8 @@ public abstract class SslContextProvider implements Closeable {
           public void run() {
             try {
               SslContext sslContext = sslContextGetter.get();
-              try {
-                callback.updateSecret(sslContext);
-              } catch (Throwable t) {
-                logger.log(Level.SEVERE, "Exception from callback.updateSecret", t);
-              }
+              callback.updateSecret(sslContext);
             } catch (Throwable e) {
-              logger.log(Level.SEVERE, "Exception from sslContextGetter.get()", e);
               callback.onException(e);
             }
           }

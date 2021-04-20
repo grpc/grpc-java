@@ -21,14 +21,18 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.base.Preconditions;
 import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
+import io.grpc.Internal;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.InternalServer;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.ServerImplBuilder;
+import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
 import io.grpc.internal.SharedResourcePool;
 import java.io.File;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
@@ -67,8 +71,8 @@ import java.util.concurrent.TimeUnit;
  * </pre>
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1783")
-public final class InProcessServerBuilder
-    extends AbstractServerImplBuilder<InProcessServerBuilder> {
+public final class InProcessServerBuilder extends
+    AbstractServerImplBuilder<InProcessServerBuilder> {
   /**
    * Create a server builder that will bind with the given name.
    *
@@ -93,6 +97,7 @@ public final class InProcessServerBuilder
     return UUID.randomUUID().toString();
   }
 
+  private final ServerImplBuilder serverImplBuilder;
   final String name;
   int maxInboundMetadataSize = Integer.MAX_VALUE;
   ObjectPool<ScheduledExecutorService> schedulerPool =
@@ -100,13 +105,30 @@ public final class InProcessServerBuilder
 
   private InProcessServerBuilder(String name) {
     this.name = Preconditions.checkNotNull(name, "name");
+
+    final class InProcessClientTransportServersBuilder implements ClientTransportServersBuilder {
+      @Override
+      public InternalServer buildClientTransportServers(
+          List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+        return buildTransportServers(streamTracerFactories);
+      }
+    }
+
+    serverImplBuilder = new ServerImplBuilder(new InProcessClientTransportServersBuilder());
+
     // In-process transport should not record its traffic to the stats module.
     // https://github.com/grpc/grpc-java/issues/2284
-    setStatsRecordStartedRpcs(false);
-    setStatsRecordFinishedRpcs(false);
+    serverImplBuilder.setStatsRecordStartedRpcs(false);
+    serverImplBuilder.setStatsRecordFinishedRpcs(false);
     // Disable handshake timeout because it is unnecessary, and can trigger Thread creation that can
     // break some environments (like tests).
     handshakeTimeout(Long.MAX_VALUE, TimeUnit.SECONDS);
+  }
+
+  @Internal
+  @Override
+  protected ServerBuilder<?> delegate() {
+    return serverImplBuilder;
   }
 
   /**
@@ -140,7 +162,7 @@ public final class InProcessServerBuilder
    * @since 1.24.0
    */
   public InProcessServerBuilder deadlineTicker(Deadline.Ticker ticker) {
-    setDeadlineTicker(ticker);
+    serverImplBuilder.setDeadlineTicker(ticker);
     return this;
   }
 
@@ -164,14 +186,17 @@ public final class InProcessServerBuilder
     return this;
   }
 
-  @Override
-  protected List<InProcessServer> buildTransportServers(
+  InProcessServer buildTransportServers(
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-    return Collections.singletonList(new InProcessServer(this, streamTracerFactories));
+    return new InProcessServer(this, streamTracerFactories);
   }
 
   @Override
   public InProcessServerBuilder useTransportSecurity(File certChain, File privateKey) {
     throw new UnsupportedOperationException("TLS not supported in InProcessServer");
+  }
+
+  void setStatsEnabled(boolean value) {
+    this.serverImplBuilder.setStatsEnabled(value);
   }
 }

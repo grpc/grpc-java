@@ -23,22 +23,30 @@ import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallOptions;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
+import io.grpc.CompositeCallCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
+import io.grpc.internal.MetadataApplierImpl.MetadataApplierListener;
 import java.net.SocketAddress;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
+import javax.annotation.concurrent.GuardedBy;
 
 final class CallCredentialsApplyingTransportFactory implements ClientTransportFactory {
   private final ClientTransportFactory delegate;
+  private final CallCredentials channelCallCredentials;
   private final Executor appExecutor;
 
   CallCredentialsApplyingTransportFactory(
-      ClientTransportFactory delegate, Executor appExecutor) {
+      ClientTransportFactory delegate, CallCredentials channelCallCredentials,
+      Executor appExecutor) {
     this.delegate = checkNotNull(delegate, "delegate");
+    this.channelCallCredentials = channelCallCredentials;
     this.appExecutor = checkNotNull(appExecutor, "appExecutor");
   }
 
@@ -55,6 +63,11 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
   }
 
   @Override
+  public SwapChannelCredentialsResult swapChannelCredentials(ChannelCredentials channelCreds) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public void close() {
     delegate.close();
   }
@@ -62,6 +75,21 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
   private class CallCredentialsApplyingTransport extends ForwardingConnectionClientTransport {
     private final ConnectionClientTransport delegate;
     private final String authority;
+    // Negative value means transport active, non-negative value indicates shutdown invoked.
+    private final AtomicInteger pendingApplier = new AtomicInteger(Integer.MIN_VALUE + 1);
+    private volatile Status shutdownStatus;
+    @GuardedBy("this")
+    private Status savedShutdownStatus;
+    @GuardedBy("this")
+    private Status savedShutdownNowStatus;
+    private final MetadataApplierListener applierListener = new MetadataApplierListener() {
+      @Override
+      public void onComplete() {
+        if (pendingApplier.decrementAndGet() == 0) {
+          maybeShutdown();
+        }
+      }
+    };
 
     CallCredentialsApplyingTransport(ConnectionClientTransport delegate, String authority) {
       this.delegate = checkNotNull(delegate, "delegate");
@@ -78,9 +106,18 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     public ClientStream newStream(
         final MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions) {
       CallCredentials creds = callOptions.getCredentials();
+      if (creds == null) {
+        creds = channelCallCredentials;
+      } else if (channelCallCredentials != null) {
+        creds = new CompositeCallCredentials(channelCallCredentials, creds);
+      }
       if (creds != null) {
         MetadataApplierImpl applier = new MetadataApplierImpl(
-            delegate, method, headers, callOptions);
+            delegate, method, headers, callOptions, applierListener);
+        if (pendingApplier.incrementAndGet() > 0) {
+          applierListener.onComplete();
+          return new FailingClientStream(shutdownStatus);
+        }
         RequestInfo requestInfo = new RequestInfo() {
             @Override
             public MethodDescriptor<?, ?> getMethodDescriptor() {
@@ -114,7 +151,68 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
         }
         return applier.returnStream();
       } else {
+        if (pendingApplier.get() >= 0) {
+          return new FailingClientStream(shutdownStatus);
+        }
         return delegate.newStream(method, headers, callOptions);
+      }
+    }
+
+    @Override
+    public void shutdown(Status status) {
+      checkNotNull(status, "status");
+      synchronized (this) {
+        if (pendingApplier.get() < 0) {
+          shutdownStatus = status;
+          pendingApplier.addAndGet(Integer.MAX_VALUE);
+        } else {
+          return;
+        }
+        if (pendingApplier.get() != 0) {
+          savedShutdownStatus = status;
+          return;
+        }
+      }
+      super.shutdown(status);
+    }
+
+    // TODO(zivy): cancel pending applier here.
+    @Override
+    public void shutdownNow(Status status) {
+      checkNotNull(status, "status");
+      synchronized (this) {
+        if (pendingApplier.get() < 0) {
+          shutdownStatus = status;
+          pendingApplier.addAndGet(Integer.MAX_VALUE);
+        } else if (savedShutdownNowStatus != null) {
+          return;
+        }
+        if (pendingApplier.get() != 0) {
+          savedShutdownNowStatus = status;
+          // TODO(zivy): propagate shutdownNow to the delegate immediately.
+          return;
+        }
+      }
+      super.shutdownNow(status);
+    }
+
+    private void maybeShutdown() {
+      Status maybeShutdown;
+      Status maybeShutdownNow;
+      synchronized (this) {
+        if (pendingApplier.get() != 0) {
+          return;
+        }
+        maybeShutdown = savedShutdownStatus;
+        maybeShutdownNow = savedShutdownNowStatus;
+        savedShutdownStatus = null;
+        savedShutdownNowStatus = null;
+      }
+      if (maybeShutdown != null) {
+        super.shutdown(maybeShutdown);
+      }
+      if (maybeShutdownNow != null) {
+        super.shutdownNow(maybeShutdownNow);
       }
     }
   }

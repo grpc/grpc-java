@@ -16,14 +16,18 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
+import io.grpc.ChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
+import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
+import io.grpc.netty.ProtocolNegotiators.PlaintextProtocolNegotiatorClientFactory;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.EventLoopGroup;
@@ -42,9 +46,10 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class NettyChannelBuilderTest {
 
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
   private final SslContext noSslContext = null;
-  
+
   private void shutdown(ManagedChannel mc) throws Exception {
     mc.shutdownNow();
     assertTrue(mc.awaitTermination(1, TimeUnit.SECONDS));
@@ -92,26 +97,33 @@ public class NettyChannelBuilderTest {
   }
 
   @Test
-  public void overrideAllowsInvalidAuthority() {
-    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){});
-    InternalNettyChannelBuilder.overrideAuthorityChecker(builder, new OverrideAuthorityChecker() {
-      @Override
-      public String checkAuthority(String authority) {
-        return authority;
-      }
-    });
-    Object unused = builder.overrideAuthority("[invalidauthority")
-        .negotiationType(NegotiationType.PLAINTEXT)
-        .buildTransportFactory();
-  }
-
-  @Test
   public void failOverrideInvalidAuthority() {
     NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){});
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Invalid authority:");
 
+    builder.overrideAuthority("[invalidauthority");
+  }
+
+  @Test
+  public void disableCheckAuthorityAllowsInvalidAuthority() {
+    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){})
+        .disableCheckAuthority();
+
+    Object unused = builder.overrideAuthority("[invalidauthority")
+        .negotiationType(NegotiationType.PLAINTEXT)
+        .buildTransportFactory();
+  }
+
+  @Test
+  public void enableCheckAuthorityFailOverrideInvalidAuthority() {
+    NettyChannelBuilder builder = new NettyChannelBuilder(new SocketAddress(){})
+        .disableCheckAuthority()
+        .enableCheckAuthority();
+
+    thrown.expect(IllegalArgumentException.class);
+    thrown.expectMessage("Invalid authority:");
     builder.overrideAuthority("[invalidauthority");
   }
 
@@ -274,5 +286,19 @@ public class NettyChannelBuilderTest {
     InternalNettyChannelBuilder.useNioTransport(builder);
 
     builder.assertEventLoopAndChannelType();
+  }
+
+  @Test
+  public void transportFactorySupportsNettyChannelCreds() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+    ClientTransportFactory transportFactory = builder.buildTransportFactory();
+
+    SwapChannelCredentialsResult result = transportFactory.swapChannelCredentials(
+        mock(ChannelCredentials.class));
+    assertThat(result).isNull();
+
+    result = transportFactory.swapChannelCredentials(
+        NettyChannelCredentials.create(new PlaintextProtocolNegotiatorClientFactory()));
+    assertThat(result).isNotNull();
   }
 }

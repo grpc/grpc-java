@@ -23,7 +23,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.net.Network;
-import android.net.NetworkInfo;
 import android.os.Build;
 import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
@@ -151,7 +150,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
   /**
    * Wraps an OkHttp channel and handles invoking the appropriate methods (e.g., {@link
-   * ManagedChannel#resetConnectBackoff}) when the device network state changes.
+   * ManagedChannel#enterIdle) when the device network state changes.
    */
   @VisibleForTesting
   static final class AndroidChannel extends ManagedChannel {
@@ -290,26 +289,9 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     /** Respond to changes in the default network. Only used on API levels 24+. */
     @TargetApi(Build.VERSION_CODES.N)
     private class DefaultNetworkCallback extends ConnectivityManager.NetworkCallback {
-      // Registering a listener may immediate invoke onAvailable/onLost: the API docs do not specify
-      // if the methods are always invoked once, then again on any change, or only on change. When
-      // onAvailable() is invoked immediately without an actual network change, it's preferable to
-      // (spuriously) resetConnectBackoff() rather than enterIdle(), as the former is a no-op if the
-      // channel has already moved to CONNECTING.
-      private boolean isConnected = false;
-
       @Override
       public void onAvailable(Network network) {
-        if (isConnected) {
-          delegate.enterIdle();
-        } else {
-          delegate.resetConnectBackoff();
-        }
-        isConnected = true;
-      }
-
-      @Override
-      public void onLost(Network network) {
-        isConnected = false;
+        delegate.enterIdle();
       }
     }
 
@@ -317,15 +299,16 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     private class NetworkReceiver extends BroadcastReceiver {
       private boolean isConnected = false;
 
+      @SuppressWarnings("deprecation")
       @Override
       public void onReceive(Context context, Intent intent) {
         ConnectivityManager conn =
             (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo networkInfo = conn.getActiveNetworkInfo();
+        android.net.NetworkInfo networkInfo = conn.getActiveNetworkInfo();
         boolean wasConnected = isConnected;
         isConnected = networkInfo != null && networkInfo.isConnected();
         if (isConnected && !wasConnected) {
-          delegate.resetConnectBackoff();
+          delegate.enterIdle();
         }
       }
     }

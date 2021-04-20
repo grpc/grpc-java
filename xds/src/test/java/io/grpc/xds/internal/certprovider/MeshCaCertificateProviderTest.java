@@ -101,7 +101,7 @@ public class MeshCaCertificateProviderTest {
   /**
    * Expire time of cert SERVER_0_PEM_FILE.
    */
-  private static final long CERT0_EXPIRY_TIME_MILLIS = 1899853658000L;
+  static final long CERT0_EXPIRY_TIME_MILLIS = 1899853658000L;
   /**
    * Cert validity of 12 hours for the above cert.
    */
@@ -534,11 +534,11 @@ public class MeshCaCertificateProviderTest {
     assertThat(receivedZoneValues).hasSize(count);
     for (int i = 0; i < count; i++) {
       assertThat(receivedStsCreds.poll()).isEqualTo("Bearer " + TEST_STS_TOKEN + i);
-      assertThat(receivedZoneValues.poll()).isEqualTo("us-west2-a");
+      assertThat(receivedZoneValues.poll()).isEqualTo("location=locations/us-west2-a");
     }
   }
 
-  private static class TestScheduledFuture<V> implements ScheduledFuture<V> {
+  static class TestScheduledFuture<V> implements ScheduledFuture<V> {
 
     static class Record {
       long timeout;

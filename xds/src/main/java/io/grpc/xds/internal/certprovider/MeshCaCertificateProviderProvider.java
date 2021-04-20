@@ -69,23 +69,11 @@ final class MeshCaCertificateProviderProvider implements CertificateProviderProv
   static final long RPC_TIMEOUT_SECONDS = 10L;
 
   private static final Pattern CLUSTER_URL_PATTERN = Pattern
-      .compile(".*/projects/(.*)/locations/(.*)/clusters/.*");
+      .compile(".*/projects/(.*)/(?:locations|zones)/(.*)/clusters/.*");
 
   private static final String TRUST_DOMAIN_SUFFIX = ".svc.id.goog";
   private static final String AUDIENCE_PREFIX = "identitynamespace:";
   static final String MESH_CA_NAME = "meshCA";
-
-  static {
-    CertificateProviderRegistry.getInstance()
-        .register(
-            new MeshCaCertificateProviderProvider(
-                StsCredentials.Factory.getInstance(),
-                MeshCaCertificateProvider.MeshCaChannelFactory.getInstance(),
-                new ExponentialBackoffPolicy.Provider(),
-                MeshCaCertificateProvider.Factory.getInstance(),
-                ScheduledExecutorServiceFactory.DEFAULT_INSTANCE,
-                TimeProvider.SYSTEM_TIME_PROVIDER));
-  }
 
   final StsCredentials.Factory stsCredentialsFactory;
   final MeshCaCertificateProvider.MeshCaChannelFactory meshCaChannelFactory;
@@ -93,6 +81,16 @@ final class MeshCaCertificateProviderProvider implements CertificateProviderProv
   final MeshCaCertificateProvider.Factory meshCaCertificateProviderFactory;
   final ScheduledExecutorServiceFactory scheduledExecutorServiceFactory;
   final TimeProvider timeProvider;
+
+  MeshCaCertificateProviderProvider() {
+    this(
+        StsCredentials.Factory.getInstance(),
+        MeshCaCertificateProvider.MeshCaChannelFactory.getInstance(),
+        new ExponentialBackoffPolicy.Provider(),
+        MeshCaCertificateProvider.Factory.getInstance(),
+        ScheduledExecutorServiceFactory.DEFAULT_INSTANCE,
+        TimeProvider.SYSTEM_TIME_PROVIDER);
+  }
 
   @VisibleForTesting
   MeshCaCertificateProviderProvider(

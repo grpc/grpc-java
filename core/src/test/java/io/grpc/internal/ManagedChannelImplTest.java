@@ -24,6 +24,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE;
 import static junit.framework.TestCase.assertNotSame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -63,15 +64,18 @@ import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.IntegerMarshaller;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
@@ -105,8 +109,12 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
+import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
 import io.grpc.internal.ManagedChannelImpl.ScParser;
+import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
+import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
+import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.stub.ClientCalls;
@@ -134,7 +142,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Assert;
@@ -269,10 +276,11 @@ public class ManagedChannelImplTest {
   private CallCredentials creds;
   @Mock
   private Executor offloadExecutor;
-  private ChannelBuilder channelBuilder;
+  private ManagedChannelImplBuilder channelBuilder;
   private boolean requestConnection = true;
   private BlockingQueue<MockClientTransportInfo> transports;
   private boolean panicExpected;
+  private final List<LogRecord> logs = new ArrayList<>();
   @Captor
   private ArgumentCaptor<ResolvedAddresses> resolvedAddressCaptor;
 
@@ -324,15 +332,35 @@ public class ManagedChannelImplTest {
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
     when(balancerRpcExecutorPool.getObject())
         .thenReturn(balancerRpcExecutor.getScheduledExecutorService());
+    Handler handler = new Handler() {
+      @Override
+      public void publish(LogRecord record) {
+        logs.add(record);
+      }
 
-    channelBuilder =
-        new ChannelBuilder()
-            .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
-            .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
-            .userAgent(USER_AGENT)
-            .idleTimeout(
-                AbstractManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
-            .offloadExecutor(offloadExecutor);
+      @Override
+      public void flush() {
+      }
+
+      @Override
+      public void close() throws SecurityException {
+      }
+    };
+    ManagedChannelImpl.logger.addHandler(handler);
+    ManagedChannelImpl.logger.setLevel(Level.ALL);
+
+    channelBuilder = new ManagedChannelImplBuilder(TARGET,
+        new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
+    configureBuilder(channelBuilder);
+  }
+
+  private void configureBuilder(ManagedChannelImplBuilder channelBuilder) {
+    channelBuilder
+        .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
+        .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
+        .userAgent(USER_AGENT)
+        .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
+        .offloadExecutor(offloadExecutor);
     channelBuilder.executorPool = executorPool;
     channelBuilder.binlog = null;
     channelBuilder.channelz = channelz;
@@ -360,89 +388,6 @@ public class ManagedChannelImplTest {
     LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
   }
 
-  @Deprecated
-  @Test
-  public void createSubchannel_old_outsideSynchronizationContextShouldLogWarning() {
-    createChannel();
-    final AtomicReference<LogRecord> logRef = new AtomicReference<>();
-    Handler handler = new Handler() {
-      @Override
-      public void publish(LogRecord record) {
-        logRef.set(record);
-      }
-
-      @Override
-      public void flush() {
-      }
-
-      @Override
-      public void close() throws SecurityException {
-      }
-    };
-    Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
-    try {
-      logger.addHandler(handler);
-      helper.createSubchannel(addressGroup, Attributes.EMPTY);
-      LogRecord record = logRef.get();
-      assertThat(record.getLevel()).isEqualTo(Level.WARNING);
-      assertThat(record.getMessage()).contains(
-          "createSubchannel() should be called from SynchronizationContext");
-      assertThat(record.getThrown()).isInstanceOf(IllegalStateException.class);
-    } finally {
-      logger.removeHandler(handler);
-    }
-  }
-
-  @Deprecated
-  @Test
-  public void createSubchannel_old_insideSyncContextFollowedByRequestConnectionShouldSucceed() {
-    createChannel();
-    final AtomicReference<Throwable> error = new AtomicReference<>();
-    helper.getSynchronizationContext().execute(new Runnable() {
-        @Override
-        public void run() {
-          try {
-            Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
-            subchannel.requestConnection();
-          } catch (Throwable e) {
-            error.set(e);
-          }
-        }
-      });
-    assertThat(error.get()).isNull();
-  }
-
-  @Deprecated
-  @Test
-  @SuppressWarnings("deprecation")
-  public void createSubchannel_old_propagateSubchannelStatesToOldApi() {
-    createChannel();
-
-    Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
-    subchannel.requestConnection();
-
-    verify(mockTransportFactory)
-        .newClientTransport(
-            any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
-    verify(mockLoadBalancer).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
-
-    MockClientTransportInfo transportInfo = transports.poll();
-    transportInfo.listener.transportReady();
-
-    verify(mockLoadBalancer).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
-
-    channel.shutdown();
-    verify(mockLoadBalancer).shutdown();
-    subchannel.shutdown();
-
-    verify(mockLoadBalancer, atLeast(0)).canHandleEmptyAddressListFromNameResolution();
-    verify(mockLoadBalancer, atLeast(0)).handleNameResolutionError(any(Status.class));
-    // handleSubchannelState() should not be called after shutdown()
-    verifyNoMoreInteractions(mockLoadBalancer);
-  }
-
   @Test
   public void createSubchannel_outsideSynchronizationContextShouldThrow() {
     createChannel();
@@ -454,6 +399,64 @@ public class ManagedChannelImplTest {
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().isEqualTo("Not called from the SynchronizationContext");
     }
+  }
+
+  @Test
+  public void createSubchannel_resolverOverrideAuthority() {
+    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(
+        socketAddress,
+        Attributes.newBuilder()
+            .set(ATTR_AUTHORITY_OVERRIDE, "resolver.override.authority")
+            .build());
+    channelBuilder.nameResolverFactory(
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(addressGroup))
+            .build());
+    createChannel();
+
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel);
+    ArgumentCaptor<ClientTransportOptions> transportOptionCaptor = ArgumentCaptor.forClass(null);
+    verify(mockTransportFactory)
+        .newClientTransport(
+            any(SocketAddress.class), transportOptionCaptor.capture(), any(ChannelLogger.class));
+    assertThat(transportOptionCaptor.getValue().getAuthority())
+        .isEqualTo("resolver.override.authority");
+  }
+
+  @Test
+  public void createSubchannel_channelBuilderOverrideAuthority() {
+    channelBuilder.overrideAuthority("channel-builder.override.authority");
+    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(
+        socketAddress,
+        Attributes.newBuilder()
+            .set(ATTR_AUTHORITY_OVERRIDE, "resolver.override.authority")
+            .build());
+    channelBuilder.nameResolverFactory(
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(addressGroup))
+            .build());
+    createChannel();
+
+    final Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel);
+    ArgumentCaptor<ClientTransportOptions> transportOptionCaptor = ArgumentCaptor.forClass(null);
+    verify(mockTransportFactory)
+        .newClientTransport(
+            any(SocketAddress.class), transportOptionCaptor.capture(), any(ChannelLogger.class));
+    assertThat(transportOptionCaptor.getValue().getAuthority())
+        .isEqualTo("channel-builder.override.authority");
+    final List<EquivalentAddressGroup> subchannelEags = new ArrayList<>();
+    helper.getSynchronizationContext().execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            subchannelEags.addAll(subchannel.getAllAddresses());
+          }
+        });
+    assertThat(subchannelEags).isEqualTo(ImmutableList.of(addressGroup));
   }
 
   @Test
@@ -484,11 +487,23 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void startCallBeforeNameResolution() {
+  public void startCallBeforeNameResolution() throws Exception {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(ImmutableList.of(addressGroup)).build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList(), timer.getTimeProvider());
+    Map<String, Object> rawServiceConfig =
+        parseConfig("{\"methodConfig\":[{"
+            + "\"name\":[{\"service\":\"service\"}],"
+            + "\"waitForReady\":true}]}");
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        createManagedChannelServiceConfig(rawServiceConfig, null);
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
     Metadata headers = new Metadata();
     ClientStream mockStream = mock(ClientStream.class);
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
@@ -518,8 +533,84 @@ public class ManagedChannelImplTest {
     updateBalancingStateSafely(helper, READY, mockPicker);
     executor.runDueTasks();
 
-    // TODO(zdapeng): verify CallOptions updated by config selector
-    verify(mockTransport).newStream(same(method), same(headers), any(CallOptions.class));
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
+    verify(mockTransport).newStream(same(method), same(headers), callOptionsCaptor.capture());
+    assertThat(callOptionsCaptor.getValue().isWaitForReady()).isTrue();
+    verify(mockStream).start(streamListenerCaptor.capture());
+
+    // Clean up as much as possible to allow the channel to terminate.
+    shutdownSafely(helper, subchannel);
+    timer.forwardNanos(
+        TimeUnit.SECONDS.toNanos(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS));
+  }
+
+  @Test
+  public void newCallWithConfigSelector() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(ImmutableList.of(addressGroup)).build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channel = new ManagedChannelImpl(
+        channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
+        balancerRpcExecutorPool, timer.getStopwatchSupplier(),
+        Collections.<ClientInterceptor>emptyList(), timer.getTimeProvider());
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(ManagedChannelServiceConfig.empty()));
+    final Metadata.Key<String> metadataKey =
+        Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER);
+    final CallOptions.Key<String> callOptionsKey = CallOptions.Key.create("test");
+    InternalConfigSelector configSelector = new InternalConfigSelector() {
+      @Override
+      public Result selectConfig(final PickSubchannelArgs args) {
+        return Result.newBuilder()
+            .setConfig(ManagedChannelServiceConfig.empty())
+            .setInterceptor(
+                // An interceptor that mutates CallOptions based on headers value.
+                new ClientInterceptor() {
+                  String value = args.getHeaders().get(metadataKey);
+                  @Override
+                  public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+                      MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+                    callOptions = callOptions.withOption(callOptionsKey, value);
+                    return next.newCall(method, callOptions);
+                  }
+                })
+            .build();
+      }
+    };
+    nameResolverFactory.nextAttributes.set(
+        Attributes.newBuilder().set(InternalConfigSelector.KEY, configSelector).build());
+    channel.getState(true);
+    Metadata headers = new Metadata();
+    headers.put(metadataKey, "fooValue");
+    ClientStream mockStream = mock(ClientStream.class);
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, headers);
+
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
+    helper = helperCaptor.getValue();
+    // Make the transport available
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel);
+    verify(mockTransportFactory)
+        .newClientTransport(
+            any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
+    MockClientTransportInfo transportInfo = transports.poll();
+    ConnectionClientTransport mockTransport = transportInfo.transport;
+    ManagedClientTransport.Listener transportListener = transportInfo.listener;
+    when(mockTransport.newStream(same(method), same(headers), any(CallOptions.class)))
+        .thenReturn(mockStream);
+    transportListener.transportReady();
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withSubchannel(subchannel));
+    updateBalancingStateSafely(helper, READY, mockPicker);
+    executor.runDueTasks();
+
+    ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
+    verify(mockTransport).newStream(same(method), same(headers), callOptionsCaptor.capture());
+    assertThat(callOptionsCaptor.getValue().getOption(callOptionsKey)).isEqualTo("fooValue");
     verify(mockStream).start(streamListenerCaptor.capture());
 
     // Clean up as much as possible to allow the channel to terminate.
@@ -541,6 +632,41 @@ public class ManagedChannelImplTest {
     assertTrue(channel.isShutdown());
     assertTrue(channel.isTerminated());
     verify(executorPool).returnObject(executor.getScheduledExecutorService());
+  }
+
+  @Test
+  public void shutdownNow_pendingCallShouldFail() {
+    channelBuilder.nameResolverFactory(
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build());
+    createChannel();
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+    channel.shutdown();
+    executor.runDueTasks();
+    verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
+    channel.shutdownNow();
+    executor.runDueTasks();
+    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.CANCELLED);
+  }
+
+  @Test
+  public void shutdownWithNoNameResolution_newCallShouldFail() {
+    channelBuilder.nameResolverFactory(
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build());
+    createChannel();
+    channel.shutdown();
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+    executor.runDueTasks();
+    verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
   }
 
   @Test
@@ -598,7 +724,8 @@ public class ManagedChannelImplTest {
   @Test
   public void channelzMembership_oob() throws Exception {
     createChannel();
-    OobChannel oob = (OobChannel) helper.createOobChannel(addressGroup, AUTHORITY);
+    OobChannel oob = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), AUTHORITY);
     // oob channels are not root channels
     assertNull(channelz.getRootChannel(oob.getLogId().getId()));
     assertTrue(channelz.containsSubchannel(oob.getLogId()));
@@ -834,8 +961,8 @@ public class ManagedChannelImplTest {
     verifyNoMoreInteractions(stateListener1, stateListener2);
 
     // LoadBalancer will normally shutdown all subchannels
-    subchannel1.shutdown();
-    subchannel2.shutdown();
+    shutdownSafely(helper, subchannel1);
+    shutdownSafely(helper, subchannel2);
 
     // Since subchannels are shutdown, SubchannelStateListeners will only get SHUTDOWN regardless of
     // the transport states.
@@ -1042,6 +1169,7 @@ public class ManagedChannelImplTest {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();
     String rawLbConfig = "{ \"setting1\": \"high\" }";
+    Object parsedLbConfig = new Object();
     Map<String, Object> rawServiceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"mock_lb\": " + rawLbConfig + " } ] }");
     ManagedChannelServiceConfig parsedServiceConfig =
@@ -1049,8 +1177,7 @@ public class ManagedChannelImplTest {
             rawServiceConfig,
             new PolicySelection(
                 mockLoadBalancerProvider,
-                parseConfig(rawLbConfig),
-                new Object()));
+                parsedLbConfig));
     nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(parsedServiceConfig));
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
@@ -1061,9 +1188,7 @@ public class ManagedChannelImplTest {
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
-    Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-    Map<String, ?> lbConfig = actualAttrs.get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
-    assertEquals(ImmutableMap.of("setting1", "high"), lbConfig);
+    assertThat(resultCaptor.getValue().getLoadBalancingPolicyConfig()).isEqualTo(parsedLbConfig);
 
     // A no resolution retry
     assertEquals(0, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
@@ -1435,6 +1560,103 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void subchannelConnectionBroken_noLbRefreshingResolver_logWarningAndTriggeRefresh() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+    FakeNameResolverFactory.FakeNameResolver resolver =
+        Iterables.getOnlyElement(nameResolverFactory.resolvers);
+    assertThat(resolver.refreshCalled).isEqualTo(0);
+
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    InternalSubchannel internalSubchannel =
+        (InternalSubchannel) subchannel.getInternalSubchannel();
+    internalSubchannel.obtainActiveTransport();
+    MockClientTransportInfo transportInfo = transports.poll();
+
+    // Break subchannel connection
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE.withDescription("unreachable"));
+    LogRecord log = Iterables.getOnlyElement(logs);
+    assertThat(log.getLevel()).isEqualTo(Level.WARNING);
+    assertThat(log.getMessage()).isEqualTo(
+        "LoadBalancer should call Helper.refreshNameResolution() to refresh name resolution if "
+            + "subchannel state becomes TRANSIENT_FAILURE or IDLE. This will no longer happen "
+            + "automatically in the future releases");
+    assertThat(resolver.refreshCalled).isEqualTo(1);
+  }
+
+  @Test
+  public void subchannelConnectionBroken_ResolverRefreshedByLb() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+    FakeNameResolverFactory.FakeNameResolver resolver =
+        Iterables.getOnlyElement(nameResolverFactory.resolvers);
+    assertThat(resolver.refreshCalled).isEqualTo(0);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+    verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
+    helper = helperCaptor.getValue();
+
+    SubchannelStateListener listener = new SubchannelStateListener() {
+      @Override
+      public void onSubchannelState(ConnectivityStateInfo newState) {
+        // Normal LoadBalancer should refresh name resolution when some subchannel enters
+        // TRANSIENT_FAILURE or IDLE
+        if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
+          helper.refreshNameResolution();
+        }
+      }
+    };
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, listener);
+    InternalSubchannel internalSubchannel =
+        (InternalSubchannel) subchannel.getInternalSubchannel();
+    internalSubchannel.obtainActiveTransport();
+    MockClientTransportInfo transportInfo = transports.poll();
+
+    // Break subchannel connection and simulate load balancer refreshing name resolution
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE.withDescription("unreachable"));
+    assertThat(logs).isEmpty();
+    assertThat(resolver.refreshCalled).isEqualTo(1);
+  }
+
+  @Test
+  public void subchannelConnectionBroken_ignoreRefreshNameResolutionCheck_noRefresh() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+    FakeNameResolverFactory.FakeNameResolver resolver =
+        Iterables.getOnlyElement(nameResolverFactory.resolvers);
+    assertThat(resolver.refreshCalled).isEqualTo(0);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+    verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
+    helper = helperCaptor.getValue();
+    helper.ignoreRefreshNameResolutionCheck();
+
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    InternalSubchannel internalSubchannel =
+        (InternalSubchannel) subchannel.getInternalSubchannel();
+    internalSubchannel.obtainActiveTransport();
+    MockClientTransportInfo transportInfo = transports.poll();
+
+    // Break subchannel connection
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE.withDescription("unreachable"));
+    assertThat(logs).isEmpty();
+    assertThat(resolver.refreshCalled).isEqualTo(0);
+  }
+
+  @Test
   public void subchannelStringableBeforeStart() {
     createChannel();
     Subchannel subchannel = createUnstartedSubchannel(helper, addressGroup, Attributes.EMPTY);
@@ -1517,8 +1739,10 @@ public class ManagedChannelImplTest {
   public void oobchannels() {
     createChannel();
 
-    ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1authority");
-    ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2authority");
+    ManagedChannel oob1 = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oob1authority");
+    ManagedChannel oob2 = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oob2authority");
     verify(balancerRpcExecutorPool, times(2)).getObject();
 
     assertEquals("oob1authority", oob1.authority());
@@ -1617,10 +1841,176 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void oobChannelHasNoChannelCallCredentials() {
+    Metadata.Key<String> metadataKey =
+        Metadata.Key.of("token", Metadata.ASCII_STRING_MARSHALLER);
+    String channelCredValue = "channel-provided call cred";
+    channelBuilder = new ManagedChannelImplBuilder(
+        TARGET, InsecureChannelCredentials.create(),
+        new FakeCallCredentials(metadataKey, channelCredValue),
+        new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
+    configureBuilder(channelBuilder);
+    createChannel();
+
+    // Verify that the normal channel has call creds, to validate configuration
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel);
+    MockClientTransportInfo transportInfo = transports.poll();
+    assertNotNull(transportInfo);
+    transportInfo.listener.transportReady();
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(
+        PickResult.withSubchannel(subchannel));
+    updateBalancingStateSafely(helper, READY, mockPicker);
+
+    String callCredValue = "per-RPC call cred";
+    CallOptions callOptions = CallOptions.DEFAULT
+        .withCallCredentials(new FakeCallCredentials(metadataKey, callCredValue));
+    Metadata headers = new Metadata();
+    ClientCall<String, Integer> call = channel.newCall(method, callOptions);
+    call.start(mockCallListener, headers);
+
+    verify(transportInfo.transport).newStream(same(method), same(headers), same(callOptions));
+    assertThat(headers.getAll(metadataKey))
+        .containsExactly(channelCredValue, callCredValue).inOrder();
+
+    // Verify that the oob channel does not
+    ManagedChannel oob = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oobauthority");
+
+    headers = new Metadata();
+    call = oob.newCall(method, callOptions);
+    call.start(mockCallListener2, headers);
+
+    transportInfo = transports.poll();
+    assertNotNull(transportInfo);
+    transportInfo.listener.transportReady();
+    balancerRpcExecutor.runDueTasks();
+
+    verify(transportInfo.transport).newStream(same(method), same(headers), same(callOptions));
+    assertThat(headers.getAll(metadataKey)).containsExactly(callCredValue);
+    oob.shutdownNow();
+
+    // Verify that resolving oob channel does not
+    oob = helper.createResolvingOobChannelBuilder("oobauthority")
+        .nameResolverFactory(
+            new FakeNameResolverFactory.Builder(URI.create("oobauthority")).build())
+        .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
+        .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
+        .build();
+    oob.getState(true);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+    verify(mockLoadBalancerProvider, times(2)).newLoadBalancer(helperCaptor.capture());
+    Helper oobHelper = helperCaptor.getValue();
+
+    subchannel =
+        createSubchannelSafely(oobHelper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(oobHelper, subchannel);
+    transportInfo = transports.poll();
+    assertNotNull(transportInfo);
+    transportInfo.listener.transportReady();
+    SubchannelPicker mockPicker2 = mock(SubchannelPicker.class);
+    when(mockPicker2.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(
+        PickResult.withSubchannel(subchannel));
+    updateBalancingStateSafely(oobHelper, READY, mockPicker2);
+
+    headers = new Metadata();
+    call = oob.newCall(method, callOptions);
+    call.start(mockCallListener2, headers);
+
+    // CallOptions may contain StreamTracerFactory for census that is added by default.
+    verify(transportInfo.transport).newStream(same(method), same(headers), any(CallOptions.class));
+    assertThat(headers.getAll(metadataKey)).containsExactly(callCredValue);
+    oob.shutdownNow();
+  }
+
+  @Test
+  public void oobChannelWithOobChannelCredsHasChannelCallCredentials() {
+    Metadata.Key<String> metadataKey =
+        Metadata.Key.of("token", Metadata.ASCII_STRING_MARSHALLER);
+    String channelCredValue = "channel-provided call cred";
+    when(mockTransportFactory.swapChannelCredentials(any(CompositeChannelCredentials.class)))
+        .thenAnswer(new Answer<SwapChannelCredentialsResult>() {
+          @Override
+          public SwapChannelCredentialsResult answer(InvocationOnMock invocation) {
+            CompositeChannelCredentials c =
+                invocation.getArgument(0, CompositeChannelCredentials.class);
+            return new SwapChannelCredentialsResult(mockTransportFactory, c.getCallCredentials());
+          }
+        });
+    channelBuilder = new ManagedChannelImplBuilder(
+        TARGET, InsecureChannelCredentials.create(),
+        new FakeCallCredentials(metadataKey, channelCredValue),
+        new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
+    configureBuilder(channelBuilder);
+    createChannel();
+
+    // Verify that the normal channel has call creds, to validate configuration
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel);
+    MockClientTransportInfo transportInfo = transports.poll();
+    transportInfo.listener.transportReady();
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(
+        PickResult.withSubchannel(subchannel));
+    updateBalancingStateSafely(helper, READY, mockPicker);
+
+    String callCredValue = "per-RPC call cred";
+    CallOptions callOptions = CallOptions.DEFAULT
+        .withCallCredentials(new FakeCallCredentials(metadataKey, callCredValue));
+    Metadata headers = new Metadata();
+    ClientCall<String, Integer> call = channel.newCall(method, callOptions);
+    call.start(mockCallListener, headers);
+
+    verify(transportInfo.transport).newStream(same(method), same(headers), same(callOptions));
+    assertThat(headers.getAll(metadataKey))
+        .containsExactly(channelCredValue, callCredValue).inOrder();
+
+    // Verify that resolving oob channel with oob channel creds provides call creds
+    String oobChannelCredValue = "oob-channel-provided call cred";
+    ChannelCredentials oobChannelCreds = CompositeChannelCredentials.create(
+        InsecureChannelCredentials.create(),
+        new FakeCallCredentials(metadataKey, oobChannelCredValue));
+    ManagedChannel oob = helper.createResolvingOobChannelBuilder(
+            "fake://oobauthority/", oobChannelCreds)
+        .nameResolverFactory(
+            new FakeNameResolverFactory.Builder(URI.create("fake://oobauthority/")).build())
+        .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
+        .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
+        .build();
+    oob.getState(true);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+    verify(mockLoadBalancerProvider, times(2)).newLoadBalancer(helperCaptor.capture());
+    Helper oobHelper = helperCaptor.getValue();
+
+    subchannel =
+        createSubchannelSafely(oobHelper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(oobHelper, subchannel);
+    transportInfo = transports.poll();
+    transportInfo.listener.transportReady();
+    SubchannelPicker mockPicker2 = mock(SubchannelPicker.class);
+    when(mockPicker2.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(
+        PickResult.withSubchannel(subchannel));
+    updateBalancingStateSafely(oobHelper, READY, mockPicker2);
+
+    headers = new Metadata();
+    call = oob.newCall(method, callOptions);
+    call.start(mockCallListener2, headers);
+
+    // CallOptions may contain StreamTracerFactory for census that is added by default.
+    verify(transportInfo.transport).newStream(same(method), same(headers), any(CallOptions.class));
+    assertThat(headers.getAll(metadataKey))
+        .containsExactly(oobChannelCredValue, callCredValue).inOrder();
+    oob.shutdownNow();
+  }
+
+  @Test
   public void oobChannelsWhenChannelShutdownNow() {
     createChannel();
-    ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1Authority");
-    ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2Authority");
+    ManagedChannel oob1 = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oob1Authority");
+    ManagedChannel oob2 = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oob2Authority");
 
     oob1.newCall(method, CallOptions.DEFAULT).start(mockCallListener, new Metadata());
     oob2.newCall(method, CallOptions.DEFAULT).start(mockCallListener2, new Metadata());
@@ -1648,8 +2038,10 @@ public class ManagedChannelImplTest {
   @Test
   public void oobChannelsNoConnectionShutdown() {
     createChannel();
-    ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1Authority");
-    ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2Authority");
+    ManagedChannel oob1 = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oob1Authority");
+    ManagedChannel oob2 = helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oob2Authority");
     channel.shutdown();
 
     verify(mockLoadBalancer).shutdown();
@@ -1667,8 +2059,8 @@ public class ManagedChannelImplTest {
   @Test
   public void oobChannelsNoConnectionShutdownNow() {
     createChannel();
-    helper.createOobChannel(addressGroup, "oob1Authority");
-    helper.createOobChannel(addressGroup, "oob2Authority");
+    helper.createOobChannel(Collections.singletonList(addressGroup), "oob1Authority");
+    helper.createOobChannel(Collections.singletonList(addressGroup), "oob2Authority");
     channel.shutdownNow();
 
     verify(mockLoadBalancer).shutdown();
@@ -1821,41 +2213,25 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void refreshNameResolution_whenSubchannelConnectionFailed_notIdle() {
-    subtestNameResolutionRefreshWhenConnectionFailed(false, false);
-  }
-
-  @Test
   public void refreshNameResolution_whenOobChannelConnectionFailed_notIdle() {
-    subtestNameResolutionRefreshWhenConnectionFailed(true, false);
-  }
-
-  @Test
-  public void notRefreshNameResolution_whenSubchannelConnectionFailed_idle() {
-    subtestNameResolutionRefreshWhenConnectionFailed(false, true);
+    subtestNameResolutionRefreshWhenConnectionFailed(false);
   }
 
   @Test
   public void notRefreshNameResolution_whenOobChannelConnectionFailed_idle() {
-    subtestNameResolutionRefreshWhenConnectionFailed(true, true);
+    subtestNameResolutionRefreshWhenConnectionFailed(true);
   }
 
-  private void subtestNameResolutionRefreshWhenConnectionFailed(
-      boolean isOobChannel, boolean isIdle) {
+  private void subtestNameResolutionRefreshWhenConnectionFailed(boolean isIdle) {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
-    if (isOobChannel) {
-      OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "oobAuthority");
-      oobChannel.getSubchannel().requestConnection();
-    } else {
-      Subchannel subchannel =
-          createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
-      requestConnectionSafely(helper, subchannel);
-    }
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oobAuthority");
+    oobChannel.getSubchannel().requestConnection();
 
     MockClientTransportInfo transportInfo = transports.poll();
     assertNotNull(transportInfo);
@@ -2839,7 +3215,7 @@ public class ManagedChannelImplTest {
     ManagedChannelServiceConfig mcsc1 = createManagedChannelServiceConfig(
         ImmutableMap.<String, Object>of(),
         new PolicySelection(
-            mockLoadBalancerProvider, ImmutableMap.of("foo", "bar"), null));
+            mockLoadBalancerProvider, null));
     ResolutionResult resolutionResult1 = ResolutionResult.newBuilder()
         .setAddresses(Collections.singletonList(
             new EquivalentAddressGroup(
@@ -2916,7 +3292,8 @@ public class ManagedChannelImplTest {
   public void channelTracing_oobChannelStateChangeEvent() throws Exception {
     channelBuilder.maxTraceEvents(10);
     createChannel();
-    OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "authority");
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), "authority");
     timer.forwardNanos(1234);
     oobChannel.handleSubchannelStateChange(
         ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
@@ -2932,7 +3309,8 @@ public class ManagedChannelImplTest {
     channelBuilder.maxTraceEvents(10);
     createChannel();
     timer.forwardNanos(1234);
-    OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "authority");
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), "authority");
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Child OobChannel created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -2940,13 +3318,13 @@ public class ManagedChannelImplTest {
         .setChannelRef(oobChannel)
         .build());
     assertThat(getStats(oobChannel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-        .setDescription("OobChannel for [[test-addr]/{}] created")
+        .setDescription("OobChannel for [[[test-addr]/{}]] created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
         .build());
     assertThat(getStats(oobChannel.getInternalSubchannel()).channelTrace.events).contains(
         new ChannelTrace.Event.Builder()
-            .setDescription("Subchannel for [[test-addr]/{}] created")
+            .setDescription("Subchannel for [[[test-addr]/{}]] created")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());
@@ -3082,7 +3460,8 @@ public class ManagedChannelImplTest {
     ClientStream mockStream = mock(ClientStream.class);
     createChannel();
 
-    OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "oobauthority");
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oobauthority");
     AbstractSubchannel oobSubchannel = (AbstractSubchannel) oobChannel.getSubchannel();
     FakeClock callExecutor = new FakeClock();
     CallOptions options =
@@ -3144,7 +3523,8 @@ public class ManagedChannelImplTest {
     createChannel();
 
     String authority = "oobauthority";
-    OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, authority);
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), authority);
     assertEquals(authority, getStats(oobChannel).target);
   }
 
@@ -3152,7 +3532,8 @@ public class ManagedChannelImplTest {
   public void channelsAndSubchannels_oob_instrumented_state() throws Exception {
     createChannel();
 
-    OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "oobauthority");
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oobauthority");
     assertEquals(IDLE, getStats(oobChannel).state);
 
     oobChannel.getSubchannel().requestConnection();
@@ -3466,21 +3847,18 @@ public class ManagedChannelImplTest {
     }
 
     FakeNameResolverFactory2 factory = new FakeNameResolverFactory2();
-    final class CustomBuilder extends AbstractManagedChannelImplBuilder<CustomBuilder> {
 
-      CustomBuilder() {
-        super(TARGET);
-        this.executorPool = ManagedChannelImplTest.this.executorPool;
-        this.channelz = ManagedChannelImplTest.this.channelz;
-      }
-
-      @Override
-      protected ClientTransportFactory buildTransportFactory() {
-        return mockTransportFactory;
-      }
-    }
-
-    ManagedChannel mychannel = new CustomBuilder().nameResolverFactory(factory).build();
+    ManagedChannelImplBuilder customBuilder = new ManagedChannelImplBuilder(TARGET,
+        new ClientTransportFactoryBuilder() {
+          @Override
+          public ClientTransportFactory buildClientTransportFactory() {
+            return mockTransportFactory;
+          }
+        },
+        null);
+    customBuilder.executorPool = executorPool;
+    customBuilder.channelz = channelz;
+    ManagedChannel mychannel = customBuilder.nameResolverFactory(factory).build();
 
     ClientCall<Void, Void> call1 =
         mychannel.newCall(TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT);
@@ -3499,7 +3877,7 @@ public class ManagedChannelImplTest {
     Object fakeLbConfig = new Object();
     PolicySelection lbConfigs =
         new PolicySelection(
-            mockLoadBalancerProvider, rawServiceConfig, fakeLbConfig);
+            mockLoadBalancerProvider, fakeLbConfig);
     mockLoadBalancerProvider.parseLoadBalancingPolicyConfig(rawServiceConfig);
     ManagedChannelServiceConfig managedChannelServiceConfig =
         createManagedChannelServiceConfig(rawServiceConfig, lbConfigs);
@@ -3514,7 +3892,7 @@ public class ManagedChannelImplTest {
         CallOptions.DEFAULT.withDeadlineAfter(5, TimeUnit.SECONDS));
     ListenableFuture<Void> future2 = ClientCalls.futureUnaryCall(call2, null);
 
-    timer.forwardTime(5, TimeUnit.SECONDS);
+    timer.forwardTime(1234, TimeUnit.SECONDS);
 
     executor.runDueTasks();
     try {
@@ -3525,64 +3903,6 @@ public class ManagedChannelImplTest {
     }
 
     mychannel.shutdownNow();
-    // Now for Deadline_exceeded, stream shutdown is delayed, calling shutdownNow() on a open stream
-    // will add a task to executor. Cleaning that task here.
-    executor.runDueTasks();
-  }
-
-  @Deprecated
-  @Test
-  public void nameResolver_forwardingStartOldApi() {
-    final AtomicReference<NameResolver.Listener2> listenerCapture = new AtomicReference<>();
-    final NameResolver noopResolver = new NameResolver() {
-        @Override
-        public String getServiceAuthority() {
-          return "fake-authority";
-        }
-
-        @Override
-        public void start(Listener2 listener) {
-          listenerCapture.set(listener);
-        }
-
-        @Override
-        public void shutdown() {}
-      };
-
-    // This forwarding resolver is still on the old start() API.  Despite that, the delegate
-    // resolver which is on the new API should get the new Listener2.
-    final NameResolver oldApiForwardingResolver = new NameResolver() {
-        @Override
-        public String getServiceAuthority() {
-          return noopResolver.getServiceAuthority();
-        }
-
-        @Override
-        public void start(Listener listener) {
-          noopResolver.start(listener);
-        }
-
-        @Override
-        public void shutdown() {
-          noopResolver.shutdown();
-        }
-      };
-
-    NameResolver.Factory oldApiResolverFactory = new NameResolver.Factory() {
-        @Override
-        public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
-          return oldApiForwardingResolver;
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          return "fakescheme";
-        }
-      };
-    channelBuilder.nameResolverFactory(oldApiResolverFactory);
-    createChannel();
-
-    assertThat(listenerCapture.get()).isNotNull();
   }
 
   @Test
@@ -3657,15 +3977,14 @@ public class ManagedChannelImplTest {
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
-        autoConfiguredLoadBalancerFactory,
-        mock(ChannelLogger.class));
+        autoConfiguredLoadBalancerFactory);
 
     ConfigOrError coe = parser.parseServiceConfig(ImmutableMap.<String, Object>of());
 
     assertThat(coe.getError()).isNull();
     ManagedChannelServiceConfig cfg = (ManagedChannelServiceConfig) coe.getConfig();
-    assertThat(cfg.getServiceMap()).isEmpty();
-    assertThat(cfg.getServiceMethodMap()).isEmpty();
+    assertThat(cfg.getMethodConfig(method)).isEqualTo(
+        ManagedChannelServiceConfig.empty().getMethodConfig(method));
   }
 
   @Test
@@ -3680,8 +3999,7 @@ public class ManagedChannelImplTest {
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
-        autoConfiguredLoadBalancerFactory,
-        mock(ChannelLogger.class));
+        autoConfiguredLoadBalancerFactory);
 
     ConfigOrError coe =
         parser.parseServiceConfig(ImmutableMap.<String, Object>of("methodConfig", "bogus"));
@@ -3704,8 +4022,7 @@ public class ManagedChannelImplTest {
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
-        autoConfiguredLoadBalancerFactory,
-        mock(ChannelLogger.class));
+        autoConfiguredLoadBalancerFactory);
 
     ConfigOrError coe =
         parser.parseServiceConfig(ImmutableMap.of("loadBalancingConfig", ImmutableList.of()));
@@ -4022,22 +4339,6 @@ public class ManagedChannelImplTest {
       if (resolvedOobChannel != null) {
         resolvedOobChannel.shutdownNow();
       }
-    }
-  }
-
-  private static final class ChannelBuilder
-      extends AbstractManagedChannelImplBuilder<ChannelBuilder> {
-
-    ChannelBuilder() {
-      super(TARGET);
-    }
-
-    @Override protected ClientTransportFactory buildTransportFactory() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override protected int getDefaultPort() {
-      return DEFAULT_PORT;
     }
   }
 

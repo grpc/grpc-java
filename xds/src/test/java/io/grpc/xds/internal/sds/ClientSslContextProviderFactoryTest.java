@@ -23,20 +23,25 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableSet;
+import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.CommonBootstrapperTestUtils;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.certprovider.CertProviderClientSslContextProvider;
 import io.grpc.xds.internal.certprovider.CertificateProvider;
 import io.grpc.xds.internal.certprovider.CertificateProviderProvider;
 import io.grpc.xds.internal.certprovider.CertificateProviderRegistry;
 import io.grpc.xds.internal.certprovider.CertificateProviderStore;
-import io.grpc.xds.internal.certprovider.CommonCertProviderTestUtils;
 import io.grpc.xds.internal.certprovider.TestCertificateProvider;
 import java.io.IOException;
 import org.junit.Assert;
@@ -117,7 +122,7 @@ public class ClientSslContextProviderFactoryTest {
   }
 
   @Test
-  public void createCertProviderClientSslContextProvider() throws IOException {
+  public void createCertProviderClientSslContextProvider() throws XdsInitializationException {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[1];
     createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
@@ -130,8 +135,40 @@ public class ClientSslContextProviderFactoryTest {
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null);
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonCertProviderTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
+    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
+    SslContextProvider sslContextProvider =
+        clientSslContextProviderFactory.create(upstreamTlsContext);
+    assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
+    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    // verify that bootstrapInfo is cached...
+    sslContextProvider =
+        clientSslContextProviderFactory.create(upstreamTlsContext);
+    assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
+    verify(bootstrapper, times(1)).bootstrap();
+  }
+
+  @Test
+  public void bothPresent_expectCertProviderClientSslContextProvider()
+      throws XdsInitializationException {
+    final CertificateProvider.DistributorWatcher[] watcherCaptor =
+        new CertificateProvider.DistributorWatcher[1];
+    createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContextForCertProviderInstance(
+            "gcp_id",
+            "cert-default",
+            "gcp_id",
+            "root-default",
+            /* alpnProtocols= */ null,
+            /* staticCertValidationContext= */ null);
+
+    CommonTlsContext.Builder builder = upstreamTlsContext.getCommonTlsContext().toBuilder();
+    builder = addFilenames(builder, "foo.pem", "foo.key", "root.pem");
+    upstreamTlsContext = new UpstreamTlsContext(builder.build());
+
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
+    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -139,7 +176,8 @@ public class ClientSslContextProviderFactoryTest {
   }
 
   @Test
-  public void createCertProviderClientSslContextProvider_onlyRootCert() throws IOException {
+  public void createCertProviderClientSslContextProvider_onlyRootCert()
+      throws XdsInitializationException {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
             new CertificateProvider.DistributorWatcher[1];
     createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
@@ -152,8 +190,8 @@ public class ClientSslContextProviderFactoryTest {
                     /* alpnProtocols= */ null,
                     /* staticCertValidationContext= */ null);
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonCertProviderTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
+    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
             clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -161,7 +199,8 @@ public class ClientSslContextProviderFactoryTest {
   }
 
   @Test
-  public void createCertProviderClientSslContextProvider_withStaticContext() throws IOException {
+  public void createCertProviderClientSslContextProvider_withStaticContext()
+      throws XdsInitializationException {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
             new CertificateProvider.DistributorWatcher[1];
     createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
@@ -181,8 +220,8 @@ public class ClientSslContextProviderFactoryTest {
                     /* alpnProtocols= */ null,
                     staticCertValidationContext);
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonCertProviderTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
+    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
             clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -190,7 +229,8 @@ public class ClientSslContextProviderFactoryTest {
   }
 
   @Test
-  public void createCertProviderClientSslContextProvider_2providers() throws IOException {
+  public void createCertProviderClientSslContextProvider_2providers()
+      throws XdsInitializationException {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[2];
     createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
@@ -207,8 +247,8 @@ public class ClientSslContextProviderFactoryTest {
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null);
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = CommonCertProviderTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.readBootstrap()).thenReturn(bootstrapInfo);
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
+    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SslContextProvider sslContextProvider =
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderClientSslContextProvider.class);
@@ -217,7 +257,8 @@ public class ClientSslContextProviderFactoryTest {
   }
 
   @Test
-  public void createCertProviderClientSslContextProvider_ioException() throws IOException {
+  public void createCertProviderClientSslContextProvider_exception()
+      throws XdsInitializationException {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextForCertProviderInstance(
             "gcp_id",
@@ -226,12 +267,13 @@ public class ClientSslContextProviderFactoryTest {
             "root-default",
             /* alpnProtocols= */ null,
             /* staticCertValidationContext= */ null);
-    when(bootstrapper.readBootstrap()).thenThrow(new IOException("test IOException"));
+    when(bootstrapper.bootstrap())
+        .thenThrow(new XdsInitializationException("test exception"));
     try {
       clientSslContextProviderFactory.create(upstreamTlsContext);
       Assert.fail("no exception thrown");
     } catch (RuntimeException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("java.io.IOException: test IOException");
+      assertThat(expected).hasMessageThat().contains("test exception");
     }
   }
 
@@ -294,5 +336,28 @@ public class ClientSslContextProviderFactoryTest {
     assertThat(watcherCaptor.getDownstreamWatchers()).hasSize(1);
     assertThat(watcherCaptor.getDownstreamWatchers().iterator().next())
         .isSameInstanceAs(sslContextProvider);
+  }
+
+  static CommonTlsContext.Builder addFilenames(
+      CommonTlsContext.Builder builder, String certChain, String privateKey, String trustCa) {
+    TlsCertificate tlsCert =
+        TlsCertificate.newBuilder()
+            .setCertificateChain(DataSource.newBuilder().setFilename(certChain))
+            .setPrivateKey(DataSource.newBuilder().setFilename(privateKey))
+            .build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder()
+            .setTrustedCa(DataSource.newBuilder().setFilename(trustCa))
+            .build();
+    CommonTlsContext.CertificateProviderInstance certificateProviderInstance =
+        builder.getValidationContextCertificateProviderInstance();
+    CommonTlsContext.CombinedCertificateValidationContext.Builder combinedBuilder =
+        CommonTlsContext.CombinedCertificateValidationContext.newBuilder();
+    combinedBuilder
+        .setDefaultValidationContext(certContext)
+        .setValidationContextCertificateProviderInstance(certificateProviderInstance);
+    return builder
+        .addTlsCertificates(tlsCert)
+        .setCombinedValidationContext(combinedBuilder.build());
   }
 }

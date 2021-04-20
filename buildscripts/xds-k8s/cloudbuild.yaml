@@ -1,0 +1,22 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'build'
+    - '--tag=${_SERVER_IMAGE_NAME}:${COMMIT_SHA}'
+    - '--file=test-server.Dockerfile'
+    - '.'
+
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'build'
+    - '--tag=${_CLIENT_IMAGE_NAME}:${COMMIT_SHA}'
+    - '--file=test-client.Dockerfile'
+    - '.'
+
+substitutions:
+  _SERVER_IMAGE_NAME: gcr.io/grpc-testing/xds-interop/java-server
+  _CLIENT_IMAGE_NAME: gcr.io/grpc-testing/xds-interop/java-client
+
+images:
+  - '${_SERVER_IMAGE_NAME}:${COMMIT_SHA}'
+  - '${_CLIENT_IMAGE_NAME}:${COMMIT_SHA}'

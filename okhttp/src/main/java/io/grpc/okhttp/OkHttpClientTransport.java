@@ -1133,7 +1133,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     public void data(boolean inFinished, int streamId, BufferedSource in, int length)
         throws IOException {
       logger.logData(OkHttpFrameLogger.Direction.INBOUND,
-          streamId, in.buffer(), length, inFinished);
+          streamId, in.getBuffer(), length, inFinished);
       OkHttpClientStream stream = getStream(streamId);
       if (stream == null) {
         if (mayHaveCreatedStream(streamId)) {
@@ -1150,7 +1150,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         in.require(length);
 
         Buffer buf = new Buffer();
-        buf.write(in.buffer(), length);
+        buf.write(in.getBuffer(), length);
         PerfMark.event("OkHttpClientTransport$ClientFrameHandler.data",
             stream.transportState().tag());
         synchronized (lock) {

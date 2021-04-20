@@ -12,22 +12,18 @@ description = "gRPC: ALTS"
 sourceCompatibility = 1.7
 targetCompatibility = 1.7
 
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
     api project(':grpc-core')
     implementation project(':grpc-auth'),
             project(':grpc-grpclb'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
-            libraries.lang,
             libraries.protobuf,
             libraries.conscrypt
     def nettyDependency = implementation project(':grpc-netty')
-    implementation (libraries.google_auth_oauth2_http) {
-        // prefer our own versions instead of google-auth-oauth2-http's dependency
-        exclude group: 'com.google.guava', module: 'guava'
-        // we'll always be more up-to-date
-        exclude group: 'io.grpc', module: 'grpc-context'
-    }
+    googleOauth2Dependency 'implementation'
     guavaDependency 'implementation'
     compileOnly libraries.javax_annotation
 
@@ -35,6 +31,7 @@ dependencies {
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
 
     testImplementation project(':grpc-testing'),
+            project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing-proto'),
             libraries.guava,
             libraries.junit,
@@ -62,7 +59,10 @@ import net.ltgt.gradle.errorprone.CheckSeverity
     it.options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
 }
 
-javadoc { exclude 'io/grpc/alts/internal/**' }
+javadoc {
+    exclude 'io/grpc/alts/internal/**'
+    exclude 'io/grpc/alts/Internal*'
+}
 
 jar {
     // Must use a different classifier to avoid conflicting with shadowJar
@@ -83,8 +83,7 @@ shadowJar {
 publishing {
     publications {
         maven(MavenPublication) {
-            // use shadowJar and remove the original Jar
-            artifact shadowJar
+            // We want this to throw an exception if it isn't working
             def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
             artifacts.remove(originalJar)
 

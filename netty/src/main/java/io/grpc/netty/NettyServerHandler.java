@@ -32,6 +32,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalStatus;
@@ -45,7 +47,6 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
-import io.grpc.netty.ListeningEncoder.ListeningDefaultHttp2ConnectionEncoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelFuture;
@@ -55,6 +56,7 @@ import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.DecoratingHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
+import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
@@ -85,6 +87,7 @@ import io.netty.util.AsciiString;
 import io.netty.util.ReferenceCountUtil;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
+import java.text.MessageFormat;
 import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
@@ -115,6 +118,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer transportTracer;
   private final KeepAliveEnforcer keepAliveEnforcer;
+  private final Attributes eagAttributes;
   /** Incomplete attributes produced by negotiator. */
   private Attributes negotiationAttributes;
   private InternalChannelz.Security securityInfo;
@@ -149,7 +153,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxConnectionAgeInNanos,
       long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls,
-      long permitKeepAliveTimeInNanos) {
+      long permitKeepAliveTimeInNanos,
+      Attributes eagAttributes) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive: %s",
         maxHeaderListSize);
     Http2FrameLogger frameLogger = new Http2FrameLogger(LogLevel.DEBUG, NettyServerHandler.class);
@@ -176,10 +181,10 @@ class NettyServerHandler extends AbstractNettyHandler {
         maxConnectionAgeInNanos,
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
-        permitKeepAliveTimeInNanos);
+        permitKeepAliveTimeInNanos,
+        eagAttributes);
   }
 
-  @VisibleForTesting
   static NettyServerHandler newHandler(
       ChannelPromise channelUnused,
       Http2FrameReader frameReader,
@@ -198,7 +203,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxConnectionAgeInNanos,
       long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls,
-      long permitKeepAliveTimeInNanos) {
+      long permitKeepAliveTimeInNanos,
+      Attributes eagAttributes) {
     Preconditions.checkArgument(maxStreams > 0, "maxStreams must be positive: %s", maxStreams);
     Preconditions.checkArgument(flowControlWindow > 0, "flowControlWindow must be positive: %s",
         flowControlWindow);
@@ -221,7 +227,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         new DefaultHttp2LocalFlowController(connection, DEFAULT_WINDOW_UPDATE_RATIO, true));
     frameWriter = new WriteMonitoringFrameWriter(frameWriter, keepAliveEnforcer);
     Http2ConnectionEncoder encoder =
-        new ListeningDefaultHttp2ConnectionEncoder(connection, frameWriter);
+        new DefaultHttp2ConnectionEncoder(connection, frameWriter);
     encoder = new Http2ControlFrameLimitEncoder(encoder, 10000);
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
         frameReader);
@@ -243,7 +249,8 @@ class NettyServerHandler extends AbstractNettyHandler {
         maxConnectionIdleInNanos,
         maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
         keepAliveEnforcer,
-        autoFlowControl);
+        autoFlowControl,
+        eagAttributes);
   }
 
   private NettyServerHandler(
@@ -262,8 +269,10 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxConnectionAgeInNanos,
       long maxConnectionAgeGraceInNanos,
       final KeepAliveEnforcer keepAliveEnforcer,
-      boolean autoFlowControl) {
-    super(channelUnused, decoder, encoder, settings, autoFlowControl);
+      boolean autoFlowControl,
+      Attributes eagAttributes) {
+    super(channelUnused, decoder, encoder, settings, new ServerChannelLogger(),
+        autoFlowControl, null);
 
     final MaxConnectionIdleManager maxConnectionIdleManager;
     if (maxConnectionIdleInNanos == MAX_CONNECTION_IDLE_NANOS_DISABLED) {
@@ -311,6 +320,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     this.maxConnectionAgeInNanos = maxConnectionAgeInNanos;
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.keepAliveEnforcer = checkNotNull(keepAliveEnforcer, "keepAliveEnforcer");
+    this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
 
     streamKey = encoder.connection().newKey();
     this.transportListener = checkNotNull(transportListener, "transportListener");
@@ -526,9 +536,13 @@ class NettyServerHandler extends AbstractNettyHandler {
   @Override
   protected void onStreamError(ChannelHandlerContext ctx, boolean outbound, Throwable cause,
       StreamException http2Ex) {
-    logger.log(Level.WARNING, "Stream Error", cause);
     NettyServerStream.TransportState serverStream = serverStream(
         connection().stream(Http2Exception.streamId(http2Ex)));
+    Level level = Level.WARNING;
+    if (serverStream == null && http2Ex.error() == Http2Error.STREAM_CLOSED) {
+      level = Level.FINE;
+    }
+    logger.log(level, "Stream Error", cause);
     Tag tag = serverStream != null ? serverStream.tag() : PerfMark.createTag();
     PerfMark.startTask("NettyServerHandler.onStreamError", tag);
     try {
@@ -550,6 +564,11 @@ class NettyServerHandler extends AbstractNettyHandler {
     this.securityInfo = securityInfo;
     super.handleProtocolNegotiationCompleted(attrs, securityInfo);
     NettyClientHandler.writeBufferingAndRemove(ctx().channel());
+  }
+
+  @Override
+  public Attributes getEagAttributes() {
+    return eagAttributes;
   }
 
   InternalChannelz.Security getSecurityInfo() {
@@ -1028,6 +1047,31 @@ class NettyServerHandler extends AbstractNettyHandler {
       keepAliveEnforcer.resetCounters();
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight, exclusive,
           padding, endStream, promise);
+    }
+  }
+
+  private static class ServerChannelLogger extends ChannelLogger {
+    private static final Logger log = Logger.getLogger(ChannelLogger.class.getName());
+
+    @Override
+    public void log(ChannelLogLevel level, String message) {
+      log.log(toJavaLogLevel(level), message);
+    }
+
+    @Override
+    public void log(ChannelLogLevel level, String messageFormat, Object... args) {
+      log(level, MessageFormat.format(messageFormat, args));
+    }
+  }
+
+  private static Level toJavaLogLevel(ChannelLogLevel level) {
+    switch (level) {
+      case ERROR:
+        return Level.FINE;
+      case WARNING:
+        return Level.FINER;
+      default:
+        return Level.FINEST;
     }
   }
 }

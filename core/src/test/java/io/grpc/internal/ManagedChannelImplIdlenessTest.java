@@ -62,6 +62,7 @@ import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.FakeClock.ScheduledTask;
+import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -159,21 +160,10 @@ public class ManagedChannelImplIdlenessTest {
     when(mockTransportFactory.getScheduledExecutorService())
         .thenReturn(timer.getScheduledExecutorService());
 
-    class Builder extends AbstractManagedChannelImplBuilder<Builder> {
-      Builder(String target) {
-        super(target);
-      }
+    ManagedChannelImplBuilder builder = new ManagedChannelImplBuilder("fake://target",
+        new UnsupportedClientTransportFactoryBuilder(), null);
 
-      @Override protected ClientTransportFactory buildTransportFactory() {
-        throw new UnsupportedOperationException();
-      }
-
-      @Override public Builder usePlaintext() {
-        throw new UnsupportedOperationException();
-      }
-    }
-
-    Builder builder = new Builder("fake://target")
+    builder
         .nameResolverFactory(mockNameResolverFactory)
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .idleTimeout(IDLE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -412,7 +402,7 @@ public class ManagedChannelImplIdlenessTest {
     assertFalse(channel.inUseStateAggregator.isInUse());
 
     // Now make an RPC on an OOB channel
-    ManagedChannel oob = helper.createOobChannel(servers.get(0), "oobauthority");
+    ManagedChannel oob = helper.createOobChannel(servers, "oobauthority");
     verify(mockTransportFactory, never())
         .newClientTransport(
             any(SocketAddress.class),
@@ -448,13 +438,13 @@ public class ManagedChannelImplIdlenessTest {
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     deliverResolutionResult();
     Helper helper = helperCaptor.getValue();
-    ManagedChannel oobChannel = helper.createOobChannel(servers.get(0), "localhost");
+    ManagedChannel oobChannel = helper.createOobChannel(servers.subList(0,1), "localhost");
 
     oobChannel.newCall(method, CallOptions.DEFAULT).start(mockCallListener, new Metadata());
     MockClientTransportInfo t0 = newTransports.poll();
     t0.listener.transportReady();
 
-    helper.updateOobChannelAddresses(oobChannel, servers.get(1));
+    helper.updateOobChannelAddresses(oobChannel, servers.subList(1,2));
 
     oobChannel.newCall(method, CallOptions.DEFAULT).start(mockCallListener, new Metadata());
     MockClientTransportInfo t1 = newTransports.poll();
@@ -472,7 +462,7 @@ public class ManagedChannelImplIdlenessTest {
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     Helper helper = helperCaptor.getValue();
     deliverResolutionResult();
-    ManagedChannel oobChannel = helper.createOobChannel(servers.get(0), "localhost");
+    ManagedChannel oobChannel = helper.createOobChannel(servers.subList(0,1), "localhost");
 
     oobChannel.newCall(method, CallOptions.DEFAULT).start(mockCallListener, new Metadata());
     MockClientTransportInfo t0 = newTransports.poll();
@@ -480,7 +470,8 @@ public class ManagedChannelImplIdlenessTest {
 
     List<SocketAddress> changedList = new ArrayList<>(servers.get(0).getAddresses());
     changedList.add(new FakeSocketAddress("aDifferentServer"));
-    helper.updateOobChannelAddresses(oobChannel, new EquivalentAddressGroup(changedList));
+    helper.updateOobChannelAddresses(oobChannel, Collections.singletonList(
+        new EquivalentAddressGroup(changedList)));
 
     oobChannel.newCall(method, CallOptions.DEFAULT).start(mockCallListener, new Metadata());
     assertNull(newTransports.poll());

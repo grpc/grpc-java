@@ -104,7 +104,10 @@ public abstract class ClientCall<ReqT, RespT> {
    * Callbacks for receiving metadata, response messages and completion status from the server.
    *
    * <p>Implementations are free to block for extended periods of time. Implementations are not
-   * required to be thread-safe.
+   * required to be thread-safe, but they must not be thread-hostile. The caller is free to call
+   * an instance from multiple threads, but only one call simultaneously. A single thread may
+   * interleave calls to multiple instances, so implementations using ThreadLocals must be careful
+   * to avoid leaking inappropriate state (e.g., clearing the ThreadLocal before returning).
    */
   public abstract static class Listener<T> {
 
@@ -137,6 +140,10 @@ public abstract class ClientCall<ReqT, RespT> {
      * <p>If {@code status} returns false for {@link Status#isOk()}, then the call failed.
      * An additional block of trailer metadata may be received at the end of the call from the
      * server. An empty {@link Metadata} object is passed if no trailers are received.
+     *
+     * <p>This method should not throw. If this method throws, there is no way to be notified of the
+     * exception. Implementations should therefore be careful of exceptions which can accidentally 
+     * leak resources.
      *
      * @param status the result of the remote call.
      * @param trailers metadata provided at call completion.
