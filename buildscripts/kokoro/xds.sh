@@ -17,7 +17,7 @@ shopt -u extglob
 ../gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true
 popd
 
-git clone -b "${branch}" --single-branch --depth=1 https://github.com/grpc/grpc.git
+git clone -b "3.4-setuptools" --single-branch --depth=1 https://github.com/lidizheng/grpc.git
 
 grpc/tools/run_tests/helper_scripts/prep_xds.sh
 
