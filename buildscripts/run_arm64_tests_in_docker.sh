@@ -10,7 +10,7 @@ else
   DOCKER_ARGS=
 fi
 
-docker build -t grpc-java-artifacts-aarch64 "${grpc_java_dir}"/buildscripts/grpc-java-artifacts-aarch64
+docker build -t grpc-java-artifacts "${grpc_java_dir}"/buildscripts/grpc-java-artifacts
 
 # build aarch64 protoc artifacts via crosscompilation
 # the corresponding codegen tests will be run under and emulator
@@ -20,8 +20,9 @@ docker build -t grpc-java-artifacts-aarch64 "${grpc_java_dir}"/buildscripts/grpc
 docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
   --user "$(id -u):$(id -g)" \
   -e "JAVA_OPTS=-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs" \
-  grpc-java-artifacts-aarch64 \
-  bash -c "LOCAL_MVN_TEMP=$(mktemp -d) SKIP_TESTS=true ARCH=aarch_64 buildscripts/kokoro/unix.sh"
+  -e "SKIP_TESTS=true" -e "ARCH=aarch_64" \
+  grpc-java-artifacts \
+  buildscripts/kokoro/unix.sh
 
 # build under x64 docker image to save time over building everything under
 # aarch64 emulator. We've already built and tested the protoc binaries
@@ -31,7 +32,7 @@ docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java
   --user "$(id -u):$(id -g)" \
   -e "JAVA_OPTS=-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs" \
   openjdk:11-jdk-slim-buster \
-  bash -c "./gradlew build -x test -PskipAndroid=true -PskipCodegen=true"
+  ./gradlew build -x test -PskipAndroid=true -PskipCodegen=true
 
 # Build and run java tests under aarch64 image.
 # To be able to run this docker container on x64 machine, one needs to have
@@ -45,8 +46,10 @@ docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java
 # A note on the "docker run" args used:
 # - run docker container under current user's UID to avoid polluting the workspace
 # - set the user.home property to avoid creating a "?" directory under grpc-java
-exec docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
+# TODO(jtattermusch): avoid skipping ":grpc-netty:test" once https://github.com/grpc/grpc-java/issues/7830 is fixed.
+# TODO(jtattermusch): avoid skipping "grpc-netty-shaded:testShadow" once it's stable
+docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
   --user "$(id -u):$(id -g)" \
   -e "JAVA_OPTS=-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs" \
   arm64v8/openjdk:11-jdk-slim-buster \
-  bash -c "./gradlew build -PskipAndroid=true -PskipCodegen=true"
+  ./gradlew build -PskipAndroid=true -PskipCodegen=true -x :grpc-netty:test -x :grpc-netty-shaded:testShadow

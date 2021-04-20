@@ -5,12 +5,7 @@ if [[ -f /VERSION ]]; then
   cat /VERSION
 fi
 
-BASE_DIR="$(pwd)"
-
-# Install gRPC and codegen for the Android examples
-# (a composite gradle build can't find protoc-gen-grpc-java)
-
-cd "$BASE_DIR/github/grpc-java"
+cd github/grpc-java
 
 buildscripts/qemu_helpers/prepare_qemu.sh
 
