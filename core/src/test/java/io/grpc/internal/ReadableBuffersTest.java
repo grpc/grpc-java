@@ -27,6 +27,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.grpc.HasByteBuffer;
+import io.grpc.Retainable;
 import java.io.IOException;
 import java.io.InputStream;
 import org.junit.Test;
@@ -157,5 +158,24 @@ public class ReadableBuffersTest {
     assertTrue(((HasByteBuffer) inputStream).getByteBufferSupported());
     ((HasByteBuffer) inputStream).getByteBuffer();
     verify(buffer).getByteBuffer();
+  }
+
+  @Test
+  public void bufferInputStream_retainThenClose_notCloseBuffer() throws IOException {
+    ReadableBuffer buffer = mock(ReadableBuffer.class);
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    ((Retainable) inputStream).retain();
+    inputStream.close();
+    verify(buffer, never()).close();
+  }
+
+  @Test
+  public void bufferInputStream_retainReleaseThenClose_closeBuffer() throws IOException {
+    ReadableBuffer buffer = mock(ReadableBuffer.class);
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    ((Retainable) inputStream).retain();
+    ((Retainable) inputStream).release();
+    inputStream.close();
+    verify(buffer).close();
   }
 }

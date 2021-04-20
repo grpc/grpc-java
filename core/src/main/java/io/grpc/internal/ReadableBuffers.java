@@ -21,6 +21,7 @@ import static com.google.common.base.Charsets.UTF_8;
 import com.google.common.base.Preconditions;
 import io.grpc.HasByteBuffer;
 import io.grpc.KnownLength;
+import io.grpc.Retainable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -330,8 +331,9 @@ public final class ReadableBuffers {
    * An {@link InputStream} that is backed by a {@link ReadableBuffer}.
    */
   private static final class BufferInputStream extends InputStream
-      implements KnownLength, HasByteBuffer {
+      implements KnownLength, HasByteBuffer, Retainable {
     final ReadableBuffer buffer;
+    private boolean retained;
 
     public BufferInputStream(ReadableBuffer buffer) {
       this.buffer = Preconditions.checkNotNull(buffer, "buffer");
@@ -397,7 +399,20 @@ public final class ReadableBuffers {
     }
 
     @Override
+    public void retain() {
+      retained = true;
+    }
+
+    @Override
+    public void release() {
+      retained = false;
+    }
+
+    @Override
     public void close() throws IOException {
+      if (retained) {
+        return;
+      }
       buffer.close();
     }
   }
