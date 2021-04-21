@@ -57,6 +57,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Serves as a wrapper for {@link XdsClient} used on the server side by {@link
@@ -70,6 +71,7 @@ public final class XdsClientWrapperForServerSds {
   private static final TimeServiceResource timeServiceResource =
       new TimeServiceResource("GrpcServerXdsClient");
 
+  @GuardedBy("lock")
   private EnvoyServerProtoData.Listener curListener;
   @SuppressWarnings("unused")
   @Nullable private XdsClient xdsClient;
@@ -78,6 +80,7 @@ public final class XdsClientWrapperForServerSds {
   private XdsClient.LdsResourceWatcher listenerWatcher;
   private boolean newServerApi;
   @VisibleForTesting final Set<ServerWatcher> serverWatchers = new HashSet<>();
+  private final Object lock = new Object();
 
   /**
    * Creates a {@link XdsClientWrapperForServerSds}.
@@ -137,14 +140,18 @@ public final class XdsClientWrapperForServerSds {
         new XdsClient.LdsResourceWatcher() {
           @Override
           public void onChanged(XdsClient.LdsUpdate update) {
-            curListener = update.listener;
+            synchronized (lock) {
+              curListener = update.listener;
+            }
             reportSuccess();
           }
 
           @Override
           public void onResourceDoesNotExist(String resourceName) {
             logger.log(Level.WARNING, "Resource {0} is unavailable", resourceName);
-            curListener = null;
+            synchronized (lock) {
+              curListener = null;
+            }
             reportError(Status.NOT_FOUND.asException(), true);
           }
 
@@ -180,7 +187,11 @@ public final class XdsClientWrapperForServerSds {
    */
   @Nullable
   public DownstreamTlsContext getDownstreamTlsContext(Channel channel) {
-    if (curListener != null && channel != null) {
+    EnvoyServerProtoData.Listener copyListener;
+    synchronized (lock) {
+      copyListener = curListener;
+    }
+    if (copyListener != null && channel != null) {
       SocketAddress localAddress = channel.localAddress();
       SocketAddress remoteAddress = channel.remoteAddress();
       if (localAddress instanceof InetSocketAddress && remoteAddress instanceof InetSocketAddress) {
@@ -189,7 +200,7 @@ public final class XdsClientWrapperForServerSds {
         checkState(
             port == localInetAddr.getPort(),
             "Channel localAddress port does not match requested listener port");
-        return getDownstreamTlsContext(localInetAddr, remoteInetAddr);
+        return getDownstreamTlsContext(localInetAddr, remoteInetAddr, copyListener);
       }
     }
     return null;
@@ -205,8 +216,9 @@ public final class XdsClientWrapperForServerSds {
    * @param remoteInetAddr source address of the inbound connection
    */
   private DownstreamTlsContext getDownstreamTlsContext(
-      InetSocketAddress localInetAddr, InetSocketAddress remoteInetAddr) {
-    List<FilterChain> filterChains = curListener.getFilterChains();
+      InetSocketAddress localInetAddr, InetSocketAddress remoteInetAddr,
+      EnvoyServerProtoData.Listener listener) {
+    List<FilterChain> filterChains = listener.getFilterChains();
 
     filterChains = filterOnDestinationPort(filterChains);
     filterChains = filterOnIpAddress(filterChains, localInetAddr.getAddress(), true);
@@ -221,7 +233,7 @@ public final class XdsClientWrapperForServerSds {
     } else if (filterChains.size() == 1) {
       return filterChains.get(0).getDownstreamTlsContext();
     }
-    return curListener.getDefaultFilterChain().getDownstreamTlsContext();
+    return listener.getDefaultFilterChain().getDownstreamTlsContext();
   }
 
   // destination_port present => Always fail match
@@ -384,7 +396,11 @@ public final class XdsClientWrapperForServerSds {
     synchronized (serverWatchers) {
       serverWatchers.add(serverWatcher);
     }
-    if (curListener != null) {
+    EnvoyServerProtoData.Listener copyListener;
+    synchronized (lock) {
+      copyListener = curListener;
+    }
+    if (copyListener != null) {
       serverWatcher.onListenerUpdate();
     }
   }
