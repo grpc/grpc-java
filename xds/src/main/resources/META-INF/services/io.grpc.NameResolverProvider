@@ -1,1 +1,2 @@
 io.grpc.xds.XdsNameResolverProvider
+io.grpc.xds.GoogleCloudToProdNameResolverProvider

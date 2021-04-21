@@ -49,7 +49,7 @@ public final class ComputeEngineChannelCredentials {
     ChannelCredentials nettyCredentials =
         InternalNettyChannelCredentials.create(createClientFactory());
     CallCredentials callCredentials;
-    if (CheckGcpEnvironment.isOnGcp()) {
+    if (InternalCheckGcpEnvironment.isOnGcp()) {
       callCredentials = MoreCallCredentials.from(ComputeEngineCredentials.create());
     } else {
       callCredentials = new FailingCallCredentials(

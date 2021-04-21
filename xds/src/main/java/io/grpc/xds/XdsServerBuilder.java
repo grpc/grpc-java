@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -26,39 +27,42 @@ import io.grpc.Internal;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
-import io.grpc.Status;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 import io.grpc.xds.internal.sds.ServerWrapperForXds;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
 
 /**
- * A version of {@link ServerBuilder} to create xDS managed servers that will use SDS to set up SSL
- * with peers. Note, this is not ready to use yet.
+ * A version of {@link ServerBuilder} to create xDS managed servers.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
 public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBuilder> {
 
   private final NettyServerBuilder delegate;
   private final int port;
-  private ErrorNotifier errorNotifier;
+  private XdsServingStatusListener xdsServingStatusListener;
   private AtomicBoolean isServerBuilt = new AtomicBoolean(false);
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
     this.port = port;
+    xdsServingStatusListener = new DefaultListener("port:" + port);
   }
 
   @Override
   @Internal
   protected ServerBuilder<?> delegate() {
+    checkState(!isServerBuilt.get(), "Server already built!");
     return delegate;
   }
 
-  /** Set the {@link ErrorNotifier}. Pass null to unset a previously set value. */
-  public XdsServerBuilder errorNotifier(ErrorNotifier errorNotifier) {
-    this.errorNotifier = errorNotifier;
+  /** Set the {@link XdsServingStatusListener} to receive "serving" and "not serving" states. */
+  public XdsServerBuilder xdsServingStatusListener(
+      XdsServingStatusListener xdsServingStatusListener) {
+    this.xdsServingStatusListener =
+        checkNotNull(xdsServingStatusListener, "xdsServingStatusListener");
     return this;
   }
 
@@ -91,16 +95,57 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     InternalNettyServerBuilder.eagAttributes(delegate, Attributes.newBuilder()
         .set(SdsProtocolNegotiators.SERVER_XDS_CLIENT, xdsClient)
         .build());
-    return new ServerWrapperForXds(delegate.build(), xdsClient, errorNotifier);
+    return new ServerWrapperForXds(delegate, xdsClient, xdsServingStatusListener);
   }
 
+  /**
+   * Returns the delegate {@link NettyServerBuilder} to allow experimental level
+   * transport-specific configuration. Note this API will always be experimental.
+   */
   public ServerBuilder<?> transportBuilder() {
     return delegate;
   }
 
-  /** Watcher to receive error notifications from xDS control plane during {@code start()}. */
-  public interface ErrorNotifier {
+  /**
+   * Applications can register this listener to receive "serving" and "not serving" states of
+   * the server using {@link #xdsServingStatusListener(XdsServingStatusListener)}.
+   */
+  public interface XdsServingStatusListener {
 
-    void onError(Status error);
+    /** Callback invoked when server begins serving. */
+    void onServing();
+
+    /** Callback invoked when server is forced to be "not serving" due to an error.
+     * @param throwable cause of the error
+     */
+    void onNotServing(Throwable throwable);
+  }
+
+  /** Default implementation of {@link XdsServingStatusListener} that logs at WARNING level. */
+  private static class DefaultListener implements XdsServingStatusListener {
+    private final Logger logger;
+    private final String prefix;
+    boolean notServing;
+
+    DefaultListener(String prefix) {
+      logger = Logger.getLogger(DefaultListener.class.getName());
+      this.prefix = prefix;
+      notServing = true;
+    }
+
+    /** Log calls to onServing() following a call to onNotServing() at WARNING level. */
+    @Override
+    public void onServing() {
+      if (notServing) {
+        notServing = false;
+        logger.warning("[" + prefix + "] Entering serving state.");
+      }
+    }
+
+    @Override
+    public void onNotServing(Throwable throwable) {
+      logger.warning("[" + prefix + "] " + throwable.getMessage());
+      notServing = true;
+    }
   }
 }

@@ -24,15 +24,16 @@ def subprojects = [
     project(':grpc-xds'),
 ]
 
-for (subproject in rootProject.subprojects) {
+for (subproject in subprojects) {
     if (subproject == project) {
         continue
     }
     evaluationDependsOn(subproject.path)
 }
+evaluationDependsOn(':grpc-interop-testing')
 
 dependencies {
-    api subprojects.minus([project(':grpc-protobuf-lite'), project(':grpc-rls')])
+    api subprojects.minus([project(':grpc-protobuf-lite')])
 }
 
 javadoc {
@@ -50,7 +51,9 @@ javadoc {
 
 task jacocoMerge(type: JacocoMerge) {
     dependsOn(subprojects.jacocoTestReport.dependsOn)
+    dependsOn(project(':grpc-interop-testing').jacocoTestReport.dependsOn)
     mustRunAfter(subprojects.jacocoTestReport.mustRunAfter)
+    mustRunAfter(project(':grpc-interop-testing').jacocoTestReport.mustRunAfter)
     destinationFile = file("${buildDir}/jacoco/test.exec")
     executionData = files(subprojects.jacocoTestReport.executionData)
             .plus(project(':grpc-interop-testing').jacocoTestReport.executionData)

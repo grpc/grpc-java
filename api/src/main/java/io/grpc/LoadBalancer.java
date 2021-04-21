@@ -930,10 +930,15 @@ public abstract class LoadBalancer {
      *
      * @since 1.4.0
      */
-    // TODO(ejona): Allow passing a List<EAG> here and to updateOobChannelAddresses, but want to
-    // wait until https://github.com/grpc/grpc-java/issues/4469 is done.
-    // https://github.com/grpc/grpc-java/issues/4618
     public abstract ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority);
+
+    /**
+     * Accept a list of EAG for multiple authorities: https://github.com/grpc/grpc-java/issues/4618
+     * */
+    public ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag,
+        String authority) {
+      throw new UnsupportedOperationException();
+    }
 
     /**
      * Updates the addresses used for connections in the {@code Channel} that was created by {@link
@@ -946,6 +951,15 @@ public abstract class LoadBalancer {
      * @since 1.4.0
      */
     public void updateOobChannelAddresses(ManagedChannel channel, EquivalentAddressGroup eag) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Updates the addresses with a new EAG list. Connection is continued when old and new addresses
+     * overlap.
+     * */
+    public void updateOobChannelAddresses(ManagedChannel channel,
+        List<EquivalentAddressGroup> eag) {
       throw new UnsupportedOperationException();
     }
 
@@ -974,11 +988,18 @@ public abstract class LoadBalancer {
      * <p>The target string will be resolved by a {@link NameResolver} created according to the
      * target string.
      *
+     * <p>The returned oob-channel builder defaults to use the same authority and ChannelCredentials
+     * (without bearer tokens) as the parent channel's for authentication. This is different from
+     * {@link #createResolvingOobChannelBuilder(String, ChannelCredentials)}.
+     *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
      *
+     * @deprecated Use {@link #createResolvingOobChannelBuilder(String, ChannelCredentials)}
+     *     instead.
      * @since 1.31.0
      */
+    @Deprecated
     public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
       throw new UnsupportedOperationException("Not implemented");
     }
@@ -1036,6 +1057,26 @@ public abstract class LoadBalancer {
      */
     public void refreshNameResolution() {
       throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Historically the channel automatically refreshes name resolution if any subchannel
+     * connection is broken. It's transitioning to let load balancers make the decision. To
+     * avoid silent breakages, the channel checks if {@link #refreshNameResolution} is called
+     * by the load balancer. If not, it will do it and log a warning. This will be removed in
+     * the future and load balancers are completely responsible for triggering the refresh.
+     * See <a href="https://github.com/grpc/grpc-java/issues/8088">#8088</a> for the background.
+     *
+     * <p>This should rarely be used, but sometimes the address for the subchannel wasn't
+     * provided by the name resolver and a refresh needs to be directed somewhere else instead.
+     * Then you can call this method to disable the short-tem check for detecting LoadBalancers
+     * that need to be updated for the new expected behavior.
+     *
+     * @since 1.38.0
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8088")
+    public void ignoreRefreshNameResolutionCheck() {
+      // no-op
     }
 
     /**

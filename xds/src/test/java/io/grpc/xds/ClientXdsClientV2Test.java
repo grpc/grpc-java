@@ -23,16 +23,21 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
+import com.google.protobuf.UInt64Value;
 import com.google.protobuf.util.Durations;
+import com.google.rpc.Code;
 import io.envoyproxy.envoy.api.v2.Cluster;
 import io.envoyproxy.envoy.api.v2.Cluster.CustomClusterType;
 import io.envoyproxy.envoy.api.v2.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.api.v2.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.api.v2.Cluster.LbPolicy;
+import io.envoyproxy.envoy.api.v2.Cluster.RingHashLbConfig;
+import io.envoyproxy.envoy.api.v2.Cluster.RingHashLbConfig.HashFunction;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload;
@@ -65,9 +70,11 @@ import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.RouteAction;
+import io.envoyproxy.envoy.api.v2.route.RouteMatch;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.cluster.aggregate.v2alpha.ClusterConfig;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
+import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpFilter;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
 import io.envoyproxy.envoy.config.listener.v2.ApiListener;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
@@ -76,15 +83,18 @@ import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
+import io.envoyproxy.envoy.type.matcher.RegexMatcher;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
+import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
 import org.junit.runner.RunWith;
@@ -167,10 +177,20 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected void verifyRequest(EnvoyProtoData.Node node, String versionInfo,
-        List<String> resources, ResourceType type, String nonce) {
+    protected void verifyRequest(
+        ResourceType type, List<String> resources, String versionInfo, String nonce,
+        EnvoyProtoData.Node node) {
       verify(requestObserver).onNext(argThat(new DiscoveryRequestMatcher(
-          node.toEnvoyProtoNodeV2(), versionInfo, resources, type.typeUrlV2(), nonce)));
+          node.toEnvoyProtoNodeV2(), versionInfo, resources, type.typeUrlV2(), nonce, null, null)));
+    }
+
+    @Override
+    protected void verifyRequestNack(
+        ResourceType type, List<String> resources, String versionInfo, String nonce,
+        EnvoyProtoData.Node node, List<String> errorMessages) {
+      verify(requestObserver).onNext(argThat(new DiscoveryRequestMatcher(
+          node.toEnvoyProtoNodeV2(), versionInfo, resources, type.typeUrlV2(), nonce,
+          Code.INVALID_ARGUMENT_VALUE, errorMessages)));
     }
 
     @Override
@@ -179,8 +199,8 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected void sendResponse(String versionInfo, List<Any> resources, ResourceType type,
-        String nonce) {
+    protected void sendResponse(
+        ResourceType type, List<Any> resources, String versionInfo, String nonce) {
       DiscoveryResponse response =
           DiscoveryResponse.newBuilder()
               .setVersionInfo(versionInfo)
@@ -232,8 +252,10 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
 
   private static class MessageFactoryV2 extends MessageFactory {
 
+    @SuppressWarnings("unchecked")
     @Override
-    protected Message buildListener(String name, Message routeConfiguration) {
+    protected Message buildListener(
+        String name, Message routeConfiguration, List<? extends Message> httpFilters) {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(Address.getDefaultInstance())
@@ -241,7 +263,9 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
           .setApiListener(
               ApiListener.newBuilder().setApiListener(Any.pack(
                   HttpConnectionManager.newBuilder()
-                      .setRouteConfig((RouteConfiguration) routeConfiguration).build())))
+                      .setRouteConfig((RouteConfiguration) routeConfiguration)
+                      .addAllHttpFilters((List<HttpFilter>) httpFilters)
+                      .build())))
           .build();
     }
 
@@ -265,6 +289,28 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
+    protected Message buildListenerInvalid(String name) {
+      return Listener.newBuilder()
+          .setName(name)
+          .setAddress(Address.getDefaultInstance())
+          .setApiListener(ApiListener.newBuilder().setApiListener(FAILING_ANY))
+          .build();
+    }
+
+    @Override
+    protected Message buildHttpFilter(String name, @Nullable Any typedConfig, boolean isOptional) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected Any buildHttpFaultTypedConfig(
+        @Nullable Long delayNanos, @Nullable Integer delayRate, String upstreamCluster,
+        List<String> downstreamNodes, @Nullable Integer maxActiveFaults, @Nullable Status status,
+        @Nullable Integer httpCode, @Nullable Integer abortRate) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     protected Message buildRouteConfiguration(String name, List<Message> virtualHostList) {
       RouteConfiguration.Builder builder = RouteConfiguration.newBuilder();
       builder.setName(name);
@@ -272,6 +318,25 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
         builder.addVirtualHosts((VirtualHost) virtualHost);
       }
       return builder.build();
+    }
+
+    @Override
+    protected Message buildRouteConfigurationInvalid(String name) {
+      // Invalid Path matcher: Pattern.compile() will throw PatternSyntaxException
+      // when attempting to process SAFE_REGEX RouteMatch malformed safe regex pattern.
+      // I wish there was a simpler way.
+      return RouteConfiguration.newBuilder()
+          .setName(name)
+          .addVirtualHosts(
+              VirtualHost.newBuilder()
+                  .setName("do not care")
+                  .addDomains("do not care")
+                  .addRoutes(
+                      Route.newBuilder()
+                          .setRoute(RouteAction.newBuilder().setCluster("do not care"))
+                          .setMatch(RouteMatch.newBuilder()
+                              .setSafeRegex(RegexMatcher.newBuilder().setRegex("[z-a]")))))
+          .build();
     }
 
     @Override
@@ -285,7 +350,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
                 .addRoutes(
                     Route.newBuilder()
                         .setRoute(RouteAction.newBuilder().setCluster("do not care"))
-                        .setMatch(io.envoyproxy.envoy.api.v2.route.RouteMatch.newBuilder()
+                        .setMatch(RouteMatch.newBuilder()
                             .setPrefix("do not care")))
                 .build();
         virtualHosts.add(virtualHost);
@@ -293,12 +358,44 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
       return virtualHosts;
     }
 
+    @SuppressWarnings("unchecked")
+    @Override
+    protected Message buildVirtualHost(
+        List<? extends Message> routes, Map<String, Any> typedConfigMap) {
+      return VirtualHost.newBuilder()
+          .setName("do not care")
+          .addDomains("do not care")
+          .addAllRoutes((List<Route>) routes)
+          .putAllTypedPerFilterConfig(typedConfigMap)
+          .build();
+    }
+
+    @Override
+    protected List<? extends Message> buildOpaqueRoutes(int num) {
+      List<Route> routes = new ArrayList<>(num);
+      for (int i = 0; i < num; i++) {
+        Route route =
+            Route.newBuilder()
+                .setRoute(RouteAction.newBuilder().setCluster("do not care"))
+                .setMatch(RouteMatch.newBuilder().setPrefix("do not care"))
+                .build();
+        routes.add(route);
+      }
+      return routes;
+    }
+
+    @Override
+    protected Message buildClusterInvalid(String name) {
+      // Unspecified cluster discovery type
+      return Cluster.newBuilder().setName(name).build();
+    }
+
     @Override
     protected Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
-        boolean enableLrs, @Nullable Message upstreamTlsContext,
-        @Nullable Message circuitBreakers) {
-      Cluster.Builder builder =
-          initClusterBuilder(clusterName, enableLrs, upstreamTlsContext, circuitBreakers);
+        String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
+        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+      Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
+          enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.EDS);
       EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
       edsClusterConfigBuilder.setEdsConfig(
@@ -311,34 +408,49 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildLogicalDnsCluster(String clusterName, boolean enableLrs,
+    protected Message buildLogicalDnsCluster(String clusterName, String lbPolicy,
+        @Nullable Message ringHashLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
-      Cluster.Builder builder =
-          initClusterBuilder(clusterName, enableLrs, upstreamTlsContext, circuitBreakers);
+      Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
+          enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.LOGICAL_DNS);
       return builder.build();
     }
 
     @Override
-    protected Message buildAggregateCluster(String clusterName, List<String> clusters) {
+    protected Message buildAggregateCluster(String clusterName, String lbPolicy,
+        @Nullable Message ringHashLbConfig, List<String> clusters) {
       ClusterConfig clusterConfig = ClusterConfig.newBuilder().addAllClusters(clusters).build();
       CustomClusterType type =
           CustomClusterType.newBuilder()
               .setName(ClientXdsClient.AGGREGATE_CLUSTER_TYPE_NAME)
               .setTypedConfig(Any.pack(clusterConfig))
               .build();
-      return Cluster.newBuilder()
-          .setName(clusterName)
-          .setLbPolicy(LbPolicy.ROUND_ROBIN)
-          .setClusterType(type)
-          .build();
+      Cluster.Builder builder = Cluster.newBuilder().setName(clusterName).setClusterType(type);
+      if (lbPolicy.equals("round_robin")) {
+        builder.setLbPolicy(LbPolicy.ROUND_ROBIN);
+      } else if (lbPolicy.equals("ring_hash")) {
+        builder.setLbPolicy(LbPolicy.RING_HASH);
+        builder.setRingHashLbConfig((RingHashLbConfig) ringHashLbConfig);
+      } else {
+        throw new AssertionError("Invalid LB policy");
+      }
+      return builder.build();
     }
 
-    private Cluster.Builder initClusterBuilder(String clusterName, boolean enableLrs,
+    private Cluster.Builder initClusterBuilder(String clusterName, String lbPolicy,
+        @Nullable Message ringHashLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
       Cluster.Builder builder = Cluster.newBuilder();
       builder.setName(clusterName);
-      builder.setLbPolicy(LbPolicy.ROUND_ROBIN);
+      if (lbPolicy.equals("round_robin")) {
+        builder.setLbPolicy(LbPolicy.ROUND_ROBIN);
+      } else if (lbPolicy.equals("ring_hash")) {
+        builder.setLbPolicy(LbPolicy.RING_HASH);
+        builder.setRingHashLbConfig((RingHashLbConfig) ringHashLbConfig);
+      } else {
+        throw new AssertionError("Invalid LB policy");
+      }
       if (enableLrs) {
         builder.setLrsServer(
             ConfigSource.newBuilder()
@@ -354,6 +466,22 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
         builder.setCircuitBreakers((CircuitBreakers) circuitBreakers);
       }
       return builder;
+    }
+
+    @Override
+    protected Message buildRingHashLbConfig(String hashFunction, long minRingSize,
+        long maxRingSize) {
+      RingHashLbConfig.Builder builder = RingHashLbConfig.newBuilder();
+      if (hashFunction.equals("xx_hash")) {
+        builder.setHashFunction(HashFunction.XX_HASH);
+      } else if  (hashFunction.equals("murmur_hash_2")) {
+        builder.setHashFunction(HashFunction.MURMUR_HASH_2);
+      } else {
+        throw new AssertionError("Invalid hash function");
+      }
+      builder.setMinimumRingSize(UInt64Value.newBuilder().setValue(minRingSize).build());
+      builder.setMaximumRingSize(UInt64Value.newBuilder().setValue(maxRingSize).build());
+      return builder.build();
     }
 
     @Override
@@ -407,6 +535,17 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
       }
       builder.setPolicy(policyBuilder);
       return builder.build();
+    }
+
+    @Override
+    protected Message buildClusterLoadAssignmentInvalid(String cluster) {
+      // Negative priority LocalityLbEndpoint.
+      return ClusterLoadAssignment.newBuilder()
+          .setClusterName(cluster)
+          .addEndpoints(LocalityLbEndpoints.newBuilder()
+              .setPriority(-1)
+              .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(1)))
+          .build();
     }
 
     @Override
@@ -469,6 +608,28 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
                   .setDenominator(DenominatorType.MILLION))
           .build();
     }
+
+    @Override
+    protected Message buildFilterChain(List<String> alpn, Message tlsContext, Message... filters) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected Message buildListenerWithFilterChain(
+        String name, int portValue, String address, Message... filterChains) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected Message buildListenerWithFilterChain(
+        String name, int portValue, String address, String certName, String validationContextName) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected Message buildTestFilter(String name) {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**
@@ -481,14 +642,19 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     private final String typeUrl;
     private final Set<String> resources;
     private final String responseNonce;
+    @Nullable private final Integer errorCode;
+    private final List<String> errorMessages;
 
     private DiscoveryRequestMatcher(Node node, String versionInfo, List<String> resources,
-        String typeUrl, String responseNonce) {
+        String typeUrl, String responseNonce, @Nullable Integer errorCode,
+        @Nullable List<String> errorMessages) {
       this.node = node;
       this.versionInfo = versionInfo;
       this.resources = new HashSet<>(resources);
       this.typeUrl = typeUrl;
       this.responseNonce = responseNonce;
+      this.errorCode = errorCode;
+      this.errorMessages = errorMessages != null ? errorMessages : ImmutableList.<String>of();
     }
 
     @Override
@@ -503,6 +669,13 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
         return false;
       }
       if (!resources.equals(new HashSet<>(argument.getResourceNamesList()))) {
+        return false;
+      }
+      if (errorCode == null && argument.hasErrorDetail()) {
+        return false;
+      }
+      if (errorCode != null
+          && !matchErrorDetail(argument.getErrorDetail(), errorCode, errorMessages)) {
         return false;
       }
       return node.equals(argument.getNode());

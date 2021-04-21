@@ -16,13 +16,18 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
+import io.grpc.ChannelCredentials;
 import io.grpc.ManagedChannel;
+import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
+import io.grpc.netty.ProtocolNegotiators.PlaintextProtocolNegotiatorClientFactory;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.EventLoopGroup;
@@ -281,5 +286,19 @@ public class NettyChannelBuilderTest {
     InternalNettyChannelBuilder.useNioTransport(builder);
 
     builder.assertEventLoopAndChannelType();
+  }
+
+  @Test
+  public void transportFactorySupportsNettyChannelCreds() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+    ClientTransportFactory transportFactory = builder.buildTransportFactory();
+
+    SwapChannelCredentialsResult result = transportFactory.swapChannelCredentials(
+        mock(ChannelCredentials.class));
+    assertThat(result).isNull();
+
+    result = transportFactory.swapChannelCredentials(
+        NettyChannelCredentials.create(new PlaintextProtocolNegotiatorClientFactory()));
+    assertThat(result).isNotNull();
   }
 }

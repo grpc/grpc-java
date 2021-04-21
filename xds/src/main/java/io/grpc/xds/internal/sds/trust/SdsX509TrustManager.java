@@ -19,8 +19,10 @@ package io.grpc.xds.internal.sds.trust;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Ascii;
+import com.google.common.base.Strings;
+import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import java.net.Socket;
 import java.security.cert.CertificateException;
@@ -28,7 +30,6 @@ import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
 import java.util.Collection;
 import java.util.List;
-import java.util.Locale;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
@@ -58,121 +59,82 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
     this.delegate = delegate;
   }
 
-  // Copied from OkHostnameVerifier.verifyHostName().
-  private static boolean verifyDnsNameInPattern(String pattern, StringMatcher sanToVerifyMatcher) {
-    String sanToVerify = sanToVerifyMatcher.getExact();
-    // Basic sanity checks
-    // Check length == 0 instead of .isEmpty() to support Java 5.
-    if (sanToVerify == null
-        || sanToVerify.length() == 0
-        || sanToVerify.startsWith(".")
-        || sanToVerify.endsWith("..")) {
-      // Invalid domain name
+  private static boolean verifyDnsNameInPattern(
+      String altNameFromCert, StringMatcher sanToVerifyMatcher) {
+    if (Strings.isNullOrEmpty(altNameFromCert)) {
       return false;
     }
-    if (pattern == null
-        || pattern.length() == 0
-        || pattern.startsWith(".")
-        || pattern.endsWith("..")) {
-      // Invalid pattern/domain name
+    switch (sanToVerifyMatcher.getMatchPatternCase()) {
+      case EXACT:
+        return verifyDnsNameExact(
+            altNameFromCert, sanToVerifyMatcher.getExact(), sanToVerifyMatcher.getIgnoreCase());
+      case PREFIX:
+        return verifyDnsNamePrefix(
+            altNameFromCert, sanToVerifyMatcher.getPrefix(), sanToVerifyMatcher.getIgnoreCase());
+      case SUFFIX:
+        return verifyDnsNameSuffix(
+            altNameFromCert, sanToVerifyMatcher.getSuffix(), sanToVerifyMatcher.getIgnoreCase());
+      case CONTAINS:
+        return verifyDnsNameContains(
+            altNameFromCert, sanToVerifyMatcher.getContains(), sanToVerifyMatcher.getIgnoreCase());
+      case SAFE_REGEX:
+        return verifyDnsNameSafeRegex(altNameFromCert, sanToVerifyMatcher.getSafeRegex());
+      default:
+        throw new IllegalArgumentException(
+            "Unknown match-pattern-case " + sanToVerifyMatcher.getMatchPatternCase());
+    }
+  }
+
+  private static boolean verifyDnsNameSafeRegex(
+          String altNameFromCert, RegexMatcher sanToVerifySafeRegex) {
+    Pattern safeRegExMatch = Pattern.compile(sanToVerifySafeRegex.getRegex());
+    return safeRegExMatch.matches(altNameFromCert);
+  }
+
+  private static boolean verifyDnsNamePrefix(
+      String altNameFromCert, String sanToVerifyPrefix, boolean ignoreCase) {
+    if (Strings.isNullOrEmpty(sanToVerifyPrefix)) {
       return false;
     }
+    return ignoreCase
+        ? altNameFromCert.toLowerCase().startsWith(sanToVerifyPrefix.toLowerCase())
+        : altNameFromCert.startsWith(sanToVerifyPrefix);
+  }
 
-    // Normalize sanToVerify and pattern by turning them into absolute domain names if they are not
-    // yet absolute. This is needed because server certificates do not normally contain absolute
-    // names or patterns, but they should be treated as absolute. At the same time, any sanToVerify
-    // presented to this method should also be treated as absolute for the purposes of matching
-    // to the server certificate.
-    //   www.android.com  matches www.android.com
-    //   www.android.com  matches www.android.com.
-    //   www.android.com. matches www.android.com.
-    //   www.android.com. matches www.android.com
-    if (!sanToVerify.endsWith(".")) {
-      sanToVerify += '.';
-    }
-    if (!pattern.endsWith(".")) {
-      pattern += '.';
-    }
-    // sanToVerify and pattern are now absolute domain names.
-
-    pattern = pattern.toLowerCase(Locale.US);
-    // sanToVerify and pattern are now in lower case -- domain names are case-insensitive.
-
-    if (!pattern.contains("*")) {
-      // Not a wildcard pattern -- sanToVerify and pattern must match exactly.
-      return sanToVerify.equals(pattern);
-    }
-    // Wildcard pattern
-
-    // WILDCARD PATTERN RULES:
-    // 1. Asterisk (*) is only permitted in the left-most domain name label and must be the
-    //    only character in that label (i.e., must match the whole left-most label).
-    //    For example, *.example.com is permitted, while *a.example.com, a*.example.com,
-    //    a*b.example.com, a.*.example.com are not permitted.
-    // 2. Asterisk (*) cannot match across domain name labels.
-    //    For example, *.example.com matches test.example.com but does not match
-    //    sub.test.example.com.
-    // 3. Wildcard patterns for single-label domain names are not permitted.
-
-    if (!pattern.startsWith("*.") || pattern.indexOf('*', 1) != -1) {
-      // Asterisk (*) is only permitted in the left-most domain name label and must be the only
-      // character in that label
+  private static boolean verifyDnsNameSuffix(
+          String altNameFromCert, String sanToVerifySuffix, boolean ignoreCase) {
+    if (Strings.isNullOrEmpty(sanToVerifySuffix)) {
       return false;
     }
+    return ignoreCase
+            ? altNameFromCert.toLowerCase().endsWith(sanToVerifySuffix.toLowerCase())
+            : altNameFromCert.endsWith(sanToVerifySuffix);
+  }
 
-    // Optimization: check whether sanToVerify is too short to match the pattern. sanToVerify must
-    // be at
-    // least as long as the pattern because asterisk must match the whole left-most label and
-    // sanToVerify starts with a non-empty label. Thus, asterisk has to match one or more
-    // characters.
-    if (sanToVerify.length() < pattern.length()) {
-      // sanToVerify too short to match the pattern.
+  private static boolean verifyDnsNameContains(
+          String altNameFromCert, String sanToVerifySubstring, boolean ignoreCase) {
+    if (Strings.isNullOrEmpty(sanToVerifySubstring)) {
       return false;
     }
+    return ignoreCase
+            ? altNameFromCert.toLowerCase().contains(sanToVerifySubstring.toLowerCase())
+            : altNameFromCert.contains(sanToVerifySubstring);
+  }
 
-    if ("*.".equals(pattern)) {
-      // Wildcard pattern for single-label domain name -- not permitted.
+  private static boolean verifyDnsNameExact(
+      String altNameFromCert, String sanToVerifyExact, boolean ignoreCase) {
+    if (Strings.isNullOrEmpty(sanToVerifyExact)) {
       return false;
     }
-
-    // sanToVerify must end with the region of pattern following the asterisk.
-    String suffix = pattern.substring(1);
-    if (!sanToVerify.endsWith(suffix)) {
-      // sanToVerify does not end with the suffix
-      return false;
-    }
-
-    // Check that asterisk did not match across domain name labels.
-    int suffixStartIndexInHostName = sanToVerify.length() - suffix.length();
-    // Asterisk is matching across domain name labels -- not permitted.
-    return suffixStartIndexInHostName <= 0
-        || sanToVerify.lastIndexOf('.', suffixStartIndexInHostName - 1) == -1;
-
-    // sanToVerify matches pattern
+    return ignoreCase
+        ? sanToVerifyExact.equalsIgnoreCase(altNameFromCert)
+        : sanToVerifyExact.equals(altNameFromCert);
   }
 
   private static boolean verifyDnsNameInSanList(
       String altNameFromCert, List<StringMatcher> verifySanList) {
     for (StringMatcher verifySan : verifySanList) {
       if (verifyDnsNameInPattern(altNameFromCert, verifySan)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * helper function for verifying URI or IP address. For now we compare IP addresses as strings
-   * without any regard to IPv4 vs IPv6.
-   *
-   * @param stringFromCert either URI or IP address
-   * @param verifySanList list of SANs from certificate context
-   * @return true if there is a match
-   */
-  private static boolean verifyStringInSanList(
-      String stringFromCert, List<StringMatcher> verifySanList) {
-    for (StringMatcher sanToVerify : verifySanList) {
-      if (Ascii.equalsIgnoreCase(sanToVerify.getExact(), stringFromCert)) {
         return true;
       }
     }
@@ -192,10 +154,9 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
     String altNameFromCert = (String) entry.get(1);
     switch (altNameType) {
       case ALT_DNS_NAME:
-        return verifyDnsNameInSanList(altNameFromCert, verifySanList);
       case ALT_URI_NAME:
       case ALT_IPA_NAME:
-        return verifyStringInSanList(altNameFromCert, verifySanList);
+        return verifyDnsNameInSanList(altNameFromCert, verifySanList);
       default:
         throw new CertificateParsingException("Unsupported altNameType: " + altNameType);
     }

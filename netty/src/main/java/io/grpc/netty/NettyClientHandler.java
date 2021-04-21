@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -142,7 +143,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       Runnable tooManyPingsRunnable,
       TransportTracer transportTracer,
       Attributes eagAttributes,
-      String authority) {
+      String authority,
+      ChannelLogger negotiationLogger) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
@@ -167,7 +169,8 @@ class NettyClientHandler extends AbstractNettyHandler {
         tooManyPingsRunnable,
         transportTracer,
         eagAttributes,
-        authority);
+        authority,
+        negotiationLogger);
   }
 
   @VisibleForTesting
@@ -184,7 +187,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       Runnable tooManyPingsRunnable,
       TransportTracer transportTracer,
       Attributes eagAttributes,
-      String authority) {
+      String authority,
+      ChannelLogger negotiationLogger) {
     Preconditions.checkNotNull(connection, "connection");
     Preconditions.checkNotNull(frameReader, "frameReader");
     Preconditions.checkNotNull(lifecycleManager, "lifecycleManager");
@@ -235,6 +239,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         decoder,
         encoder,
         settings,
+        negotiationLogger,
         lifecycleManager,
         keepAliveManager,
         stopwatchFactory,
@@ -250,6 +255,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,
       Http2Settings settings,
+      ChannelLogger negotiationLogger,
       ClientTransportLifecycleManager lifecycleManager,
       KeepAliveManager keepAliveManager,
       Supplier<Stopwatch> stopwatchFactory,
@@ -259,7 +265,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       String authority,
       boolean autoFlowControl,
       PingLimiter pingLimiter) {
-    super(/* channelUnused= */ null, decoder, encoder, settings, autoFlowControl, pingLimiter);
+    super(/* channelUnused= */ null, decoder, encoder, settings,
+        negotiationLogger, autoFlowControl, pingLimiter);
     this.lifecycleManager = lifecycleManager;
     this.keepAliveManager = keepAliveManager;
     this.stopwatchFactory = stopwatchFactory;
@@ -562,20 +569,28 @@ class NettyClientHandler extends AbstractNettyHandler {
       }
       return;
     }
-    if (connection().goAwayReceived()
-        && streamId > connection().local().lastStreamKnownByPeer()) {
-      // This should only be reachable during onGoAwayReceived, as otherwise
-      // getShutdownThrowable() != null
-      command.stream().setNonExistent();
+    if (connection().goAwayReceived()) {
       Status s = abruptGoAwayStatus;
+      int maxActiveStreams = connection().local().maxActiveStreams();
+      int lastStreamId = connection().local().lastStreamKnownByPeer();
       if (s == null) {
-        // Should be impossible, but handle psuedo-gracefully
+        // Should be impossible, but handle pseudo-gracefully
         s = Status.INTERNAL.withDescription(
             "Failed due to abrupt GOAWAY, but can't find GOAWAY details");
+      } else if (streamId > lastStreamId) {
+        s = s.augmentDescription(
+            "stream id: " + streamId + ", GOAWAY Last-Stream-ID:" + lastStreamId);
+      } else if (connection().local().numActiveStreams() == maxActiveStreams) {
+        s = s.augmentDescription("At MAX_CONCURRENT_STREAMS limit. limit: " + maxActiveStreams);
       }
-      command.stream().transportReportStatus(s, RpcProgress.REFUSED, true, new Metadata());
-      promise.setFailure(s.asRuntimeException());
-      return;
+      if (streamId > lastStreamId || connection().local().numActiveStreams() == maxActiveStreams) {
+        // This should only be reachable during onGoAwayReceived, as otherwise
+        // getShutdownThrowable() != null
+        command.stream().setNonExistent();
+        command.stream().transportReportStatus(s, RpcProgress.REFUSED, true, new Metadata());
+        promise.setFailure(s.asRuntimeException());
+        return;
+      }
     }
 
     NettyClientStream.TransportState stream = command.stream();
@@ -767,7 +782,6 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   private void forcefulClose(final ChannelHandlerContext ctx, final ForcefulCloseCommand msg,
       ChannelPromise promise) throws Exception {
-    // close() already called by NettyClientTransport, so just need to clean up streams
     connection().forEachActiveStream(new Http2StreamVisitor() {
       @Override
       public boolean visit(Http2Stream stream) throws Http2Exception {
@@ -787,7 +801,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         }
       }
     });
-    promise.setSuccess();
+    close(ctx, promise);
   }
 
   /**

@@ -16,11 +16,10 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.Metadata.BINARY_BYTE_MARSHALLER;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
 import static io.netty.util.AsciiString.of;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -131,7 +130,7 @@ public class GrpcHttp2HeadersUtilsTest {
 
     Http2Headers decodedHeaders = decoder.decodeHeaders(3 /* randomly chosen */, encodedHeaders);
     assertEquals(0, decodedHeaders.size());
-    assertThat(decodedHeaders.toString(), containsString("[]"));
+    assertThat(decodedHeaders.toString()).contains("[]");
   }
 
   @Test
@@ -156,8 +155,69 @@ public class GrpcHttp2HeadersUtilsTest {
         values));
   }
 
+  @Test
+  public void headerGetAll_notPresent() {
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    http2Headers.add(AsciiString.of("notit"), AsciiString.of("val"));
+    assertThat(http2Headers.getAll(AsciiString.of("dont-care"))).isEmpty();
+  }
+
+  @Test
+  public void headerGetAll_multiplePresent() {
+    // getAll is used by Netty 4.1.60+. https://github.com/grpc/grpc-java/issues/7953
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    http2Headers.add(AsciiString.of("notit1"), AsciiString.of("val1"));
+    http2Headers.add(AsciiString.of("multiple"), AsciiString.of("value1"));
+    http2Headers.add(AsciiString.of("notit2"), AsciiString.of("val2"));
+    http2Headers.add(AsciiString.of("multiple"), AsciiString.of("value2"));
+    http2Headers.add(AsciiString.of("notit3"), AsciiString.of("val3"));
+    assertThat(http2Headers.size()).isEqualTo(5);
+    assertThat(http2Headers.getAll(AsciiString.of("multiple")))
+        .containsExactly(AsciiString.of("value1"), AsciiString.of("value2"));
+  }
+
+  @Test
+  public void headerRemove_notPresent() {
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    http2Headers.add(AsciiString.of("dont-care"), AsciiString.of("value"));
+    assertThat(http2Headers.remove(AsciiString.of("not-seen"))).isFalse();
+    assertThat(http2Headers.size()).isEqualTo(1);
+    assertThat(http2Headers.getAll(AsciiString.of("dont-care")))
+        .containsExactly(AsciiString.of("value"));
+  }
+
+  @Test
+  public void headerRemove_multiplePresent() {
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    http2Headers.add(AsciiString.of("notit1"), AsciiString.of("val1"));
+    http2Headers.add(AsciiString.of("multiple"), AsciiString.of("value1"));
+    http2Headers.add(AsciiString.of("notit2"), AsciiString.of("val2"));
+    http2Headers.add(AsciiString.of("multiple"), AsciiString.of("value2"));
+    http2Headers.add(AsciiString.of("notit3"), AsciiString.of("val3"));
+    assertThat(http2Headers.remove(AsciiString.of("multiple"))).isTrue();
+    assertThat(http2Headers.size()).isEqualTo(3);
+    assertThat(http2Headers.getAll(AsciiString.of("notit1")))
+        .containsExactly(AsciiString.of("val1"));
+    assertThat(http2Headers.getAll(AsciiString.of("notit2")))
+        .containsExactly(AsciiString.of("val2"));
+    assertThat(http2Headers.getAll(AsciiString.of("notit3")))
+        .containsExactly(AsciiString.of("val3"));
+  }
+
+  @Test
+  public void headerSetLong() {
+    // setLong is used by Netty 4.1.60+. https://github.com/grpc/grpc-java/issues/7953
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    http2Headers.add(AsciiString.of("long-header"), AsciiString.of("1"));
+    http2Headers.add(AsciiString.of("long-header"), AsciiString.of("2"));
+    http2Headers.setLong(AsciiString.of("long-header"), 3);
+    assertThat(http2Headers.size()).isEqualTo(1);
+    assertThat(http2Headers.getAll(AsciiString.of("long-header")))
+        .containsExactly(AsciiString.of("3"));
+  }
+
   private static void assertContainsKeyAndValue(String str, CharSequence key, CharSequence value) {
-    assertThat(str, containsString(key.toString()));
-    assertThat(str, containsString(value.toString()));
+    assertThat(str).contains(key.toString());
+    assertThat(str).contains(value.toString());
   }
 }

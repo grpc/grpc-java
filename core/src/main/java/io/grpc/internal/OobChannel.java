@@ -193,8 +193,8 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
     delayedTransport.reprocess(subchannelPicker);
   }
 
-  void updateAddresses(EquivalentAddressGroup eag) {
-    subchannel.updateAddresses(Collections.singletonList(eag));
+  void updateAddresses(List<EquivalentAddressGroup> eag) {
+    subchannel.updateAddresses(eag);
   }
 
   @Override

@@ -124,6 +124,11 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
       promise.setFailure(failCause);
       ReferenceCountUtil.release(msg);
     } else {
+      if (msg instanceof GracefulCloseCommand || msg instanceof ForcefulCloseCommand) {
+        // No point in continuing negotiation
+        ctx.close();
+        // Still enqueue the command in case the HTTP/2 handler is already on the pipeline
+      }
       bufferedWrites.add(new ChannelWrite(msg, promise));
     }
   }

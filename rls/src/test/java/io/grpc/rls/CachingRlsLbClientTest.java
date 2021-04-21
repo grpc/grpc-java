@@ -34,6 +34,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -144,12 +145,16 @@ public class CachingRlsLbClientTest {
 
   private CachingRlsLbClient rlsLbClient;
   private boolean existingEnableOobChannelDirectPath;
+  private Map<String, ?> rlsChannelServiceConfig;
+  private String rlsChannelOverriddenAuthority;
 
   @Before
   public void setUp() throws Exception {
     existingEnableOobChannelDirectPath = CachingRlsLbClient.enableOobChannelDirectPath;
     CachingRlsLbClient.enableOobChannelDirectPath = false;
+  }
 
+  private void setUpRlsLbClient() {
     rlsLbClient =
         CachingRlsLbClient.newBuilder()
             .setBackoffProvider(fakeBackoffProvider)
@@ -184,9 +189,11 @@ public class CachingRlsLbClientTest {
 
   @Test
   public void get_noError_lifeCycle() throws Exception {
+    setUpRlsLbClient();
     InOrder inOrder = inOrder(evictionListener);
     RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest("server", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+        new RouteLookupRequest(
+            "bigtable.googleapis.com", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
@@ -232,7 +239,43 @@ public class CachingRlsLbClientTest {
   }
 
   @Test
+  public void rls_overDirectPath() throws Exception {
+    CachingRlsLbClient.enableOobChannelDirectPath = true;
+    setUpRlsLbClient();
+    RouteLookupRequest routeLookupRequest =
+        new RouteLookupRequest(
+            "bigtable.googleapis.com", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequest,
+            new RouteLookupResponse(ImmutableList.of("target"), "header")));
+
+    // initial request
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.isPending()).isTrue();
+
+    // server response
+    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.hasData()).isTrue();
+
+    assertThat(rlsChannelOverriddenAuthority).isEqualTo("bigtable.googleapis.com:443");
+    assertThat(rlsChannelServiceConfig).isEqualTo(
+        ImmutableMap.of(
+            "loadBalancingConfig",
+            ImmutableList.of(ImmutableMap.of(
+                "grpclb",
+                ImmutableMap.of(
+                    "childPolicy",
+                    ImmutableList.of(ImmutableMap.of("pick_first", ImmutableMap.of())),
+                    "serviceName",
+                    "service1")))));
+  }
+
+  @Test
   public void get_throttledAndRecover() throws Exception {
+    setUpRlsLbClient();
     RouteLookupRequest routeLookupRequest =
         new RouteLookupRequest("server", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
     rlsServerImpl.setLookupTable(
@@ -274,9 +317,11 @@ public class CachingRlsLbClientTest {
 
   @Test
   public void get_updatesLbState() throws Exception {
+    setUpRlsLbClient();
     InOrder inOrder = inOrder(helper);
     RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest("service1", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+        new RouteLookupRequest(
+            "bigtable.googleapis.com", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
@@ -316,7 +361,7 @@ public class CachingRlsLbClientTest {
     // try to get invalid
     RouteLookupRequest invalidRouteLookupRequest =
         new RouteLookupRequest(
-            "service1", "/doesn/exists", "grpc", ImmutableMap.<String, String>of());
+            "bigtable.googleapis.com", "/doesn/exists", "grpc", ImmutableMap.<String, String>of());
     CachedRouteLookupResponse errorResp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(errorResp.isPending()).isTrue();
     fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
@@ -341,6 +386,7 @@ public class CachingRlsLbClientTest {
 
   @Test
   public void get_childPolicyWrapper_reusedForSameTarget() throws Exception {
+    setUpRlsLbClient();
     RouteLookupRequest routeLookupRequest =
         new RouteLookupRequest("server", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
     RouteLookupRequest routeLookupRequest2 =
@@ -536,7 +582,8 @@ public class CachingRlsLbClientTest {
   private final class FakeHelper extends Helper {
 
     @Override
-    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
+    public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
+        String target, ChannelCredentials creds) {
       try {
         grpcCleanupRule.register(
             InProcessServerBuilder.forName(target)
@@ -561,6 +608,20 @@ public class CachingRlsLbClientTest {
         public ManagedChannel build() {
           return grpcCleanupRule.register(super.build());
         }
+
+        @Override
+        public CleaningChannelBuilder defaultServiceConfig(Map<String, ?> serviceConfig) {
+          rlsChannelServiceConfig = serviceConfig;
+          delegate().defaultServiceConfig(serviceConfig);
+          return this;
+        }
+
+        @Override
+        public CleaningChannelBuilder overrideAuthority(String authority) {
+          rlsChannelOverriddenAuthority = authority;
+          delegate().overrideAuthority(authority);
+          return this;
+        }
       }
 
       return new CleaningChannelBuilder();
@@ -579,7 +640,18 @@ public class CachingRlsLbClientTest {
 
     @Override
     public String getAuthority() {
-      throw new UnsupportedOperationException();
+      return "bigtable.googleapis.com:443";
+    }
+
+    @Override
+    public ChannelCredentials getUnsafeChannelCredentials() {
+      // In test we don't do any authentication.
+      return new ChannelCredentials() {
+        @Override
+        public ChannelCredentials withoutBearerTokens() {
+          return this;
+        }
+      };
     }
 
     @Override

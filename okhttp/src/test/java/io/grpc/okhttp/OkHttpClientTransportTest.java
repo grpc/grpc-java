@@ -1866,7 +1866,8 @@ public class OkHttpClientTransportTest {
         INITIAL_WINDOW_SIZE,
         HttpConnectProxiedSocketAddress.newBuilder()
             .setTargetAddress(targetAddress)
-            .setProxyAddress(serverSocket.getLocalSocketAddress()).build(),
+            .setProxyAddress(new InetSocketAddress("localhost", serverSocket.getLocalPort()))
+            .build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
         transportTracer,
@@ -1923,7 +1924,8 @@ public class OkHttpClientTransportTest {
         INITIAL_WINDOW_SIZE,
         HttpConnectProxiedSocketAddress.newBuilder()
             .setTargetAddress(targetAddress)
-            .setProxyAddress(serverSocket.getLocalSocketAddress()).build(),
+            .setProxyAddress(new InetSocketAddress("localhost", serverSocket.getLocalPort()))
+            .build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
         transportTracer,
@@ -1979,7 +1981,8 @@ public class OkHttpClientTransportTest {
         INITIAL_WINDOW_SIZE,
         HttpConnectProxiedSocketAddress.newBuilder()
             .setTargetAddress(targetAddress)
-            .setProxyAddress(serverSocket.getLocalSocketAddress()).build(),
+            .setProxyAddress(new InetSocketAddress("localhost", serverSocket.getLocalPort()))
+            .build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
         transportTracer,

@@ -31,6 +31,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
 import io.grpc.SynchronizationContext;
+import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
@@ -51,10 +52,21 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   }
 
   @Override
+  public  ManagedChannel createOobChannel(List<EquivalentAddressGroup> eag, String authority) {
+    return delegate().createOobChannel(eag, authority);
+  }
+
+  @Override
   public void updateOobChannelAddresses(ManagedChannel channel, EquivalentAddressGroup eag) {
     delegate().updateOobChannelAddresses(channel, eag);
   }
 
+  @Override
+  public void updateOobChannelAddresses(ManagedChannel channel, List<EquivalentAddressGroup> eag) {
+    delegate().updateOobChannelAddresses(channel, eag);
+  }
+
+  @Deprecated
   @Override
   public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(String target) {
     return delegate().createResolvingOobChannelBuilder(target);
@@ -80,6 +92,11 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   @Override
   public void refreshNameResolution() {
     delegate().refreshNameResolution();
+  }
+
+  @Override
+  public void ignoreRefreshNameResolutionCheck() {
+    delegate().ignoreRefreshNameResolutionCheck();
   }
 
   @Override

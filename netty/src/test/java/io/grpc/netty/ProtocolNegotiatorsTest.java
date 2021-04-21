@@ -27,25 +27,39 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
+import io.grpc.ChannelLogger;
 import io.grpc.ChoiceChannelCredentials;
 import io.grpc.ChoiceServerCredentials;
 import io.grpc.CompositeChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.Security;
+import io.grpc.Metadata;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerCredentials;
+import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
+import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.GrpcAttributes;
+import io.grpc.internal.InternalServer;
+import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.ServerListener;
+import io.grpc.internal.ServerStream;
+import io.grpc.internal.ServerTransport;
+import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
@@ -99,8 +113,14 @@ import io.netty.handler.ssl.util.SelfSignedCertificate;
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
+import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -108,10 +128,12 @@ import java.util.logging.Filter;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManagerFactory;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -135,11 +157,13 @@ public class ProtocolNegotiatorsTest {
 
   private static File server1Cert;
   private static File server1Key;
+  private static File caCert;
 
   @BeforeClass
   public static void loadCerts() throws Exception {
     server1Cert = TestUtils.loadCert("server1.pem");
     server1Key = TestUtils.loadCert("server1.key");
+    caCert = TestUtils.loadCert("ca.pem");
   }
 
   private static final int TIMEOUT_SECONDS = 60;
@@ -159,6 +183,7 @@ public class ProtocolNegotiatorsTest {
   private SslContext sslContext;
   private SSLEngine engine;
   private ChannelHandlerContext channelHandlerCtx;
+  private static ChannelLogger noopLogger = new NoopChannelLogger();
 
   @Before
   public void setUp() throws Exception {
@@ -300,6 +325,177 @@ public class ProtocolNegotiatorsTest {
     assertThat(result.negotiator).isNull();
   }
 
+  private InternalChannelz.Tls expectSuccessfulHandshake(
+      ChannelCredentials channelCreds, ServerCredentials serverCreds) throws Exception {
+    return (InternalChannelz.Tls) expectHandshake(channelCreds, serverCreds, true);
+  }
+
+  private Status expectFailedHandshake(
+      ChannelCredentials channelCreds, ServerCredentials serverCreds) throws Exception {
+    return (Status) expectHandshake(channelCreds, serverCreds, false);
+  }
+
+  private Object expectHandshake(
+      ChannelCredentials channelCreds, ServerCredentials serverCreds, boolean expectSuccess)
+      throws Exception {
+    MockServerListener serverListener = new MockServerListener();
+    ClientTransportFactory clientFactory = NettyChannelBuilder
+        // Although specified here, address is ignored because we never call build.
+        .forAddress("localhost", 0, channelCreds)
+        .buildTransportFactory();
+    InternalServer server = NettyServerBuilder
+        .forPort(0, serverCreds)
+        .buildTransportServers(Collections.<ServerStreamTracer.Factory>emptyList());
+    server.start(serverListener);
+
+    ManagedClientTransport.Listener clientTransportListener =
+        mock(ManagedClientTransport.Listener.class);
+    ManagedClientTransport client = clientFactory.newClientTransport(
+        server.getListenSocketAddress(),
+        new ClientTransportFactory.ClientTransportOptions()
+          .setAuthority(TestUtils.TEST_SERVER_HOST),
+        mock(ChannelLogger.class));
+    callMeMaybe(client.start(clientTransportListener));
+    Object result;
+    if (expectSuccess) {
+      verify(clientTransportListener, timeout(TIMEOUT_SECONDS * 1000)).transportReady();
+      InternalChannelz.SocketStats stats = serverListener.transports.poll().getStats().get();
+      assertThat(stats.security).isNotNull();
+      assertThat(stats.security.tls).isNotNull();
+      result = stats.security.tls;
+    } else {
+      ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+      verify(clientTransportListener, timeout(TIMEOUT_SECONDS * 1000))
+          .transportShutdown(captor.capture());
+      result = captor.getValue();
+    }
+
+    client.shutdownNow(Status.UNAVAILABLE.withDescription("trash it"));
+    server.shutdown();
+    assertTrue(
+        serverListener.waitForShutdown(TIMEOUT_SECONDS * 1000, TimeUnit.MILLISECONDS));
+    verify(clientTransportListener, timeout(TIMEOUT_SECONDS * 1000)).transportTerminated();
+    clientFactory.close();
+    return result;
+  }
+
+  @Test
+  public void from_tls_clientAuthNone_noClientCert() throws Exception {
+    // Use convenience API to better match most user's usage
+    ServerCredentials serverCreds = TlsServerCredentials.create(server1Cert, server1Key);
+    ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+        .trustManager(caCert)
+        .build();
+    InternalChannelz.Tls tls = expectSuccessfulHandshake(channelCreds, serverCreds);
+    assertThat(tls.remoteCert).isNull();
+  }
+
+  @Test
+  public void from_tls_clientAuthNone_clientCert() throws Exception {
+    ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
+        .keyManager(server1Cert, server1Key)
+        .trustManager(caCert)
+        .build();
+    ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+        .keyManager(server1Cert, server1Key)
+        .trustManager(caCert)
+        .build();
+    InternalChannelz.Tls tls = expectSuccessfulHandshake(channelCreds, serverCreds);
+    assertThat(tls.remoteCert).isNull();
+  }
+
+  @Test
+  public void from_tls_clientAuthRequire_noClientCert() throws Exception {
+    ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
+        .keyManager(server1Cert, server1Key)
+        .trustManager(caCert)
+        .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
+        .build();
+    ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+        .trustManager(caCert)
+        .build();
+    Status status = expectFailedHandshake(channelCreds, serverCreds);
+    assertThat(status.getDescription()).isEqualTo("ssl exception");
+  }
+
+  @Test
+  public void from_tls_clientAuthRequire_clientCert() throws Exception {
+    ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
+        .keyManager(server1Cert, server1Key)
+        .trustManager(caCert)
+        .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
+        .build();
+    ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+        .keyManager(server1Cert, server1Key)
+        .trustManager(caCert)
+        .build();
+    InternalChannelz.Tls tls = expectSuccessfulHandshake(channelCreds, serverCreds);
+    assertThat(((X509Certificate) tls.remoteCert).getSubjectX500Principal().getName())
+        .contains("CN=*.test.google.com");
+  }
+
+  @Test
+  public void from_tls_clientAuthOptional_noClientCert() throws Exception {
+    ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
+        .keyManager(server1Cert, server1Key)
+        .trustManager(caCert)
+        .clientAuth(TlsServerCredentials.ClientAuth.OPTIONAL)
+        .build();
+    ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+        .trustManager(caCert)
+        .build();
+    InternalChannelz.Tls tls = expectSuccessfulHandshake(channelCreds, serverCreds);
+    assertThat(tls.remoteCert).isNull();
+  }
+
+  @Test
+  public void from_tls_clientAuthOptional_clientCert() throws Exception {
+    ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
+        .keyManager(server1Cert, server1Key)
+        .trustManager(caCert)
+        .clientAuth(TlsServerCredentials.ClientAuth.OPTIONAL)
+        .build();
+    ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+        .keyManager(server1Cert, server1Key)
+        .trustManager(caCert)
+        .build();
+    InternalChannelz.Tls tls = expectSuccessfulHandshake(channelCreds, serverCreds);
+    assertThat(((X509Certificate) tls.remoteCert).getSubjectX500Principal().getName())
+        .contains("CN=*.test.google.com");
+  }
+
+  @Test
+  public void from_tls_managers() throws Exception {
+    SelfSignedCertificate cert = new SelfSignedCertificate(TestUtils.TEST_SERVER_HOST);
+    KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+    keyStore.load(null);
+    keyStore.setKeyEntry("mykey", cert.key(), new char[0], new Certificate[] {cert.cert()});
+    KeyManagerFactory keyManagerFactory =
+        KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+    keyManagerFactory.init(keyStore, new char[0]);
+
+    KeyStore certStore = KeyStore.getInstance(KeyStore.getDefaultType());
+    certStore.load(null);
+    certStore.setCertificateEntry("mycert", cert.cert());
+    TrustManagerFactory trustManagerFactory =
+        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    trustManagerFactory.init(certStore);
+
+    ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
+        .keyManager(keyManagerFactory.getKeyManagers())
+        .trustManager(trustManagerFactory.getTrustManagers())
+        .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
+        .build();
+    ChannelCredentials channelCreds = TlsChannelCredentials.newBuilder()
+        .keyManager(keyManagerFactory.getKeyManagers())
+        .trustManager(trustManagerFactory.getTrustManagers())
+        .build();
+    InternalChannelz.Tls tls = expectSuccessfulHandshake(channelCreds, serverCreds);
+    assertThat(((X509Certificate) tls.remoteCert).getSubjectX500Principal().getName())
+        .isEqualTo("CN=" + TestUtils.TEST_SERVER_HOST);
+    cert.delete();
+  }
+
   @Test
   public void fromServer_unknown() {
     ProtocolNegotiators.FromServerCredentialsResult result =
@@ -388,7 +584,7 @@ public class ProtocolNegotiatorsTest {
             latch.countDown();
             super.handlerAdded(ctx);
           }
-        });
+        }, noopLogger);
 
     ChannelHandler lateAddingHandler = new ChannelInboundHandlerAdapter() {
       @Override
@@ -432,7 +628,7 @@ public class ProtocolNegotiatorsTest {
             latch.countDown();
             super.handlerAdded(ctx);
           }
-        });
+        }, noopLogger);
 
     LocalAddress addr = new LocalAddress("local");
     ChannelFuture cf = new Bootstrap()
@@ -665,7 +861,8 @@ public class ProtocolNegotiatorsTest {
     };
     DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
 
-    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext, "authority", elg);
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
+        "authority", elg, noopLogger);
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -703,7 +900,8 @@ public class ProtocolNegotiatorsTest {
         .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apn).build();
 
-    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext, "authority", elg);
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
+        "authority", elg, noopLogger);
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -726,7 +924,8 @@ public class ProtocolNegotiatorsTest {
     };
     DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
 
-    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext, "authority", elg);
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
+        "authority", elg, noopLogger);
     pipeline.addLast(handler);
 
     final AtomicReference<Throwable> error = new AtomicReference<>();
@@ -753,7 +952,8 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void clientTlsHandler_closeDuringNegotiation() throws Exception {
-    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext, "authority", null);
+    ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
+        "authority", null, noopLogger);
     pipeline.addLast(new WriteBufferingAndExceptionHandler(handler));
     ChannelFuture pendingWrite = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
 
@@ -979,7 +1179,7 @@ public class ProtocolNegotiatorsTest {
         .sync()
         .channel();
     Channel c = new Bootstrap()
-        .handler(new WaitUntilActiveHandler(next))
+        .handler(new WaitUntilActiveHandler(next, noopLogger))
         .channel(LocalChannel.class).group(group)
         .connect(addr)
         .sync()
@@ -1119,6 +1319,12 @@ public class ProtocolNegotiatorsTest {
     assertThat(gh.attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR)).isEqualTo(addr);
   }
 
+  private static void callMeMaybe(Runnable runnable) {
+    if (runnable != null) {
+      runnable.run();
+    }
+  }
+
   private static class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
 
     static FakeGrpcHttp2ConnectionHandler noopHandler() {
@@ -1137,7 +1343,7 @@ public class ProtocolNegotiatorsTest {
           new DefaultHttp2ConnectionDecoder(conn, encoder, new DefaultHttp2FrameReader());
       Http2Settings settings = new Http2Settings();
       return new FakeGrpcHttp2ConnectionHandler(
-          /*channelUnused=*/ null, decoder, encoder, settings, noop);
+          /*channelUnused=*/ null, decoder, encoder, settings, noop, noopLogger);
     }
 
     private final boolean noop;
@@ -1150,8 +1356,9 @@ public class ProtocolNegotiatorsTest {
         Http2ConnectionDecoder decoder,
         Http2ConnectionEncoder encoder,
         Http2Settings initialSettings,
-        boolean noop) {
-      super(channelUnused, decoder, encoder, initialSettings);
+        boolean noop,
+        ChannelLogger negotiationLogger) {
+      super(channelUnused, decoder, encoder, initialSettings, negotiationLogger);
       this.noop = noop;
     }
 
@@ -1209,5 +1416,38 @@ public class ProtocolNegotiatorsTest {
       ctx.pipeline().replace(ctx.name(), null, next);
       ctx.pipeline().fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
     }
+  }
+
+  private static class MockServerListener implements ServerListener {
+    private final CountDownLatch latch = new CountDownLatch(1);
+    public Queue<ServerTransport> transports = new ArrayDeque<>();
+
+    @Override
+    public ServerTransportListener transportCreated(ServerTransport transport) {
+      transports.add(transport);
+      return new MockServerTransportListener();
+    }
+
+    @Override
+    public void serverShutdown() {
+      latch.countDown();
+    }
+
+    public boolean waitForShutdown(long timeout, TimeUnit unit) throws InterruptedException {
+      return latch.await(timeout, unit);
+    }
+  }
+
+  private static class MockServerTransportListener implements ServerTransportListener {
+    @Override
+    public void streamCreated(ServerStream stream, String method, Metadata headers) {}
+
+    @Override
+    public Attributes transportReady(Attributes attributes) {
+      return attributes;
+    }
+
+    @Override
+    public void transportTerminated() {}
   }
 }

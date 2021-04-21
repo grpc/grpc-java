@@ -23,6 +23,8 @@ import javax.annotation.concurrent.ThreadSafe;
 interface ThreadSafeRandom {
   int nextInt(int bound);
 
+  long nextLong();
+
   final class ThreadSafeRandomImpl implements ThreadSafeRandom {
 
     static final ThreadSafeRandom instance = new ThreadSafeRandomImpl();
@@ -32,6 +34,11 @@ interface ThreadSafeRandom {
     @Override
     public int nextInt(int bound) {
       return ThreadLocalRandom.current().nextInt(bound);
+    }
+
+    @Override
+    public long nextLong() {
+      return ThreadLocalRandom.current().nextLong();
     }
   }
 }

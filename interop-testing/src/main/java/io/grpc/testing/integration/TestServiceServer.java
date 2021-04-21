@@ -17,8 +17,8 @@
 package io.grpc.testing.integration;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Splitter;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
 import io.grpc.ServerCredentials;
@@ -26,10 +26,6 @@ import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.NettyServerBuilder;
-import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -68,12 +64,13 @@ public class TestServiceServer {
     server.blockUntilShutdown();
   }
 
-  private final ArrayList<Integer> port = new ArrayList<>(Collections.singletonList(8080));
+  private int port = 8080;
   private boolean useTls = true;
   private boolean useAlts = false;
 
   private ScheduledExecutorService executor;
   private Server server;
+  private int localHandshakerPort = -1;
 
   @VisibleForTesting
   void parseArgs(String[] args) {
@@ -97,19 +94,13 @@ public class TestServiceServer {
       }
       String value = parts[1];
       if ("port".equals(key)) {
-        port.clear();
-        for (String v : Splitter.on(',').split(value)) {
-          port.add(Integer.parseInt(v.trim()));
-        }
-        if (port.isEmpty()) {
-          System.err.println("Unknown server port");
-          usage = true;
-          break;
-        }
+        port = Integer.parseInt(value);
       } else if ("use_tls".equals(key)) {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_alts".equals(key)) {
         useAlts = Boolean.parseBoolean(value);
+      } else if ("local_handshaker_port".equals(key)) {
+        localHandshakerPort = Integer.parseInt(value);
       } else if ("grpc_version".equals(key)) {
         if (!"2".equals(value)) {
           System.err.println("Only grpc version 2 is supported");
@@ -130,10 +121,13 @@ public class TestServiceServer {
       System.out.println(
           "Usage: [ARGS...]"
               + "\n"
-              + "\n  --port=<port_1>,<port_2>...<port_N>  Port to connect to. Default " + s.port
+              + "\n  --port=PORT           Port to connect to. Default " + s.port
               + "\n  --use_tls=true|false  Whether to use TLS. Default " + s.useTls
               + "\n  --use_alts=true|false Whether to use ALTS. Enable ALTS will disable TLS."
               + "\n                        Default " + s.useAlts
+              + "\n  --local_handshaker_port=PORT"
+              + "\n                        Use local ALTS handshaker service on the specified port "
+              + "\n                        for testing. Only effective when --use_alts=true."
       );
       System.exit(1);
     }
@@ -144,18 +138,21 @@ public class TestServiceServer {
     executor = Executors.newSingleThreadScheduledExecutor();
     ServerCredentials serverCreds;
     if (useAlts) {
-      serverCreds = AltsServerCredentials.create();
+      if (localHandshakerPort > -1) {
+        serverCreds = AltsServerCredentials.newBuilder()
+            .enableUntrustedAltsForTesting()
+            .setHandshakerAddressForTesting("localhost:" + localHandshakerPort).build();
+      } else {
+        serverCreds = AltsServerCredentials.create();
+      }
     } else if (useTls) {
       serverCreds = TlsServerCredentials.create(
           TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
     } else {
       serverCreds = InsecureServerCredentials.create();
     }
-    NettyServerBuilder serverBuilder = NettyServerBuilder.forPort(port.get(0), serverCreds);
-    for (int i = 1; i < port.size(); i++) {
-      serverBuilder.addListenAddress(new InetSocketAddress(port.get(i)));
-    }
-    server = serverBuilder.maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
+    server = Grpc.newServerBuilderForPort(port, serverCreds)
+        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .addService(
             ServerInterceptors.intercept(
                 new TestServiceImpl(executor), TestServiceImpl.interceptors()))

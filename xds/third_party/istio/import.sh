@@ -23,6 +23,7 @@ GIT_REPO="https://github.com/istio/istio.git"
 GIT_BASE_DIR=istio
 SOURCE_PROTO_BASE_DIR=istio
 TARGET_PROTO_BASE_DIR=src/main/proto
+# Sorted alphabetically.
 FILES=(
 security/proto/providers/google/meshca.proto
 )
