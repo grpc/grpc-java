@@ -167,7 +167,7 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
       };
 
   @Override
-  public ReadableBuffer readBytes(int length) {
+  public CompositeReadableBuffer readBytes(int length) {
     final CompositeReadableBuffer newBuffer = new CompositeReadableBuffer();
     executeNoThrow(COMPOSITE_OP, length, newBuffer, 0);
     return newBuffer;
