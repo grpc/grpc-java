@@ -54,10 +54,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Serves as a wrapper for {@link XdsClient} used on the server side by {@link
@@ -71,8 +71,7 @@ public final class XdsClientWrapperForServerSds {
   private static final TimeServiceResource timeServiceResource =
       new TimeServiceResource("GrpcServerXdsClient");
 
-  @GuardedBy("lock")
-  private EnvoyServerProtoData.Listener curListener;
+  private AtomicReference<EnvoyServerProtoData.Listener> curListener = new AtomicReference<>();
   @SuppressWarnings("unused")
   @Nullable private XdsClient xdsClient;
   private final int port;
@@ -80,7 +79,6 @@ public final class XdsClientWrapperForServerSds {
   private XdsClient.LdsResourceWatcher listenerWatcher;
   private boolean newServerApi;
   @VisibleForTesting final Set<ServerWatcher> serverWatchers = new HashSet<>();
-  private final Object lock = new Object();
 
   /**
    * Creates a {@link XdsClientWrapperForServerSds}.
@@ -140,18 +138,14 @@ public final class XdsClientWrapperForServerSds {
         new XdsClient.LdsResourceWatcher() {
           @Override
           public void onChanged(XdsClient.LdsUpdate update) {
-            synchronized (lock) {
-              curListener = update.listener;
-            }
+            curListener.set(update.listener);
             reportSuccess();
           }
 
           @Override
           public void onResourceDoesNotExist(String resourceName) {
             logger.log(Level.WARNING, "Resource {0} is unavailable", resourceName);
-            synchronized (lock) {
-              curListener = null;
-            }
+            curListener.set(null);
             reportError(Status.NOT_FOUND.asException(), true);
           }
 
@@ -187,10 +181,7 @@ public final class XdsClientWrapperForServerSds {
    */
   @Nullable
   public DownstreamTlsContext getDownstreamTlsContext(Channel channel) {
-    EnvoyServerProtoData.Listener copyListener;
-    synchronized (lock) {
-      copyListener = curListener;
-    }
+    EnvoyServerProtoData.Listener copyListener = curListener.get();
     if (copyListener != null && channel != null) {
       SocketAddress localAddress = channel.localAddress();
       SocketAddress remoteAddress = channel.remoteAddress();
@@ -396,10 +387,7 @@ public final class XdsClientWrapperForServerSds {
     synchronized (serverWatchers) {
       serverWatchers.add(serverWatcher);
     }
-    EnvoyServerProtoData.Listener copyListener;
-    synchronized (lock) {
-      copyListener = curListener;
-    }
+    EnvoyServerProtoData.Listener copyListener = curListener.get();
     if (copyListener != null) {
       serverWatcher.onListenerUpdate();
     }
