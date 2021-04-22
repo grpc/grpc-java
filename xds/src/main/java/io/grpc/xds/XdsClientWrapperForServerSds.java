@@ -206,7 +206,7 @@ public final class XdsClientWrapperForServerSds {
    * @param localInetAddr dest address of the inbound connection
    * @param remoteInetAddr source address of the inbound connection
    */
-  private DownstreamTlsContext getDownstreamTlsContext(
+  private static DownstreamTlsContext getDownstreamTlsContext(
       InetSocketAddress localInetAddr, InetSocketAddress remoteInetAddr,
       EnvoyServerProtoData.Listener listener) {
     List<FilterChain> filterChains = listener.getFilterChains();
@@ -258,7 +258,7 @@ public final class XdsClientWrapperForServerSds {
     return filteredOnMatch.isEmpty() ? filteredOnEmpty : filteredOnMatch;
   }
 
-  private List<FilterChain> filterOnSourceType(
+  private static List<FilterChain> filterOnSourceType(
       List<FilterChain> filterChains, InetAddress sourceAddress, InetAddress destAddress) {
     ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
     for (FilterChain filterChain : filterChains) {
@@ -353,7 +353,7 @@ public final class XdsClientWrapperForServerSds {
   }
 
   // use prefix_ranges (CIDR) and get the most specific matches
-  private List<FilterChain> filterOnIpAddress(
+  private static List<FilterChain> filterOnIpAddress(
       List<FilterChain> filterChains, InetAddress address, boolean forDestination) {
     PriorityQueue<QueueElement> heap = new PriorityQueue<>(10, new QueueElementComparator());
 
