@@ -7,7 +7,7 @@ description = 'gRPC: Android Integration Testing'
 
 repositories {
     google()
-    jcenter()
+    mavenCentral()
 }
 
 android {
