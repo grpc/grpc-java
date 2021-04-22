@@ -40,11 +40,6 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   private int readableBytes;
   private boolean marked;
 
-  public CompositeReadableBuffer(int initialCapacity) {
-    readableBuffers = new ArrayDeque<>(initialCapacity);
-    rewindableBuffers = new ArrayDeque<>(initialCapacity);
-  }
-
   public CompositeReadableBuffer() {
     readableBuffers = new ArrayDeque<>();
     rewindableBuffers = new ArrayDeque<>();
