@@ -19,6 +19,10 @@ RUN yum install -y \
             && \
     yum clean all
 
+RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm && \
+    yum install -y gcc-c++-aarch64-linux-gnu && \
+    yum clean all
+
 # Install Maven
 RUN curl -Ls http://apache.cs.utah.edu/maven/maven-3/3.3.9/binaries/apache-maven-3.3.9-bin.tar.gz | \
     tar xz -C /var/local
