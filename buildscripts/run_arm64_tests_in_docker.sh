@@ -10,7 +10,7 @@ else
   DOCKER_ARGS=
 fi
 
-docker build -t grpc-java-artifacts "${grpc_java_dir}"/buildscripts/grpc-java-artifacts
+docker build -t grpc-java-artifacts-aarch64 "${grpc_java_dir}"/buildscripts/grpc-java-artifacts-aarch64
 
 # build aarch64 protoc artifacts via crosscompilation
 # the corresponding codegen tests will be run under and emulator
@@ -21,7 +21,7 @@ docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java
   --user "$(id -u):$(id -g)" \
   -e "JAVA_OPTS=-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs" \
   -e "SKIP_TESTS=true" -e "ARCH=aarch_64" \
-  grpc-java-artifacts \
+  grpc-java-artifacts-aarch64 \
   buildscripts/kokoro/unix.sh
 
 # build under x64 docker image to save time over building everything under
