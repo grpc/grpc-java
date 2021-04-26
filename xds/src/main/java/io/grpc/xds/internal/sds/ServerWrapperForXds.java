@@ -56,7 +56,7 @@ public final class ServerWrapperForXds extends Server {
   private XdsServerBuilder.XdsServingStatusListener xdsServingStatusListener;
   @Nullable XdsClientWrapperForServerSds.ServerWatcher serverWatcher;
   private AtomicBoolean started = new AtomicBoolean();
-  private ServingState currentServingState;
+  private volatile ServingState currentServingState;
   private final long delayForRetry;
   private final TimeUnit timeUnitForDelayForRetry;
   private StartRetryTask startRetryTask;
@@ -239,11 +239,13 @@ public final class ServerWrapperForXds extends Server {
       rebuildAndRestartServer();
     }
 
-    private synchronized void cleanUpStartRetryTask() {
-      if (timerService != null) {
-        timerService = SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timerService);
+    private void cleanUpStartRetryTask() {
+      synchronized (ServerWrapperForXds.this) {
+        if (timerService != null) {
+          timerService = SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timerService);
+        }
+        startRetryTask = null;
       }
-      startRetryTask = null;
     }
 
     public void shutdownNow() {
@@ -290,7 +292,7 @@ public final class ServerWrapperForXds extends Server {
 
   private void cleanupStartRetryTaskAndShutdownDelegateAndXdsClient(boolean shutdownNow) {
     Server delegateCopy = null;
-    synchronized (this) {
+    synchronized (ServerWrapperForXds.this) {
       if (startRetryTask != null) {
         startRetryTask.shutdownNow();
       }

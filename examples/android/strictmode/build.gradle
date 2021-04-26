@@ -3,7 +3,7 @@
 buildscript {
     repositories {
         google()
-        jcenter()
+        mavenCentral()
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:4.0.0'
@@ -17,9 +17,6 @@ buildscript {
 allprojects {
     repositories {
         google()
-        jcenter()
-        // Some grpc-java releases may be missing in JCenter.
-        // See https://github.com/grpc/grpc-java/issues/5782
         mavenCentral()
         mavenLocal()
     }

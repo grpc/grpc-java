@@ -15,7 +15,6 @@
 buildscript {
     // Configuration for building
     repositories {
-        jcenter()    // Bintray's repository - a fast Maven Central mirror & more
         maven { // The google mirror is less flaky than mavenCentral()
             url "https://maven-central.storage-download.googleapis.com/maven2/" }
     }
@@ -37,7 +36,6 @@ repositories {
     mavenLocal()
     maven { // The google mirror is less flaky than mavenCentral()
         url "https://maven-central.storage-download.googleapis.com/maven2/" }
-    jcenter()
 }
 
 apply plugin: 'com.google.cloud.tools.appengine'  // App Engine tasks
