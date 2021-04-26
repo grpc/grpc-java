@@ -3,6 +3,7 @@ set -eo pipefail
 
 # Constants
 readonly GITHUB_REPOSITORY_NAME="grpc-java"
+readonly SHARED_INSTALL_LIB_DOWNLOAD_URL="https://raw.githubusercontent.com/grpc/grpc/master/tools/internal_ci/linux/grpc_xds_k8s_install_test_driver.sh"
 # GKE Cluster
 readonly GKE_CLUSTER_NAME="interop-test-psm-sec-testing-api"
 readonly GKE_CLUSTER_ZONE="us-west1-b"
@@ -147,19 +148,31 @@ run_test() {
 main() {
   local script_dir
   script_dir="$(dirname "$0")"
-  # shellcheck source=buildscripts/kokoro/xds-k8s-install-test-driver.sh
-  source "${script_dir}/xds-k8s-install-test-driver.sh"
+
+  local install_driver_lib_path
+  if [[ -n "${TEST_DRIVER_REPO_DIR_USE_EXISTING}" && -d "${TEST_DRIVER_REPO_DIR}" ]]; then
+    # Use local driver library (use for development).
+    install_driver_lib_path="${TEST_DRIVER_REPO_DIR}/tools/internal_ci/linux/grpc_xds_k8s_install_test_driver.sh"
+    echo "Using existing install library: ${install_driver_lib_path}"
+  else
+    # Download shared install driver library.
+    echo "Downloading shared install library: ${SHARED_INSTALL_LIB_DOWNLOAD_URL}."
+    install_driver_lib_path="$(mktemp -d)/grpc_xds_k8s_shared_install_lib.sh"
+    wget --https-only "${SHARED_INSTALL_LIB_DOWNLOAD_URL}" -O "${install_driver_lib_path}"
+  fi
+  # shellcheck source=grpc_xds_k8s_install_test_driver.sh
+  source "${install_driver_lib_path}"
   set -x
   if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
-    kokoro_setup_test_driver "${GITHUB_REPOSITORY_NAME}"
+    xds_k8s_test_driver::kokoro_setup_test_driver "${GITHUB_REPOSITORY_NAME}"
   else
-    local_setup_test_driver "${script_dir}"
+    xds_k8s_test_driver::local_setup_test_driver "${script_dir}"
   fi
-  build_docker_images_if_needed
+  # build_docker_images_if_needed
   # Run tests
   cd "${TEST_DRIVER_FULL_DIR}"
-  run_test baseline_test
-  run_test security_test
+  # run_test baseline_test
+  # run_test security_test
 }
 
 main "$@"
