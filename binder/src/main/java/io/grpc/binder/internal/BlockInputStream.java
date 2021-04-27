@@ -145,13 +145,15 @@ final class BlockInputStream extends InputStream implements KnownLength, Drainab
   public void close() {
     if (!closed) {
       closed = true;
-      currentBlock = null;
       if (blocks != null) {
         for (byte[] block : blocks) {
           BlockPool.releaseBlock(block);
         }
-        blocks = null;
+      } else if (currentBlock != null) {
+        BlockPool.releaseBlock(currentBlock);
       }
+      currentBlock = null;
+      blocks = null;
     }
   }
 }

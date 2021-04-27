@@ -48,8 +48,6 @@ import javax.annotation.Nullable;
  */
 final class MetadataHelper {
 
-  static final Metadata EMPTY_METADATA = new Metadata();
-
   /** The generic metadata marshaller we use for reading parcelables from the transport. */
   private static final Metadata.BinaryStreamMarshaller<Parcelable> TRANSPORT_INBOUND_MARSHALLER =
     new ParcelableMetadataMarshaller<>(null, true);
@@ -65,9 +63,9 @@ final class MetadataHelper {
    * @param parcel The {@link Parcel} to write to.
    * @param metadata The {@link Metadata} to write.
    */
-  public static void writeMetadata(Parcel parcel, Metadata metadata)
+  public static void writeMetadata(Parcel parcel, @Nullable Metadata metadata)
       throws StatusException, IOException {
-    int n = InternalMetadata.headerCount(metadata);
+    int n = metadata != null ? InternalMetadata.headerCount(metadata) : 0;
     if (n == 0) {
       parcel.writeInt(0);
       return;
@@ -123,7 +121,7 @@ final class MetadataHelper {
   public static Metadata readMetadata(Parcel parcel, Attributes attributes) throws StatusException {
     int n = parcel.readInt();
     if (n == 0) {
-      return EMPTY_METADATA;
+      return new Metadata();
     }
     int startPos = parcel.dataPosition();
     // We count this for two reasons: to ignore it in header size limit and to check this against

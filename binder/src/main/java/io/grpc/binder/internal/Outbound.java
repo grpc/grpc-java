@@ -395,7 +395,8 @@ abstract class Outbound {
   // Server-side outbound transactions.
   static final class ServerOutbound extends Outbound {
     @GuardedBy("this")
-    private Metadata headers = MetadataHelper.EMPTY_METADATA;
+    @Nullable
+    private Metadata headers;
 
     @GuardedBy("this")
     @Nullable

@@ -193,17 +193,6 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
     return suffixAvailable && firstQueuedTransactionIndex >= suffixTransactionIndex;
   }
 
-  @GuardedBy("this")
-  protected final boolean receivedData() {
-    switch (deliveryState) {
-      case UNINITIALIZED:
-      case INITIALIZED:
-        return suffixAvailable || queuedTransactionData != null;
-      default:
-        return true;
-    }
-  }
-
   // ===================
   // Internals.
 
@@ -614,9 +603,7 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
     @Override
     @GuardedBy("this")
     protected void deliverCloseAbnormal(Status status) {
-      // Assume the rpc was processed if we received anything (though we can't _really_ know).
-      RpcProgress progress = receivedData() ? RpcProgress.PROCESSED : RpcProgress.DROPPED;
-      listener.closed(status, progress, MetadataHelper.EMPTY_METADATA);
+      listener.closed(status, RpcProgress.PROCESSED, new Metadata());
     }
   }
 
