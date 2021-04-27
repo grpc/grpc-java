@@ -113,11 +113,27 @@ public final class HostServices {
    * ensure the next test is able to use this class again (since Android itself is in control of the
    * services).
    */
-  public static synchronized void awaitServiceShutdown() throws InterruptedException {
-    serviceShutdownLatch = new CountDownLatch(activeServices.size());
-    serviceShutdownLatch.await(5, SECONDS);
-    serviceAddresses.clear();
-    serviceParams.clear();
+  public static void awaitServiceShutdown() throws InterruptedException {
+    CountDownLatch latch = null;
+    synchronized (HostServices.class) {
+      if (serviceShutdownLatch == null && !activeServices.isEmpty()) {
+        latch = new CountDownLatch(activeServices.size());
+        serviceShutdownLatch = latch;
+      }
+      serviceParams.clear();
+      serviceAddresses.clear();
+    }
+    if (latch != null) {
+      if (!latch.await(10, SECONDS)) {
+        throw new AssertionError("Failed to shut down services");
+      }
+    }
+    synchronized (HostServices.class) {
+      checkState(activeServices.isEmpty());
+      checkState(serviceParams.isEmpty());
+      checkState(serviceAddresses.isEmpty());
+      serviceShutdownLatch = null;
+    }
   }
 
   /** Create the address for a host-service. */
