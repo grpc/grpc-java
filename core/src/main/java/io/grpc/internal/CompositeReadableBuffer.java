@@ -36,18 +36,16 @@ import javax.annotation.Nullable;
 public class CompositeReadableBuffer extends AbstractReadableBuffer {
 
   private final Deque<ReadableBuffer> readableBuffers;
-  private final Deque<ReadableBuffer> rewindableBuffers;
+  private Deque<ReadableBuffer> rewindableBuffers;
   private int readableBytes;
   private boolean marked;
 
   public CompositeReadableBuffer(int initialCapacity) {
     readableBuffers = new ArrayDeque<>(initialCapacity);
-    rewindableBuffers = new ArrayDeque<>(initialCapacity);
   }
 
   public CompositeReadableBuffer() {
     readableBuffers = new ArrayDeque<>();
-    rewindableBuffers = new ArrayDeque<>();
   }
 
   /**
@@ -204,6 +202,9 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
 
   @Override
   public void mark() {
+    if (rewindableBuffers == null) {
+      rewindableBuffers = new ArrayDeque<>(Math.min(readableBuffers.size(), 16));
+    }
     while (!rewindableBuffers.isEmpty()) {
       rewindableBuffers.remove().close();
     }
@@ -256,8 +257,10 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
     while (!readableBuffers.isEmpty()) {
       readableBuffers.remove().close();
     }
-    while (!rewindableBuffers.isEmpty()) {
-      rewindableBuffers.remove().close();
+    if (rewindableBuffers != null) {
+      while (!rewindableBuffers.isEmpty()) {
+        rewindableBuffers.remove().close();
+      }
     }
   }
 
