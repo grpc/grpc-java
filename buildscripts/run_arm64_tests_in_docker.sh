@@ -33,9 +33,10 @@ docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java
 # - run docker container under current user's UID to avoid polluting the workspace
 # - set the user.home property to avoid creating a "?" directory under grpc-java
 # TODO(jtattermusch): avoid skipping ":grpc-netty:test" once https://github.com/grpc/grpc-java/issues/7830 is fixed.
+# TODO(jtattermusch): avoid skipping ":grpc-xds:test" once https://github.com/grpc/grpc-java/issues/8118 is fixed.
 # TODO(jtattermusch): avoid skipping "grpc-netty-shaded:testShadow" once it's stable
 docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
   --user "$(id -u):$(id -g)" \
   -e "JAVA_OPTS=-Duser.home=/grpc-java/.current-user-home -Djava.util.prefs.userRoot=/grpc-java/.current-user-home/.java/.userPrefs" \
   arm64v8/openjdk:11-jdk-slim-buster \
-  ./gradlew build -PskipAndroid=true -PskipCodegen=true -x :grpc-netty:test -x :grpc-netty-shaded:testShadow
+  ./gradlew build -PskipAndroid=true -PskipCodegen=true -x :grpc-netty:test -x :grpc-netty-shaded:testShadow -x :grpc-xds:test
