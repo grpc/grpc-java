@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-# Constants
+# Constants:
 readonly GITHUB_REPOSITORY_NAME="grpc-java"
-readonly SHARED_INSTALL_LIB_DOWNLOAD_URL="https://raw.githubusercontent.com/grpc/grpc/master/tools/internal_ci/linux/grpc_xds_k8s_install_test_driver.sh"
-# GKE Cluster
-readonly GKE_CLUSTER_NAME="interop-test-psm-sec-testing-api"
-readonly GKE_CLUSTER_ZONE="us-west1-b"
-export CLOUDSDK_API_ENDPOINT_OVERRIDES_CONTAINER="https://test-container.sandbox.googleapis.com/"
-## xDS test server/client Docker images
+## xDS test server/client Docker images.
 readonly SERVER_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-server"
 readonly CLIENT_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-client"
 readonly FORCE_IMAGE_BUILD="${FORCE_IMAGE_BUILD:-0}"
 readonly BUILD_APP_PATH="interop-testing/build/install/grpc-interop-testing"
+# Test driver.
+readonly TEST_DRIVER_REPO_URL="https://github.com/grpc/grpc.git"
+readonly TEST_DRIVER_BRANCH="${TEST_DRIVER_BRANCH:-master}"
+readonly TEST_DRIVER_INSTALL_LIB_PATH="tools/internal_ci/linux/grpc_xds_k8s_install_test_driver.sh"
 
 #######################################
 # Builds the test app using gradle and smoke-checks its binaries
@@ -96,7 +95,36 @@ build_docker_images_if_needed() {
 }
 
 #######################################
-# Executes the test case
+# Ensure the source code of the test driver is present at TEST_DRIVER_REPO_DIR.
+#
+# If TEST_DRIVER_REPO_DIR is set, this method only confirms that this directory exists.
+# In this case, TEST_DRIVER_BRANCH is not used.
+#
+# Otherwise, clone branch TEST_DRIVER_BRANCH of the test driver from TEST_DRIVER_REPO_URL repo to
+# a temporary folder, and export the path in TEST_DRIVER_REPO_DIR global variable.
+#
+# Globals:
+#   TEST_DRIVER_REPO_DIR: path to the repo containing the test driver.
+#   TEST_DRIVER_REPO_URL: the repo with the source code of test driver to clone
+#   TEST_DRIVER_BRANCH: (if the repo is cloned from TEST_DRIVER_REPO_URL) the branch to checkout
+# Arguments:
+#   None
+# Outputs:
+#   Writes the output of `git` command to stdout, stderr
+#   Writes driver source code to $TEST_DRIVER_REPO_DIR
+#######################################
+get_test_driver() {
+  if [[ -d "${TEST_DRIVER_REPO_DIR}" ]]; then
+    echo "Using exiting driver directory: ${TEST_DRIVER_REPO_DIR}"
+  else
+    readonly TEST_DRIVER_REPO_DIR="$(mktemp -d)/xds-k8s-driver-repo"
+    echo "Cloning driver to ${TEST_DRIVER_REPO_URL} branch ${TEST_DRIVER_BRANCH} to ${TEST_DRIVER_REPO_DIR}"
+    git clone -b "${TEST_DRIVER_BRANCH}" --depth=1 "${TEST_DRIVER_REPO_URL}" "${TEST_DRIVER_REPO_DIR}"
+  fi
+}
+
+#######################################
+# Execute the test case
 # Globals:
 #   TEST_DRIVER_FLAGFILE: Relative path to test driver flagfile
 #   KUBE_CONTEXT: The name of kubectl context with GKE cluster access
@@ -146,31 +174,20 @@ run_test() {
 #   Writes the output of test execution to stdout, stderr
 #######################################
 main() {
-  local script_dir
-  script_dir="$(dirname "$0")"
-
-  local install_driver_lib_path
-  if [[ -n "${TEST_DRIVER_REPO_DIR_USE_EXISTING}" && -d "${TEST_DRIVER_REPO_DIR}" ]]; then
-    # Use local driver library (use for development).
-    install_driver_lib_path="${TEST_DRIVER_REPO_DIR}/tools/internal_ci/linux/grpc_xds_k8s_install_test_driver.sh"
-    echo "Using existing install library: ${install_driver_lib_path}"
-  else
-    # Download shared install driver library.
-    echo "Downloading shared install library: ${SHARED_INSTALL_LIB_DOWNLOAD_URL}."
-    install_driver_lib_path="$(mktemp -d)/grpc_xds_k8s_shared_install_lib.sh"
-    wget --https-only "${SHARED_INSTALL_LIB_DOWNLOAD_URL}" -O "${install_driver_lib_path}"
-  fi
-  # shellcheck source=grpc_xds_k8s_install_test_driver.sh
-  source "${install_driver_lib_path}"
   set -x
+  get_test_driver
+  # shellcheck source=grpc_xds_k8s_install_test_driver.sh
+  source "${TEST_DRIVER_REPO_DIR}/${TEST_DRIVER_INSTALL_LIB_PATH}"
+
   if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
-    xds_k8s_test_driver::kokoro_setup_test_driver "${GITHUB_REPOSITORY_NAME}"
+    kokoro_setup_test_driver "${GITHUB_REPOSITORY_NAME}"
   else
-    xds_k8s_test_driver::local_setup_test_driver "${script_dir}"
+    local_setup_test_driver "$(dirname "$0")"
   fi
   # build_docker_images_if_needed
   # Run tests
   cd "${TEST_DRIVER_FULL_DIR}"
+  echo "OK"
   # run_test baseline_test
   # run_test security_test
 }
