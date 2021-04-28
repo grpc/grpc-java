@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Strings;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
@@ -321,6 +322,11 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
         }
         return result;
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this).add("delegate", delegate).toString();
       }
     }
   }

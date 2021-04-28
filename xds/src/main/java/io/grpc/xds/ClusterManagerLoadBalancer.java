@@ -24,6 +24,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -150,6 +151,11 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
                     Status.UNAVAILABLE.withDescription("Unable to find cluster " + clusterName));
           }
           return delegate.pickSubchannel(args);
+        }
+
+        @Override
+        public String toString() {
+          return MoreObjects.toStringHelper(this).add("pickers", childPickers).toString();
         }
       };
       helper.updateBalancingState(overallState, picker);
