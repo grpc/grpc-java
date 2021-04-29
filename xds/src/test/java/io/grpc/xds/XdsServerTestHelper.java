@@ -16,12 +16,18 @@
 
 package io.grpc.xds;
 
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.internal.ObjectPool;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.Arrays;
+import java.util.Map;
+import javax.annotation.Nullable;
 import org.mockito.ArgumentCaptor;
 
 /**
@@ -29,17 +35,74 @@ import org.mockito.ArgumentCaptor;
  */
 class XdsServerTestHelper {
 
+  private static final String SERVER_URI = "trafficdirector.googleapis.com";
+  private static final String NODE_ID =
+      "projects/42/networks/default/nodes/5c85b298-6f5b-4722-b74a-f7d1f0ccf5ad";
+  private static final EnvoyProtoData.Node BOOTSTRAP_NODE =
+      EnvoyProtoData.Node.newBuilder().setId(NODE_ID).build();
+  static final Bootstrapper.BootstrapInfo BOOTSTRAP_INFO =
+      new Bootstrapper.BootstrapInfo(
+          Arrays.asList(
+              new Bootstrapper.ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), false)),
+          BOOTSTRAP_NODE,
+          null,
+          "grpc/server?udpa.resource.listening_address=%s");
+
+  static final class FakeXdsClientPoolFactory
+      implements XdsNameResolverProvider.XdsClientPoolFactory {
+
+    private XdsClient xdsClient;
+
+    FakeXdsClientPoolFactory(XdsClient xdsClient) {
+      this.xdsClient = xdsClient;
+    }
+
+    @Override
+    public void setBootstrapOverride(Map<String, ?> bootstrap) {
+      throw new UnsupportedOperationException("Should not be called");
+    }
+
+    @Override
+    @Nullable
+    public ObjectPool<XdsClient> get() {
+      throw new UnsupportedOperationException("Should not be called");
+    }
+
+    @Override
+    public ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
+      return new ObjectPool<XdsClient>() {
+        @Override
+        public XdsClient getObject() {
+          return xdsClient;
+        }
+
+        @Override
+        public XdsClient returnObject(Object object) {
+          return null;
+        }
+      };
+    }
+  }
+
+  static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port) {
+    FakeXdsClientPoolFactory fakeXdsClientPoolFactory = new FakeXdsClientPoolFactory(
+        buildMockXdsClient());
+    return new XdsClientWrapperForServerSds(port, fakeXdsClientPoolFactory);
+  }
+
+  private static XdsClient buildMockXdsClient() {
+    XdsClient xdsClient = mock(XdsClient.class);
+    when(xdsClient.getBootstrapInfo()).thenReturn(BOOTSTRAP_INFO);
+    return xdsClient;
+  }
+
   static XdsClient.LdsResourceWatcher startAndGetWatcher(
-      XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
-      XdsClient mockXdsClient,
-      int port) {
-    xdsClientWrapperForServerSds.start(
-        mockXdsClient, "grpc/server?udpa.resource.listening_address=%s");
-    ArgumentCaptor<XdsClient.LdsResourceWatcher> listenerWatcherCaptor = ArgumentCaptor
-        .forClass(null);
-    verify(mockXdsClient)
-        .watchLdsResource(eq("grpc/server?udpa.resource.listening_address=0.0.0.0:" + port),
-            listenerWatcherCaptor.capture());
+      XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+    xdsClientWrapperForServerSds.start();
+    XdsClient mockXdsClient = xdsClientWrapperForServerSds.getXdsClient();
+    ArgumentCaptor<XdsClient.LdsResourceWatcher> listenerWatcherCaptor =
+        ArgumentCaptor.forClass(null);
+    verify(mockXdsClient).watchLdsResource(any(String.class), listenerWatcherCaptor.capture());
     return listenerWatcherCaptor.getValue();
   }
 
