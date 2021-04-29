@@ -24,6 +24,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
+import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
@@ -57,6 +58,9 @@ final class MessagePrinter {
             .add(io.envoyproxy.envoy.api.v2.RouteConfiguration.getDescriptor())
             .add(Cluster.getDescriptor())
             .add(io.envoyproxy.envoy.api.v2.Cluster.getDescriptor())
+            .add(ClusterConfig.getDescriptor())
+            .add(io.envoyproxy.envoy.config.cluster.aggregate.v2alpha.ClusterConfig
+                .getDescriptor())
             .add(ClusterLoadAssignment.getDescriptor())
             .add(io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.getDescriptor())
             .build();
