@@ -174,9 +174,8 @@ subprojects {
 
             // Keep the following references of tcnative version in sync whenever it's updated
             // SECURITY.md (multiple occurrences)
-            // examples/example-tls/build.gradle
             // examples/example-tls/pom.xml
-            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.34.Final',
+            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.35.Final',
 
             conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:2.5.1',
             re2j: 'com.google.re2j:re2j:1.5',
