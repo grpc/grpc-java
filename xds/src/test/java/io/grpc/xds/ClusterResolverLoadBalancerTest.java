@@ -175,7 +175,6 @@ public class ClusterResolverLoadBalancerTest {
     lbRegistry.register(new FakeLoadBalancerProvider(WEIGHTED_TARGET_POLICY_NAME));
     lbRegistry.register(
         new FakeLoadBalancerProvider("pick_first")); // needed by logical_dns
-    URI targetUri = new URI(AUTHORITY);
     NameResolver.Args args = NameResolver.Args.newBuilder()
         .setDefaultPort(8080)
         .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
@@ -183,7 +182,7 @@ public class ClusterResolverLoadBalancerTest {
         .setServiceConfigParser(mock(ServiceConfigParser.class))
         .setChannelLogger(mock(ChannelLogger.class))
         .build();
-    nsRegistry.register(new FakeNameResolverProvider(targetUri));
+    nsRegistry.register(new FakeNameResolverProvider());
     when(helper.getNameResolverRegistry()).thenReturn(nsRegistry);
     when(helper.getNameResolverArgs()).thenReturn(args);
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
@@ -962,25 +961,18 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private class FakeNameResolverProvider extends NameResolverProvider {
-    private final URI expectedUri;
-
-    FakeNameResolverProvider(URI expectedUri) {
-      this.expectedUri = expectedUri;
-    }
-
     @Override
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-      if (expectedUri.equals(targetUri)) {
-        FakeNameResolver resolver = new FakeNameResolver(targetUri);
-        resolvers.add(resolver);
-        return resolver;
-      }
-      return null;
+      assertThat(targetUri.getScheme()).isEqualTo("dns");
+      assertThat(targetUri.getPath()).isEqualTo("/" + AUTHORITY);
+      FakeNameResolver resolver = new FakeNameResolver();
+      resolvers.add(resolver);
+      return resolver;
     }
 
     @Override
     public String getDefaultScheme() {
-      return "fake";
+      return "dns";
     }
 
     @Override
@@ -995,17 +987,12 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private class FakeNameResolver extends NameResolver {
-    private final URI uri;
     private Listener2 listener;
     private int refreshCount;
 
-    FakeNameResolver(URI uri) {
-      this.uri = uri;
-    }
-
     @Override
     public String getServiceAuthority() {
-      return uri.getAuthority();
+      throw new UnsupportedOperationException("should not be called");
     }
 
     @Override
@@ -1025,7 +1012,6 @@ public class ClusterResolverLoadBalancerTest {
 
     private void deliverEndpointAddresses(List<EquivalentAddressGroup> addresses) {
       listener.onResult(ResolutionResult.newBuilder().setAddresses(addresses).build());
-
     }
 
     private void deliverError(Status error) {
