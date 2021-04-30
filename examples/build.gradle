@@ -126,6 +126,20 @@ task compressingHelloWorldClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task manualFlowControlClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.manualflowcontrol.ManualFlowControlClient'
+    applicationName = 'manual-flow-control-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task manualFlowControlServer(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.manualflowcontrol.ManualFlowControlServer'
+    applicationName = 'manual-flow-control-server'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
 applicationDistribution.into('bin') {
     from(routeGuideServer)
     from(routeGuideClient)
@@ -136,5 +150,7 @@ applicationDistribution.into('bin') {
     from(retryingHelloWorldClient)
     from(retryingHelloWorldServer)
     from(compressingHelloWorldClient)
+    from(manualFlowControlClient)
+    from(manualFlowControlServer)
     fileMode = 0755
 }
