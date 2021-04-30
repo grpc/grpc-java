@@ -22,14 +22,10 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.UInt32Value;
-import io.grpc.Grpc;
 import io.grpc.Internal;
-import io.grpc.ManagedChannel;
 import io.grpc.Status;
-import io.grpc.internal.ExponentialBackoffPolicy;
-import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
-import io.grpc.internal.TimeProvider;
 import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -38,7 +34,6 @@ import io.netty.channel.Channel;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import java.io.IOException;
 import java.math.BigInteger;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -72,7 +67,8 @@ public final class XdsClientWrapperForServerSds {
       new TimeServiceResource("GrpcServerXdsClient");
 
   private AtomicReference<EnvoyServerProtoData.Listener> curListener = new AtomicReference<>();
-  @SuppressWarnings("unused")
+  private ObjectPool<XdsClient> xdsClientPool;
+  private final XdsNameResolverProvider.XdsClientPoolFactory xdsClientPoolFactory;
   @Nullable private XdsClient xdsClient;
   private final int port;
   private ScheduledExecutorService timeService;
@@ -85,55 +81,31 @@ public final class XdsClientWrapperForServerSds {
    *
    * @param port server's port for which listener config is needed.
    */
-  public XdsClientWrapperForServerSds(int port) {
+  XdsClientWrapperForServerSds(int port) {
+    this(port, SharedXdsClientPoolProvider.getDefaultProvider());
+  }
+
+  @VisibleForTesting
+  XdsClientWrapperForServerSds(int port,
+      XdsNameResolverProvider.XdsClientPoolFactory xdsClientPoolFactory) {
     this.port = port;
+    this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
   }
 
-  public boolean hasXdsClient() {
-    return xdsClient != null;
-  }
-
-  /** Creates an XdsClient and starts a watch. */
-  public void createXdsClientAndStart() throws IOException {
-    checkState(xdsClient == null, "start() called more than once");
-    Bootstrapper.BootstrapInfo bootstrapInfo;
-    try {
-      bootstrapInfo = new BootstrapperImpl().bootstrap();
-      List<Bootstrapper.ServerInfo> serverList = bootstrapInfo.getServers();
-      if (serverList.isEmpty()) {
-        throw new XdsInitializationException("No management server provided by bootstrap");
-      }
-    } catch (XdsInitializationException e) {
-      throw new IOException(e);
-    }
-    Bootstrapper.ServerInfo serverInfo = bootstrapInfo.getServers().get(0);  // use first server
-    ManagedChannel channel =
-        Grpc.newChannelBuilder(serverInfo.getTarget(), serverInfo.getChannelCredentials())
-            .keepAliveTime(5, TimeUnit.MINUTES).build();
-    timeService = SharedResourceHolder.get(timeServiceResource);
-    newServerApi = serverInfo.isUseProtocolV3();
-    String grpcServerResourceId = bootstrapInfo.getServerListenerResourceNameTemplate();
-    if (newServerApi && grpcServerResourceId == null) {
-      throw new IOException(
-          "missing server_listener_resource_name_template value in xds bootstrap");
-    }
-    XdsClient xdsClientImpl =
-        new ClientXdsClient(
-            channel,
-            bootstrapInfo,
-            timeService,
-            new ExponentialBackoffPolicy.Provider(),
-            GrpcUtil.STOPWATCH_SUPPLIER,
-            TimeProvider.SYSTEM_TIME_PROVIDER);
-    start(xdsClientImpl, grpcServerResourceId);
+  @VisibleForTesting XdsClient getXdsClient() {
+    return xdsClient;
   }
 
   /** Accepts an XdsClient and starts a watch. */
   @VisibleForTesting
-  public void start(XdsClient xdsClient, String grpcServerResourceId) {
-    checkState(this.xdsClient == null, "start() called more than once");
-    checkNotNull(xdsClient, "xdsClient");
-    this.xdsClient = xdsClient;
+  public void start() {
+    try {
+      xdsClientPool = xdsClientPoolFactory.getOrCreate();
+    } catch (Exception e) {
+      reportError(e, true);
+      return;
+    }
+    xdsClient = xdsClientPool.getObject();
     this.listenerWatcher =
         new XdsClient.LdsResourceWatcher() {
           @Override
@@ -156,6 +128,15 @@ public final class XdsClientWrapperForServerSds {
             reportError(error.asException(), isResourceAbsent(error));
           }
         };
+    String grpcServerResourceId = xdsClient.getBootstrapInfo()
+        .getServerListenerResourceNameTemplate();
+    newServerApi = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
+    if (newServerApi && grpcServerResourceId == null) {
+      reportError(
+          new XdsInitializationException(
+              "missing server_listener_resource_name_template value in xds bootstrap"),
+          true);
+    }
     grpcServerResourceId = grpcServerResourceId.replaceAll("%s", "0.0.0.0:" + port);
     xdsClient.watchLdsResource(grpcServerResourceId, listenerWatcher);
   }
@@ -438,8 +419,7 @@ public final class XdsClientWrapperForServerSds {
   public void shutdown() {
     logger.log(Level.FINER, "Shutdown");
     if (xdsClient != null) {
-      xdsClient.shutdown();
-      xdsClient = null;
+      xdsClient = xdsClientPool.returnObject(xdsClient);
     }
     if (timeService != null) {
       timeService = SharedResourceHolder.release(timeServiceResource, timeService);

@@ -45,7 +45,6 @@ public class FilterChainMatchTest {
   private static final String LOCAL_IP = "10.1.2.3";  // dest
   private static final String REMOTE_IP = "10.4.2.3"; // source
 
-  @Mock private XdsClient xdsClient;
   @Mock private Channel channel;
 
   private XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
@@ -54,9 +53,9 @@ public class FilterChainMatchTest {
   @Before
   public void setUp() throws IOException {
     MockitoAnnotations.initMocks(this);
-    xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(PORT);
+    xdsClientWrapperForServerSds = XdsServerTestHelper.createXdsClientWrapperForServerSds(PORT);
     registeredWatcher =
-            XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, xdsClient, PORT);
+            XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds);
   }
 
   @After
