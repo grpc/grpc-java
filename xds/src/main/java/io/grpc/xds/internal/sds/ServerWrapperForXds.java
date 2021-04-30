@@ -113,9 +113,7 @@ public final class ServerWrapperForXds extends Server {
     checkState(started.compareAndSet(false, true), "Already started");
     currentServingState = ServingState.STARTING;
     SettableFuture<Throwable> future = addServerWatcher();
-    if (!xdsClientWrapperForServerSds.hasXdsClient()) {
-      xdsClientWrapperForServerSds.createXdsClientAndStart();
-    }
+    xdsClientWrapperForServerSds.start();
     try {
       Throwable throwable = future.get();
       if (throwable != null) {

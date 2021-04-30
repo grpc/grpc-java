@@ -22,14 +22,10 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.UInt32Value;
-import io.grpc.Grpc;
 import io.grpc.Internal;
-import io.grpc.ManagedChannel;
 import io.grpc.Status;
-import io.grpc.internal.ExponentialBackoffPolicy;
-import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
-import io.grpc.internal.TimeProvider;
 import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -38,7 +34,6 @@ import io.netty.channel.Channel;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import java.io.IOException;
 import java.math.BigInteger;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -54,6 +49,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -70,8 +66,9 @@ public final class XdsClientWrapperForServerSds {
   private static final TimeServiceResource timeServiceResource =
       new TimeServiceResource("GrpcServerXdsClient");
 
-  private EnvoyServerProtoData.Listener curListener;
-  @SuppressWarnings("unused")
+  private AtomicReference<EnvoyServerProtoData.Listener> curListener = new AtomicReference<>();
+  private ObjectPool<XdsClient> xdsClientPool;
+  private final XdsNameResolverProvider.XdsClientPoolFactory xdsClientPoolFactory;
   @Nullable private XdsClient xdsClient;
   private final int port;
   private ScheduledExecutorService timeService;
@@ -84,67 +81,43 @@ public final class XdsClientWrapperForServerSds {
    *
    * @param port server's port for which listener config is needed.
    */
-  public XdsClientWrapperForServerSds(int port) {
+  XdsClientWrapperForServerSds(int port) {
+    this(port, SharedXdsClientPoolProvider.getDefaultProvider());
+  }
+
+  @VisibleForTesting
+  XdsClientWrapperForServerSds(int port,
+      XdsNameResolverProvider.XdsClientPoolFactory xdsClientPoolFactory) {
     this.port = port;
+    this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
   }
 
-  public boolean hasXdsClient() {
-    return xdsClient != null;
-  }
-
-  /** Creates an XdsClient and starts a watch. */
-  public void createXdsClientAndStart() throws IOException {
-    checkState(xdsClient == null, "start() called more than once");
-    Bootstrapper.BootstrapInfo bootstrapInfo;
-    try {
-      bootstrapInfo = new BootstrapperImpl().bootstrap();
-      List<Bootstrapper.ServerInfo> serverList = bootstrapInfo.getServers();
-      if (serverList.isEmpty()) {
-        throw new XdsInitializationException("No management server provided by bootstrap");
-      }
-    } catch (XdsInitializationException e) {
-      throw new IOException(e);
-    }
-    Bootstrapper.ServerInfo serverInfo = bootstrapInfo.getServers().get(0);  // use first server
-    ManagedChannel channel =
-        Grpc.newChannelBuilder(serverInfo.getTarget(), serverInfo.getChannelCredentials())
-            .keepAliveTime(5, TimeUnit.MINUTES).build();
-    timeService = SharedResourceHolder.get(timeServiceResource);
-    newServerApi = serverInfo.isUseProtocolV3();
-    String grpcServerResourceId = bootstrapInfo.getServerListenerResourceNameTemplate();
-    if (newServerApi && grpcServerResourceId == null) {
-      throw new IOException(
-          "missing server_listener_resource_name_template value in xds bootstrap");
-    }
-    XdsClient xdsClientImpl =
-        new ClientXdsClient(
-            channel,
-            bootstrapInfo,
-            timeService,
-            new ExponentialBackoffPolicy.Provider(),
-            GrpcUtil.STOPWATCH_SUPPLIER,
-            TimeProvider.SYSTEM_TIME_PROVIDER);
-    start(xdsClientImpl, grpcServerResourceId);
+  @VisibleForTesting XdsClient getXdsClient() {
+    return xdsClient;
   }
 
   /** Accepts an XdsClient and starts a watch. */
   @VisibleForTesting
-  public void start(XdsClient xdsClient, String grpcServerResourceId) {
-    checkState(this.xdsClient == null, "start() called more than once");
-    checkNotNull(xdsClient, "xdsClient");
-    this.xdsClient = xdsClient;
+  public void start() {
+    try {
+      xdsClientPool = xdsClientPoolFactory.getOrCreate();
+    } catch (Exception e) {
+      reportError(e, true);
+      return;
+    }
+    xdsClient = xdsClientPool.getObject();
     this.listenerWatcher =
         new XdsClient.LdsResourceWatcher() {
           @Override
           public void onChanged(XdsClient.LdsUpdate update) {
-            curListener = update.listener;
+            curListener.set(update.listener);
             reportSuccess();
           }
 
           @Override
           public void onResourceDoesNotExist(String resourceName) {
             logger.log(Level.WARNING, "Resource {0} is unavailable", resourceName);
-            curListener = null;
+            curListener.set(null);
             reportError(Status.NOT_FOUND.asException(), true);
           }
 
@@ -155,6 +128,15 @@ public final class XdsClientWrapperForServerSds {
             reportError(error.asException(), isResourceAbsent(error));
           }
         };
+    String grpcServerResourceId = xdsClient.getBootstrapInfo()
+        .getServerListenerResourceNameTemplate();
+    newServerApi = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
+    if (newServerApi && grpcServerResourceId == null) {
+      reportError(
+          new XdsInitializationException(
+              "missing server_listener_resource_name_template value in xds bootstrap"),
+          true);
+    }
     grpcServerResourceId = grpcServerResourceId.replaceAll("%s", "0.0.0.0:" + port);
     xdsClient.watchLdsResource(grpcServerResourceId, listenerWatcher);
   }
@@ -180,7 +162,8 @@ public final class XdsClientWrapperForServerSds {
    */
   @Nullable
   public DownstreamTlsContext getDownstreamTlsContext(Channel channel) {
-    if (curListener != null && channel != null) {
+    EnvoyServerProtoData.Listener copyListener = curListener.get();
+    if (copyListener != null && channel != null) {
       SocketAddress localAddress = channel.localAddress();
       SocketAddress remoteAddress = channel.remoteAddress();
       if (localAddress instanceof InetSocketAddress && remoteAddress instanceof InetSocketAddress) {
@@ -189,7 +172,7 @@ public final class XdsClientWrapperForServerSds {
         checkState(
             port == localInetAddr.getPort(),
             "Channel localAddress port does not match requested listener port");
-        return getDownstreamTlsContext(localInetAddr, remoteInetAddr);
+        return getDownstreamTlsContext(localInetAddr, remoteInetAddr, copyListener);
       }
     }
     return null;
@@ -204,9 +187,10 @@ public final class XdsClientWrapperForServerSds {
    * @param localInetAddr dest address of the inbound connection
    * @param remoteInetAddr source address of the inbound connection
    */
-  private DownstreamTlsContext getDownstreamTlsContext(
-      InetSocketAddress localInetAddr, InetSocketAddress remoteInetAddr) {
-    List<FilterChain> filterChains = curListener.getFilterChains();
+  private static DownstreamTlsContext getDownstreamTlsContext(
+      InetSocketAddress localInetAddr, InetSocketAddress remoteInetAddr,
+      EnvoyServerProtoData.Listener listener) {
+    List<FilterChain> filterChains = listener.getFilterChains();
 
     filterChains = filterOnDestinationPort(filterChains);
     filterChains = filterOnIpAddress(filterChains, localInetAddr.getAddress(), true);
@@ -221,7 +205,7 @@ public final class XdsClientWrapperForServerSds {
     } else if (filterChains.size() == 1) {
       return filterChains.get(0).getDownstreamTlsContext();
     }
-    return curListener.getDefaultFilterChain().getDownstreamTlsContext();
+    return listener.getDefaultFilterChain().getDownstreamTlsContext();
   }
 
   // destination_port present => Always fail match
@@ -255,7 +239,7 @@ public final class XdsClientWrapperForServerSds {
     return filteredOnMatch.isEmpty() ? filteredOnEmpty : filteredOnMatch;
   }
 
-  private List<FilterChain> filterOnSourceType(
+  private static List<FilterChain> filterOnSourceType(
       List<FilterChain> filterChains, InetAddress sourceAddress, InetAddress destAddress) {
     ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
     for (FilterChain filterChain : filterChains) {
@@ -350,7 +334,7 @@ public final class XdsClientWrapperForServerSds {
   }
 
   // use prefix_ranges (CIDR) and get the most specific matches
-  private List<FilterChain> filterOnIpAddress(
+  private static List<FilterChain> filterOnIpAddress(
       List<FilterChain> filterChains, InetAddress address, boolean forDestination) {
     PriorityQueue<QueueElement> heap = new PriorityQueue<>(10, new QueueElementComparator());
 
@@ -384,7 +368,8 @@ public final class XdsClientWrapperForServerSds {
     synchronized (serverWatchers) {
       serverWatchers.add(serverWatcher);
     }
-    if (curListener != null) {
+    EnvoyServerProtoData.Listener copyListener = curListener.get();
+    if (copyListener != null) {
       serverWatcher.onListenerUpdate();
     }
   }
@@ -434,8 +419,7 @@ public final class XdsClientWrapperForServerSds {
   public void shutdown() {
     logger.log(Level.FINER, "Shutdown");
     if (xdsClient != null) {
-      xdsClient.shutdown();
-      xdsClient = null;
+      xdsClient = xdsClientPool.returnObject(xdsClient);
     }
     if (timeService != null) {
       timeService = SharedResourceHolder.release(timeServiceResource, timeService);
