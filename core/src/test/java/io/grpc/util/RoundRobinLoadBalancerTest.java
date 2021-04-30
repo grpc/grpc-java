@@ -293,6 +293,25 @@ public class RoundRobinLoadBalancerTest {
   }
 
   @Test
+  public void ignoreShutdownSubchannelStateChange() {
+    InOrder inOrder = inOrder(mockHelper);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
+            .build());
+    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), isA(EmptyPicker.class));
+
+    loadBalancer.shutdown();
+    for (Subchannel sc : loadBalancer.getSubchannels()) {
+      verify(sc).shutdown();
+      // When the subchannel is being shut down, a SHUTDOWN connectivity state is delivered
+      // back to the subchannel state listener.
+      deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(SHUTDOWN));
+    }
+
+    inOrder.verifyNoMoreInteractions();
+  }
+
+  @Test
   public void stayTransientFailureUntilReady() {
     InOrder inOrder = inOrder(mockHelper);
     loadBalancer.handleResolvedAddresses(
