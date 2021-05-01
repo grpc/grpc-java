@@ -337,7 +337,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       }
     }
 
-    private class EdsClusterState extends ClusterState implements EdsResourceWatcher {
+    private final class EdsClusterState extends ClusterState implements EdsResourceWatcher {
 
       private EdsClusterState(String name, @Nullable String edsServiceName,
           @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
@@ -464,8 +464,10 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       }
     }
 
-    private class LogicalDnsClusterState extends ClusterState {
-      private final NameResolver resolver;
+    private final class LogicalDnsClusterState extends ClusterState {
+      private final NameResolver.Factory nameResolverFactory;
+      private final NameResolver.Args nameResolverArgs;
+      private NameResolver resolver;
       @Nullable
       private BackoffPolicy backoffPolicy;
       @Nullable
@@ -474,23 +476,35 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       private LogicalDnsClusterState(String name, @Nullable String lrsServerName,
           @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext) {
         super(name, null, lrsServerName, maxConcurrentRequests, tlsContext);
-        NameResolver.Args args = helper.getNameResolverArgs();
-        URI uri;
-        try {
-          uri = new URI(authority);
-        } catch (URISyntaxException e) {
-          // TODO(chengyuanzhang): unlikely to happen, but maybe handle it more gracefully.
-          throw new AssertionError("Bug, invalid authority: " + authority, e);
-        }
-        resolver = helper.getNameResolverRegistry().asFactory().newNameResolver(uri, args);
+        nameResolverFactory =
+            checkNotNull(helper.getNameResolverRegistry().asFactory(), "nameResolverFactory");
+        nameResolverArgs = checkNotNull(helper.getNameResolverArgs(), "nameResolverArgs");
       }
 
       @Override
       void start() {
+        URI uri;
+        try {
+          uri = new URI("dns", "", "/" + authority, null);
+        } catch (URISyntaxException e) {
+          status =
+              Status.INTERNAL.withDescription("Bug, invalid authority: " + authority).withCause(e);
+          handleEndpointResolutionError();
+          return;
+        }
+        resolver = nameResolverFactory.newNameResolver(uri, nameResolverArgs);
+        if (resolver == null) {
+          status = Status.INTERNAL.withDescription("Cannot find DNS resolver");
+          handleEndpointResolutionError();
+          return;
+        }
         resolver.start(new NameResolverListener());
       }
 
       void refresh() {
+        if (resolver == null) {
+          return;
+        }
         cancelBackoff();
         resolver.refresh();
       }
@@ -498,7 +512,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       @Override
       void shutdown() {
         super.shutdown();
-        resolver.shutdown();
+        if (resolver != null) {
+          resolver.shutdown();
+        }
         cancelBackoff();
       }
 
