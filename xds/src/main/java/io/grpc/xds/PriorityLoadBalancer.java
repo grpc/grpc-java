@@ -123,6 +123,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
     for (ChildLbState child : children.values()) {
       child.tearDown();
     }
+    children.clear();
   }
 
   private void tryNextPriority(boolean reportConnecting) {
@@ -292,6 +293,9 @@ final class PriorityLoadBalancer extends LoadBalancer {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
+            if (!children.containsKey(priority)) {
+              return;
+            }
             connectivityState = newState;
             picker = newPicker;
             if (deletionTimer != null && deletionTimer.isPending()) {
