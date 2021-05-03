@@ -36,7 +36,6 @@ import javax.net.ssl.TrustManager;
  * incomprehensible()} method. Unless overridden by a {@code Feature}, server verification should
  * use customary default root certificates.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
 public final class TlsChannelCredentials extends ChannelCredentials {
   /** Use TLS with its defaults. */
   public static ChannelCredentials create() {
@@ -221,7 +220,6 @@ public final class TlsChannelCredentials extends ChannelCredentials {
   }
 
   /** Builder for {@link TlsChannelCredentials}. */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
   public static final class Builder {
     private boolean fakeFeature;
     private byte[] certificateChain;

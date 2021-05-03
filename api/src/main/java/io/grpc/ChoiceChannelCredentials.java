@@ -26,7 +26,6 @@ import java.util.List;
  * Provides a list of {@link ChannelCredentials}, where any one may be used. The credentials are in
  * preference order.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
 public final class ChoiceChannelCredentials extends ChannelCredentials {
   /**
    * Constructs with the provided {@code creds} as options, with preferred credentials first.

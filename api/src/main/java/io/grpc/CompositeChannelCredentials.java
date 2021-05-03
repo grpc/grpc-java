@@ -24,7 +24,6 @@ import com.google.common.base.Preconditions;
  * composite credential), then all of the {@code CallCredentials} should be used; one {@code
  * CallCredentials} does not override another.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
 public final class CompositeChannelCredentials extends ChannelCredentials {
   public static ChannelCredentials create(
       ChannelCredentials channelCreds, CallCredentials callCreds) {
