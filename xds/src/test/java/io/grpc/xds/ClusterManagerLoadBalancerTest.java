@@ -197,7 +197,7 @@ public class ClusterManagerLoadBalancerTest {
   }
 
   @Test
-  public void raceBetweenShutDownAndBalancingStateUpdate() {
+  public void raceBetweenShutdownAndChildLbBalancingStateUpdate() {
     deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
     verify(helper).updateBalancingState(
         eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));

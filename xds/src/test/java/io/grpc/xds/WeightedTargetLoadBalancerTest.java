@@ -384,7 +384,7 @@ public class WeightedTargetLoadBalancerTest {
   }
 
   @Test
-  public void raceBetweenShutDownAndBalancingStateUpdate() {
+  public void raceBetweenShutdownAndChildLbBalancingStateUpdate() {
     Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
         "target0", weightedLbConfig0,
         "target1", weightedLbConfig1);

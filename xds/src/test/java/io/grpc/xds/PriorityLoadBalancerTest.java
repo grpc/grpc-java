@@ -426,7 +426,7 @@ public class PriorityLoadBalancerTest {
   }
 
   @Test
-  public void raceBetweenShutDownAndBalancingStateUpdate() {
+  public void raceBetweenShutdownAndChildLbBalancingStateUpdate() {
     PriorityChildConfig priorityChildConfig0 =
         new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
     PriorityChildConfig priorityChildConfig1 =
