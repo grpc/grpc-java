@@ -131,7 +131,6 @@ public final class Grpc {
    * @param port the port to listen on
    * @param creds the server identity
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7621")
   public static ServerBuilder<?> newServerBuilderForPort(int port, ServerCredentials creds) {
     return ServerRegistry.getDefaultRegistry().newServerBuilderForPort(port, creds);
   }

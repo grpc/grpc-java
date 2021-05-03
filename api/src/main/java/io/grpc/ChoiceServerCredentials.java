@@ -25,7 +25,6 @@ import java.util.List;
  * Provides a list of {@link ServerCredentials}, where any one may be used. The credentials are in
  * preference order.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7621")
 public final class ChoiceServerCredentials extends ServerCredentials {
   /**
    * Constructs with the provided {@code creds} as options, with preferred credentials first.

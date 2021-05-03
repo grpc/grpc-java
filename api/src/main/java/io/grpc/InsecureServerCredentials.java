@@ -17,7 +17,6 @@
 package io.grpc;
 
 /** No server identity or encryption is to be used. */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7621")
 public final class InsecureServerCredentials extends ServerCredentials {
   public static ServerCredentials create() {
     return new InsecureServerCredentials();
