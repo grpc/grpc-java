@@ -96,7 +96,6 @@ public final class Grpc {
    *   <li>{@code "[2001:db8:85a3:8d3:1319:8a2e:370:7348]:443"}</li>
    * </ul>
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
   public static ManagedChannelBuilder<?> newChannelBuilder(
       String target, ChannelCredentials creds) {
     return ManagedChannelRegistry.getDefaultRegistry().newChannelBuilder(target, creds);
@@ -107,7 +106,6 @@ public final class Grpc {
    * form an authority string and then passed to {@link #newChannelBuilder(String,
    * ChannelCredentials)}. IPv6 addresses are properly surrounded by square brackets ("[]").
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
   public static ManagedChannelBuilder<?> newChannelBuilderForAddress(
       String host, int port, ChannelCredentials creds) {
     return newChannelBuilder(authorityFromHostAndPort(host, port), creds);

@@ -17,7 +17,6 @@
 package io.grpc;
 
 /** No client identity, authentication, or encryption is to be used. */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
 public final class InsecureChannelCredentials extends ChannelCredentials {
   public static ChannelCredentials create() {
     return new InsecureChannelCredentials();

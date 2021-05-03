@@ -34,7 +34,7 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * @since 1.32.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
+@Internal
 @ThreadSafe
 public final class ManagedChannelRegistry {
   private static final Logger logger = Logger.getLogger(ManagedChannelRegistry.class.getName());
