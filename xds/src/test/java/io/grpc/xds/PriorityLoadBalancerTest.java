@@ -23,10 +23,10 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -119,7 +119,7 @@ public class PriorityLoadBalancerTest {
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     priorityLb = new PriorityLoadBalancer(helper);
-    reset(helper);
+    clearInvocations(helper);
   }
 
   @After

@@ -25,9 +25,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -166,7 +166,7 @@ public class WeightedTargetLoadBalancerTest {
     lbRegistry.register(barLbProvider);
 
     weightedTargetLb = new WeightedTargetLoadBalancer(helper);
-    reset(helper);
+    clearInvocations(helper);
   }
 
   @After
