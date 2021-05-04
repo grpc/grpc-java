@@ -188,6 +188,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
     for (Subchannel subchannel : subchannels.values()) {
       shutdownSubchannel(subchannel);
     }
+    subchannels.clear();
   }
 
   private void updateBalancingState() {
