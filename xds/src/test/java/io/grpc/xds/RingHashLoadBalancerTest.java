@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -334,6 +335,26 @@ public class RingHashLoadBalancerTest {
     deliverSubchannelState(
         subchannels.values().iterator().next(), ConnectivityStateInfo.forNonError(READY));
     verify(helper).updateBalancingState(eq(READY), any(SubchannelPicker.class));
+  }
+
+  @Test
+  public void ignoreShutdownSubchannelStateChange() {
+    RingHashConfig config = new RingHashConfig(10, 100);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+
+    loadBalancer.shutdown();
+    for (Subchannel sc : subchannels.values()) {
+      verify(sc).shutdown();
+      // When the subchannel is being shut down, a SHUTDOWN connectivity state is delivered
+      // back to the subchannel state listener.
+      deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(SHUTDOWN));
+    }
+    verifyNoMoreInteractions(helper);
   }
 
   @Test
