@@ -264,7 +264,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     private void updateSslContextProviderSupplier(@Nullable UpstreamTlsContext tlsContext) {
       UpstreamTlsContext currentTlsContext =
           sslContextProviderSupplier != null
-              ? sslContextProviderSupplier.getUpstreamTlsContext()
+              ? (UpstreamTlsContext)sslContextProviderSupplier.getTlsContext()
               : null;
       if (Objects.equals(currentTlsContext,  tlsContext)) {
         return;
