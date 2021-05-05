@@ -19,9 +19,8 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
-import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.certprovider.CertProviderServerSslContextProvider;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 import java.util.concurrent.Executors;
@@ -30,18 +29,17 @@ import java.util.concurrent.Executors;
 final class ServerSslContextProviderFactory
     implements ValueFactory<DownstreamTlsContext, SslContextProvider> {
 
-  private final Bootstrapper bootstrapper;
-  private Bootstrapper.BootstrapInfo bootstrapInfo;
+  private BootstrapInfo bootstrapInfo;
   private final CertProviderServerSslContextProvider.Factory
       certProviderServerSslContextProviderFactory;
 
-  ServerSslContextProviderFactory(Bootstrapper bootstrapper) {
-    this(bootstrapper, CertProviderServerSslContextProvider.Factory.getInstance());
+  ServerSslContextProviderFactory(BootstrapInfo bootstrapInfo) {
+    this(bootstrapInfo, CertProviderServerSslContextProvider.Factory.getInstance());
   }
 
   ServerSslContextProviderFactory(
-      Bootstrapper bootstrapper, CertProviderServerSslContextProvider.Factory factory) {
-    this.bootstrapper = bootstrapper;
+      BootstrapInfo bootstrapInfo, CertProviderServerSslContextProvider.Factory factory) {
+    this.bootstrapInfo = bootstrapInfo;
     this.certProviderServerSslContextProviderFactory = factory;
   }
 
@@ -54,38 +52,24 @@ final class ServerSslContextProviderFactory
         downstreamTlsContext.getCommonTlsContext(),
         "downstreamTlsContext should have CommonTlsContext");
     if (CommonTlsContextUtil.hasCertProviderInstance(
-            downstreamTlsContext.getCommonTlsContext())) {
-      try {
-        if (bootstrapInfo == null) {
-          bootstrapInfo = bootstrapper.bootstrap();
-        }
-        return certProviderServerSslContextProviderFactory.getProvider(
-                downstreamTlsContext,
-                bootstrapInfo.getNode().toEnvoyProtoNode(),
-                bootstrapInfo.getCertProviders());
-      } catch (XdsInitializationException e) {
-        throw new RuntimeException(e);
-      }
+        downstreamTlsContext.getCommonTlsContext())) {
+      return certProviderServerSslContextProviderFactory.getProvider(
+          downstreamTlsContext,
+          bootstrapInfo.getNode().toEnvoyProtoNode(),
+          bootstrapInfo.getCertProviders());
     } else if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
         downstreamTlsContext.getCommonTlsContext())) {
       return SecretVolumeServerSslContextProvider.getProvider(downstreamTlsContext);
     } else if (CommonTlsContextUtil.hasAllSecretsUsingSds(
         downstreamTlsContext.getCommonTlsContext())) {
-      try {
-        if (bootstrapInfo == null) {
-          bootstrapInfo = bootstrapper.bootstrap();
-        }
-        return SdsServerSslContextProvider.getProvider(
-            downstreamTlsContext,
-            bootstrapInfo.getNode().toEnvoyProtoNodeV2(),
-            Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-                .setNameFormat("server-sds-sslcontext-provider-%d")
-                .setDaemon(true)
-                .build()),
-            /* channelExecutor= */ null);
-      } catch (XdsInitializationException e) {
-        throw new RuntimeException(e);
-      }
+      return SdsServerSslContextProvider.getProvider(
+          downstreamTlsContext,
+          bootstrapInfo.getNode().toEnvoyProtoNodeV2(),
+          Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
+              .setNameFormat("server-sds-sslcontext-provider-%d")
+              .setDaemon(true)
+              .build()),
+          /* channelExecutor= */ null);
     }
     throw new UnsupportedOperationException("Unsupported configurations in DownstreamTlsContext!");
   }

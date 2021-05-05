@@ -32,6 +32,7 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
+import io.grpc.xds.internal.sds.TlsContextManager;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -534,6 +535,13 @@ abstract class XdsClient {
    * Returns the config used to bootstrap this XdsClient {@link Bootstrapper.BootstrapInfo}.
    */
   Bootstrapper.BootstrapInfo getBootstrapInfo() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Returns the {@link TlsContextManager} used in this XdsClient.
+   */
+  TlsContextManager getTlsContextManager() {
     throw new UnsupportedOperationException();
   }
 

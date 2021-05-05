@@ -30,6 +30,7 @@ import io.grpc.StatusException;
 import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.sds.TlsContextManager;
 import io.netty.channel.Channel;
 import java.io.IOException;
 import java.net.InetAddress;
@@ -60,7 +61,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
   @Before
   public void setUp() throws IOException {
     MockitoAnnotations.initMocks(this);
-    xdsClientWrapperForServerSds = XdsServerTestHelper.createXdsClientWrapperForServerSds(PORT);
+    xdsClientWrapperForServerSds = XdsServerTestHelper
+        .createXdsClientWrapperForServerSds(PORT, null);
   }
 
   @After
@@ -197,9 +199,9 @@ public class XdsClientWrapperForServerSdsTestMisc {
 
   /** Creates XdsClientWrapperForServerSds: also used by other classes. */
   public static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(
-      int port, DownstreamTlsContext downstreamTlsContext) {
+      int port, DownstreamTlsContext downstreamTlsContext, TlsContextManager tlsContextManager) {
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-            XdsServerTestHelper.createXdsClientWrapperForServerSds(port);
+        XdsServerTestHelper.createXdsClientWrapperForServerSds(port, tlsContextManager);
     xdsClientWrapperForServerSds.start();
     XdsSdsClientServerTest.generateListenerUpdateToWatcher(
         downstreamTlsContext, xdsClientWrapperForServerSds.getListenerWatcher());

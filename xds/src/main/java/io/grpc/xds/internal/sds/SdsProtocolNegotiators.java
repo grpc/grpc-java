@@ -368,7 +368,8 @@ public final class SdsProtocolNegotiators {
                   this,
                   null,
                   new ServerSdsHandler(
-                      grpcHandler, downstreamTlsContext, fallbackProtocolNegotiator));
+                      grpcHandler, downstreamTlsContext, fallbackProtocolNegotiator,
+                      xdsClientWrapperForServerSds.getTlsContextManager()));
           ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
           ctx.fireUserEventTriggered(pne);
           return;
@@ -384,12 +385,13 @@ public final class SdsProtocolNegotiators {
           extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final DownstreamTlsContext downstreamTlsContext;
+    private final TlsContextManager tlsContextManager;
     @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
 
     ServerSdsHandler(
             GrpcHttp2ConnectionHandler grpcHandler,
             DownstreamTlsContext downstreamTlsContext,
-            ProtocolNegotiator fallbackProtocolNegotiator) {
+            ProtocolNegotiator fallbackProtocolNegotiator, TlsContextManager tlsContextManager) {
       super(
           // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
           // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
@@ -404,6 +406,7 @@ public final class SdsProtocolNegotiators {
       this.grpcHandler = grpcHandler;
       this.downstreamTlsContext = downstreamTlsContext;
       this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
+      this.tlsContextManager = tlsContextManager;
     }
 
     @Override
@@ -414,8 +417,7 @@ public final class SdsProtocolNegotiators {
       SslContextProvider sslContextProviderTemp = null;
       try {
         sslContextProviderTemp =
-            TlsContextManagerImpl.getInstance()
-                .findOrCreateServerSslContextProvider(downstreamTlsContext);
+            tlsContextManager.findOrCreateServerSslContextProvider(downstreamTlsContext);
       } catch (Exception e) {
         if (fallbackProtocolNegotiator == null) {
           ctx.fireExceptionCaught(new CertStoreException("No certificate source found!", e));
@@ -442,8 +444,7 @@ public final class SdsProtocolNegotiators {
                 fireProtocolNegotiationEvent(ctx);
                 ctx.pipeline().remove(bufferReads);
               }
-              TlsContextManagerImpl.getInstance()
-                  .releaseServerSslContextProvider(sslContextProvider);
+              tlsContextManager.releaseServerSslContextProvider(sslContextProvider);
             }
 
             @Override

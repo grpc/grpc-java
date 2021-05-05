@@ -31,6 +31,7 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -136,7 +137,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
           xdsClient = new ClientXdsClient(channel, bootstrapInfo, context, scheduler,
               new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER,
-              TimeProvider.SYSTEM_TIME_PROVIDER);
+              TimeProvider.SYSTEM_TIME_PROVIDER, new TlsContextManagerImpl(bootstrapInfo));
         }
         refCount++;
         return xdsClient;

@@ -30,6 +30,7 @@ import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
+import io.grpc.xds.internal.sds.TlsContextManager;
 import io.netty.channel.Channel;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
@@ -94,6 +95,10 @@ public final class XdsClientWrapperForServerSds {
 
   @VisibleForTesting XdsClient getXdsClient() {
     return xdsClient;
+  }
+
+  public TlsContextManager getTlsContextManager() {
+    return xdsClient.getTlsContextManager();
   }
 
   /** Accepts an XdsClient and starts a watch. */

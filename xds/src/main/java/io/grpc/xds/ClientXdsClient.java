@@ -73,6 +73,7 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.sds.TlsContextManager;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -131,14 +132,17 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final LoadReportClient lrsClient;
   private final TimeProvider timeProvider;
   private boolean reportingLoad;
+  private final TlsContextManager tlsContextManager;
 
   ClientXdsClient(
       ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo, Context context,
       ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier, TimeProvider timeProvider) {
+      Supplier<Stopwatch> stopwatchSupplier, TimeProvider timeProvider,
+      TlsContextManager tlsContextManager) {
     super(channel, bootstrapInfo, context, timeService, backoffPolicyProvider, stopwatchSupplier);
     loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
     this.timeProvider = timeProvider;
+    this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
     lrsClient = new LoadReportClient(loadStatsManager, channel, context,
         bootstrapInfo.getServers().get(0).isUseProtocolV3(), bootstrapInfo.getNode(),
         getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
@@ -1179,6 +1183,11 @@ final class ClientXdsClient extends AbstractXdsClient {
       metadataMap.put(entry.getKey(), entry.getValue().metadata);
     }
     return metadataMap;
+  }
+
+  @Override
+  TlsContextManager getTlsContextManager() {
+    return tlsContextManager;
   }
 
   @Override
