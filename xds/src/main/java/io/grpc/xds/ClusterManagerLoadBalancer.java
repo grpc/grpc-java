@@ -126,6 +126,7 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
     for (ChildLbState state : childLbStates.values()) {
       state.shutdown();
     }
+    childLbStates.clear();
   }
 
   private void updateOverallBalancingState() {
@@ -237,7 +238,6 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
     }
 
     void shutdown() {
-      deactivated = true;
       if (deletionTimer != null && deletionTimer.isPending()) {
         deletionTimer.cancel();
       }
@@ -253,10 +253,13 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            currentState = newState;
-            currentPicker = newPicker;
+            if (!childLbStates.containsKey(name)) {
+              return;
+            }
             // Subchannel picker and state are saved, but will only be propagated to the channel
             // when the child instance exits deactivated state.
+            currentState = newState;
+            currentPicker = newPicker;
             if (!deactivated) {
               updateOverallBalancingState();
             }
