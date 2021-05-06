@@ -201,6 +201,16 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   }
 
   @Override
+  public boolean markSupported() {
+    for (ReadableBuffer buffer : readableBuffers) {
+      if (!buffer.markSupported()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @Override
   public void mark() {
     if (rewindableBuffers == null) {
       rewindableBuffers = new ArrayDeque<>(Math.min(readableBuffers.size(), 16));

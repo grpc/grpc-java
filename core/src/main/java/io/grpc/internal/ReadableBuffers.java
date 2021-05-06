@@ -211,6 +211,11 @@ public final class ReadableBuffers {
     }
 
     @Override
+    public boolean markSupported() {
+      return true;
+    }
+
+    @Override
     public void mark() {
       mark = offset;
     }
@@ -311,6 +316,11 @@ public final class ReadableBuffers {
     }
 
     @Override
+    public boolean markSupported() {
+      return true;
+    }
+
+    @Override
     public void mark() {
       bytes.mark();
     }
@@ -397,7 +407,7 @@ public final class ReadableBuffers {
 
     @Override
     public boolean markSupported() {
-      return true;
+      return buffer.markSupported();
     }
 
     @Override

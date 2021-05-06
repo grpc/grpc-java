@@ -48,6 +48,11 @@ public abstract class AbstractReadableBuffer implements ReadableBuffer {
   }
 
   @Override
+  public boolean markSupported() {
+    return false;
+  }
+
+  @Override
   public void mark() {}
 
   @Override

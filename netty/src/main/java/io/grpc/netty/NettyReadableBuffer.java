@@ -95,6 +95,11 @@ class NettyReadableBuffer extends AbstractReadableBuffer {
   }
 
   @Override
+  public boolean markSupported() {
+    return true;
+  }
+
+  @Override
   public void mark() {
     buffer.markReaderIndex();
   }

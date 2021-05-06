@@ -125,6 +125,11 @@ public interface ReadableBuffer extends Closeable {
   int arrayOffset();
 
   /**
+   * Indicates whether or not {@link #mark} operation is supported for this buffer.
+   */
+  boolean markSupported();
+
+  /**
    * Marks the current position in this buffer. A subsequent call to the {@link #reset} method
    * repositions this stream at the last marked position so that subsequent reads re-read the same
    * bytes.

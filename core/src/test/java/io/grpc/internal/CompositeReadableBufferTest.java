@@ -161,6 +161,23 @@ public class CompositeReadableBufferTest {
   }
 
   @Test
+  public void markSupportedOnlyAllComponentsSupportMark() {
+    composite = new CompositeReadableBuffer();
+    ReadableBuffer buffer1 = mock(ReadableBuffer.class);
+    ReadableBuffer buffer2 = mock(ReadableBuffer.class);
+    ReadableBuffer buffer3 = mock(ReadableBuffer.class);
+    when(buffer1.markSupported()).thenReturn(true);
+    when(buffer2.markSupported()).thenReturn(true);
+    when(buffer3.markSupported()).thenReturn(false);
+    composite.addBuffer(buffer1);
+    assertTrue(composite.markSupported());
+    composite.addBuffer(buffer2);
+    assertTrue(composite.markSupported());
+    composite.addBuffer(buffer3);
+    assertFalse(composite.markSupported());
+  }
+
+  @Test
   public void resetUnmarkedShouldThrow() {
     try {
       composite.reset();
