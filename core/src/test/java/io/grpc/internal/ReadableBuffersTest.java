@@ -158,9 +158,9 @@ public class ReadableBuffersTest {
   @Test
   public void bufferInputStream_getByteBufferDelegatesToBuffer() {
     ReadableBuffer buffer = mock(ReadableBuffer.class);
-    when(buffer.getByteBufferSupported()).thenReturn(true);
+    when(buffer.byteBufferSupported()).thenReturn(true);
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
-    assertTrue(((HasByteBuffer) inputStream).getByteBufferSupported());
+    assertTrue(((HasByteBuffer) inputStream).byteBufferSupported());
     ((HasByteBuffer) inputStream).getByteBuffer();
     verify(buffer).getByteBuffer();
   }

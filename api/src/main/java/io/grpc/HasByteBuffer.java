@@ -34,7 +34,7 @@ public interface HasByteBuffer {
   /**
    * Indicates whether or not {@link #getByteBuffer} operation is supported.
    */
-  boolean getByteBufferSupported();
+  boolean byteBufferSupported();
 
   /**
    * Gets a {@link ByteBuffer} containing some bytes of the content next to be read, or {@code
@@ -43,7 +43,7 @@ public interface HasByteBuffer {
    * stream. The returned buffer's content should not be modified, but the position, limit, and
    * mark may be changed. Operations for changing the position, limit, and mark of the returned
    * buffer does not affect the position, limit, and mark of this input stream. This is an optional
-   * method, so callers should first check {@link #getByteBufferSupported}.
+   * method, so callers should first check {@link #byteBufferSupported}.
    *
    * @throws UnsupportedOperationException if this operation is not supported.
    */

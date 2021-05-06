@@ -59,7 +59,7 @@ public class NettyReadableBufferTest extends ReadableBufferTestBase {
 
   @Test
   public void getByteBufferFromSingleNioBufferBackedBuffer() {
-    assertTrue(buffer.getByteBufferSupported());
+    assertTrue(buffer.byteBufferSupported());
     ByteBuffer byteBuffer = buffer.getByteBuffer();
     byte[] arr = new byte[byteBuffer.remaining()];
     byteBuffer.get(arr);
