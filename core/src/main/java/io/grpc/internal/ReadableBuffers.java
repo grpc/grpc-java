@@ -335,7 +335,7 @@ public final class ReadableBuffers {
    * An {@link InputStream} that is backed by a {@link ReadableBuffer}.
    */
   private static final class BufferInputStream extends InputStream
-      implements KnownLength, HasByteBuffer, Detachable<InputStream> {
+      implements KnownLength, HasByteBuffer, Detachable {
     final ReadableBuffer buffer;
     private boolean detached;
 
@@ -415,7 +415,7 @@ public final class ReadableBuffers {
     }
 
     @Override
-    public InputStream detach() {
+    public Object detach() {
       if (detached) {
         throw new IllegalStateException("already detached");
       }

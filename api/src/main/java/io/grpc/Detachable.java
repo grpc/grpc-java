@@ -25,13 +25,13 @@ package io.grpc;
  * states of detached resources and is no longer consumable as if the resources are exhausted.
  */
 @ExperimentalApi("TODO")
-public interface Detachable<T> {
+public interface Detachable {
 
   /**
-   * Fork a new instance of {@code T} with underlying resources detached from this instance and
+   * Fork a new instance with underlying resources detached from this instance and
    * transferred to the new instance.
    *
    * @throws IllegalStateException if the underlying resources have already been detached.
    */
-  public T detach();
+  public Object detach();
 }

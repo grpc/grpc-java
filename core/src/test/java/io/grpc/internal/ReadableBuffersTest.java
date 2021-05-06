@@ -165,40 +165,36 @@ public class ReadableBuffersTest {
     verify(buffer).getByteBuffer();
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void bufferInputStream_availableAfterDetached_returnsZeroByte() throws IOException {
     ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
     assertEquals(5, inputStream.available());
-    InputStream detachedStream = ((Detachable<InputStream>) inputStream).detach();
+    InputStream detachedStream = (InputStream) ((Detachable) inputStream).detach();
     assertEquals(0, inputStream.available());
     assertEquals(5, detachedStream.available());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void bufferInputStream_skipAfterDetached() throws IOException {
     ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
     assertEquals(3, inputStream.skip(3));
-    InputStream detachedStream = ((Detachable<InputStream>) inputStream).detach();
+    InputStream detachedStream = (InputStream) ((Detachable) inputStream).detach();
     assertEquals(0, inputStream.skip(2));
     assertEquals(2, detachedStream.skip(2));
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void bufferInputStream_readUnsignedByteAfterDetached() throws IOException {
     ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
     assertEquals((int) 'h', inputStream.read());
-    InputStream detachedStream = ((Detachable<InputStream>) inputStream).detach();
+    InputStream detachedStream = (InputStream) ((Detachable) inputStream).detach();
     assertEquals(-1, inputStream.read());
     assertEquals((int) 'e', detachedStream.read());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void bufferInputStream_partialReadAfterDetached() throws IOException {
     ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
@@ -206,44 +202,41 @@ public class ReadableBuffersTest {
     byte[] dest = new byte[3];
     assertEquals(3, inputStream.read(dest, /*destOffset*/ 0, /*length*/ 3));
     assertArrayEquals(new byte[]{'h', 'e', 'l'}, dest);
-    InputStream detachedStream = ((Detachable<InputStream>) inputStream).detach();
+    InputStream detachedStream = (InputStream) ((Detachable) inputStream).detach();
     byte[] newDest = new byte[2];
     assertEquals(2, detachedStream.read(newDest, /*destOffset*/ 0, /*length*/ 2));
     assertArrayEquals(new byte[]{'l', 'o'}, newDest);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void bufferInputStream_markDiscardedAfterDetached() throws IOException {
     ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
     inputStream.mark(5);
-    ((Detachable<InputStream>) inputStream).detach();
+    ((Detachable) inputStream).detach();
     thrown.expect(IOException.class);
     thrown.expectMessage("underlying buffer detached");
     inputStream.reset();
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void bufferInputStream_markPreservedInForkedInputStream() throws IOException {
     ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
     inputStream.skip(2);
     inputStream.mark(3);
-    InputStream detachedStream = ((Detachable<InputStream>) inputStream).detach();
+    InputStream detachedStream = (InputStream) ((Detachable) inputStream).detach();
     detachedStream.skip(3);
     assertEquals(0, detachedStream.available());
     detachedStream.reset();
     assertEquals(3, detachedStream.available());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void bufferInputStream_closeAfterDetached() throws IOException {
     ReadableBuffer buffer = mock(ReadableBuffer.class);
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
-    InputStream detachedStream = ((Detachable<InputStream>) inputStream).detach();
+    InputStream detachedStream = (InputStream) ((Detachable) inputStream).detach();
     inputStream.close();
     verify(buffer, never()).close();
     detachedStream.close();
