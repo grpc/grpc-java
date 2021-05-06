@@ -19,14 +19,15 @@ package io.grpc.internal;
 import static com.google.common.base.Charsets.UTF_8;
 
 import com.google.common.base.Preconditions;
+import io.grpc.Detachable;
 import io.grpc.HasByteBuffer;
 import io.grpc.KnownLength;
-import io.grpc.Retainable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.nio.InvalidMarkException;
 import java.nio.charset.Charset;
 import javax.annotation.Nullable;
 
@@ -216,6 +217,9 @@ public final class ReadableBuffers {
 
     @Override
     public void reset() {
+      if (mark == -1) {
+        throw new InvalidMarkException();
+      }
       offset = mark;
     }
   }
@@ -331,9 +335,9 @@ public final class ReadableBuffers {
    * An {@link InputStream} that is backed by a {@link ReadableBuffer}.
    */
   private static final class BufferInputStream extends InputStream
-      implements KnownLength, HasByteBuffer, Retainable {
+      implements KnownLength, HasByteBuffer, Detachable<InputStream> {
     final ReadableBuffer buffer;
-    private boolean retained;
+    private boolean detached;
 
     public BufferInputStream(ReadableBuffer buffer) {
       this.buffer = Preconditions.checkNotNull(buffer, "buffer");
@@ -341,12 +345,12 @@ public final class ReadableBuffers {
 
     @Override
     public int available() throws IOException {
-      return buffer.readableBytes();
+      return detached ? 0 : buffer.readableBytes();
     }
 
     @Override
     public int read() {
-      if (buffer.readableBytes() == 0) {
+      if (detached || buffer.readableBytes() == 0) {
         // EOF.
         return -1;
       }
@@ -355,7 +359,7 @@ public final class ReadableBuffers {
 
     @Override
     public int read(byte[] dest, int destOffset, int length) throws IOException {
-      if (buffer.readableBytes() == 0) {
+      if (detached || buffer.readableBytes() == 0) {
         // EOF.
         return -1;
       }
@@ -367,6 +371,9 @@ public final class ReadableBuffers {
 
     @Override
     public long skip(long n) throws IOException {
+      if (detached) {
+        return 0;
+      }
       int length = (int) Math.min(buffer.readableBytes(), n);
       buffer.skipBytes(length);
       return length;
@@ -374,11 +381,17 @@ public final class ReadableBuffers {
 
     @Override
     public void mark(int readlimit) {
+      if (detached) {
+        return;
+      }
       buffer.mark();
     }
 
     @Override
     public void reset() throws IOException {
+      if (detached) {
+        throw new IOException("underlying buffer detached");
+      }
       buffer.reset();
     }
 
@@ -395,22 +408,24 @@ public final class ReadableBuffers {
     @Nullable
     @Override
     public ByteBuffer getByteBuffer() {
+      if (detached) {
+        return null;
+      }
       return buffer.getByteBuffer();
     }
 
     @Override
-    public void retain() {
-      retained = true;
-    }
-
-    @Override
-    public void release() {
-      retained = false;
+    public InputStream detach() {
+      if (detached) {
+        throw new IllegalStateException("already detached");
+      }
+      detached = true;
+      return new BufferInputStream(buffer);
     }
 
     @Override
     public void close() throws IOException {
-      if (retained) {
+      if (detached) {
         return;
       }
       buffer.close();
