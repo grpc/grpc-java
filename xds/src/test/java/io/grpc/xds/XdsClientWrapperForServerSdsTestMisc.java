@@ -30,7 +30,6 @@ import io.grpc.StatusException;
 import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
-import io.grpc.xds.internal.sds.TlsContextManager;
 import io.netty.channel.Channel;
 import java.io.IOException;
 import java.net.InetAddress;

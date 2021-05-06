@@ -28,6 +28,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.xds.EnvoyServerProtoData;
+import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
 import java.util.concurrent.Executor;
 import org.junit.Assert;

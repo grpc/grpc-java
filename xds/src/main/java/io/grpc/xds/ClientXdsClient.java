@@ -73,7 +73,6 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
-import io.grpc.xds.internal.sds.TlsContextManager;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;

@@ -48,6 +48,7 @@ import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.InternalXdsAttributes;
+import io.grpc.xds.TlsContextManager;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.grpc.xds.XdsClientWrapperForServerSdsTestMisc;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsHandler;

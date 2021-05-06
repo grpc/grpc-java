@@ -23,7 +23,6 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.internal.sds.TlsContextManager;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.Arrays;
