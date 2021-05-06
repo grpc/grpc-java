@@ -33,5 +33,5 @@ public interface Detachable {
    *
    * @throws IllegalStateException if the underlying resources have already been detached.
    */
-  public Object detach();
+  public Detachable detach();
 }

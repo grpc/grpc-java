@@ -415,7 +415,7 @@ public final class ReadableBuffers {
     }
 
     @Override
-    public Object detach() {
+    public Detachable detach() {
       if (detached) {
         throw new IllegalStateException("already detached");
       }
