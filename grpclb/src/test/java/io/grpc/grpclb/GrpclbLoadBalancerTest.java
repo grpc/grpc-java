@@ -55,6 +55,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -229,6 +230,7 @@ public class GrpclbLoadBalancerTest {
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     balancer = new GrpclbLoadBalancer(
         helper,
+        Context.ROOT,
         subchannelPool,
         fakeClock.getTimeProvider(),
         fakeClock.getStopwatchSupplier().get(),
