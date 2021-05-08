@@ -1785,7 +1785,7 @@ public abstract class ClientXdsClientTestBase {
   public void useIndependentRpcContext() {
     // Simulates making RPCs within the context of an inbound RPC.
     CancellableContext cancellableContext = Context.current().withCancellation();
-    Context baseContext = cancellableContext.attach();
+    Context prevContext = cancellableContext.attach();
     try {
       DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
 
@@ -1797,7 +1797,7 @@ public abstract class ClientXdsClientTestBase {
       call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
       verify(ldsResourceWatcher).onChanged(any(LdsUpdate.class));
     } finally {
-      cancellableContext.detach(baseContext);
+      cancellableContext.detach(prevContext);
     }
   }
 
