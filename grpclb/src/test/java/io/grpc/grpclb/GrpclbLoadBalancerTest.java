@@ -2707,11 +2707,13 @@ public class GrpclbLoadBalancerTest {
               .setInitialRequest(
                   InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
               .build()));
+      lbResponseObserver.onNext(buildInitialResponse());
 
       // The inbound RPC finishes and closes its context. The outbound RPC's control plane RPC
-      // should not be impacted.
+      // should not be impacted (no retry).
       cancellableContext.close();
-      verify(lbRequestObserver, never()).onError(any(Throwable.class));
+      assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+      verifyNoMoreInteractions(mockLbService);
     } finally {
       cancellableContext.detach(prevContext);
     }
