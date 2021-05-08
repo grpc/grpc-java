@@ -22,7 +22,9 @@ import static io.grpc.xds.AbstractXdsClient.ResourceType.CDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -40,6 +42,8 @@ import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
+import io.grpc.Context;
+import io.grpc.Context.CancellableContext;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -270,6 +274,7 @@ public abstract class ClientXdsClientTestBase {
         new ClientXdsClient(
             channel,
             bootstrapInfo,
+            Context.ROOT,
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
@@ -1774,6 +1779,26 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataAcked(
         EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 0, 0, 2);
+  }
+
+  @Test
+  public void useIndependentRpcContext() {
+    // Simulates making RPCs within the context of an inbound RPC.
+    CancellableContext cancellableContext = Context.current().withCancellation();
+    Context prevContext = cancellableContext.attach();
+    try {
+      DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
+
+      // The inbound RPC finishes and closes its context. The outbound RPC's control plane RPC
+      // should not be impacted.
+      cancellableContext.close();
+      verify(ldsResourceWatcher, never()).onError(any(Status.class));
+
+      call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
+      verify(ldsResourceWatcher).onChanged(any(LdsUpdate.class));
+    } finally {
+      cancellableContext.detach(prevContext);
+    }
   }
 
   @Test
