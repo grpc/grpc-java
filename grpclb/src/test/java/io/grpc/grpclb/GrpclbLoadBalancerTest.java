@@ -2690,7 +2690,7 @@ public class GrpclbLoadBalancerTest {
   public void useIndependentRpcContext() {
     // Simulates making RPCs within the context of an inbound RPC.
     CancellableContext cancellableContext = Context.current().withCancellation();
-    Context baseContext = cancellableContext.attach();
+    Context prevContext = cancellableContext.attach();
     try {
       List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
       List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(2);
@@ -2713,7 +2713,7 @@ public class GrpclbLoadBalancerTest {
       cancellableContext.close();
       verify(lbRequestObserver, never()).onError(any(Throwable.class));
     } finally {
-      cancellableContext.detach(baseContext);
+      cancellableContext.detach(prevContext);
     }
   }
 

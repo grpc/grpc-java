@@ -372,11 +372,11 @@ final class GrpclbState {
     checkState(lbStream == null, "previous lbStream has not been cleared yet");
     LoadBalancerGrpc.LoadBalancerStub stub = LoadBalancerGrpc.newStub(lbCommChannel);
     lbStream = new LbStream(stub);
-    Context baseContext = context.attach();
+    Context prevContext = context.attach();
     try {
       lbStream.start();
     } finally {
-      context.detach(baseContext);
+      context.detach(prevContext);
     }
     stopwatch.reset().start();
 
