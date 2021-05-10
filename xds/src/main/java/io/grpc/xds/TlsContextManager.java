@@ -16,10 +16,12 @@
 
 package io.grpc.xds;
 
+import io.grpc.Internal;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.SslContextProvider;
 
+@Internal
 public interface TlsContextManager {
 
   /** Creates a SslContextProvider. Used for retrieving a server-side SslContext. */
