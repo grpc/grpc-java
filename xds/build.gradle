@@ -107,6 +107,7 @@ javadoc {
     exclude 'io/grpc/xds/*LoadBalancer*'
     exclude 'io/grpc/xds/Bootstrapper.java'
     exclude 'io/grpc/xds/Envoy*'
+    exclude 'io/grpc/xds/TlsContextManager.java'
     exclude 'io/grpc/xds/XdsAttributes.java'
     exclude 'io/grpc/xds/XdsClientWrapperForServerSds.java'
     exclude 'io/grpc/xds/XdsInitializationException.java'
