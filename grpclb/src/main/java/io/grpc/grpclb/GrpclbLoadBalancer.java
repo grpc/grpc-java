@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
@@ -45,6 +46,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
   private static final GrpclbConfig DEFAULT_CONFIG = GrpclbConfig.create(Mode.ROUND_ROBIN);
 
   private final Helper helper;
+  private final Context context;
   private final TimeProvider time;
   private final Stopwatch stopwatch;
   private final SubchannelPool subchannelPool;
@@ -58,11 +60,13 @@ class GrpclbLoadBalancer extends LoadBalancer {
 
   GrpclbLoadBalancer(
       Helper helper,
+      Context context,
       SubchannelPool subchannelPool,
       TimeProvider time,
       Stopwatch stopwatch,
       BackoffPolicy.Provider backoffPolicyProvider) {
     this.helper = checkNotNull(helper, "helper");
+    this.context = checkNotNull(context, "context");
     this.time = checkNotNull(time, "time provider");
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
@@ -131,7 +135,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
     checkState(grpclbState == null, "Should've been cleared");
     grpclbState =
         new GrpclbState(
-            config, helper, subchannelPool, time, stopwatch, backoffPolicyProvider);
+            config, helper, context, subchannelPool, time, stopwatch, backoffPolicyProvider);
   }
 
   @Override
