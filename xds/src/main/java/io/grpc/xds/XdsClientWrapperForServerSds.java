@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.UInt32Value;
+import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.ManagedChannel;
@@ -121,6 +122,7 @@ public final class XdsClientWrapperForServerSds {
     XdsClient xdsClientImpl =
         new ClientXdsClient(
             channel,
+            Context.ROOT,
             serverInfo.isUseProtocolV3(),
             node,
             timeService,

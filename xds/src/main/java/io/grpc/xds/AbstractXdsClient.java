@@ -28,6 +28,7 @@ import com.google.rpc.Code;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
+import io.grpc.Context;
 import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -82,6 +83,7 @@ abstract class AbstractXdsClient extends XdsClient {
   private final InternalLogId logId;
   private final XdsLogger logger;
   private final ManagedChannel channel;
+  private final Context context;
   private final boolean useProtocolV3;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
@@ -109,10 +111,11 @@ abstract class AbstractXdsClient extends XdsClient {
   @Nullable
   private ScheduledHandle rpcRetryTimer;
 
-  AbstractXdsClient(ManagedChannel channel, boolean useProtocolV3, Node node,
+  AbstractXdsClient(ManagedChannel channel, Context context, boolean useProtocolV3, Node node,
       ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.channel = checkNotNull(channel, "channel");
+    this.context = checkNotNull(context, "context");
     this.useProtocolV3 = useProtocolV3;
     this.node = checkNotNull(node, "node");
     this.timeService = checkNotNull(timeService, "timeService");
@@ -313,7 +316,12 @@ abstract class AbstractXdsClient extends XdsClient {
     } else {
       adsStream = new AdsStreamV2();
     }
-    adsStream.start();
+    Context prevContext = context.attach();
+    try {
+      adsStream.start();
+    } finally {
+      context.detach(prevContext);
+    }
     logger.log(XdsLogLevel.INFO, "ADS stream started");
     stopwatch.reset().start();
   }
