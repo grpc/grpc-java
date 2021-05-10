@@ -55,6 +55,8 @@ import io.grpc.ChannelLogger;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.Context;
+import io.grpc.Context.CancellableContext;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -229,6 +231,7 @@ public class GrpclbLoadBalancerTest {
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     balancer = new GrpclbLoadBalancer(
         helper,
+        Context.ROOT,
         subchannelPool,
         fakeClock.getTimeProvider(),
         fakeClock.getStopwatchSupplier().get(),
@@ -2681,6 +2684,39 @@ public class GrpclbLoadBalancerTest {
         new BackendEntry(subchannel3, getLoadRecorder(), "token1001"),
         new BackendEntry(subchannel4, getLoadRecorder(), "token1002"))
         .inOrder();
+  }
+
+  @Test
+  public void useIndependentRpcContext() {
+    // Simulates making RPCs within the context of an inbound RPC.
+    CancellableContext cancellableContext = Context.current().withCancellation();
+    Context prevContext = cancellableContext.attach();
+    try {
+      List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
+      List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(2);
+      deliverResolvedAddresses(backendList, grpclbBalancerList);
+
+      verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+          eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
+      verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+      StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+      assertEquals(1, lbRequestObservers.size());
+      StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+      verify(lbRequestObserver).onNext(
+          eq(LoadBalanceRequest.newBuilder()
+              .setInitialRequest(
+                  InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+              .build()));
+      lbResponseObserver.onNext(buildInitialResponse());
+
+      // The inbound RPC finishes and closes its context. The outbound RPC's control plane RPC
+      // should not be impacted (no retry).
+      cancellableContext.close();
+      assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+      verifyNoMoreInteractions(mockLbService);
+    } finally {
+      cancellableContext.detach(prevContext);
+    }
   }
 
   private void deliverSubchannelState(

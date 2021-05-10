@@ -9,6 +9,7 @@ java_library(
     deps = [
         ":load_balancer_java_grpc",
         "//api",
+        "//context",
         "//core:internal",
         "//core:util",
         "//stub",
