@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ChannelCredentials;
+import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.ExponentialBackoffPolicy;
@@ -109,6 +110,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @ThreadSafe
   @VisibleForTesting
   static class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
+    private final Context context = Context.ROOT;
     private final String target;
     private final ChannelCredentials channelCredentials;
     private final Node node;
@@ -140,7 +142,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
               .keepAliveTime(5, TimeUnit.MINUTES)
               .build();
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
-          xdsClient = new ClientXdsClient(channel, useProtocolV3, node, scheduler,
+          xdsClient = new ClientXdsClient(channel, context, useProtocolV3, node, scheduler,
               new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER,
               TimeProvider.SYSTEM_TIME_PROVIDER);
         }

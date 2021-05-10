@@ -28,6 +28,7 @@ import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadReportingServiceStub;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
+import io.grpc.Context;
 import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -55,6 +56,7 @@ final class LoadReportClient {
   private final InternalLogId logId;
   private final XdsLogger logger;
   private final ManagedChannel channel;
+  private final Context context;
   private final boolean useProtocolV3;
   private final Node node;
   private final SynchronizationContext syncContext;
@@ -74,6 +76,7 @@ final class LoadReportClient {
   LoadReportClient(
       LoadStatsManager2 loadStatsManager,
       ManagedChannel channel,
+      Context context,
       boolean useProtocolV3,
       Node node,
       SynchronizationContext syncContext,
@@ -82,6 +85,7 @@ final class LoadReportClient {
       Supplier<Stopwatch> stopwatchSupplier) {
     this.loadStatsManager = checkNotNull(loadStatsManager, "loadStatsManager");
     this.channel = checkNotNull(channel, "xdsChannel");
+    this.context = checkNotNull(context, "context");
     this.useProtocolV3 = useProtocolV3;
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timerService = checkNotNull(scheduledExecutorService, "timeService");
@@ -163,7 +167,12 @@ final class LoadReportClient {
       lrsStream = new LrsStreamV2();
     }
     retryStopwatch.reset().start();
-    lrsStream.start();
+    Context prevContext = context.attach();
+    try {
+      lrsStream.start();
+    } finally {
+      context.detach(prevContext);
+    }
   }
 
   private abstract class LrsStream {
