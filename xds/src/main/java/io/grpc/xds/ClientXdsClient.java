@@ -48,6 +48,7 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
+import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -132,13 +133,13 @@ final class ClientXdsClient extends AbstractXdsClient {
   private boolean reportingLoad;
 
   ClientXdsClient(
-      ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo,
+      ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo, Context context,
       ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier, TimeProvider timeProvider) {
-    super(channel, bootstrapInfo, timeService, backoffPolicyProvider, stopwatchSupplier);
+    super(channel, bootstrapInfo, context, timeService, backoffPolicyProvider, stopwatchSupplier);
     loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
     this.timeProvider = timeProvider;
-    lrsClient = new LoadReportClient(loadStatsManager, channel,
+    lrsClient = new LoadReportClient(loadStatsManager, channel, context,
         bootstrapInfo.getServers().get(0).isUseProtocolV3(), bootstrapInfo.getNode(),
         getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
   }
