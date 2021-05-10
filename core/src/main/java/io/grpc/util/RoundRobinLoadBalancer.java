@@ -163,6 +163,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     for (Subchannel subchannel : getSubchannels()) {
       shutdownSubchannel(subchannel);
     }
+    subchannels.clear();
   }
 
   private static final Status EMPTY_OK = Status.OK.withDescription("no subchannels ready");
