@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
 
 /**

@@ -278,7 +278,8 @@ public abstract class ClientXdsClientTestBase {
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
-            timeProvider);
+            timeProvider,
+            mock(TlsContextManager.class));
 
     assertThat(resourceDiscoveryCalls).isEmpty();
     assertThat(loadReportCalls).isEmpty();

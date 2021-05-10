@@ -53,7 +53,8 @@ public class FilterChainMatchTest {
   @Before
   public void setUp() throws IOException {
     MockitoAnnotations.initMocks(this);
-    xdsClientWrapperForServerSds = XdsServerTestHelper.createXdsClientWrapperForServerSds(PORT);
+    xdsClientWrapperForServerSds = XdsServerTestHelper
+        .createXdsClientWrapperForServerSds(PORT, null);
     registeredWatcher =
             XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds);
   }

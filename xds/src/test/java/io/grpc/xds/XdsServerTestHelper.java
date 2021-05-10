@@ -84,15 +84,17 @@ class XdsServerTestHelper {
     }
   }
 
-  static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port) {
+  static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port,
+      TlsContextManager tlsContextManager) {
     FakeXdsClientPoolFactory fakeXdsClientPoolFactory = new FakeXdsClientPoolFactory(
-        buildMockXdsClient());
+        buildMockXdsClient(tlsContextManager));
     return new XdsClientWrapperForServerSds(port, fakeXdsClientPoolFactory);
   }
 
-  private static XdsClient buildMockXdsClient() {
+  private static XdsClient buildMockXdsClient(TlsContextManager tlsContextManager) {
     XdsClient xdsClient = mock(XdsClient.class);
     when(xdsClient.getBootstrapInfo()).thenReturn(BOOTSTRAP_INFO);
+    when(xdsClient.getTlsContextManager()).thenReturn(tlsContextManager);
     return xdsClient;
   }
 

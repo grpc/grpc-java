@@ -538,6 +538,13 @@ abstract class XdsClient {
   }
 
   /**
+   * Returns the {@link TlsContextManager} used in this XdsClient.
+   */
+  TlsContextManager getTlsContextManager() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Returns the latest accepted version of the given resource type.
    */
   String getCurrentVersion(ResourceType type) {
