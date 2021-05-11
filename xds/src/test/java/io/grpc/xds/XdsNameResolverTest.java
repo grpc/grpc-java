@@ -77,7 +77,6 @@ import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -1320,7 +1319,7 @@ public class XdsNameResolverTest {
 
   @Test
   public void routeMatching_pathOnly() {
-    Map<String, String> headers = Collections.emptyMap();
+    Metadata headers = new Metadata();
     ThreadSafeRandom random = mock(ThreadSafeRandom.class);
 
     RouteMatch routeMatch1 =
@@ -1352,13 +1351,35 @@ public class XdsNameResolverTest {
   }
 
   @Test
+  public void routeMatching_pathOnly_caseInsensitive() {
+    Metadata headers = new Metadata();
+    ThreadSafeRandom random = mock(ThreadSafeRandom.class);
+
+    RouteMatch routeMatch1 =
+        RouteMatch.create(
+            PathMatcher.fromPath("/FooService/barMethod", false),
+            Collections.<HeaderMatcher>emptyList(), null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/fooservice/barmethod", headers, random))
+        .isTrue();
+
+    RouteMatch routeMatch2 =
+        RouteMatch.create(
+            PathMatcher.fromPrefix("/FooService", false),
+            Collections.<HeaderMatcher>emptyList(), null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/fooservice/barmethod", headers, random))
+        .isTrue();
+  }
+
+  @Test
   public void routeMatching_withHeaders() {
-    Map<String, String> headers = new HashMap<>();
-    headers.put("authority", "foo.googleapis.com");
-    headers.put("grpc-encoding", "gzip");
-    headers.put("user-agent", "gRPC-Java");
-    headers.put("content-length", "1000");
-    headers.put("custom-key", "custom-value1,custom-value2");
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("authority", Metadata.ASCII_STRING_MARSHALLER),
+        "foo.googleapis.com");
+    headers.put(Metadata.Key.of("grpc-encoding", Metadata.ASCII_STRING_MARSHALLER), "gzip");
+    headers.put(Metadata.Key.of("user-agent", Metadata.ASCII_STRING_MARSHALLER), "gRPC-Java");
+    headers.put(Metadata.Key.of("content-length", Metadata.ASCII_STRING_MARSHALLER), "1000");
+    headers.put(Metadata.Key.of("custom-key", Metadata.ASCII_STRING_MARSHALLER), "custom-value1");
+    headers.put(Metadata.Key.of("custom-key", Metadata.ASCII_STRING_MARSHALLER), "custom-value2");
     ThreadSafeRandom random = mock(ThreadSafeRandom.class);
 
     PathMatcher pathMatcher = PathMatcher.fromPath("/FooService/barMethod", true);
@@ -1419,15 +1440,22 @@ public class XdsNameResolverTest {
         null);
     assertThat(XdsNameResolver.matchRoute(routeMatch7, "/FooService/barMethod", headers, random))
         .isTrue();
-  }
 
-  @Test
-  public void pathMatching_caseInsensitive() {
-    PathMatcher pathMatcher1 = PathMatcher.fromPath("/FooService/barMethod", false);
-    assertThat(XdsNameResolver.matchPath(pathMatcher1, "/fooservice/barmethod")).isTrue();
+    RouteMatch routeMatch8 = RouteMatch.create(
+        pathMatcher,
+        Collections.singletonList(
+            HeaderMatcher.forExactValue("content-type", "application/grpc", false)),
+        null);
+    assertThat(XdsNameResolver.matchRoute(
+        routeMatch8, "/FooService/barMethod", new Metadata(), random)).isTrue();
 
-    PathMatcher pathMatcher2 = PathMatcher.fromPrefix("/FooService", false);
-    assertThat(XdsNameResolver.matchPath(pathMatcher2, "/fooservice/barmethod")).isTrue();
+    RouteMatch routeMatch9 = RouteMatch.create(
+        pathMatcher,
+        Collections.singletonList(
+            HeaderMatcher.forExactValue("custom-key!", "custom-value1,custom-value2", false)),
+        null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch9, "/FooService/barMethod", headers, random))
+        .isFalse();
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
