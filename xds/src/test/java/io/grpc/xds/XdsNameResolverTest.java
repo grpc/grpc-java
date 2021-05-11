@@ -448,7 +448,38 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void resolved_rpcHashingByHeader() {
+  public void resolved_rpcHashingByHeader_withoutSubstitution() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(
+        Collections.singletonList(
+            Route.create(
+                RouteMatch.withPathExactOnly(
+                    "/" + TestMethodDescriptors.voidMethod().getFullMethodName()),
+                RouteAction.forCluster(cluster1, Collections.singletonList(HashPolicy.forHeader(
+                    false, "custom-key", null, null)),
+                    null),
+                ImmutableMap.<String, FilterConfig>of())));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    InternalConfigSelector configSelector =
+        resolutionResultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY);
+
+    // First call, with header "custom-key": "custom-value".
+    startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
+        ImmutableMap.of("custom-key", "custom-value"), CallOptions.DEFAULT);
+    long hash1 = testCall.callOptions.getOption(XdsNameResolver.RPC_HASH_KEY);
+
+    // Second call, with header "custom-key": "custom-val".
+    startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
+        ImmutableMap.of("custom-key", "custom-val"),
+        CallOptions.DEFAULT);
+    long hash2 = testCall.callOptions.getOption(XdsNameResolver.RPC_HASH_KEY);
+
+    assertThat(hash2).isNotEqualTo(hash1);
+  }
+
+  @Test
+  public void resolved_rpcHashingByHeader_withSubstitution() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(

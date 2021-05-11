@@ -509,8 +509,10 @@ final class XdsNameResolver extends NameResolver {
         Long newHash = null;
         if (policy.type() == HashPolicy.Type.HEADER) {
           String value = getHeaderValue(headers, policy.headerName());
-          if (value != null && policy.regEx() != null && policy.regExSubstitution() != null) {
-            value = policy.regEx().matcher(value).replaceAll(policy.regExSubstitution());
+          if (value != null) {
+            if (policy.regEx() != null && policy.regExSubstitution() != null) {
+              value = policy.regEx().matcher(value).replaceAll(policy.regExSubstitution());
+            }
             newHash = hashFunc.hashAsciiString(value);
           }
         } else if (policy.type() == HashPolicy.Type.CHANNEL_ID) {
