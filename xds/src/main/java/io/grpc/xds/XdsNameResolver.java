@@ -511,8 +511,8 @@ final class XdsNameResolver extends NameResolver {
           String value = getHeaderValue(headers, policy.headerName());
           if (value != null && policy.regEx() != null && policy.regExSubstitution() != null) {
             value = policy.regEx().matcher(value).replaceAll(policy.regExSubstitution());
+            newHash = hashFunc.hashAsciiString(value);
           }
-          newHash = hashFunc.hashAsciiString(value);
         } else if (policy.type() == HashPolicy.Type.CHANNEL_ID) {
           newHash = hashFunc.hashLong(logId.getId());
         }
