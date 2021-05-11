@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.EnvoyServerProtoData.TRANSPORT_SOCKET_NAME_TLS;
+import static io.grpc.xds.MatcherParser.parseHeaderMatcher;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
@@ -63,9 +64,8 @@ import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
-import io.grpc.xds.Matchers.FractionMatcher;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import io.grpc.xds.Matchers.PathMatcher;
+import io.grpc.xds.Matcher.FractionMatcher;
+import io.grpc.xds.Matcher.RouteMatcher;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
@@ -480,7 +480,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (proto.getQueryParametersCount() != 0) {
       return null;
     }
-    StructOrError<PathMatcher> pathMatch = parsePathMatcher(proto);
+    StructOrError<RouteMatcher> pathMatch = parseRouteMatcher(proto);
     if (pathMatch.getErrorDetail() != null) {
       return StructOrError.fromError(pathMatch.getErrorDetail());
     }
@@ -495,9 +495,9 @@ final class ClientXdsClient extends AbstractXdsClient {
       fractionMatch = parsedFraction.getStruct();
     }
 
-    List<HeaderMatcher> headerMatchers = new ArrayList<>();
+    List<Matcher> headerMatchers = new ArrayList<>();
     for (io.envoyproxy.envoy.config.route.v3.HeaderMatcher hmProto : proto.getHeadersList()) {
-      StructOrError<HeaderMatcher> headerMatcher = parseHeaderMatcher(hmProto);
+      StructOrError<Matcher> headerMatcher = StructOrError.fromStruct(parseHeaderMatcher(hmProto));
       if (headerMatcher.getErrorDetail() != null) {
         return StructOrError.fromError(headerMatcher.getErrorDetail());
       }
@@ -509,15 +509,15 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @VisibleForTesting
-  static StructOrError<PathMatcher> parsePathMatcher(
+  static StructOrError<RouteMatcher> parseRouteMatcher(
       io.envoyproxy.envoy.config.route.v3.RouteMatch proto) {
     boolean caseSensitive = proto.getCaseSensitive().getValue();
     switch (proto.getPathSpecifierCase()) {
       case PREFIX:
         return StructOrError.fromStruct(
-            PathMatcher.fromPrefix(proto.getPrefix(), caseSensitive));
+            RouteMatcher.fromPrefix(proto.getPrefix(), caseSensitive));
       case PATH:
-        return StructOrError.fromStruct(PathMatcher.fromPath(proto.getPath(), caseSensitive));
+        return StructOrError.fromStruct(RouteMatcher.fromPath(proto.getPath(), caseSensitive));
       case SAFE_REGEX:
         String rawPattern = proto.getSafeRegex().getRegex();
         Pattern safeRegEx;
@@ -526,7 +526,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         } catch (PatternSyntaxException e) {
           return StructOrError.fromError("Malformed safe regex pattern: " + e.getMessage());
         }
-        return StructOrError.fromStruct(PathMatcher.fromRegEx(safeRegEx));
+        return StructOrError.fromStruct(RouteMatcher.fromRegEx(safeRegEx));
       case PATHSPECIFIER_NOT_SET:
       default:
         return StructOrError.fromError("Unknown path match type");
@@ -552,45 +552,6 @@ final class ClientXdsClient extends AbstractXdsClient {
             "Unrecognized fractional percent denominator: " + proto.getDenominator());
     }
     return StructOrError.fromStruct(FractionMatcher.create(numerator, denominator));
-  }
-
-  @VisibleForTesting
-  static StructOrError<HeaderMatcher> parseHeaderMatcher(
-      io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
-    switch (proto.getHeaderMatchSpecifierCase()) {
-      case EXACT_MATCH:
-        return StructOrError.fromStruct(HeaderMatcher.forExactValue(
-            proto.getName(), proto.getExactMatch(), proto.getInvertMatch()));
-      case SAFE_REGEX_MATCH:
-        String rawPattern = proto.getSafeRegexMatch().getRegex();
-        Pattern safeRegExMatch;
-        try {
-          safeRegExMatch = Pattern.compile(rawPattern);
-        } catch (PatternSyntaxException e) {
-          return StructOrError.fromError(
-              "HeaderMatcher [" + proto.getName() + "] contains malformed safe regex pattern: "
-                  + e.getMessage());
-        }
-        return StructOrError.fromStruct(HeaderMatcher.forSafeRegEx(
-            proto.getName(), safeRegExMatch, proto.getInvertMatch()));
-      case RANGE_MATCH:
-        HeaderMatcher.Range rangeMatch = HeaderMatcher.Range.create(
-            proto.getRangeMatch().getStart(), proto.getRangeMatch().getEnd());
-        return StructOrError.fromStruct(HeaderMatcher.forRange(
-            proto.getName(), rangeMatch, proto.getInvertMatch()));
-      case PRESENT_MATCH:
-        return StructOrError.fromStruct(HeaderMatcher.forPresent(
-            proto.getName(), proto.getPresentMatch(), proto.getInvertMatch()));
-      case PREFIX_MATCH:
-        return StructOrError.fromStruct(HeaderMatcher.forPrefix(
-            proto.getName(), proto.getPrefixMatch(), proto.getInvertMatch()));
-      case SUFFIX_MATCH:
-        return StructOrError.fromStruct(HeaderMatcher.forSuffix(
-            proto.getName(), proto.getSuffixMatch(), proto.getInvertMatch()));
-      case HEADERMATCHSPECIFIER_NOT_SET:
-      default:
-        return StructOrError.fromError("Unknown header matcher type");
-    }
   }
 
   @VisibleForTesting

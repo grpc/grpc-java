@@ -46,9 +46,8 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.Matchers.FractionMatcher;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import io.grpc.xds.Matchers.PathMatcher;
+import io.grpc.xds.Matcher.AndMatcher;
+import io.grpc.xds.Matcher.FractionMatcher;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
@@ -335,7 +334,7 @@ final class XdsNameResolver extends NameResolver {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
       // Index ASCII headers by key, multi-value headers are concatenated for matching purposes.
-      Map<String, String> asciiHeaders = new HashMap<>();
+      final Map<String, String> asciiHeaders = new HashMap<>();
       Metadata headers = args.getHeaders();
       for (String headerName : headers.keys()) {
         if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
@@ -354,6 +353,19 @@ final class XdsNameResolver extends NameResolver {
       RoutingConfig routingCfg;
       Map<String, FilterConfig> selectedOverrideConfigs;
       List<ClientInterceptor> filterInterceptors = new ArrayList<>();
+      final String fullMethodName = "/" + args.getMethodDescriptor().getFullMethodName();
+      EvaluateArgs evaluateRouteArgs = new EvaluateArgs() {
+        @Override
+        public Map<String, String> getHeaders() {
+          return asciiHeaders;
+        }
+
+        @Override
+        public String getFullMethodName() {
+          return fullMethodName;
+        }
+      };
+
       do {
         routingCfg = routingConfig;
         selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
@@ -362,8 +374,7 @@ final class XdsNameResolver extends NameResolver {
           break;
         }
         for (Route route : routingCfg.routes) {
-          if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
-              asciiHeaders, random)) {
+          if (matchRoute(route.routeMatch(), evaluateRouteArgs, random)) {
             selectedRoute = route;
             selectedOverrideConfigs.putAll(route.filterConfigOverrides());
             break;
@@ -564,70 +575,16 @@ final class XdsNameResolver extends NameResolver {
   }
 
   @VisibleForTesting
-  static boolean matchRoute(RouteMatch routeMatch, String fullMethodName,
-      Map<String, String> headers, ThreadSafeRandom random) {
-    if (!matchPath(routeMatch.pathMatcher(), fullMethodName)) {
+  static boolean matchRoute(RouteMatch routeMatch, EvaluateArgs args, ThreadSafeRandom random) {
+    if (!routeMatch.pathMatcher().matches(args)) {
       return false;
     }
-    if (!matchHeaders(routeMatch.headerMatchers(), headers)) {
+    Matcher headerMatcher = new AndMatcher(routeMatch.headerMatchers());
+    if (!headerMatcher.matches(args)) {
       return false;
     }
     FractionMatcher fraction = routeMatch.fractionMatcher();
     return fraction == null || random.nextInt(fraction.denominator()) < fraction.numerator();
-  }
-
-  @VisibleForTesting
-  static boolean matchPath(PathMatcher pathMatcher, String fullMethodName) {
-    if (pathMatcher.path() != null) {
-      return pathMatcher.caseSensitive()
-          ? pathMatcher.path().equals(fullMethodName)
-          : pathMatcher.path().equalsIgnoreCase(fullMethodName);
-    } else if (pathMatcher.prefix() != null) {
-      return pathMatcher.caseSensitive()
-          ? fullMethodName.startsWith(pathMatcher.prefix())
-          : fullMethodName.toLowerCase().startsWith(pathMatcher.prefix().toLowerCase());
-    }
-    return pathMatcher.regEx().matches(fullMethodName);
-  }
-
-  private static boolean matchHeaders(
-      List<HeaderMatcher> headerMatchers, Map<String, String> headers) {
-    for (HeaderMatcher headerMatcher : headerMatchers) {
-      if (!matchHeader(headerMatcher, headers.get(headerMatcher.name()))) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  @VisibleForTesting
-  static boolean matchHeader(HeaderMatcher headerMatcher, @Nullable String value) {
-    if (headerMatcher.present() != null) {
-      return (value == null) == headerMatcher.present().equals(headerMatcher.inverted());
-    }
-    if (value == null) {
-      return false;
-    }
-    boolean baseMatch;
-    if (headerMatcher.exactValue() != null) {
-      baseMatch = headerMatcher.exactValue().equals(value);
-    } else if (headerMatcher.safeRegEx() != null) {
-      baseMatch = headerMatcher.safeRegEx().matches(value);
-    } else if (headerMatcher.range() != null) {
-      long numValue;
-      try {
-        numValue = Long.parseLong(value);
-        baseMatch = numValue >= headerMatcher.range().start()
-            && numValue <= headerMatcher.range().end();
-      } catch (NumberFormatException ignored) {
-        baseMatch = false;
-      }
-    } else if (headerMatcher.prefix() != null) {
-      baseMatch = value.startsWith(headerMatcher.prefix());
-    } else {
-      baseMatch = value.endsWith(headerMatcher.suffix());
-    }
-    return baseMatch != headerMatcher.inverted();
   }
 
   private class ResolveState implements LdsResourceWatcher {

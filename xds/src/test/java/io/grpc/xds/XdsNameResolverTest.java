@@ -66,8 +66,8 @@ import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import io.grpc.xds.Matchers.PathMatcher;
+import io.grpc.xds.Matcher.HeaderMatcher;
+import io.grpc.xds.Matcher.RouteMatcher;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
@@ -1320,40 +1320,60 @@ public class XdsNameResolverTest {
 
   @Test
   public void routeMatching_pathOnly() {
-    Map<String, String> headers = Collections.emptyMap();
+    final Map<String, String> headers = Collections.emptyMap();
     ThreadSafeRandom random = mock(ThreadSafeRandom.class);
 
     RouteMatch routeMatch1 =
         RouteMatch.create(
-            PathMatcher.fromPath("/FooService/barMethod", true),
+            RouteMatcher.fromPath("/FooService/barMethod", true),
             Collections.<HeaderMatcher>emptyList(), null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/FooService/barMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch1,
+        args("/FooService/barMethod", headers), random))
         .isTrue();
-    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/FooService/bazMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch1,
+        args("/FooService/bazMethod", headers), random))
         .isFalse();
 
     RouteMatch routeMatch2 =
         RouteMatch.create(
-            PathMatcher.fromPrefix("/FooService/", true),
+            RouteMatcher.fromPrefix("/FooService/", true),
             Collections.<HeaderMatcher>emptyList(), null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/FooService/barMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch2,
+        args("/FooService/barMethod", headers), random))
         .isTrue();
-    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/FooService/bazMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch2,
+        args("/FooService/bazMethod", headers), random))
         .isTrue();
-    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/BarService/bazMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch2,
+        args("/BarService/bazMethod", headers), random))
         .isFalse();
 
     RouteMatch routeMatch3 =
         RouteMatch.create(
-            PathMatcher.fromRegEx(Pattern.compile(".*Foo.*")),
+            RouteMatcher.fromRegEx(Pattern.compile(".*Foo.*")),
             Collections.<HeaderMatcher>emptyList(), null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch3, "/FooService/barMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch3,
+        args("/FooService/barMethod", headers), random))
         .isTrue();
+  }
+
+  private EvaluateArgs args(final String method, final Map<String, String> headers) {
+    return new EvaluateArgs() {
+      @Override
+      public Map<String, String> getHeaders() {
+        return headers;
+      }
+
+      @Override
+      public String getFullMethodName() {
+        return method;
+      }
+    };
   }
 
   @Test
   public void routeMatching_withHeaders() {
-    Map<String, String> headers = new HashMap<>();
+    final Map<String, String> headers = new HashMap<>();
     headers.put("authority", "foo.googleapis.com");
     headers.put("grpc-encoding", "gzip");
     headers.put("user-agent", "gRPC-Java");
@@ -1361,9 +1381,9 @@ public class XdsNameResolverTest {
     headers.put("custom-key", "custom-value1,custom-value2");
     ThreadSafeRandom random = mock(ThreadSafeRandom.class);
 
-    PathMatcher pathMatcher = PathMatcher.fromPath("/FooService/barMethod", true);
+    RouteMatcher routeMatcher = RouteMatcher.fromPath("/FooService/barMethod", true);
     RouteMatch routeMatch1 = RouteMatch.create(
-        pathMatcher,
+        routeMatcher,
         Arrays.asList(
             HeaderMatcher.forExactValue("grpc-encoding", "gzip", false),
             HeaderMatcher.forSafeRegEx("authority", Pattern.compile(".*googleapis.*"), false),
@@ -1373,61 +1393,53 @@ public class XdsNameResolverTest {
             HeaderMatcher.forPrefix("custom-key", "custom-", false),
             HeaderMatcher.forSuffix("custom-key", "value2", false)),
         null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/FooService/barMethod", headers, random))
+    EvaluateArgs evaluateRouteArgs = args("/FooService/barMethod", headers);
+    assertThat(XdsNameResolver.matchRoute(routeMatch1, evaluateRouteArgs, random))
         .isTrue();
 
     RouteMatch routeMatch2 = RouteMatch.create(
-        pathMatcher,
+        routeMatcher,
         Collections.singletonList(
             HeaderMatcher.forSafeRegEx("authority", Pattern.compile(".*googleapis.*"), true)),
         null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/FooService/barMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch2, evaluateRouteArgs, random))
         .isFalse();
 
     RouteMatch routeMatch3 = RouteMatch.create(
-        pathMatcher,
+        routeMatcher,
         Collections.singletonList(
             HeaderMatcher.forExactValue("user-agent", "gRPC-Go", false)), null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch3, "/FooService/barMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch3, evaluateRouteArgs, random))
         .isFalse();
 
     RouteMatch routeMatch4 = RouteMatch.create(
-        pathMatcher,
+        routeMatcher,
         Collections.singletonList(HeaderMatcher.forPresent("user-agent", false, false)),
         null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch4, "/FooService/barMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch4, evaluateRouteArgs, random))
         .isFalse();
 
     RouteMatch routeMatch5 = RouteMatch.create(
-        pathMatcher,
+        routeMatcher,
         Collections.singletonList(HeaderMatcher.forPresent("user-agent", false, true)), // inverted
         null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch5, "/FooService/barMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch5, evaluateRouteArgs, random))
         .isTrue();
 
     RouteMatch routeMatch6 = RouteMatch.create(
-        pathMatcher,
+        routeMatcher,
         Collections.singletonList(HeaderMatcher.forPresent("user-agent", true, true)),
         null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch6, "/FooService/barMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch6, evaluateRouteArgs, random))
         .isFalse();
 
     RouteMatch routeMatch7 = RouteMatch.create(
-        pathMatcher,
+        routeMatcher,
         Collections.singletonList(
             HeaderMatcher.forExactValue("custom-key", "custom-value1,custom-value2", false)),
         null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch7, "/FooService/barMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch7, evaluateRouteArgs, random))
         .isTrue();
-  }
-
-  @Test
-  public void pathMatching_caseInsensitive() {
-    PathMatcher pathMatcher1 = PathMatcher.fromPath("/FooService/barMethod", false);
-    assertThat(XdsNameResolver.matchPath(pathMatcher1, "/fooservice/barmethod")).isTrue();
-
-    PathMatcher pathMatcher2 = PathMatcher.fromPrefix("/FooService", false);
-    assertThat(XdsNameResolver.matchPath(pathMatcher2, "/fooservice/barmethod")).isTrue();
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
@@ -1537,7 +1549,7 @@ public class XdsNameResolverTest {
           : ImmutableMap.<String, FilterConfig>of(FAULT_FILTER_INSTANCE_NAME, routeFaultConfig);
       Route route = Route.create(
           RouteMatch.create(
-              PathMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
+              RouteMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
           RouteAction.forWeightedClusters(
               Collections.singletonList(clusterWeight),
               Collections.<HashPolicy>emptyList(),
@@ -1602,7 +1614,7 @@ public class XdsNameResolverTest {
           : ImmutableMap.<String, FilterConfig>of(FAULT_FILTER_INSTANCE_NAME, routFaultConfig);
       Route route = Route.create(
           RouteMatch.create(
-              PathMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
+              RouteMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
           RouteAction.forWeightedClusters(
               Collections.singletonList(clusterWeight),
               Collections.<HashPolicy>emptyList(),

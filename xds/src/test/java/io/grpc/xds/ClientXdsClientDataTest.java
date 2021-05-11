@@ -56,16 +56,15 @@ import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher.GoogleRE2;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
-import io.envoyproxy.envoy.type.v3.Int64Range;
 import io.grpc.Status.Code;
 import io.grpc.xds.ClientXdsClient.StructOrError;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.Filter.FilterConfig;
-import io.grpc.xds.Matchers.FractionMatcher;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import io.grpc.xds.Matchers.PathMatcher;
+import io.grpc.xds.Matcher.FractionMatcher;
+import io.grpc.xds.Matcher.HeaderMatcher;
+import io.grpc.xds.Matcher.RouteMatcher;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
@@ -100,7 +99,7 @@ public class ClientXdsClientDataTest {
     assertThat(struct.getStruct())
         .isEqualTo(
             Route.create(
-                RouteMatch.create(PathMatcher.fromPath("/service/method", false),
+                RouteMatch.create(RouteMatcher.fromPath("/service/method", false),
                     Collections.<HeaderMatcher>emptyList(), null),
                 RouteAction.forCluster("cluster-foo", Collections.<HashPolicy>emptyList(), null),
                 ImmutableMap.<String, FilterConfig>of()));
@@ -192,7 +191,7 @@ public class ClientXdsClientDataTest {
     assertThat(struct.getStruct())
         .isEqualTo(
             RouteMatch.create(
-                PathMatcher.fromPrefix("", false),
+                RouteMatcher.fromPrefix("", false),
                 Arrays.asList(
                     HeaderMatcher.forPrefix(":scheme", "http", false),
                     HeaderMatcher.forExactValue(":method", "PUT", false)),
@@ -216,7 +215,7 @@ public class ClientXdsClientDataTest {
     assertThat(struct.getStruct())
         .isEqualTo(
             RouteMatch.create(
-                PathMatcher.fromPrefix( "", false), Collections.<HeaderMatcher>emptyList(),
+                RouteMatcher.fromPrefix( "", false), Collections.<HeaderMatcher>emptyList(),
                 FractionMatcher.create(30, 100)));
   }
 
@@ -226,20 +225,20 @@ public class ClientXdsClientDataTest {
         io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
             .setPath("/service/method")
             .build();
-    StructOrError<PathMatcher> struct = ClientXdsClient.parsePathMatcher(proto);
+    StructOrError<RouteMatcher> struct = ClientXdsClient.parseRouteMatcher(proto);
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct()).isEqualTo(
-        PathMatcher.fromPath("/service/method", false));
+        RouteMatcher.fromPath("/service/method", false));
   }
 
   @Test
   public void parsePathMatcher_withPrefix() {
     io.envoyproxy.envoy.config.route.v3.RouteMatch proto =
         io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPrefix("/").build();
-    StructOrError<PathMatcher> struct = ClientXdsClient.parsePathMatcher(proto);
+    StructOrError<RouteMatcher> struct = ClientXdsClient.parseRouteMatcher(proto);
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct()).isEqualTo(
-        PathMatcher.fromPrefix("/", false));
+        RouteMatcher.fromPrefix("/", false));
   }
 
   @Test
@@ -248,99 +247,9 @@ public class ClientXdsClientDataTest {
         io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
             .setSafeRegex(RegexMatcher.newBuilder().setRegex("."))
             .build();
-    StructOrError<PathMatcher> struct = ClientXdsClient.parsePathMatcher(proto);
+    StructOrError<RouteMatcher> struct = ClientXdsClient.parseRouteMatcher(proto);
     assertThat(struct.getErrorDetail()).isNull();
-    assertThat(struct.getStruct()).isEqualTo(PathMatcher.fromRegEx(Pattern.compile(".")));
-  }
-
-  @Test
-  public void parseHeaderMatcher_withExactMatch() {
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
-        io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
-            .setName(":method")
-            .setExactMatch("PUT")
-            .build();
-    StructOrError<HeaderMatcher> struct1 = ClientXdsClient.parseHeaderMatcher(proto);
-    assertThat(struct1.getErrorDetail()).isNull();
-    assertThat(struct1.getStruct()).isEqualTo(
-        HeaderMatcher.forExactValue(":method", "PUT", false));
-  }
-
-  @Test
-  public void parseHeaderMatcher_withSafeRegExMatch() {
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
-        io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
-            .setName(":method")
-            .setSafeRegexMatch(RegexMatcher.newBuilder().setRegex("P*"))
-            .build();
-    StructOrError<HeaderMatcher> struct3 = ClientXdsClient.parseHeaderMatcher(proto);
-    assertThat(struct3.getErrorDetail()).isNull();
-    assertThat(struct3.getStruct()).isEqualTo(
-        HeaderMatcher.forSafeRegEx(":method", Pattern.compile("P*"), false));
-  }
-
-  @Test
-  public void parseHeaderMatcher_withRangeMatch() {
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
-        io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
-            .setName("timeout")
-            .setRangeMatch(Int64Range.newBuilder().setStart(10L).setEnd(20L))
-            .build();
-    StructOrError<HeaderMatcher> struct4 = ClientXdsClient.parseHeaderMatcher(proto);
-    assertThat(struct4.getErrorDetail()).isNull();
-    assertThat(struct4.getStruct()).isEqualTo(
-        HeaderMatcher.forRange("timeout", HeaderMatcher.Range.create(10L, 20L), false));
-  }
-
-  @Test
-  public void parseHeaderMatcher_withPresentMatch() {
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
-        io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
-            .setName("user-agent")
-            .setPresentMatch(true)
-            .build();
-    StructOrError<HeaderMatcher> struct5 = ClientXdsClient.parseHeaderMatcher(proto);
-    assertThat(struct5.getErrorDetail()).isNull();
-    assertThat(struct5.getStruct()).isEqualTo(
-        HeaderMatcher.forPresent("user-agent", true, false));
-  }
-
-  @Test
-  public void parseHeaderMatcher_withPrefixMatch() {
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
-        io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
-            .setName("authority")
-            .setPrefixMatch("service-foo")
-            .build();
-    StructOrError<HeaderMatcher> struct6 = ClientXdsClient.parseHeaderMatcher(proto);
-    assertThat(struct6.getErrorDetail()).isNull();
-    assertThat(struct6.getStruct()).isEqualTo(
-        HeaderMatcher.forPrefix("authority", "service-foo", false));
-  }
-
-  @Test
-  public void parseHeaderMatcher_withSuffixMatch() {
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
-        io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
-            .setName("authority")
-            .setSuffixMatch("googleapis.com")
-            .build();
-    StructOrError<HeaderMatcher> struct7 = ClientXdsClient.parseHeaderMatcher(proto);
-    assertThat(struct7.getErrorDetail()).isNull();
-    assertThat(struct7.getStruct()).isEqualTo(
-        HeaderMatcher.forSuffix("authority", "googleapis.com", false));
-  }
-
-  @Test
-  public void parseHeaderMatcher_malformedRegExPattern() {
-    io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
-        io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
-            .setName(":method")
-            .setSafeRegexMatch(RegexMatcher.newBuilder().setRegex("["))
-            .build();
-    StructOrError<HeaderMatcher> struct = ClientXdsClient.parseHeaderMatcher(proto);
-    assertThat(struct.getErrorDetail()).isNotNull();
-    assertThat(struct.getStruct()).isNull();
+    assertThat(struct.getStruct()).isEqualTo(RouteMatcher.fromRegEx(Pattern.compile(".")));
   }
 
   @Test

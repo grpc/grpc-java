@@ -29,6 +29,7 @@ import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.config.rbac.v2.Policy;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC.Action;
+import io.grpc.xds.EvaluateArgs;
 import io.grpc.xds.internal.rbac.engine.cel.Activation;
 import io.grpc.xds.internal.rbac.engine.cel.InterpreterException;
 import java.util.Map;
