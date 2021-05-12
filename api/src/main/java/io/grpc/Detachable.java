@@ -16,22 +16,25 @@
 
 package io.grpc;
 
+import java.io.InputStream;
+
 /**
- * A <i>Detachable</i> encapsulates an object that can be forked with underlying resources
- * detached and transferred to a new instance. The forked instance takes over the ownership
- * of resources and is responsible for releasing after use. The forked instance preserves
- * states of detached resources. Resources can be consumed through the forked instance as if
- * being continually consumed through the original instance. The original instance discards
- * states of detached resources and is no longer consumable as if the resources are exhausted.
+ * A <i>Detachable</i> encapsulates some readable data source that can be detached and transferred
+ * to an {@link InputStream}. The detached InputStream takes over the ownership of the
+ * underlying data source. That's said, the detached InputStream is responsible for releasing its
+ * resources after use. The detached InputStream preserves internal states of the underlying
+ * data source. Data can be consumed through the detached InputStream as if being continually
+ * consumed through the original instance. The original instance discards internal states of
+ * detached data source and is no longer consumable as if the data source is exhausted.
  */
 @ExperimentalApi("TODO")
 public interface Detachable {
 
   /**
-   * Fork a new instance with underlying resources detached from this instance and
-   * transferred to the new instance.
+   * Detaches the underlying data source from this instance and transfers to an {@link
+   * InputStream}. Detaching data from an already-detached instance gives an InputStream with
+   * zero bytes of data.
    *
-   * @throws IllegalStateException if the underlying resources have already been detached.
    */
-  public Detachable detach();
+  InputStream detach();
 }

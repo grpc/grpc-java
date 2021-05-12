@@ -425,7 +425,7 @@ public final class ReadableBuffers {
     }
 
     @Override
-    public Detachable detach() {
+    public InputStream detach() {
       if (detached) {
         throw new IllegalStateException("already detached");
       }
