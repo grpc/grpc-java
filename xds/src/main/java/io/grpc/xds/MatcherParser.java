@@ -66,7 +66,7 @@ public class MatcherParser {
             proto.getName(), proto.getSuffixMatch(), proto.getInvertMatch());
       case HEADERMATCHSPECIFIER_NOT_SET:
       default:
-        throw new IllegalArgumentException("Unknown header matcher type");
+        throw new IllegalArgumentException("Unknown header matcher type.");
     }
   }
 
@@ -77,30 +77,30 @@ public class MatcherParser {
         return new PathMatcher((StringMatcher) parseStringMatcher(proto.getPath()));
       case RULE_NOT_SET:
       default:
-        throw new IllegalArgumentException("Unknown path matcher rule type");
+        throw new IllegalArgumentException("Unknown path matcher rule type.");
     }
   }
 
-  /** Translates envoy proto.*/
+  /** Translates envoy proto Authenticated to {@link AuthenticatedMatcher}.*/
   public static Matcher parseAuthenticated(Authenticated proto) {
     Matcher matcher = parseStringMatcher(proto.getPrincipalName());
     return new AuthenticatedMatcher((StringMatcher)matcher);
   }
 
-  /** Construct DestinationIpMatcher matcher from envoy proto.*/
+  /** Constructs {@link DestinationIpMatcher} matcher from envoy proto. */
   public static Matcher createDestinationIpMatcher(CidrRange cidrRange) {
     return new DestinationIpMatcher(
         IpMatcher.create(cidrRange.getAddressPrefix(), cidrRange.getPrefixLen().getValue()));
   }
 
-  /** Construct SourceIPMatcher from envoy proto.*/
+  /** Constructs {@link SourceIpMatcher} from envoy proto. */
   public static Matcher createSourceIpMatcher(CidrRange cidrRange) {
     return new SourceIpMatcher(
         IpMatcher.create(cidrRange.getAddressPrefix(), cidrRange.getPrefixLen().getValue()));
   }
 
-  /** Translate StringMatcher from envoy proto. */
-  public static Matcher parseStringMatcher(io.envoyproxy.envoy.type.matcher.v3.StringMatcher
+  /** Translates {@link StringMatcher} from envoy proto. */
+  static Matcher parseStringMatcher(io.envoyproxy.envoy.type.matcher.v3.StringMatcher
       proto) {
     switch (proto.getMatchPatternCase()) {
       case EXACT:
@@ -116,7 +116,7 @@ public class MatcherParser {
         return StringMatcher.forContains(proto.getContains(), proto.getIgnoreCase());
       case MATCHPATTERN_NOT_SET:
       default:
-        throw new IllegalArgumentException("Unknown StringMatcher match pattern");
+        throw new IllegalArgumentException("Unknown StringMatcher match pattern.");
     }
   }
 }

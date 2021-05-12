@@ -23,17 +23,17 @@ import javax.annotation.Nullable;
  *  authorization/http-filtering, to support the {@link io.grpc.xds.Matcher} logic. */
 public abstract class EvaluateArgs {
   /** Provides the source address. */
-  public String getSourceAddress() {
+  public String getPeerAddress() {
     throw new UnsupportedOperationException();
   }
 
   /** Provides the destination address. */
-  public String getDestinationAddress() {
+  public String getLocalAddress() {
     throw new UnsupportedOperationException();
   }
 
   /** Provides the destination port from the request. */
-  public int getDestinationPort() {
+  public int getLocalPort() {
     throw new UnsupportedOperationException();
   }
 
@@ -44,12 +44,12 @@ public abstract class EvaluateArgs {
 
   /** Provides request header for the corresponding key. */
   @Nullable
-  public String getHeader(String key) {
+  public String getHeaderValue(String key) {
     throw new UnsupportedOperationException();
   }
 
-  /** Provides request method name. */
-  public String getFullMethodName() {
+  /** Provides full gRPC method name. */
+  public String getPath() {
     throw new UnsupportedOperationException();
   }
 

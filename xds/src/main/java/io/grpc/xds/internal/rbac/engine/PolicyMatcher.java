@@ -33,7 +33,8 @@ import java.util.List;
 /** Implements a top level {@link Matcher} for a single RBAC policy configuration per envoy
  * protocol:
  * https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/rbac/v3/rbac.proto#config-rbac-v3-policy.
- * Currently we only support matching some of the request fields. Those unsupported fields are
+ *
+ * <p>Currently we only support matching some of the request fields. Those unsupported fields are
  * considered not match until we stop ignoring them.
  * */
 public final class PolicyMatcher extends Matcher {
@@ -45,6 +46,7 @@ public final class PolicyMatcher extends Matcher {
     this.principals = createPrincipals(policy.getPrincipalsList());
   }
 
+  // Top level permissions are being matched with OR semantics.
   private static Matcher createPermissions(List<Permission> permissions) {
     List<Matcher> anyMatch = new ArrayList<>();
     for (Permission permission : permissions) {
@@ -58,10 +60,7 @@ public final class PolicyMatcher extends Matcher {
       case AND_RULES:
         List<Matcher> andMatch = new ArrayList<>();
         for (Permission p : permission.getAndRules().getRulesList()) {
-          Matcher matcher = createPermission(p);
-          if (matcher != null) {
-            andMatch.add(matcher);
-          }
+          andMatch.add(createPermission(p));
         }
         return new AndMatcher(andMatch);
       case OR_RULES:
@@ -79,7 +78,7 @@ public final class PolicyMatcher extends Matcher {
         return new Matcher() {
           @Override
           public boolean matches(EvaluateArgs args) {
-            return args.getDestinationPort() == port;
+            return args.getLocalPort() == port;
           }
         };
       case NOT_RULE:
@@ -89,10 +88,11 @@ public final class PolicyMatcher extends Matcher {
         // Ignore. Not supported.
         return new InvertMatcher(AlwaysTrueMatcher.INSTANCE);
       default:
-        throw new IllegalArgumentException("Unknown permission rule case");
+        throw new IllegalArgumentException("Unknown permission rule case.");
     }
   }
 
+  // Top level principals are being matched with OR semantics.
   private static Matcher createPrincipals(List<Principal> principals) {
     List<Matcher> anyMatch = new ArrayList<>();
     for (Principal principal: principals) {
@@ -115,9 +115,10 @@ public final class PolicyMatcher extends Matcher {
         return AlwaysTrueMatcher.INSTANCE;
       case AUTHENTICATED:
         return parseAuthenticated(principal.getAuthenticated());
-      case REMOTE_IP:
       case SOURCE_IP:
-        return createSourceIpMatcher(principal.getRemoteIp());
+        return createSourceIpMatcher(principal.getSourceIp());
+      case DIRECT_REMOTE_IP:
+        return createSourceIpMatcher(principal.getDirectRemoteIp());
       case HEADER:
         return parseHeaderMatcher(principal.getHeader());
       case NOT_ID:
@@ -125,11 +126,11 @@ public final class PolicyMatcher extends Matcher {
       case URL_PATH:
         return parsePathMatcher(principal.getUrlPath());
       case METADATA:
-      case DIRECT_REMOTE_IP:
+      case REMOTE_IP:
         // Ignore. Not supported.
         return new InvertMatcher(AlwaysTrueMatcher.INSTANCE);
       default:
-        throw new IllegalArgumentException("Unknown principal identifier case");
+        throw new IllegalArgumentException("Unknown principal identifier case.");
     }
   }
 

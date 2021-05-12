@@ -26,8 +26,8 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 /** Defines matcher abstract and provides a group of request matchers.
- * A matcher implementation evaluates an {@link EvaluateArgs} input and tells whether certain
- * argument matches a predefined match pattern. */
+ * A matcher evaluates an {@link EvaluateArgs} input and tells whether certain
+ * argument in the input matches a predefined matching pattern. */
 public abstract class Matcher {
   protected Matcher() {}
 
@@ -53,7 +53,7 @@ public abstract class Matcher {
     }
   }
 
-  /** Matches when all of the matchers matches. */
+  /** Matches when all of the matchers match. */
   public static class AndMatcher extends Matcher {
     private final List<? extends Matcher> allMatch;
 
@@ -97,7 +97,8 @@ public abstract class Matcher {
     }
   }
 
-  /** Matcher for HTTP request path. */
+  /** Matcher for HTTP request path.
+   * TODO(zivy@): merge with {@link PathMatcher} */
   @AutoValue
   abstract static class RouteMatcher extends Matcher {
     // Exact full path to be matched.
@@ -138,7 +139,7 @@ public abstract class Matcher {
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      String fullMethodName = args.getFullMethodName();
+      String fullMethodName = args.getPath();
       if (path() != null) {
         return caseSensitive()
             ? path().equals(fullMethodName)
@@ -243,7 +244,7 @@ public abstract class Matcher {
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      String value = args.getHeader(name());
+      String value = args.getHeaderValue(name());
       if (present() != null) {
         return (value == null) == present().equals(inverted());
       }
@@ -285,10 +286,10 @@ public abstract class Matcher {
     }
   }
 
-  /** Defines string match pattern and evaluates matching result for the argument.*/
+  /** Represents various ways to match a string .*/
   @AutoValue
-  public abstract static class StringMatcher extends Matcher {
-    // The input string exactly matches the specified string exactly.
+  abstract static class StringMatcher extends Matcher {
+    // The input string exactly matches the specified string.
     @Nullable
     abstract String exact();
 
@@ -308,8 +309,7 @@ public abstract class Matcher {
     @Nullable
     abstract String contains();
 
-    // If true, exact/prefix/suffix matching should be case insensitive. No effect on regular
-    // expression matching.
+    // If true, exact/prefix/suffix matching should be case insensitive.
     abstract boolean ignoreCase();
 
     static StringMatcher forExact(String exact, boolean ignoreCase) {
@@ -344,10 +344,9 @@ public abstract class Matcher {
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      throw new UnsupportedOperationException("error");
+      throw new UnsupportedOperationException();
     }
 
-    /** Returns match result for one and only one of the match pattern. */
     public boolean matches(String args) {
       if (args == null) {
         return false;
@@ -378,7 +377,7 @@ public abstract class Matcher {
     }
   }
 
-  /** Evaluate whether request path matches a string matcher pattern. */
+  /** Matcher for HTTP request path. */
   static class PathMatcher extends Matcher {
     private final StringMatcher delegate;
 
@@ -388,11 +387,11 @@ public abstract class Matcher {
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return delegate.matches(args.getFullMethodName());
+      return delegate.matches(args.getPath());
     }
   }
 
-  /** Evaluate whether request principal argument matches a string matcher pattern. */
+  /** Matcher for the authenticated principal name. */
   static class AuthenticatedMatcher extends Matcher {
     private final StringMatcher delegate;
 
@@ -406,7 +405,7 @@ public abstract class Matcher {
     }
   }
 
-  /** Evaluate whether the request destination address matches an IP address pattern. */
+  /** Matcher for request destination IP address. */
   static class DestinationIpMatcher extends Matcher {
     private final IpMatcher delegate;
 
@@ -416,11 +415,11 @@ public abstract class Matcher {
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return delegate.matches(args.getDestinationAddress());
+      return delegate.matches(args.getLocalAddress());
     }
   }
 
-  /** Evaluate whether the request source address matches an IP address pattern. */
+  /** Matcher for request source IP address. */
   static class SourceIpMatcher extends Matcher {
     private final IpMatcher delegate;
 
@@ -430,21 +429,21 @@ public abstract class Matcher {
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return delegate.matches(args.getSourceAddress());
+      return delegate.matches(args.getPeerAddress());
     }
   }
 
-  /** Evaluates whether an IPv4 or IPv6 address is within a CIDR range.  */
+  /** Matcher to evaluate whether an IPv4 or IPv6 address is within a CIDR range. */
   @AutoValue
   abstract static class IpMatcher extends Matcher {
-    @Nullable
+
     abstract String addressPrefix();
 
     abstract int prefixLen();
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      throw new UnsupportedOperationException("error");
+      throw new UnsupportedOperationException();
     }
 
     public boolean matches(String args) {
@@ -460,15 +459,12 @@ public abstract class Matcher {
       if (ip.length != subnet.length) {
         return false;
       }
-      for (int i = 0; i < ip.length; i++) {
+      for (int i = 0; i < ip.length && len > 0; i++) {
         int mask = 256 - (1 << (len >= 8 ? 0 : len % 8));
         if ((mask & ip[i]) != (mask & subnet[i]))  {
           return false;
         }
         len -= 8;
-        if (len <= 0) {
-          return true;
-        }
       }
       return true;
     }

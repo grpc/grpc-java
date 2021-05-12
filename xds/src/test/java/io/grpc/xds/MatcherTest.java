@@ -144,12 +144,12 @@ public class MatcherTest {
   private EvaluateArgs args(final String method, final Map<String, String> headers) {
     return new EvaluateArgs() {
       @Override
-      public String getHeader(String key) {
+      public String getHeaderValue(String key) {
         return headers.get(key);
       }
 
       @Override
-      public String getFullMethodName() {
+      public String getPath() {
         return method;
       }
     };

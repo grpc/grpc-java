@@ -26,10 +26,11 @@ import java.util.Map;
 
 /** Implementation of gRPC server access control based on envoy RBAC protocol:
  * https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/rbac/v3/rbac.proto
- * One GrpcAuthorizationEngine corresponds to one action type and a list of policies.
- * Action type is either DENY or ALLOW. Policies are examined sequentially in an any match fashion.
- * If not matched, the opposite action type is returned as a result.
- * e.g.
+ *
+ * <p>One GrpcAuthorizationEngine is initialized with one action type and a list of policies.
+ * Policies are examined sequentially in order in an any match fashion, and the first matched policy
+ * will be returned. If not matched at all, the opposite action type is returned as a result.
+ * The the following example demonstrates the matching criteria corresponding to the engine:
  * action: ALLOW
  * policies:
  *   "service-admin":
@@ -55,12 +56,15 @@ import java.util.Map;
  *                     - destination_port: 443
  *     principals:
  *       - any: true
- * */
+ *
+ * <p>The matching criteria should be immutable once constructed, and
+ * {@link #evaluate(EvaluateArgs)} is supposed to be called safely for multiple times.
+ */
 public class GrpcAuthorizationEngine implements AuthorizationEngineInterface {
   private final Map<String, PolicyMatcher> policyMatchers = new HashMap<>();
   private final Action action;
 
-  /** Instantiate with envoy RBAC policy configuration. */
+  /** Instantiated with envoy RBAC policy configuration. */
   public GrpcAuthorizationEngine(RBAC rbacPolicy) {
     this.action = rbacPolicy.getAction();
     for (Map.Entry<String, Policy> entry: rbacPolicy.getPoliciesMap().entrySet()) {
@@ -68,8 +72,6 @@ public class GrpcAuthorizationEngine implements AuthorizationEngineInterface {
     }
   }
 
-  /** The matching criteria are supposed to be immutable once constructed,
-   * and {@link #evaluate(EvaluateArgs)} are supposed to be called multiple times safely. */
   @Override
   public AuthDecision evaluate(EvaluateArgs args) {
     String firstMatch = findFirstMatch(args);
@@ -80,8 +82,6 @@ public class GrpcAuthorizationEngine implements AuthorizationEngineInterface {
     return AuthDecision.create(decisionType, firstMatch);
   }
 
-  /** Sequentially evaluate each policy, and return the policy name for the first match if any
-   * match happens, otherwise return null. */
   private String findFirstMatch(EvaluateArgs args) {
     for (Map.Entry<String, PolicyMatcher> entry: policyMatchers.entrySet()) {
       if (entry.getValue().matches(args)) {

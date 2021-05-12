@@ -74,11 +74,11 @@ public class GrpcAuthorizationEngineTest {
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
         createRbac(Action.ALLOW, POLICY_NAME, permission, principal));
 
-    when(args.getHeader(HEADER_KEY)).thenReturn( HEADER_VALUE);
+    when(args.getHeaderValue(HEADER_KEY)).thenReturn( HEADER_VALUE);
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.ALLOW, POLICY_NAME));
 
-    when(args.getHeader(HEADER_KEY)).thenReturn(HEADER_VALUE + "-1");
+    when(args.getHeaderValue(HEADER_KEY)).thenReturn(HEADER_VALUE + "-1");
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.DENY, null));
   }
@@ -92,24 +92,25 @@ public class GrpcAuthorizationEngineTest {
         createRbac(Action.DENY, POLICY_NAME, permission, principal));
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.ALLOW, null));
-    when(args.getFullMethodName()).thenReturn("authorized");
+    when(args.getPath()).thenReturn("authorized");
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.DENY, POLICY_NAME));
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void testIpPortMatch() {
     Permission permission = Permission.newBuilder().setDestinationIp(CIDR_RANGE).build();
-    Principal principal = Principal.newBuilder().setRemoteIp(CIDR_RANGE2).build();
+    Principal principal = Principal.newBuilder().setDirectRemoteIp(CIDR_RANGE2).build();
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
         createRbac(Action.ALLOW, POLICY_NAME, permission, principal));
 
-    when(args.getDestinationAddress()).thenReturn(IP_ADDR1);
-    when(args.getSourceAddress()).thenReturn(IP_ADDR2);
+    when(args.getLocalAddress()).thenReturn(IP_ADDR1);
+    when(args.getPeerAddress()).thenReturn(IP_ADDR2);
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.ALLOW, POLICY_NAME));
 
-    when(args.getDestinationAddress()).thenReturn(IP_ADDR2);
+    when(args.getLocalAddress()).thenReturn(IP_ADDR2);
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.DENY, null));
 
@@ -117,13 +118,14 @@ public class GrpcAuthorizationEngineTest {
         .addRules(Permission.newBuilder().setDestinationPort(8000).build())
         .addRules(Permission.newBuilder().setDestinationPort(8001).build())
         .build()).build();
+    principal = Principal.newBuilder().setSourceIp(CIDR_RANGE2).build();
     engine = new GrpcAuthorizationEngine(
         createRbac(Action.ALLOW, POLICY_NAME, permission, principal));
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.DENY, null));
-    when(args.getDestinationAddress()).thenReturn(IP_ADDR1);
-    when(args.getSourceAddress()).thenReturn(IP_ADDR2);
-    when(args.getDestinationPort()).thenReturn(8001);
+    when(args.getLocalAddress()).thenReturn(IP_ADDR1);
+    when(args.getPeerAddress()).thenReturn(IP_ADDR2);
+    when(args.getLocalPort()).thenReturn(8001);
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.ALLOW, POLICY_NAME));
   }
@@ -143,7 +145,7 @@ public class GrpcAuthorizationEngineTest {
 
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.ALLOW, null));
-    when(args.getHeader(HEADER_KEY)).thenReturn( HEADER_VALUE);
+    when(args.getHeaderValue(HEADER_KEY)).thenReturn( HEADER_VALUE);
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.DENY, POLICY_NAME));
   }
@@ -192,7 +194,7 @@ public class GrpcAuthorizationEngineTest {
         AuthDecision.create(DecisionType.ALLOW, null));
 
     permission = Permission.newBuilder().setAny(true).build();
-    principal = Principal.newBuilder().setDirectRemoteIp(CIDR_RANGE).build();
+    principal = Principal.newBuilder().setRemoteIp(CIDR_RANGE).build();
     engine = new GrpcAuthorizationEngine(
         createRbac(Action.DENY, POLICY_NAME, permission, principal));
     assertThat(engine.evaluate(args)).isEqualTo(
@@ -247,9 +249,9 @@ public class GrpcAuthorizationEngineTest {
             POLICY_NAME + "-2",
             Policy.newBuilder().addPermissions(permission21).addPermissions(permission22)
                 .addPrincipals(principal21).addPrincipals(principal22).build()));
-    when(args.getHeader(HEADER_KEY)).thenReturn( HEADER_VALUE);
-    when(args.getDestinationAddress()).thenReturn(IP_ADDR1);
-    when(args.getDestinationPort()).thenReturn(80);
+    when(args.getHeaderValue(HEADER_KEY)).thenReturn( HEADER_VALUE);
+    when(args.getLocalAddress()).thenReturn(IP_ADDR1);
+    when(args.getLocalPort()).thenReturn(80);
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.ALLOW, POLICY_NAME + "-2"));
   }

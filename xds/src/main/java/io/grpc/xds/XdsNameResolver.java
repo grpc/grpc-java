@@ -507,7 +507,7 @@ final class XdsNameResolver extends NameResolver {
       for (HashPolicy policy : hashPolicies) {
         Long newHash = null;
         if (policy.type() == HashPolicy.Type.HEADER) {
-          String value = getHeaderValue(headers, policy.headerName());
+          String value = extractHeaderValue(headers, policy.headerName());
           if (value != null) {
             if (policy.regEx() != null && policy.regExSubstitution() != null) {
               value = policy.regEx().matcher(value).replaceAll(policy.regExSubstitution());
@@ -553,12 +553,12 @@ final class XdsNameResolver extends NameResolver {
       final Metadata metadata, ThreadSafeRandom random) {
     EvaluateArgs evaluateRouteArgs = new EvaluateArgs() {
       @Override
-      public String getHeader(String key) {
-        return getHeaderValue(metadata, key);
+      public String getHeaderValue(String key) {
+        return extractHeaderValue(metadata, key);
       }
 
       @Override
-      public String getFullMethodName() {
+      public String getPath() {
         return fullMethodName;
       }
     };
@@ -574,7 +574,7 @@ final class XdsNameResolver extends NameResolver {
   }
 
   @Nullable
-  private static String getHeaderValue(Metadata headers, String headerName) {
+  private static String extractHeaderValue(Metadata headers, String headerName) {
     if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
       return null;
     }
