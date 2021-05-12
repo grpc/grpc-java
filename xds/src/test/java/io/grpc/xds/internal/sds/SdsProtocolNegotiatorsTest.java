@@ -48,6 +48,7 @@ import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.InternalXdsAttributes;
+import io.grpc.xds.TlsContextManager;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.grpc.xds.XdsClientWrapperForServerSdsTestMisc;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsHandler;
@@ -206,7 +207,7 @@ public class SdsProtocolNegotiatorsTest {
         buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProviderSupplier sslContextProviderSupplier =
-        new SslContextProviderSupplier(upstreamTlsContext, TlsContextManagerImpl.getInstance());
+        new SslContextProviderSupplier(upstreamTlsContext, new TlsContextManagerImpl(null));
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
     pipeline.addLast(clientSdsHandler);
@@ -248,7 +249,7 @@ public class SdsProtocolNegotiatorsTest {
 
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         XdsClientWrapperForServerSdsTestMisc.createXdsClientWrapperForServerSds(
-            80, downstreamTlsContext);
+            80, downstreamTlsContext, new TlsContextManagerImpl(null));
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
         new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds,
             InternalProtocolNegotiators.serverPlaintext());
@@ -296,7 +297,7 @@ public class SdsProtocolNegotiatorsTest {
 
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         XdsClientWrapperForServerSdsTestMisc.createXdsClientWrapperForServerSds(
-            80, downstreamTlsContext);
+            80, downstreamTlsContext, null);
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
         new SdsProtocolNegotiators.HandlerPickerHandler(
             grpcHandler, xdsClientWrapperForServerSds, mockProtocolNegotiator);
@@ -369,7 +370,7 @@ public class SdsProtocolNegotiatorsTest {
         buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
     SslContextProviderSupplier sslContextProviderSupplier =
-        new SslContextProviderSupplier(upstreamTlsContext, TlsContextManagerImpl.getInstance());
+        new SslContextProviderSupplier(upstreamTlsContext, new TlsContextManagerImpl(null));
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
 

@@ -172,8 +172,8 @@ public class LoadReportClientTest {
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(2L), TimeUnit.SECONDS.toNanos(20L));
     addFakeStatsData();
-    lrsClient = new LoadReportClient(loadStatsManager, channel, false, NODE, syncContext,
-        fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
+    lrsClient = new LoadReportClient(loadStatsManager, channel, Context.ROOT, false, NODE,
+        syncContext, fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
         fakeClock.getStopwatchSupplier());
     syncContext.execute(new Runnable() {
       @Override

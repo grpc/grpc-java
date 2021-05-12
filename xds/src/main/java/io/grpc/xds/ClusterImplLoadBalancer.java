@@ -45,8 +45,6 @@ import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
-import io.grpc.xds.internal.sds.TlsContextManager;
-import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -78,7 +76,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
   private final Helper helper;
   private final ThreadSafeRandom random;
-  private final TlsContextManager tlsContextManager;
   // The following fields are effectively final.
   private String cluster;
   @Nullable
@@ -91,14 +88,12 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private LoadBalancer childLb;
 
   ClusterImplLoadBalancer(Helper helper) {
-    this(helper, ThreadSafeRandomImpl.instance, TlsContextManagerImpl.getInstance());
+    this(helper, ThreadSafeRandomImpl.instance);
   }
 
-  ClusterImplLoadBalancer(Helper helper, ThreadSafeRandom random,
-      TlsContextManager tlsContextManager) {
+  ClusterImplLoadBalancer(Helper helper, ThreadSafeRandom random) {
     this.helper = checkNotNull(helper, "helper");
     this.random = checkNotNull(random, "random");
-    this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
     InternalLogId logId = InternalLogId.allocate("cluster-impl-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
@@ -274,7 +269,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       }
       sslContextProviderSupplier =
           tlsContext != null
-              ? new SslContextProviderSupplier(tlsContext, tlsContextManager)
+              ? new SslContextProviderSupplier(tlsContext, xdsClient.getTlsContextManager())
               : null;
     }
 

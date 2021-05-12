@@ -17,7 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.collect.ImmutableMap;
-import java.util.Map;
+import javax.annotation.Nullable;
 
 /** This data structure provides request arguments to be evaluated in routing selection or
  *  authorization/http-filtering, to support the {@link io.grpc.xds.Matcher} logic. */
@@ -42,8 +42,9 @@ public abstract class EvaluateArgs {
     throw new UnsupportedOperationException();
   }
 
-  /** Provides request headers. */
-  public Map<String, String> getHeaders() {
+  /** Provides request header for the corresponding key. */
+  @Nullable
+  public String getHeader(String key) {
     throw new UnsupportedOperationException();
   }
 

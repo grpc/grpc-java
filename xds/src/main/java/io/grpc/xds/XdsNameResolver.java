@@ -333,39 +333,12 @@ final class XdsNameResolver extends NameResolver {
   private final class ConfigSelector extends InternalConfigSelector {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
-      // Index ASCII headers by key, multi-value headers are concatenated for matching purposes.
-      final Map<String, String> asciiHeaders = new HashMap<>();
-      Metadata headers = args.getHeaders();
-      for (String headerName : headers.keys()) {
-        if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-          continue;
-        }
-        Metadata.Key<String> key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
-        Iterable<String> values = headers.getAll(key);
-        if (values != null) {
-          asciiHeaders.put(headerName, Joiner.on(",").join(values));
-        }
-      }
-      // Special hack for exposing headers: "content-type".
-      asciiHeaders.put("content-type", "application/grpc");
       String cluster = null;
       Route selectedRoute = null;
       RoutingConfig routingCfg;
       Map<String, FilterConfig> selectedOverrideConfigs;
       List<ClientInterceptor> filterInterceptors = new ArrayList<>();
-      final String fullMethodName = "/" + args.getMethodDescriptor().getFullMethodName();
-      EvaluateArgs evaluateRouteArgs = new EvaluateArgs() {
-        @Override
-        public Map<String, String> getHeaders() {
-          return asciiHeaders;
-        }
-
-        @Override
-        public String getFullMethodName() {
-          return fullMethodName;
-        }
-      };
-
+      Metadata headers = args.getHeaders();
       do {
         routingCfg = routingConfig;
         selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
@@ -374,7 +347,8 @@ final class XdsNameResolver extends NameResolver {
           break;
         }
         for (Route route : routingCfg.routes) {
-          if (matchRoute(route.routeMatch(), evaluateRouteArgs, random)) {
+          if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
+              headers, random)) {
             selectedRoute = route;
             selectedOverrideConfigs.putAll(route.filterConfigOverrides());
             break;
@@ -453,7 +427,7 @@ final class XdsNameResolver extends NameResolver {
         }
       }
       final String finalCluster = cluster;
-      final long hash = generateHash(selectedRoute.routeAction().hashPolicies(), asciiHeaders);
+      final long hash = generateHash(selectedRoute.routeAction().hashPolicies(), headers);
       class ClusterSelectionInterceptor implements ClientInterceptor {
         @Override
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -528,13 +502,13 @@ final class XdsNameResolver extends NameResolver {
       }
     }
 
-    private long generateHash(List<HashPolicy> hashPolicies, Map<String, String> headers) {
+    private long generateHash(List<HashPolicy> hashPolicies, Metadata headers) {
       Long hash = null;
       for (HashPolicy policy : hashPolicies) {
         Long newHash = null;
         if (policy.type() == HashPolicy.Type.HEADER) {
-          if (headers.containsKey(policy.headerName())) {
-            String value = headers.get(policy.headerName());
+          String value = getHeaderValue(headers, policy.headerName());
+          if (value != null) {
             if (policy.regEx() != null && policy.regExSubstitution() != null) {
               value = policy.regEx().matcher(value).replaceAll(policy.regExSubstitution());
             }
@@ -575,16 +549,46 @@ final class XdsNameResolver extends NameResolver {
   }
 
   @VisibleForTesting
-  static boolean matchRoute(RouteMatch routeMatch, EvaluateArgs args, ThreadSafeRandom random) {
-    if (!routeMatch.pathMatcher().matches(args)) {
+  static boolean matchRoute(RouteMatch routeMatch, final String fullMethodName,
+      final Metadata metadata, ThreadSafeRandom random) {
+    EvaluateArgs evaluateRouteArgs = new EvaluateArgs() {
+      @Override
+      public String getHeader(String key) {
+        return getHeaderValue(metadata, key);
+      }
+
+      @Override
+      public String getFullMethodName() {
+        return fullMethodName;
+      }
+    };
+    if (!routeMatch.pathMatcher().matches(evaluateRouteArgs)) {
       return false;
     }
     Matcher headerMatcher = new AndMatcher(routeMatch.headerMatchers());
-    if (!headerMatcher.matches(args)) {
+    if (!headerMatcher.matches(evaluateRouteArgs)) {
       return false;
     }
     FractionMatcher fraction = routeMatch.fractionMatcher();
     return fraction == null || random.nextInt(fraction.denominator()) < fraction.numerator();
+  }
+
+  @Nullable
+  private static String getHeaderValue(Metadata headers, String headerName) {
+    if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+      return null;
+    }
+    if (headerName.equals("content-type")) {
+      return "application/grpc";
+    }
+    Metadata.Key<String> key;
+    try {
+      key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
+    } catch (IllegalArgumentException e) {
+      return null;
+    }
+    Iterable<String> values = headers.getAll(key);
+    return values == null ? null : Joiner.on(",").join(values);
   }
 
   private class ResolveState implements LdsResourceWatcher {

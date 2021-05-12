@@ -71,7 +71,8 @@ public class ServerWrapperForXdsTest {
   public void setUp() throws IOException {
     port = XdsServerTestHelper.findFreePort();
     mockDelegateBuilder = mock(ServerBuilder.class);
-    xdsClientWrapperForServerSds = XdsServerTestHelper.createXdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds = XdsServerTestHelper
+        .createXdsClientWrapperForServerSds(port, null);
     mockXdsServingStatusListener = mock(XdsServerBuilder.XdsServingStatusListener.class);
     listenerWatcher =
         XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds);

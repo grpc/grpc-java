@@ -79,7 +79,8 @@ public class XdsServerBuilderTest {
     if (xdsServingStatusListener != null) {
       builder = builder.xdsServingStatusListener(xdsServingStatusListener);
     }
-    xdsClientWrapperForServerSds = XdsServerTestHelper.createXdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds = XdsServerTestHelper
+        .createXdsClientWrapperForServerSds(port, null);
     listenerWatcher = XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds);
   }
 

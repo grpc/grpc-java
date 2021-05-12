@@ -19,7 +19,6 @@ package io.grpc.xds.internal.rbac.engine;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.when;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.config.core.v3.CidrRange;
 import io.envoyproxy.envoy.config.rbac.v3.Permission;
@@ -75,10 +74,11 @@ public class GrpcAuthorizationEngineTest {
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
         createRbac(Action.ALLOW, POLICY_NAME, permission, principal));
 
-    when(args.getHeaders()).thenReturn(ImmutableMap.of(HEADER_KEY, HEADER_VALUE));
+    when(args.getHeader(HEADER_KEY)).thenReturn( HEADER_VALUE);
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.ALLOW, POLICY_NAME));
-    when(args.getHeaders()).thenReturn(ImmutableMap.of(HEADER_KEY, HEADER_VALUE + "-1"));
+
+    when(args.getHeader(HEADER_KEY)).thenReturn(HEADER_VALUE + "-1");
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.DENY, null));
   }
@@ -143,7 +143,7 @@ public class GrpcAuthorizationEngineTest {
 
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.ALLOW, null));
-    when(args.getHeaders()).thenReturn(ImmutableMap.of(HEADER_KEY, HEADER_VALUE));
+    when(args.getHeader(HEADER_KEY)).thenReturn( HEADER_VALUE);
     assertThat(engine.evaluate(args)).isEqualTo(
         AuthDecision.create(DecisionType.DENY, POLICY_NAME));
   }
@@ -247,7 +247,7 @@ public class GrpcAuthorizationEngineTest {
             POLICY_NAME + "-2",
             Policy.newBuilder().addPermissions(permission21).addPermissions(permission22)
                 .addPrincipals(principal21).addPrincipals(principal22).build()));
-    when(args.getHeaders()).thenReturn(ImmutableMap.of(HEADER_KEY, HEADER_VALUE));
+    when(args.getHeader(HEADER_KEY)).thenReturn( HEADER_VALUE);
     when(args.getDestinationAddress()).thenReturn(IP_ADDR1);
     when(args.getDestinationPort()).thenReturn(80);
     assertThat(engine.evaluate(args)).isEqualTo(

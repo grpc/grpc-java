@@ -243,10 +243,7 @@ public abstract class Matcher {
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return matchHeader(args.getHeaders().get(name()));
-    }
-
-    private boolean matchHeader(@Nullable String value) {
+      String value = args.getHeader(name());
       if (present() != null) {
         return (value == null) == present().equals(inverted());
       }

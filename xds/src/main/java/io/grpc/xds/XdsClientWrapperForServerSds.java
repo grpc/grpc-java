@@ -96,6 +96,10 @@ public final class XdsClientWrapperForServerSds {
     return xdsClient;
   }
 
+  public TlsContextManager getTlsContextManager() {
+    return xdsClient.getTlsContextManager();
+  }
+
   /** Accepts an XdsClient and starts a watch. */
   @VisibleForTesting
   public void start() {

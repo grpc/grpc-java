@@ -525,13 +525,15 @@ public class RingHashLoadBalancerTest {
         ConnectivityStateInfo.forTransientFailure(
             Status.PERMISSION_DENIED.withDescription("permission denied")));
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verify(subchannels.get(Collections.singletonList(servers.get(3))))
+        .requestConnection();  // LB attempts to recover by itself
 
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC
     assertThat(result.getStatus().getCode())
         .isEqualTo(Code.UNAVAILABLE);  // with error status for the original server hit by hash
     assertThat(result.getStatus().getDescription()).isEqualTo("unreachable");
-    verify(subchannels.get(Collections.singletonList(servers.get(3))))
+    verify(subchannels.get(Collections.singletonList(servers.get(3))), times(2))
         .requestConnection();  // kickoff connection to server3 (next first non-failing)
     verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
         .requestConnection();  // no excessive connection
