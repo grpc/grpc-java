@@ -28,6 +28,7 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -354,17 +355,21 @@ public final class EnvoyServerProtoData {
     // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.
     private final FilterChainMatch filterChainMatch;
     @Nullable
-    private final DownstreamTlsContext downstreamTlsContext;
+    private final SslContextProviderSupplier sslContextProviderSupplier;
 
     @VisibleForTesting
     FilterChain(
-        FilterChainMatch filterChainMatch, @Nullable DownstreamTlsContext downstreamTlsContext) {
+        FilterChainMatch filterChainMatch, @Nullable DownstreamTlsContext downstreamTlsContext,
+        TlsContextManager tlsContextManager) {
+      SslContextProviderSupplier sslContextProviderSupplier1 = downstreamTlsContext == null ? null
+          : new SslContextProviderSupplier(downstreamTlsContext, tlsContextManager);
       this.filterChainMatch = filterChainMatch;
-      this.downstreamTlsContext = downstreamTlsContext;
+      this.sslContextProviderSupplier = sslContextProviderSupplier1;
     }
 
     static FilterChain fromEnvoyProtoFilterChain(
-        io.envoyproxy.envoy.config.listener.v3.FilterChain proto, boolean isDefaultFilterChain)
+        io.envoyproxy.envoy.config.listener.v3.FilterChain proto,
+        TlsContextManager tlsContextManager, boolean isDefaultFilterChain)
         throws InvalidProtocolBufferException {
       if (!isDefaultFilterChain && proto.getFiltersList().isEmpty()) {
         throw new IllegalArgumentException(
@@ -380,7 +385,8 @@ public final class EnvoyServerProtoData {
       }
       return new FilterChain(
           FilterChainMatch.fromEnvoyProtoFilterChainMatch(proto.getFilterChainMatch()),
-          getTlsContextFromFilterChain(proto)
+          getTlsContextFromFilterChain(proto),
+          tlsContextManager
       );
     }
 
@@ -456,9 +462,8 @@ public final class EnvoyServerProtoData {
       return filterChainMatch;
     }
 
-    @Nullable
-    public DownstreamTlsContext getDownstreamTlsContext() {
-      return downstreamTlsContext;
+    public SslContextProviderSupplier getSslContextProviderSupplier() {
+      return sslContextProviderSupplier;
     }
 
     @Override
@@ -471,19 +476,19 @@ public final class EnvoyServerProtoData {
       }
       FilterChain that = (FilterChain) o;
       return java.util.Objects.equals(filterChainMatch, that.filterChainMatch)
-          && java.util.Objects.equals(downstreamTlsContext, that.downstreamTlsContext);
+          && java.util.Objects.equals(sslContextProviderSupplier, that.sslContextProviderSupplier);
     }
 
     @Override
     public int hashCode() {
-      return java.util.Objects.hash(filterChainMatch, downstreamTlsContext);
+      return java.util.Objects.hash(filterChainMatch, sslContextProviderSupplier);
     }
 
     @Override
     public String toString() {
       return "FilterChain{"
           + "filterChainMatch=" + filterChainMatch
-          + ", downstreamTlsContext=" + downstreamTlsContext
+          + ", sslContextProviderSupplier=" + sslContextProviderSupplier
           + '}';
     }
   }
@@ -524,7 +529,8 @@ public final class EnvoyServerProtoData {
       return null;
     }
 
-    static Listener fromEnvoyProtoListener(io.envoyproxy.envoy.config.listener.v3.Listener proto)
+    static Listener fromEnvoyProtoListener(io.envoyproxy.envoy.config.listener.v3.Listener proto,
+        TlsContextManager tlsContextManager)
         throws InvalidProtocolBufferException {
       if (!proto.getTrafficDirection().equals(TrafficDirection.INBOUND)) {
         throw new IllegalArgumentException("Listener " + proto.getName() + " is not INBOUND");
@@ -537,21 +543,25 @@ public final class EnvoyServerProtoData {
         throw new IllegalArgumentException(
             "Listener " + proto.getName() + " cannot have use_original_dst set to true");
       }
-      List<FilterChain> filterChains = validateAndSelectFilterChains(proto.getFilterChainsList());
+      List<FilterChain> filterChains = validateAndSelectFilterChains(proto.getFilterChainsList(),
+          tlsContextManager);
       return new Listener(
           proto.getName(),
           convertEnvoyAddressToString(proto.getAddress()),
-          filterChains, FilterChain.fromEnvoyProtoFilterChain(proto.getDefaultFilterChain(), true));
+          filterChains, FilterChain
+          .fromEnvoyProtoFilterChain(proto.getDefaultFilterChain(), tlsContextManager, true));
     }
 
     private static List<FilterChain> validateAndSelectFilterChains(
-        List<io.envoyproxy.envoy.config.listener.v3.FilterChain> inputFilterChains)
+        List<io.envoyproxy.envoy.config.listener.v3.FilterChain> inputFilterChains,
+        TlsContextManager tlsContextManager)
         throws InvalidProtocolBufferException {
       List<FilterChain> filterChains = new ArrayList<>(inputFilterChains.size());
       for (io.envoyproxy.envoy.config.listener.v3.FilterChain filterChain :
           inputFilterChains) {
         if (isAcceptable(filterChain.getFilterChainMatch())) {
-          filterChains.add(FilterChain.fromEnvoyProtoFilterChain(filterChain, false));
+          filterChains
+              .add(FilterChain.fromEnvoyProtoFilterChain(filterChain, tlsContextManager, false));
         }
       }
       return filterChains;

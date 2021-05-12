@@ -114,19 +114,6 @@ public class XdsSdsClientServerTest {
   }
 
   @Test
-  public void plaintextClientServer_withDefaultTlsContext() throws IOException, URISyntaxException {
-    DownstreamTlsContext defaultTlsContext =
-        EnvoyServerProtoData.DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
-            io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
-                .getDefaultInstance());
-    buildServerWithTlsContext(/* downstreamTlsContext= */ defaultTlsContext);
-
-    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
-            getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
-    assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
-  }
-
-  @Test
   public void nullFallbackCredentials_expectException() throws IOException, URISyntaxException {
     try {
       buildServerWithTlsContext(/* downstreamTlsContext= */ null, /* fallbackCredentials= */ null);
@@ -289,7 +276,7 @@ public class XdsSdsClientServerTest {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             BAD_SERVER_KEY_FILE, BAD_SERVER_PEM_FILE, CA_PEM_FILE);
-    generateListenerUpdateToWatcher(downstreamTlsContext, listenerWatcher);
+    generateListenerUpdateToWatcher(downstreamTlsContext, listenerWatcher, tlsContextManager);
     try {
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, "foo.test.google.fr");
@@ -356,8 +343,10 @@ public class XdsSdsClientServerTest {
   }
 
   static void generateListenerUpdateToWatcher(
-      DownstreamTlsContext tlsContext, XdsClient.LdsResourceWatcher registeredWatcher) {
-    EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0", tlsContext);
+      DownstreamTlsContext tlsContext, XdsClient.LdsResourceWatcher registeredWatcher,
+      TlsContextManager tlsContextManager) {
+    EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0", tlsContext,
+        tlsContextManager);
     XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
     registeredWatcher.onChanged(listenerUpdate);
   }
@@ -371,12 +360,13 @@ public class XdsSdsClientServerTest {
     XdsServerBuilder builder = XdsServerBuilder.forPort(port, serverCredentials)
         .addService(new SimpleServiceImpl());
     XdsServerTestHelper.generateListenerUpdate(
-        xdsClientWrapperForServerSds.getListenerWatcher(), downstreamTlsContext);
+        xdsClientWrapperForServerSds.getListenerWatcher(), downstreamTlsContext, tlsContextManager);
     cleanupRule.register(builder.buildServer(xdsClientWrapperForServerSds)).start();
   }
 
   static EnvoyServerProtoData.Listener buildListener(
-      String name, String address, DownstreamTlsContext tlsContext) {
+      String name, String address, DownstreamTlsContext tlsContext,
+      TlsContextManager tlsContextManager) {
     EnvoyServerProtoData.FilterChainMatch filterChainMatch =
         new EnvoyServerProtoData.FilterChainMatch(
             0,
@@ -386,7 +376,7 @@ public class XdsSdsClientServerTest {
             null,
             Arrays.<Integer>asList());
     EnvoyServerProtoData.FilterChain defaultFilterChain =
-        new EnvoyServerProtoData.FilterChain(filterChainMatch, tlsContext);
+        new EnvoyServerProtoData.FilterChain(filterChainMatch, tlsContext, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(name, address, Arrays.asList(defaultFilterChain), null);
     return listener;

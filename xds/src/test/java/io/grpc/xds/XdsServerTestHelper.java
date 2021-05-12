@@ -26,6 +26,7 @@ import io.grpc.internal.ObjectPool;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 import org.mockito.ArgumentCaptor;
@@ -112,14 +113,25 @@ class XdsServerTestHelper {
    * Creates a {@link XdsClient.LdsUpdate} with {@link
    * io.grpc.xds.EnvoyServerProtoData.FilterChain} with a destination port and an optional {@link
    * EnvoyServerProtoData.DownstreamTlsContext}.
-   *
    * @param registeredWatcher the watcher on which to generate the update
    * @param tlsContext if non-null, used to populate filterChain
    */
   static void generateListenerUpdate(
       XdsClient.LdsResourceWatcher registeredWatcher,
-      EnvoyServerProtoData.DownstreamTlsContext tlsContext) {
-    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3", tlsContext);
+      EnvoyServerProtoData.DownstreamTlsContext tlsContext, TlsContextManager tlsContextManager) {
+    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3",
+        Arrays.<Integer>asList(), tlsContext, null, tlsContextManager);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
+  }
+
+  static void generateListenerUpdate(
+      XdsClient.LdsResourceWatcher registeredWatcher, List<Integer> sourcePorts,
+      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
+      EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain,
+      TlsContextManager tlsContextManager) {
+    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3", sourcePorts,
+        tlsContext, tlsContextForDefaultFilterChain, tlsContextManager);
     XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
     registeredWatcher.onChanged(listenerUpdate);
   }
@@ -132,7 +144,10 @@ class XdsServerTestHelper {
   }
 
   static EnvoyServerProtoData.Listener buildTestListener(
-      String name, String address, EnvoyServerProtoData.DownstreamTlsContext tlsContext) {
+      String name, String address, List<Integer> sourcePorts,
+      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
+      EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain,
+      TlsContextManager tlsContextManager) {
     EnvoyServerProtoData.FilterChainMatch filterChainMatch1 =
         new EnvoyServerProtoData.FilterChainMatch(
             0,
@@ -140,11 +155,12 @@ class XdsServerTestHelper {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             null,
-            Arrays.<Integer>asList());
+            sourcePorts);
     EnvoyServerProtoData.FilterChain filterChain1 =
-        new EnvoyServerProtoData.FilterChain(filterChainMatch1, tlsContext);
+        new EnvoyServerProtoData.FilterChain(filterChainMatch1, tlsContext, tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain =
-        new EnvoyServerProtoData.FilterChain(null, null);
+        new EnvoyServerProtoData.FilterChain(null, tlsContextForDefaultFilterChain,
+            tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             name, address, Arrays.asList(filterChain1), defaultFilterChain);

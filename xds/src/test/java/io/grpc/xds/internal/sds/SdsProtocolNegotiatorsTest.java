@@ -297,7 +297,7 @@ public class SdsProtocolNegotiatorsTest {
 
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         XdsClientWrapperForServerSdsTestMisc.createXdsClientWrapperForServerSds(
-            80, downstreamTlsContext, null);
+            80, downstreamTlsContext, mock(TlsContextManager.class));
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
         new SdsProtocolNegotiators.HandlerPickerHandler(
             grpcHandler, xdsClientWrapperForServerSds, mockProtocolNegotiator);

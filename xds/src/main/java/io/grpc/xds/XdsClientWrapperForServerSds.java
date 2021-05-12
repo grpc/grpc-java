@@ -27,9 +27,9 @@ import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.EnvoyServerProtoData.CidrRange;
-import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import io.netty.channel.Channel;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
@@ -114,14 +114,14 @@ public final class XdsClientWrapperForServerSds {
         new XdsClient.LdsResourceWatcher() {
           @Override
           public void onChanged(XdsClient.LdsUpdate update) {
-            curListener.set(update.listener);
+            releaseOldSuppliers(curListener.getAndSet(update.listener));
             reportSuccess();
           }
 
           @Override
           public void onResourceDoesNotExist(String resourceName) {
             logger.log(Level.WARNING, "Resource {0} is unavailable", resourceName);
-            curListener.set(null);
+            releaseOldSuppliers(curListener.getAndSet(null));
             reportError(Status.NOT_FOUND.asException(), true);
           }
 
@@ -129,7 +129,12 @@ public final class XdsClientWrapperForServerSds {
           public void onError(Status error) {
             logger.log(
                 Level.WARNING, "LdsResourceWatcher in XdsClientWrapperForServerSds: {0}", error);
-            reportError(error.asException(), isResourceAbsent(error));
+            if (isResourceAbsent(error)) {
+              releaseOldSuppliers(curListener.getAndSet(null));
+              reportError(error.asException(), true);
+            } else {
+              reportError(error.asException(), false);
+            }
           }
         };
     String grpcServerResourceId = xdsClient.getBootstrapInfo()
@@ -143,6 +148,27 @@ public final class XdsClientWrapperForServerSds {
     }
     grpcServerResourceId = grpcServerResourceId.replaceAll("%s", "0.0.0.0:" + port);
     xdsClient.watchLdsResource(grpcServerResourceId, listenerWatcher);
+  }
+
+  // go thru the old listener and release all the old SslContextProviderSupplier
+  private void releaseOldSuppliers(EnvoyServerProtoData.Listener oldListener) {
+    if (oldListener != null) {
+      List<FilterChain> filterChains = oldListener.getFilterChains();
+      for (FilterChain filterChain : filterChains) {
+        releaseSupplier(filterChain);
+      }
+      releaseSupplier(oldListener.getDefaultFilterChain());
+    }
+  }
+
+  private static void releaseSupplier(FilterChain filterChain) {
+    if (filterChain != null) {
+      SslContextProviderSupplier sslContextProviderSupplier =
+          filterChain.getSslContextProviderSupplier();
+      if (sslContextProviderSupplier != null) {
+        sslContextProviderSupplier.close();
+      }
+    }
   }
 
   /** Whether the throwable indicates our listener resource is absent/deleted. */
@@ -162,10 +188,10 @@ public final class XdsClientWrapperForServerSds {
 
   /**
    * Locates the best matching FilterChain to the channel from the current listener and if found
-   * returns the DownstreamTlsContext from that FilterChain, else null.
+   * returns the SslContextProviderSupplier from that FilterChain, else null.
    */
   @Nullable
-  public DownstreamTlsContext getDownstreamTlsContext(Channel channel) {
+  public SslContextProviderSupplier getSslContextProviderSupplier(Channel channel) {
     EnvoyServerProtoData.Listener copyListener = curListener.get();
     if (copyListener != null && channel != null) {
       SocketAddress localAddress = channel.localAddress();
@@ -176,7 +202,7 @@ public final class XdsClientWrapperForServerSds {
         checkState(
             port == localInetAddr.getPort(),
             "Channel localAddress port does not match requested listener port");
-        return getDownstreamTlsContext(localInetAddr, remoteInetAddr, copyListener);
+        return getSslContextProviderSupplier(localInetAddr, remoteInetAddr, copyListener);
       }
     }
     return null;
@@ -185,13 +211,13 @@ public final class XdsClientWrapperForServerSds {
   /**
    * Using the logic specified at
    * https://www.envoyproxy.io/docs/envoy/latest/api-v2/api/v2/listener/listener_components.proto.html?highlight=filter%20chain#listener-filterchainmatch
-   * locate a matching filter and return the corresponding DownstreamTlsContext or else return one
-   * from default filter chain.
+   * locate a matching filter and return the corresponding SslContextProviderSupplier or else
+   * return one from default filter chain.
    *
    * @param localInetAddr dest address of the inbound connection
    * @param remoteInetAddr source address of the inbound connection
    */
-  private static DownstreamTlsContext getDownstreamTlsContext(
+  private static SslContextProviderSupplier getSslContextProviderSupplier(
       InetSocketAddress localInetAddr, InetSocketAddress remoteInetAddr,
       EnvoyServerProtoData.Listener listener) {
     List<FilterChain> filterChains = listener.getFilterChains();
@@ -207,9 +233,9 @@ public final class XdsClientWrapperForServerSds {
       // close the connection
       throw new IllegalStateException("Found 2 matching filter-chains");
     } else if (filterChains.size() == 1) {
-      return filterChains.get(0).getDownstreamTlsContext();
+      return filterChains.get(0).getSslContextProviderSupplier();
     }
-    return listener.getDefaultFilterChain().getDownstreamTlsContext();
+    return listener.getDefaultFilterChain().getSslContextProviderSupplier();
   }
 
   // destination_port present => Always fail match
@@ -422,6 +448,7 @@ public final class XdsClientWrapperForServerSds {
   /** Shutdown this instance and release resources. */
   public void shutdown() {
     logger.log(Level.FINER, "Shutdown");
+    releaseOldSuppliers(curListener.get());
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
