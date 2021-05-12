@@ -346,8 +346,7 @@ public final class ReadableBuffers {
    */
   private static final class BufferInputStream extends InputStream
       implements KnownLength, HasByteBuffer, Detachable {
-    final ReadableBuffer buffer;
-    private boolean detached;
+    private ReadableBuffer buffer;
 
     public BufferInputStream(ReadableBuffer buffer) {
       this.buffer = Preconditions.checkNotNull(buffer, "buffer");
@@ -355,12 +354,12 @@ public final class ReadableBuffers {
 
     @Override
     public int available() throws IOException {
-      return detached ? 0 : buffer.readableBytes();
+      return buffer.readableBytes();
     }
 
     @Override
     public int read() {
-      if (detached || buffer.readableBytes() == 0) {
+      if (buffer.readableBytes() == 0) {
         // EOF.
         return -1;
       }
@@ -369,7 +368,7 @@ public final class ReadableBuffers {
 
     @Override
     public int read(byte[] dest, int destOffset, int length) throws IOException {
-      if (detached || buffer.readableBytes() == 0) {
+      if (buffer.readableBytes() == 0) {
         // EOF.
         return -1;
       }
@@ -381,9 +380,6 @@ public final class ReadableBuffers {
 
     @Override
     public long skip(long n) throws IOException {
-      if (detached) {
-        return 0;
-      }
       int length = (int) Math.min(buffer.readableBytes(), n);
       buffer.skipBytes(length);
       return length;
@@ -391,17 +387,11 @@ public final class ReadableBuffers {
 
     @Override
     public void mark(int readlimit) {
-      if (detached) {
-        return;
-      }
       buffer.mark();
     }
 
     @Override
     public void reset() throws IOException {
-      if (detached) {
-        throw new IOException("underlying buffer detached");
-      }
       buffer.reset();
     }
 
@@ -418,26 +408,18 @@ public final class ReadableBuffers {
     @Nullable
     @Override
     public ByteBuffer getByteBuffer() {
-      if (detached) {
-        return null;
-      }
       return buffer.getByteBuffer();
     }
 
     @Override
     public InputStream detach() {
-      if (detached) {
-        throw new IllegalStateException("already detached");
-      }
-      detached = true;
-      return new BufferInputStream(buffer);
+      ReadableBuffer detachedBuffer = buffer;
+      buffer = buffer.readBytes(0);
+      return new BufferInputStream(detachedBuffer);
     }
 
     @Override
     public void close() throws IOException {
-      if (detached) {
-        return;
-      }
       buffer.close();
     }
   }

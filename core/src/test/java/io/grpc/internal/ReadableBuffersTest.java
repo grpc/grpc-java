@@ -20,6 +20,7 @@ import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -30,6 +31,7 @@ import io.grpc.Detachable;
 import io.grpc.HasByteBuffer;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.InvalidMarkException;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -214,8 +216,7 @@ public class ReadableBuffersTest {
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
     inputStream.mark(5);
     ((Detachable) inputStream).detach();
-    thrown.expect(IOException.class);
-    thrown.expectMessage("underlying buffer detached");
+    thrown.expect(InvalidMarkException.class);
     inputStream.reset();
   }
 
@@ -235,6 +236,7 @@ public class ReadableBuffersTest {
   @Test
   public void bufferInputStream_closeAfterDetached() throws IOException {
     ReadableBuffer buffer = mock(ReadableBuffer.class);
+    when(buffer.readBytes(anyInt())).thenReturn(mock(ReadableBuffer.class));
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
     InputStream detachedStream = ((Detachable) inputStream).detach();
     inputStream.close();
