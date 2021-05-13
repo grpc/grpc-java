@@ -585,7 +585,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                 return;
               }
               status = error;
-              // NameResolver.Listener API cannot distinguish between address not found and
+              // NameResolver.Listener API cannot distinguish between address-not-found and
               // transient errors. If the error occurs in the first resolution, treat it as
               // address not found. Otherwise, either there is previously resolved addresses
               // previously encountered error, propagate the error to downstream/upstream and
