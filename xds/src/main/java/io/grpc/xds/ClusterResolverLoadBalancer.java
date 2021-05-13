@@ -226,7 +226,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       }
       if (addresses.isEmpty()) {
         if (endpointNotFound.isOk()) {
-          endpointNotFound = Status.UNAVAILABLE.withDescription("No usable endpoint from any cluster");
+          endpointNotFound =
+              Status.UNAVAILABLE.withDescription("No usable endpoint from any cluster");
         } else {
           endpointNotFound =
               Status.UNAVAILABLE.withCause(endpointNotFound.getCause())
