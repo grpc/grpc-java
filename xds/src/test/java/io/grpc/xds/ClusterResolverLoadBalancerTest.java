@@ -383,7 +383,8 @@ public class ClusterResolverLoadBalancerTest {
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     assertPicker(
         pickerCaptor.getValue(),
-        Status.UNAVAILABLE.withDescription("No usable endpoint from any cluster"),
+        Status.UNAVAILABLE.withDescription(
+            "No usable endpoint from cluster(s): " + Arrays.asList(CLUSTER1, CLUSTER2)),
         null);
   }
 
@@ -418,8 +419,8 @@ public class ClusterResolverLoadBalancerTest {
     xdsClient.deliverResourceNotFound(EDS_SERVICE_NAME1);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status expectedError =
-        Status.UNAVAILABLE.withDescription("No usable endpoint from any cluster");
+    Status expectedError = Status.UNAVAILABLE.withDescription(
+        "No usable endpoint from cluster(s): " + Arrays.asList(CLUSTER1, CLUSTER2));
     assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
 
@@ -513,8 +514,11 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(childBalancers).isEmpty();
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertPicker(pickerCaptor.getValue(),
-        Status.UNAVAILABLE.withDescription("No usable endpoint from any cluster"), null);
+    assertPicker(
+        pickerCaptor.getValue(),
+        Status.UNAVAILABLE.withDescription(
+            "No usable endpoint from cluster(s): " + Collections.singleton(CLUSTER1)),
+        null);
   }
 
   @Test
