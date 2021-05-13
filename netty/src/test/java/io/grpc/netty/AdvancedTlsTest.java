@@ -35,30 +35,30 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.grpc.util.AdvancedTlsX509KeyManager;
 import io.grpc.util.AdvancedTlsX509TrustManager;
+import io.grpc.util.AdvancedTlsX509TrustManager.PeerVerifier;
+import io.grpc.util.AdvancedTlsX509TrustManager.SSLEnginePeerVerifier;
+import io.grpc.util.AdvancedTlsX509TrustManager.SSLSocketPeerVerifier;
 import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import io.grpc.util.CertificateUtils;
 
-import io.netty.handler.ssl.OpenSsl;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.SslProvider;
+import java.io.Closeable;
 import java.io.File;
+import java.io.IOException;
+import java.net.Socket;
 import java.security.PrivateKey;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.security.NoSuchAlgorithmException;
-import java.security.Security;
-import java.util.Arrays;
+import java.security.spec.InvalidKeySpecException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 import org.junit.After;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
 public class AdvancedTlsTest {
-
-
   public static final String SERVER_0_KEY_FILE = "server0.key";
   public static final String SERVER_0_PEM_FILE = "server0.pem";
   public static final String CLIENT_0_KEY_FILE = "client.key";
@@ -69,9 +69,36 @@ public class AdvancedTlsTest {
   private Server server;
   private ManagedChannel channel;
 
+  private File caCertFile;
+  private File serverKey0File;
+  private File serverCert0File;
+  private File clientKey0File;
+  private File clientCert0File;
+  private X509Certificate[] caCert;
+  private PrivateKey serverKey0;
+  private X509Certificate[] serverCert0;
+  private PrivateKey clientKey0;
+  private X509Certificate[] clientCert0;
+
   @Before
-  public void setUp() throws NoSuchAlgorithmException {
+  public void setUp()
+      throws NoSuchAlgorithmException, IOException, CertificateException, InvalidKeySpecException {
     executor = Executors.newSingleThreadScheduledExecutor();
+    caCertFile = TestUtils.loadCert(CA_PEM_FILE);
+    serverKey0File = TestUtils.loadCert(SERVER_0_KEY_FILE);
+    serverCert0File = TestUtils.loadCert(SERVER_0_PEM_FILE);
+    clientKey0File = TestUtils.loadCert(CLIENT_0_KEY_FILE);
+    clientCert0File = TestUtils.loadCert(CLIENT_0_PEM_FILE);
+    caCert = CertificateUtils.getX509Certificates(
+        TestUtils.class.getResourceAsStream("/certs/" + CA_PEM_FILE));
+    serverKey0 = CertificateUtils.getPrivateKey(
+        TestUtils.class.getResourceAsStream("/certs/" + SERVER_0_KEY_FILE));
+    serverCert0 = CertificateUtils.getX509Certificates(
+        TestUtils.class.getResourceAsStream("/certs/" + SERVER_0_PEM_FILE));
+    clientKey0 = CertificateUtils.getPrivateKey(
+        TestUtils.class.getResourceAsStream("/certs/" + CLIENT_0_KEY_FILE));
+    clientCert0 = CertificateUtils.getX509Certificates(
+        TestUtils.class.getResourceAsStream("/certs/" + CLIENT_0_PEM_FILE));
   }
 
   @After
@@ -87,27 +114,18 @@ public class AdvancedTlsTest {
 
   @Test
   public void basicMutualTlsTest() throws Exception {
-    File caCert = TestUtils.loadCert("ca.pem");
-    File serverKey0 = TestUtils.loadCert("server0.key");
-    File serverCert0 = TestUtils.loadCert("server0.pem");
-    File clientKey0 = TestUtils.loadCert("client.key");
-    File clientCert0 = TestUtils.loadCert("client.pem");
-
     // Create & start a server.
-
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
-        .keyManager(serverCert0, serverKey0).trustManager(caCert)
+        .keyManager(serverCert0File, serverKey0File).trustManager(caCertFile)
         .clientAuth(ClientAuth.REQUIRE).build();
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
-
     // Create a client to connect.
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
-        .keyManager(clientCert0, clientKey0).trustManager(caCert).build();
-    channel = Grpc.newChannelBuilderForAddress(
-        "localhost", server.getPort(), channelCredentials).build();
-
-
+        .keyManager(clientCert0File, clientKey0File).trustManager(caCertFile).build();
+    channel = Grpc.newChannelBuilderForAddress("localhost", server.getPort(), channelCredentials)
+        .overrideAuthority("foo.test.google.com.au").build();
+    // Start the connection.
     try {
       SimpleServiceGrpc.SimpleServiceBlockingStub client =
           SimpleServiceGrpc.newBlockingStub(channel);
@@ -115,24 +133,14 @@ public class AdvancedTlsTest {
       // response comes back.
       client.unaryRpc(SimpleRequest.getDefaultInstance());
     } catch (StatusRuntimeException e) {
-      fail("Find error: " + e.getMessage());
+      e.printStackTrace();
+      fail("Failed to make a connection");
+      e.printStackTrace();
     }
   }
 
-  /*@Test
+  @Test
   public void AdvancedTlsKeyManagerTrustManagerMutualTlsTest() throws Exception {
-    X509Certificate[] caCert = CertificateUtils.getX509Certificates(
-        TestUtils.class.getResourceAsStream("/certs/" + CA_PEM_FILE));
-    PrivateKey serverKey0 = CertificateUtils.getPrivateKey(
-        TestUtils.class.getResourceAsStream("/certs/" + SERVER_0_KEY_FILE));
-    X509Certificate[] serverCert0 = CertificateUtils.getX509Certificates(
-        TestUtils.class.getResourceAsStream("/certs/" + SERVER_0_PEM_FILE));
-    PrivateKey clientKey0 = CertificateUtils.getPrivateKey(
-        TestUtils.class.getResourceAsStream("/certs/" + CLIENT_0_KEY_FILE));
-    X509Certificate[] clientCert0 = CertificateUtils.getX509Certificates(
-        TestUtils.class.getResourceAsStream("/certs/" + CLIENT_0_PEM_FILE));
-
-
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
@@ -143,9 +151,8 @@ public class AdvancedTlsTest {
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
         .keyManager(serverKeyManager).trustManager(serverTrustManager)
         .clientAuth(ClientAuth.REQUIRE).build();
-    Server server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
+    server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
-
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
@@ -155,10 +162,9 @@ public class AdvancedTlsTest {
     clientTrustManager.updateTrustCredentials(caCert);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
         .keyManager(clientKeyManager).trustManager(clientTrustManager).build();
-    ManagedChannel channel = Grpc.newChannelBuilderForAddress(
-        "localhost", server.getPort(), channelCredentials).build();
-
-
+    channel = Grpc.newChannelBuilderForAddress("localhost", server.getPort(), channelCredentials)
+        .overrideAuthority("foo.test.google.com.au").build();
+    // Start the connection.
     try {
       SimpleServiceGrpc.SimpleServiceBlockingStub client =
           SimpleServiceGrpc.newBlockingStub(channel);
@@ -166,12 +172,175 @@ public class AdvancedTlsTest {
       // response comes back.
       client.unaryRpc(SimpleRequest.getDefaultInstance());
     } catch (StatusRuntimeException e) {
+      fail("Failed to make a connection");
+      e.printStackTrace();
+    }
+  }
+
+  @Test
+  public void TrustManagerCustomVerifierMutualTlsTest() throws Exception {
+    // Create & start a server.
+    AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
+    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
+    AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.CertificateOnlyVerification)
+        .setSSLEnginePeerVerifier(
+            new SSLEnginePeerVerifier() {
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  SSLEngine engine) throws CertificateException {
+                if (peerCertChain == null || peerCertChain.length == 0) {
+                  throw new CertificateException("peerCertChain is empty");
+                }
+                X509Certificate leafCert = peerCertChain[0];
+                if (!leafCert.getSubjectDN().getName().contains("testclient")) {
+                  throw new CertificateException("SSLEnginePeerVerifier failed");
+                }
+              }
+            })
+        .setSSLSocketPeerVerifier(new SSLSocketPeerVerifier() {
+          @Override
+          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+              Socket socket) throws CertificateException {
+            if (peerCertChain == null || peerCertChain.length == 0) {
+              throw new CertificateException("peerCertChain is empty");
+            }
+            X509Certificate leafCert = peerCertChain[0];
+            if (!leafCert.getSubjectDN().getName().contains("testclient")) {
+              throw new CertificateException("SSLSocketPeerVerifier failed");
+            }
+          }
+        })
+        .setPeerVerifier(new PeerVerifier() {
+          @Override
+          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
+              throws CertificateException {
+            if (peerCertChain == null || peerCertChain.length == 0) {
+              throw new CertificateException("peerCertChain is empty");
+            }
+            X509Certificate leafCert = peerCertChain[0];
+            if (!leafCert.getSubjectDN().getName().contains("testclient")) {
+              throw new CertificateException("PeerVerifier failed");
+            }
+          }
+        })
+        .build();
+    serverTrustManager.updateTrustCredentials(caCert);
+    ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
+        .keyManager(serverKeyManager).trustManager(serverTrustManager)
+        .clientAuth(ClientAuth.REQUIRE).build();
+    server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
+        new SimpleServiceImpl()).build().start();
+    // Create a client to connect.
+    AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
+    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
+    AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.CertificateOnlyVerification)
+        .setSSLEnginePeerVerifier(
+            new SSLEnginePeerVerifier() {
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  SSLEngine engine) throws CertificateException {
+                if (peerCertChain == null || peerCertChain.length == 0) {
+                  throw new CertificateException("peerCertChain is empty");
+                }
+                X509Certificate leafCert = peerCertChain[0];
+                if (!leafCert.getSubjectDN().getName().contains("*.test.google.com.au")) {
+                  throw new CertificateException("SSLEnginePeerVerifier failed");
+                }
+              }
+            })
+        .setSSLSocketPeerVerifier(new SSLSocketPeerVerifier() {
+          @Override
+          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+              Socket socket) throws CertificateException {
+            if (peerCertChain == null || peerCertChain.length == 0) {
+              throw new CertificateException("peerCertChain is empty");
+            }
+            X509Certificate leafCert = peerCertChain[0];
+            if (!leafCert.getSubjectDN().getName().contains("*.test.google.com.au")) {
+              throw new CertificateException("SSLSocketPeerVerifier failed");
+            }
+          }
+        })
+        .setPeerVerifier(new PeerVerifier() {
+          @Override
+          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
+              throws CertificateException {
+            if (peerCertChain == null || peerCertChain.length == 0) {
+              throw new CertificateException("peerCertChain is empty");
+            }
+            X509Certificate leafCert = peerCertChain[0];
+            if (!leafCert.getSubjectDN().getName().contains("*.test.google.com.au")) {
+              throw new CertificateException("PeerVerifier failed");
+            }
+          }
+        })
+        .build();
+    clientTrustManager.updateTrustCredentials(caCert);
+    ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
+        .keyManager(clientKeyManager).trustManager(clientTrustManager).build();
+    channel = Grpc.newChannelBuilderForAddress(
+        "localhost", server.getPort(), channelCredentials).build();
+    // Start the connection.
+    try {
+      SimpleServiceGrpc.SimpleServiceBlockingStub client =
+          SimpleServiceGrpc.newBlockingStub(channel);
+      // Send an actual request, via the full GRPC & network stack, and check that a proper
+      // response comes back.
+      client.unaryRpc(SimpleRequest.getDefaultInstance());
+    } catch (StatusRuntimeException e) {
+      fail("Failed to make a connection");
+      e.printStackTrace();
+    }
+  }
+
+  @Test
+  public void OnFileReloadingKeyManagerTrustManagerTest() throws Exception {
+    // Create & start a server.
+    AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
+    Closeable serverKeyShutdown = serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File,
+        serverCert0File, 0, 100, TimeUnit.MILLISECONDS, executor);
+    AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.CertificateOnlyVerification)
+        .build();
+    Closeable serverTrustShutdown = serverTrustManager.updateTrustCredentialsFromFile(caCertFile,
+        0, 100, TimeUnit.MILLISECONDS, executor);
+    ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
+        .keyManager(serverKeyManager).trustManager(serverTrustManager)
+        .clientAuth(ClientAuth.REQUIRE).build();
+    server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
+        new SimpleServiceImpl()).build().start();
+    // Create a client to connect.
+    AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
+    Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File,
+        clientCert0File, 0, 100, TimeUnit.MILLISECONDS, executor);
+    AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.CertificateAndHostNameVerification)
+        .build();
+    Closeable clientTrustShutdown = clientTrustManager.updateTrustCredentialsFromFile(caCertFile,
+        0, 100, TimeUnit.MILLISECONDS, executor);
+    ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
+        .keyManager(clientKeyManager).trustManager(clientTrustManager).build();
+    channel = Grpc.newChannelBuilderForAddress("localhost", server.getPort(), channelCredentials)
+        .overrideAuthority("foo.test.google.com.au").build();
+    // Start the connection.
+    try {
+      SimpleServiceGrpc.SimpleServiceBlockingStub client =
+          SimpleServiceGrpc.newBlockingStub(channel);
+      // Send an actual request, via the full GRPC & network stack, and check that a proper
+      // response comes back.
+      client.unaryRpc(SimpleRequest.getDefaultInstance());
+    } catch (StatusRuntimeException e) {
+      e.printStackTrace();
       fail("Find error: " + e.getMessage());
     }
-
-    server.shutdown();
-    channel.shutdown();
-  }*/
+    // Clean up.
+    serverKeyShutdown.close();
+    serverTrustShutdown.close();
+    clientKeyShutdown.close();
+    clientTrustShutdown.close();
+  }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
     @Override
