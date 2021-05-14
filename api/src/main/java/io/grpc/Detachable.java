@@ -19,13 +19,18 @@ package io.grpc;
 import java.io.InputStream;
 
 /**
- * A <i>Detachable</i> encapsulates some readable data source that can be detached and transferred
- * to an {@link InputStream}. The detached InputStream takes over the ownership of the
- * underlying data source. That's said, the detached InputStream is responsible for releasing its
- * resources after use. The detached InputStream preserves internal states of the underlying
- * data source. Data can be consumed through the detached InputStream as if being continually
- * consumed through the original instance. The original instance discards internal states of
- * detached data source and is no longer consumable as if the data source is exhausted.
+ * An extension of {@link InputStream} that allows the underlying data source to be detached and
+ * transferred to a new instance of the same kind. The detached InputStream takes over the
+ * ownership of the underlying data source. That's said, the detached InputStream is responsible
+ * for releasing its resources after use. The detached InputStream preserves internal states of
+ * the underlying data source. Data can be consumed through the detached InputStream as if being
+ * continually consumed through the original instance. The original instance discards internal
+ * states of detached data source and is no longer consumable as if the data source is exhausted.
+ *
+ * <p>A normal usage of this API is to extend the lifetime of the data source owned by the
+ * original instance for doing extra processing before releasing it. For example, when combined
+ * with {@link HasByteBuffer}, a custom {@link io.grpc.MethodDescriptor.Marshaller} can take
+ * over the ownership of buffers containing inbound data and perform delayed deserialization.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7387")
 public interface Detachable {
