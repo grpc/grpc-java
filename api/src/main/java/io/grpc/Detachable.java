@@ -27,7 +27,7 @@ import java.io.InputStream;
  * consumed through the original instance. The original instance discards internal states of
  * detached data source and is no longer consumable as if the data source is exhausted.
  */
-@ExperimentalApi("TODO")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7387")
 public interface Detachable {
 
   /**
