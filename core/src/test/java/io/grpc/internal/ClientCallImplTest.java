@@ -899,7 +899,7 @@ public class ClientCallImplTest {
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
-        .matches("deadline exceeded after [0-9]+\\.[0-9]+s. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
+        .matches("Deadline of [0-9]+\\.[0-9]+s exceeded. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
   }
 
   @Test
