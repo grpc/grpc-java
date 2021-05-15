@@ -696,8 +696,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         if (deadline.isExpired()) {
           InsightBuilder insight = new InsightBuilder();
           stream.appendTimeoutInsight(insight);
-          status = DEADLINE_EXCEEDED.augmentDescription(
-              String.format("ClientCall was cancelled at or after deadline: %s. %s", deadline, insight));
+          status = DEADLINE_EXCEEDED.augmentDescription(String.format(
+              "ClientCall was cancelled at or after deadline: %s. %s", deadline, insight));
           // Replace trailers to prevent mixing sources of status and trailers.
           trailers = new Metadata();
         }
