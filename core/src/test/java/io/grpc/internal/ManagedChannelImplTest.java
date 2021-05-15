@@ -3899,7 +3899,7 @@ public class ManagedChannelImplTest {
       future2.get();
       Assert.fail();
     } catch (ExecutionException e) {
-      assertThat(Throwables.getStackTraceAsString(e.getCause())).contains("deadline");
+      assertThat(Throwables.getStackTraceAsString(e.getCause())).contains("Deadline");
     }
 
     mychannel.shutdownNow();
