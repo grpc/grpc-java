@@ -388,13 +388,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       long nanos = Math.abs(remainingNanos) % TimeUnit.SECONDS.toNanos(1);
 
       StringBuilder buf = new StringBuilder();
-      buf.append("deadline exceeded after ");
+      buf.append("Deadline of ");
       if (remainingNanos < 0) {
         buf.append('-');
       }
       buf.append(seconds);
       buf.append(String.format(Locale.US, ".%09d", nanos));
-      buf.append("s. ");
+      buf.append("s exceeded. ");
       buf.append(insight);
       stream.cancel(DEADLINE_EXCEEDED.augmentDescription(buf.toString()));
     }
@@ -697,7 +697,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           InsightBuilder insight = new InsightBuilder();
           stream.appendTimeoutInsight(insight);
           status = DEADLINE_EXCEEDED.augmentDescription(
-              "ClientCall was cancelled at or after deadline. " + insight);
+              String.format("ClientCall was cancelled at or after deadline: %s. %s", deadline, insight));
           // Replace trailers to prevent mixing sources of status and trailers.
           trailers = new Metadata();
         }
