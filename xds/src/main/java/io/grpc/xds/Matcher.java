@@ -25,9 +25,11 @@ import java.util.Collections;
 import java.util.List;
 import javax.annotation.Nullable;
 
-/** Defines matcher abstract and provides a group of request matchers.
+/**
+ * Defines matcher abstract and provides a group of request matchers.
  * A matcher evaluates an {@link EvaluateArgs} input and tells whether certain
- * argument in the input matches a predefined matching pattern. */
+ * argument in the input matches a predefined matching pattern.
+ */
 public abstract class Matcher {
   protected Matcher() {}
 
@@ -97,8 +99,7 @@ public abstract class Matcher {
     }
   }
 
-  /** Matcher for HTTP request path.
-   * TODO(zivy@): merge with {@link PathMatcher} */
+  /** Matcher for HTTP request path for Route. */
   @AutoValue
   abstract static class RouteMatcher extends Matcher {
     // Exact full path to be matched.
@@ -288,7 +289,7 @@ public abstract class Matcher {
 
   /** Represents various ways to match a string .*/
   @AutoValue
-  abstract static class StringMatcher extends Matcher {
+  abstract static class StringMatcher {
     // The input string exactly matches the specified string.
     @Nullable
     abstract String exact();
@@ -340,11 +341,6 @@ public abstract class Matcher {
       checkNotNull(contains, "contains");
       return StringMatcher.create(null, null, null, null, contains,
           ignoreCase);
-    }
-
-    @Override
-    public boolean matches(EvaluateArgs args) {
-      throw new UnsupportedOperationException();
     }
 
     public boolean matches(String args) {

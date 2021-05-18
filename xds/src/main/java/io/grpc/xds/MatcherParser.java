@@ -28,8 +28,10 @@ import io.grpc.xds.Matcher.PathMatcher;
 import io.grpc.xds.Matcher.SourceIpMatcher;
 import io.grpc.xds.Matcher.StringMatcher;
 
-/** A group of parser utility functions that translate envoy matcher proto into xds internal
- * {@link Matcher} data structure. */
+/**
+ * A group of parser utility functions that translate envoy matcher proto into xds internal
+ * {@link Matcher} data structure.
+ */
 public class MatcherParser {
   /** Translates envoy proto HeaderMatcher to {@link HeaderMatcher}.*/
   public static Matcher parseHeaderMatcher(
@@ -74,7 +76,7 @@ public class MatcherParser {
   public static Matcher parsePathMatcher(io.envoyproxy.envoy.type.matcher.v3.PathMatcher proto) {
     switch (proto.getRuleCase()) {
       case PATH:
-        return new PathMatcher((StringMatcher) parseStringMatcher(proto.getPath()));
+        return new PathMatcher(parseStringMatcher(proto.getPath()));
       case RULE_NOT_SET:
       default:
         throw new IllegalArgumentException("Unknown path matcher rule type.");
@@ -83,8 +85,7 @@ public class MatcherParser {
 
   /** Translates envoy proto Authenticated to {@link AuthenticatedMatcher}.*/
   public static Matcher parseAuthenticated(Authenticated proto) {
-    Matcher matcher = parseStringMatcher(proto.getPrincipalName());
-    return new AuthenticatedMatcher((StringMatcher)matcher);
+    return new AuthenticatedMatcher(parseStringMatcher(proto.getPrincipalName()));
   }
 
   /** Constructs {@link DestinationIpMatcher} matcher from envoy proto. */
@@ -100,7 +101,7 @@ public class MatcherParser {
   }
 
   /** Translates {@link StringMatcher} from envoy proto. */
-  static Matcher parseStringMatcher(io.envoyproxy.envoy.type.matcher.v3.StringMatcher
+  static StringMatcher parseStringMatcher(io.envoyproxy.envoy.type.matcher.v3.StringMatcher
       proto) {
     switch (proto.getMatchPatternCase()) {
       case EXACT:

@@ -19,8 +19,10 @@ package io.grpc.xds;
 import com.google.common.collect.ImmutableMap;
 import javax.annotation.Nullable;
 
-/** This data structure provides request arguments to be evaluated in routing selection or
- *  authorization/http-filtering, to support the {@link io.grpc.xds.Matcher} logic. */
+/**
+ * This data structure provides request arguments to be evaluated in routing selection or
+ *  authorization/http-filtering, to support the {@link io.grpc.xds.Matcher} logic.
+ */
 public abstract class EvaluateArgs {
   /** Provides the source address. */
   public String getPeerAddress() {

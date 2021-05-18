@@ -20,11 +20,12 @@ import io.envoyproxy.envoy.config.rbac.v3.Policy;
 import io.envoyproxy.envoy.config.rbac.v3.RBAC;
 import io.envoyproxy.envoy.config.rbac.v3.RBAC.Action;
 import io.grpc.xds.EvaluateArgs;
-import io.grpc.xds.internal.rbac.engine.AuthorizationEngineInterface.AuthDecision.DecisionType;
+import io.grpc.xds.internal.rbac.engine.AuthorizationEngine.AuthDecision.DecisionType;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Implementation of gRPC server access control based on envoy RBAC protocol:
+/**
+ * Implementation of gRPC server access control based on envoy RBAC protocol:
  * https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/rbac/v3/rbac.proto
  *
  * <p>One GrpcAuthorizationEngine is initialized with one action type and a list of policies.
@@ -60,7 +61,7 @@ import java.util.Map;
  * <p>The matching criteria should be immutable once constructed, and
  * {@link #evaluate(EvaluateArgs)} is supposed to be called safely for multiple times.
  */
-public class GrpcAuthorizationEngine implements AuthorizationEngineInterface {
+public final class GrpcAuthorizationEngine implements AuthorizationEngine {
   private final Map<String, PolicyMatcher> policyMatchers = new HashMap<>();
   private final Action action;
 

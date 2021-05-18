@@ -54,7 +54,7 @@ public class AuthzEngineEvaluationTest {
   @Mock
   private Map<String, Object> attributes;
 
-  private AuthorizationEngine spyEngine;
+  private CelAuthorizationEngine spyEngine;
   private AuthorizationDecision evaluateResult;
 
   // Mock RBAC engine with ALLOW action.
@@ -125,7 +125,7 @@ public class AuthzEngineEvaluationTest {
   @Before
   public void setupEngineSingleRbacAllow() {
     buildRbac();
-    AuthorizationEngine engine = new AuthorizationEngine(rbacAllow);
+    CelAuthorizationEngine engine = new CelAuthorizationEngine(rbacAllow);
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }
@@ -134,7 +134,7 @@ public class AuthzEngineEvaluationTest {
   @Before
   public void setupEngineSingleRbacDeny() {
     buildRbac();
-    AuthorizationEngine engine = new AuthorizationEngine(rbacDeny);
+    CelAuthorizationEngine engine = new CelAuthorizationEngine(rbacDeny);
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }
@@ -143,7 +143,7 @@ public class AuthzEngineEvaluationTest {
   @Before
   public void setupEngineRbacPair() {
     buildRbac();
-    AuthorizationEngine engine = new AuthorizationEngine(rbacDeny, rbacAllow);
+    CelAuthorizationEngine engine = new CelAuthorizationEngine(rbacDeny, rbacAllow);
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }

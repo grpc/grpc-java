@@ -140,7 +140,7 @@ public class MatcherParserTest {
             .setExact("auth")
             .setIgnoreCase(true)
             .build();
-    Matcher result = MatcherParser.parseStringMatcher(proto);
+    StringMatcher result = MatcherParser.parseStringMatcher(proto);
     assertThat(result).isEqualTo(
         StringMatcher.forExact("auth",  true));
   }
@@ -152,7 +152,7 @@ public class MatcherParserTest {
             .setPrefix("auth")
             .setIgnoreCase(false)
             .build();
-    Matcher result = MatcherParser.parseStringMatcher(proto);
+    StringMatcher result = MatcherParser.parseStringMatcher(proto);
     assertThat(result).isEqualTo(
         StringMatcher.forPrefix("auth",  false));
   }
@@ -164,7 +164,7 @@ public class MatcherParserTest {
             .setSuffix("auth")
             .setIgnoreCase(false)
             .build();
-    Matcher result = MatcherParser.parseStringMatcher(proto);
+    StringMatcher result = MatcherParser.parseStringMatcher(proto);
     assertThat(result).isEqualTo(
         StringMatcher.forSuffix("auth",  false));
   }
@@ -178,7 +178,7 @@ public class MatcherParserTest {
             )
             .setIgnoreCase(false)
             .build();
-    Matcher result = MatcherParser.parseStringMatcher(proto);
+    StringMatcher result = MatcherParser.parseStringMatcher(proto);
     assertThat(result).isEqualTo(
         StringMatcher.forSafeRegEx(Pattern.compile("auth*"),  false));
   }

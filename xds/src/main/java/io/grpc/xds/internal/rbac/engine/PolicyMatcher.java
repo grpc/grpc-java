@@ -30,13 +30,14 @@ import io.grpc.xds.Matcher;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Implements a top level {@link Matcher} for a single RBAC policy configuration per envoy
+/**
+ * Implements a top level {@link Matcher} for a single RBAC policy configuration per envoy
  * protocol:
  * https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/rbac/v3/rbac.proto#config-rbac-v3-policy.
  *
  * <p>Currently we only support matching some of the request fields. Those unsupported fields are
  * considered not match until we stop ignoring them.
- * */
+ */
 public final class PolicyMatcher extends Matcher {
   private final Matcher permissions;
   private final Matcher principals;

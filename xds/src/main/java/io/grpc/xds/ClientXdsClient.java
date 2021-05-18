@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.EnvoyServerProtoData.TRANSPORT_SOCKET_NAME_TLS;
-import static io.grpc.xds.MatcherParser.parseHeaderMatcher;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
@@ -501,7 +500,8 @@ final class ClientXdsClient extends AbstractXdsClient {
 
     List<Matcher> headerMatchers = new ArrayList<>();
     for (io.envoyproxy.envoy.config.route.v3.HeaderMatcher hmProto : proto.getHeadersList()) {
-      StructOrError<Matcher> headerMatcher = StructOrError.fromStruct(parseHeaderMatcher(hmProto));
+      StructOrError<Matcher> headerMatcher = StructOrError.fromStruct(
+          MatcherParser.parseHeaderMatcher(hmProto));
       if (headerMatcher.getErrorDetail() != null) {
         return StructOrError.fromError(headerMatcher.getErrorDetail());
       }
