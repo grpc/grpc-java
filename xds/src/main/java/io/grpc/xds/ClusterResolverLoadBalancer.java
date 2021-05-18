@@ -17,11 +17,9 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
-import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
@@ -211,29 +209,34 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       List<EquivalentAddressGroup> addresses = new ArrayList<>();
       Map<String, PriorityChildConfig> priorityChildConfigs = new HashMap<>();
       List<String> priorities = new ArrayList<>();  // totally ordered priority list
-      boolean allResolved = true;
+      Status endpointNotFound = Status.OK;
       for (String cluster : clusters) {
         ClusterState state = clusterStates.get(cluster);
-        if (!state.resolved) {
-          allResolved = false;
-          continue;
+        // Propagate endpoints to the child LB policy only after all clusters have been resolved.
+        if (!state.resolved && state.status.isOk()) {
+          return;
         }
         if (state.result != null) {
           addresses.addAll(state.result.addresses);
           priorityChildConfigs.putAll(state.result.priorityChildConfigs);
           priorities.addAll(state.result.priorities);
+        } else {
+          endpointNotFound = state.status;
         }
       }
       if (addresses.isEmpty()) {
+        if (endpointNotFound.isOk()) {
+          endpointNotFound = Status.UNAVAILABLE.withDescription(
+              "No usable endpoint from cluster(s): " + clusters);
+        } else {
+          endpointNotFound =
+              Status.UNAVAILABLE.withCause(endpointNotFound.getCause())
+                  .withDescription(endpointNotFound.getDescription());
+        }
+        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(endpointNotFound));
         if (childLb != null) {
           childLb.shutdown();
           childLb = null;
-        }
-        if (allResolved) {
-          Status unavailable = Status.UNAVAILABLE.withDescription("No usable endpoint");
-          helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
-        } else {
-          helper.updateBalancingState(CONNECTING, BUFFER_PICKER);
         }
         return;
       }
@@ -252,14 +255,15 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
     private void handleEndpointResolutionError() {
       boolean allInError = true;
+      Status error = null;
       for (ClusterState state :  clusterStates.values()) {
         if (state.status.isOk()) {
           allInError = false;
+        } else {
+          error = state.status;
         }
       }
       if (allInError) {
-        // Propagate the error status of the last cluster. This is the best we can do.
-        Status error = clusterStates.get(clusters.get(clusters.size() - 1)).status;
         if (childLb != null) {
           childLb.handleNameResolutionError(error);
         } else {
@@ -581,10 +585,17 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                 return;
               }
               status = error;
-              // NameResolver.Listener API cannot distinguish transient errors, we should avoid
-              // waiting for DNS addresses indefinitely.
-              resolved = true;
-              handleEndpointResolutionError();
+              // NameResolver.Listener API cannot distinguish between address-not-found and
+              // transient errors. If the error occurs in the first resolution, treat it as
+              // address not found. Otherwise, either there is previously resolved addresses
+              // previously encountered error, propagate the error to downstream/upstream and
+              // let downstream/upstream handle it.
+              if (!resolved) {
+                resolved = true;
+                handleEndpointResourceUpdate();
+              } else {
+                handleEndpointResolutionError();
+              }
               if (scheduledRefresh != null && scheduledRefresh.isPending()) {
                 return;
               }
