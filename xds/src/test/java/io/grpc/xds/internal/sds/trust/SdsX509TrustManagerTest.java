@@ -29,6 +29,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
@@ -37,6 +38,8 @@ import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.Collections;
+import java.util.List;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSession;
@@ -549,6 +552,29 @@ public class SdsX509TrustManagerTest {
     }
     verify(sslSocket, times(1)).isConnected();
     verify(sslSocket, times(1)).getHandshakeSession();
+  }
+
+  @Test
+  public void unsupportedAltNameType() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder()
+            .setExact("waterzooi.test.google.be")
+            .setIgnoreCase(false)
+            .build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new SdsX509TrustManager(certContext, mockDelegate);
+    X509Certificate mockCert = mock(X509Certificate.class);
+
+    when(mockCert.getSubjectAlternativeNames())
+        .thenReturn(Collections.<List<?>>singleton(ImmutableList.of(Integer.valueOf(1), "foo")));
+    X509Certificate[] certs = new X509Certificate[] {mockCert};
+    try {
+      trustManager.verifySubjectAltNameInChain(certs);
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    }
   }
 
   private TestSslEngine buildTrustManagerAndGetSslEngine()

@@ -158,7 +158,7 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
       case ALT_IPA_NAME:
         return verifyDnsNameInSanList(altNameFromCert, verifySanList);
       default:
-        throw new CertificateParsingException("Unsupported altNameType: " + altNameType);
+        return false;
     }
   }
 
