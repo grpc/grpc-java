@@ -16,17 +16,12 @@
 
 package io.grpc.xds.internal.rbac.engine;
 
-import static io.grpc.xds.MatcherParser.createDestinationIpMatcher;
-import static io.grpc.xds.MatcherParser.createSourceIpMatcher;
-import static io.grpc.xds.MatcherParser.parseAuthenticated;
-import static io.grpc.xds.MatcherParser.parseHeaderMatcher;
-import static io.grpc.xds.MatcherParser.parsePathMatcher;
-
 import io.envoyproxy.envoy.config.rbac.v3.Permission;
 import io.envoyproxy.envoy.config.rbac.v3.Policy;
 import io.envoyproxy.envoy.config.rbac.v3.Principal;
 import io.grpc.xds.EvaluateArgs;
 import io.grpc.xds.Matcher;
+import io.grpc.xds.MatcherParser;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -69,11 +64,11 @@ public final class PolicyMatcher extends Matcher {
       case ANY:
         return AlwaysTrueMatcher.INSTANCE;
       case HEADER:
-        return parseHeaderMatcher(permission.getHeader());
+        return MatcherParser.parseHeaderMatcher(permission.getHeader());
       case URL_PATH:
-        return parsePathMatcher(permission.getUrlPath());
+        return MatcherParser.parsePathMatcher(permission.getUrlPath());
       case DESTINATION_IP:
-        return createDestinationIpMatcher(permission.getDestinationIp());
+        return MatcherParser.createDestinationIpMatcher(permission.getDestinationIp());
       case DESTINATION_PORT:
         final int port = permission.getDestinationPort();
         return new Matcher() {
@@ -115,17 +110,17 @@ public final class PolicyMatcher extends Matcher {
       case ANY:
         return AlwaysTrueMatcher.INSTANCE;
       case AUTHENTICATED:
-        return parseAuthenticated(principal.getAuthenticated());
+        return MatcherParser.parseAuthenticated(principal.getAuthenticated());
       case SOURCE_IP:
-        return createSourceIpMatcher(principal.getSourceIp());
+        return MatcherParser.createSourceIpMatcher(principal.getSourceIp());
       case DIRECT_REMOTE_IP:
-        return createSourceIpMatcher(principal.getDirectRemoteIp());
+        return MatcherParser.createSourceIpMatcher(principal.getDirectRemoteIp());
       case HEADER:
-        return parseHeaderMatcher(principal.getHeader());
+        return MatcherParser.parseHeaderMatcher(principal.getHeader());
       case NOT_ID:
         return new InvertMatcher(createPrincipal(principal.getNotId()));
       case URL_PATH:
-        return parsePathMatcher(principal.getUrlPath());
+        return MatcherParser.parsePathMatcher(principal.getUrlPath());
       case METADATA:
       case REMOTE_IP:
         // Ignore. Not supported.

@@ -180,6 +180,6 @@ public class MatcherParserTest {
             .build();
     StringMatcher result = MatcherParser.parseStringMatcher(proto);
     assertThat(result).isEqualTo(
-        StringMatcher.forSafeRegEx(Pattern.compile("auth*"),  false));
+        StringMatcher.forSafeRegEx(Pattern.compile("auth*")));
   }
 }

@@ -76,7 +76,7 @@ public class MatcherParser {
   public static Matcher parsePathMatcher(io.envoyproxy.envoy.type.matcher.v3.PathMatcher proto) {
     switch (proto.getRuleCase()) {
       case PATH:
-        return new PathMatcher(parseStringMatcher(proto.getPath()));
+        return PathMatcher.create(parseStringMatcher(proto.getPath()));
       case RULE_NOT_SET:
       default:
         throw new IllegalArgumentException("Unknown path matcher rule type.");
@@ -111,10 +111,9 @@ public class MatcherParser {
       case SUFFIX:
         return StringMatcher.forSuffix(proto.getSuffix(), proto.getIgnoreCase());
       case SAFE_REGEX:
-        return StringMatcher.forSafeRegEx(Pattern.compile(proto.getSafeRegex().getRegex()),
-            proto.getIgnoreCase());
+        return StringMatcher.forSafeRegEx(Pattern.compile(proto.getSafeRegex().getRegex()));
       case CONTAINS:
-        return StringMatcher.forContains(proto.getContains(), proto.getIgnoreCase());
+        return StringMatcher.forContains(proto.getContains());
       case MATCHPATTERN_NOT_SET:
       default:
         throw new IllegalArgumentException("Unknown StringMatcher match pattern.");

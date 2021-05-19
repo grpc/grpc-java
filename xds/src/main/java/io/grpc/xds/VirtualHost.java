@@ -26,7 +26,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.re2j.Pattern;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Matcher.FractionMatcher;
-import io.grpc.xds.Matcher.RouteMatcher;
+import io.grpc.xds.Matcher.PathMatcher;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +70,7 @@ abstract class VirtualHost {
 
     @AutoValue
     abstract static class RouteMatch {
-      abstract RouteMatcher pathMatcher();
+      abstract PathMatcher pathMatcher();
 
       abstract ImmutableList<Matcher> headerMatchers();
 
@@ -80,13 +80,13 @@ abstract class VirtualHost {
       // TODO(chengyuanzhang): maybe delete me.
       @VisibleForTesting
       static RouteMatch withPathExactOnly(String path) {
-        return RouteMatch.create(RouteMatcher.fromPath(path, true),
+        return RouteMatch.create(PathMatcher.fromPath(path, false),
             Collections.<Matcher>emptyList(), null);
       }
 
-      static RouteMatch create(RouteMatcher routeMatcher,
+      static RouteMatch create(PathMatcher pathMatcher,
           List<? extends Matcher> headerMatchers, @Nullable FractionMatcher fractionMatcher) {
-        return new AutoValue_VirtualHost_Route_RouteMatch(routeMatcher,
+        return new AutoValue_VirtualHost_Route_RouteMatch(pathMatcher,
             ImmutableList.copyOf(headerMatchers), fractionMatcher);
       }
     }

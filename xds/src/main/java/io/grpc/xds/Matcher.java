@@ -99,61 +99,6 @@ public abstract class Matcher {
     }
   }
 
-  /** Matcher for HTTP request path for Route. */
-  @AutoValue
-  abstract static class RouteMatcher extends Matcher {
-    // Exact full path to be matched.
-    @Nullable
-    abstract String path();
-
-    // Path prefix to be matched.
-    @Nullable
-    abstract String prefix();
-
-    // Regular expression pattern of the path to be matched.
-    @Nullable
-    abstract Pattern regEx();
-
-    // Whether case sensitivity is taken into account for matching.
-    // Only valid for full path matching or prefix matching.
-    abstract boolean caseSensitive();
-
-    static RouteMatcher fromPath(String path, boolean caseSensitive) {
-      checkNotNull(path, "path");
-      return RouteMatcher.create(path, null, null, caseSensitive);
-    }
-
-    static RouteMatcher fromPrefix(String prefix, boolean caseSensitive) {
-      checkNotNull(prefix, "prefix");
-      return RouteMatcher.create(null, prefix, null, caseSensitive);
-    }
-
-    static RouteMatcher fromRegEx(Pattern regEx) {
-      checkNotNull(regEx, "regEx");
-      return RouteMatcher.create(null, null, regEx, false /* doesn't matter */);
-    }
-
-    private static RouteMatcher create(@Nullable String path, @Nullable String prefix,
-        @Nullable Pattern regEx, boolean caseSensitive) {
-      return new AutoValue_Matcher_RouteMatcher(path, prefix, regEx, caseSensitive);
-    }
-
-    @Override
-    public boolean matches(EvaluateArgs args) {
-      String fullMethodName = args.getPath();
-      if (path() != null) {
-        return caseSensitive()
-            ? path().equals(fullMethodName)
-            : path().equalsIgnoreCase(fullMethodName);
-      } else if (prefix() != null) {
-        return caseSensitive()
-            ? fullMethodName.startsWith(prefix())
-            : fullMethodName.toLowerCase().startsWith(prefix().toLowerCase());
-      }
-      return regEx().matches(fullMethodName);
-    }
-  }
-
   /** Matcher for HTTP request headers. */
   @AutoValue
   abstract static class HeaderMatcher extends Matcher {
@@ -331,16 +276,16 @@ public abstract class Matcher {
           ignoreCase);
     }
 
-    static StringMatcher forSafeRegEx(Pattern regEx, boolean ignoreCase) {
+    static StringMatcher forSafeRegEx(Pattern regEx) {
       checkNotNull(regEx, "regEx");
       return StringMatcher.create(null, null, null, regEx, null,
-          ignoreCase);
+          false/* doesn't matter */);
     }
 
-    static StringMatcher forContains(String contains, boolean ignoreCase) {
+    static StringMatcher forContains(String contains) {
       checkNotNull(contains, "contains");
       return StringMatcher.create(null, null, null, null, contains,
-          ignoreCase);
+          false/* doesn't matter */);
     }
 
     public boolean matches(String args) {
@@ -374,16 +319,29 @@ public abstract class Matcher {
   }
 
   /** Matcher for HTTP request path. */
-  static class PathMatcher extends Matcher {
-    private final StringMatcher delegate;
+  @AutoValue
+  abstract static class PathMatcher extends Matcher {
+    abstract StringMatcher delegate();
 
-    public PathMatcher(StringMatcher stringMatcher) {
-      this.delegate = stringMatcher;
+    static PathMatcher create(StringMatcher stringMatcher) {
+      return new AutoValue_Matcher_PathMatcher(stringMatcher);
+    }
+
+    static PathMatcher fromPrefix(String prefix, boolean ignoreCase) {
+      return create(StringMatcher.forPrefix(prefix, ignoreCase));
+    }
+
+    static PathMatcher fromPath(String path, boolean ignoreCase) {
+      return create(StringMatcher.forExact(path, ignoreCase));
+    }
+
+    static PathMatcher fromRegEx(Pattern pattern) {
+      return create(StringMatcher.forSafeRegEx(pattern));
     }
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return delegate.matches(args.getPath());
+      return delegate().matches(args.getPath());
     }
   }
 

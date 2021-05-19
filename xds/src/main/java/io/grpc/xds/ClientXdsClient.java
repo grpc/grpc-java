@@ -65,7 +65,7 @@ import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.Matcher.FractionMatcher;
-import io.grpc.xds.Matcher.RouteMatcher;
+import io.grpc.xds.Matcher.PathMatcher;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
@@ -483,7 +483,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (proto.getQueryParametersCount() != 0) {
       return null;
     }
-    StructOrError<RouteMatcher> pathMatch = parseRouteMatcher(proto);
+    StructOrError<PathMatcher> pathMatch = parsePathMatcher(proto);
     if (pathMatch.getErrorDetail() != null) {
       return StructOrError.fromError(pathMatch.getErrorDetail());
     }
@@ -513,15 +513,15 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @VisibleForTesting
-  static StructOrError<RouteMatcher> parseRouteMatcher(
+  static StructOrError<PathMatcher> parsePathMatcher(
       io.envoyproxy.envoy.config.route.v3.RouteMatch proto) {
-    boolean caseSensitive = proto.getCaseSensitive().getValue();
+    boolean ignoreCase = !proto.getCaseSensitive().getValue();
     switch (proto.getPathSpecifierCase()) {
       case PREFIX:
         return StructOrError.fromStruct(
-            RouteMatcher.fromPrefix(proto.getPrefix(), caseSensitive));
+            PathMatcher.fromPrefix(proto.getPrefix(), ignoreCase));
       case PATH:
-        return StructOrError.fromStruct(RouteMatcher.fromPath(proto.getPath(), caseSensitive));
+        return StructOrError.fromStruct(PathMatcher.fromPath(proto.getPath(), ignoreCase));
       case SAFE_REGEX:
         String rawPattern = proto.getSafeRegex().getRegex();
         Pattern safeRegEx;
@@ -530,7 +530,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         } catch (PatternSyntaxException e) {
           return StructOrError.fromError("Malformed safe regex pattern: " + e.getMessage());
         }
-        return StructOrError.fromStruct(RouteMatcher.fromRegEx(safeRegEx));
+        return StructOrError.fromStruct(PathMatcher.fromRegEx(safeRegEx));
       case PATHSPECIFIER_NOT_SET:
       default:
         return StructOrError.fromError("Unknown path match type");

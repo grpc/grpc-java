@@ -67,7 +67,7 @@ import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.Matcher.HeaderMatcher;
-import io.grpc.xds.Matcher.RouteMatcher;
+import io.grpc.xds.Matcher.PathMatcher;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
@@ -1355,7 +1355,7 @@ public class XdsNameResolverTest {
 
     RouteMatch routeMatch1 =
         RouteMatch.create(
-            RouteMatcher.fromPath("/FooService/barMethod", true),
+            PathMatcher.fromPath("/FooService/barMethod", false),
             Collections.<HeaderMatcher>emptyList(), null);
     assertThat(XdsNameResolver.matchRoute(routeMatch1, "/FooService/barMethod", headers, random))
         .isTrue();
@@ -1364,7 +1364,7 @@ public class XdsNameResolverTest {
 
     RouteMatch routeMatch2 =
         RouteMatch.create(
-            RouteMatcher.fromPrefix("/FooService/", true),
+            PathMatcher.fromPrefix("/FooService/", false),
             Collections.<HeaderMatcher>emptyList(), null);
     assertThat(XdsNameResolver.matchRoute(routeMatch2, "/FooService/barMethod", headers, random))
         .isTrue();
@@ -1375,7 +1375,7 @@ public class XdsNameResolverTest {
 
     RouteMatch routeMatch3 =
         RouteMatch.create(
-            RouteMatcher.fromRegEx(Pattern.compile(".*Foo.*")),
+            PathMatcher.fromRegEx(Pattern.compile(".*Foo.*")),
             Collections.<HeaderMatcher>emptyList(), null);
     assertThat(XdsNameResolver.matchRoute(routeMatch3, "/FooService/barMethod", headers, random))
         .isTrue();
@@ -1388,14 +1388,14 @@ public class XdsNameResolverTest {
 
     RouteMatch routeMatch1 =
         RouteMatch.create(
-            RouteMatcher.fromPath("/FooService/barMethod", false),
+            PathMatcher.fromPath("/FooService/barMethod", true),
             Collections.<HeaderMatcher>emptyList(), null);
     assertThat(XdsNameResolver.matchRoute(routeMatch1, "/fooservice/barmethod", headers, random))
         .isTrue();
 
     RouteMatch routeMatch2 =
         RouteMatch.create(
-            RouteMatcher.fromPrefix("/FooService", false),
+            PathMatcher.fromPrefix("/FooService", true),
             Collections.<HeaderMatcher>emptyList(), null);
     assertThat(XdsNameResolver.matchRoute(routeMatch2, "/fooservice/barmethod", headers, random))
         .isTrue();
@@ -1413,7 +1413,7 @@ public class XdsNameResolverTest {
     headers.put(Metadata.Key.of("custom-key", Metadata.ASCII_STRING_MARSHALLER), "custom-value2");
     ThreadSafeRandom random = mock(ThreadSafeRandom.class);
 
-    RouteMatcher routeMatcher = RouteMatcher.fromPath("/FooService/barMethod", true);
+    PathMatcher routeMatcher = PathMatcher.fromPath("/FooService/barMethod", false);
     RouteMatch routeMatch1 = RouteMatch.create(
         routeMatcher,
         Arrays.asList(
@@ -1596,7 +1596,7 @@ public class XdsNameResolverTest {
           : ImmutableMap.<String, FilterConfig>of(FAULT_FILTER_INSTANCE_NAME, routeFaultConfig);
       Route route = Route.create(
           RouteMatch.create(
-              RouteMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
+              PathMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
           RouteAction.forWeightedClusters(
               Collections.singletonList(clusterWeight),
               Collections.<HashPolicy>emptyList(),
@@ -1661,7 +1661,7 @@ public class XdsNameResolverTest {
           : ImmutableMap.<String, FilterConfig>of(FAULT_FILTER_INSTANCE_NAME, routFaultConfig);
       Route route = Route.create(
           RouteMatch.create(
-              RouteMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
+              PathMatcher.fromPrefix("/", false), Collections.<HeaderMatcher>emptyList(), null),
           RouteAction.forWeightedClusters(
               Collections.singletonList(clusterWeight),
               Collections.<HashPolicy>emptyList(),

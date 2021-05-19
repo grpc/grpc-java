@@ -23,7 +23,7 @@ import com.google.re2j.Pattern;
 import io.grpc.xds.Matcher.HeaderMatcher;
 import io.grpc.xds.Matcher.HeaderMatcher.Range;
 import io.grpc.xds.Matcher.IpMatcher;
-import io.grpc.xds.Matcher.RouteMatcher;
+import io.grpc.xds.Matcher.PathMatcher;
 import io.grpc.xds.Matcher.StringMatcher;
 import java.util.Map;
 import org.junit.Rule;
@@ -104,7 +104,7 @@ public class MatcherTest {
     assertThat(matcher.matches("esSEncESs")).isTrue();
     assertThat(matcher.matches("ess")).isTrue();
 
-    matcher = StringMatcher.forContains("ess", true);
+    matcher = StringMatcher.forContains("ess");
     assertThat(matcher.matches("elite")).isFalse();
     assertThat(matcher.matches("es")).isFalse();
     assertThat(matcher.matches("")).isFalse();
@@ -113,29 +113,29 @@ public class MatcherTest {
     assertThat(matcher.matches("ExcesS")).isFalse();
     assertThat(matcher.matches((String)null)).isFalse();
 
-    matcher = StringMatcher.forSafeRegEx(Pattern.compile("^es*.*"), true);
+    matcher = StringMatcher.forSafeRegEx(Pattern.compile("^es*.*"));
     assertThat(matcher.matches("essence")).isTrue();
   }
 
   @Test
-  public void testRouteMatch() {
-    RouteMatcher matcher = RouteMatcher.fromPath("/Namespace/get", true);
+  public void testPathMatch() {
+    PathMatcher matcher = PathMatcher.fromPath("/Namespace/get", false);
     assertThat(matcher.matches(args("/Namespace/get", null))).isTrue();
     assertThat(matcher.matches(args("/namespace/get", null))).isFalse();
-    matcher = RouteMatcher.fromPath("/Namespace/get", false);
+    matcher = PathMatcher.fromPath("/Namespace/get", true);
     assertThat(matcher.matches(args("/Namespace/get", null))).isTrue();
     assertThat(matcher.matches(args("/namespace/get", null))).isTrue();
 
-    matcher = RouteMatcher.fromPrefix("/Namespace/get", true);
+    matcher = PathMatcher.fromPrefix("/Namespace/get", false);
     assertThat(matcher.matches(args("/namespace/get/market", null))).isFalse();
     assertThat(matcher.matches(args("/namespace/put", null))).isFalse();
     assertThat(matcher.matches(args("/Namespace/get/market", null))).isTrue();
-    matcher = RouteMatcher.fromPrefix("/Namespace/get", false);
+    matcher = PathMatcher.fromPrefix("/Namespace/get", true);
     assertThat(matcher.matches(args("/namespace/get/market", null))).isTrue();
     assertThat(matcher.matches(args("/namespace/put", null))).isFalse();
     assertThat(matcher.matches(args("/Namespace/Get/market", null))).isTrue();
 
-    matcher = RouteMatcher.fromRegEx(Pattern.compile("/name.*"));
+    matcher = PathMatcher.fromRegEx(Pattern.compile("/name.*"));
     assertThat(matcher.matches(args("/namespace/get/market", null))).isTrue();
     assertThat(matcher.matches(args("/namespace/put", null))).isTrue();
     assertThat(matcher.matches(args("namespace/put", null))).isFalse();
