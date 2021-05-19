@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.rbac.engine;
+package io.grpc.xds;
 
 import com.google.auto.value.AutoValue;
-import io.grpc.xds.EvaluateArgs;
 import javax.annotation.Nullable;
 
 /** An authorization engine evaluates input arguments against internal configuration policies and

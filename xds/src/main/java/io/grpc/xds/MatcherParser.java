@@ -32,9 +32,9 @@ import io.grpc.xds.Matcher.StringMatcher;
  * A group of parser utility functions that translate envoy matcher proto into xds internal
  * {@link Matcher} data structure.
  */
-public class MatcherParser {
+final class MatcherParser {
   /** Translates envoy proto HeaderMatcher to {@link HeaderMatcher}.*/
-  public static Matcher parseHeaderMatcher(
+  static Matcher parseHeaderMatcher(
       io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
     switch (proto.getHeaderMatchSpecifierCase()) {
       case EXACT_MATCH:
@@ -73,7 +73,7 @@ public class MatcherParser {
   }
 
   /** Translates envoy proto PathMatcher to {@link PathMatcher}. */
-  public static Matcher parsePathMatcher(io.envoyproxy.envoy.type.matcher.v3.PathMatcher proto) {
+  static Matcher parsePathMatcher(io.envoyproxy.envoy.type.matcher.v3.PathMatcher proto) {
     switch (proto.getRuleCase()) {
       case PATH:
         return PathMatcher.create(parseStringMatcher(proto.getPath()));
@@ -84,18 +84,18 @@ public class MatcherParser {
   }
 
   /** Translates envoy proto Authenticated to {@link AuthenticatedMatcher}.*/
-  public static Matcher parseAuthenticated(Authenticated proto) {
+  static Matcher parseAuthenticated(Authenticated proto) {
     return new AuthenticatedMatcher(parseStringMatcher(proto.getPrincipalName()));
   }
 
   /** Constructs {@link DestinationIpMatcher} matcher from envoy proto. */
-  public static Matcher createDestinationIpMatcher(CidrRange cidrRange) {
+  static Matcher createDestinationIpMatcher(CidrRange cidrRange) {
     return new DestinationIpMatcher(
         IpMatcher.create(cidrRange.getAddressPrefix(), cidrRange.getPrefixLen().getValue()));
   }
 
   /** Constructs {@link SourceIpMatcher} from envoy proto. */
-  public static Matcher createSourceIpMatcher(CidrRange cidrRange) {
+  static Matcher createSourceIpMatcher(CidrRange cidrRange) {
     return new SourceIpMatcher(
         IpMatcher.create(cidrRange.getAddressPrefix(), cidrRange.getPrefixLen().getValue()));
   }

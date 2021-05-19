@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.rbac.engine;
+package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.when;
@@ -32,9 +32,8 @@ import io.envoyproxy.envoy.config.route.v3.HeaderMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.MetadataMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.PathMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
-import io.grpc.xds.EvaluateArgs;
-import io.grpc.xds.internal.rbac.engine.AuthorizationEngine.AuthDecision;
-import io.grpc.xds.internal.rbac.engine.AuthorizationEngine.AuthDecision.DecisionType;
+import io.grpc.xds.AuthorizationEngine.AuthDecision;
+import io.grpc.xds.AuthorizationEngine.AuthDecision.DecisionType;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
