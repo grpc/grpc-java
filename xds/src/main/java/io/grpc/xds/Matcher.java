@@ -30,22 +30,22 @@ import javax.annotation.Nullable;
  * A matcher evaluates an {@link EvaluateArgs} input and tells whether certain
  * argument in the input matches a predefined matching pattern.
  */
-public abstract class Matcher {
+abstract class Matcher {
   protected Matcher() {}
 
-  public abstract boolean matches(EvaluateArgs args);
+  abstract boolean matches(EvaluateArgs args);
 
   /** Matches when any of the matcher matches. */
-  public static class OrMatcher extends Matcher {
+  static class OrMatcher extends Matcher {
     private final List<? extends Matcher> anyMatch;
 
-    public OrMatcher(List<? extends Matcher> matchers) {
+    OrMatcher(List<? extends Matcher> matchers) {
       checkNotNull(matchers, "matchers");
       this.anyMatch = Collections.unmodifiableList(matchers);
     }
 
     @Override
-    public boolean matches(EvaluateArgs args) {
+    boolean matches(EvaluateArgs args) {
       for (Matcher m : anyMatch) {
         if (m.matches(args)) {
           return true;
@@ -56,16 +56,16 @@ public abstract class Matcher {
   }
 
   /** Matches when all of the matchers match. */
-  public static class AndMatcher extends Matcher {
+  static class AndMatcher extends Matcher {
     private final List<? extends Matcher> allMatch;
 
-    public AndMatcher(List<? extends Matcher> matchers) {
+    AndMatcher(List<? extends Matcher> matchers) {
       checkNotNull(matchers, "matchers");
       this.allMatch = Collections.unmodifiableList(matchers);
     }
 
     @Override
-    public boolean matches(EvaluateArgs args) {
+    boolean matches(EvaluateArgs args) {
       for (Matcher m : allMatch) {
         if (!m.matches(args)) {
           return false;
@@ -76,25 +76,25 @@ public abstract class Matcher {
   }
 
   /** Always true matcher.*/
-  public static class AlwaysTrueMatcher extends Matcher {
-    public static AlwaysTrueMatcher INSTANCE = new AlwaysTrueMatcher();
+  static class AlwaysTrueMatcher extends Matcher {
+    static AlwaysTrueMatcher INSTANCE = new AlwaysTrueMatcher();
 
     @Override
-    public boolean matches(EvaluateArgs args) {
+    boolean matches(EvaluateArgs args) {
       return true;
     }
   }
 
   /** Negate matcher.*/
-  public static class InvertMatcher extends Matcher {
+  static class InvertMatcher extends Matcher {
     private final Matcher toInvertMatcher;
 
-    public InvertMatcher(Matcher matcher) {
+    InvertMatcher(Matcher matcher) {
       this.toInvertMatcher = matcher;
     }
 
     @Override
-    public boolean matches(EvaluateArgs args) {
+    boolean matches(EvaluateArgs args) {
       return !toInvertMatcher.matches(args);
     }
   }
@@ -189,7 +189,7 @@ public abstract class Matcher {
     }
 
     @Override
-    public boolean matches(EvaluateArgs args) {
+    boolean matches(EvaluateArgs args) {
       String value = args.getHeaderValue(name());
       if (present() != null) {
         return (value == null) == present().equals(inverted());
@@ -288,7 +288,7 @@ public abstract class Matcher {
           false/* doesn't matter */);
     }
 
-    public boolean matches(String args) {
+    boolean matches(String args) {
       if (args == null) {
         return false;
       }
@@ -340,7 +340,7 @@ public abstract class Matcher {
     }
 
     @Override
-    public boolean matches(EvaluateArgs args) {
+    boolean matches(EvaluateArgs args) {
       return delegate().matches(args.getPath());
     }
   }
@@ -349,12 +349,12 @@ public abstract class Matcher {
   static class AuthenticatedMatcher extends Matcher {
     private final StringMatcher delegate;
 
-    public AuthenticatedMatcher(StringMatcher stringMatcher) {
+    AuthenticatedMatcher(StringMatcher stringMatcher) {
       this.delegate = stringMatcher;
     }
 
     @Override
-    public boolean matches(EvaluateArgs args) {
+    boolean matches(EvaluateArgs args) {
       return delegate.matches(args.getPrincipalName());
     }
   }
@@ -363,12 +363,12 @@ public abstract class Matcher {
   static class DestinationIpMatcher extends Matcher {
     private final IpMatcher delegate;
 
-    public DestinationIpMatcher(IpMatcher ipMatcher) {
+    DestinationIpMatcher(IpMatcher ipMatcher) {
       this.delegate = ipMatcher;
     }
 
     @Override
-    public boolean matches(EvaluateArgs args) {
+    boolean matches(EvaluateArgs args) {
       return delegate.matches(args.getLocalAddress());
     }
   }
@@ -377,12 +377,12 @@ public abstract class Matcher {
   static class SourceIpMatcher extends Matcher {
     private final IpMatcher delegate;
 
-    public SourceIpMatcher(IpMatcher ipMatcher) {
+    SourceIpMatcher(IpMatcher ipMatcher) {
       this.delegate = ipMatcher;
     }
 
     @Override
-    public boolean matches(EvaluateArgs args) {
+    boolean matches(EvaluateArgs args) {
       return delegate.matches(args.getPeerAddress());
     }
   }
@@ -396,11 +396,11 @@ public abstract class Matcher {
     abstract int prefixLen();
 
     @Override
-    public boolean matches(EvaluateArgs args) {
+    boolean matches(EvaluateArgs args) {
       throw new UnsupportedOperationException();
     }
 
-    public boolean matches(String args) {
+    boolean matches(String args) {
       int len = prefixLen();
       byte[] ip;
       byte[] subnet;
