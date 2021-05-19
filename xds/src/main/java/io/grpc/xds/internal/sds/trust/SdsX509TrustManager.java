@@ -151,14 +151,13 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (altNameType == null) {
       throw new CertificateParsingException("Invalid SAN entry: null altNameType");
     }
-    String altNameFromCert = (String) entry.get(1);
     switch (altNameType) {
       case ALT_DNS_NAME:
       case ALT_URI_NAME:
       case ALT_IPA_NAME:
-        return verifyDnsNameInSanList(altNameFromCert, verifySanList);
+        return verifyDnsNameInSanList((String) entry.get(1), verifySanList);
       default:
-        throw new CertificateParsingException("Unsupported altNameType: " + altNameType);
+        return false;
     }
   }
 
