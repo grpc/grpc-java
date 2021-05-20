@@ -153,6 +153,7 @@ public class AdvancedTlsTest {
         .clientAuth(ClientAuth.REQUIRE).build();
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
+    TimeUnit.SECONDS.sleep(5);
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
@@ -231,6 +232,7 @@ public class AdvancedTlsTest {
         .clientAuth(ClientAuth.REQUIRE).build();
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
+    TimeUnit.SECONDS.sleep(5);
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
@@ -311,6 +313,7 @@ public class AdvancedTlsTest {
         .clientAuth(ClientAuth.REQUIRE).build();
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
+    TimeUnit.SECONDS.sleep(5);
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File,
