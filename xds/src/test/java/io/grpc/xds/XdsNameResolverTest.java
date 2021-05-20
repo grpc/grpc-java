@@ -1207,7 +1207,8 @@ public class XdsNameResolverTest {
             Deadline.after(4000, TimeUnit.NANOSECONDS, fakeTicker)));
     assertThat(testCall).isNull();
     verifyRpcDelayedThenAborted(observer, 4000L, Status.DEADLINE_EXCEEDED.withDescription(
-        "Deadline exceeded after 0.000004000s. \nAdditional delay injected: 5000 ns"));
+        "Deadline exceeded after up to 5000 ns of fault-injected delay:"
+            + " Deadline exceeded after 0.000004000s. "));
   }
 
   @Test

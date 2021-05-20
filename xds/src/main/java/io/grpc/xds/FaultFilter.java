@@ -247,8 +247,22 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
                     @Override
                     public void onClose(Status status, Metadata trailers) {
                       if (status.getCode().equals(Code.DEADLINE_EXCEEDED)) {
-                        status = status.augmentDescription(
-                            String.format("Additional delay injected: %d ns", finalDelayNanos));
+                        // TODO(zdapeng:) check effective deadline locally, and
+                        //   do the following only if the local deadline is exceeded.
+                        //   (If the server sends DEADLINE_EXCEEDED for its own deadline, then the
+                        //   injected delay does not contribute to the error, because the request is
+                        //   only sent out after the delay. There could be a race between local and
+                        //   remote, but it is rather rare.)
+                        String description = String.format(
+                            "Deadline exceeded after up to %d ns of fault-injected delay",
+                            finalDelayNanos);
+                        if (status.getDescription() != null) {
+                          description = description + ": " + status.getDescription();
+                        }
+                        status = Status.DEADLINE_EXCEEDED
+                            .withDescription(description).withCause(status.getCause());
+                        // Replace trailers to prevent mixing sources of status and trailers.
+                        trailers = new Metadata();
                       }
                       delegate().onClose(status, trailers);
                     }
