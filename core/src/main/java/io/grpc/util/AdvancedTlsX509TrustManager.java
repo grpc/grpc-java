@@ -37,24 +37,27 @@ import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
 /**
+ * For Android users: this class is only supported in API level 24 and above.
  * AdvancedTlsX509TrustManager is an {@code X509ExtendedTrustManager} that allows users to configure
  * advanced TLS features, such as root certificate reloading, peer cert custom verification, etc.
  */
+@IgnoreJRERequirement
 public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509TrustManager.class.getName());
 
   private Verification verification;
   private PeerVerifier peerVerifier;
-  private SSLSocketPeerVerifier sslSocketPeerVerifier;
-  private SSLEnginePeerVerifier sslEnginePeerVerifier;
+  private SslSocketPeerVerifier sslSocketPeerVerifier;
+  private SslEnginePeerVerifier sslEnginePeerVerifier;
   // The trust certs we will use to verify peer certificate chain.
   private volatile X509Certificate[] trustCerts;
 
   private AdvancedTlsX509TrustManager(Verification verification,  PeerVerifier peerVerifier,
-      SSLSocketPeerVerifier socketPeerVerifier, SSLEnginePeerVerifier enginePeerVerifier) {
+      SslSocketPeerVerifier socketPeerVerifier, SslEnginePeerVerifier enginePeerVerifier) {
     this.verification = verification;
     this.peerVerifier = peerVerifier;
     this.sslSocketPeerVerifier = socketPeerVerifier;
@@ -68,21 +71,9 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   }
 
   @Override
-  public void checkServerTrusted(X509Certificate[] chain, String authType)
-      throws CertificateException {
-    checkTrusted(chain, authType, null, null, true);
-  }
-
-  @Override
   public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
     checkTrusted(chain, authType, null, socket, false);
-  }
-
-  @Override
-  public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
-      throws CertificateException {
-    checkTrusted(chain, authType, null, socket, true);
   }
 
   @Override
@@ -98,6 +89,18 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   }
 
   @Override
+  public void checkServerTrusted(X509Certificate[] chain, String authType)
+      throws CertificateException {
+    checkTrusted(chain, authType, null, null, true);
+  }
+
+  @Override
+  public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
+      throws CertificateException {
+    checkTrusted(chain, authType, null, socket, true);
+  }
+
+  @Override
   public X509Certificate[] getAcceptedIssuers() {
     return trustCerts;
   }
@@ -109,7 +112,11 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     this.trustCerts = new X509Certificate[0];
   }
 
-  // Update the current cached trust certs.
+  /**
+   * Updates the current cached trust certificates.
+   *
+   * @param trustCerts  the trust certificates that are going to be used
+   */
   public void updateTrustCredentials(X509Certificate[] trustCerts) {
     // Question: in design, we will do an copy of trustCerts, but that seems not easy, since
     // X509Certificate is an abstract class without copy constructor.
@@ -117,7 +124,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     this.trustCerts = trustCerts;
   }
 
-  public void checkTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine,
+  private void checkTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine,
       Socket socket, boolean checkingServer) throws CertificateException {
     if (this.verification == Verification.CertificateAndHostNameVerification
         || this.verification == Verification.CertificateOnlyVerification) {
@@ -173,8 +180,8 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       }
       // Configure the delegated trust manager based on users' input.
       if (checkingServer) {
-        if (this.verification == Verification.CertificateAndHostNameVerification ||
-            this.verification == Verification.CertificateOnlyVerification) {
+        if (this.verification == Verification.CertificateAndHostNameVerification
+            || this.verification == Verification.CertificateOnlyVerification) {
           if (sslEngine == null) {
             throw new CertificateException(
                 "SSLEngine is null. Couldn't check host name");
@@ -258,8 +265,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    *
    * @param trustCertFile  the file on disk holding the trust certificates
    * @param oldTime the time when the trust file is modified during last execution
-   * @return 0 if something wrong with this execution or the modified time is not changed since last
-   * execution, otherwise the modified time during this execution
+   * @return 0 if failed or the modified time is not changed, otherwise the new modified time
    */
   private long readAndUpdate(File trustCertFile, long oldTime)
       throws FileNotFoundException, CertificateException {
@@ -320,10 +326,11 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
         throws CertificateException;
   }
+
   // Additional custom peer verification check.
   // It will be used when checkClientTrusted/checkServerTrusted is called with the {@code Socket}
   // parameter.
-  public interface SSLSocketPeerVerifier {
+  public interface SslSocketPeerVerifier {
     /**
      * Verifies the peer certificate chain. For more information, please refer to
      * {@code X509ExtendedTrustManager}.
@@ -336,10 +343,11 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     void verifyPeerCertificate(X509Certificate[] peerCertChain,  String authType, Socket socket)
         throws CertificateException;
   }
+
   // Additional custom peer verification check.
   // It will be used when checkClientTrusted/checkServerTrusted is called with the {@code SSLEngine}
   // parameter.
-  public interface SSLEnginePeerVerifier {
+  public interface SslEnginePeerVerifier {
     /**
      * Verifies the peer certificate chain. For more information, please refer to
      * {@code X509ExtendedTrustManager}.
@@ -357,8 +365,8 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
 
     private Verification verification;
     private PeerVerifier peerVerifier;
-    private SSLSocketPeerVerifier socketPeerVerifier;
-    private SSLEnginePeerVerifier enginePeerVerifier;
+    private SslSocketPeerVerifier socketPeerVerifier;
+    private SslEnginePeerVerifier enginePeerVerifier;
 
     public Builder setVerification(Verification verification) {
       this.verification = verification;
@@ -370,12 +378,12 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       return this;
     }
 
-    public Builder setSSLSocketPeerVerifier(SSLSocketPeerVerifier peerVerifier) {
+    public Builder setSslSocketPeerVerifier(SslSocketPeerVerifier peerVerifier) {
       this.socketPeerVerifier = peerVerifier;
       return this;
     }
 
-    public Builder setSSLEnginePeerVerifier(SSLEnginePeerVerifier peerVerifier) {
+    public Builder setSslEnginePeerVerifier(SslEnginePeerVerifier peerVerifier) {
       this.enginePeerVerifier = peerVerifier;
       return this;
     }

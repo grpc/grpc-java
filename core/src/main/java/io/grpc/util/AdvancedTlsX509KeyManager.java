@@ -20,7 +20,6 @@ import io.grpc.ExperimentalApi;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.Socket;
 import java.security.NoSuchAlgorithmException;
 import java.security.Principal;
@@ -92,10 +91,15 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
     return "default";
   }
 
-  // Update the current cached private key and cert chains.
-  // Users should make sure the private key matches the public key on the leaf certificate of the
-  // certificate chain.
-  // TODO(ZhenLian): explore possibilities to do a crypto check here.
+  /**
+   * Updates the current cached private key and cert chains.
+   * Right now, callers should make sure |key| matches the public key on the leaf certificate of
+   * |certs|.
+   * TODO(ZhenLian): explore possibilities to do a crypto check here.
+   *
+   * @param key  the private key that is going to be used
+   * @param certs  the certificate chain that is going to be used
+   */
   public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs) {
     // Same question as the trust manager: what to do if copy is not feasible here?
     this.key = key;
@@ -150,8 +154,8 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
           this.currentKeyTime = newResult.keyTime;
           this.currentCertTime = newResult.certTime;
         }
-      } catch (CertificateException | IOException | NoSuchAlgorithmException |
-          InvalidKeySpecException e) {
+      } catch (CertificateException | IOException | NoSuchAlgorithmException
+          | InvalidKeySpecException e) {
         log.log(Level.SEVERE, "readAndUpdate() execution thread failed", e);
       }
     }
@@ -170,8 +174,8 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   }
 
   /**
-   * reads the private key and certificates specified in the path locations. Updates |key| and |cert|
-   * if both of their modified time changed since last read.
+   * reads the private key and certificates specified in the path locations. Updates |key| and
+   * |cert| if both of their modified time changed since last read.
    *
    * @param keyFile  the file on disk holding the private key
    * @param certFile  the file on disk holding the certificate chain

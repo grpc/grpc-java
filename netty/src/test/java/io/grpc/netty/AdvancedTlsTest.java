@@ -36,8 +36,8 @@ import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.grpc.util.AdvancedTlsX509KeyManager;
 import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.util.AdvancedTlsX509TrustManager.PeerVerifier;
-import io.grpc.util.AdvancedTlsX509TrustManager.SSLEnginePeerVerifier;
-import io.grpc.util.AdvancedTlsX509TrustManager.SSLSocketPeerVerifier;
+import io.grpc.util.AdvancedTlsX509TrustManager.SslEnginePeerVerifier;
+import io.grpc.util.AdvancedTlsX509TrustManager.SslSocketPeerVerifier;
 import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import io.grpc.util.CertificateUtils;
 
@@ -45,10 +45,10 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.net.Socket;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -140,7 +140,7 @@ public class AdvancedTlsTest {
   }
 
   @Test
-  public void AdvancedTlsKeyManagerTrustManagerMutualTlsTest() throws Exception {
+  public void advancedTlsKeyManagerTrustManagerMutualTlsTest() throws Exception {
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
@@ -178,14 +178,14 @@ public class AdvancedTlsTest {
   }
 
   @Test
-  public void TrustManagerCustomVerifierMutualTlsTest() throws Exception {
+  public void trustManagerCustomVerifierMutualTlsTest() throws Exception {
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
-        .setSSLEnginePeerVerifier(
-            new SSLEnginePeerVerifier() {
+        .setSslEnginePeerVerifier(
+            new SslEnginePeerVerifier() {
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
                   SSLEngine engine) throws CertificateException {
@@ -198,7 +198,7 @@ public class AdvancedTlsTest {
                 }
               }
             })
-        .setSSLSocketPeerVerifier(new SSLSocketPeerVerifier() {
+        .setSslSocketPeerVerifier(new SslSocketPeerVerifier() {
           @Override
           public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
               Socket socket) throws CertificateException {
@@ -236,8 +236,8 @@ public class AdvancedTlsTest {
     clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
-        .setSSLEnginePeerVerifier(
-            new SSLEnginePeerVerifier() {
+        .setSslEnginePeerVerifier(
+            new SslEnginePeerVerifier() {
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
                   SSLEngine engine) throws CertificateException {
@@ -250,7 +250,7 @@ public class AdvancedTlsTest {
                 }
               }
             })
-        .setSSLSocketPeerVerifier(new SSLSocketPeerVerifier() {
+        .setSslSocketPeerVerifier(new SslSocketPeerVerifier() {
           @Override
           public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
               Socket socket) throws CertificateException {
@@ -296,7 +296,7 @@ public class AdvancedTlsTest {
   }
 
   @Test
-  public void OnFileReloadingKeyManagerTrustManagerTest() throws Exception {
+  public void onFileReloadingKeyManagerTrustManagerTest() throws Exception {
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     Closeable serverKeyShutdown = serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File,
