@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ChannelCredentials;
+import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.ExponentialBackoffPolicy;
@@ -30,6 +31,7 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -105,6 +107,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @ThreadSafe
   @VisibleForTesting
   static class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
+    private final Context context = Context.ROOT;
     private final BootstrapInfo bootstrapInfo;
     private final Object lock = new Object();
     @GuardedBy("lock")
@@ -132,9 +135,9 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
               .keepAliveTime(5, TimeUnit.MINUTES)
               .build();
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
-          xdsClient = new ClientXdsClient(channel, bootstrapInfo, scheduler,
+          xdsClient = new ClientXdsClient(channel, bootstrapInfo, context, scheduler,
               new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER,
-              TimeProvider.SYSTEM_TIME_PROVIDER);
+              TimeProvider.SYSTEM_TIME_PROVIDER, new TlsContextManagerImpl(bootstrapInfo));
         }
         refCount++;
         return xdsClient;

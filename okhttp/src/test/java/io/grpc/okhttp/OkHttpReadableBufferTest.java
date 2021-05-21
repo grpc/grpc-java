@@ -57,6 +57,18 @@ public class OkHttpReadableBufferTest extends ReadableBufferTestBase {
   }
 
   @Override
+  @Test
+  public void markAndResetWithReadShouldSucceed() {
+    // Not supported.
+  }
+
+  @Override
+  @Test
+  public void markAndResetWithReadToReadableBufferShouldSucceed() {
+    // Not supported.
+  }
+
+  @Override
   protected ReadableBuffer buffer() {
     return buffer;
   }

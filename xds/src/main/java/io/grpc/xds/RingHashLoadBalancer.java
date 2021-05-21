@@ -191,9 +191,59 @@ final class RingHashLoadBalancer extends LoadBalancer {
     subchannels.clear();
   }
 
+  /**
+   * Updates the overall balancing state by aggregating the connectivity states of all subchannels.
+   *
+   * <p>Aggregation rules (in order of dominance):
+   * <ol>
+   *   <li>If there is at least one subchannel in READY state, overall state is READY</li>
+   *   <li>If there are <em>2 or more</em> subchannels in TRANSIENT_FAILURE, overall state is
+   *   TRANSIENT_FAILURE</li>
+   *   <li>If there is at least one subchannel in CONNECTING state, overall state is
+   *   CONNECTING</li>
+   *   <li>If there is at least one subchannel in IDLE state, overall state is IDLE</li>
+   *   <li>Otherwise, overall state is TRANSIENT_FAILURE</li>
+   * </ol>
+   */
   private void updateBalancingState() {
     checkState(!subchannels.isEmpty(), "no subchannel has been created");
-    ConnectivityState overallState = aggregateState(subchannels.values());
+    int failureCount = 0;
+    boolean hasConnecting = false;
+    Subchannel idleSubchannel = null;
+    ConnectivityState overallState = null;
+    for (Subchannel subchannel : subchannels.values()) {
+      ConnectivityState state = getSubchannelStateInfoRef(subchannel).value.getState();
+      if (state == READY) {
+        overallState = READY;
+        break;
+      }
+      if (state == TRANSIENT_FAILURE) {
+        failureCount++;
+      } else if (state == CONNECTING) {
+        hasConnecting = true;
+      } else if (state == IDLE) {
+        if (idleSubchannel == null) {
+          idleSubchannel = subchannel;
+        }
+      }
+    }
+    if (overallState == null) {
+      if (failureCount >= 2) {
+        // This load balancer may not get any pick requests from the upstream if it's reporting
+        // TRANSIENT_FAILURE. It needs to recover by itself by attempting to connect to at least
+        // one subchannel that has not failed at any given time.
+        if (!hasConnecting && idleSubchannel != null) {
+          idleSubchannel.requestConnection();
+        }
+        overallState = TRANSIENT_FAILURE;
+      } else if (hasConnecting) {
+        overallState = CONNECTING;
+      } else if (idleSubchannel != null) {
+        overallState = IDLE;
+      } else {
+        overallState = TRANSIENT_FAILURE;
+      }
+    }
     RingHashPicker picker = new RingHashPicker(syncContext, ring, subchannels);
     // TODO(chengyuanzhang): avoid unnecessary reprocess caused by duplicated server addr updates
     helper.updateBalancingState(overallState, picker);
@@ -219,46 +269,6 @@ final class RingHashLoadBalancer extends LoadBalancer {
     }
     subchannelStateRef.value = stateInfo;
     updateBalancingState();
-  }
-
-  /**
-   * Aggregates the connectivity states of a group of subchannels for overall connectivity state.
-   *
-   * <p>Aggregation rules (in order of dominance):
-   * <ol>
-   *   <li>If there is at least one subchannel in READY state, overall state is READY</li>
-   *   <li>If there are <em>2 or more</em> subchannels in TRANSIENT_FAILURE, overall state is
-   *   TRANSIENT_FAILURE</li>
-   *   <li>If there is at least one subchannel in CONNECTING state, overall state is
-   *   CONNECTING</li>
-   *   <li>If there is at least one subchannel in IDLE state, overall state is IDLE</li>
-   *   <li>Otherwise, overall state is TRANSIENT_FAILURE</li>
-   * </ol>
-   */
-  private static ConnectivityState aggregateState(Iterable<Subchannel> subchannels) {
-    int failureCount = 0;
-    boolean hasIdle = false;
-    boolean hasConnecting = false;
-    for (Subchannel subchannel : subchannels) {
-      ConnectivityState state = getSubchannelStateInfoRef(subchannel).value.getState();
-      if (state == READY) {
-        return state;
-      }
-      if (state == TRANSIENT_FAILURE) {
-        failureCount++;
-      } else if (state == CONNECTING) {
-        hasConnecting = true;
-      } else if (state == IDLE) {
-        hasIdle = true;
-      }
-    }
-    if (failureCount >= 2) {
-      return TRANSIENT_FAILURE;
-    }
-    if (hasConnecting) {
-      return CONNECTING;
-    }
-    return hasIdle ? IDLE : TRANSIENT_FAILURE;
   }
 
   private static void shutdownSubchannel(Subchannel subchannel) {

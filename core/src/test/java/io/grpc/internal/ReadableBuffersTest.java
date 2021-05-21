@@ -19,13 +19,22 @@ package io.grpc.internal;
 import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import io.grpc.Detachable;
+import io.grpc.HasByteBuffer;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.InvalidMarkException;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -36,6 +45,9 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ReadableBuffersTest {
   private static final byte[] MSG_BYTES = "hello".getBytes(UTF_8);
+
+  @Rule
+  public final ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void empty_returnsEmptyBuffer() {
@@ -127,5 +139,109 @@ public class ReadableBuffersTest {
     InputStream inputStream = ReadableBuffers.openStream(buffer, true);
     inputStream.close();
     verify(buffer, times(1)).close();
+  }
+
+  @Test
+  public void bufferInputStream_markAndReset() throws IOException {
+    ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    assertTrue(inputStream.markSupported());
+    inputStream.mark(2);
+    byte[] first = new byte[5];
+    inputStream.read(first);
+    assertEquals(0, inputStream.available());
+    inputStream.reset();
+    assertEquals(5, inputStream.available());
+    byte[] second = new byte[5];
+    inputStream.read(second);
+    assertArrayEquals(first, second);
+  }
+
+  @Test
+  public void bufferInputStream_getByteBufferDelegatesToBuffer() {
+    ReadableBuffer buffer = mock(ReadableBuffer.class);
+    when(buffer.byteBufferSupported()).thenReturn(true);
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    assertTrue(((HasByteBuffer) inputStream).byteBufferSupported());
+    ((HasByteBuffer) inputStream).getByteBuffer();
+    verify(buffer).getByteBuffer();
+  }
+
+  @Test
+  public void bufferInputStream_availableAfterDetached_returnsZeroByte() throws IOException {
+    ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    assertEquals(5, inputStream.available());
+    InputStream detachedStream = ((Detachable) inputStream).detach();
+    assertEquals(0, inputStream.available());
+    assertEquals(5, detachedStream.available());
+  }
+
+  @Test
+  public void bufferInputStream_skipAfterDetached() throws IOException {
+    ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    assertEquals(3, inputStream.skip(3));
+    InputStream detachedStream = ((Detachable) inputStream).detach();
+    assertEquals(0, inputStream.skip(2));
+    assertEquals(2, detachedStream.skip(2));
+  }
+
+  @Test
+  public void bufferInputStream_readUnsignedByteAfterDetached() throws IOException {
+    ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    assertEquals((int) 'h', inputStream.read());
+    InputStream detachedStream = ((Detachable) inputStream).detach();
+    assertEquals(-1, inputStream.read());
+    assertEquals((int) 'e', detachedStream.read());
+  }
+
+  @Test
+  public void bufferInputStream_partialReadAfterDetached() throws IOException {
+    ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    byte[] dest = new byte[3];
+    assertEquals(3, inputStream.read(dest, /*destOffset*/ 0, /*length*/ 3));
+    assertArrayEquals(new byte[]{'h', 'e', 'l'}, dest);
+    InputStream detachedStream = ((Detachable) inputStream).detach();
+    byte[] newDest = new byte[2];
+    assertEquals(2, detachedStream.read(newDest, /*destOffset*/ 0, /*length*/ 2));
+    assertArrayEquals(new byte[]{'l', 'o'}, newDest);
+  }
+
+  @Test
+  public void bufferInputStream_markDiscardedAfterDetached() throws IOException {
+    ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    inputStream.mark(5);
+    ((Detachable) inputStream).detach();
+    thrown.expect(InvalidMarkException.class);
+    inputStream.reset();
+  }
+
+  @Test
+  public void bufferInputStream_markPreservedInForkedInputStream() throws IOException {
+    ReadableBuffer buffer = ReadableBuffers.wrap(MSG_BYTES);
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    inputStream.skip(2);
+    inputStream.mark(3);
+    InputStream detachedStream = ((Detachable) inputStream).detach();
+    detachedStream.skip(3);
+    assertEquals(0, detachedStream.available());
+    detachedStream.reset();
+    assertEquals(3, detachedStream.available());
+  }
+
+  @Test
+  public void bufferInputStream_closeAfterDetached() throws IOException {
+    ReadableBuffer buffer = mock(ReadableBuffer.class);
+    when(buffer.readBytes(anyInt())).thenReturn(mock(ReadableBuffer.class));
+    InputStream inputStream = ReadableBuffers.openStream(buffer, true);
+    InputStream detachedStream = ((Detachable) inputStream).detach();
+    inputStream.close();
+    verify(buffer, never()).close();
+    detachedStream.close();
+    verify(buffer).close();
   }
 }

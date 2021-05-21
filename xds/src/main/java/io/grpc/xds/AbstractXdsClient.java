@@ -28,6 +28,7 @@ import com.google.rpc.Code;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
+import io.grpc.Context;
 import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -81,6 +82,7 @@ abstract class AbstractXdsClient extends XdsClient {
   private final InternalLogId logId;
   private final XdsLogger logger;
   private final ManagedChannel channel;
+  private final Context context;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
@@ -103,10 +105,11 @@ abstract class AbstractXdsClient extends XdsClient {
   private ScheduledHandle rpcRetryTimer;
 
   AbstractXdsClient(ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo,
-      ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier) {
+      Context context, ScheduledExecutorService timeService,
+      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
     this.channel = checkNotNull(channel, "channel");
     this.bootstrapInfo = checkNotNull(bootstrapInfo, "bootstrapInfo");
+    this.context = checkNotNull(context, "context");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
@@ -305,7 +308,12 @@ abstract class AbstractXdsClient extends XdsClient {
     } else {
       adsStream = new AdsStreamV2();
     }
-    adsStream.start();
+    Context prevContext = context.attach();
+    try {
+      adsStream.start();
+    } finally {
+      context.detach(prevContext);
+    }
     logger.log(XdsLogLevel.INFO, "ADS stream started");
     stopwatch.reset().start();
   }

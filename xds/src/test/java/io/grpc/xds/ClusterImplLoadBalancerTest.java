@@ -58,7 +58,6 @@ import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
-import io.grpc.xds.internal.sds.TlsContextManager;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -134,7 +133,7 @@ public class ClusterImplLoadBalancerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    loadBalancer = new ClusterImplLoadBalancer(helper, mockRandom, tlsContextManager);
+    loadBalancer = new ClusterImplLoadBalancer(helper, mockRandom);
   }
 
   @After
@@ -764,6 +763,11 @@ public class ClusterImplLoadBalancerTest {
     ClusterLocalityStats addClusterLocalityStats(String clusterName,
         @Nullable String edsServiceName, Locality locality) {
       return loadStatsManager.getClusterLocalityStats(clusterName, edsServiceName, locality);
+    }
+
+    @Override
+    TlsContextManager getTlsContextManager() {
+      return tlsContextManager;
     }
   }
 

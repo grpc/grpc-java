@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
 
 /**
@@ -40,8 +41,8 @@ public final class SslContextProviderSupplier implements Closeable {
 
   public SslContextProviderSupplier(
       BaseTlsContext tlsContext, TlsContextManager tlsContextManager) {
-    this.tlsContext = tlsContext;
-    this.tlsContextManager = tlsContextManager;
+    this.tlsContext = checkNotNull(tlsContext, "tlsContext");
+    this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
   }
 
   public BaseTlsContext getTlsContext() {
@@ -91,10 +92,12 @@ public final class SslContextProviderSupplier implements Closeable {
   /** Called by consumer when tlsContext changes. */
   @Override
   public synchronized void close() {
-    if (tlsContext instanceof UpstreamTlsContext) {
-      tlsContextManager.releaseClientSslContextProvider(sslContextProvider);
-    } else {
-      tlsContextManager.releaseServerSslContextProvider(sslContextProvider);
+    if (sslContextProvider != null) {
+      if (tlsContext instanceof UpstreamTlsContext) {
+        tlsContextManager.releaseClientSslContextProvider(sslContextProvider);
+      } else {
+        tlsContextManager.releaseServerSslContextProvider(sslContextProvider);
+      }
     }
     shutdown = true;
   }
