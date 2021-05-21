@@ -46,14 +46,13 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.Matcher.AndMatcher;
-import io.grpc.xds.Matcher.FractionMatcher;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
+import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
@@ -61,6 +60,8 @@ import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import io.grpc.xds.internal.Matchers.FractionMatcher;
+import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -507,7 +508,7 @@ final class XdsNameResolver extends NameResolver {
       for (HashPolicy policy : hashPolicies) {
         Long newHash = null;
         if (policy.type() == HashPolicy.Type.HEADER) {
-          String value = extractHeaderValue(headers, policy.headerName());
+          String value = getHeaderValue(headers, policy.headerName());
           if (value != null) {
             if (policy.regEx() != null && policy.regExSubstitution() != null) {
               value = policy.regEx().matcher(value).replaceAll(policy.regExSubstitution());
@@ -549,32 +550,64 @@ final class XdsNameResolver extends NameResolver {
   }
 
   @VisibleForTesting
-  static boolean matchRoute(RouteMatch routeMatch, final String fullMethodName,
-      final Metadata metadata, ThreadSafeRandom random) {
-    EvaluateArgs evaluateRouteArgs = new EvaluateArgs() {
-      @Override
-      public String getHeaderValue(String key) {
-        return extractHeaderValue(metadata, key);
-      }
-
-      @Override
-      public String getPath() {
-        return fullMethodName;
-      }
-    };
-    if (!routeMatch.pathMatcher().matches(evaluateRouteArgs)) {
+  static boolean matchRoute(RouteMatch routeMatch, String fullMethodName,
+      Metadata headers, ThreadSafeRandom random) {
+    if (!matchPath(routeMatch.pathMatcher(), fullMethodName)) {
       return false;
     }
-    Matcher headerMatcher = new AndMatcher(routeMatch.headerMatchers());
-    if (!headerMatcher.matches(evaluateRouteArgs)) {
-      return false;
+    for (HeaderMatcher headerMatcher : routeMatch.headerMatchers()) {
+      if (!matchHeader(headerMatcher, getHeaderValue(headers, headerMatcher.name()))) {
+        return false;
+      }
     }
     FractionMatcher fraction = routeMatch.fractionMatcher();
     return fraction == null || random.nextInt(fraction.denominator()) < fraction.numerator();
   }
 
+  private static boolean matchPath(PathMatcher pathMatcher, String fullMethodName) {
+    if (pathMatcher.path() != null) {
+      return pathMatcher.caseSensitive()
+          ? pathMatcher.path().equals(fullMethodName)
+          : pathMatcher.path().equalsIgnoreCase(fullMethodName);
+    } else if (pathMatcher.prefix() != null) {
+      return pathMatcher.caseSensitive()
+          ? fullMethodName.startsWith(pathMatcher.prefix())
+          : fullMethodName.toLowerCase().startsWith(pathMatcher.prefix().toLowerCase());
+    }
+    return pathMatcher.regEx().matches(fullMethodName);
+  }
+
+  private static boolean matchHeader(HeaderMatcher headerMatcher, @Nullable String value) {
+    if (headerMatcher.present() != null) {
+      return (value == null) == headerMatcher.present().equals(headerMatcher.inverted());
+    }
+    if (value == null) {
+      return false;
+    }
+    boolean baseMatch;
+    if (headerMatcher.exactValue() != null) {
+      baseMatch = headerMatcher.exactValue().equals(value);
+    } else if (headerMatcher.safeRegEx() != null) {
+      baseMatch = headerMatcher.safeRegEx().matches(value);
+    } else if (headerMatcher.range() != null) {
+      long numValue;
+      try {
+        numValue = Long.parseLong(value);
+        baseMatch = numValue >= headerMatcher.range().start()
+            && numValue <= headerMatcher.range().end();
+      } catch (NumberFormatException ignored) {
+        baseMatch = false;
+      }
+    } else if (headerMatcher.prefix() != null) {
+      baseMatch = value.startsWith(headerMatcher.prefix());
+    } else {
+      baseMatch = value.endsWith(headerMatcher.suffix());
+    }
+    return baseMatch != headerMatcher.inverted();
+  }
+
   @Nullable
-  private static String extractHeaderValue(Metadata headers, String headerName) {
+  private static String getHeaderValue(Metadata headers, String headerName) {
     if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
       return null;
     }

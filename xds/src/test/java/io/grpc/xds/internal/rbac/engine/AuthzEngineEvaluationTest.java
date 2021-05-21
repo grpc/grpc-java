@@ -29,7 +29,6 @@ import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.config.rbac.v2.Policy;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC.Action;
-import io.grpc.xds.EvaluateArgs;
 import io.grpc.xds.internal.rbac.engine.cel.Activation;
 import io.grpc.xds.internal.rbac.engine.cel.InterpreterException;
 import java.util.Map;
@@ -54,7 +53,7 @@ public class AuthzEngineEvaluationTest {
   @Mock
   private Map<String, Object> attributes;
 
-  private CelAuthorizationEngine spyEngine;
+  private AuthorizationEngine spyEngine;
   private AuthorizationDecision evaluateResult;
 
   // Mock RBAC engine with ALLOW action.
@@ -125,7 +124,7 @@ public class AuthzEngineEvaluationTest {
   @Before
   public void setupEngineSingleRbacAllow() {
     buildRbac();
-    CelAuthorizationEngine engine = new CelAuthorizationEngine(rbacAllow);
+    AuthorizationEngine engine = new AuthorizationEngine(rbacAllow);
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }
@@ -134,7 +133,7 @@ public class AuthzEngineEvaluationTest {
   @Before
   public void setupEngineSingleRbacDeny() {
     buildRbac();
-    CelAuthorizationEngine engine = new CelAuthorizationEngine(rbacDeny);
+    AuthorizationEngine engine = new AuthorizationEngine(rbacDeny);
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }
@@ -143,7 +142,7 @@ public class AuthzEngineEvaluationTest {
   @Before
   public void setupEngineRbacPair() {
     buildRbac();
-    CelAuthorizationEngine engine = new CelAuthorizationEngine(rbacDeny, rbacAllow);
+    AuthorizationEngine engine = new AuthorizationEngine(rbacDeny, rbacAllow);
     spyEngine = Mockito.spy(engine);
     doReturn(ImmutableMap.copyOf(attributes)).when(args).generateEnvoyAttributes();
   }

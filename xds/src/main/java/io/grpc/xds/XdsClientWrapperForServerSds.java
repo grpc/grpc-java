@@ -30,11 +30,11 @@ import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
+import io.grpc.xds.internal.Matchers.CidrMatcher;
 import io.netty.channel.Channel;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import java.math.BigInteger;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -269,17 +269,6 @@ public final class XdsClientWrapperForServerSds {
     return filtered;
   }
 
-  private static boolean isCidrMatching(byte[] cidrBytes, byte[] addressBytes, int prefixLen) {
-    BigInteger cidrInt = new BigInteger(cidrBytes);
-    BigInteger addrInt = new BigInteger(addressBytes);
-
-    int shiftAmount = 8 * cidrBytes.length - prefixLen;
-
-    cidrInt = cidrInt.shiftRight(shiftAmount);
-    addrInt = addrInt.shiftRight(shiftAmount);
-    return cidrInt.equals(addrInt);
-  }
-
   private static class QueueElement {
     FilterChain filterChain;
     int indexOfMatchingPrefixRange;
@@ -288,7 +277,6 @@ public final class XdsClientWrapperForServerSds {
     public QueueElement(FilterChain filterChain, InetAddress address, boolean forDestination) {
       this.filterChain = filterChain;
       FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
-      byte[] addressBytes = address.getAddress();
       boolean isIPv6 = address instanceof Inet6Address;
       List<CidrRange> cidrRanges =
           forDestination
@@ -304,10 +292,9 @@ public final class XdsClientWrapperForServerSds {
           InetAddress cidrAddr = cidrRange.getAddressPrefix();
           boolean cidrIsIpv6 = cidrAddr instanceof Inet6Address;
           if (isIPv6 == cidrIsIpv6) {
-            byte[] cidrBytes = cidrAddr.getAddress();
             int prefixLen = cidrRange.getPrefixLen();
-            if (isCidrMatching(cidrBytes, addressBytes, prefixLen)
-                && prefixLen > matchingPrefixLength) {
+            CidrMatcher matcher = CidrMatcher.create(cidrAddr, prefixLen);
+            if (matcher.matches(address) && prefixLen > matchingPrefixLength) {
               matchingPrefixLength = prefixLen;
               indexOfMatchingPrefixRange = index;
             }

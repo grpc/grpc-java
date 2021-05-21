@@ -66,7 +66,7 @@ public class AuthzEngineTest {
   @Mock
   private Interpretable interpretable;
   
-  private CelAuthorizationEngine engine;
+  private AuthorizationEngine engine;
   private RBAC rbacDeny;
   private RBAC rbacAllow;
   private Object result;
@@ -83,19 +83,19 @@ public class AuthzEngineTest {
 
   @Test
   public void createEngineAllowPolicy() {
-    engine = new CelAuthorizationEngine(rbacAllow);
+    engine = new AuthorizationEngine(rbacAllow);
     assertNotNull(engine);
   }
 
   @Test
   public void createEngineDenyPolicy() {
-    engine = new CelAuthorizationEngine(rbacDeny);
+    engine = new AuthorizationEngine(rbacDeny);
     assertNotNull(engine);
   }
 
   @Test
   public void createEngineDenyAllowPolicies() {
-    engine = new CelAuthorizationEngine(rbacDeny, rbacAllow);
+    engine = new AuthorizationEngine(rbacDeny, rbacAllow);
     assertNotNull(engine);
   }
 
@@ -104,7 +104,7 @@ public class AuthzEngineTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Invalid RBAC list, " 
         + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
-    engine = new CelAuthorizationEngine(rbacAllow, rbacAllow);
+    engine = new AuthorizationEngine(rbacAllow, rbacAllow);
     assertNull(engine);
   }
 
@@ -113,7 +113,7 @@ public class AuthzEngineTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Invalid RBAC list, " 
         + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
-    engine = new CelAuthorizationEngine(rbacAllow, rbacDeny);
+    engine = new AuthorizationEngine(rbacAllow, rbacDeny);
     assertNull(engine);
   }
 
@@ -122,13 +122,13 @@ public class AuthzEngineTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Invalid RBAC list, " 
         + "must provide a RBAC with DENY action followed by a RBAC with ALLOW action. ");
-    engine = new CelAuthorizationEngine(rbacDeny, rbacDeny);
+    engine = new AuthorizationEngine(rbacDeny, rbacDeny);
     assertNull(engine);
   }
 
   @Test
   public void testCelInterface() throws InterpreterException {
-    engine = new CelAuthorizationEngine(rbacAllow);
+    engine = new AuthorizationEngine(rbacAllow);
     when(interpretable.eval(any(Activation.class))).thenReturn(true);
     Expr expr = Expr.getDefaultInstance();
     result = engine.matches(expr, activation);

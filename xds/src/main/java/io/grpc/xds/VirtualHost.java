@@ -25,8 +25,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.re2j.Pattern;
 import io.grpc.xds.Filter.FilterConfig;
-import io.grpc.xds.Matcher.FractionMatcher;
-import io.grpc.xds.Matcher.PathMatcher;
+import io.grpc.xds.internal.Matchers.FractionMatcher;
+import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -72,7 +72,7 @@ abstract class VirtualHost {
     abstract static class RouteMatch {
       abstract PathMatcher pathMatcher();
 
-      abstract ImmutableList<Matcher> headerMatchers();
+      abstract ImmutableList<HeaderMatcher> headerMatchers();
 
       @Nullable
       abstract FractionMatcher fractionMatcher();
@@ -80,14 +80,55 @@ abstract class VirtualHost {
       // TODO(chengyuanzhang): maybe delete me.
       @VisibleForTesting
       static RouteMatch withPathExactOnly(String path) {
-        return RouteMatch.create(PathMatcher.fromPath(path, false),
-            Collections.<Matcher>emptyList(), null);
+        return RouteMatch.create(PathMatcher.fromPath(path, true),
+            Collections.<HeaderMatcher>emptyList(), null);
       }
 
       static RouteMatch create(PathMatcher pathMatcher,
-          List<? extends Matcher> headerMatchers, @Nullable FractionMatcher fractionMatcher) {
+          List<HeaderMatcher> headerMatchers, @Nullable FractionMatcher fractionMatcher) {
         return new AutoValue_VirtualHost_Route_RouteMatch(pathMatcher,
             ImmutableList.copyOf(headerMatchers), fractionMatcher);
+      }
+
+      /** Matcher for HTTP request path. */
+      @AutoValue
+      abstract static class PathMatcher {
+        // Exact full path to be matched.
+        @Nullable
+        abstract String path();
+
+        // Path prefix to be matched.
+        @Nullable
+        abstract String prefix();
+
+        // Regular expression pattern of the path to be matched.
+        @Nullable
+        abstract Pattern regEx();
+
+        // Whether case sensitivity is taken into account for matching.
+        // Only valid for full path matching or prefix matching.
+        abstract boolean caseSensitive();
+
+        static PathMatcher fromPath(String path, boolean caseSensitive) {
+          checkNotNull(path, "path");
+          return create(path, null, null, caseSensitive);
+        }
+
+        static PathMatcher fromPrefix(String prefix, boolean caseSensitive) {
+          checkNotNull(prefix, "prefix");
+          return create(null, prefix, null, caseSensitive);
+        }
+
+        static PathMatcher fromRegEx(Pattern regEx) {
+          checkNotNull(regEx, "regEx");
+          return create(null, null, regEx, false /* doesn't matter */);
+        }
+
+        private static PathMatcher create(@Nullable String path, @Nullable String prefix,
+            @Nullable Pattern regEx, boolean caseSensitive) {
+          return new AutoValue_VirtualHost_Route_RouteMatch_PathMatcher(path, prefix, regEx,
+              caseSensitive);
+        }
       }
     }
 

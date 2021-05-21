@@ -17,23 +17,41 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
-import com.google.protobuf.UInt32Value;
-import io.envoyproxy.envoy.config.core.v3.CidrRange;
-import io.envoyproxy.envoy.config.rbac.v3.Permission;
-import io.envoyproxy.envoy.config.rbac.v3.Permission.Set;
-import io.envoyproxy.envoy.config.rbac.v3.Policy;
-import io.envoyproxy.envoy.config.rbac.v3.Principal;
-import io.envoyproxy.envoy.config.rbac.v3.Principal.Authenticated;
-import io.envoyproxy.envoy.config.rbac.v3.RBAC;
+import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.config.rbac.v3.RBAC.Action;
-import io.envoyproxy.envoy.config.route.v3.HeaderMatcher;
-import io.envoyproxy.envoy.type.matcher.v3.MetadataMatcher;
-import io.envoyproxy.envoy.type.matcher.v3.PathMatcher;
-import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
-import io.grpc.xds.AuthorizationEngine.AuthDecision;
-import io.grpc.xds.AuthorizationEngine.AuthDecision.DecisionType;
+import io.grpc.Attributes;
+import io.grpc.Grpc;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.ServerCall;
+import io.grpc.internal.testing.TestUtils;
+import io.grpc.testing.TestMethodDescriptors;
+import io.grpc.xds.GrpcAuthorizationEngine.AlwaysTrueMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.AndMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.AuthDecision;
+import io.grpc.xds.GrpcAuthorizationEngine.AuthDecision.DecisionType;
+import io.grpc.xds.GrpcAuthorizationEngine.AuthenticatedMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.DestinationIpMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.DestinationPortMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.HeaderMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.InvertMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.OrMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.PathMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.PolicyMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.SourceIpMatcher;
+import io.grpc.xds.internal.Matchers;
+import io.grpc.xds.internal.Matchers.CidrMatcher;
+import io.grpc.xds.internal.Matchers.StringMatcher;
+import java.net.InetSocketAddress;
+import java.security.cert.X509Certificate;
+import java.util.Collections;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -44,230 +62,170 @@ import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class GrpcAuthorizationEngineTest {
-  private static final String POLICY_NAME = "policy-name";
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
-  @Mock
-  EvaluateArgs args;
-
+  private static final String POLICY_NAME = "policy-name";
   private static final String HEADER_KEY = "header-key";
   private static final String HEADER_VALUE = "header-val";
-  private static final HeaderMatcher HEADER_MATCHER = HeaderMatcher.newBuilder()
-      .setName(HEADER_KEY).setExactMatch(HEADER_VALUE).build();
   private static final String IP_ADDR1 = "10.10.10.0";
   private static final String IP_ADDR2 = "68.36.0.19";
-  private static final CidrRange CIDR_RANGE = CidrRange.newBuilder().setAddressPrefix(IP_ADDR1)
-      .setPrefixLen(UInt32Value.of(24)).build();
-  private static final CidrRange CIDR_RANGE2 = CidrRange.newBuilder().setAddressPrefix(IP_ADDR2)
-      .setPrefixLen(UInt32Value.of(24)).build();
-  private static final StringMatcher STRING_MATCHER =
-      StringMatcher.newBuilder().setPrefix("auth").setIgnoreCase(true).build();
-  private static final Authenticated AUTHENTICATED = Authenticated.newBuilder()
-      .setPrincipalName(STRING_MATCHER).build();
+  private static final int PORT = 100;
+  private static final String PATH = "/auth/engine";
+  private static final StringMatcher STRING_MATCHER = StringMatcher.forExact(PATH, false);
+  private static final Metadata HEADER = metadata(HEADER_KEY, HEADER_VALUE);
 
-  @Test
-  public void testHeaderMatch() {
-    Permission permission = Permission.newBuilder().setHeader(HEADER_MATCHER).build();
-    Principal principal = Principal.newBuilder().setAny(true).build();
-    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        createRbac(Action.ALLOW, POLICY_NAME, permission, principal));
+  @Mock
+  private ServerCall<Void,Void> serverCall;
+  @Mock
+  private SSLSession sslSession;
 
-    when(args.getHeaderValue(HEADER_KEY)).thenReturn( HEADER_VALUE);
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.ALLOW, POLICY_NAME));
-
-    when(args.getHeaderValue(HEADER_KEY)).thenReturn(HEADER_VALUE + "-1");
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.DENY, null));
-  }
-
-  @Test
-  public void testPathMatch() {
-    PathMatcher matcher = PathMatcher.newBuilder().setPath(STRING_MATCHER).build();
-    Permission permission = Permission.newBuilder().setUrlPath(matcher).build();
-    Principal principal = Principal.newBuilder().setUrlPath(matcher).build();
-    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        createRbac(Action.DENY, POLICY_NAME, permission, principal));
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.ALLOW, null));
-    when(args.getPath()).thenReturn("authorized");
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.DENY, POLICY_NAME));
-  }
-
-  @Test
-  @SuppressWarnings("deprecation")
-  public void testIpPortMatch() {
-    Permission permission = Permission.newBuilder().setDestinationIp(CIDR_RANGE).build();
-    Principal principal = Principal.newBuilder().setDirectRemoteIp(CIDR_RANGE2).build();
-    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        createRbac(Action.ALLOW, POLICY_NAME, permission, principal));
-
-    when(args.getLocalAddress()).thenReturn(IP_ADDR1);
-    when(args.getPeerAddress()).thenReturn(IP_ADDR2);
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.ALLOW, POLICY_NAME));
-
-    when(args.getLocalAddress()).thenReturn(IP_ADDR2);
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.DENY, null));
-
-    permission = Permission.newBuilder().setOrRules(Set.newBuilder()
-        .addRules(Permission.newBuilder().setDestinationPort(8000).build())
-        .addRules(Permission.newBuilder().setDestinationPort(8001).build())
-        .build()).build();
-    principal = Principal.newBuilder().setSourceIp(CIDR_RANGE2).build();
-    engine = new GrpcAuthorizationEngine(
-        createRbac(Action.ALLOW, POLICY_NAME, permission, principal));
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.DENY, null));
-    when(args.getLocalAddress()).thenReturn(IP_ADDR1);
-    when(args.getPeerAddress()).thenReturn(IP_ADDR2);
-    when(args.getLocalPort()).thenReturn(8001);
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.ALLOW, POLICY_NAME));
-  }
-
-  @Test
-  public void testNestedRules() {
-    Permission nextPermission = Permission.newBuilder().setHeader(HEADER_MATCHER).build();
-    Permission permission = Permission.newBuilder().setAndRules(
-        Set.newBuilder().addRules(nextPermission).build()
-    ).build();
-    Principal nextPrincipal = Principal.newBuilder().setHeader(HEADER_MATCHER).build();
-    Principal principal = Principal.newBuilder().setOrIds(
-        Principal.Set.newBuilder().addIds(nextPrincipal).build()
-    ).build();
-    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        createRbac(Action.DENY, POLICY_NAME, permission, principal));
-
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.ALLOW, null));
-    when(args.getHeaderValue(HEADER_KEY)).thenReturn( HEADER_VALUE);
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.DENY, POLICY_NAME));
-  }
-
-  @Test(expected = IllegalArgumentException.class)
-  public void testInvalidPrincipalType() {
-    Permission permission = Permission.newBuilder().setAny(true).build();
-    Principal principal = Principal.newBuilder().build();
-    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        createRbac(Action.DENY, POLICY_NAME, permission, principal));
-    engine.evaluate(args);
-  }
-
-  @Test(expected = IllegalArgumentException.class)
-  public void testInvalidPermissionType() {
-    Permission permission = Permission.newBuilder().build();
-    Principal principal = Principal.newBuilder().setAny(false).build();
-    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        createRbac(Action.DENY, POLICY_NAME, permission, principal));
-    engine.evaluate(args);
-  }
-
-  @Test
-  public void testUnsupportedFields() {
-    Permission permission = Permission.newBuilder().setMetadata(
-        MetadataMatcher.newBuilder().build()).build();
-    Principal principal = Principal.newBuilder().setAny(true).build();
-    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        createRbac(Action.DENY, POLICY_NAME, permission, principal));
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.ALLOW, null));
-
-    permission = Permission.newBuilder().setAny(true).build();
-    principal = Principal.newBuilder().setMetadata(
-        MetadataMatcher.newBuilder().build()).build();
-    engine = new GrpcAuthorizationEngine(
-        createRbac(Action.ALLOW, POLICY_NAME, permission, principal));
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.DENY, null));
-
-    permission = Permission.newBuilder().setRequestedServerName(STRING_MATCHER).build();
-    principal = Principal.newBuilder().setAny(true).build();
-    engine = new GrpcAuthorizationEngine(
-        createRbac(Action.DENY, POLICY_NAME, permission, principal));
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.ALLOW, null));
-
-    permission = Permission.newBuilder().setAny(true).build();
-    principal = Principal.newBuilder().setRemoteIp(CIDR_RANGE).build();
-    engine = new GrpcAuthorizationEngine(
-        createRbac(Action.DENY, POLICY_NAME, permission, principal));
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.ALLOW, null));
-  }
-
-  @Test
-  public void testAuthenticatedMatch() {
-    Principal principal = Principal.newBuilder().setAuthenticated(AUTHENTICATED).build();
-    Permission permission = Permission.newBuilder().setAny(true).build();
-    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        createRbac(Action.ALLOW, POLICY_NAME, permission, principal));
-
-    when(args.getPrincipalName()).thenReturn("authorized");
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.ALLOW, POLICY_NAME));
-    when(args.getPrincipalName()).thenReturn("denied");
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.DENY, null));
-  }
-
-  @Test
-  public void testMultiplePolicies() {
-    Principal principal1 = Principal.newBuilder().setAuthenticated(AUTHENTICATED).build();
-    Permission permission1 = Permission.newBuilder()
-        .setMetadata(MetadataMatcher.newBuilder().build()).build();
-
-    Principal principal21 = Principal.newBuilder().setAndIds(
-        Principal.Set.newBuilder()
-            .addIds(Principal.newBuilder().setNotId(
-                Principal.newBuilder().setMetadata(MetadataMatcher.newBuilder().build()).build()
-            ).build()).build()
-    ).build();
-    Principal principal22 = Principal.newBuilder().setOrIds(Principal.Set.newBuilder()
-        .addIds(Principal.newBuilder().setHeader(HEADER_MATCHER).build())
-        .addIds(Principal.newBuilder().setRemoteIp(CIDR_RANGE2).build())
-        .build()).build();
-    Permission permission21 = Permission.newBuilder().setOrRules(
-        Set.newBuilder()
-            .addRules(Permission.newBuilder().setNotRule(
-                Permission.newBuilder().setDestinationPort(80).build()).build())
-            .build()
-    ).build();
-    Permission permission22 = Permission.newBuilder().setAndRules(Set.newBuilder()
-        .addRules(Permission.newBuilder().setDestinationIp(CIDR_RANGE).build())
-        .addRules(Permission.newBuilder().setHeader(HEADER_MATCHER).build())
-        .build()).build();
-
-    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        createRbac(Action.ALLOW,
-            POLICY_NAME, createPolicy(permission1, principal1),
-            POLICY_NAME + "-2",
-            Policy.newBuilder().addPermissions(permission21).addPermissions(permission22)
-                .addPrincipals(principal21).addPrincipals(principal22).build()));
-    when(args.getHeaderValue(HEADER_KEY)).thenReturn( HEADER_VALUE);
-    when(args.getLocalAddress()).thenReturn(IP_ADDR1);
-    when(args.getLocalPort()).thenReturn(80);
-    assertThat(engine.evaluate(args)).isEqualTo(
-        AuthDecision.create(DecisionType.ALLOW, POLICY_NAME + "-2"));
-  }
-
-  private Policy createPolicy(Permission permission, Principal principal) {
-    return Policy.newBuilder().addPermissions(permission).addPrincipals(principal).build();
-  }
-
-  private RBAC createRbac(Action action, String name, Permission permission, Principal principal) {
-    return RBAC.newBuilder().setAction(action)
-        .putPolicies(name,
-            Policy.newBuilder().addPermissions(permission).addPrincipals(principal).build())
+  @Before
+  public void setUp() throws Exception {
+    X509Certificate[] certs = {TestUtils.loadX509Cert("server1.pem")};
+    when(sslSession.getPeerCertificates()).thenReturn(certs);
+    Attributes attributes = Attributes.newBuilder()
+        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InetSocketAddress(IP_ADDR2, PORT))
+        .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InetSocketAddress(IP_ADDR1, PORT))
+        .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession)
         .build();
+    when(serverCall.getAttributes()).thenReturn(attributes);
+    when(serverCall.getMethodDescriptor()).thenReturn(method().build());
   }
 
-  private RBAC createRbac(Action action, String name, Policy policy, String name2, Policy policy2) {
-    return RBAC.newBuilder().setAction(action).putPolicies(name, policy).putPolicies(name2, policy2)
+  @Test
+  public void testIpMatcher() throws Exception {
+    CidrMatcher ip1 = CidrMatcher.create(IP_ADDR1, 24);
+    DestinationIpMatcher destIpMatcher = new DestinationIpMatcher(ip1);
+    CidrMatcher ip2 = CidrMatcher.create(IP_ADDR2, 24);
+    SourceIpMatcher sourceIpMatcher = new SourceIpMatcher(ip2);
+    DestinationPortMatcher portMatcher = new DestinationPortMatcher(PORT);
+    OrMatcher permission = OrMatcher.create(AndMatcher.create(portMatcher, destIpMatcher));
+    OrMatcher principal = OrMatcher.create(sourceIpMatcher);
+    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        Collections.singletonList(policyMatcher), Action.ALLOW);
+    AuthDecision decision = engine.evaluate(HEADER, serverCall);
+    assertThat(decision.decision()).isEqualTo(DecisionType.ALLOW);
+    assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
+
+    Attributes attributes = Attributes.newBuilder()
+        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InetSocketAddress(IP_ADDR2, PORT))
+        .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InetSocketAddress(IP_ADDR1, 2))
         .build();
+    when(serverCall.getAttributes()).thenReturn(attributes);
+    decision = engine.evaluate(HEADER, serverCall);
+    assertThat(decision.decision()).isEqualTo(DecisionType.DENY);
+    assertThat(decision.matchingPolicyName()).isEqualTo(null);
+
+    attributes = Attributes.newBuilder()
+        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, null)
+        .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InetSocketAddress("1.1.1.1", PORT))
+        .build();
+    when(serverCall.getAttributes()).thenReturn(attributes);
+    decision = engine.evaluate(HEADER, serverCall);
+    assertThat(decision.decision()).isEqualTo(DecisionType.DENY);
+    assertThat(decision.matchingPolicyName()).isEqualTo(null);
+
+    engine = new GrpcAuthorizationEngine(Collections.singletonList(policyMatcher), Action.DENY);
+    decision = engine.evaluate(HEADER, serverCall);
+    assertThat(decision.decision()).isEqualTo(DecisionType.ALLOW);
+    assertThat(decision.matchingPolicyName()).isEqualTo(null);
+  }
+
+  @Test
+  public void testHeaderMatcher() {
+    HeaderMatcher headerMatcher = new HeaderMatcher(Matchers.HeaderMatcher
+        .forExactValue(HEADER_KEY, HEADER_VALUE, false));
+    OrMatcher principal = OrMatcher.create(headerMatcher);
+    OrMatcher permission = OrMatcher.create(
+        new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
+    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        Collections.singletonList(policyMatcher), Action.ALLOW);
+    AuthDecision decision = engine.evaluate(HEADER, serverCall);
+    assertThat(decision.decision()).isEqualTo(DecisionType.ALLOW);
+    assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
+  }
+
+  @Test
+  public void testPathMatcher() {
+    PathMatcher pathMatcher = new PathMatcher(STRING_MATCHER);
+    OrMatcher permission = OrMatcher.create(AlwaysTrueMatcher.INSTANCE);
+    OrMatcher principal = OrMatcher.create(pathMatcher);
+    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        Collections.singletonList(policyMatcher), Action.DENY);
+    AuthDecision decision = engine.evaluate(HEADER, serverCall);
+    assertThat(decision.decision()).isEqualTo(DecisionType.DENY);
+    assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
+  }
+
+  @Test
+  public void testAuthenticatedMatcher() throws Exception {
+    AuthenticatedMatcher authMatcher = new AuthenticatedMatcher(
+        StringMatcher.forExact("*.test.google.fr", false));
+    PathMatcher pathMatcher = new PathMatcher(STRING_MATCHER);
+    OrMatcher permission = OrMatcher.create(authMatcher);
+    OrMatcher principal = OrMatcher.create(pathMatcher);
+    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        Collections.singletonList(policyMatcher), Action.ALLOW);
+    AuthDecision decision = engine.evaluate(HEADER, serverCall);
+    assertThat(decision.decision()).isEqualTo(DecisionType.ALLOW);
+    assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
+
+    X509Certificate[] certs = {TestUtils.loadX509Cert("badserver.pem")};
+    when(sslSession.getPeerCertificates()).thenReturn(certs);
+    decision = engine.evaluate(HEADER, serverCall);
+    assertThat(decision.decision()).isEqualTo(DecisionType.DENY);
+    assertThat(decision.matchingPolicyName()).isEqualTo(null);
+
+    doThrow(new SSLPeerUnverifiedException("bad")).when(sslSession).getPeerCertificates();
+    decision = engine.evaluate(HEADER, serverCall);
+    assertThat(decision.decision()).isEqualTo(DecisionType.DENY);
+    assertThat(decision.matchingPolicyName()).isEqualTo(null);
+  }
+
+  @Test
+  public void testMultiplePolicies() throws Exception {
+    AuthenticatedMatcher authMatcher = new AuthenticatedMatcher(
+        StringMatcher.forSuffix("TEST.google.fr", true));
+    PathMatcher pathMatcher = new PathMatcher(STRING_MATCHER);
+    OrMatcher principal = OrMatcher.create(AndMatcher.create(authMatcher, pathMatcher));
+    OrMatcher permission = OrMatcher.create(AndMatcher.create(pathMatcher,
+        new InvertMatcher(new DestinationPortMatcher(PORT + 1))));
+    PolicyMatcher policyMatcher1 = new PolicyMatcher(POLICY_NAME, permission, principal);
+
+    HeaderMatcher headerMatcher = new HeaderMatcher(Matchers.HeaderMatcher
+        .forExactValue(HEADER_KEY, HEADER_VALUE + 1, false));
+    authMatcher = new AuthenticatedMatcher(
+        StringMatcher.forContains("TEST.google.fr"));
+    principal = OrMatcher.create(headerMatcher, authMatcher);
+    CidrMatcher ip1 = CidrMatcher.create(IP_ADDR1, 24);
+    DestinationIpMatcher destIpMatcher = new DestinationIpMatcher(ip1);
+    permission = OrMatcher.create(destIpMatcher, pathMatcher);
+    PolicyMatcher policyMatcher2 = new PolicyMatcher(POLICY_NAME + "-2", permission, principal);
+
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        ImmutableList.of(policyMatcher1, policyMatcher2), Action.DENY);
+    AuthDecision decision = engine.evaluate(HEADER, serverCall);
+    assertThat(decision.decision()).isEqualTo(DecisionType.DENY);
+    assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
+  }
+
+  private MethodDescriptor.Builder<Void, Void> method() {
+    return MethodDescriptor.<Void,Void>newBuilder()
+            .setType(MethodType.BIDI_STREAMING)
+            .setFullMethodName(PATH)
+            .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
+            .setResponseMarshaller(TestMethodDescriptors.voidMarshaller());
+  }
+
+  private static Metadata metadata(String key, String value) {
+    Metadata metadata = new Metadata();
+    metadata.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value);
+    return metadata;
   }
 }

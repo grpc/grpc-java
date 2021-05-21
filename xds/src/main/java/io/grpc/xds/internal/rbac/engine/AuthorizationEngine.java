@@ -25,7 +25,6 @@ import com.google.protobuf.Descriptors.Descriptor;
 import io.envoyproxy.envoy.config.rbac.v2.Policy;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC;
 import io.envoyproxy.envoy.config.rbac.v2.RBAC.Action;
-import io.grpc.xds.EvaluateArgs;
 import io.grpc.xds.internal.rbac.engine.cel.Activation;
 import io.grpc.xds.internal.rbac.engine.cel.DefaultDispatcher;
 import io.grpc.xds.internal.rbac.engine.cel.DefaultInterpreter;
@@ -60,7 +59,7 @@ import java.util.logging.Logger;
  *  AuthorizationDecision result = engine.evaluate(new EvaluateArgs(call, headers));
  * </pre>
  */
-public class CelAuthorizationEngine {
+public class AuthorizationEngine {
   /**
    * RbacEngine is an inner class that holds RBAC action 
    * and a list of conditions in RBAC policy.
@@ -76,7 +75,7 @@ public class CelAuthorizationEngine {
     }
   }
 
-  private static final Logger log = Logger.getLogger(CelAuthorizationEngine.class.getName());
+  private static final Logger log = Logger.getLogger(AuthorizationEngine.class.getName());
   private final RbacEngine allowEngine;
   private final RbacEngine denyEngine;
 
@@ -84,7 +83,7 @@ public class CelAuthorizationEngine {
    * Creates a CEL-based Authorization Engine from one Envoy RBAC policy.
    * @param rbacPolicy input Envoy RBAC policy.
    */
-  public CelAuthorizationEngine(RBAC rbacPolicy) {
+  public AuthorizationEngine(RBAC rbacPolicy) {
     Map<String, Expr> conditions = new LinkedHashMap<>();
     for (Map.Entry<String, Policy> policy: rbacPolicy.getPoliciesMap().entrySet()) {
       conditions.put(policy.getKey(), policy.getValue().getCondition());
@@ -103,7 +102,7 @@ public class CelAuthorizationEngine {
    * @param allowPolicy input Envoy RBAC policy with ALLOW action.
    * @throws IllegalArgumentException if the user inputs an invalid RBAC list.
    */
-  public CelAuthorizationEngine(RBAC denyPolicy, RBAC allowPolicy) {
+  public AuthorizationEngine(RBAC denyPolicy, RBAC allowPolicy) {
     checkArgument(
         denyPolicy.getAction() == Action.DENY && allowPolicy.getAction() == Action.ALLOW,
         "Invalid RBAC list, " 

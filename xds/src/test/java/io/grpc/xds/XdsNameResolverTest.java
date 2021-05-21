@@ -66,14 +66,14 @@ import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.Matcher.HeaderMatcher;
-import io.grpc.xds.Matcher.PathMatcher;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
+import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1350,12 +1350,12 @@ public class XdsNameResolverTest {
 
   @Test
   public void routeMatching_pathOnly() {
-    final Metadata headers = new Metadata();
+    Metadata headers = new Metadata();
     ThreadSafeRandom random = mock(ThreadSafeRandom.class);
 
     RouteMatch routeMatch1 =
         RouteMatch.create(
-            PathMatcher.fromPath("/FooService/barMethod", false),
+            PathMatcher.fromPath("/FooService/barMethod", true),
             Collections.<HeaderMatcher>emptyList(), null);
     assertThat(XdsNameResolver.matchRoute(routeMatch1, "/FooService/barMethod", headers, random))
         .isTrue();
@@ -1364,7 +1364,7 @@ public class XdsNameResolverTest {
 
     RouteMatch routeMatch2 =
         RouteMatch.create(
-            PathMatcher.fromPrefix("/FooService/", false),
+            PathMatcher.fromPrefix("/FooService/", true),
             Collections.<HeaderMatcher>emptyList(), null);
     assertThat(XdsNameResolver.matchRoute(routeMatch2, "/FooService/barMethod", headers, random))
         .isTrue();
@@ -1388,14 +1388,14 @@ public class XdsNameResolverTest {
 
     RouteMatch routeMatch1 =
         RouteMatch.create(
-            PathMatcher.fromPath("/FooService/barMethod", true),
+            PathMatcher.fromPath("/FooService/barMethod", false),
             Collections.<HeaderMatcher>emptyList(), null);
     assertThat(XdsNameResolver.matchRoute(routeMatch1, "/fooservice/barmethod", headers, random))
         .isTrue();
 
     RouteMatch routeMatch2 =
         RouteMatch.create(
-            PathMatcher.fromPrefix("/FooService", true),
+            PathMatcher.fromPrefix("/FooService", false),
             Collections.<HeaderMatcher>emptyList(), null);
     assertThat(XdsNameResolver.matchRoute(routeMatch2, "/fooservice/barmethod", headers, random))
         .isTrue();
@@ -1413,9 +1413,9 @@ public class XdsNameResolverTest {
     headers.put(Metadata.Key.of("custom-key", Metadata.ASCII_STRING_MARSHALLER), "custom-value2");
     ThreadSafeRandom random = mock(ThreadSafeRandom.class);
 
-    PathMatcher routeMatcher = PathMatcher.fromPath("/FooService/barMethod", false);
+    PathMatcher pathMatcher = PathMatcher.fromPath("/FooService/barMethod", true);
     RouteMatch routeMatch1 = RouteMatch.create(
-        routeMatcher,
+        pathMatcher,
         Arrays.asList(
             HeaderMatcher.forExactValue("grpc-encoding", "gzip", false),
             HeaderMatcher.forSafeRegEx("authority", Pattern.compile(".*googleapis.*"), false),
@@ -1425,11 +1425,11 @@ public class XdsNameResolverTest {
             HeaderMatcher.forPrefix("custom-key", "custom-", false),
             HeaderMatcher.forSuffix("custom-key", "value2", false)),
         null);
-    assertThat(XdsNameResolver.matchRoute(routeMatch1,"/FooService/barMethod", headers, random))
+    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/FooService/barMethod", headers, random))
         .isTrue();
 
     RouteMatch routeMatch2 = RouteMatch.create(
-        routeMatcher,
+        pathMatcher,
         Collections.singletonList(
             HeaderMatcher.forSafeRegEx("authority", Pattern.compile(".*googleapis.*"), true)),
         null);
@@ -1437,35 +1437,35 @@ public class XdsNameResolverTest {
         .isFalse();
 
     RouteMatch routeMatch3 = RouteMatch.create(
-        routeMatcher,
+        pathMatcher,
         Collections.singletonList(
             HeaderMatcher.forExactValue("user-agent", "gRPC-Go", false)), null);
     assertThat(XdsNameResolver.matchRoute(routeMatch3, "/FooService/barMethod", headers, random))
         .isFalse();
 
     RouteMatch routeMatch4 = RouteMatch.create(
-        routeMatcher,
+        pathMatcher,
         Collections.singletonList(HeaderMatcher.forPresent("user-agent", false, false)),
         null);
     assertThat(XdsNameResolver.matchRoute(routeMatch4, "/FooService/barMethod", headers, random))
         .isFalse();
 
     RouteMatch routeMatch5 = RouteMatch.create(
-        routeMatcher,
+        pathMatcher,
         Collections.singletonList(HeaderMatcher.forPresent("user-agent", false, true)), // inverted
         null);
     assertThat(XdsNameResolver.matchRoute(routeMatch5, "/FooService/barMethod", headers, random))
         .isTrue();
 
     RouteMatch routeMatch6 = RouteMatch.create(
-        routeMatcher,
+        pathMatcher,
         Collections.singletonList(HeaderMatcher.forPresent("user-agent", true, true)),
         null);
     assertThat(XdsNameResolver.matchRoute(routeMatch6, "/FooService/barMethod", headers, random))
         .isFalse();
 
     RouteMatch routeMatch7 = RouteMatch.create(
-        routeMatcher,
+        pathMatcher,
         Collections.singletonList(
             HeaderMatcher.forExactValue("custom-key", "custom-value1,custom-value2", false)),
         null);
@@ -1473,7 +1473,7 @@ public class XdsNameResolverTest {
         .isTrue();
 
     RouteMatch routeMatch8 = RouteMatch.create(
-        routeMatcher,
+        pathMatcher,
         Collections.singletonList(
             HeaderMatcher.forExactValue("content-type", "application/grpc", false)),
         null);
@@ -1481,7 +1481,7 @@ public class XdsNameResolverTest {
         routeMatch8, "/FooService/barMethod", new Metadata(), random)).isTrue();
 
     RouteMatch routeMatch9 = RouteMatch.create(
-        routeMatcher,
+        pathMatcher,
         Collections.singletonList(
             HeaderMatcher.forExactValue("custom-key!", "custom-value1,custom-value2", false)),
         null);
