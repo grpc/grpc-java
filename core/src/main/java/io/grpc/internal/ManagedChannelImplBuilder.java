@@ -283,7 +283,8 @@ public final class ManagedChannelImplBuilder
   public ManagedChannelImplBuilder(SocketAddress directServerAddress, String authority,
       ClientTransportFactoryBuilder clientTransportFactoryBuilder,
       @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
-      this(directServerAddress, authority, null, null, clientTransportFactoryBuilder, channelBuilderDefaultPortProvider);
+      this(directServerAddress, authority, null, null, clientTransportFactoryBuilder,
+	      channelBuilderDefaultPortProvider);
   }
 
   /**
