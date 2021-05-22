@@ -154,6 +154,28 @@ public class NettyChannelBuilderTest {
   }
 
   @Test
+  public void failNegotiationTypeWithChannelCredentials_target() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget(
+        "fakeTarget", InsecureChannelCredentials.create());
+
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage("Cannot change security when using ChannelCredentials");
+
+    builder.negotiationType(NegotiationType.TLS);
+  }
+
+  @Test
+  public void failNegotiationTypeWithChannelCredentials_socketAddress() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forAddress(
+        new SocketAddress(){}, InsecureChannelCredentials.create());
+
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage("Cannot change security when using ChannelCredentials");
+
+    builder.negotiationType(NegotiationType.TLS);
+  }
+
+  @Test
   public void createProtocolNegotiatorByType_plaintext() {
     ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiatorByType(
         NegotiationType.PLAINTEXT,
