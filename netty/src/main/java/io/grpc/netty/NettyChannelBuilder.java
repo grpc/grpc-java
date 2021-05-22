@@ -129,10 +129,10 @@ public final class NettyChannelBuilder extends
 
   /**
    * Creates a new builder with the given server address. This factory method is primarily intended
-   * for using Netty Channel types other than SocketChannel. {@link #forAddress(String, int)} should
-   * generally be preferred over this method, since that API permits delaying DNS lookups and
-   * noticing changes to DNS. If an unresolved InetSocketAddress is passed in, then it will remain
-   * unresolved.
+   * for using Netty Channel types other than SocketChannel.
+   * {@link #forAddress(String, int, ChannelCredentials)} should generally be preferred over this
+   * method, since that API permits delaying DNS lookups and noticing changes to DNS. If an
+   * unresolved InetSocketAddress is passed in, then it will remain unresolved.
    */
   @CheckReturnValue
   public static NettyChannelBuilder forAddress(SocketAddress serverAddress,
