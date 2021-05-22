@@ -135,7 +135,8 @@ public final class NettyChannelBuilder extends
    * unresolved.
    */
   @CheckReturnValue
-  public static NettyChannelBuilder forTarget(SocketAddress serverAddress, ChannelCredentials creds) {
+  public static NettyChannelBuilder forAddress(SocketAddress serverAddress,
+      ChannelCredentials creds) {
     FromChannelCredentialsResult result = ProtocolNegotiators.from(creds);
     if (result.error != null) {
       throw new IllegalArgumentException(result.error);
