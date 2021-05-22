@@ -23,8 +23,8 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ChannelCredentials;
-import io.grpc.ManagedChannel;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.ManagedChannel;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.netty.NettyTestUtil.TrackingObjectPoolForTest;
