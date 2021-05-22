@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
@@ -61,11 +62,13 @@ public final class ManagedChannelImplBuilder
 
   private static final Logger log = Logger.getLogger(ManagedChannelImplBuilder.class.getName());
 
+  @DoNotCall("ClientTransportFactoryBuilder is required, use a constructor")
   public static ManagedChannelBuilder<?> forAddress(String name, int port) {
     throw new UnsupportedOperationException(
         "ClientTransportFactoryBuilder is required, use a constructor");
   }
 
+  @DoNotCall("ClientTransportFactoryBuilder is required, use a constructor")
   public static ManagedChannelBuilder<?> forTarget(String target) {
     throw new UnsupportedOperationException(
         "ClientTransportFactoryBuilder is required, use a constructor");

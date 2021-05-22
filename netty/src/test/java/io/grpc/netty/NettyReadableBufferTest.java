@@ -17,11 +17,16 @@
 package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
+import com.google.common.base.Splitter;
 import io.grpc.internal.ReadableBuffer;
 import io.grpc.internal.ReadableBufferTestBase;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
+import java.nio.ByteBuffer;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -50,6 +55,29 @@ public class NettyReadableBufferTest extends ReadableBufferTestBase {
     buffer.close();
     buffer.close();
     assertEquals(0, buffer.buffer().refCnt());
+  }
+
+  @Test
+  public void getByteBufferFromSingleNioBufferBackedBuffer() {
+    assertTrue(buffer.byteBufferSupported());
+    ByteBuffer byteBuffer = buffer.getByteBuffer();
+    byte[] arr = new byte[byteBuffer.remaining()];
+    byteBuffer.get(arr);
+    assertArrayEquals(msg.getBytes(UTF_8), arr);
+  }
+
+  @Test
+  public void getByteBufferFromCompositeBufferReturnsOnlyFirstComponent() {
+    CompositeByteBuf composite = Unpooled.compositeBuffer(10);
+    int chunks = 4;
+    int chunkLen = msg.length() / chunks;
+    for (String chunk : Splitter.fixedLength(chunkLen).split(msg)) {
+      composite.addComponent(true, Unpooled.copiedBuffer(chunk.getBytes(UTF_8)));
+    }
+    buffer = new NettyReadableBuffer(composite);
+    byte[] array = new byte[chunkLen];
+    buffer.getByteBuffer().get(array);
+    assertArrayEquals(msg.substring(0, chunkLen).getBytes(UTF_8), array);
   }
 
   @Override
