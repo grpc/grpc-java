@@ -562,8 +562,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                 addresses.add(eag);
               }
               PriorityChildConfig priorityChildConfig = generateDnsBasedPriorityChildConfig(
-                  name, null, lrsServerName, maxConcurrentRequests, tlsContext,
-                  lbRegistry, Collections.<DropOverload>emptyList());
+                  name, lrsServerName, maxConcurrentRequests, tlsContext, lbRegistry,
+                  Collections.<DropOverload>emptyList());
               status = Status.OK;
               resolved = true;
               result = new ClusterResolutionResult(addresses, priorityName, priorityChildConfig);
@@ -643,14 +643,14 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    * <p>priority LB -> cluster_impl LB (single hardcoded priority) -> pick_first
    */
   private static PriorityChildConfig generateDnsBasedPriorityChildConfig(
-      String cluster, @Nullable String edsServiceName, @Nullable String lrsServerName,
-      @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
-      LoadBalancerRegistry lbRegistry, List<DropOverload> dropOverloads) {
+      String cluster, @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+      @Nullable UpstreamTlsContext tlsContext, LoadBalancerRegistry lbRegistry,
+      List<DropOverload> dropOverloads) {
     // Override endpoint-level LB policy with pick_first for logical DNS cluster.
     PolicySelection endpointLbPolicy =
         new PolicySelection(lbRegistry.getProvider("pick_first"), null);
     ClusterImplConfig clusterImplConfig =
-        new ClusterImplConfig(cluster, edsServiceName, lrsServerName, maxConcurrentRequests,
+        new ClusterImplConfig(cluster, null, lrsServerName, maxConcurrentRequests,
             dropOverloads, endpointLbPolicy, tlsContext);
     LoadBalancerProvider clusterImplLbProvider =
         lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
