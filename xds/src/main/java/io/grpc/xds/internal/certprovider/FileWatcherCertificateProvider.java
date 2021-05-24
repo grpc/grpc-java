@@ -82,6 +82,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
   @Override
   public synchronized void close() {
     shutdown = true;
+    scheduledExecutorService.shutdownNow();
     if (scheduledFuture != null) {
       scheduledFuture.cancel(true);
       scheduledFuture = null;
