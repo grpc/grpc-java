@@ -180,6 +180,7 @@ public class FileWatcherCertificateProviderTest {
         .updateCertificate(any(PrivateKey.class), ArgumentMatchers.<X509Certificate>anyList());
     verify(mockWatcher, never()).updateTrustedRoots(ArgumentMatchers.<X509Certificate>anyList());
     verify(timeService, never()).schedule(any(Runnable.class), any(Long.TYPE), any(TimeUnit.class));
+    verify(timeService, times(1)).shutdownNow();
   }
 
 
