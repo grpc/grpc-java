@@ -7,6 +7,7 @@ io.grpc.okhttp
 io.grpc.protobuf
 io.grpc.protobuf.lite
 io.grpc.protobuf.services
+io.grpc.protobuf.services.internal
 io.grpc.rls
 io.grpc.services
 io.grpc.stub
