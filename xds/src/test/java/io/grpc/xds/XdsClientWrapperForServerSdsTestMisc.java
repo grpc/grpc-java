@@ -22,13 +22,37 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableSet;
+import io.grpc.Attributes;
+import io.grpc.Grpc;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.inprocess.InProcessSocketAddress;
+import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.GrpcAuthorizationEngine.Action;
+import io.grpc.xds.GrpcAuthorizationEngine.AlwaysTrueMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.AuthConfig;
+import io.grpc.xds.GrpcAuthorizationEngine.DestinationIpMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.DestinationPortMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.HeaderMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.OrMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.PathMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.PolicyMatcher;
+import io.grpc.xds.XdsClientWrapperForServerSds.RbacServerInterceptor;
+import io.grpc.xds.internal.Matchers;
+import io.grpc.xds.internal.Matchers.CidrMatcher;
+import io.grpc.xds.internal.Matchers.StringMatcher;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.netty.channel.Channel;
 import java.io.IOException;
@@ -37,6 +61,8 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.Collections;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -205,5 +231,165 @@ public class XdsClientWrapperForServerSdsTestMisc {
     XdsSdsClientServerTest.generateListenerUpdateToWatcher(
         downstreamTlsContext, xdsClientWrapperForServerSds.getListenerWatcher());
     return xdsClientWrapperForServerSds;
+  }
+
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void testAuthorizationInterceptor_Allow() throws Exception {
+    ServerCallHandler<Void, Void> mockHandler = mock(ServerCallHandler.class);
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("header-key", Metadata.ASCII_STRING_MARSHALLER), "header-value");
+    ServerCall<Void, Void> mockServerCall = mock(ServerCall.class);
+    String hostname = "1.1.1.1";
+    Attributes attr = Attributes.newBuilder()
+        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InetSocketAddress("10.10.10.10", 10))
+        .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InetSocketAddress(hostname, 20))
+        .build();
+    when(mockServerCall.getAttributes()).thenReturn(attr);
+    when(mockServerCall.getMethodDescriptor()).thenReturn(method());
+
+    DestinationIpMatcher destIpMatcher = new DestinationIpMatcher(CidrMatcher.create(hostname, 24));
+    PathMatcher pathMatcher = new PathMatcher(StringMatcher.forExact("/path", false));
+    OrMatcher principal = OrMatcher.create(pathMatcher);
+    OrMatcher permission = OrMatcher.create(destIpMatcher);
+    PolicyMatcher policyMatcher = new PolicyMatcher("policy-matcher", permission, principal);
+    AuthConfig authconfig =  new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW);
+    xdsClientWrapperForServerSds.authInterceptorChain = ImmutableSet.of(
+        xdsClientWrapperForServerSds.generateAuthorizationInterceptor(authconfig));
+    RbacServerInterceptor interceptor = xdsClientWrapperForServerSds.rbacServerInterceptor;
+    interceptor.interceptCall(mockServerCall, headers, mockHandler);
+    verify(mockHandler).startCall(mockServerCall, headers);
+    verify(mockServerCall).getMethodDescriptor();
+    verify(mockServerCall).getAttributes();
+
+    DestinationPortMatcher destinationPortMatcher = new DestinationPortMatcher(99999);
+    policyMatcher = new PolicyMatcher("policy-matcher",
+        OrMatcher.create(destinationPortMatcher), principal);
+    authconfig =  new AuthConfig(Collections.singletonList(policyMatcher), Action.DENY);
+    xdsClientWrapperForServerSds.authInterceptorChain = ImmutableSet.of(
+        xdsClientWrapperForServerSds.generateAuthorizationInterceptor(authconfig));
+    interceptor.interceptCall(mockServerCall, headers, mockHandler);
+    verify(mockHandler, times(2)).startCall(mockServerCall, headers);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test(expected = UnsupportedOperationException.class)
+  public void testAuthorizationInterceptor_Deny() throws Exception {
+    ServerCallHandler<Void, Void> mockHandler = mock(ServerCallHandler.class);
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("header-key", Metadata.ASCII_STRING_MARSHALLER), "header-value");
+    ServerCall<Void, Void> mockServerCall = mock(ServerCall.class);
+    String hostname = "1.1.1.1";
+    Attributes attr = Attributes.newBuilder()
+        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InetSocketAddress("10.10.10.10", 10))
+        .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InetSocketAddress(hostname, 20))
+        .build();
+    when(mockServerCall.getAttributes()).thenReturn(attr);
+    when(mockServerCall.getMethodDescriptor()).thenReturn(method());
+
+    DestinationIpMatcher destIpMatcher = new DestinationIpMatcher(CidrMatcher.create(hostname, 24));
+    PathMatcher pathMatcher = new PathMatcher(StringMatcher.forExact("/path/", false));
+    OrMatcher principal = OrMatcher.create(pathMatcher);
+    OrMatcher permission = OrMatcher.create(destIpMatcher);
+    PolicyMatcher policyMatcher = new PolicyMatcher("policy-matcher", permission, principal);
+    AuthConfig authconfig =  new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW);
+    xdsClientWrapperForServerSds.authInterceptorChain = ImmutableSet.of(
+        xdsClientWrapperForServerSds.generateAuthorizationInterceptor(authconfig));
+    RbacServerInterceptor interceptor = xdsClientWrapperForServerSds.rbacServerInterceptor;
+    interceptor.interceptCall(mockServerCall, headers, mockHandler);
+    verify(mockHandler, never()).startCall(mockServerCall, headers);
+    verify(mockServerCall).getMethodDescriptor();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void testAuthorizationInterceptor_MultipleInterceptors() throws Exception {
+    ServerCallHandler<Void, Void> mockHandler = mock(ServerCallHandler.class);
+    Metadata headers = new Metadata();
+    ServerCall<Void, Void> mockServerCall = mock(ServerCall.class);
+    String hostname = "1.1.1.1";
+    Attributes attr = Attributes.newBuilder()
+        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InetSocketAddress("10.10.10.10", 10))
+        .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InetSocketAddress(hostname, 20))
+        .build();
+    when(mockServerCall.getAttributes()).thenReturn(attr);
+    when(mockServerCall.getMethodDescriptor()).thenReturn(method());
+
+    DestinationIpMatcher destIpMatcher = new DestinationIpMatcher(CidrMatcher.create(hostname, 24));
+    PathMatcher pathMatcher = new PathMatcher(StringMatcher.forPrefix("/path", false));
+    OrMatcher principal = OrMatcher.create(pathMatcher);
+    OrMatcher permission = OrMatcher.create(destIpMatcher);
+    PolicyMatcher policyMatcher = new PolicyMatcher("policy-matcher", permission, principal);
+    PolicyMatcher policyMatcher2 = new PolicyMatcher("policy-matcher-2",
+        OrMatcher.create(new PathMatcher(StringMatcher.forExact("/path/block", false))),
+        OrMatcher.create(AlwaysTrueMatcher.INSTANCE));
+    ServerInterceptor interceptor1 = xdsClientWrapperForServerSds.generateAuthorizationInterceptor(
+        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+    ServerInterceptor interceptor2 = xdsClientWrapperForServerSds.generateAuthorizationInterceptor(
+        new AuthConfig(Collections.singletonList(policyMatcher2), Action.DENY));
+
+    xdsClientWrapperForServerSds.authInterceptorChain = ImmutableSet.of(interceptor1, interceptor2);
+    RbacServerInterceptor interceptor = xdsClientWrapperForServerSds.rbacServerInterceptor;
+    interceptor.interceptCall(mockServerCall, headers, mockHandler);
+    verify(mockHandler).startCall(mockServerCall, headers);
+    verify(mockServerCall, times(2)).getMethodDescriptor();
+    verify(mockServerCall).getAttributes();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void testAuthorizationInterceptor_ConcurrentConfigUpdate() throws Exception {
+    ServerCallHandler<Void, Void> mockHandler = mock(ServerCallHandler.class);
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("header-key", Metadata.ASCII_STRING_MARSHALLER), "header-value");
+    ServerCall<Void, Void> mockServerCall = mock(ServerCall.class);
+    String hostname = "1.1.1.1";
+    Attributes attr = Attributes.newBuilder()
+        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InetSocketAddress("10.10.10.10", 10))
+        .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InetSocketAddress(hostname, 20))
+        .build();
+    when(mockServerCall.getAttributes()).thenReturn(attr);
+    when(mockServerCall.getMethodDescriptor()).thenReturn(method());
+
+    PolicyMatcher policyMatcher = new PolicyMatcher("policy-matcher",
+        OrMatcher.create(new DestinationIpMatcher(CidrMatcher.create(hostname, 24))),
+        OrMatcher.create(new PathMatcher(StringMatcher.forExact("/path", false)) ));
+    AuthConfig authconfig = new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW);
+    xdsClientWrapperForServerSds.authInterceptorChain = ImmutableSet.of(
+        xdsClientWrapperForServerSds.generateAuthorizationInterceptor(authconfig));
+    RbacServerInterceptor interceptor = xdsClientWrapperForServerSds.rbacServerInterceptor;
+    interceptor.interceptCall(mockServerCall, headers, mockHandler);
+    verify(mockHandler).startCall(mockServerCall, headers);
+    verify(mockServerCall).getMethodDescriptor();
+    verify(mockServerCall).getAttributes();
+
+    final CountDownLatch latch = new CountDownLatch(1);
+    new Thread(new Runnable() {
+      @Override
+      public void run() {
+        PolicyMatcher policyMatcher = new PolicyMatcher("policy-matcher-new",
+            OrMatcher.create(new HeaderMatcher(
+                Matchers.HeaderMatcher.forExactValue("header-key", "wrong", false))),
+            OrMatcher.create(new PathMatcher(StringMatcher.forExact("/path", false))));
+        AuthConfig config = new AuthConfig(Collections.singletonList(policyMatcher), Action.DENY);
+        xdsClientWrapperForServerSds.authInterceptorChain = ImmutableSet.of(
+            xdsClientWrapperForServerSds.generateAuthorizationInterceptor(config));
+        latch.countDown();
+      }
+    }).start();
+    latch.await(5, TimeUnit.SECONDS);
+    interceptor.interceptCall(mockServerCall, headers, mockHandler);
+    verify(mockHandler, times(2)).startCall(mockServerCall, headers);
+    verify(mockServerCall, times(1)).getMethodDescriptor();
+    verify(mockServerCall, times(1)).getAttributes();
+  }
+
+  private MethodDescriptor<Void, Void> method() {
+    return MethodDescriptor.<Void,Void>newBuilder()
+        .setType(MethodType.BIDI_STREAMING)
+        .setFullMethodName("/path")
+        .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
+        .setResponseMarshaller(TestMethodDescriptors.voidMarshaller()).build();
   }
 }

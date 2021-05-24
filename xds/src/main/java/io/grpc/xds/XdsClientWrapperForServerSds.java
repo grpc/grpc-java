@@ -23,6 +23,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.UInt32Value;
 import io.grpc.Internal;
+import io.grpc.InternalServerInterceptors;
+import io.grpc.Metadata;
+import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
@@ -30,6 +36,9 @@ import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
+import io.grpc.xds.GrpcAuthorizationEngine.Action;
+import io.grpc.xds.GrpcAuthorizationEngine.AuthConfig;
+import io.grpc.xds.GrpcAuthorizationEngine.AuthDecision;
 import io.grpc.xds.internal.Matchers.CidrMatcher;
 import io.netty.channel.Channel;
 import io.netty.channel.epoll.Epoll;
@@ -75,6 +84,47 @@ public final class XdsClientWrapperForServerSds {
   private XdsClient.LdsResourceWatcher listenerWatcher;
   private boolean newServerApi;
   @VisibleForTesting final Set<ServerWatcher> serverWatchers = new HashSet<>();
+  @VisibleForTesting
+  final RbacServerInterceptor rbacServerInterceptor = new RbacServerInterceptor();
+  @VisibleForTesting
+  ImmutableSet<ServerInterceptor> authInterceptorChain = ImmutableSet.of();
+
+  final class RbacServerInterceptor implements ServerInterceptor {
+    @Override
+    public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+        Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      ServerCallHandler<ReqT, RespT> authChainHandler = next;
+      Set<ServerInterceptor> delegate = authInterceptorChain;
+      for (ServerInterceptor i: delegate) {
+        authChainHandler = InternalServerInterceptors.interceptCallHandler(i, authChainHandler);
+      }
+      return authChainHandler.startCall(call, headers);
+    }
+  }
+
+  /** A ServerInterceptor that does authorization of a server call. If permitted, the server call is
+   * passed through transparently. If denied, the call is closed immediately. */
+  @VisibleForTesting
+  ServerInterceptor generateAuthorizationInterceptor(AuthConfig config) {
+    final GrpcAuthorizationEngine authEngine = new GrpcAuthorizationEngine(config);
+    return new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> Listener<ReqT> interceptCall(final ServerCall<ReqT, RespT> call,
+          final Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+        AuthDecision authResult = authEngine.evaluate(headers, call);
+        logger.log(Level.INFO, String.format("Authorization result for serverCall {%s}: {%s}, "
+                + "matching policy name: {%s}.",
+            call, authResult.decision(), authResult.matchingPolicyName()));
+        if (Action.DENY.equals(authResult.decision())) {
+          Status status = Status.UNAUTHENTICATED.withDescription(
+              "Access Denied, matching policy " + authResult.matchingPolicyName());
+          call.close(status, new Metadata());
+          throw new UnsupportedOperationException("Unauthorized.");
+        }
+        return next.startCall(call, headers);
+      }
+    };
+  }
 
   /**
    * Creates a {@link XdsClientWrapperForServerSds}.
