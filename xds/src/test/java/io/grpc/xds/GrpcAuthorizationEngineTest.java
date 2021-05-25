@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -47,8 +48,11 @@ import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.CidrMatcher;
 import io.grpc.xds.internal.Matchers.StringMatcher;
 import java.net.InetSocketAddress;
+import java.security.Principal;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import org.junit.Before;
@@ -182,6 +186,30 @@ public class GrpcAuthorizationEngineTest {
     decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.DENY);
     assertThat(decision.matchingPolicyName()).isEqualTo(null);
+
+    X509Certificate mockCert = mock(X509Certificate.class);
+    when(sslSession.getPeerCertificates()).thenReturn(new X509Certificate[]{mockCert});
+    assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.DENY);
+    when(mockCert.getSubjectDN()).thenReturn(mock(Principal.class));
+    assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.DENY);
+    when(mockCert.getSubjectAlternativeNames()).thenReturn(Arrays.<List<?>>asList(
+        Arrays.asList(2, "*.test.google.fr")));
+    assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.ALLOW);
+    when(mockCert.getSubjectAlternativeNames()).thenReturn(Arrays.<List<?>>asList(
+        Arrays.asList(6, "*.test.google.fr")));
+    assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.ALLOW);
+    when(mockCert.getSubjectAlternativeNames()).thenReturn(Arrays.<List<?>>asList(
+        Arrays.asList(10, "*.test.google.fr")));
+    assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.DENY);
+    when(mockCert.getSubjectAlternativeNames()).thenReturn(Arrays.<List<?>>asList(
+        Arrays.asList(2, "google.com"), Arrays.asList(6, "*.test.google.fr")));
+    assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.ALLOW);
+    when(mockCert.getSubjectAlternativeNames()).thenReturn(Arrays.<List<?>>asList(
+        Arrays.asList(6, "*.test.google.fr"), Arrays.asList(2, "google.com")));
+    assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.ALLOW);
+    when(mockCert.getSubjectAlternativeNames()).thenReturn(Arrays.<List<?>>asList(
+        Arrays.asList(2, "*.test.google.fr"), Arrays.asList(6, "google.com")));
+    assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.DENY);
 
     doThrow(new SSLPeerUnverifiedException("bad")).when(sslSession).getPeerCertificates();
     decision = engine.evaluate(HEADER, serverCall);

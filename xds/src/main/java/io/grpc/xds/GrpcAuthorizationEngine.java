@@ -217,8 +217,12 @@ public final class GrpcAuthorizationEngine {
   private static final class EvaluateArgs {
     private final Metadata metadata;
     private final ServerCall<?,?> serverCall;
-    // ref: io.grpc.okhttp.internal.OkHostnameVerifier, sun.security.x509.GeneralNameInterface
-    private static final ImmutableList<Integer> ALT_NAME_TYPES = ImmutableList.of(2, 6, 7);
+    private static final int URI_SAN = 6;
+    private static final int DNS_SAN = 2;
+    // https://github.com/envoyproxy/envoy/blob/63619d578e1abe0c1725ea28ba02f361466662e1/api/envoy/config/rbac/v3/rbac.proto#L238-L240
+    // Set the principal name for SAN types in this order, higher priority on the left. If none of
+    // them present, subject name is the fallback.
+    private static final ImmutableList<Integer> SAN_TYPES = ImmutableList.of(URI_SAN, DNS_SAN);
 
     private EvaluateArgs(Metadata metadata, ServerCall<?,?> serverCall) {
       this.metadata = metadata;
@@ -237,22 +241,31 @@ public final class GrpcAuthorizationEngine {
         if (certs == null || certs.length < 1) {
           return null;
         }
-        Collection<List<?>> names = ((X509Certificate)certs[0]).getSubjectAlternativeNames();
-        if (names == null) {
+        X509Certificate cert = (X509Certificate)certs[0];
+        if (cert == null || cert.getSubjectDN() == null) {
           return null;
         }
-        for (List<?> name : names) {
-          Integer altNameType = (Integer) name.get(0);
-          if (ALT_NAME_TYPES.contains(altNameType)) {
-            String principalName = (String) name.get(1);
-            log.log(Level.FINE, "Found Principal Name: " + principalName);
-            return principalName;
+        String principalName = cert.getSubjectDN().getName();
+        Collection<List<?>> names = cert.getSubjectAlternativeNames();
+        int chosenIndex = Integer.MAX_VALUE;
+        if (names != null) {
+          for (List<?> name : names) {
+            Integer altNameType = (Integer) name.get(0);
+            int currentIndex = SAN_TYPES.indexOf(altNameType);
+            if (SAN_TYPES.contains(altNameType) && currentIndex < chosenIndex) {
+              chosenIndex = currentIndex;
+              principalName = (String) name.get(1);
+            }
+            if (chosenIndex == 0) {
+              break;
+            }
           }
         }
+        log.log(Level.FINER, "Found Principal Name: " + principalName);
+        return principalName;
       } catch (SSLPeerUnverifiedException | CertificateParsingException ex) {
         return null;
       }
-      return null;
     }
 
     private Metadata getHeader() {

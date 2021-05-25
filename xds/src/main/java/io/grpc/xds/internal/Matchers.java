@@ -298,8 +298,12 @@ public final class Matchers {
         return false;
       }
       byte[] cidr = addressPrefix().getAddress();
+      byte[] addr = address.getAddress();
+      if (addr.length != cidr.length) {
+        return false;
+      }
       BigInteger cidrInt = new BigInteger(cidr);
-      BigInteger addrInt = new BigInteger(address.getAddress());
+      BigInteger addrInt = new BigInteger(addr);
 
       int shiftAmount = 8 * cidr.length - prefixLen();
 
