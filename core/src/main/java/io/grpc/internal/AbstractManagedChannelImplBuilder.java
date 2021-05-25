@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import com.google.common.base.MoreObjects;
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.BinaryLog;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
@@ -49,6 +50,7 @@ public abstract class AbstractManagedChannelImplBuilder
   /**
    * This method serves to force sub classes to "hide" this static factory.
    */
+  @DoNotCall("Unsupported")
   public static ManagedChannelBuilder<?> forAddress(String name, int port) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
   }
@@ -56,6 +58,7 @@ public abstract class AbstractManagedChannelImplBuilder
   /**
    * This method serves to force sub classes to "hide" this static factory.
    */
+  @DoNotCall("Unsupported")
   public static ManagedChannelBuilder<?> forTarget(String target) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
   }

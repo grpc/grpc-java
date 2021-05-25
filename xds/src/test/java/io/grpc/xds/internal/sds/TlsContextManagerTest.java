@@ -33,8 +33,6 @@ import static org.mockito.Mockito.when;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
-import java.lang.reflect.Field;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -53,20 +51,13 @@ public class TlsContextManagerTest {
 
   @Mock ValueFactory<DownstreamTlsContext, SslContextProvider> mockServerFactory;
 
-  @Before
-  public void clearInstance() throws NoSuchFieldException, IllegalAccessException {
-    Field field = TlsContextManagerImpl.class.getDeclaredField("instance");
-    field.setAccessible(true);
-    field.set(null, null);
-  }
-
   @Test
   public void createServerSslContextProvider() {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
 
-    TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
+    TlsContextManagerImpl tlsContextManagerImpl = new TlsContextManagerImpl(null);
     SslContextProvider serverSecretProvider =
         tlsContextManagerImpl.findOrCreateServerSslContextProvider(downstreamTlsContext);
     assertThat(serverSecretProvider).isNotNull();
@@ -82,7 +73,7 @@ public class TlsContextManagerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
 
-    TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
+    TlsContextManagerImpl tlsContextManagerImpl = new TlsContextManagerImpl(null);
     SslContextProvider clientSecretProvider =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isNotNull();
@@ -98,7 +89,7 @@ public class TlsContextManagerTest {
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
 
-    TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
+    TlsContextManagerImpl tlsContextManagerImpl = new TlsContextManagerImpl(null);
     SslContextProvider serverSecretProvider =
         tlsContextManagerImpl.findOrCreateServerSslContextProvider(downstreamTlsContext);
     assertThat(serverSecretProvider).isNotNull();
@@ -118,7 +109,7 @@ public class TlsContextManagerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
 
-    TlsContextManagerImpl tlsContextManagerImpl = TlsContextManagerImpl.getInstance();
+    TlsContextManagerImpl tlsContextManagerImpl = new TlsContextManagerImpl(null);
     SslContextProvider clientSecretProvider =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isNotNull();

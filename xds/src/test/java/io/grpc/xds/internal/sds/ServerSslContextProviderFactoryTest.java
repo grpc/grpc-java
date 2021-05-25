@@ -22,10 +22,6 @@ import static io.grpc.xds.internal.sds.ClientSslContextProviderFactoryTest.verif
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableSet;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
@@ -51,7 +47,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ServerSslContextProviderFactoryTest {
 
-  Bootstrapper bootstrapper;
   CertificateProviderRegistry certificateProviderRegistry;
   CertificateProviderStore certificateProviderStore;
   CertProviderServerSslContextProvider.Factory certProviderServerSslContextProviderFactory;
@@ -59,18 +54,17 @@ public class ServerSslContextProviderFactoryTest {
 
   @Before
   public void setUp() {
-    bootstrapper = mock(Bootstrapper.class);
     certificateProviderRegistry = new CertificateProviderRegistry();
     certificateProviderStore = new CertificateProviderStore(certificateProviderRegistry);
     certProviderServerSslContextProviderFactory =
         new CertProviderServerSslContextProvider.Factory(certificateProviderStore);
-    serverSslContextProviderFactory =
-        new ServerSslContextProviderFactory(
-            bootstrapper, certProviderServerSslContextProviderFactory);
   }
 
   @Test
   public void createSslContextProvider_allFilenames() {
+    serverSslContextProviderFactory =
+            new ServerSslContextProviderFactory(
+                    null, certProviderServerSslContextProviderFactory);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
@@ -82,6 +76,9 @@ public class ServerSslContextProviderFactoryTest {
 
   @Test
   public void createSslContextProvider_sdsConfigForTlsCert_expectException() {
+    serverSslContextProviderFactory =
+            new ServerSslContextProviderFactory(
+                    null, certProviderServerSslContextProviderFactory);
     CommonTlsContext commonTlsContext =
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
             "name", "unix:/tmp/sds/path", CA_PEM_FILE);
@@ -100,6 +97,9 @@ public class ServerSslContextProviderFactoryTest {
 
   @Test
   public void createSslContextProvider_sdsConfigForCertValidationContext_expectException() {
+    serverSslContextProviderFactory =
+            new ServerSslContextProviderFactory(
+                    null, certProviderServerSslContextProviderFactory);
     CommonTlsContext commonTlsContext =
         CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
             "name", "unix:/tmp/sds/path", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE);
@@ -132,7 +132,9 @@ public class ServerSslContextProviderFactoryTest {
             /* requireClientCert= */ true);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
+    serverSslContextProviderFactory =
+            new ServerSslContextProviderFactory(
+                    bootstrapInfo, certProviderServerSslContextProviderFactory);
     SslContextProvider sslContextProvider =
         serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
@@ -141,7 +143,6 @@ public class ServerSslContextProviderFactoryTest {
     sslContextProvider =
         serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
-    verify(bootstrapper, times(1)).bootstrap();
   }
 
   @Test
@@ -168,7 +169,9 @@ public class ServerSslContextProviderFactoryTest {
             builder.build(), downstreamTlsContext.isRequireClientCertificate());
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
+    serverSslContextProviderFactory =
+            new ServerSslContextProviderFactory(
+                    bootstrapInfo, certProviderServerSslContextProviderFactory);
     SslContextProvider sslContextProvider =
         serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
@@ -192,7 +195,9 @@ public class ServerSslContextProviderFactoryTest {
                     /* requireClientCert= */ true);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
+    serverSslContextProviderFactory =
+            new ServerSslContextProviderFactory(
+                    bootstrapInfo, certProviderServerSslContextProviderFactory);
     SslContextProvider sslContextProvider =
             serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
@@ -223,7 +228,9 @@ public class ServerSslContextProviderFactoryTest {
                     /* requireClientCert= */ true);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
+    serverSslContextProviderFactory =
+            new ServerSslContextProviderFactory(
+                    bootstrapInfo, certProviderServerSslContextProviderFactory);
     SslContextProvider sslContextProvider =
             serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
@@ -251,7 +258,9 @@ public class ServerSslContextProviderFactoryTest {
             /* requireClientCert= */ true);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
-    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
+    serverSslContextProviderFactory =
+            new ServerSslContextProviderFactory(
+                    bootstrapInfo, certProviderServerSslContextProviderFactory);
     SslContextProvider sslContextProvider =
         serverSslContextProviderFactory.create(downstreamTlsContext);
     assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
@@ -260,31 +269,12 @@ public class ServerSslContextProviderFactoryTest {
   }
 
   @Test
-  public void createCertProviderServerSslContextProvider_exception()
-      throws XdsInitializationException {
-    DownstreamTlsContext downstreamTlsContext =
-        CommonTlsContextTestsUtil.buildDownstreamTlsContextForCertProviderInstance(
-            "gcp_id",
-            "cert-default",
-            "gcp_id",
-            "root-default",
-            /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null,
-            /* requireClientCert= */ true);
-    when(bootstrapper.bootstrap())
-        .thenThrow(new XdsInitializationException("test exception"));
-    try {
-      serverSslContextProviderFactory.create(downstreamTlsContext);
-      Assert.fail("no exception thrown");
-    } catch (RuntimeException expected) {
-      assertThat(expected).hasMessageThat().contains("test exception");
-    }
-  }
-
-  @Test
   public void createEmptyCommonTlsContext_exception() throws IOException {
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(null, null, null);
+    serverSslContextProviderFactory =
+            new ServerSslContextProviderFactory(
+                    null, certProviderServerSslContextProviderFactory);
     try {
       serverSslContextProviderFactory.create(downstreamTlsContext);
       Assert.fail("no exception thrown");
@@ -297,6 +287,9 @@ public class ServerSslContextProviderFactoryTest {
 
   @Test
   public void createNullCommonTlsContext_exception() throws IOException {
+    serverSslContextProviderFactory =
+            new ServerSslContextProviderFactory(
+                    null, certProviderServerSslContextProviderFactory);
     DownstreamTlsContext downstreamTlsContext = new DownstreamTlsContext(null, true);
     try {
       serverSslContextProviderFactory.create(downstreamTlsContext);

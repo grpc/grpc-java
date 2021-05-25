@@ -25,10 +25,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -164,6 +166,7 @@ public class WeightedTargetLoadBalancerTest {
     lbRegistry.register(barLbProvider);
 
     weightedTargetLb = new WeightedTargetLoadBalancer(helper);
+    clearInvocations(helper);
   }
 
   @After
@@ -378,5 +381,25 @@ public class WeightedTargetLoadBalancerTest {
             new WeightedChildPicker(weights[1], failurePickers[1]),
             new WeightedChildPicker(weights[2], failurePickers[2]),
             new WeightedChildPicker(weights[3], failurePickers[3]));
+  }
+
+  @Test
+  public void raceBetweenShutdownAndChildLbBalancingStateUpdate() {
+    Map<String, WeightedPolicySelection> targets = ImmutableMap.of(
+        "target0", weightedLbConfig0,
+        "target1", weightedLbConfig1);
+    weightedTargetLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(new WeightedTargetConfig(targets))
+            .build());
+    verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
+
+    // LB shutdown and subchannel state change can happen simultaneously. If shutdown runs first,
+    // any further balancing state update should be ignored.
+    weightedTargetLb.shutdown();
+    Helper weightedChildHelper0 = childHelpers.iterator().next();
+    weightedChildHelper0.updateBalancingState(READY, mock(SubchannelPicker.class));
+    verifyNoMoreInteractions(helper);
   }
 }

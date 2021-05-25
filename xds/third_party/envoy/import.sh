@@ -18,7 +18,7 @@
 set -e
 BRANCH=main
 # import VERSION from one of the google internal CLs
-VERSION=ac9a2637336decdcc52c24add5e8fc39edebb962
+VERSION=8b9b87702885beb324dadb349cbcb06d037c956e
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
@@ -84,6 +84,7 @@ envoy/config/core/v3/protocol.proto
 envoy/config/core/v3/proxy_protocol.proto
 envoy/config/core/v3/socket_option.proto
 envoy/config/core/v3/substitution_format_string.proto
+envoy/config/core/v3/udp_socket_config.proto
 envoy/config/endpoint/v3/endpoint.proto
 envoy/config/endpoint/v3/endpoint_components.proto
 envoy/config/endpoint/v3/load_report.proto
@@ -96,10 +97,12 @@ envoy/config/listener/v2/api_listener.proto
 envoy/config/listener/v3/api_listener.proto
 envoy/config/listener/v3/listener.proto
 envoy/config/listener/v3/listener_components.proto
+envoy/config/listener/v3/quic_config.proto
 envoy/config/listener/v3/udp_listener_config.proto
 envoy/config/metrics/v3/stats.proto
 envoy/config/overload/v3/overload.proto
 envoy/config/rbac/v2/rbac.proto
+envoy/config/rbac/v3/rbac.proto
 envoy/config/route/v3/route.proto
 envoy/config/route/v3/route_components.proto
 envoy/config/route/v3/scoped_route.proto
@@ -136,6 +139,7 @@ envoy/service/load_stats/v2/lrs.proto
 envoy/service/load_stats/v3/lrs.proto
 envoy/service/status/v3/csds.proto
 envoy/type/http.proto
+envoy/type/http/v3/path_transformation.proto
 envoy/type/matcher/metadata.proto
 envoy/type/matcher/number.proto
 envoy/type/matcher/path.proto
@@ -144,6 +148,7 @@ envoy/type/matcher/string.proto
 envoy/type/matcher/v3/metadata.proto
 envoy/type/matcher/v3/node.proto
 envoy/type/matcher/v3/number.proto
+envoy/type/matcher/v3/path.proto
 envoy/type/matcher/v3/regex.proto
 envoy/type/matcher/v3/string.proto
 envoy/type/matcher/v3/struct.proto

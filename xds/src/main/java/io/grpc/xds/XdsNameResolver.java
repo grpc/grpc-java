@@ -334,26 +334,12 @@ final class XdsNameResolver extends NameResolver {
   private final class ConfigSelector extends InternalConfigSelector {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
-      // Index ASCII headers by key, multi-value headers are concatenated for matching purposes.
-      Map<String, String> asciiHeaders = new HashMap<>();
-      Metadata headers = args.getHeaders();
-      for (String headerName : headers.keys()) {
-        if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-          continue;
-        }
-        Metadata.Key<String> key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
-        Iterable<String> values = headers.getAll(key);
-        if (values != null) {
-          asciiHeaders.put(headerName, Joiner.on(",").join(values));
-        }
-      }
-      // Special hack for exposing headers: "content-type".
-      asciiHeaders.put("content-type", "application/grpc");
       String cluster = null;
       Route selectedRoute = null;
       RoutingConfig routingCfg;
       Map<String, FilterConfig> selectedOverrideConfigs;
       List<ClientInterceptor> filterInterceptors = new ArrayList<>();
+      Metadata headers = args.getHeaders();
       do {
         routingCfg = routingConfig;
         selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
@@ -363,7 +349,7 @@ final class XdsNameResolver extends NameResolver {
         }
         for (Route route : routingCfg.routes) {
           if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
-              asciiHeaders, random)) {
+              headers, random)) {
             selectedRoute = route;
             selectedOverrideConfigs.putAll(route.filterConfigOverrides());
             break;
@@ -442,7 +428,7 @@ final class XdsNameResolver extends NameResolver {
         }
       }
       final String finalCluster = cluster;
-      final long hash = generateHash(selectedRoute.routeAction().hashPolicies(), asciiHeaders);
+      final long hash = generateHash(selectedRoute.routeAction().hashPolicies(), headers);
       class ClusterSelectionInterceptor implements ClientInterceptor {
         @Override
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -517,13 +503,13 @@ final class XdsNameResolver extends NameResolver {
       }
     }
 
-    private long generateHash(List<HashPolicy> hashPolicies, Map<String, String> headers) {
+    private long generateHash(List<HashPolicy> hashPolicies, Metadata headers) {
       Long hash = null;
       for (HashPolicy policy : hashPolicies) {
         Long newHash = null;
         if (policy.type() == HashPolicy.Type.HEADER) {
-          if (headers.containsKey(policy.headerName())) {
-            String value = headers.get(policy.headerName());
+          String value = getHeaderValue(headers, policy.headerName());
+          if (value != null) {
             if (policy.regEx() != null && policy.regExSubstitution() != null) {
               value = policy.regEx().matcher(value).replaceAll(policy.regExSubstitution());
             }
@@ -565,19 +551,20 @@ final class XdsNameResolver extends NameResolver {
 
   @VisibleForTesting
   static boolean matchRoute(RouteMatch routeMatch, String fullMethodName,
-      Map<String, String> headers, ThreadSafeRandom random) {
+      Metadata headers, ThreadSafeRandom random) {
     if (!matchPath(routeMatch.pathMatcher(), fullMethodName)) {
       return false;
     }
-    if (!matchHeaders(routeMatch.headerMatchers(), headers)) {
-      return false;
+    for (HeaderMatcher headerMatcher : routeMatch.headerMatchers()) {
+      if (!matchHeader(headerMatcher, getHeaderValue(headers, headerMatcher.name()))) {
+        return false;
+      }
     }
     FractionMatcher fraction = routeMatch.fractionMatcher();
     return fraction == null || random.nextInt(fraction.denominator()) < fraction.numerator();
   }
 
-  @VisibleForTesting
-  static boolean matchPath(PathMatcher pathMatcher, String fullMethodName) {
+  private static boolean matchPath(PathMatcher pathMatcher, String fullMethodName) {
     if (pathMatcher.path() != null) {
       return pathMatcher.caseSensitive()
           ? pathMatcher.path().equals(fullMethodName)
@@ -590,18 +577,7 @@ final class XdsNameResolver extends NameResolver {
     return pathMatcher.regEx().matches(fullMethodName);
   }
 
-  private static boolean matchHeaders(
-      List<HeaderMatcher> headerMatchers, Map<String, String> headers) {
-    for (HeaderMatcher headerMatcher : headerMatchers) {
-      if (!matchHeader(headerMatcher, headers.get(headerMatcher.name()))) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  @VisibleForTesting
-  static boolean matchHeader(HeaderMatcher headerMatcher, @Nullable String value) {
+  private static boolean matchHeader(HeaderMatcher headerMatcher, @Nullable String value) {
     if (headerMatcher.present() != null) {
       return (value == null) == headerMatcher.present().equals(headerMatcher.inverted());
     }
@@ -628,6 +604,24 @@ final class XdsNameResolver extends NameResolver {
       baseMatch = value.endsWith(headerMatcher.suffix());
     }
     return baseMatch != headerMatcher.inverted();
+  }
+
+  @Nullable
+  private static String getHeaderValue(Metadata headers, String headerName) {
+    if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+      return null;
+    }
+    if (headerName.equals("content-type")) {
+      return "application/grpc";
+    }
+    Metadata.Key<String> key;
+    try {
+      key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
+    } catch (IllegalArgumentException e) {
+      return null;
+    }
+    Iterable<String> values = headers.getAll(key);
+    return values == null ? null : Joiner.on(",").join(values);
   }
 
   private class ResolveState implements LdsResourceWatcher {
