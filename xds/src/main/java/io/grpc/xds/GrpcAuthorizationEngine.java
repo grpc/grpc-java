@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
-import io.envoyproxy.envoy.config.rbac.v3.RBAC.Action;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -53,32 +52,41 @@ import javax.net.ssl.SSLSession;
  */
 public final class GrpcAuthorizationEngine {
   private static final Logger log = Logger.getLogger(GrpcAuthorizationEngine.class.getName());
-  private final List<PolicyMatcher> policyMatchers;
-  private final Action action;
+  private final AuthConfig authConfig;
+
+  enum Action {
+    ALLOW,
+    DENY,
+  }
 
   /** An authorization decision provides information about the decision type and the policy name
    * identifier based on the authorization engine evaluation. */
   @AutoValue
-  public abstract static class AuthDecision {
-    public enum DecisionType {
-      ALLOW,
-      DENY,
-    }
-
-    public abstract DecisionType decision();
+  abstract static class AuthDecision {
+    abstract Action decision();
 
     @Nullable
-    public abstract String matchingPolicyName();
+    abstract String matchingPolicyName();
 
-    static AuthDecision create(DecisionType decisionType, @Nullable String matchingPolicy) {
+    static AuthDecision create(Action decisionType, @Nullable String matchingPolicy) {
       return new AutoValue_GrpcAuthorizationEngine_AuthDecision(decisionType, matchingPolicy);
     }
   }
 
+  /** Represents authorization config policy that the engine will evaluate against. */
+  static final class AuthConfig {
+    private final List<PolicyMatcher> policies;
+    private final Action action;
+
+    AuthConfig(List<PolicyMatcher> policies, Action action) {
+      this.policies = Collections.unmodifiableList(policies);
+      this.action = action;
+    }
+  }
+
   /** Instantiated with envoy policyMatcher configuration. */
-  public GrpcAuthorizationEngine(List<PolicyMatcher> policies, Action action) {
-    this.action = action;
-    this.policyMatchers = Collections.unmodifiableList(policies);
+  public GrpcAuthorizationEngine(AuthConfig authConfig) {
+    this.authConfig = authConfig;
   }
 
   /** Return the auth decision for the request argument against the policies. */
@@ -87,15 +95,15 @@ public final class GrpcAuthorizationEngine {
     checkNotNull(serverCall, "serverCall");
     String firstMatch = null;
     EvaluateArgs args = new EvaluateArgs(metadata, serverCall);
-    for (PolicyMatcher policyMatcher : policyMatchers) {
+    for (PolicyMatcher policyMatcher : authConfig.policies) {
       if (policyMatcher.matches(args)) {
         firstMatch = policyMatcher.name;
         break;
       }
     }
-    AuthDecision.DecisionType decisionType = AuthDecision.DecisionType.DENY;
-    if (Action.DENY.equals(action) == (firstMatch == null)) {
-      decisionType = AuthDecision.DecisionType.ALLOW;
+    Action decisionType = Action.DENY;
+    if (Action.DENY.equals(authConfig.action) == (firstMatch == null)) {
+      decisionType = Action.ALLOW;
     }
     log.log(Level.FINER, String.format("RBAC decision: {%s}, policy match: {%s}",
         decisionType, firstMatch));
@@ -110,9 +118,9 @@ public final class GrpcAuthorizationEngine {
    * <p>Currently we only support matching some of the request fields. Those unsupported fields are
    * considered not match until we stop ignoring them.
    */
-  static class PolicyMatcher extends Matcher {
-    private final Matcher permissions;
-    private final Matcher principals;
+  static final class PolicyMatcher extends Matcher {
+    private final OrMatcher permissions;
+    private final OrMatcher principals;
     private final String name;
 
     /** Constructs a matcher for one RBAC policy. */
@@ -128,7 +136,7 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  static class AuthenticatedMatcher extends Matcher {
+  static final class AuthenticatedMatcher extends Matcher {
     private final StringMatcher delegate;
 
     AuthenticatedMatcher(StringMatcher delegate) {
@@ -141,7 +149,7 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  static class DestinationIpMatcher extends Matcher {
+  static final class DestinationIpMatcher extends Matcher {
     private final CidrMatcher delegate;
 
     DestinationIpMatcher(CidrMatcher delegate) {
@@ -154,7 +162,7 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  static class SourceIpMatcher extends Matcher {
+  static final class SourceIpMatcher extends Matcher {
     private final CidrMatcher delegate;
 
     SourceIpMatcher(CidrMatcher delegate) {
@@ -167,7 +175,7 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  static class PathMatcher extends Matcher {
+  static final class PathMatcher extends Matcher {
     private final StringMatcher delegate;
 
     PathMatcher(StringMatcher delegate) {
@@ -180,7 +188,7 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  static class HeaderMatcher extends Matcher {
+  static final class HeaderMatcher extends Matcher {
     private final Matchers.HeaderMatcher delegate;
 
     HeaderMatcher(Matchers.HeaderMatcher delegate) {
@@ -193,7 +201,7 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  static class DestinationPortMatcher extends Matcher {
+  static final class DestinationPortMatcher extends Matcher {
     private final int port;
 
     DestinationPortMatcher(int port) {
@@ -206,7 +214,7 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  private static class EvaluateArgs {
+  private static final class EvaluateArgs {
     private final Metadata metadata;
     private final ServerCall<?,?> serverCall;
     // ref: io.grpc.okhttp.internal.OkHostnameVerifier, sun.security.x509.GeneralNameInterface
@@ -275,7 +283,7 @@ public final class GrpcAuthorizationEngine {
   }
 
   /** Matches when any of the matcher matches. */
-  static class OrMatcher extends Matcher {
+  static final class OrMatcher extends Matcher {
     private final List<? extends Matcher> anyMatch;
 
     OrMatcher(List<? extends Matcher> matchers) {
@@ -284,7 +292,7 @@ public final class GrpcAuthorizationEngine {
     }
 
     static OrMatcher create(Matcher...matchers) {
-      return new OrMatcher(Collections.unmodifiableList(Arrays.asList(matchers)));
+      return new OrMatcher(Arrays.asList(matchers));
     }
 
     @Override
@@ -299,7 +307,7 @@ public final class GrpcAuthorizationEngine {
   }
 
   /** Matches when all of the matchers match. */
-  static class AndMatcher extends Matcher {
+  static final class AndMatcher extends Matcher {
     private final List<? extends Matcher> allMatch;
 
     AndMatcher(List<? extends Matcher> matchers) {
@@ -308,7 +316,7 @@ public final class GrpcAuthorizationEngine {
     }
 
     static AndMatcher create(Matcher...matchers) {
-      return new AndMatcher(Collections.unmodifiableList(Arrays.asList(matchers)));
+      return new AndMatcher(Arrays.asList(matchers));
     }
 
     @Override
@@ -323,7 +331,7 @@ public final class GrpcAuthorizationEngine {
   }
 
   /** Always true matcher.*/
-  static class AlwaysTrueMatcher extends Matcher {
+  static final class AlwaysTrueMatcher extends Matcher {
     static AlwaysTrueMatcher INSTANCE = new AlwaysTrueMatcher();
 
     @Override
@@ -333,7 +341,7 @@ public final class GrpcAuthorizationEngine {
   }
 
   /** Negate matcher.*/
-  static class InvertMatcher extends Matcher {
+  static final class InvertMatcher extends Matcher {
     private final Matcher toInvertMatcher;
 
     InvertMatcher(Matcher matcher) {

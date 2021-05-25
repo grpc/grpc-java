@@ -21,7 +21,6 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
-import io.envoyproxy.envoy.config.rbac.v3.RBAC.Action;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
@@ -30,10 +29,11 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TestMethodDescriptors;
+import io.grpc.xds.GrpcAuthorizationEngine.Action;
 import io.grpc.xds.GrpcAuthorizationEngine.AlwaysTrueMatcher;
 import io.grpc.xds.GrpcAuthorizationEngine.AndMatcher;
+import io.grpc.xds.GrpcAuthorizationEngine.AuthConfig;
 import io.grpc.xds.GrpcAuthorizationEngine.AuthDecision;
-import io.grpc.xds.GrpcAuthorizationEngine.AuthDecision.DecisionType;
 import io.grpc.xds.GrpcAuthorizationEngine.AuthenticatedMatcher;
 import io.grpc.xds.GrpcAuthorizationEngine.DestinationIpMatcher;
 import io.grpc.xds.GrpcAuthorizationEngine.DestinationPortMatcher;
@@ -105,9 +105,9 @@ public class GrpcAuthorizationEngineTest {
     PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
 
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        Collections.singletonList(policyMatcher), Action.ALLOW);
+        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
     AuthDecision decision = engine.evaluate(HEADER, serverCall);
-    assertThat(decision.decision()).isEqualTo(DecisionType.ALLOW);
+    assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
 
     Attributes attributes = Attributes.newBuilder()
@@ -116,7 +116,7 @@ public class GrpcAuthorizationEngineTest {
         .build();
     when(serverCall.getAttributes()).thenReturn(attributes);
     decision = engine.evaluate(HEADER, serverCall);
-    assertThat(decision.decision()).isEqualTo(DecisionType.DENY);
+    assertThat(decision.decision()).isEqualTo(Action.DENY);
     assertThat(decision.matchingPolicyName()).isEqualTo(null);
 
     attributes = Attributes.newBuilder()
@@ -125,12 +125,13 @@ public class GrpcAuthorizationEngineTest {
         .build();
     when(serverCall.getAttributes()).thenReturn(attributes);
     decision = engine.evaluate(HEADER, serverCall);
-    assertThat(decision.decision()).isEqualTo(DecisionType.DENY);
+    assertThat(decision.decision()).isEqualTo(Action.DENY);
     assertThat(decision.matchingPolicyName()).isEqualTo(null);
 
-    engine = new GrpcAuthorizationEngine(Collections.singletonList(policyMatcher), Action.DENY);
+    engine = new GrpcAuthorizationEngine(
+        new AuthConfig(Collections.singletonList(policyMatcher), Action.DENY));
     decision = engine.evaluate(HEADER, serverCall);
-    assertThat(decision.decision()).isEqualTo(DecisionType.ALLOW);
+    assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(null);
   }
 
@@ -143,9 +144,9 @@ public class GrpcAuthorizationEngineTest {
         new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
     PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        Collections.singletonList(policyMatcher), Action.ALLOW);
+        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
     AuthDecision decision = engine.evaluate(HEADER, serverCall);
-    assertThat(decision.decision()).isEqualTo(DecisionType.ALLOW);
+    assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
   }
 
@@ -156,9 +157,9 @@ public class GrpcAuthorizationEngineTest {
     OrMatcher principal = OrMatcher.create(pathMatcher);
     PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        Collections.singletonList(policyMatcher), Action.DENY);
+        new AuthConfig(Collections.singletonList(policyMatcher), Action.DENY));
     AuthDecision decision = engine.evaluate(HEADER, serverCall);
-    assertThat(decision.decision()).isEqualTo(DecisionType.DENY);
+    assertThat(decision.decision()).isEqualTo(Action.DENY);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
   }
 
@@ -171,20 +172,20 @@ public class GrpcAuthorizationEngineTest {
     OrMatcher principal = OrMatcher.create(pathMatcher);
     PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        Collections.singletonList(policyMatcher), Action.ALLOW);
+        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
     AuthDecision decision = engine.evaluate(HEADER, serverCall);
-    assertThat(decision.decision()).isEqualTo(DecisionType.ALLOW);
+    assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
 
     X509Certificate[] certs = {TestUtils.loadX509Cert("badserver.pem")};
     when(sslSession.getPeerCertificates()).thenReturn(certs);
     decision = engine.evaluate(HEADER, serverCall);
-    assertThat(decision.decision()).isEqualTo(DecisionType.DENY);
+    assertThat(decision.decision()).isEqualTo(Action.DENY);
     assertThat(decision.matchingPolicyName()).isEqualTo(null);
 
     doThrow(new SSLPeerUnverifiedException("bad")).when(sslSession).getPeerCertificates();
     decision = engine.evaluate(HEADER, serverCall);
-    assertThat(decision.decision()).isEqualTo(DecisionType.DENY);
+    assertThat(decision.decision()).isEqualTo(Action.DENY);
     assertThat(decision.matchingPolicyName()).isEqualTo(null);
   }
 
@@ -209,9 +210,9 @@ public class GrpcAuthorizationEngineTest {
     PolicyMatcher policyMatcher2 = new PolicyMatcher(POLICY_NAME + "-2", permission, principal);
 
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        ImmutableList.of(policyMatcher1, policyMatcher2), Action.DENY);
+        new AuthConfig(ImmutableList.of(policyMatcher1, policyMatcher2), Action.DENY));
     AuthDecision decision = engine.evaluate(HEADER, serverCall);
-    assertThat(decision.decision()).isEqualTo(DecisionType.DENY);
+    assertThat(decision.decision()).isEqualTo(Action.DENY);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
   }
 

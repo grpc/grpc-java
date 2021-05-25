@@ -66,7 +66,7 @@ public class AuthzEngineTest {
   @Mock
   private Interpretable interpretable;
   
-  private AuthorizationEngine engine;
+  private AuthorizationEngine engine;  
   private RBAC rbacDeny;
   private RBAC rbacAllow;
   private Object result;
