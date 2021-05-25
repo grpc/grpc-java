@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.collect.ImmutableList;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -35,7 +34,9 @@ import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -145,7 +146,19 @@ public final class GrpcAuthorizationEngine {
 
     @Override
     boolean matches(EvaluateArgs args) {
-      return delegate.matches(args.getPrincipalName());
+      if (delegate == null) {
+        return true;
+      }
+      Collection<String> principalNames = args.getPrincipalNames();
+      log.log(Level.FINER, "Matching principal names: " + principalNames);
+      if (principalNames != null) {
+        for (String name : principalNames) {
+          if (delegate.matches(name)) {
+            return true;
+          }
+        }
+      }
+      return false;
     }
   }
 
@@ -217,12 +230,9 @@ public final class GrpcAuthorizationEngine {
   private static final class EvaluateArgs {
     private final Metadata metadata;
     private final ServerCall<?,?> serverCall;
+    // https://github.com/envoyproxy/envoy/blob/63619d578e1abe0c1725ea28ba02f361466662e1/api/envoy/config/rbac/v3/rbac.proto#L238-L240
     private static final int URI_SAN = 6;
     private static final int DNS_SAN = 2;
-    // https://github.com/envoyproxy/envoy/blob/63619d578e1abe0c1725ea28ba02f361466662e1/api/envoy/config/rbac/v3/rbac.proto#L238-L240
-    // Set the principal name for SAN types in this order, higher priority on the left. If none of
-    // them present, subject name is the fallback.
-    private static final ImmutableList<Integer> SAN_TYPES = ImmutableList.of(URI_SAN, DNS_SAN);
 
     private EvaluateArgs(Metadata metadata, ServerCall<?,?> serverCall) {
       this.metadata = metadata;
@@ -233,36 +243,38 @@ public final class GrpcAuthorizationEngine {
       return serverCall.getMethodDescriptor().getFullMethodName();
     }
 
-    @Nullable
-    private String getPrincipalName() {
+    private Collection<String> getPrincipalNames() {
       SSLSession sslSession = serverCall.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
+      Set<String> principalNames = new HashSet<>();
       try {
         Certificate[] certs = sslSession == null ? null : sslSession.getPeerCertificates();
         if (certs == null || certs.length < 1) {
-          return null;
+          return principalNames;
         }
         X509Certificate cert = (X509Certificate)certs[0];
         if (cert == null || cert.getSubjectDN() == null) {
-          return null;
+          return principalNames;
         }
-        String principalName = cert.getSubjectDN().getName();
         Collection<List<?>> names = cert.getSubjectAlternativeNames();
-        int chosenIndex = Integer.MAX_VALUE;
         if (names != null) {
           for (List<?> name : names) {
-            Integer altNameType = (Integer) name.get(0);
-            int currentIndex = SAN_TYPES.indexOf(altNameType);
-            if (SAN_TYPES.contains(altNameType) && currentIndex < chosenIndex) {
-              chosenIndex = currentIndex;
-              principalName = (String) name.get(1);
-            }
-            if (chosenIndex == 0) {
-              break;
+            if (URI_SAN == (Integer) name.get(0)) {
+              principalNames.add((String) name.get(1));
             }
           }
+          if (!principalNames.isEmpty()) {
+            return principalNames;
+          }
+          for (List<?> name : names) {
+            if (DNS_SAN == (Integer) name.get(0)) {
+              principalNames.add((String) name.get(1));
+            }
+          }
+          if (!principalNames.isEmpty()) {
+            return principalNames;
+          }
         }
-        log.log(Level.FINER, "Found Principal Name: " + principalName);
-        return principalName;
+        return Collections.singleton(cert.getSubjectDN().getName());
       } catch (SSLPeerUnverifiedException | CertificateParsingException ex) {
         return null;
       }

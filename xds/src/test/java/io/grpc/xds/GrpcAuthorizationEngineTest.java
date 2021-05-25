@@ -210,6 +210,10 @@ public class GrpcAuthorizationEngineTest {
     when(mockCert.getSubjectAlternativeNames()).thenReturn(Arrays.<List<?>>asList(
         Arrays.asList(2, "*.test.google.fr"), Arrays.asList(6, "google.com")));
     assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.DENY);
+    when(mockCert.getSubjectAlternativeNames()).thenReturn(Arrays.<List<?>>asList(
+        Arrays.asList(2, "*.test.google.fr"), Arrays.asList(6, "google.com"),
+        Arrays.asList(6, "*.test.google.fr")));
+    assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.ALLOW);
 
     doThrow(new SSLPeerUnverifiedException("bad")).when(sslSession).getPeerCertificates();
     decision = engine.evaluate(HEADER, serverCall);
