@@ -88,27 +88,30 @@ final class MetadataHelper {
         // An InputStream which wasn't created by ParcelableUtils, which means there's another use
         // of Metadata.BinaryStreamMarshaller. Just read the bytes.
         //
-        // While this case almost certainly won't happen in google3 (since BSM was just
-        // added recently), we need to support the full API, since we can't predict how teams
-        // will use Metadata.
-        //
-        // We know that BlockPool will give us a buffer at least as larges as the max space for all
+        // We know that BlockPool will give us a buffer at least as large as the max space for all
         // names and values so it'll certainly be large enough (and the limit is only 8k so this
         // is fine).
         byte[] buffer = BlockPool.acquireBlock();
-        int read = ((InputStream) value).read(buffer);
-        if (read < 0) {
-          throw Status.INTERNAL.withDescription("Failure reading metadata value").asException();
-        } else if (read == buffer.length) {
-          throw Status.RESOURCE_EXHAUSTED.withDescription("Metadata value too large").asException();
-        } else {
-          parcel.writeInt(read);
-          if (read > 0) {
-            parcel.writeByteArray(buffer, 0, read);
+        try {
+          InputStream stream = (InputStream) value;
+          int total = 0;
+          while (total < buffer.length) {
+            int read = stream.read(buffer, total, buffer.length - total); 
+            if (read == -1) {
+              break;
+            }
+            total += read;
           }
+          if (total == buffer.length) {
+            throw Status.RESOURCE_EXHAUSTED.withDescription("Metadata value too large").asException();
+          }
+          parcel.writeInt(total);
+          if (total > 0) {
+            parcel.writeByteArray(buffer, 0, total);
+          }
+        } finally {
+          BlockPool.releaseBlock(buffer);
         }
-
-        BlockPool.releaseBlock(buffer);
       }
     }
   }
@@ -123,17 +126,19 @@ final class MetadataHelper {
     if (n == 0) {
       return new Metadata();
     }
-    int startPos = parcel.dataPosition();
-    // We count this for two reasons: to ignore it in header size limit and to check this against
-    // maximum allowed size of Parcelables in metadata (see InboundParcelablePolicy).
+    // For enforcing the header-size limit. Doesn't include parcelable data.
+    int bytesRead = 0;
+    // For enforcing the maximum allowed parcelable data (see InboundParcelablePolicy).
     int parcelableBytesRead = 0;
     Object[] serialized = new Object[n * 2];
     for (int i = 0; i < n; i++) {
       int numNameBytes = parcel.readInt();
-      byte[] name = new byte[numNameBytes];
-      parcel.readByteArray(name);
+      bytesRead += 4;
+      byte[] name = readBytesChecked(parcel, numNameBytes, bytesRead);
+      bytesRead += numNameBytes;
       serialized[i * 2] = name;
       int numValueBytes = parcel.readInt();
+      bytesRead += 4;
       if (numValueBytes == PARCELABLE_SENTINEL) {
         InboundParcelablePolicy policy = attributes.get(BinderTransport.INBOUND_PARCELABLE_POLICY);
         if (!policy.shouldAcceptParcelableMetadataValues()) {
@@ -165,20 +170,27 @@ final class MetadataHelper {
       } else if (numValueBytes < 0) {
         throw Status.INTERNAL.withDescription("Unrecognized metadata sentinel").asException();
       } else {
-        byte[] value = new byte[numValueBytes];
-        if (numValueBytes > 0) {
-          parcel.readByteArray(value);
-        }
+        byte[] value = readBytesChecked(parcel, numValueBytes, bytesRead);
+        bytesRead += numValueBytes;
         serialized[i * 2 + 1] = value;
-      }
-      // We need to reject metadata which is too large in order to pass AbstractTransportTest.
-      // This is the simplest way to do that, even if it's inefficient.
-      if ((parcel.dataPosition() - parcelableBytesRead - startPos)
-          > GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE) {
-        throw Status.RESOURCE_EXHAUSTED.withDescription("Metadata too large").asException();
       }
     }
     return InternalMetadata.newMetadataWithParsedValues(n, serialized);
+  }
+
+  /** Read a byte array checking that we're not reading too much. */
+  private static byte[] readBytesChecked(
+      Parcel parcel,
+      int numBytes,
+      int bytesRead) throws StatusException {
+    if (bytesRead + numBytes > GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE) {
+      throw Status.RESOURCE_EXHAUSTED.withDescription("Metadata too large").asException();
+    }
+    byte[] res = new byte[numBytes];
+    if (numBytes > 0) {
+      parcel.readByteArray(res);
+    }
+    return res;
   }
 
   /** A marshaller for passing parcelables in gRPC {@link Metadata} */

@@ -124,7 +124,7 @@ final class SingleMessageClientStream implements ClientStream {
   }
 
   // =====================
-  // Misc stubbed & usupported methods.
+  // Misc stubbed & unsupported methods.
 
   @Override
   public final void flush() {

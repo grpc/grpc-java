@@ -148,7 +148,7 @@ final class MultiMessageServerStream implements ServerStream {
   }
 
   // =====================
-  // Misc stubbed & usupported methods.
+  // Misc stubbed & unsupported methods.
 
   @Override
   public final void flush() {
