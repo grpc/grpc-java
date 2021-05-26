@@ -111,6 +111,7 @@ abstract class Outbound {
   /** Call to add a message to be delivered. */
   @GuardedBy("this")
   final void addMessage(InputStream message) throws StatusException {
+    onPrefixReady(); // This is implied.
     if (messageQueue != null) {
       messageQueue.add(message);
     } else if (firstMessage == null) {
@@ -167,7 +168,7 @@ abstract class Outbound {
   private final boolean canSend() {
     switch (outboundState) {
       case INITIAL:
-        if (!prefixReady && !messageAvailable() && !suffixReady) {
+        if (!prefixReady) {
           return false;
         }
         break;
@@ -427,7 +428,7 @@ abstract class Outbound {
     @GuardedBy("this")
     void sendSingleMessageAndClose(
         @Nullable Metadata pendingHeaders,
-        @Nullable InputStream pendingSingleMesage,
+        @Nullable InputStream pendingSingleMessage,
         Status closeStatus,
         Metadata trailers)
         throws StatusException {
@@ -436,10 +437,10 @@ abstract class Outbound {
       }
       if (pendingHeaders != null) {
         this.headers = pendingHeaders;
-        onPrefixReady();
       }
-      if (pendingSingleMesage != null) {
-        addMessage(pendingSingleMesage);
+      onPrefixReady();
+      if (pendingSingleMessage != null) {
+        addMessage(pendingSingleMessage);
       }
       checkState(this.trailers == null);
       this.closeStatus = closeStatus;
@@ -456,6 +457,7 @@ abstract class Outbound {
       checkState(this.trailers == null);
       this.closeStatus = closeStatus;
       this.trailers = trailers;
+      onPrefixReady();
       onSuffixReady();
       send();
     }
