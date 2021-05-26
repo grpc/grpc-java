@@ -74,6 +74,7 @@ public final class XdsClientWrapperForServerSds {
   private ScheduledExecutorService timeService;
   private XdsClient.LdsResourceWatcher listenerWatcher;
   private boolean newServerApi;
+  private String grpcServerResourceId;
   @VisibleForTesting final Set<ServerWatcher> serverWatchers = new HashSet<>();
 
   /**
@@ -137,7 +138,7 @@ public final class XdsClientWrapperForServerSds {
             }
           }
         };
-    String grpcServerResourceId = xdsClient.getBootstrapInfo()
+    grpcServerResourceId = xdsClient.getBootstrapInfo()
         .getServerListenerResourceNameTemplate();
     newServerApi = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
     if (newServerApi && grpcServerResourceId == null) {
@@ -448,10 +449,11 @@ public final class XdsClientWrapperForServerSds {
   /** Shutdown this instance and release resources. */
   public void shutdown() {
     logger.log(Level.FINER, "Shutdown");
-    releaseOldSuppliers(curListener.get());
     if (xdsClient != null) {
+      xdsClient.cancelLdsResourceWatch(grpcServerResourceId, listenerWatcher);
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
+    releaseOldSuppliers(curListener.getAndSet(null));
     if (timeService != null) {
       timeService = SharedResourceHolder.release(timeServiceResource, timeService);
     }

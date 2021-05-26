@@ -189,7 +189,11 @@ public class XdsClientWrapperForServerSdsTestMisc {
     InetSocketAddress remoteAddress = new InetSocketAddress(ipRemoteAddress, 1111);
     when(channel.remoteAddress()).thenReturn(remoteAddress);
     callUpdateSslContext(channel);
+    XdsClient mockXdsClient = xdsClientWrapperForServerSds.getXdsClient();
     xdsClientWrapperForServerSds.shutdown();
+    verify(mockXdsClient, times(1))
+        .cancelLdsResourceWatch(eq("grpc/server?udpa.resource.listening_address=0.0.0.0:" + PORT),
+            eq(registeredWatcher));
     verify(tlsContextManager, never()).releaseServerSslContextProvider(eq(sslContextProvider1));
     verify(tlsContextManager, times(1)).releaseServerSslContextProvider(eq(sslContextProvider2));
     verify(tlsContextManager, times(1)).releaseServerSslContextProvider(eq(sslContextProvider3));
