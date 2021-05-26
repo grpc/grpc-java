@@ -31,9 +31,7 @@ import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.ProtocolNegotiationEvent;
-import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.InternalXdsAttributes;
-import io.grpc.xds.TlsContextManager;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -345,11 +343,11 @@ public final class SdsProtocolNegotiators {
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProtocolNegotiationEvent) {
-        DownstreamTlsContext downstreamTlsContext =
+        SslContextProviderSupplier sslContextProviderSupplier =
             xdsClientWrapperForServerSds == null
                 ? null
-                : xdsClientWrapperForServerSds.getDownstreamTlsContext(ctx.channel());
-        if (downstreamTlsContext == null) {
+                : xdsClientWrapperForServerSds.getSslContextProviderSupplier(ctx.channel());
+        if (sslContextProviderSupplier == null) {
           if (fallbackProtocolNegotiator == null) {
             ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
             return;
@@ -369,8 +367,7 @@ public final class SdsProtocolNegotiators {
                   this,
                   null,
                   new ServerSdsHandler(
-                      grpcHandler, downstreamTlsContext, fallbackProtocolNegotiator,
-                      xdsClientWrapperForServerSds.getTlsContextManager()));
+                      grpcHandler, sslContextProviderSupplier));
           ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
           ctx.fireUserEventTriggered(pne);
           return;
@@ -385,14 +382,11 @@ public final class SdsProtocolNegotiators {
   static final class ServerSdsHandler
           extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
-    private final DownstreamTlsContext downstreamTlsContext;
-    private final TlsContextManager tlsContextManager;
-    @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
+    private final SslContextProviderSupplier sslContextProviderSupplier;
 
     ServerSdsHandler(
             GrpcHttp2ConnectionHandler grpcHandler,
-            DownstreamTlsContext downstreamTlsContext,
-            ProtocolNegotiator fallbackProtocolNegotiator, TlsContextManager tlsContextManager) {
+            SslContextProviderSupplier sslContextProviderSupplier) {
       super(
           // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
           // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
@@ -405,9 +399,7 @@ public final class SdsProtocolNegotiators {
           }, grpcHandler.getNegotiationLogger());
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
-      this.downstreamTlsContext = downstreamTlsContext;
-      this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
-      this.tlsContextManager = tlsContextManager;
+      this.sslContextProviderSupplier = sslContextProviderSupplier;
     }
 
     @Override
@@ -415,23 +407,7 @@ public final class SdsProtocolNegotiators {
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
-      SslContextProvider sslContextProviderTemp = null;
-      try {
-        sslContextProviderTemp =
-            tlsContextManager.findOrCreateServerSslContextProvider(downstreamTlsContext);
-      } catch (Exception e) {
-        if (fallbackProtocolNegotiator == null) {
-          ctx.fireExceptionCaught(new CertStoreException("No certificate source found!", e));
-          return;
-        }
-        logger.log(Level.INFO, "Using fallback for {0}", ctx.channel().localAddress());
-        // Delegate rest of handshake to fallback handler
-        ctx.pipeline().replace(this, null, fallbackProtocolNegotiator.newHandler(grpcHandler));
-        ctx.pipeline().remove(bufferReads);
-        return;
-      }
-      final SslContextProvider sslContextProvider = sslContextProviderTemp;
-      sslContextProvider.addCallback(
+      sslContextProviderSupplier.updateSslContext(
           new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
@@ -445,7 +421,6 @@ public final class SdsProtocolNegotiators {
                 fireProtocolNegotiationEvent(ctx);
                 ctx.pipeline().remove(bufferReads);
               }
-              tlsContextManager.releaseServerSslContextProvider(sslContextProvider);
             }
 
             @Override

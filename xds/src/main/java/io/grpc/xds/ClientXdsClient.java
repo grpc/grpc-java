@@ -287,10 +287,10 @@ final class ClientXdsClient extends AbstractXdsClient {
         "HttpConnectionManager neither has inlined route_config nor RDS.");
   }
 
-  private static LdsUpdate processServerSideListener(Listener listener)
+  private LdsUpdate processServerSideListener(Listener listener)
       throws ResourceInvalidException {
     StructOrError<EnvoyServerProtoData.Listener> convertedListener =
-        parseServerSideListener(listener);
+        parseServerSideListener(listener, tlsContextManager);
     if (convertedListener.getErrorDetail() != null) {
       throw new ResourceInvalidException(convertedListener.getErrorDetail());
     }
@@ -369,10 +369,10 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @VisibleForTesting static StructOrError<EnvoyServerProtoData.Listener> parseServerSideListener(
-      Listener listener) {
+      Listener listener, TlsContextManager tlsContextManager) {
     try {
       return StructOrError.fromStruct(
-          EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
+          EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener, tlsContextManager));
     } catch (InvalidProtocolBufferException e) {
       return StructOrError.fromError(
           "Failed to unpack Listener " + listener.getName() + ":" + e.getMessage());

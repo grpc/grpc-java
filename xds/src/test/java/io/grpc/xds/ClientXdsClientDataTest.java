@@ -688,7 +688,7 @@ public class ClientXdsClientDataTest {
             .setTrafficDirection(TrafficDirection.OUTBOUND)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail()).isEqualTo("Listener listener1 is not INBOUND");
   }
 
@@ -701,7 +701,7 @@ public class ClientXdsClientDataTest {
             .addListenerFilters(ListenerFilter.newBuilder().build())
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("Listener listener1 cannot have listener_filters");
   }
@@ -715,7 +715,7 @@ public class ClientXdsClientDataTest {
             .setUseOriginalDst(BoolValue.of(true))
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("Listener listener1 cannot have use_original_dst set to true");
   }
@@ -729,7 +729,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(FilterChain.newBuilder().build())
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("filerChain  has to have envoy.http_connection_manager");
   }
@@ -753,7 +753,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("filerChain  has non-unique filter name:envoy.http_connection_manager");
   }
@@ -773,7 +773,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("filter envoy.http_connection_manager with config_discovery not supported");
   }
@@ -789,7 +789,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("filter envoy.http_connection_manager expected to have typed_config");
   }
@@ -809,7 +809,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo(
             "filter envoy.http_connection_manager with unsupported typed_config type:badTypeUrl");
@@ -830,7 +830,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("http-connection-manager has non-unique http-filter name:hf");
   }
@@ -852,7 +852,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo(
             "http-connection-manager http-filter envoy.router uses "
@@ -877,7 +877,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo(
             "http-connection-manager http-filter envoy.router has unsupported typed-config type:"
@@ -898,7 +898,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo(
             "http-connection-manager http-filter envoy.filters.http.router should have "

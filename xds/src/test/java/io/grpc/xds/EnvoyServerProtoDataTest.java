@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.Mockito.mock;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -34,6 +35,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -61,7 +63,7 @@ public class EnvoyServerProtoDataTest {
             .setTrafficDirection(TrafficDirection.INBOUND)
             .build();
 
-    Listener xdsListener = Listener.fromEnvoyProtoListener(listener);
+    Listener xdsListener = Listener.fromEnvoyProtoListener(listener, mock(TlsContextManager.class));
     assertThat(xdsListener.getName()).isEqualTo("8000");
     assertThat(xdsListener.getAddress()).isEqualTo("10.2.1.34:8000");
     List<EnvoyServerProtoData.FilterChain> filterChains = xdsListener.getFilterChains();
@@ -81,7 +83,11 @@ public class EnvoyServerProtoDataTest {
     assertThat(inFilterChainMatch.getConnectionSourceType())
         .isEqualTo(EnvoyServerProtoData.ConnectionSourceType.EXTERNAL);
     assertThat(inFilterChainMatch.getSourcePorts()).containsExactly(200, 300);
-    DownstreamTlsContext inFilterTlsContext = inFilter.getDownstreamTlsContext();
+    SslContextProviderSupplier sslContextProviderSupplier = inFilter
+        .getSslContextProviderSupplier();
+    assertThat(sslContextProviderSupplier.getTlsContext()).isInstanceOf(DownstreamTlsContext.class);
+    DownstreamTlsContext inFilterTlsContext = (DownstreamTlsContext) sslContextProviderSupplier
+        .getTlsContext();
     assertThat(inFilterTlsContext.getCommonTlsContext()).isNotNull();
     CommonTlsContext commonTlsContext = inFilterTlsContext.getCommonTlsContext();
     List<SdsSecretConfig> tlsCertSdsConfigs = commonTlsContext

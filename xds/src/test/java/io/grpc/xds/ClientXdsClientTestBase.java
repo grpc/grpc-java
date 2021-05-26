@@ -234,6 +234,8 @@ public abstract class ClientXdsClientTestBase {
   private CdsResourceWatcher cdsResourceWatcher;
   @Mock
   private EdsResourceWatcher edsResourceWatcher;
+  @Mock
+  private TlsContextManager tlsContextManager;
 
   private ManagedChannel channel;
   private ClientXdsClient xdsClient;
@@ -279,7 +281,7 @@ public abstract class ClientXdsClientTestBase {
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(),
             timeProvider,
-            mock(TlsContextManager.class));
+            tlsContextManager);
 
     assertThat(resourceDiscoveryCalls).isEmpty();
     assertThat(loadReportCalls).isEmpty();
@@ -2021,7 +2023,7 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
     Message listener =
-            mf.buildListenerWithFilterChain(
+        mf.buildListenerWithFilterChain(
             LISTENER_RESOURCE, 7000, "0.0.0.0", "google-sds-config-default", "ROOTCA");
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
@@ -2030,10 +2032,11 @@ public abstract class ClientXdsClientTestBase {
         ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().listener)
-        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener((Listener)listener));
+        .isEqualTo(EnvoyServerProtoData.Listener
+            .fromEnvoyProtoListener((Listener) listener, tlsContextManager));
 
     listener =
-            mf.buildListenerWithFilterChain(
+        mf.buildListenerWithFilterChain(
             LISTENER_RESOURCE, 7000, "0.0.0.0", "CERT2", "ROOTCA2");
     listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "1", "0001");
@@ -2043,7 +2046,8 @@ public abstract class ClientXdsClientTestBase {
         ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "1", "0001", NODE);
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
     assertThat(ldsUpdateCaptor.getValue().listener)
-        .isEqualTo(EnvoyServerProtoData.Listener.fromEnvoyProtoListener((Listener)listener));
+        .isEqualTo(EnvoyServerProtoData.Listener
+            .fromEnvoyProtoListener((Listener) listener, tlsContextManager));
 
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
