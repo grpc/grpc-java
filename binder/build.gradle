@@ -7,6 +7,22 @@ plugins {
 description = 'gRPC BinderChannel'
 
 android {
+    sourceSets {
+        test {
+            java {
+                srcDirs += "${projectDir}/../core/src/test/java/"
+                setIncludes(["io/grpc/internal/FakeClock.java",
+                             "io/grpc/binder/**"])
+            }
+        }
+        androidTest {
+            java {
+                srcDirs += "${projectDir}/../core/src/test/java/"
+                setIncludes(["io/grpc/internal/AbstractTransportTest.java",
+                             "io/grpc/binder/**"])
+            }
+        }
+    }
     compileSdkVersion 29
     compileOptions {
         sourceCompatibility 1.8
@@ -14,10 +30,11 @@ android {
     }
     defaultConfig {
         minSdkVersion 16
-        targetSdkVersion 28
+        targetSdkVersion 29
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        multiDexEnabled true
     }
     lintOptions { abortOnError false }
 }
@@ -29,6 +46,7 @@ repositories {
 
 dependencies {
     api project(':grpc-core')
+
     guavaDependency 'implementation'
     implementation libraries.androidx_annotation
     testImplementation libraries.androidx_core
@@ -39,9 +57,33 @@ dependencies {
         // Unreleased change: https://github.com/robolectric/robolectric/pull/5432
         exclude group: 'com.google.auto.service', module: 'auto-service'
     }
+    testImplementation (libraries.guava_testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
     testImplementation libraries.truth
+
+    androidTestAnnotationProcessor libraries.autovalue
+    androidTestImplementation project(':grpc-testing')
+    androidTestImplementation libraries.autovalue_annotation
+    androidTestImplementation libraries.junit
+    androidTestImplementation libraries.androidx_core
+    androidTestImplementation libraries.androidx_test
     androidTestImplementation libraries.androidx_test_rules
     androidTestImplementation libraries.androidx_test_ext_junit
     androidTestImplementation libraries.truth
+    androidTestImplementation libraries.mockito_android
+    androidTestImplementation libraries.androidx_lifecycle_service
 }
+
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+tasks.withType(JavaCompile) {
+    options.compilerArgs += [
+            "-Xlint:-cast"
+    ]
+    appendToProperty(it.options.errorprone.excludedPaths, ".*/R.java", "|")
+    // Reuses source code from grpc-core, which targets Java 7 (no method references)
+    options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
+}
+
 [publishMavenPublicationToMavenRepository]*.onlyIf { false }
