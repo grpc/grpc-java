@@ -64,7 +64,6 @@ public class ServerWrapperForXdsTest {
   private int port;
   private XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
   private XdsServerBuilder.XdsServingStatusListener mockXdsServingStatusListener;
-  private XdsClient mockXdsClient;
   private XdsClient.LdsResourceWatcher listenerWatcher;
   private Server mockServer;
 
@@ -72,11 +71,11 @@ public class ServerWrapperForXdsTest {
   public void setUp() throws IOException {
     port = XdsServerTestHelper.findFreePort();
     mockDelegateBuilder = mock(ServerBuilder.class);
-    xdsClientWrapperForServerSds = new XdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds = XdsServerTestHelper
+        .createXdsClientWrapperForServerSds(port, null);
     mockXdsServingStatusListener = mock(XdsServerBuilder.XdsServingStatusListener.class);
-    mockXdsClient = mock(XdsClient.class);
     listenerWatcher =
-        XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds, mockXdsClient, port);
+        XdsServerTestHelper.startAndGetWatcher(xdsClientWrapperForServerSds);
     mockServer = mock(Server.class);
     when(mockDelegateBuilder.build()).thenReturn(mockServer);
     serverWrapperForXds = new ServerWrapperForXds(mockDelegateBuilder,
@@ -99,7 +98,12 @@ public class ServerWrapperForXdsTest {
       }
     });
     // wait until xdsClientWrapperForServerSds.serverWatchers populated
-    for (int i = 0; i < 10 && xdsClientWrapperForServerSds.serverWatchers.isEmpty(); i++) {
+    for (int i = 0; i < 10; i++) {
+      synchronized (xdsClientWrapperForServerSds.serverWatchers) {
+        if (!xdsClientWrapperForServerSds.serverWatchers.isEmpty()) {
+          break;
+        }
+      }
       Thread.sleep(100L);
     }
     return settableFuture;

@@ -22,7 +22,6 @@ import static io.grpc.xds.EnvoyServerProtoData.TRANSPORT_SOCKET_NAME_TLS;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.CaseFormat;
 import com.google.common.base.Joiner;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
@@ -42,6 +41,8 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.PortSpecifierCase;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
@@ -49,6 +50,7 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
+import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -131,15 +133,18 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final LoadReportClient lrsClient;
   private final TimeProvider timeProvider;
   private boolean reportingLoad;
+  private final TlsContextManager tlsContextManager;
 
   ClientXdsClient(
-      ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo,
+      ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo, Context context,
       ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier, TimeProvider timeProvider) {
-    super(channel, bootstrapInfo, timeService, backoffPolicyProvider, stopwatchSupplier);
+      Supplier<Stopwatch> stopwatchSupplier, TimeProvider timeProvider,
+      TlsContextManager tlsContextManager) {
+    super(channel, bootstrapInfo, context, timeService, backoffPolicyProvider, stopwatchSupplier);
     loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
     this.timeProvider = timeProvider;
-    lrsClient = new LoadReportClient(loadStatsManager, channel,
+    this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
+    lrsClient = new LoadReportClient(loadStatsManager, channel, context,
         bootstrapInfo.getServers().get(0).isUseProtocolV3(), bootstrapInfo.getNode(),
         getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
   }
@@ -832,8 +837,6 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
 
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
-    String lbPolicy = CaseFormat.UPPER_UNDERSCORE.to(
-        CaseFormat.LOWER_UNDERSCORE, cluster.getLbPolicy().name());
 
     if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
       RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
@@ -841,10 +844,10 @@ final class ClientXdsClient extends AbstractXdsClient {
         throw new ResourceInvalidException(
             "Unsupported ring hash function: " + lbConfig.getHashFunction());
       }
-      updateBuilder.lbPolicy(lbPolicy, lbConfig.getMinimumRingSize().getValue(),
-          lbConfig.getMaximumRingSize().getValue());
+      updateBuilder.lbPolicy(CdsUpdate.LbPolicy.RING_HASH,
+          lbConfig.getMinimumRingSize().getValue(), lbConfig.getMaximumRingSize().getValue());
     } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
-      updateBuilder.lbPolicy(lbPolicy);
+      updateBuilder.lbPolicy(CdsUpdate.LbPolicy.ROUND_ROBIN);
     } else {
       throw new ResourceInvalidException("Unsupported lb policy: " + cluster.getLbPolicy());
     }
@@ -928,8 +931,40 @@ final class ClientXdsClient extends AbstractXdsClient {
       return StructOrError.fromStruct(CdsUpdate.forEds(
           clusterName, edsServiceName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
     } else if (type.equals(DiscoveryType.LOGICAL_DNS)) {
+      if (!cluster.hasLoadAssignment()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": LOGICAL_DNS clusters must have a single host");
+      }
+      ClusterLoadAssignment assignment = cluster.getLoadAssignment();
+      if (assignment.getEndpointsCount() != 1
+          || assignment.getEndpoints(0).getLbEndpointsCount() != 1) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": LOGICAL_DNS clusters must have a single "
+                + "locality_lb_endpoint and a single lb_endpoint");
+      }
+      io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint lbEndpoint =
+          assignment.getEndpoints(0).getLbEndpoints(0);
+      if (!lbEndpoint.hasEndpoint() || !lbEndpoint.getEndpoint().hasAddress()
+          || !lbEndpoint.getEndpoint().getAddress().hasSocketAddress()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": LOGICAL_DNS clusters must have an endpoint with address and socket_address");
+      }
+      SocketAddress socketAddress = lbEndpoint.getEndpoint().getAddress().getSocketAddress();
+      if (!socketAddress.getResolverName().isEmpty()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": LOGICAL DNS clusters must NOT have a custom resolver name set");
+      }
+      if (socketAddress.getPortSpecifierCase() != PortSpecifierCase.PORT_VALUE) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": LOGICAL DNS clusters socket_address must have port_value");
+      }
+      String dnsHostName =
+          String.format("%s:%d", socketAddress.getAddress(), socketAddress.getPortValue());
       return StructOrError.fromStruct(CdsUpdate.forLogicalDns(
-          clusterName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
+          clusterName, dnsHostName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
     }
     return StructOrError.fromError(
         "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);
@@ -1181,6 +1216,11 @@ final class ClientXdsClient extends AbstractXdsClient {
       metadataMap.put(entry.getKey(), entry.getValue().metadata);
     }
     return metadataMap;
+  }
+
+  @Override
+  TlsContextManager getTlsContextManager() {
+    return tlsContextManager;
   }
 
   @Override

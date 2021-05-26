@@ -178,7 +178,7 @@ abstract class XdsClient {
     abstract ClusterType clusterType();
 
     // Endpoint-level load balancing policy.
-    abstract String lbPolicy();
+    abstract LbPolicy lbPolicy();
 
     // Only valid if lbPolicy is "ring_hash".
     abstract long minRingSize();
@@ -190,6 +190,12 @@ abstract class XdsClient {
     /// Only valid for EDS cluster.
     @Nullable
     abstract String edsServiceName();
+
+    // Corresponding DNS name to be used if upstream endpoints of the cluster is resolvable
+    // via DNS.
+    // Only valid for LOGICAL_DNS cluster.
+    @Nullable
+    abstract String dnsHostName();
 
     // Load report server name for reporting loads via LRS.
     // Only valid for EDS or LOGICAL_DNS cluster.
@@ -235,13 +241,15 @@ abstract class XdsClient {
           .upstreamTlsContext(upstreamTlsContext);
     }
 
-    static Builder forLogicalDns(String clusterName, @Nullable String lrsServerName,
-        @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext upstreamTlsContext) {
+    static Builder forLogicalDns(String clusterName, String dnsHostName,
+        @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+        @Nullable UpstreamTlsContext upstreamTlsContext) {
       return new AutoValue_XdsClient_CdsUpdate.Builder()
           .clusterName(clusterName)
           .clusterType(ClusterType.LOGICAL_DNS)
           .minRingSize(0)
           .maxRingSize(0)
+          .dnsHostName(dnsHostName)
           .lrsServerName(lrsServerName)
           .maxConcurrentRequests(maxConcurrentRequests)
           .upstreamTlsContext(upstreamTlsContext);
@@ -249,6 +257,10 @@ abstract class XdsClient {
 
     enum ClusterType {
       EDS, LOGICAL_DNS, AGGREGATE
+    }
+
+    enum LbPolicy {
+      ROUND_ROBIN, RING_HASH
     }
 
     // FIXME(chengyuanzhang): delete this after UpstreamTlsContext's toString() is fixed.
@@ -261,6 +273,7 @@ abstract class XdsClient {
           .add("minRingSize", minRingSize())
           .add("maxRingSize", maxRingSize())
           .add("edsServiceName", edsServiceName())
+          .add("dnsHostName", dnsHostName())
           .add("lrsServerName", lrsServerName())
           .add("maxConcurrentRequests", maxConcurrentRequests())
           // Exclude upstreamTlsContext as its string representation is cumbersome.
@@ -270,38 +283,40 @@ abstract class XdsClient {
 
     @AutoValue.Builder
     abstract static class Builder {
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder clusterName(String clusterName);
 
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder clusterType(ClusterType clusterType);
 
-      // Private do not use.
-      protected abstract Builder lbPolicy(String lbPolicy);
+      abstract Builder lbPolicy(LbPolicy lbPolicy);
 
-      Builder lbPolicy(String lbPolicy, long minRingSize, long maxRingSize) {
+      Builder lbPolicy(LbPolicy lbPolicy, long minRingSize, long maxRingSize) {
         return this.lbPolicy(lbPolicy).minRingSize(minRingSize).maxRingSize(maxRingSize);
       }
 
-      // Private do not use.
+      // Private, use lbPolicy(LbPolicy, long, long).
       protected abstract Builder minRingSize(long minRingSize);
 
-      // Private do not use.
+      // Private, use lbPolicy(.LbPolicy, long, long)
       protected abstract Builder maxRingSize(long maxRingSize);
 
-      // Private do not use.
+      // Private, use CdsUpdate.forEds() instead.
       protected abstract Builder edsServiceName(String edsServiceName);
 
-      // Private do not use.
+      // Private, use CdsUpdate.forLogicalDns() instead.
+      protected abstract Builder dnsHostName(String dnsHostName);
+
+      // Private, use one of the static factory methods instead.
       protected abstract Builder lrsServerName(String lrsServerName);
 
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder maxConcurrentRequests(Long maxConcurrentRequests);
 
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder upstreamTlsContext(UpstreamTlsContext upstreamTlsContext);
 
-      // Private do not use.
+      // Private, use CdsUpdate.forAggregate() instead.
       protected abstract Builder prioritizedClusterNames(List<String> prioritizedClusterNames);
 
       abstract CdsUpdate build();
@@ -531,6 +546,13 @@ abstract class XdsClient {
    * Returns the config used to bootstrap this XdsClient {@link Bootstrapper.BootstrapInfo}.
    */
   Bootstrapper.BootstrapInfo getBootstrapInfo() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Returns the {@link TlsContextManager} used in this XdsClient.
+   */
+  TlsContextManager getTlsContextManager() {
     throw new UnsupportedOperationException();
   }
 

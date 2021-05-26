@@ -29,6 +29,7 @@ grpc/tools/run_tests/helper_scripts/prep_xds.sh
 JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.properties \
   python3 grpc/tools/run_tests/run_xds_tests.py \
     --test_case="all,circuit_breaking,timeout,fault_injection" \
+    --test_case="all,circuit_breaking,timeout,fault_injection,csds" \
     --project_id=grpc-testing \
     --project_num=830293263384 \
     --source_image=projects/grpc-testing/global/images/xds-test-server-4 \

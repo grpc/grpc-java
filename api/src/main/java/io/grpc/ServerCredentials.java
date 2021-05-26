@@ -33,5 +33,4 @@ package io.grpc;
  * would only be used after {@code instanceof} checks (which must consider
  * {@code ChoiceServerCredentials}!).
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7621")
 public abstract class ServerCredentials {}

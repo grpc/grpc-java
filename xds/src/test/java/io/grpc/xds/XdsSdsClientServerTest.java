@@ -27,7 +27,6 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.mock;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
@@ -82,12 +81,11 @@ public class XdsSdsClientServerTest {
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private int port;
   private FakeNameResolverFactory fakeNameResolverFactory;
-  private Bootstrapper mockBootstrapper;
+  private final TlsContextManagerImpl tlsContextManager = new TlsContextManagerImpl(null);
 
   @Before
   public void setUp() throws IOException {
     port = XdsServerTestHelper.findFreePort();
-    mockBootstrapper = mock(Bootstrapper.class);
   }
 
   @After
@@ -333,10 +331,9 @@ public class XdsSdsClientServerTest {
   private void buildServerWithTlsContext(
       DownstreamTlsContext downstreamTlsContext, ServerCredentials fallbackCredentials)
       throws IOException {
-    XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        new XdsClientWrapperForServerSds(port);
-    xdsClientWrapperForServerSds.start(mockXdsClient, "grpc/server");
+        createXdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds.start();
     buildServerWithFallbackServerCredentials(
         xdsClientWrapperForServerSds, fallbackCredentials, downstreamTlsContext);
   }
@@ -351,11 +348,10 @@ public class XdsSdsClientServerTest {
   }
 
   /** Creates XdsClientWrapperForServerSds. */
-  private static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port) {
-    XdsClient mockXdsClient = mock(XdsClient.class);
+  private XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port) {
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        new XdsClientWrapperForServerSds(port);
-    xdsClientWrapperForServerSds.start(mockXdsClient, "grpc/server");
+        XdsServerTestHelper.createXdsClientWrapperForServerSds(port, tlsContextManager);
+    xdsClientWrapperForServerSds.start();
     return xdsClientWrapperForServerSds;
   }
 
@@ -415,7 +411,7 @@ public class XdsSdsClientServerTest {
             ? Attributes.newBuilder()
                 .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                     new SslContextProviderSupplier(
-                        upstreamTlsContext, new TlsContextManagerImpl(mockBootstrapper)))
+                        upstreamTlsContext, tlsContextManager))
                 .build()
             : Attributes.EMPTY;
     fakeNameResolverFactory.setServers(
@@ -444,7 +440,7 @@ public class XdsSdsClientServerTest {
             ? Attributes.newBuilder()
                 .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                     new SslContextProviderSupplier(
-                        upstreamTlsContext, new TlsContextManagerImpl(mockBootstrapper)))
+                        upstreamTlsContext, tlsContextManager))
                 .build()
             : Attributes.EMPTY;
     fakeNameResolverFactory.setServers(

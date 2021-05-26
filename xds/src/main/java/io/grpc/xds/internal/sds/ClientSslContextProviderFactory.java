@@ -19,9 +19,8 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.XdsInitializationException;
 import io.grpc.xds.internal.certprovider.CertProviderClientSslContextProvider;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 import java.util.concurrent.Executors;
@@ -30,18 +29,17 @@ import java.util.concurrent.Executors;
 final class ClientSslContextProviderFactory
     implements ValueFactory<UpstreamTlsContext, SslContextProvider> {
 
-  private final Bootstrapper bootstrapper;
-  private Bootstrapper.BootstrapInfo bootstrapInfo;
+  private BootstrapInfo bootstrapInfo;
   private final CertProviderClientSslContextProvider.Factory
       certProviderClientSslContextProviderFactory;
 
-  ClientSslContextProviderFactory(Bootstrapper bootstrapper) {
-    this(bootstrapper, CertProviderClientSslContextProvider.Factory.getInstance());
+  ClientSslContextProviderFactory(BootstrapInfo bootstrapInfo) {
+    this(bootstrapInfo, CertProviderClientSslContextProvider.Factory.getInstance());
   }
 
   ClientSslContextProviderFactory(
-      Bootstrapper bootstrapper, CertProviderClientSslContextProvider.Factory factory) {
-    this.bootstrapper = bootstrapper;
+      BootstrapInfo bootstrapInfo, CertProviderClientSslContextProvider.Factory factory) {
+    this.bootstrapInfo = bootstrapInfo;
     this.certProviderClientSslContextProviderFactory = factory;
   }
 
@@ -53,38 +51,24 @@ final class ClientSslContextProviderFactory
         upstreamTlsContext.getCommonTlsContext(),
         "upstreamTlsContext should have CommonTlsContext");
     if (CommonTlsContextUtil.hasCertProviderInstance(
-            upstreamTlsContext.getCommonTlsContext())) {
-      try {
-        if (bootstrapInfo == null) {
-          bootstrapInfo = bootstrapper.bootstrap();
-        }
-        return certProviderClientSslContextProviderFactory.getProvider(
-                upstreamTlsContext,
-                bootstrapInfo.getNode().toEnvoyProtoNode(),
-                bootstrapInfo.getCertProviders());
-      } catch (XdsInitializationException e) {
-        throw new RuntimeException(e);
-      }
+        upstreamTlsContext.getCommonTlsContext())) {
+      return certProviderClientSslContextProviderFactory.getProvider(
+          upstreamTlsContext,
+          bootstrapInfo.getNode().toEnvoyProtoNode(),
+          bootstrapInfo.getCertProviders());
     } else if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
         upstreamTlsContext.getCommonTlsContext())) {
       return SecretVolumeClientSslContextProvider.getProvider(upstreamTlsContext);
     } else if (CommonTlsContextUtil.hasAllSecretsUsingSds(
         upstreamTlsContext.getCommonTlsContext())) {
-      try {
-        if (bootstrapInfo == null) {
-          bootstrapInfo = bootstrapper.bootstrap();
-        }
-        return SdsClientSslContextProvider.getProvider(
-            upstreamTlsContext,
-            bootstrapInfo.getNode().toEnvoyProtoNodeV2(),
-            Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-                .setNameFormat("client-sds-sslcontext-provider-%d")
-                .setDaemon(true)
-                .build()),
-            /* channelExecutor= */ null);
-      } catch (XdsInitializationException e) {
-        throw new RuntimeException(e);
-      }
+      return SdsClientSslContextProvider.getProvider(
+          upstreamTlsContext,
+          bootstrapInfo.getNode().toEnvoyProtoNodeV2(),
+          Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
+              .setNameFormat("client-sds-sslcontext-provider-%d")
+              .setDaemon(true)
+              .build()),
+          /* channelExecutor= */ null);
     }
     throw new UnsupportedOperationException("Unsupported configurations in UpstreamTlsContext!");
   }

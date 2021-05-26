@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Strings;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
@@ -44,8 +45,6 @@ import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
-import io.grpc.xds.internal.sds.TlsContextManager;
-import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -77,7 +76,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private final XdsLogger logger;
   private final Helper helper;
   private final ThreadSafeRandom random;
-  private final TlsContextManager tlsContextManager;
   // The following fields are effectively final.
   private String cluster;
   @Nullable
@@ -90,14 +88,12 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private LoadBalancer childLb;
 
   ClusterImplLoadBalancer(Helper helper) {
-    this(helper, ThreadSafeRandomImpl.instance, TlsContextManagerImpl.getInstance());
+    this(helper, ThreadSafeRandomImpl.instance);
   }
 
-  ClusterImplLoadBalancer(Helper helper, ThreadSafeRandom random,
-      TlsContextManager tlsContextManager) {
+  ClusterImplLoadBalancer(Helper helper, ThreadSafeRandom random) {
     this.helper = checkNotNull(helper, "helper");
     this.random = checkNotNull(random, "random");
-    this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
     InternalLogId logId = InternalLogId.allocate("cluster-impl-lb", helper.getAuthority());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
@@ -263,7 +259,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     private void updateSslContextProviderSupplier(@Nullable UpstreamTlsContext tlsContext) {
       UpstreamTlsContext currentTlsContext =
           sslContextProviderSupplier != null
-              ? sslContextProviderSupplier.getUpstreamTlsContext()
+              ? (UpstreamTlsContext)sslContextProviderSupplier.getTlsContext()
               : null;
       if (Objects.equals(currentTlsContext,  tlsContext)) {
         return;
@@ -273,7 +269,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       }
       sslContextProviderSupplier =
           tlsContext != null
-              ? new SslContextProviderSupplier(tlsContext, tlsContextManager)
+              ? new SslContextProviderSupplier(tlsContext, xdsClient.getTlsContextManager())
               : null;
     }
 
@@ -321,6 +317,11 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
         }
         return result;
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this).add("delegate", delegate).toString();
       }
     }
   }

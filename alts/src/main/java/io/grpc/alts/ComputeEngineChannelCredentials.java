@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.CompositeChannelCredentials;
-import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import io.grpc.alts.internal.AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory;
 import io.grpc.auth.MoreCallCredentials;
@@ -37,7 +36,6 @@ import javax.net.ssl.SSLException;
  * class sets up a secure channel using ALTS if applicable and using TLS as fallback. It is a subset
  * of the functionality provided by {@link GoogleDefaultChannelCredentials}.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
 public final class ComputeEngineChannelCredentials {
   private ComputeEngineChannelCredentials() {}
 

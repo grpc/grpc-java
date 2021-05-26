@@ -37,7 +37,6 @@ import javax.net.ssl.TrustManager;
  * method. Unless overridden by a {@code Feature}, server identity is provided via {@link
  * #getCertificateChain}, {@link #getPrivateKey}, and {@link #getPrivateKeyPassword}.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7621")
 public final class TlsServerCredentials extends ServerCredentials {
   /**
    * Creates an instance using provided certificate chain and private key. Generally they should be
@@ -239,7 +238,6 @@ public final class TlsServerCredentials extends ServerCredentials {
   }
 
   /** Builder for {@link TlsServerCredentials}. */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7621")
   public static final class Builder {
     private boolean fakeFeature;
     private byte[] certificateChain;

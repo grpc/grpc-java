@@ -20,10 +20,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.grpc.xds.Bootstrapper;
-import io.grpc.xds.BootstrapperImpl;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.TlsContextManager;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
 
 /**
@@ -34,16 +34,16 @@ import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
  */
 public final class TlsContextManagerImpl implements TlsContextManager {
 
-  private static TlsContextManagerImpl instance;
-
   private final ReferenceCountingMap<UpstreamTlsContext, SslContextProvider> mapForClients;
   private final ReferenceCountingMap<DownstreamTlsContext, SslContextProvider> mapForServers;
 
-  /** Create a TlsContextManagerImpl instance using the passed in {@link Bootstrapper}. */
-  @VisibleForTesting public TlsContextManagerImpl(Bootstrapper bootstrapper) {
+  /**
+   * Create a TlsContextManagerImpl instance using the passed in {@link BootstrapInfo}.
+   */
+  @VisibleForTesting public TlsContextManagerImpl(BootstrapInfo bootstrapInfo) {
     this(
-        new ClientSslContextProviderFactory(bootstrapper),
-        new ServerSslContextProviderFactory(bootstrapper));
+        new ClientSslContextProviderFactory(bootstrapInfo),
+        new ServerSslContextProviderFactory(bootstrapInfo));
   }
 
   @VisibleForTesting
@@ -54,14 +54,6 @@ public final class TlsContextManagerImpl implements TlsContextManager {
     checkNotNull(serverFactory, "serverFactory");
     mapForClients = new ReferenceCountingMap<>(clientFactory);
     mapForServers = new ReferenceCountingMap<>(serverFactory);
-  }
-
-  /** Gets the TlsContextManagerImpl singleton. */
-  public static synchronized TlsContextManagerImpl getInstance() {
-    if (instance == null) {
-      instance = new TlsContextManagerImpl(new BootstrapperImpl());
-    }
-    return instance;
   }
 
   @Override

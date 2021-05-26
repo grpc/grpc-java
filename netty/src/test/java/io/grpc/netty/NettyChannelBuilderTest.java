@@ -23,6 +23,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ChannelCredentials;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
@@ -151,6 +152,28 @@ public class NettyChannelBuilderTest {
     thrown.expectMessage("Server SSL context can not be used for client channel");
 
     builder.sslContext(sslContext);
+  }
+
+  @Test
+  public void failNegotiationTypeWithChannelCredentials_target() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget(
+        "fakeTarget", InsecureChannelCredentials.create());
+
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage("Cannot change security when using ChannelCredentials");
+
+    builder.negotiationType(NegotiationType.TLS);
+  }
+
+  @Test
+  public void failNegotiationTypeWithChannelCredentials_socketAddress() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forAddress(
+        new SocketAddress(){}, InsecureChannelCredentials.create());
+
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage("Cannot change security when using ChannelCredentials");
+
+    builder.negotiationType(NegotiationType.TLS);
   }
 
   @Test

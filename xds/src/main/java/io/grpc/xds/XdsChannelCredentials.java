@@ -24,7 +24,7 @@ import io.grpc.netty.InternalNettyChannelCredentials;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
 
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
 public class XdsChannelCredentials {
   private XdsChannelCredentials() {} // prevent instantiation
 

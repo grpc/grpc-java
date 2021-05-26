@@ -23,7 +23,7 @@ import java.util.concurrent.Executor;
  * Uses multiple {@code CallCredentials} as if they were one. If the first credential fails, the
  * second will not be used. Both must succeed to allow the RPC.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
 public final class CompositeCallCredentials extends CallCredentials {
   private final CallCredentials credentials1;
   private final CallCredentials credentials2;

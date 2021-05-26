@@ -31,6 +31,7 @@ shadowJar {
         include(project(':grpc-netty'))
         include(dependency('io.netty:'))
     }
+    exclude 'META-INF/maven/**'
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
     // We have to be careful with these replacements as they must not match any

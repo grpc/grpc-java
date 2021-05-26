@@ -1106,8 +1106,14 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         // frameReader.nextFrame() returns false when the underlying read encounters an IOException,
         // it may be triggered by the socket closing, in such case, the startGoAway() will do
         // nothing, otherwise, we finish all streams since it's a real IO issue.
-        startGoAway(0, ErrorCode.INTERNAL_ERROR,
-            Status.UNAVAILABLE.withDescription("End of stream or IOException"));
+        Status status;
+        synchronized (lock) {
+          status = goAwayStatus;
+        }
+        if (status == null) {
+          status = Status.UNAVAILABLE.withDescription("End of stream or IOException");
+        }
+        startGoAway(0, ErrorCode.INTERNAL_ERROR, status);
       } catch (Throwable t) {
         // TODO(madongfly): Send the exception message to the server.
         startGoAway(

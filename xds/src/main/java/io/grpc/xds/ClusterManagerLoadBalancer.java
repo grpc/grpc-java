@@ -24,6 +24,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -125,6 +126,7 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
     for (ChildLbState state : childLbStates.values()) {
       state.shutdown();
     }
+    childLbStates.clear();
   }
 
   private void updateOverallBalancingState() {
@@ -150,6 +152,11 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
                     Status.UNAVAILABLE.withDescription("Unable to find cluster " + clusterName));
           }
           return delegate.pickSubchannel(args);
+        }
+
+        @Override
+        public String toString() {
+          return MoreObjects.toStringHelper(this).add("pickers", childPickers).toString();
         }
       };
       helper.updateBalancingState(overallState, picker);
@@ -231,7 +238,6 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
     }
 
     void shutdown() {
-      deactivated = true;
       if (deletionTimer != null && deletionTimer.isPending()) {
         deletionTimer.cancel();
       }
@@ -247,10 +253,13 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            currentState = newState;
-            currentPicker = newPicker;
+            if (!childLbStates.containsKey(name)) {
+              return;
+            }
             // Subchannel picker and state are saved, but will only be propagated to the channel
             // when the child instance exits deactivated state.
+            currentState = newState;
+            currentPicker = newPicker;
             if (!deactivated) {
               updateOverallBalancingState();
             }

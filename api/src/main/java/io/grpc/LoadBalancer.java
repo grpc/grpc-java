@@ -1060,6 +1060,26 @@ public abstract class LoadBalancer {
     }
 
     /**
+     * Historically the channel automatically refreshes name resolution if any subchannel
+     * connection is broken. It's transitioning to let load balancers make the decision. To
+     * avoid silent breakages, the channel checks if {@link #refreshNameResolution} is called
+     * by the load balancer. If not, it will do it and log a warning. This will be removed in
+     * the future and load balancers are completely responsible for triggering the refresh.
+     * See <a href="https://github.com/grpc/grpc-java/issues/8088">#8088</a> for the background.
+     *
+     * <p>This should rarely be used, but sometimes the address for the subchannel wasn't
+     * provided by the name resolver and a refresh needs to be directed somewhere else instead.
+     * Then you can call this method to disable the short-tem check for detecting LoadBalancers
+     * that need to be updated for the new expected behavior.
+     *
+     * @since 1.38.0
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8088")
+    public void ignoreRefreshNameResolutionCheck() {
+      // no-op
+    }
+
+    /**
      * Returns a {@link SynchronizationContext} that runs tasks in the same Synchronization Context
      * as that the callback methods on the {@link LoadBalancer} interface are run in.
      *

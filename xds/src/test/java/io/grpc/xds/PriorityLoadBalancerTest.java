@@ -20,12 +20,16 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -115,6 +119,7 @@ public class PriorityLoadBalancerTest {
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     priorityLb = new PriorityLoadBalancer(helper);
+    clearInvocations(helper);
   }
 
   @After
@@ -418,6 +423,31 @@ public class PriorityLoadBalancerTest {
     Helper priorityHelper1 = Iterables.getLast(fooHelpers);
     priorityHelper1.refreshNameResolution();
     verify(helper).refreshNameResolution();
+  }
+
+  @Test
+  public void raceBetweenShutdownAndChildLbBalancingStateUpdate() {
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
+    PriorityChildConfig priorityChildConfig1 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), false);
+    PriorityLbConfig priorityLbConfig =
+        new PriorityLbConfig(
+            ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
+            ImmutableList.of("p0", "p1"));
+    priorityLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+    verify(helper).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
+
+    // LB shutdown and subchannel state change can happen simultaneously. If shutdown runs first,
+    // any further balancing state update should be ignored.
+    priorityLb.shutdown();
+    Helper priorityHelper0 = Iterables.getOnlyElement(fooHelpers);  // priority p0
+    priorityHelper0.updateBalancingState(READY, mock(SubchannelPicker.class));
+    verifyNoMoreInteractions(helper);
   }
 
   private void assertLatestConnectivityState(ConnectivityState expectedState) {

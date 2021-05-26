@@ -65,6 +65,8 @@ public final class AltsProtocolNegotiator {
 
   private static final AsciiString SCHEME = AsciiString.of("https");
 
+  private static final String DIRECT_PATH_SERVICE_CFE_CLUSTER_PREFIX = "google_cfe_";
+
   /**
    * ClientAltsProtocolNegotiatorFactory is a factory for doing client side negotiation of an ALTS
    * channel.
@@ -282,7 +284,8 @@ public final class AltsProtocolNegotiator {
       boolean isXdsDirectPath = false;
       if (clusterNameAttrKey != null) {
         String clusterName = grpcHandler.getEagAttributes().get(clusterNameAttrKey);
-        if (clusterName != null && !clusterName.equals("google_cfe")) {
+        if (clusterName != null
+            && !clusterName.startsWith(DIRECT_PATH_SERVICE_CFE_CLUSTER_PREFIX)) {
           isXdsDirectPath = true;
         }
       }

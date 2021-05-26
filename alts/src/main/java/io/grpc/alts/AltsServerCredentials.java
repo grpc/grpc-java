@@ -32,7 +32,7 @@ import java.util.logging.Logger;
  * gRPC secure server builder used for ALTS. This class adds on the necessary ALTS support to create
  * a production server on Google Cloud Platform.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7621")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4151")
 public final class AltsServerCredentials {
   private static final Logger logger = Logger.getLogger(AltsServerCredentials.class.getName());
 
@@ -46,7 +46,7 @@ public final class AltsServerCredentials {
     return new Builder();
   }
 
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7621")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4151")
   public static final class Builder {
     private ObjectPool<Channel> handshakerChannelPool =
         SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL);
