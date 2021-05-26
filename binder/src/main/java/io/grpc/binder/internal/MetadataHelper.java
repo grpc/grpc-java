@@ -46,7 +46,7 @@ import javax.annotation.Nullable;
  * The sentinel int at the start of a value may indicate bad metadata. When this happens, no more
  * data follows the sentinel.
  */
-final class MetadataHelper {
+public final class MetadataHelper {
 
   /** The generic metadata marshaller we use for reading parcelables from the transport. */
   private static final Metadata.BinaryStreamMarshaller<Parcelable> TRANSPORT_INBOUND_MARSHALLER =
@@ -194,13 +194,13 @@ final class MetadataHelper {
   }
 
   /** A marshaller for passing parcelables in gRPC {@link Metadata} */
-  static final class ParcelableMetadataMarshaller<P extends Parcelable>
+  public static final class ParcelableMetadataMarshaller<P extends Parcelable>
       implements Metadata.BinaryStreamMarshaller<P> {
 
     @Nullable private final Parcelable.Creator<P> creator;
     private final boolean immutableType;
 
-    ParcelableMetadataMarshaller(@Nullable Parcelable.Creator<P> creator, boolean immutableType) {
+    public ParcelableMetadataMarshaller(@Nullable Parcelable.Creator<P> creator, boolean immutableType) {
       this.creator = creator;
       this.immutableType = immutableType;
     }

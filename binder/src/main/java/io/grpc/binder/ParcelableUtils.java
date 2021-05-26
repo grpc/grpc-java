@@ -19,7 +19,7 @@ package io.grpc.binder;
 import android.os.Parcelable;
 import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
-import io.grpc.binder.internal.InternalMetadataHelper;
+import io.grpc.binder.internal.MetadataHelper;
 
 /**
  * Utility methods for using Android Parcelable objects with gRPC.
@@ -39,7 +39,8 @@ public final class ParcelableUtils {
    */
   public static <P extends Parcelable> Metadata.Key<P> metadataKey(
       String name, Parcelable.Creator<P> creator) {
-    return InternalMetadataHelper.createParcelableMetadataKey(name, creator, false);
+    return Metadata.Key.of(
+        name, new MetadataHelper.ParcelableMetadataMarshaller<P>(creator, false));
   }
 
   /**
@@ -51,7 +52,8 @@ public final class ParcelableUtils {
    */
   public static <P extends Parcelable> Metadata.Key<P> metadataKeyForImmutableType(
       String name, Parcelable.Creator<P> creator) {
-    return InternalMetadataHelper.createParcelableMetadataKey(name, creator, true);
+    return Metadata.Key.of(
+        name, new MetadataHelper.ParcelableMetadataMarshaller<P>(creator, true));
   }
 }
 
