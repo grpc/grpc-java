@@ -41,6 +41,8 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.PortSpecifierCase;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
@@ -929,8 +931,40 @@ final class ClientXdsClient extends AbstractXdsClient {
       return StructOrError.fromStruct(CdsUpdate.forEds(
           clusterName, edsServiceName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
     } else if (type.equals(DiscoveryType.LOGICAL_DNS)) {
+      if (!cluster.hasLoadAssignment()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": LOGICAL_DNS clusters must have a single host");
+      }
+      ClusterLoadAssignment assignment = cluster.getLoadAssignment();
+      if (assignment.getEndpointsCount() != 1
+          || assignment.getEndpoints(0).getLbEndpointsCount() != 1) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": LOGICAL_DNS clusters must have a single "
+                + "locality_lb_endpoint and a single lb_endpoint");
+      }
+      io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint lbEndpoint =
+          assignment.getEndpoints(0).getLbEndpoints(0);
+      if (!lbEndpoint.hasEndpoint() || !lbEndpoint.getEndpoint().hasAddress()
+          || !lbEndpoint.getEndpoint().getAddress().hasSocketAddress()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": LOGICAL_DNS clusters must have an endpoint with address and socket_address");
+      }
+      SocketAddress socketAddress = lbEndpoint.getEndpoint().getAddress().getSocketAddress();
+      if (!socketAddress.getResolverName().isEmpty()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": LOGICAL DNS clusters must NOT have a custom resolver name set");
+      }
+      if (socketAddress.getPortSpecifierCase() != PortSpecifierCase.PORT_VALUE) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": LOGICAL DNS clusters socket_address must have port_value");
+      }
+      String dnsHostName =
+          String.format("%s:%d", socketAddress.getAddress(), socketAddress.getPortValue());
       return StructOrError.fromStruct(CdsUpdate.forLogicalDns(
-          clusterName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
+          clusterName, dnsHostName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
     }
     return StructOrError.fromError(
         "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);

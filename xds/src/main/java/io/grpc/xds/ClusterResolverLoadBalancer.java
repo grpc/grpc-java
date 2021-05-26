@@ -79,7 +79,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   // to an empty locality.
   private static final Locality LOGICAL_DNS_CLUSTER_LOCALITY = Locality.create("", "", "");
   private final XdsLogger logger;
-  private final String authority;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final LoadBalancerRegistry lbRegistry;
@@ -99,7 +98,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       BackoffPolicy.Provider backoffPolicyProvider) {
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.authority = checkNotNull(checkNotNull(helper, "helper").getAuthority(), "authority");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     delegate = new GracefulSwitchLoadBalancer(helper);
@@ -178,8 +176,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           state = new EdsClusterState(instance.cluster, instance.edsServiceName,
               instance.lrsServerName, instance.maxConcurrentRequests, instance.tlsContext);
         } else {  // logical DNS
-          state = new LogicalDnsClusterState(instance.cluster, instance.lrsServerName,
-              instance.maxConcurrentRequests, instance.tlsContext);
+          state = new LogicalDnsClusterState(instance.cluster, instance.dnsHostName,
+              instance.lrsServerName, instance.maxConcurrentRequests, instance.tlsContext);
         }
         clusterStates.put(instance.cluster, state);
         state.start();
@@ -305,10 +303,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     private abstract class ClusterState {
       // Name of the cluster to be resolved.
       protected final String name;
-      // The resource name to be used for resolving endpoints via EDS.
-      // Always null if the cluster is a logical DNS cluster.
-      @Nullable
-      protected final String edsServiceName;
       @Nullable
       protected final String lrsServerName;
       @Nullable
@@ -324,11 +318,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       protected ClusterResolutionResult result;
       protected boolean shutdown;
 
-      private ClusterState(String name, @Nullable String edsServiceName,
-          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
-          @Nullable UpstreamTlsContext tlsContext) {
+      private ClusterState(String name, @Nullable String lrsServerName,
+          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext) {
         this.name = name;
-        this.edsServiceName = edsServiceName;
         this.lrsServerName = lrsServerName;
         this.maxConcurrentRequests = maxConcurrentRequests;
         this.tlsContext = tlsContext;
@@ -342,11 +334,14 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     }
 
     private final class EdsClusterState extends ClusterState implements EdsResourceWatcher {
+      @Nullable
+      private final String edsServiceName;
 
       private EdsClusterState(String name, @Nullable String edsServiceName,
           @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
           @Nullable UpstreamTlsContext tlsContext) {
-        super(name, edsServiceName, lrsServerName, maxConcurrentRequests, tlsContext);
+        super(name, lrsServerName, maxConcurrentRequests, tlsContext);
+        this.edsServiceName = edsServiceName;
       }
 
       @Override
@@ -469,6 +464,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     }
 
     private final class LogicalDnsClusterState extends ClusterState {
+      private final String dnsHostName;
       private final NameResolver.Factory nameResolverFactory;
       private final NameResolver.Args nameResolverArgs;
       private NameResolver resolver;
@@ -477,9 +473,11 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       @Nullable
       private ScheduledHandle scheduledRefresh;
 
-      private LogicalDnsClusterState(String name, @Nullable String lrsServerName,
-          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext) {
-        super(name, null, lrsServerName, maxConcurrentRequests, tlsContext);
+      private LogicalDnsClusterState(String name, String dnsHostName,
+          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+          @Nullable UpstreamTlsContext tlsContext) {
+        super(name, lrsServerName, maxConcurrentRequests, tlsContext);
+        this.dnsHostName = checkNotNull(dnsHostName, "dnsHostName");
         nameResolverFactory =
             checkNotNull(helper.getNameResolverRegistry().asFactory(), "nameResolverFactory");
         nameResolverArgs = checkNotNull(helper.getNameResolverArgs(), "nameResolverArgs");
@@ -489,10 +487,10 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       void start() {
         URI uri;
         try {
-          uri = new URI("dns", "", "/" + authority, null);
+          uri = new URI("dns", "", "/" + dnsHostName, null);
         } catch (URISyntaxException e) {
-          status =
-              Status.INTERNAL.withDescription("Bug, invalid authority: " + authority).withCause(e);
+          status = Status.INTERNAL.withDescription(
+              "Bug, invalid URI creation: " + dnsHostName).withCause(e);
           handleEndpointResolutionError();
           return;
         }
@@ -564,8 +562,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                 addresses.add(eag);
               }
               PriorityChildConfig priorityChildConfig = generateDnsBasedPriorityChildConfig(
-                  name, edsServiceName, lrsServerName, maxConcurrentRequests, tlsContext,
-                  lbRegistry, Collections.<DropOverload>emptyList());
+                  name, lrsServerName, maxConcurrentRequests, tlsContext, lbRegistry,
+                  Collections.<DropOverload>emptyList());
               status = Status.OK;
               resolved = true;
               result = new ClusterResolutionResult(addresses, priorityName, priorityChildConfig);
@@ -645,14 +643,14 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    * <p>priority LB -> cluster_impl LB (single hardcoded priority) -> pick_first
    */
   private static PriorityChildConfig generateDnsBasedPriorityChildConfig(
-      String cluster, @Nullable String edsServiceName, @Nullable String lrsServerName,
-      @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
-      LoadBalancerRegistry lbRegistry, List<DropOverload> dropOverloads) {
+      String cluster, @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+      @Nullable UpstreamTlsContext tlsContext, LoadBalancerRegistry lbRegistry,
+      List<DropOverload> dropOverloads) {
     // Override endpoint-level LB policy with pick_first for logical DNS cluster.
     PolicySelection endpointLbPolicy =
         new PolicySelection(lbRegistry.getProvider("pick_first"), null);
     ClusterImplConfig clusterImplConfig =
-        new ClusterImplConfig(cluster, edsServiceName, lrsServerName, maxConcurrentRequests,
+        new ClusterImplConfig(cluster, null, lrsServerName, maxConcurrentRequests,
             dropOverloads, endpointLbPolicy, tlsContext);
     LoadBalancerProvider clusterImplLbProvider =
         lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);

@@ -408,12 +408,20 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildLogicalDnsCluster(String clusterName, String lbPolicy,
-        @Nullable Message ringHashLbConfig, boolean enableLrs,
+    protected Message buildLogicalDnsCluster(String clusterName, String dnsHostAddr,
+        int dnsHostPort, String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
       Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
           enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.LOGICAL_DNS);
+      builder.setLoadAssignment(
+          ClusterLoadAssignment.newBuilder().addEndpoints(
+              LocalityLbEndpoints.newBuilder().addLbEndpoints(
+                  LbEndpoint.newBuilder().setEndpoint(
+                      Endpoint.newBuilder().setAddress(
+                          Address.newBuilder().setSocketAddress(
+                              SocketAddress.newBuilder()
+                                  .setAddress(dnsHostAddr).setPortValue(dnsHostPort)))))).build());
       return builder.build();
     }
 

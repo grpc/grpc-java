@@ -1233,8 +1233,8 @@ public abstract class ClientXdsClientTestBase {
             null, true,
             mf.buildUpstreamTlsContext("secret1", "unix:/var/uds2"), null));
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com", "round_robin", null,
-            false, null, null)),
+        Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com",
+            "dns-service-bar.googleapis.com", 443, "round_robin", null, false, null, null)),
         clusterEds,
         Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null, false,
             null, null)));
@@ -1305,14 +1305,18 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataRequested(CDS, CDS_RESOURCE);
 
     // Initial CDS response.
+    String dnsHostAddr = "dns-service-bar.googleapis.com";
+    int dnsHostPort = 443;
     Any clusterDns =
-        Any.pack(mf.buildLogicalDnsCluster(CDS_RESOURCE, "round_robin", null, false, null, null));
+        Any.pack(mf.buildLogicalDnsCluster(CDS_RESOURCE, dnsHostAddr, dnsHostPort, "round_robin",
+            null, false, null, null));
     call.sendResponse(CDS, clusterDns, VERSION_1, "0000");
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
+    assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
     assertThat(cdsUpdate.lrsServerName()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
@@ -1389,9 +1393,12 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataDoesNotExist(CDS, cdsResourceTwo);
     verifySubscribedResourcesMetadataSizes(0, 2, 0, 0);
 
+    String dnsHostAddr = "dns-service-bar.googleapis.com";
+    int dnsHostPort = 443;
     String edsService = "eds-service-bar.googleapis.com";
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildLogicalDnsCluster(CDS_RESOURCE, "round_robin", null, false, null, null)),
+        Any.pack(mf.buildLogicalDnsCluster(CDS_RESOURCE, dnsHostAddr, dnsHostPort, "round_robin",
+            null, false, null, null)),
         Any.pack(mf.buildEdsCluster(cdsResourceTwo, edsService, "round_robin", null, true, null,
             null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
@@ -1399,6 +1406,7 @@ public abstract class ClientXdsClientTestBase {
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
+    assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
     assertThat(cdsUpdate.lrsServerName()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
@@ -2187,8 +2195,8 @@ public abstract class ClientXdsClientTestBase {
         String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers);
 
-    protected abstract Message buildLogicalDnsCluster(String clusterName, String lbPolicy,
-        @Nullable Message ringHashLbConfig, boolean enableLrs,
+    protected abstract Message buildLogicalDnsCluster(String clusterName, String dnsHostAddr,
+        int dnsHostPort, String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers);
 
     protected abstract Message buildAggregateCluster(String clusterName, String lbPolicy,
