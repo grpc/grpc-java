@@ -45,6 +45,7 @@ import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -125,6 +126,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   private final InternalChannelz channelz;
   private final CallTracer serverCallTracer;
   private final Deadline.Ticker ticker;
+  private ExecutorSupplier executorSupplier;
 
   /**
    * Construct a server.
@@ -159,6 +161,18 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     this.serverCallTracer = builder.callTracerFactory.create();
     this.ticker = checkNotNull(builder.ticker, "ticker");
     channelz.addServer(this);
+    this.executorSupplier = new ExecutorSupplier() {
+      @Override
+      public Executor getExecutor(ServerCallImpl<?, ?> call,
+                                  MethodDescriptor<?, ?> methodDescriptor) {
+        return executor;
+      }
+
+      @Override
+      public Executor getExecutor() {
+        return executor;
+      }
+    };
   }
 
   /**
@@ -466,16 +480,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
     private void streamCreatedInternal(
         final ServerStream stream, final String methodName, final Metadata headers, final Tag tag) {
-      final Executor wrappedExecutor;
-      // This is a performance optimization that avoids the synchronization and queuing overhead
-      // that comes with SerializingExecutor.
-      if (executor == directExecutor()) {
-        wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
-        stream.optimizeForDirectExecutor();
-      } else {
-        wrappedExecutor = new SerializingExecutor(executor);
-      }
-
       if (headers.containsKey(MESSAGE_ENCODING_KEY)) {
         String encoding = headers.get(MESSAGE_ENCODING_KEY);
         Decompressor decompressor = decompressorRegistry.lookupDecompressor(encoding);
@@ -492,18 +496,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
       final StatsTraceContext statsTraceCtx = Preconditions.checkNotNull(
           stream.statsTraceContext(), "statsTraceCtx not present from stream");
-
       final Context.CancellableContext context = createContext(headers, statsTraceCtx);
-
       final Link link = PerfMark.linkOut();
-
-      final JumpToApplicationThreadServerStreamListener jumpListener
-          = new JumpToApplicationThreadServerStreamListener(
-          wrappedExecutor, executor, stream, context, tag);
-      stream.setListener(jumpListener);
-      // Run in wrappedExecutor so jumpListener.setListener() is called before any callbacks
-      // are delivered, including any errors. Callbacks can still be triggered, but they will be
-      // queued.
 
       final class StreamCreated extends ContextRunnable {
         StreamCreated() {
@@ -522,9 +516,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         }
 
         private void runInternal() {
-          ServerStreamListener listener = NOOP_LISTENER;
+          ServerMethodDefinition<?, ?> method;
           try {
-            ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
+            method = registry.lookupMethod(methodName);
             if (method == null) {
               method = fallbackRegistry.lookupMethod(methodName, stream.getAuthority());
             }
@@ -540,13 +534,13 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               context.cancel(null);
               return;
             }
-            listener = startCall(stream, methodName, method, headers, context, statsTraceCtx, tag);
+            final ServerMethodDefinition<?,?> wrapMethod =
+                    wrapMethodDefinition(stream, method, statsTraceCtx);
+            fun(stream, wrapMethod, headers, context, tag);
           } catch (Throwable t) {
             stream.close(Status.fromThrowable(t), new Metadata());
             context.cancel(null);
-            throw t;
-          } finally {
-            jumpListener.setListener(listener);
+            return;
           }
 
           // An extremely short deadline may expire before stream.setListener(jumpListener).
@@ -566,9 +560,73 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
           context.addListener(new ServerStreamCancellationListener(), directExecutor());
         }
-      }
 
-      wrappedExecutor.execute(new StreamCreated());
+        private <ReqT, RespT> void fun(final ServerStream stream,
+                                       final ServerMethodDefinition<ReqT, RespT> methodDef,
+                                       final Metadata headers,
+                                       final Context.CancellableContext context,
+                                       final Tag tag) {
+          final ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<>(
+                  stream,
+                  methodDef.getMethodDescriptor(),
+                  headers,
+                  context,
+                  decompressorRegistry,
+                  compressorRegistry,
+                  serverCallTracer,
+                  tag);
+          Executor realExecutor = executorSupplier.getExecutor(call,
+                  methodDef.getMethodDescriptor());
+          Executor wrappedExecutor;
+          // This is a performance optimization that avoids the synchronization and queuing overhead
+          // that comes with SerializingExecutor.
+          if (executor == directExecutor()) {
+            wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
+            stream.optimizeForDirectExecutor();
+          } else {
+            wrappedExecutor = new SerializingExecutor(realExecutor);
+          }
+          // Run in wrappedExecutor so jumpListener.setListener() is called before any callbacks
+          // are delivered, including any errors. Callbacks can still be triggered, but they will be
+          // queued.
+          final JumpToApplicationThreadServerStreamListener jumpListener
+                  = new JumpToApplicationThreadServerStreamListener(
+                  wrappedExecutor, executor, stream, context, tag);
+
+          final class JumpCall extends ContextRunnable {
+            JumpCall() {
+              super(context);
+            }
+
+            @Override
+            public void runInContext() {
+              PerfMark.startTask("ServerTransportListener$StreamCreated.startCall", tag);
+              PerfMark.linkIn(link);
+              try {
+                runInternal();
+              } finally {
+                PerfMark.stopTask("ServerTransportListener$StreamCreated.startCall", tag);
+              }
+            }
+
+            private void runInternal() {
+              ServerStreamListener listener = NOOP_LISTENER;
+              try {
+                stream.setListener(jumpListener);
+                listener = startCall(methodName, methodDef, headers, call);
+              } catch (Throwable t) {
+                stream.close(Status.fromThrowable(t), new Metadata());
+                context.cancel(null);
+                throw t;
+              } finally {
+                jumpListener.setListener(listener);
+              }
+            }
+          }
+          wrappedExecutor.execute(new JumpCall());
+        }
+      }
+      executorSupplier.getExecutor().execute(new StreamCreated());
     }
 
     private Context.CancellableContext createContext(
@@ -593,51 +651,43 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     }
 
     /** Never returns {@code null}. */
-    private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream, String fullMethodName,
-        ServerMethodDefinition<ReqT, RespT> methodDef, Metadata headers,
-        Context.CancellableContext context, StatsTraceContext statsTraceCtx, Tag tag) {
+    private <ReqM, RespM> ServerMethodDefinition<?,?> wrapMethodDefinition(ServerStream stream,
+            ServerMethodDefinition<ReqM, RespM> methodDef, StatsTraceContext statsTraceCtx) {
       // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
       statsTraceCtx.serverCallStarted(
-          new ServerCallInfoImpl<>(
-              methodDef.getMethodDescriptor(), // notify with original method descriptor
-              stream.getAttributes(),
-              stream.getAuthority()));
-      ServerCallHandler<ReqT, RespT> handler = methodDef.getServerCallHandler();
+              new ServerCallInfoImpl<>(
+                      methodDef.getMethodDescriptor(), // notify with original method descriptor
+                      stream.getAttributes(),
+                      stream.getAuthority()));
+      ServerCallHandler<ReqM, RespM> handler = methodDef.getServerCallHandler();
       for (ServerInterceptor interceptor : interceptors) {
         handler = InternalServerInterceptors.interceptCallHandler(interceptor, handler);
       }
-      ServerMethodDefinition<ReqT, RespT> interceptedDef = methodDef.withServerCallHandler(handler);
-      ServerMethodDefinition<?, ?> wMethodDef = binlog == null
-          ? interceptedDef : binlog.wrapMethodDefinition(interceptedDef);
-      return startWrappedCall(fullMethodName, wMethodDef, stream, headers, context, tag);
+      ServerMethodDefinition<ReqM, RespM> interceptedDef = methodDef.withServerCallHandler(handler);
+      ServerMethodDefinition<?,?> wrapMethod =
+              binlog == null ? interceptedDef : binlog.wrapMethodDefinition(interceptedDef);
+      return wrapMethod;
     }
 
-    private <WReqT, WRespT> ServerStreamListener startWrappedCall(
-        String fullMethodName,
-        ServerMethodDefinition<WReqT, WRespT> methodDef,
-        ServerStream stream,
-        Metadata headers,
-        Context.CancellableContext context,
-        Tag tag) {
-
-      ServerCallImpl<WReqT, WRespT> call = new ServerCallImpl<>(
-          stream,
-          methodDef.getMethodDescriptor(),
-          headers,
-          context,
-          decompressorRegistry,
-          compressorRegistry,
-          serverCallTracer,
-          tag);
-
-      ServerCall.Listener<WReqT> listener =
-          methodDef.getServerCallHandler().startCall(call, headers);
+    /** Never returns {@code null}. */
+    private <ReqT, RespT> ServerStreamListener startCall( String fullMethodName,
+         ServerMethodDefinition<ReqT, RespT> methodDef, Metadata headers,
+         ServerCallImpl<ReqT, RespT> call) {
+      ServerCall.Listener<ReqT> listener =
+              methodDef.getServerCallHandler().startCall(call, headers);
       if (listener == null) {
         throw new NullPointerException(
-            "startCall() returned a null listener for method " + fullMethodName);
+                "startCall() returned a null listener for method " + fullMethodName);
       }
       return call.newServerStreamListener(listener);
     }
+  }
+
+  public interface ExecutorSupplier {
+    // ServerCall has getter getMethodDescriptor
+    Executor getExecutor(ServerCallImpl<?,?> call, MethodDescriptor<?,?> methodDescriptor);
+
+    Executor getExecutor();
   }
 
   @Override
