@@ -155,7 +155,9 @@ class XdsServerTestHelper {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             null,
-            sourcePorts);
+            sourcePorts,
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChain1 =
         new EnvoyServerProtoData.FilterChain(filterChainMatch1, tlsContext, tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain =

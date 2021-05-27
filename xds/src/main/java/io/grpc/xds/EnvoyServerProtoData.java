@@ -228,6 +228,8 @@ public final class EnvoyServerProtoData {
     private final List<CidrRange> sourcePrefixRanges;
     private final ConnectionSourceType sourceType;
     private final List<Integer> sourcePorts;
+    private final List<String> serverNames;
+    private final String transportProtocol;
 
     @VisibleForTesting
     FilterChainMatch(
@@ -236,13 +238,17 @@ public final class EnvoyServerProtoData {
         List<String> applicationProtocols,
         List<CidrRange> sourcePrefixRanges,
         ConnectionSourceType sourceType,
-        List<Integer> sourcePorts) {
+        List<Integer> sourcePorts,
+        List<String> serverNames,
+        String transportProtocol) {
       this.destinationPort = destinationPort;
       this.prefixRanges = Collections.unmodifiableList(prefixRanges);
       this.applicationProtocols = Collections.unmodifiableList(applicationProtocols);
       this.sourcePrefixRanges = sourcePrefixRanges;
       this.sourceType = sourceType;
       this.sourcePorts = sourcePorts;
+      this.serverNames = Collections.unmodifiableList(serverNames);
+      this.transportProtocol = transportProtocol;
     }
 
     static FilterChainMatch fromEnvoyProtoFilterChainMatch(
@@ -274,13 +280,19 @@ public final class EnvoyServerProtoData {
         default:
           throw new InvalidProtocolBufferException("Unknown source-type:" + proto.getSourceType());
       }
+      List<String> serverNames = new ArrayList<>();
+      for (String serverName : proto.getServerNamesList()) {
+        serverNames.add(serverName);
+      }
       return new FilterChainMatch(
           proto.getDestinationPort().getValue(),
           prefixRanges,
           applicationProtocols,
           sourcePrefixRanges,
           sourceType,
-          proto.getSourcePortsList());
+          proto.getSourcePortsList(),
+          serverNames,
+          proto.getTransportProtocol());
     }
 
     public int getDestinationPort() {
@@ -307,6 +319,14 @@ public final class EnvoyServerProtoData {
       return sourcePorts;
     }
 
+    public List<String> getServerNames() {
+      return serverNames;
+    }
+
+    public String getTransportProtocol() {
+      return transportProtocol;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) {
@@ -321,7 +341,9 @@ public final class EnvoyServerProtoData {
           && Objects.equals(applicationProtocols, that.applicationProtocols)
           && Objects.equals(sourcePrefixRanges, that.sourcePrefixRanges)
           && sourceType == that.sourceType
-          && Objects.equals(sourcePorts, that.sourcePorts);
+          && Objects.equals(sourcePorts, that.sourcePorts)
+          && Objects.equals(serverNames, that.serverNames)
+          && Objects.equals(transportProtocol, that.transportProtocol);
     }
 
     @Override
@@ -332,7 +354,9 @@ public final class EnvoyServerProtoData {
           applicationProtocols,
           sourcePrefixRanges,
           sourceType,
-          sourcePorts);
+          sourcePorts,
+          serverNames,
+          transportProtocol);
     }
 
     @Override
@@ -344,6 +368,8 @@ public final class EnvoyServerProtoData {
               .add("sourcePrefixRanges", sourcePrefixRanges)
               .add("sourceType", sourceType)
               .add("sourcePorts", sourcePorts)
+              .add("serverNames", serverNames)
+              .add("transportProtocol", transportProtocol)
               .toString();
     }
   }
@@ -559,30 +585,10 @@ public final class EnvoyServerProtoData {
       List<FilterChain> filterChains = new ArrayList<>(inputFilterChains.size());
       for (io.envoyproxy.envoy.config.listener.v3.FilterChain filterChain :
           inputFilterChains) {
-        if (isAcceptable(filterChain.getFilterChainMatch())) {
-          filterChains
-              .add(FilterChain.fromEnvoyProtoFilterChain(filterChain, tlsContextManager, false));
-        }
+        filterChains
+            .add(FilterChain.fromEnvoyProtoFilterChain(filterChain, tlsContextManager, false));
       }
       return filterChains;
-    }
-
-    // check if a filter is acceptable for gRPC server side processing
-    private static boolean isAcceptable(
-        io.envoyproxy.envoy.config.listener.v3.FilterChainMatch filterChainMatch) {
-      // reject if filer-chain-match
-      // - has server_name
-      // - transport protocol is other than "raw_buffer"
-      // - application_protocols is non-empty
-      if (!filterChainMatch.getServerNamesList().isEmpty()) {
-        return false;
-      }
-      String transportProtocol = filterChainMatch.getTransportProtocol();
-      if (!transportProtocol.isEmpty() && !"raw_buffer".equals(transportProtocol)) {
-        return false;
-      }
-      List<String> appProtocols = filterChainMatch.getApplicationProtocolsList();
-      return appProtocols.isEmpty();
     }
 
     public String getName() {
