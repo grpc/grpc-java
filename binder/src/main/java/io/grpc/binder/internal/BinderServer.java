@@ -32,6 +32,7 @@ import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.ServerSecurityPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.SharedResourceHolder;
 import java.io.IOException;
@@ -53,8 +54,7 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 final class BinderServer implements InternalServer, LeakSafeOneWayBinder.TransactionHandler {
 
-  private final boolean useSharedTimer;
-  private final ScheduledExecutorService executorService;
+  private final ObjectPool<ScheduledExecutorService> executorServicePool;
   private final ImmutableList<ServerStreamTracer.Factory> streamTracerFactories;
   private final AndroidComponentAddress listenAddress;
   private final LeakSafeOneWayBinder hostServiceBinder;
@@ -65,18 +65,19 @@ final class BinderServer implements InternalServer, LeakSafeOneWayBinder.Transac
   private ServerListener listener;
 
   @GuardedBy("this")
+  private ScheduledExecutorService executorService;
+
+  @GuardedBy("this")
   private boolean shutdown;
 
   BinderServer(
       AndroidComponentAddress listenAddress,
-      @Nullable ScheduledExecutorService executorService,
+      ObjectPool<ScheduledExecutorService> executorServicePool,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       ServerSecurityPolicy serverSecurityPolicy,
       InboundParcelablePolicy inboundParcelablePolicy) {
     this.listenAddress = listenAddress;
-    useSharedTimer = executorService == null;
-    this.executorService =
-        useSharedTimer ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : executorService;
+    this.executorServicePool = executorServicePool;
     this.streamTracerFactories =
         ImmutableList.copyOf(checkNotNull(streamTracerFactories, "streamTracerFactories"));
     this.serverSecurityPolicy = checkNotNull(serverSecurityPolicy, "serverSecurityPolicy");
@@ -92,6 +93,7 @@ final class BinderServer implements InternalServer, LeakSafeOneWayBinder.Transac
   @Override
   public synchronized void start(ServerListener serverListener) throws IOException {
     this.listener = serverListener;
+    executorService = executorServicePool.getObject();
   }
 
   @Override
@@ -119,14 +121,10 @@ final class BinderServer implements InternalServer, LeakSafeOneWayBinder.Transac
   public synchronized void shutdown() {
     if (!shutdown) {
       shutdown = true;
-      if (useSharedTimer) {
-        // TODO: Transports may still be using this resource. They should 
-        // be managing its use as well.
-        SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, executorService);
-      }
       // Break the connection to the binder. We'll receive no more transactions.
       hostServiceBinder.detach();
       listener.serverShutdown();
+      executorService = executorServicePool.returnObject(executorService);
     }
   }
 
@@ -156,7 +154,7 @@ final class BinderServer implements InternalServer, LeakSafeOneWayBinder.Transac
           // Create a new transport and let our listener know about it.
           BinderTransport.BinderServerTransport transport =
               new BinderTransport.BinderServerTransport(
-                  executorService, attrsBuilder.build(), streamTracerFactories, callbackBinder);
+                  executorServicePool, attrsBuilder.build(), streamTracerFactories, callbackBinder);
           transport.setServerTransportListener(listener.transportCreated(transport));
           return true;
         }
