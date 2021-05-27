@@ -45,8 +45,11 @@ import java.nio.file.Paths;
 import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Delayed;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
@@ -62,6 +65,10 @@ import org.mockito.MockitoAnnotations;
 /** Unit tests for {@link FileWatcherCertificateProvider}. */
 @RunWith(JUnit4.class)
 public class FileWatcherCertificateProviderTest {
+  /**
+   * Expire time of cert SERVER_0_PEM_FILE.
+   */
+  static final long CERT0_EXPIRY_TIME_MILLIS = 1899853658000L;
   private static final String CERT_FILE = "cert.pem";
   private static final String KEY_FILE = "key.pem";
   private static final String ROOT_FILE = "root.pem";
@@ -126,8 +133,8 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void getCertificateAndCheckUpdates() throws IOException, CertificateException {
-    MeshCaCertificateProviderTest.TestScheduledFuture<?> scheduledFuture =
-        new MeshCaCertificateProviderTest.TestScheduledFuture<>();
+    TestScheduledFuture<?> scheduledFuture =
+        new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
@@ -147,8 +154,8 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void allUpdateSecondTime() throws IOException, CertificateException, InterruptedException {
-    MeshCaCertificateProviderTest.TestScheduledFuture<?> scheduledFuture =
-        new MeshCaCertificateProviderTest.TestScheduledFuture<>();
+    TestScheduledFuture<?> scheduledFuture =
+        new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
@@ -168,8 +175,8 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void closeDoesNotScheduleNext() throws IOException, CertificateException {
-    MeshCaCertificateProviderTest.TestScheduledFuture<?> scheduledFuture =
-            new MeshCaCertificateProviderTest.TestScheduledFuture<>();
+    TestScheduledFuture<?> scheduledFuture =
+            new TestScheduledFuture<>();
     doReturn(scheduledFuture)
             .when(timeService)
             .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
@@ -186,8 +193,8 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void rootFileUpdateOnly() throws IOException, CertificateException, InterruptedException {
-    MeshCaCertificateProviderTest.TestScheduledFuture<?> scheduledFuture =
-        new MeshCaCertificateProviderTest.TestScheduledFuture<>();
+    TestScheduledFuture<?> scheduledFuture =
+        new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
@@ -208,8 +215,8 @@ public class FileWatcherCertificateProviderTest {
   @Test
   public void certAndKeyFileUpdateOnly()
       throws IOException, CertificateException, InterruptedException {
-    MeshCaCertificateProviderTest.TestScheduledFuture<?> scheduledFuture =
-        new MeshCaCertificateProviderTest.TestScheduledFuture<>();
+    TestScheduledFuture<?> scheduledFuture =
+        new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
@@ -229,8 +236,8 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void getCertificate_initialMissingCertFile() throws IOException {
-    MeshCaCertificateProviderTest.TestScheduledFuture<?> scheduledFuture =
-        new MeshCaCertificateProviderTest.TestScheduledFuture<>();
+    TestScheduledFuture<?> scheduledFuture =
+        new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
@@ -269,8 +276,8 @@ public class FileWatcherCertificateProviderTest {
 
   @Test
   public void getCertificate_missingRootFile() throws IOException, InterruptedException {
-    MeshCaCertificateProviderTest.TestScheduledFuture<?> scheduledFuture =
-        new MeshCaCertificateProviderTest.TestScheduledFuture<>();
+    TestScheduledFuture<?> scheduledFuture =
+        new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
@@ -283,7 +290,7 @@ public class FileWatcherCertificateProviderTest {
     when(timeProvider.currentTimeNanos())
         .thenReturn(
             TimeUnit.MILLISECONDS.toNanos(
-                MeshCaCertificateProviderTest.CERT0_EXPIRY_TIME_MILLIS - 610_000L));
+                CERT0_EXPIRY_TIME_MILLIS - 610_000L));
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(Status.Code.UNKNOWN, NoSuchFileException.class, 1, 0, "root.pem");
   }
@@ -299,8 +306,8 @@ public class FileWatcherCertificateProviderTest {
       int secondUpdateRootCount,
       String... causeMessages)
       throws IOException, InterruptedException {
-    MeshCaCertificateProviderTest.TestScheduledFuture<?> scheduledFuture =
-        new MeshCaCertificateProviderTest.TestScheduledFuture<>();
+    TestScheduledFuture<?> scheduledFuture =
+        new TestScheduledFuture<>();
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
@@ -314,7 +321,7 @@ public class FileWatcherCertificateProviderTest {
     when(timeProvider.currentTimeNanos())
         .thenReturn(
             TimeUnit.MILLISECONDS.toNanos(
-                MeshCaCertificateProviderTest.CERT0_EXPIRY_TIME_MILLIS - 610_000L));
+                CERT0_EXPIRY_TIME_MILLIS - 610_000L));
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(
         null, null, firstUpdateCertCount, firstUpdateRootCount, (String[]) null);
@@ -323,7 +330,7 @@ public class FileWatcherCertificateProviderTest {
     when(timeProvider.currentTimeNanos())
         .thenReturn(
             TimeUnit.MILLISECONDS.toNanos(
-                MeshCaCertificateProviderTest.CERT0_EXPIRY_TIME_MILLIS - 590_000L));
+                CERT0_EXPIRY_TIME_MILLIS - 590_000L));
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(
         Status.Code.UNKNOWN,
@@ -390,6 +397,57 @@ public class FileWatcherCertificateProviderTest {
       verify(mockWatcher, never()).onError(any(Status.class));
     } else {
       verify(mockWatcher, never()).updateTrustedRoots(ArgumentMatchers.<X509Certificate>anyList());
+    }
+  }
+
+  static class TestScheduledFuture<V> implements ScheduledFuture<V> {
+
+    static class Record {
+      long timeout;
+      TimeUnit unit;
+
+      Record(long timeout, TimeUnit unit) {
+        this.timeout = timeout;
+        this.unit = unit;
+      }
+    }
+
+    ArrayList<Record> calls = new ArrayList<>();
+
+    @Override
+    public long getDelay(TimeUnit unit) {
+      return 0;
+    }
+
+    @Override
+    public int compareTo(Delayed o) {
+      return 0;
+    }
+
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+      return false;
+    }
+
+    @Override
+    public boolean isCancelled() {
+      return false;
+    }
+
+    @Override
+    public boolean isDone() {
+      return false;
+    }
+
+    @Override
+    public V get() {
+      return null;
+    }
+
+    @Override
+    public V get(long timeout, TimeUnit unit) {
+      calls.add(new Record(timeout, unit));
+      return null;
     }
   }
 }
