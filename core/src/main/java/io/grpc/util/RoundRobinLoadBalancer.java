@@ -297,12 +297,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
 
     private Subchannel nextSubchannel() {
       int size = list.size();
-      int i = indexUpdater.incrementAndGet(this);
-      if (i >= size) {
-        int oldi = i;
-        i %= size;
-        indexUpdater.compareAndSet(this, oldi, i);
-      }
+      int i = (indexUpdater.incrementAndGet(this) & 0x7FFFFFFF) % size;
       return list.get(i);
     }
 
