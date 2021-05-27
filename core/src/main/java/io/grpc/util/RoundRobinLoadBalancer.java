@@ -276,6 +276,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
         AtomicIntegerFieldUpdater.newUpdater(ReadyPicker.class, "index");
 
     private final List<Subchannel> list; // non-empty
+    private final int maxIndex;
     @SuppressWarnings("unused")
     private volatile int index;
 
@@ -283,6 +284,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       Preconditions.checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
       this.index = startIndex - 1;
+      this.maxIndex = list.size() - 1;
     }
 
     @Override
@@ -296,13 +298,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     }
 
     private Subchannel nextSubchannel() {
-      int size = list.size();
-      int i = indexUpdater.incrementAndGet(this);
-      if (i >= size) {
-        int oldi = i;
-        i %= size;
-        indexUpdater.compareAndSet(this, oldi, i);
-      }
+      int i = indexUpdater.updateAndGet(this, old -> old == maxIndex ? 0 : old + 1);
       return list.get(i);
     }
 
