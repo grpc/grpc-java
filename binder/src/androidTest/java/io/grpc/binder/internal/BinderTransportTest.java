@@ -29,11 +29,12 @@ import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.FixedObjectPool;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.SharedResourcePool;
 import java.util.List;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.After;
 import org.junit.Ignore;
@@ -51,7 +52,7 @@ public final class BinderTransportTest extends AbstractTransportTest {
 
   private final Context appContext = ApplicationProvider.getApplicationContext();
   private final ObjectPool<ScheduledExecutorService> executorServicePool =
-      new FixedObjectPool<>(Executors.newScheduledThreadPool(2));
+      SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
 
   @Override
   @After

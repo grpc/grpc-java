@@ -124,8 +124,7 @@ final class BinderServer implements InternalServer, LeakSafeOneWayBinder.Transac
       // Break the connection to the binder. We'll receive no more transactions.
       hostServiceBinder.detach();
       listener.serverShutdown();
-      executorServicePool.returnObject(executorService);
-      executorService = null;
+      executorService = executorServicePool.returnObject(executorService);
     }
   }
 
