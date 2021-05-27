@@ -52,7 +52,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * https://github.com/grpc/proposal/blob/master/L73-java-binderchannel/wireformat.md
  */
 @ThreadSafe
-final class BinderServer implements InternalServer, LeakSafeOneWayBinder.TransactionHandler {
+public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.TransactionHandler {
 
   private final ObjectPool<ScheduledExecutorService> executorServicePool;
   private final ImmutableList<ServerStreamTracer.Factory> streamTracerFactories;
@@ -70,7 +70,7 @@ final class BinderServer implements InternalServer, LeakSafeOneWayBinder.Transac
   @GuardedBy("this")
   private boolean shutdown;
 
-  BinderServer(
+  public BinderServer(
       AndroidComponentAddress listenAddress,
       ObjectPool<ScheduledExecutorService> executorServicePool,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
