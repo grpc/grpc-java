@@ -27,6 +27,7 @@ import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.security.spec.InvalidKeySpecException;
+import java.util.Arrays;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -35,11 +36,11 @@ import java.util.logging.Logger;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.X509ExtendedKeyManager;
 
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
 /**
  * AdvancedTlsX509KeyManager is an {@code X509ExtendedKeyManager} that allows users to configure
  * advanced TLS features, such as private key and certificate chain reloading, etc.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8024")
 public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509KeyManager.class.getName());
 
@@ -57,12 +58,12 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
 
   @Override
   public X509Certificate[] getCertificateChain(String alias) {
-    return this.certs;
+    return Arrays.copyOf(this.certs, this.certs.length);
   }
 
   @Override
   public String[] getClientAliases(String keyType, Principal[] issuers) {
-    return new String[0];
+    return new String[] {"default"};
   }
 
   @Override
@@ -77,7 +78,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
 
   @Override
   public String[] getServerAliases(String keyType, Principal[] issuers) {
-    return new String[0];
+    return new String[] {"default"};
   }
 
   @Override
@@ -93,38 +94,36 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
 
   /**
    * Updates the current cached private key and cert chains.
-   * Right now, callers should make sure |key| matches the public key on the leaf certificate of
-   * |certs|.
-   * TODO(ZhenLian): explore possibilities to do a crypto check here.
    *
    * @param key  the private key that is going to be used
    * @param certs  the certificate chain that is going to be used
    */
   public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs) {
     // Same question as the trust manager: what to do if copy is not feasible here?
+    // Right now, callers should make sure {@code key} matches the public key on the leaf
+    // certificate of {@code certs}.
+    // TODO(ZhenLian): explore possibilities to do a crypto check here.
     this.key = key;
-    this.certs = certs;
+    this.certs = Arrays.copyOf(certs, certs.length);
   }
 
   /**
-   * starts a {@code ScheduledExecutorService} to read private key and certificate chains from the
-   * local file paths periodically, and update the cached identity credentials if they are both
+   * Schedules a {@code ScheduledExecutorService} to read private key and certificate chains from
+   * the local file paths periodically, and update the cached identity credentials if they are both
    * updated.
    *
    * @param keyFile  the file on disk holding the private key
    * @param certFile  the file on disk holding the certificate chain
-   * @param initialDelay the time to delay first read-and-update execution
-   * @param delay the period between successive read-and-update executions
+   * @param period the period between successive read-and-update executions
    * @param unit the time unit of the initialDelay and period parameters
-   * @param executor the execute service we use to start the read-and-update thread
-   * @return an object that caller should close when the scheduled execution is not needed
+   * @param executor the execute service we use to read and update the credentials
+   * @return an object that caller should close when the file refreshes are not needed
    */
   public Closeable updateIdentityCredentialsFromFile(File keyFile, File certFile,
-      long initialDelay, long delay, TimeUnit unit, ScheduledExecutorService executor) {
+      long period, TimeUnit unit, ScheduledExecutorService executor) {
     final ScheduledFuture<?> future =
         executor.scheduleWithFixedDelay(
-            new LoadFilePathExecution(keyFile, certFile),
-            initialDelay, delay, unit);
+            new LoadFilePathExecution(keyFile, certFile), 0, period, unit);
     return new Closeable() {
       @Override public void close() {
         future.cancel(false);
@@ -174,8 +173,8 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   }
 
   /**
-   * reads the private key and certificates specified in the path locations. Updates |key| and
-   * |cert| if both of their modified time changed since last read.
+   * Reads the private key and certificates specified in the path locations. Updates {@code key} and
+   * {@code cert} if both of their modified time changed since last read.
    *
    * @param keyFile  the file on disk holding the private key
    * @param certFile  the file on disk holding the certificate chain
@@ -189,15 +188,21 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
     long newCertTime = certFile.lastModified();
     // We only update when both the key and the certs are updated.
     if (newKeyTime != oldKeyTime && newCertTime != oldCertTime) {
-      PrivateKey key = CertificateUtils.getPrivateKey(new FileInputStream(keyFile));
-      X509Certificate[] certs = CertificateUtils.getX509Certificates(new FileInputStream(certFile));
+      FileInputStream keyInputStream = new FileInputStream(keyFile);
+      FileInputStream certInputStream = new FileInputStream(certFile);
+      PrivateKey key = CertificateUtils.getPrivateKey(keyInputStream);
+      X509Certificate[] certs = CertificateUtils.getX509Certificates(certInputStream);
+      keyInputStream.close();
+      certInputStream.close();
       updateIdentityCredentials(key, certs);
       return new UpdateResult(true, newKeyTime, newCertTime);
     }
     return new UpdateResult(false, -1, -1);
   }
 
-  // Mainly used to avoid throwing IO Exceptions in java.io.Closeable.
+  /**
+   * Mainly used to avoid throwing IO Exceptions in java.io.Closeable.
+   */
   public interface Closeable extends java.io.Closeable {
     @Override public void close();
   }

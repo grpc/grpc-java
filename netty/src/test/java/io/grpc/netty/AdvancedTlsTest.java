@@ -36,8 +36,7 @@ import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.grpc.util.AdvancedTlsX509KeyManager;
 import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.util.AdvancedTlsX509TrustManager.PeerVerifier;
-import io.grpc.util.AdvancedTlsX509TrustManager.SslEnginePeerVerifier;
-import io.grpc.util.AdvancedTlsX509TrustManager.SslSocketPeerVerifier;
+import io.grpc.util.AdvancedTlsX509TrustManager.SslSocketAndEnginePeerVerifier;
 import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import io.grpc.util.CertificateUtils;
 
@@ -185,8 +184,20 @@ public class AdvancedTlsTest {
     serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
-        .setSslEnginePeerVerifier(
-            new SslEnginePeerVerifier() {
+        .setSslSocketAndEnginePeerVerifier(
+            new SslSocketAndEnginePeerVerifier() {
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  Socket socket) throws CertificateException {
+                if (peerCertChain == null || peerCertChain.length == 0) {
+                  throw new CertificateException("peerCertChain is empty");
+                }
+                X509Certificate leafCert = peerCertChain[0];
+                if (!leafCert.getSubjectDN().getName().contains("testclient")) {
+                  throw new CertificateException("SslSocketAndEnginePeerVerifier failed");
+                }
+              }
+
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
                   SSLEngine engine) throws CertificateException {
@@ -195,23 +206,10 @@ public class AdvancedTlsTest {
                 }
                 X509Certificate leafCert = peerCertChain[0];
                 if (!leafCert.getSubjectDN().getName().contains("testclient")) {
-                  throw new CertificateException("SSLEnginePeerVerifier failed");
+                  throw new CertificateException("SslSocketAndEnginePeerVerifier failed");
                 }
               }
             })
-        .setSslSocketPeerVerifier(new SslSocketPeerVerifier() {
-          @Override
-          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-              Socket socket) throws CertificateException {
-            if (peerCertChain == null || peerCertChain.length == 0) {
-              throw new CertificateException("peerCertChain is empty");
-            }
-            X509Certificate leafCert = peerCertChain[0];
-            if (!leafCert.getSubjectDN().getName().contains("testclient")) {
-              throw new CertificateException("SSLSocketPeerVerifier failed");
-            }
-          }
-        })
         .setPeerVerifier(new PeerVerifier() {
           @Override
           public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
@@ -238,8 +236,20 @@ public class AdvancedTlsTest {
     clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
-        .setSslEnginePeerVerifier(
-            new SslEnginePeerVerifier() {
+        .setSslSocketAndEnginePeerVerifier(
+            new SslSocketAndEnginePeerVerifier() {
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  Socket socket) throws CertificateException {
+                if (peerCertChain == null || peerCertChain.length == 0) {
+                  throw new CertificateException("peerCertChain is empty");
+                }
+                X509Certificate leafCert = peerCertChain[0];
+                if (!leafCert.getSubjectDN().getName().contains("*.test.google.com.au")) {
+                  throw new CertificateException("SslSocketAndEnginePeerVerifier failed");
+                }
+              }
+              
               @Override
               public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
                   SSLEngine engine) throws CertificateException {
@@ -248,23 +258,10 @@ public class AdvancedTlsTest {
                 }
                 X509Certificate leafCert = peerCertChain[0];
                 if (!leafCert.getSubjectDN().getName().contains("*.test.google.com.au")) {
-                  throw new CertificateException("SSLEnginePeerVerifier failed");
+                  throw new CertificateException("SslSocketAndEnginePeerVerifier failed");
                 }
               }
             })
-        .setSslSocketPeerVerifier(new SslSocketPeerVerifier() {
-          @Override
-          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-              Socket socket) throws CertificateException {
-            if (peerCertChain == null || peerCertChain.length == 0) {
-              throw new CertificateException("peerCertChain is empty");
-            }
-            X509Certificate leafCert = peerCertChain[0];
-            if (!leafCert.getSubjectDN().getName().contains("*.test.google.com.au")) {
-              throw new CertificateException("SSLSocketPeerVerifier failed");
-            }
-          }
-        })
         .setPeerVerifier(new PeerVerifier() {
           @Override
           public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
@@ -302,12 +299,12 @@ public class AdvancedTlsTest {
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     Closeable serverKeyShutdown = serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File,
-        serverCert0File, 0, 100, TimeUnit.MILLISECONDS, executor);
+        serverCert0File,  100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
         .build();
     Closeable serverTrustShutdown = serverTrustManager.updateTrustCredentialsFromFile(caCertFile,
-        0, 100, TimeUnit.MILLISECONDS, executor);
+        100, TimeUnit.MILLISECONDS, executor);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
         .keyManager(serverKeyManager).trustManager(serverTrustManager)
         .clientAuth(ClientAuth.REQUIRE).build();
@@ -317,12 +314,12 @@ public class AdvancedTlsTest {
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File,
-        clientCert0File, 0, 100, TimeUnit.MILLISECONDS, executor);
+        clientCert0File, 100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateAndHostNameVerification)
         .build();
     Closeable clientTrustShutdown = clientTrustManager.updateTrustCredentialsFromFile(caCertFile,
-        0, 100, TimeUnit.MILLISECONDS, executor);
+        100, TimeUnit.MILLISECONDS, executor);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
         .keyManager(clientKeyManager).trustManager(clientTrustManager).build();
     channel = Grpc.newChannelBuilderForAddress("localhost", server.getPort(), channelCredentials)
