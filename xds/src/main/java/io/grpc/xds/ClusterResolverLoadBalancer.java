@@ -254,7 +254,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     private void handleEndpointResolutionError() {
       boolean allInError = true;
       Status error = null;
-      for (ClusterState state :  clusterStates.values()) {
+      for (String cluster : clusters) {
+        ClusterState state = clusterStates.get(cluster);
         if (state.status.isOk()) {
           allInError = false;
         } else {
