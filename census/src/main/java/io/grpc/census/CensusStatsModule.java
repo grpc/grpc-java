@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import io.grpc.CallAttemptTracer;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -37,6 +38,7 @@ import io.grpc.Status;
 import io.grpc.StreamTracer;
 import io.grpc.census.internal.DeprecatedCensusConstants;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
+import io.opencensus.stats.Measure;
 import io.opencensus.stats.Measure.MeasureDouble;
 import io.opencensus.stats.Measure.MeasureLong;
 import io.opencensus.stats.MeasureMap;
@@ -49,8 +51,10 @@ import io.opencensus.tags.Tags;
 import io.opencensus.tags.propagation.TagContextBinarySerializer;
 import io.opencensus.tags.propagation.TagContextSerializationException;
 import io.opencensus.tags.unsafe.ContextUtils;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.logging.Level;
@@ -145,6 +149,11 @@ final class CensusStatsModule {
   ClientCallTracer newClientCallTracer(
       TagContext parentCtx, String fullMethodName) {
     return new ClientCallTracer(this, parentCtx, fullMethodName);
+  }
+
+  private CallAttemptTracerFactory newCallAttemptTracerFactory(
+      TagContext parentCtx, String fullMethodName) {
+    return new CallAttemptTracerFactory(this, parentCtx, fullMethodName);
   }
 
   /**
@@ -686,10 +695,10 @@ final class CensusStatsModule {
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
       // New RPCs on client-side inherit the tag context from the current Context.
       TagContext parentCtx = tagger.getCurrentTagContext();
-      final ClientCallTracer tracerFactory =
-          newClientCallTracer(parentCtx, method.getFullMethodName());
+      final CallAttemptTracerFactory tracerFactory =
+          newCallAttemptTracerFactory(parentCtx, method.getFullMethodName());
       ClientCall<ReqT, RespT> call =
-          next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
+          next.newCall(method, callOptions.withCallAttemptTracerFactory(tracerFactory));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {
         @Override
         public void start(Listener<RespT> responseListener, Metadata headers) {
@@ -704,6 +713,118 @@ final class CensusStatsModule {
               headers);
         }
       };
+    }
+  }
+
+  private static final class CallAttemptTracerFactory extends CallAttemptTracer.Factory {
+    private final CensusStatsModule module;
+    private volatile CallAttemptStatsTracer callAttemptTracer;
+    private final TagContext parentCtx;
+    private final String fullMethodName;
+    private final Stopwatch stopwatch;
+
+    CallAttemptTracerFactory(
+        CensusStatsModule module, TagContext parentCtx, String fullMethodName) {
+      this.module = checkNotNull(module);
+      this.parentCtx = checkNotNull(parentCtx);
+      this.fullMethodName = checkNotNull(fullMethodName);
+      this.stopwatch = module.stopwatchSupplier.get().start();
+    }
+
+    @Override
+    public CallAttemptTracer newCallAttemptTracer() {
+      callAttemptTracer = new CallAttemptStatsTracer(module, parentCtx, fullMethodName, stopwatch);
+      return callAttemptTracer;
+    }
+
+    void callEnded(Status status) {
+      if (callAttemptTracer.streamTracerFactories.size() == 1) {
+        // for the case retry not enable.
+        callAttemptTracer.attemptEnded(0, status);
+      }
+
+      stopwatch.stop();
+      MeasureLong RETRIES_PER_CALL =
+          Measure.MeasureLong.create(
+              "grpc.io/client/retries_per_call", "Number of retries per call", "1");
+      MeasureLong TRANSPARENT_RETRIES_PER_CALL =
+          Measure.MeasureLong.create(
+              "grpc.io/client/transparent_retries_per_call", "Transparent retries per call", "1");
+      MeasureDouble RETRY_DELAY_PER_CALL =
+          Measure.MeasureDouble.create(
+              "grpc.io/client/retry_delay_per_call", "Retry delay per call", "ms");
+      MeasureMap measureMap = module.statsRecorder.newMeasureMap()
+          .put(RETRIES_PER_CALL, callAttemptTracer.retriesPerCall.get())
+          .put(TRANSPARENT_RETRIES_PER_CALL, callAttemptTracer.transparentRetriesPerCall.get())
+          .put(RETRY_DELAY_PER_CALL, callAttemptTracer.getRetryDelayNanos()/ NANOS_PER_MILLI);
+      if (!status.isOk()) {
+        measureMap.put(DeprecatedCensusConstants.RPC_CLIENT_ERROR_COUNT, 1);
+      }
+      TagValue methodTag = TagValue.create(fullMethodName);
+      TagValue statusTag = TagValue.create(status.getCode().toString());
+      measureMap.record(
+          module
+              .tagger
+              .toBuilder(parentCtx)
+              .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
+              .putLocal(RpcMeasureConstants.GRPC_CLIENT_STATUS, statusTag)
+              .build());
+    }
+  }
+
+  private static final class CallAttemptStatsTracer extends CallAttemptTracer {
+    private final CensusStatsModule module;
+    private final TagContext tagContext;
+    private final String fullMethodName;
+    private final Stopwatch stopwatch;
+
+    AtomicLong retriesPerCall;
+    AtomicLong transparentRetriesPerCall;
+    List<ClientCallTracer> streamTracerFactories;
+    List<Long> reactiveTimestamps;
+    List<Long> inactiveTimestamps;
+    AtomicLong activeStreams;
+
+    CallAttemptStatsTracer(
+        CensusStatsModule module, TagContext tagContext, String fullMethodName,
+        Stopwatch stopwatch) {
+      this.module = checkNotNull(module, "module");
+      this.tagContext = checkNotNull(tagContext, "tagContext");
+      this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
+      this.stopwatch = stopwatch;
+    }
+
+    @Override
+    public ClientStreamTracer.Factory newAttempt(int attemptId, boolean transparentRetry) {
+      if (activeStreams.incrementAndGet() == 1) {
+        reactiveTimestamps.add(stopwatch.elapsed(TimeUnit.NANOSECONDS));
+      }
+      if (transparentRetry) {
+        transparentRetriesPerCall.incrementAndGet();
+      } else {
+        retriesPerCall.incrementAndGet();
+      }
+
+      ClientCallTracer tracerFactory = new ClientCallTracer(module, tagContext, fullMethodName);
+      streamTracerFactories.add(tracerFactory);
+      return tracerFactory;
+    }
+
+    @Override
+    public void attemptEnded(int attemptId, Status status) {
+      // TODO: no-op if called twice
+      streamTracerFactories.get(attemptId).callEnded(status);
+      if (activeStreams.decrementAndGet() == 0) {
+        inactiveTimestamps.add(stopwatch.elapsed(TimeUnit.NANOSECONDS));
+      }
+    }
+
+    long getRetryDelayNanos() {
+      long retryDelayNanos = 0;
+      for (int i = 0; i < inactiveTimestamps.size() - 1; i++) {
+        retryDelayNanos += (reactiveTimestamps.get(i + 1) - inactiveTimestamps.get(i));
+      }
+      return retryDelayNanos;
     }
   }
 }

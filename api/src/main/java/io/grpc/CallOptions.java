@@ -238,6 +238,17 @@ public final class CallOptions {
     return streamTracerFactories;
   }
 
+  public CallOptions withCallAttemptTracerFactory(CallAttemptTracer.Factory factory) {
+    CallOptions newOptions = new CallOptions(this);
+    // TODO: impl
+    return newOptions;
+  }
+
+  public CallAttemptTracer.Factory getCallAttemptTracerFactor() {
+    // TODO: impl
+    return null;
+  }
+
   /**
    * Key for a key-value pair. Uses reference equality.
    */

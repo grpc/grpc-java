@@ -31,6 +31,7 @@ import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.CallAttemptTracer;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -528,12 +529,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
         final CallOptions callOptions,
         final Metadata headers,
         final Context context) {
+      CallAttemptTracer callAttemptTracer =
+          callOptions.getCallAttemptTracerFactor().newCallAttemptTracer();
       if (!retryEnabled) {
+        ClientStreamTracer.Factory tracerFacotry = callAttemptTracer.newAttempt(0, false);
+        CallOptions newCallOptions = callOptions.withStreamTracerFactory(tracerFacotry);
         ClientTransport transport =
             getTransport(new PickSubchannelArgsImpl(method, headers, callOptions));
         Context origContext = context.attach();
         try {
-          return transport.newStream(method, headers, callOptions);
+          return transport.newStream(method, headers, newCallOptions);
         } finally {
           context.detach(origContext);
         }
@@ -555,6 +560,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 transportFactory.getScheduledExecutorService(),
                 retryPolicy,
                 hedgingPolicy,
+                callAttemptTracer,
                 throttle);
           }
 
@@ -569,8 +575,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           @Override
-          ClientStream newSubstream(ClientStreamTracer.Factory tracerFactory, Metadata newHeaders) {
-            CallOptions newOptions = callOptions.withStreamTracerFactory(tracerFactory);
+          ClientStream newSubstream(
+              Metadata newHeaders, ClientStreamTracer.Factory... tracerFactories) {
+            CallOptions newOptions = callOptions;
+            for (ClientStreamTracer.Factory factory : tracerFactories) {
+              newOptions = newOptions.withStreamTracerFactory(factory);
+            }
             ClientTransport transport =
                 getTransport(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
             Context origContext = context.attach();
