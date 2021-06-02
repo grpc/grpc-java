@@ -38,7 +38,7 @@ public class MatcherTest {
   public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Test
-  public void testIpMatcher_Ipv4() throws Exception {
+  public void ipMatcher_Ipv4() throws Exception {
     CidrMatcher matcher = CidrMatcher.create("10.10.24.10", 20);
     assertThat(matcher.matches(InetAddress.getByName("::0"))).isFalse();
     assertThat(matcher.matches(InetAddress.getByName("10.10.20.0"))).isTrue();
@@ -56,7 +56,7 @@ public class MatcherTest {
   }
 
   @Test
-  public void testIpMatcher_Ipv6() throws Exception {
+  public void ipMatcher_Ipv6() throws Exception {
     CidrMatcher matcher = CidrMatcher.create("2012:00fe:d808::", 36);
     assertThat(matcher.matches(InetAddress.getByName("0.0.0.0"))).isFalse();
     assertThat(matcher.matches(InetAddress.getByName("2012:00fe:d000::0"))).isTrue();
@@ -67,7 +67,7 @@ public class MatcherTest {
   }
 
   @Test
-  public void testStringMatcher() {
+  public void stringMatcher() {
     StringMatcher matcher = StringMatcher.forExact("essence", false);
     assertThat(matcher.matches("elite")).isFalse();
     assertThat(matcher.matches("ess")).isFalse();
@@ -126,7 +126,7 @@ public class MatcherTest {
   }
 
   @Test
-  public void testHeaderMatcher() {
+  public void headerMatcher() {
     HeaderMatcher matcher = HeaderMatcher.forExactValue("version", "v1", false);
     Metadata metadata = metadata("version", "v1");
     assertThat(matcher.matches(metadata)).isTrue();

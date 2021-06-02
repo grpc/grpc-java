@@ -23,20 +23,17 @@ import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.xds.internal.Matchers;
-import io.grpc.xds.internal.Matchers.CidrMatcher;
-import io.grpc.xds.internal.Matchers.StringMatcher;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -51,7 +48,7 @@ import javax.net.ssl.SSLSession;
  * Policies are examined sequentially in order in an any match fashion, and the first matched policy
  * will be returned. If not matched at all, the opposite action type is returned as a result.
  */
-public final class GrpcAuthorizationEngine {
+final class GrpcAuthorizationEngine {
   private static final Logger log = Logger.getLogger(GrpcAuthorizationEngine.class.getName());
   private final AuthConfig authConfig;
 
@@ -60,7 +57,8 @@ public final class GrpcAuthorizationEngine {
     DENY,
   }
 
-  /** An authorization decision provides information about the decision type and the policy name
+  /**
+   * An authorization decision provides information about the decision type and the policy name
    * identifier based on the authorization engine evaluation. */
   @AutoValue
   abstract static class AuthDecision {
@@ -86,12 +84,12 @@ public final class GrpcAuthorizationEngine {
   }
 
   /** Instantiated with envoy policyMatcher configuration. */
-  public GrpcAuthorizationEngine(AuthConfig authConfig) {
+  GrpcAuthorizationEngine(AuthConfig authConfig) {
     this.authConfig = authConfig;
   }
 
   /** Return the auth decision for the request argument against the policies. */
-  public AuthDecision evaluate(Metadata metadata, ServerCall<?,?> serverCall) {
+  AuthDecision evaluate(Metadata metadata, ServerCall<?,?> serverCall) {
     checkNotNull(metadata, "metadata");
     checkNotNull(serverCall, "serverCall");
     String firstMatch = null;
@@ -106,8 +104,8 @@ public final class GrpcAuthorizationEngine {
     if (Action.DENY.equals(authConfig.action) == (firstMatch == null)) {
       decisionType = Action.ALLOW;
     }
-    log.log(Level.FINER, String.format("RBAC decision: {%s}, policy match: {%s}",
-        decisionType, firstMatch));
+    log.log(Level.FINER, "RBAC decision: {0}, policy match: {1}.",
+            new Object[]{decisionType, firstMatch});
     return AuthDecision.create(decisionType, firstMatch);
   }
 
@@ -119,7 +117,7 @@ public final class GrpcAuthorizationEngine {
    * <p>Currently we only support matching some of the request fields. Those unsupported fields are
    * considered not match until we stop ignoring them.
    */
-  static final class PolicyMatcher extends Matcher {
+  static final class PolicyMatcher implements Matcher {
     private final OrMatcher permissions;
     private final OrMatcher principals;
     private final String name;
@@ -132,25 +130,22 @@ public final class GrpcAuthorizationEngine {
     }
 
     @Override
-    boolean matches(EvaluateArgs args) {
+    public boolean matches(EvaluateArgs args) {
       return permissions.matches(args) && principals.matches(args);
     }
   }
 
-  static final class AuthenticatedMatcher extends Matcher {
-    private final StringMatcher delegate;
+  static final class AuthenticatedMatcher implements Matcher {
+    private final Matchers.StringMatcher delegate;
 
-    AuthenticatedMatcher(StringMatcher delegate) {
-      this.delegate = delegate;
+    AuthenticatedMatcher(Matchers.StringMatcher delegate) {
+      this.delegate = checkNotNull(delegate, "delegate");
     }
 
     @Override
-    boolean matches(EvaluateArgs args) {
-      if (delegate == null) {
-        return true;
-      }
+    public boolean matches(EvaluateArgs args) {
       Collection<String> principalNames = args.getPrincipalNames();
-      log.log(Level.FINER, "Matching principal names: " + principalNames);
+      log.log(Level.FINER, "Matching principal names: {0}", new Object[]{principalNames});
       if (principalNames != null) {
         for (String name : principalNames) {
           if (delegate.matches(name)) {
@@ -162,59 +157,59 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  static final class DestinationIpMatcher extends Matcher {
-    private final CidrMatcher delegate;
+  static final class DestinationIpMatcher implements Matcher {
+    private final Matchers.CidrMatcher delegate;
 
-    DestinationIpMatcher(CidrMatcher delegate) {
-      this.delegate = delegate;
+    DestinationIpMatcher(Matchers.CidrMatcher delegate) {
+      this.delegate = checkNotNull(delegate, "delegate");
     }
 
     @Override
-    boolean matches(EvaluateArgs args) {
+    public boolean matches(EvaluateArgs args) {
       return delegate.matches(args.getDestinationIp());
     }
   }
 
-  static final class SourceIpMatcher extends Matcher {
-    private final CidrMatcher delegate;
+  static final class SourceIpMatcher implements Matcher {
+    private final Matchers.CidrMatcher delegate;
 
-    SourceIpMatcher(CidrMatcher delegate) {
-      this.delegate = delegate;
+    SourceIpMatcher(Matchers.CidrMatcher delegate) {
+      this.delegate = checkNotNull(delegate, "delegate");
     }
 
     @Override
-    boolean matches(EvaluateArgs args) {
+    public boolean matches(EvaluateArgs args) {
       return delegate.matches(args.getSourceIp());
     }
   }
 
-  static final class PathMatcher extends Matcher {
-    private final StringMatcher delegate;
+  static final class PathMatcher implements Matcher {
+    private final Matchers.StringMatcher delegate;
 
-    PathMatcher(StringMatcher delegate) {
-      this.delegate = delegate;
+    PathMatcher(Matchers.StringMatcher delegate) {
+      this.delegate = checkNotNull(delegate, "delegate");
     }
 
     @Override
-    boolean matches(EvaluateArgs args) {
+    public boolean matches(EvaluateArgs args) {
       return delegate.matches(args.getPath());
     }
   }
 
-  static final class HeaderMatcher extends Matcher {
+  static final class HeaderMatcher implements Matcher {
     private final Matchers.HeaderMatcher delegate;
 
     HeaderMatcher(Matchers.HeaderMatcher delegate) {
-      this.delegate = delegate;
+      this.delegate = checkNotNull(delegate, "delegate");
     }
 
     @Override
-    boolean matches(EvaluateArgs args) {
+    public boolean matches(EvaluateArgs args) {
       return delegate.matches(args.getHeader());
     }
   }
 
-  static final class DestinationPortMatcher extends Matcher {
+  static final class DestinationPortMatcher implements Matcher {
     private final int port;
 
     DestinationPortMatcher(int port) {
@@ -222,7 +217,7 @@ public final class GrpcAuthorizationEngine {
     }
 
     @Override
-    boolean matches(EvaluateArgs args) {
+    public boolean matches(EvaluateArgs args) {
       return port == args.getDestinationPort();
     }
   }
@@ -240,22 +235,22 @@ public final class GrpcAuthorizationEngine {
     }
 
     private String getPath() {
-      return serverCall.getMethodDescriptor().getFullMethodName();
+      return "/" + serverCall.getMethodDescriptor().getFullMethodName();
     }
 
     private Collection<String> getPrincipalNames() {
       SSLSession sslSession = serverCall.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
-      Set<String> principalNames = new HashSet<>();
       try {
         Certificate[] certs = sslSession == null ? null : sslSession.getPeerCertificates();
         if (certs == null || certs.length < 1) {
-          return principalNames;
+          return Collections.emptyList();
         }
         X509Certificate cert = (X509Certificate)certs[0];
-        if (cert == null || cert.getSubjectDN() == null) {
-          return principalNames;
+        if (cert == null) {
+          return Collections.emptyList();
         }
         Collection<List<?>> names = cert.getSubjectAlternativeNames();
+        List<String> principalNames = new ArrayList<>();
         if (names != null) {
           for (List<?> name : names) {
             if (URI_SAN == (Integer) name.get(0)) {
@@ -263,7 +258,7 @@ public final class GrpcAuthorizationEngine {
             }
           }
           if (!principalNames.isEmpty()) {
-            return principalNames;
+            return Collections.unmodifiableCollection(principalNames);
           }
           for (List<?> name : names) {
             if (DNS_SAN == (Integer) name.get(0)) {
@@ -271,12 +266,16 @@ public final class GrpcAuthorizationEngine {
             }
           }
           if (!principalNames.isEmpty()) {
-            return principalNames;
+            return Collections.unmodifiableCollection(principalNames);
           }
+        }
+        if (cert.getSubjectDN() == null || cert.getSubjectDN().getName() == null) {
+          return Collections.emptyList();
         }
         return Collections.singleton(cert.getSubjectDN().getName());
       } catch (SSLPeerUnverifiedException | CertificateParsingException ex) {
-        return null;
+        log.log(Level.FINE, "Unexpected getPrincipalNames error.", ex);
+        return Collections.emptyList();
       }
     }
 
@@ -300,20 +299,20 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  abstract static class Matcher {
-    protected Matcher() {
-    }
-
-    abstract boolean matches(EvaluateArgs args);
+  interface Matcher {
+    boolean matches(EvaluateArgs args);
   }
 
   /** Matches when any of the matcher matches. */
-  static final class OrMatcher extends Matcher {
+  static final class OrMatcher implements Matcher {
     private final List<? extends Matcher> anyMatch;
 
     OrMatcher(List<? extends Matcher> matchers) {
       checkNotNull(matchers, "matchers");
-      this.anyMatch = Collections.unmodifiableList(matchers);
+      for (Matcher matcher : matchers) {
+        checkNotNull(matcher, "matcher");
+      }
+      this.anyMatch = Collections.unmodifiableList(new ArrayList<>(matchers));
     }
 
     static OrMatcher create(Matcher...matchers) {
@@ -321,9 +320,9 @@ public final class GrpcAuthorizationEngine {
     }
 
     @Override
-    boolean matches(EvaluateArgs args) {
+    public boolean matches(EvaluateArgs args) {
       for (Matcher m : anyMatch) {
-        if (m != null && m.matches(args)) {
+        if (m.matches(args)) {
           return true;
         }
       }
@@ -332,12 +331,15 @@ public final class GrpcAuthorizationEngine {
   }
 
   /** Matches when all of the matchers match. */
-  static final class AndMatcher extends Matcher {
+  static final class AndMatcher implements Matcher {
     private final List<? extends Matcher> allMatch;
 
     AndMatcher(List<? extends Matcher> matchers) {
       checkNotNull(matchers, "matchers");
-      this.allMatch = Collections.unmodifiableList(matchers);
+      for (Matcher matcher : matchers) {
+        checkNotNull(matcher, "matcher");
+      }
+      this.allMatch = Collections.unmodifiableList(new ArrayList<>(matchers));
     }
 
     static AndMatcher create(Matcher...matchers) {
@@ -345,9 +347,9 @@ public final class GrpcAuthorizationEngine {
     }
 
     @Override
-    boolean matches(EvaluateArgs args) {
+    public boolean matches(EvaluateArgs args) {
       for (Matcher m : allMatch) {
-        if (m == null || !m.matches(args)) {
+        if (!m.matches(args)) {
           return false;
         }
       }
@@ -356,25 +358,25 @@ public final class GrpcAuthorizationEngine {
   }
 
   /** Always true matcher.*/
-  static final class AlwaysTrueMatcher extends Matcher {
+  static final class AlwaysTrueMatcher implements Matcher {
     static AlwaysTrueMatcher INSTANCE = new AlwaysTrueMatcher();
 
     @Override
-    boolean matches(EvaluateArgs args) {
+    public boolean matches(EvaluateArgs args) {
       return true;
     }
   }
 
   /** Negate matcher.*/
-  static final class InvertMatcher extends Matcher {
+  static final class InvertMatcher implements Matcher {
     private final Matcher toInvertMatcher;
 
     InvertMatcher(Matcher matcher) {
-      this.toInvertMatcher = checkNotNull(matcher);
+      this.toInvertMatcher = checkNotNull(matcher, "matcher");
     }
 
     @Override
-    boolean matches(EvaluateArgs args) {
+    public boolean matches(EvaluateArgs args) {
       return !toInvertMatcher.matches(args);
     }
   }

@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.base.Joiner;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.re2j.Pattern;
 import io.grpc.Metadata;
 import java.math.BigInteger;
@@ -29,8 +28,7 @@ import java.net.UnknownHostException;
 import javax.annotation.Nullable;
 
 /**
- * Defines matcher abstract and provides a group of request matchers.
- * A matcher evaluates an input and tells whether certain
+ * Provides a group of request matchers. A matcher evaluates an input and tells whether certain
  * argument in the input matches a predefined matching pattern.
  */
 public final class Matchers {
@@ -153,7 +151,7 @@ public final class Matchers {
       checkNotNull(headers);
       String value = getHeaderValue(headers, name());
       if (present() != null) {
-        return (value == null) == present().equals(inverted());
+        return ((value == null) == present()) == inverted();
       }
       if (value == null) {
         return false;
@@ -318,13 +316,12 @@ public final class Matchers {
     }
 
     /** Constructs a CidrMatcher with this prefix string and prefix length. */
-    public static CidrMatcher create(String addressPrefix, int prefixLen)
-        throws InvalidProtocolBufferException {
+    public static CidrMatcher create(String addressPrefix, int prefixLen) {
       InetAddress prefix;
       try {
         prefix = InetAddress.getByName(addressPrefix);
       } catch (UnknownHostException e) {
-        throw new InvalidProtocolBufferException(e.getMessage());
+        throw new IllegalArgumentException(e.getMessage());
       }
       return new AutoValue_Matchers_CidrMatcher(prefix, prefixLen);
     }

@@ -76,7 +76,7 @@ public class GrpcAuthorizationEngineTest {
   private static final String IP_ADDR2 = "68.36.0.19";
   private static final int PORT = 100;
   private static final String PATH = "/auth/engine";
-  private static final StringMatcher STRING_MATCHER = StringMatcher.forExact(PATH, false);
+  private static final StringMatcher STRING_MATCHER = StringMatcher.forExact("/" + PATH, false);
   private static final Metadata HEADER = metadata(HEADER_KEY, HEADER_VALUE);
 
   @Mock
@@ -98,7 +98,7 @@ public class GrpcAuthorizationEngineTest {
   }
 
   @Test
-  public void testIpMatcher() throws Exception {
+  public void ipMatcher() throws Exception {
     CidrMatcher ip1 = CidrMatcher.create(IP_ADDR1, 24);
     DestinationIpMatcher destIpMatcher = new DestinationIpMatcher(ip1);
     CidrMatcher ip2 = CidrMatcher.create(IP_ADDR2, 24);
@@ -140,7 +140,7 @@ public class GrpcAuthorizationEngineTest {
   }
 
   @Test
-  public void testHeaderMatcher() {
+  public void headerMatcher() {
     HeaderMatcher headerMatcher = new HeaderMatcher(Matchers.HeaderMatcher
         .forExactValue(HEADER_KEY, HEADER_VALUE, false));
     OrMatcher principal = OrMatcher.create(headerMatcher);
@@ -155,7 +155,7 @@ public class GrpcAuthorizationEngineTest {
   }
 
   @Test
-  public void testPathMatcher() {
+  public void pathMatcher() {
     PathMatcher pathMatcher = new PathMatcher(STRING_MATCHER);
     OrMatcher permission = OrMatcher.create(AlwaysTrueMatcher.INSTANCE);
     OrMatcher principal = OrMatcher.create(pathMatcher);
@@ -168,7 +168,7 @@ public class GrpcAuthorizationEngineTest {
   }
 
   @Test
-  public void testAuthenticatedMatcher() throws Exception {
+  public void authenticatedMatcher() throws Exception {
     AuthenticatedMatcher authMatcher = new AuthenticatedMatcher(
         StringMatcher.forExact("*.test.google.fr", false));
     PathMatcher pathMatcher = new PathMatcher(STRING_MATCHER);
@@ -222,7 +222,7 @@ public class GrpcAuthorizationEngineTest {
   }
 
   @Test
-  public void testMultiplePolicies() throws Exception {
+  public void multiplePolicies() throws Exception {
     AuthenticatedMatcher authMatcher = new AuthenticatedMatcher(
         StringMatcher.forSuffix("TEST.google.fr", true));
     PathMatcher pathMatcher = new PathMatcher(STRING_MATCHER);
