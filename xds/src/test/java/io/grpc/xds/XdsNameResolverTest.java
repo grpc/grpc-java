@@ -1591,7 +1591,8 @@ public class XdsNameResolverTest {
     }
 
     void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
-      ldsWatcher.onChanged(new LdsUpdate(httpMaxStreamDurationNano, virtualHosts, null));
+      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.withVirtualHosts(
+          httpMaxStreamDurationNano, virtualHosts, null)));
     }
 
     void deliverLdsUpdate(final List<Route> routes) {
@@ -1599,7 +1600,8 @@ public class XdsNameResolverTest {
           VirtualHost.create(
               "virtual-host", Collections.singletonList(AUTHORITY), routes,
               ImmutableMap.<String, FilterConfig>of());
-      ldsWatcher.onChanged(new LdsUpdate(0L, Collections.singletonList(virtualHost), null));
+      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.withVirtualHosts(
+          0L, Collections.singletonList(virtualHost), null)));
     }
 
     void deliverLdsUpdateWithFaultInjection(
@@ -1642,7 +1644,8 @@ public class XdsNameResolverTest {
           Collections.singletonList(AUTHORITY),
           Collections.singletonList(route),
           overrideConfig);
-      ldsWatcher.onChanged(new LdsUpdate(0L, Collections.singletonList(virtualHost), filterChain));
+      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.withVirtualHosts(
+          0L, Collections.singletonList(virtualHost), filterChain)));
     }
 
     void deliverLdsUpdateWithNoRouterFilter() {
@@ -1651,8 +1654,8 @@ public class XdsNameResolverTest {
           Collections.singletonList(AUTHORITY),
           Collections.<Route>emptyList(),
           Collections.<String, FilterConfig>emptyMap());
-      ldsWatcher.onChanged(new LdsUpdate(
-          0L, Collections.singletonList(virtualHost), ImmutableList.<NamedFilterConfig>of()));
+      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.withVirtualHosts(
+          0L, Collections.singletonList(virtualHost), ImmutableList.<NamedFilterConfig>of())));
     }
 
     void deliverLdsUpdateForRdsNameWithFaultInjection(
@@ -1664,11 +1667,13 @@ public class XdsNameResolverTest {
       ImmutableList<NamedFilterConfig> filterChain = ImmutableList.of(
           new NamedFilterConfig(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
           new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
-      ldsWatcher.onChanged(new LdsUpdate(0L, rdsName, filterChain));
+      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.withRdsName(
+          0L, rdsName, filterChain)));
     }
 
     void deliverLdsUpdateForRdsName(String rdsName) {
-      ldsWatcher.onChanged(new LdsUpdate(0, rdsName, null));
+      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.withRdsName(
+          0, rdsName, null)));
     }
 
     void deliverLdsResourceNotFound() {

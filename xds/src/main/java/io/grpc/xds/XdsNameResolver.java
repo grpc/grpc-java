@@ -647,14 +647,17 @@ final class XdsNameResolver extends NameResolver {
             return;
           }
           logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
-          List<VirtualHost> virtualHosts = update.virtualHosts;
-          String rdsName = update.rdsName;
+          HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
+          List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
+          String rdsName = httpConnectionManager.rdsName();
           cleanUpRouteDiscoveryState();
           if (virtualHosts != null) {
-            updateRoutes(virtualHosts, update.httpMaxStreamDurationNano, update.filterChain);
+            updateRoutes(virtualHosts, httpConnectionManager.httpMaxStreamDurationNano(),
+                httpConnectionManager.httpFilterConfigs());
           } else {
             routeDiscoveryState = new RouteDiscoveryState(
-                rdsName, update.httpMaxStreamDurationNano, update.filterChain);
+                rdsName, httpConnectionManager.httpMaxStreamDurationNano(),
+                httpConnectionManager.httpFilterConfigs());
             logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
             xdsClient.watchRdsResource(rdsName, routeDiscoveryState);
           }
