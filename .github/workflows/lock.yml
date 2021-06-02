@@ -17,4 +17,4 @@ jobs:
         with:
           github-token: ${{ github.token }}
           issue-lock-inactive-days: 90
-￼         pr-lock-inactive-days: 90
+          pr-lock-inactive-days: 90
