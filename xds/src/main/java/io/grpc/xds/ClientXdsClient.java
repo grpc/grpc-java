@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.EnvoyServerProtoData.TRANSPORT_SOCKET_NAME_TLS;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
@@ -43,11 +42,13 @@ import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.PortSpecifierCase;
+import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.Context;
@@ -60,6 +61,10 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyServerProtoData.CidrRange;
+import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
+import io.grpc.xds.EnvoyServerProtoData.FilterChain;
+import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.Filter.ConfigOrError;
 import io.grpc.xds.Filter.FilterConfig;
@@ -76,8 +81,10 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -97,6 +104,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
+  private static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   @VisibleForTesting
@@ -178,7 +186,8 @@ final class ClientXdsClient extends AbstractXdsClient {
         if (listener.hasApiListener()) {
           ldsUpdate = processClientSideListener(listener, enableFaultInjection && isResourceV3);
         } else {
-          ldsUpdate = processServerSideListener(listener);
+          // TODO(chengyuanzhang): change env var for supporting HttpFilter.
+          ldsUpdate = processServerSideListener(listener, enableFaultInjection && isResourceV3);
         }
       } catch (ResourceInvalidException e) {
         errors.add(
@@ -188,8 +197,11 @@ final class ClientXdsClient extends AbstractXdsClient {
 
       // LdsUpdate parsed successfully.
       parsedResources.put(listenerName, new ParsedResource(ldsUpdate, resource));
-      if (ldsUpdate.rdsName != null) {
-        retainedRdsResources.add(ldsUpdate.rdsName);
+      // TODO(chengyuanzhang): may need a way to retain RDS resources referenced by
+      //  HttpConnectionManagers in TCP listener FilterChains (for server side).
+      if (ldsUpdate.httpConnectionManager() != null
+          && ldsUpdate.httpConnectionManager().rdsName() != null) {
+        retainedRdsResources.add(ldsUpdate.httpConnectionManager().rdsName());
       }
     }
     getLogger().log(XdsLogLevel.INFO,
@@ -212,89 +224,252 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   private static LdsUpdate processClientSideListener(Listener listener, boolean parseFilter)
       throws ResourceInvalidException {
-    // Unpack HttpConnectionManager from the Listener.
-    HttpConnectionManager hcm;
+    HttpConnectionManager httpConnectionManagerProto;
     try {
-      hcm = unpackCompatibleType(
+      httpConnectionManagerProto = unpackCompatibleType(
           listener.getApiListener().getApiListener(), HttpConnectionManager.class,
           TYPE_URL_HTTP_CONNECTION_MANAGER, TYPE_URL_HTTP_CONNECTION_MANAGER_V2);
     } catch (InvalidProtocolBufferException e) {
       throw new ResourceInvalidException(
           "Could not parse HttpConnectionManager config from ApiListener", e);
     }
+    return LdsUpdate.forApiListener(
+        parseHttpConnectionManager(httpConnectionManagerProto, parseFilter, true /* forClient */));
+  }
 
+  private LdsUpdate processServerSideListener(Listener proto, boolean parseFilter)
+      throws ResourceInvalidException {
+    return LdsUpdate.forTcpListener(
+        parseServerSideListener(proto, tlsContextManager, parseFilter));
+  }
+
+  @VisibleForTesting
+  static EnvoyServerProtoData.Listener parseServerSideListener(
+      Listener proto, TlsContextManager tlsContextManager, boolean parseFilter)
+      throws ResourceInvalidException {
+    if (!proto.getTrafficDirection().equals(TrafficDirection.INBOUND)) {
+      throw new ResourceInvalidException(
+          "Listener " + proto.getName() + " with invalid traffic direction: "
+              + proto.getTrafficDirection());
+    }
+    if (!proto.getListenerFiltersList().isEmpty()) {
+      throw new ResourceInvalidException(
+          "Listener " + proto.getName() + " cannot have listener_filters");
+    }
+    if (proto.hasUseOriginalDst()) {
+      throw new ResourceInvalidException(
+          "Listener " + proto.getName() + " cannot have use_original_dst set to true");
+    }
+
+    SocketAddress socketAddress = proto.getAddress().getSocketAddress();
+    String address = socketAddress.getAddress();
+    switch (socketAddress.getPortSpecifierCase()) {
+      case NAMED_PORT:
+        address = address + ":" + socketAddress.getNamedPort();
+        break;
+      case PORT_VALUE:
+        address = address + ":" + socketAddress.getPortValue();
+        break;
+      default:
+        throw new ResourceInvalidException(
+            "Listener " + proto.getName() + " invalid socket_address port");
+    }
+
+    List<FilterChain> filterChains = new ArrayList<>();
+    for (io.envoyproxy.envoy.config.listener.v3.FilterChain fc : proto.getFilterChainsList()) {
+      filterChains.add(parseFilterChain(fc, tlsContextManager, parseFilter));
+    }
+    FilterChain defaultFilterChain = null;
+    if (proto.hasDefaultFilterChain()) {
+      defaultFilterChain = parseFilterChain(
+          proto.getDefaultFilterChain(), tlsContextManager, parseFilter);
+    }
+
+    return new EnvoyServerProtoData.Listener(
+        proto.getName(), address, Collections.unmodifiableList(filterChains), defaultFilterChain);
+  }
+
+  private static FilterChain parseFilterChain(
+      io.envoyproxy.envoy.config.listener.v3.FilterChain proto,
+      TlsContextManager tlsContextManager, boolean parseHttpFilters)
+      throws ResourceInvalidException {
+    io.grpc.xds.HttpConnectionManager httpConnectionManager = null;
+    HashSet<String> uniqueNames = new HashSet<>();
+    for (io.envoyproxy.envoy.config.listener.v3.Filter filter : proto.getFiltersList()) {
+      if (!uniqueNames.add(filter.getName())) {
+        throw new ResourceInvalidException(
+            "FilterChain " + proto.getName() + " with duplicated filter: " + filter.getName());
+      }
+      if (filter.hasConfigDiscovery()) {
+        throw new ResourceInvalidException(
+            "FilterChain " + proto.getName() + " contains filter " + filter.getName()
+                + " with config_discovery not supported");
+      }
+      if (!filter.hasTypedConfig()) {
+        throw new ResourceInvalidException(
+            "FilterChain " + proto.getName() + " contains filter " + filter.getName()
+                + " without typed_config");
+      }
+      Any any = filter.getTypedConfig();
+      // HttpConnectionManager is the only supported network filter at the moment.
+      if (!any.getTypeUrl().equals(TYPE_URL_HTTP_CONNECTION_MANAGER)) {
+        throw new ResourceInvalidException(
+            "FilterChain " + proto.getName() + " contains filter " + filter.getName()
+                + " with unsupported typed_config " + any.getTypeUrl());
+      }
+      // Any filters after the first HttpConnectionManager are ignored.
+      if (httpConnectionManager == null) {
+        HttpConnectionManager hcmProto;
+        try {
+          hcmProto = any.unpack(HttpConnectionManager.class);
+        } catch (InvalidProtocolBufferException e) {
+          throw new ResourceInvalidException("FilterChain " + proto.getName() + " with filter "
+              + filter.getName() + " failed to unpack message", e);
+        }
+        httpConnectionManager =
+            parseHttpConnectionManager(hcmProto, parseHttpFilters, false /* forClient */);
+      }
+    }
+    if (httpConnectionManager == null) {
+      throw new ResourceInvalidException("FilterChain " + proto.getName()
+          + " missing required HttpConnectionManager filter");
+    }
+
+    EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext = null;
+    if (TRANSPORT_SOCKET_NAME_TLS.equals(proto.getTransportSocket().getName())) {
+      DownstreamTlsContext downstreamTlsContextProto;
+      try {
+        downstreamTlsContextProto =
+            proto.getTransportSocket().getTypedConfig().unpack(DownstreamTlsContext.class);
+      } catch (InvalidProtocolBufferException e) {
+        throw new ResourceInvalidException("FilterChain " + proto.getName()
+            + " failed to unpack message", e);
+      }
+      downstreamTlsContext =
+          EnvoyServerProtoData.DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
+              downstreamTlsContextProto);
+    }
+
+    return new FilterChain(
+        parseFilterChainMatch(proto.getFilterChainMatch()),
+        httpConnectionManager,
+        downstreamTlsContext,
+        tlsContextManager
+    );
+  }
+
+  private static FilterChainMatch parseFilterChainMatch(
+      io.envoyproxy.envoy.config.listener.v3.FilterChainMatch proto)
+      throws ResourceInvalidException {
+    List<CidrRange> prefixRanges = new ArrayList<>();
+    List<CidrRange> sourcePrefixRanges = new ArrayList<>();
+    try {
+      for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getPrefixRangesList()) {
+        prefixRanges.add(new CidrRange(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+      }
+      for (io.envoyproxy.envoy.config.core.v3.CidrRange range
+          : proto.getSourcePrefixRangesList()) {
+        sourcePrefixRanges.add(
+            new CidrRange(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+      }
+    } catch (UnknownHostException e) {
+      throw new ResourceInvalidException("Failed to create CidrRange", e);
+    }
+    ConnectionSourceType sourceType;
+    switch (proto.getSourceType()) {
+      case ANY:
+        sourceType = ConnectionSourceType.ANY;
+        break;
+      case EXTERNAL:
+        sourceType = ConnectionSourceType.EXTERNAL;
+        break;
+      case SAME_IP_OR_LOOPBACK:
+        sourceType = ConnectionSourceType.SAME_IP_OR_LOOPBACK;
+        break;
+      default:
+        throw new ResourceInvalidException("Unknown source-type: " + proto.getSourceType());
+    }
+    return new FilterChainMatch(
+        proto.getDestinationPort().getValue(),
+        prefixRanges,
+        proto.getApplicationProtocolsList(),
+        sourcePrefixRanges,
+        sourceType,
+        proto.getSourcePortsList());
+  }
+
+  @VisibleForTesting
+  static io.grpc.xds.HttpConnectionManager parseHttpConnectionManager(
+      HttpConnectionManager proto, boolean parseFilter, boolean forClient)
+      throws ResourceInvalidException {
     // Obtain max_stream_duration from Http Protocol Options.
     long maxStreamDuration = 0;
-    if (hcm.hasCommonHttpProtocolOptions()) {
-      HttpProtocolOptions options = hcm.getCommonHttpProtocolOptions();
+    if (proto.hasCommonHttpProtocolOptions()) {
+      HttpProtocolOptions options = proto.getCommonHttpProtocolOptions();
       if (options.hasMaxStreamDuration()) {
         maxStreamDuration = Durations.toNanos(options.getMaxStreamDuration());
       }
     }
 
-    // Parse filters.
-    List<NamedFilterConfig> filterChain = null;
+    // Parse http filters.
+    List<NamedFilterConfig> filterConfigs = null;
     if (parseFilter) {
-      filterChain = new ArrayList<>();
-      List<io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter>
-          httpFilters = hcm.getHttpFiltersList();
+      filterConfigs = new ArrayList<>();
+      Set<String> names = new HashSet<>();
       for (io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
-               httpFilter : httpFilters) {
+               httpFilter : proto.getHttpFiltersList()) {
         String filterName = httpFilter.getName();
+        if (!names.add(filterName)) {
+          throw new ResourceInvalidException(
+              "HttpConnectionManager contains duplicate HttpFilter: " + filterName);
+        }
         StructOrError<FilterConfig> filterConfig = parseHttpFilter(httpFilter);
         if (filterConfig == null) {
           continue;
         }
         if (filterConfig.getErrorDetail() != null) {
           throw new ResourceInvalidException(
-              "HttpConnectionManager contains invalid HttpFault filter: "
+              "HttpConnectionManager contains invalid HttpFilter: "
                   + filterConfig.getErrorDetail());
         }
-        filterChain.add(new NamedFilterConfig(filterName, filterConfig.struct));
+        filterConfigs.add(new NamedFilterConfig(filterName, filterConfig.struct));
       }
     }
 
-    // Parse RDS info.
-    if (hcm.hasRouteConfig()) {
-      // Found inlined route_config. Parse it to find the cluster_name.
-      List<VirtualHost> virtualHosts = new ArrayList<>();
-      for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
-          : hcm.getRouteConfig().getVirtualHostsList()) {
-        StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseFilter);
-        if (virtualHost.getErrorDetail() != null) {
-          throw new ResourceInvalidException("HttpConnectionManager contains invalid virtual host: "
-              + virtualHost.getErrorDetail());
+    if (forClient) {
+      // Parse inlined RouteConfiguration or RDS.
+      if (proto.hasRouteConfig()) {
+        List<VirtualHost> virtualHosts = new ArrayList<>();
+        for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
+            : proto.getRouteConfig().getVirtualHostsList()) {
+          StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseFilter);
+          if (virtualHost.getErrorDetail() != null) {
+            throw new ResourceInvalidException(
+                "HttpConnectionManager contains invalid virtual host: "
+                    + virtualHost.getErrorDetail());
+          }
+          virtualHosts.add(virtualHost.getStruct());
         }
-        virtualHosts.add(virtualHost.getStruct());
+        return io.grpc.xds.HttpConnectionManager.withVirtualHosts(
+            maxStreamDuration, virtualHosts, filterConfigs);
       }
-      return new LdsUpdate(maxStreamDuration, virtualHosts, filterChain);
-    }
-
-    if (hcm.hasRds()) {
-      // Found RDS.
-      Rds rds = hcm.getRds();
-      if (!rds.hasConfigSource()) {
-        throw new ResourceInvalidException("HttpConnectionManager missing config_source for RDS.");
+      if (proto.hasRds()) {
+        Rds rds = proto.getRds();
+        if (!rds.hasConfigSource()) {
+          throw new ResourceInvalidException(
+              "HttpConnectionManager contains invalid RDS: missing config_source");
+        }
+        if (!rds.getConfigSource().hasAds()) {
+          throw new ResourceInvalidException(
+              "HttpConnectionManager contains invalid RDS: must specify ADS");
+        }
+        return io.grpc.xds.HttpConnectionManager.withRdsName(
+            maxStreamDuration, rds.getRouteConfigName(), filterConfigs);
       }
-      if (!rds.getConfigSource().hasAds()) {
-        throw new ResourceInvalidException(
-            "HttpConnectionManager ConfigSource for RDS does not specify ADS.");
-      }
-      return new LdsUpdate(maxStreamDuration, rds.getRouteConfigName(), filterChain);
+      throw new ResourceInvalidException(
+          "HttpConnectionManager neither has inlined route_config nor RDS");
     }
-
-    throw new ResourceInvalidException(
-        "HttpConnectionManager neither has inlined route_config nor RDS.");
-  }
-
-  private LdsUpdate processServerSideListener(Listener listener)
-      throws ResourceInvalidException {
-    StructOrError<EnvoyServerProtoData.Listener> convertedListener =
-        parseServerSideListener(listener, tlsContextManager);
-    if (convertedListener.getErrorDetail() != null) {
-      throw new ResourceInvalidException(convertedListener.getErrorDetail());
-    }
-    return new LdsUpdate(convertedListener.getStruct());
+    return io.grpc.xds.HttpConnectionManager.forLdsOnly(maxStreamDuration, filterConfigs);
   }
 
   @VisibleForTesting
@@ -366,19 +541,6 @@ final class ClientXdsClient extends AbstractXdsClient {
           "Invalid filter config for HttpFilter [" + filterName + "]: " + filterConfig.errorDetail);
     }
     return StructOrError.fromStruct(filterConfig.config);
-  }
-
-  @VisibleForTesting static StructOrError<EnvoyServerProtoData.Listener> parseServerSideListener(
-      Listener listener, TlsContextManager tlsContextManager) {
-    try {
-      return StructOrError.fromStruct(
-          EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener, tlsContextManager));
-    } catch (InvalidProtocolBufferException e) {
-      return StructOrError.fromError(
-          "Failed to unpack Listener " + listener.getName() + ":" + e.getMessage());
-    } catch (IllegalArgumentException e) {
-      return StructOrError.fromError(e.getMessage());
-    }
   }
 
   private static StructOrError<VirtualHost> parseVirtualHost(
@@ -1610,14 +1772,15 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static final class ResourceInvalidException extends Exception {
+  @VisibleForTesting
+  static final class ResourceInvalidException extends Exception {
     private static final long serialVersionUID = 0L;
 
-    public ResourceInvalidException(String message) {
+    private ResourceInvalidException(String message) {
       super(message, null, false, false);
     }
 
-    public ResourceInvalidException(String message, Throwable cause) {
+    private ResourceInvalidException(String message, Throwable cause) {
       super(cause != null ? message + ": " + cause.getMessage() : message, cause, false, false);
     }
   }
