@@ -27,6 +27,7 @@ import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.ExtensionConfigSource;
+import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.Locality;
 import io.envoyproxy.envoy.config.core.v3.RuntimeFractionalPercent;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
@@ -58,6 +59,7 @@ import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.envoyproxy.envoy.type.v3.Int64Range;
 import io.grpc.Status.Code;
+import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.ClientXdsClient.StructOrError;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -76,12 +78,18 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class ClientXdsClientDataTest {
+
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
+  @Rule
+  public final ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void parseRoute_withRouteAction() {
@@ -681,63 +689,94 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
-  public void parseServerSideListener_invalidTrafficDirection() {
+  public void parseHttpConnectionManager_forClient_missingRdsAndInlinedRouteConfiguration()
+      throws ResourceInvalidException {
+    HttpConnectionManager hcm =
+        HttpConnectionManager.newBuilder()
+            .setCommonHttpProtocolOptions(
+                HttpProtocolOptions.newBuilder()
+                    .setMaxStreamDuration(Durations.fromNanos(1000L)))
+            .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("HttpConnectionManager neither has inlined route_config nor RDS");
+    ClientXdsClient.parseHttpConnectionManager(hcm, false /* does not matter */, true);
+  }
+
+  @Test
+  public void parseHttpConnectionManager_duplicateHttpFilters() throws ResourceInvalidException {
+    HttpConnectionManager hcm =
+        HttpConnectionManager.newBuilder()
+            .addHttpFilters(
+                HttpFilter.newBuilder().setName("envoy.filter.foo").setIsOptional(true))
+            .addHttpFilters(
+                HttpFilter.newBuilder().setName("envoy.filter.foo").setIsOptional(true))
+            .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("HttpConnectionManager contains duplicate HttpFilter: envoy.filter.foo");
+    ClientXdsClient.parseHttpConnectionManager(hcm, true, false /* does not matter */);
+  }
+
+  @Test
+  public void parseServerSideListener_invalidTrafficDirection() throws ResourceInvalidException {
     Listener listener =
         Listener.newBuilder()
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.OUTBOUND)
             .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener, null);
-    assertThat(struct.getErrorDetail()).isEqualTo("Listener listener1 is not INBOUND");
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("Listener listener1 with invalid traffic direction: OUTBOUND");
+    ClientXdsClient.parseServerSideListener(listener, null, true);
   }
 
   @Test
-  public void parseServerSideListener_listenerFiltersPresent() {
+  public void parseServerSideListener_listenerFiltersPresent() throws ResourceInvalidException {
     Listener listener =
         Listener.newBuilder()
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addListenerFilters(ListenerFilter.newBuilder().build())
             .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener, null);
-    assertThat(struct.getErrorDetail())
-        .isEqualTo("Listener listener1 cannot have listener_filters");
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("Listener listener1 cannot have listener_filters");
+    ClientXdsClient.parseServerSideListener(listener, null, true);
   }
 
   @Test
-  public void parseServerSideListener_useOriginalDst() {
+  public void parseServerSideListener_useOriginalDst() throws ResourceInvalidException {
     Listener listener =
         Listener.newBuilder()
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.INBOUND)
             .setUseOriginalDst(BoolValue.of(true))
             .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener, null);
-    assertThat(struct.getErrorDetail())
-        .isEqualTo("Listener listener1 cannot have use_original_dst set to true");
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("Listener listener1 cannot have use_original_dst set to true");
+    ClientXdsClient.parseServerSideListener(listener, null, true);
   }
 
   @Test
-  public void parseServerSideListener_noHcm() {
+  public void parseServerSideListener_noHcm() throws ResourceInvalidException {
     Listener listener =
         Listener.newBuilder()
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.INBOUND)
-            .addFilterChains(FilterChain.newBuilder().build())
+            .addFilterChains(FilterChain.newBuilder().setName("filter-chain-foo").build())
+            .setAddress(
+                Address.newBuilder()
+                    .setSocketAddress(
+                        SocketAddress.newBuilder().setAddress("10.0.1.2").setPortValue(8080)))
             .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener, null);
-    assertThat(struct.getErrorDetail())
-        .isEqualTo("filerChain  has to have envoy.http_connection_manager");
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage(
+        "FilterChain filter-chain-foo missing required HttpConnectionManager filter");
+    ClientXdsClient.parseServerSideListener(listener, null, true);
   }
 
   @Test
-  public void parseServerSideListener_duplicateFilterName() {
+  public void parseServerSideListener_duplicateFilterName() throws ResourceInvalidException {
     FilterChain filterChain =
         buildFilterChain(
+            "filter-chain-foo",
             Filter.newBuilder()
                 .setName("envoy.http_connection_manager")
                 .setTypedConfig(Any.pack(HttpConnectionManager.getDefaultInstance()))
@@ -751,164 +790,113 @@ public class ClientXdsClientDataTest {
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addFilterChains(filterChain)
+            .setAddress(
+                Address.newBuilder()
+                    .setSocketAddress(
+                        SocketAddress.newBuilder().setAddress("10.0.1.2").setPortValue(8080)))
             .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener, null);
-    assertThat(struct.getErrorDetail())
-        .isEqualTo("filerChain  has non-unique filter name:envoy.http_connection_manager");
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage(
+        "FilterChain filter-chain-foo with duplicated filter: envoy.http_connection_manager");
+    ClientXdsClient.parseServerSideListener(listener, null, true);
   }
 
   @Test
-  public void parseServerSideListener_configDiscoveryFilter() {
+  public void parseServerSideListener_configDiscoveryFilter() throws ResourceInvalidException {
     Filter filter =
         Filter.newBuilder()
             .setName("envoy.http_connection_manager")
             .setConfigDiscovery(ExtensionConfigSource.newBuilder().build())
             .build();
-    FilterChain filterChain = buildFilterChain(filter);
+    FilterChain filterChain = buildFilterChain("filter-chain-foo", filter);
     Listener listener =
         Listener.newBuilder()
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addFilterChains(filterChain)
+            .setAddress(
+                Address.newBuilder()
+                    .setSocketAddress(
+                        SocketAddress.newBuilder().setAddress("10.0.1.2").setPortValue(8080)))
             .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener, null);
-    assertThat(struct.getErrorDetail())
-        .isEqualTo("filter envoy.http_connection_manager with config_discovery not supported");
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage(
+        "FilterChain filter-chain-foo contains filter envoy.http_connection_manager "
+            + "with config_discovery not supported");
+    ClientXdsClient.parseServerSideListener(listener, null, true);
   }
 
   @Test
-  public void parseServerSideListener_expectTypedConfigFilter() {
+  public void parseServerSideListener_expectTypedConfigFilter() throws ResourceInvalidException {
     Filter filter = Filter.newBuilder().setName("envoy.http_connection_manager").build();
-    FilterChain filterChain = buildFilterChain(filter);
+    FilterChain filterChain = buildFilterChain("filter-chain-foo", filter);
     Listener listener =
         Listener.newBuilder()
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addFilterChains(filterChain)
+            .setAddress(
+                Address.newBuilder()
+                    .setSocketAddress(
+                        SocketAddress.newBuilder().setAddress("10.0.1.2").setPortValue(8080)))
             .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener, null);
-    assertThat(struct.getErrorDetail())
-        .isEqualTo("filter envoy.http_connection_manager expected to have typed_config");
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage(
+        "FilterChain filter-chain-foo contains filter envoy.http_connection_manager "
+            + "without typed_config");
+    ClientXdsClient.parseServerSideListener(listener, null, true);
   }
 
   @Test
-  public void parseServerSideListener_wrongTypeUrl() {
+  public void parseServerSideListener_wrongTypeUrl() throws ResourceInvalidException {
     Filter filter =
         Filter.newBuilder()
             .setName("envoy.http_connection_manager")
             .setTypedConfig(Any.newBuilder().setTypeUrl("badTypeUrl"))
             .build();
-    FilterChain filterChain = buildFilterChain(filter);
+    FilterChain filterChain = buildFilterChain("filter-chain-foo", filter);
     Listener listener =
         Listener.newBuilder()
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addFilterChains(filterChain)
+            .setAddress(
+                Address.newBuilder()
+                    .setSocketAddress(
+                        SocketAddress.newBuilder().setAddress("10.0.1.2").setPortValue(8080)))
             .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener, null);
-    assertThat(struct.getErrorDetail())
-        .isEqualTo(
-            "filter envoy.http_connection_manager with unsupported typed_config type:badTypeUrl");
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage(
+        "FilterChain filter-chain-foo contains filter envoy.http_connection_manager with "
+            + "unsupported typed_config badTypeUrl");
+    ClientXdsClient.parseServerSideListener(listener, null, true);
   }
 
   @Test
-  public void parseServerSideListener_duplicateHttpFilter() {
+  public void parseServerSideListener_duplicateHttpFilter() throws ResourceInvalidException {
     Filter filter =
-        buildHttpConnectionManager(
-            "envoy.http_connection_manager",
+        buildHttpConnectionManagerFilter(
             HttpFilter.newBuilder().setName("hf").setIsOptional(true).build(),
             HttpFilter.newBuilder().setName("hf").setIsOptional(true).build());
-    FilterChain filterChain = buildFilterChain(filter);
+    FilterChain filterChain = buildFilterChain("filter-chain-foo", filter);
     Listener listener =
         Listener.newBuilder()
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addFilterChains(filterChain)
+            .setAddress(
+                Address.newBuilder()
+                    .setSocketAddress(
+                        SocketAddress.newBuilder().setAddress("10.0.1.2").setPortValue(8080)))
             .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener, null);
-    assertThat(struct.getErrorDetail())
-        .isEqualTo("http-connection-manager has non-unique http-filter name:hf");
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("HttpConnectionManager contains duplicate HttpFilter: hf");
+    ClientXdsClient.parseServerSideListener(listener, null, true);
   }
 
-  @Test
-  public void parseServerSideListener_configDiscoveryHttpFilter() {
-    Filter filter =
-        buildHttpConnectionManager(
-            "envoy.http_connection_manager",
-            HttpFilter.newBuilder()
-                .setName("envoy.router")
-                .setConfigDiscovery(ExtensionConfigSource.newBuilder().build())
-                .build());
-    FilterChain filterChain = buildFilterChain(filter);
-    Listener listener =
-        Listener.newBuilder()
-            .setName("listener1")
-            .setTrafficDirection(TrafficDirection.INBOUND)
-            .addFilterChains(filterChain)
-            .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener, null);
-    assertThat(struct.getErrorDetail())
-        .isEqualTo(
-            "http-connection-manager http-filter envoy.router uses "
-                + "config-discovery which is unsupported");
-  }
-
-  @Test
-  public void parseServerSideListener_badTypeUrlHttpFilter() {
-    HTTPFault fault = HTTPFault.newBuilder().build();
-    Filter filter =
-        buildHttpConnectionManager(
-            "envoy.http_connection_manager",
-            HttpFilter.newBuilder()
-                .setName("envoy.router")
-                .setTypedConfig(Any.pack(fault, "type.googleapis.com"))
-                .build());
-    FilterChain filterChain = buildFilterChain(filter);
-    Listener listener =
-        Listener.newBuilder()
-            .setName("listener1")
-            .setTrafficDirection(TrafficDirection.INBOUND)
-            .addFilterChains(filterChain)
-            .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener, null);
-    assertThat(struct.getErrorDetail())
-        .isEqualTo(
-            "http-connection-manager http-filter envoy.router has unsupported typed-config type:"
-                + "type.googleapis.com/envoy.extensions.filters.http.fault.v3.HTTPFault");
-  }
-
-  @Test
-  public void parseServerSideListener_missingTypeUrlHttpFilter() {
-    Filter filter =
-        buildHttpConnectionManager(
-            "envoy.http_connection_manager",
-            HttpFilter.newBuilder().setName("envoy.filters.http.router").build());
-    FilterChain filterChain = buildFilterChain(filter);
-    Listener listener =
-        Listener.newBuilder()
-            .setName("listener1")
-            .setTrafficDirection(TrafficDirection.INBOUND)
-            .addFilterChains(filterChain)
-            .build();
-    StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener, null);
-    assertThat(struct.getErrorDetail())
-        .isEqualTo(
-            "http-connection-manager http-filter envoy.filters.http.router should have "
-                + "typed-config type "
-                + "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router");
-  }
-
-  static Filter buildHttpConnectionManager(String name, HttpFilter... httpFilters) {
+  private static Filter buildHttpConnectionManagerFilter(HttpFilter... httpFilters) {
     return Filter.newBuilder()
-        .setName(name)
+        .setName("envoy.http_connection_manager")
         .setTypedConfig(
             Any.pack(
                 HttpConnectionManager.newBuilder()
@@ -918,8 +906,9 @@ public class ClientXdsClientDataTest {
         .build();
   }
 
-  static FilterChain buildFilterChain(Filter... filters) {
+  private static FilterChain buildFilterChain(String name, Filter... filters) {
     return FilterChain.newBuilder()
+        .setName(name)
         .setFilterChainMatch(
             FilterChainMatch.newBuilder()
                 .build())

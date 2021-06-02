@@ -264,7 +264,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
 
     @SuppressWarnings("unchecked")
     @Override
-    protected Message buildListener(
+    protected Message buildListenerWithApiListener(
         String name, Message routeConfiguration, List<? extends Message> httpFilters) {
       return Listener.newBuilder()
           .setName(name)
@@ -280,7 +280,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildListenerForRds(String name, String rdsResourceName) {
+    protected Message buildListenerWithApiListenerForRds(String name, String rdsResourceName) {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(Address.getDefaultInstance())
@@ -299,7 +299,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildListenerInvalid(String name) {
+    protected Message buildListenerWithApiListenerInvalid(String name) {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(Address.getDefaultInstance())
@@ -700,7 +700,6 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(listenerAddress)
-          .setDefaultFilterChain(FilterChain.getDefaultInstance())
           .addAllFilterChains(Arrays.asList(filterChainsArray))
           .setTrafficDirection(TrafficDirection.INBOUND)
           .build();
@@ -723,7 +722,6 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(listenerAddress)
-          .setDefaultFilterChain(FilterChain.getDefaultInstance())
           .addAllFilterChains(Arrays.asList(filterChain))
           .setTrafficDirection(TrafficDirection.INBOUND)
           .build();
@@ -733,7 +731,8 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     protected Filter buildTestFilter(String name) {
       return Filter.newBuilder()
           .setName(name)
-          .setTypedConfig(Any.pack(HttpConnectionManager.getDefaultInstance()))
+          .setTypedConfig(
+              Any.pack(HttpConnectionManager.getDefaultInstance(), "type.googleapis.com"))
           .build();
     }
   }
