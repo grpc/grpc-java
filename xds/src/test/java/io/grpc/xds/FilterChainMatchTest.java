@@ -18,9 +18,20 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.UInt32Value;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.CidrRange;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
+import io.envoyproxy.envoy.config.core.v3.TransportSocket;
+import io.envoyproxy.envoy.config.listener.v3.Filter;
+import io.envoyproxy.envoy.config.listener.v3.FilterChain;
+import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
@@ -87,7 +98,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     DownstreamTlsContext tlsContext =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChain filterChain =
@@ -110,17 +123,24 @@ public class FilterChainMatchTest {
             Arrays.asList("managed-mtls"),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     DownstreamTlsContext tlsContext =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChain filterChain =
         new EnvoyServerProtoData.FilterChain(filterChainMatch, tlsContext, tlsContextManager);
+    DownstreamTlsContext defaultTlsContext =
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
+    EnvoyServerProtoData.FilterChain defaultFilterChain =
+        new EnvoyServerProtoData.FilterChain(null, defaultTlsContext, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
-        new EnvoyServerProtoData.Listener("listener1", LOCAL_IP, Arrays.asList(filterChain), null);
+        new EnvoyServerProtoData.Listener("listener1", LOCAL_IP, Arrays.asList(filterChain),
+            defaultFilterChain);
     XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
     registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext1 = getDownstreamTlsContext();
-    assertThat(tlsContext1).isSameInstanceAs(tlsContext);
+    assertThat(tlsContext1).isSameInstanceAs(defaultTlsContext);
   }
 
   @Test
@@ -151,7 +171,9 @@ public class FilterChainMatchTest {
             Arrays.asList("managed-mtls"),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainWithDestPort =
         new EnvoyServerProtoData.FilterChain(filterChainMatchWithDestPort, tlsContextWithDestPort,
             tlsContextManager);
@@ -181,7 +203,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainWithMatch =
         new EnvoyServerProtoData.FilterChain(filterChainMatchWithMatch, tlsContextMatch,
             tlsContextManager);
@@ -213,7 +237,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainWithMismatch =
         new EnvoyServerProtoData.FilterChain(filterChainMatchWithMismatch, tlsContextMismatch,
             tlsContextManager);
@@ -245,7 +271,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChain0Length =
         new EnvoyServerProtoData.FilterChain(filterChainMatch0Length, tlsContext0Length,
             tlsContextManager);
@@ -276,7 +304,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
         new EnvoyServerProtoData.FilterChain(filterChainMatchLessSpecific, tlsContextLessSpecific,
             tlsContextManager);
@@ -290,7 +320,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainMoreSpecific =
         new EnvoyServerProtoData.FilterChain(filterChainMatchMoreSpecific, tlsContextMoreSpecific,
             tlsContextManager);
@@ -321,7 +353,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
         new EnvoyServerProtoData.FilterChain(filterChainMatchLessSpecific, tlsContextLessSpecific,
             tlsContextManager);
@@ -335,7 +369,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainMoreSpecific =
         new EnvoyServerProtoData.FilterChain(filterChainMatchMoreSpecific, tlsContextMoreSpecific,
             tlsContextManager);
@@ -366,7 +402,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
         new EnvoyServerProtoData.FilterChain(filterChainMatchLessSpecific, tlsContextLessSpecific,
             tlsContextManager);
@@ -380,7 +418,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainMoreSpecific =
         new EnvoyServerProtoData.FilterChain(filterChainMatchMoreSpecific, tlsContextMoreSpecific,
             tlsContextManager);
@@ -413,7 +453,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainMoreSpecificWith2 =
         new EnvoyServerProtoData.FilterChain(
             filterChainMatchMoreSpecificWith2, tlsContextMoreSpecificWith2, tlsContextManager);
@@ -427,7 +469,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
         new EnvoyServerProtoData.FilterChain(filterChainMatchLessSpecific, tlsContextLessSpecific,
             tlsContextManager);
@@ -457,7 +501,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.SAME_IP_OR_LOOPBACK,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainWithMismatch =
         new EnvoyServerProtoData.FilterChain(filterChainMatchWithMismatch, tlsContextMismatch,
             tlsContextManager);
@@ -487,7 +533,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.SAME_IP_OR_LOOPBACK,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainWithMatch =
         new EnvoyServerProtoData.FilterChain(filterChainMatchWithMatch, tlsContextMatch,
             tlsContextManager);
@@ -520,7 +568,9 @@ public class FilterChainMatchTest {
                 new EnvoyServerProtoData.CidrRange("10.4.2.0", 24),
                 new EnvoyServerProtoData.CidrRange(REMOTE_IP, 32)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainMoreSpecificWith2 =
         new EnvoyServerProtoData.FilterChain(
             filterChainMatchMoreSpecificWith2, tlsContextMoreSpecificWith2, tlsContextManager);
@@ -534,7 +584,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.asList(new EnvoyServerProtoData.CidrRange("10.4.2.2", 31)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
         new EnvoyServerProtoData.FilterChain(filterChainMatchLessSpecific, tlsContextLessSpecific,
             tlsContextManager);
@@ -567,7 +619,9 @@ public class FilterChainMatchTest {
                 new EnvoyServerProtoData.CidrRange("10.4.2.0", 24),
                 new EnvoyServerProtoData.CidrRange("192.168.10.2", 32)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChain1 =
         new EnvoyServerProtoData.FilterChain(filterChainMatch1, tlsContext1, tlsContextManager);
 
@@ -580,7 +634,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.asList(new EnvoyServerProtoData.CidrRange("10.4.2.0", 24)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChain2 =
         new EnvoyServerProtoData.FilterChain(filterChainMatch2, tlsContext2, tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain =
@@ -613,7 +669,9 @@ public class FilterChainMatchTest {
                 new EnvoyServerProtoData.CidrRange("10.4.2.0", 24),
                 new EnvoyServerProtoData.CidrRange("10.4.2.2", 31)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainEmptySourcePorts =
         new EnvoyServerProtoData.FilterChain(
             filterChainMatchEmptySourcePorts, tlsContextEmptySourcePorts, tlsContextManager);
@@ -627,7 +685,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.asList(new EnvoyServerProtoData.CidrRange("10.4.2.2", 31)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.asList(7000, 15000));
+            Arrays.asList(7000, 15000),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChainSourcePortMatch =
         new EnvoyServerProtoData.FilterChain(
             filterChainMatchSourcePortMatch, tlsContextSourcePortMatch, tlsContextManager);
@@ -676,7 +736,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.asList(new EnvoyServerProtoData.CidrRange(REMOTE_IP, 32)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChain1 =
         new EnvoyServerProtoData.FilterChain(filterChainMatch1, tlsContext1, tlsContextManager);
 
@@ -690,7 +752,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.asList(new EnvoyServerProtoData.CidrRange("10.4.0.0", 16)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChain2 =
         new EnvoyServerProtoData.FilterChain(filterChainMatch2, tlsContext2, tlsContextManager);
 
@@ -704,7 +768,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.SAME_IP_OR_LOOPBACK,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChain3 =
         new EnvoyServerProtoData.FilterChain(filterChainMatch3, tlsContext3, tlsContextManager);
 
@@ -719,7 +785,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.asList(new EnvoyServerProtoData.CidrRange("10.4.2.0", 24)),
             EnvoyServerProtoData.ConnectionSourceType.EXTERNAL,
-            Arrays.asList(16000, 9000));
+            Arrays.asList(16000, 9000),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChain4 =
         new EnvoyServerProtoData.FilterChain(filterChainMatch4, tlsContext4, tlsContextManager);
 
@@ -736,7 +804,9 @@ public class FilterChainMatchTest {
                 new EnvoyServerProtoData.CidrRange("10.4.2.0", 24),
                 new EnvoyServerProtoData.CidrRange("192.168.2.0", 24)),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.asList(15000, 8000));
+            Arrays.asList(15000, 8000),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChain5 =
         new EnvoyServerProtoData.FilterChain(filterChainMatch5, tlsContext5, tlsContextManager);
 
@@ -748,7 +818,9 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain filterChain6 =
         new EnvoyServerProtoData.FilterChain(filterChainMatch6, tlsContext6, tlsContextManager);
 
@@ -765,6 +837,108 @@ public class FilterChainMatchTest {
     registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContextPicked = getDownstreamTlsContext();
     assertThat(tlsContextPicked).isSameInstanceAs(tlsContext5);
+  }
+
+  @Test
+  public void filterChainMatch_unsupportedMatchers()
+      throws InvalidProtocolBufferException, UnknownHostException {
+    setupChannel(LOCAL_IP, REMOTE_IP, 15000);
+    io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext tlsContext1 =
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+            "CERT1", "ROOTCA");
+    io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext tlsContext2 =
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+            "CERT2", "ROOTCA");
+    io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext tlsContext3 =
+        CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+            "CERT3", "ROOTCA");
+
+    FilterChainMatch filterChainMatch1 =
+        FilterChainMatch.newBuilder()
+            .addAllServerNames(Arrays.asList("server1", "server2"))
+            .setTransportProtocol("tls")
+            .addAllApplicationProtocols(Arrays.asList("managed-mtls", "h2"))
+            .addPrefixRanges(CidrRange.newBuilder()
+                .setAddressPrefix("10.1.0.0")
+                .setPrefixLen(UInt32Value.of(16))
+                .build())
+            .build();
+
+    FilterChainMatch filterChainMatch2 =
+        FilterChainMatch.newBuilder()
+            .addPrefixRanges(CidrRange.newBuilder()
+                .setAddressPrefix("10.0.0.0")
+                .setPrefixLen(UInt32Value.of(8))
+                .build())
+            .build();
+
+    FilterChain filterChain1 =
+        FilterChain.newBuilder()
+            .setFilterChainMatch(filterChainMatch1)
+            .setTransportSocket(TransportSocket.newBuilder().setName("envoy.transport_sockets.tls")
+                .setTypedConfig(Any.pack(tlsContext1))
+                .build())
+            .addFilters(Filter.newBuilder()
+                .setName("envoy.http_connection_manager")
+                .setTypedConfig(Any.newBuilder()
+                    .setTypeUrl(
+                        "type.googleapis.com/"
+                            + "envoy.extensions.filters.network.http_connection_manager"
+                            + ".v3.HttpConnectionManager"))
+                .build())
+            .build();
+    FilterChain filterChain2 =
+        FilterChain.newBuilder()
+            .setFilterChainMatch(filterChainMatch2)
+            .setTransportSocket(TransportSocket.newBuilder().setName("envoy.transport_sockets.tls")
+                .setTypedConfig(Any.pack(tlsContext2))
+                .build())
+            .addFilters(Filter.newBuilder()
+                .setName("envoy.http_connection_manager")
+                .setTypedConfig(Any.newBuilder()
+                    .setTypeUrl(
+                        "type.googleapis.com/"
+                            + "envoy.extensions.filters.network.http_connection_manager"
+                            + ".v3.HttpConnectionManager"))
+                .build())
+            .build();
+    FilterChain defaultFilterChain =
+        FilterChain.newBuilder()
+            .setTransportSocket(TransportSocket.newBuilder().setName("envoy.transport_sockets.tls")
+                .setTypedConfig(Any.pack(tlsContext3))
+                .build())
+            .addFilters(Filter.newBuilder()
+                .setName("envoy.http_connection_manager")
+                .setTypedConfig(Any.newBuilder()
+                    .setTypeUrl(
+                        "type.googleapis.com/"
+                            + "envoy.extensions.filters.network.http_connection_manager"
+                            + ".v3.HttpConnectionManager"))
+                .build())
+            .build();
+    Address address =
+        Address.newBuilder()
+            .setSocketAddress(
+                SocketAddress.newBuilder().setPortValue(8000).setAddress("10.2.1.34").build())
+            .build();
+    io.envoyproxy.envoy.config.listener.v3.Listener listener =
+        io.envoyproxy.envoy.config.listener.v3.Listener.newBuilder()
+            .setName("8000")
+            .setAddress(address)
+            .addFilterChains(filterChain1)
+            .addFilterChains(filterChain2)
+            .setDefaultFilterChain(defaultFilterChain)
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .build();
+
+    EnvoyServerProtoData.Listener xdsListener = EnvoyServerProtoData.Listener
+        .fromEnvoyProtoListener(listener, mock(TlsContextManager.class));
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(xdsListener);
+    registeredWatcher.onChanged(listenerUpdate);
+    DownstreamTlsContext tlsContextPicked = getDownstreamTlsContext();
+    // assert defaultFilterChain match
+    assertThat(tlsContextPicked.getCommonTlsContext().getTlsCertificateSdsSecretConfigsList().get(0)
+        .getName()).isEqualTo("CERT3");
   }
 
   private void setupChannel(String localIp, String remoteIp, int remotePort)

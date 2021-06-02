@@ -374,7 +374,9 @@ public class XdsSdsClientServerTest {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             null,
-            Arrays.<Integer>asList());
+            Arrays.<Integer>asList(),
+            Arrays.<String>asList(),
+            null);
     EnvoyServerProtoData.FilterChain defaultFilterChain =
         new EnvoyServerProtoData.FilterChain(filterChainMatch, tlsContext, tlsContextManager);
     EnvoyServerProtoData.Listener listener =

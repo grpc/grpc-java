@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.UInt32Value;
 import io.grpc.Internal;
@@ -223,6 +224,9 @@ public final class XdsClientWrapperForServerSds {
 
     filterChains = filterOnDestinationPort(filterChains);
     filterChains = filterOnIpAddress(filterChains, localInetAddr.getAddress(), true);
+    filterChains = filterOnServerNames(filterChains);
+    filterChains = filterOnTransportProtocol(filterChains);
+    filterChains = filterOnApplicationProtocols(filterChains);
     filterChains =
         filterOnSourceType(filterChains, remoteInetAddr.getAddress(), localInetAddr.getAddress());
     filterChains = filterOnIpAddress(filterChains, remoteInetAddr.getAddress(), false);
@@ -235,6 +239,46 @@ public final class XdsClientWrapperForServerSds {
       return filterChains.get(0).getSslContextProviderSupplier();
     }
     return listener.getDefaultFilterChain().getSslContextProviderSupplier();
+  }
+
+  // reject if filer-chain-match has non-empty application_protocols
+  private static List<FilterChain> filterOnApplicationProtocols(List<FilterChain> filterChains) {
+    ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
+    for (FilterChain filterChain : filterChains) {
+      FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+
+      if (filterChainMatch.getApplicationProtocols().isEmpty()) {
+        filtered.add(filterChain);
+      }
+    }
+    return filtered;
+  }
+
+  // reject if filer-chain-match has non-empty transport protocol other than "raw_buffer"
+  private static List<FilterChain> filterOnTransportProtocol(List<FilterChain> filterChains) {
+    ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
+    for (FilterChain filterChain : filterChains) {
+      FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+
+      String transportProtocol = filterChainMatch.getTransportProtocol();
+      if ( Strings.isNullOrEmpty(transportProtocol) || "raw_buffer".equals(transportProtocol)) {
+        filtered.add(filterChain);
+      }
+    }
+    return filtered;
+  }
+
+  // reject if filer-chain-match has server_name(s)
+  private static List<FilterChain> filterOnServerNames(List<FilterChain> filterChains) {
+    ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
+    for (FilterChain filterChain : filterChains) {
+      FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+
+      if (filterChainMatch.getServerNames().isEmpty()) {
+        filtered.add(filterChain);
+      }
+    }
+    return filtered;
   }
 
   // destination_port present => Always fail match

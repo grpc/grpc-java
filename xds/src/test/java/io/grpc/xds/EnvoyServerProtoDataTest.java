@@ -36,6 +36,7 @@ import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -75,7 +76,11 @@ public class EnvoyServerProtoDataTest {
     EnvoyServerProtoData.FilterChainMatch inFilterChainMatch = inFilter.getFilterChainMatch();
     assertThat(inFilterChainMatch).isNotNull();
     assertThat(inFilterChainMatch.getDestinationPort()).isEqualTo(8000);
-    assertThat(inFilterChainMatch.getApplicationProtocols()).isEmpty();
+    assertThat(inFilterChainMatch.getApplicationProtocols())
+        .containsExactlyElementsIn(Arrays.asList("managed-mtls", "h2"));
+    assertThat(inFilterChainMatch.getServerNames())
+        .containsExactlyElementsIn(Arrays.asList("server1", "server2"));
+    assertThat(inFilterChainMatch.getTransportProtocol()).isEqualTo("tls");
     assertThat(inFilterChainMatch.getPrefixRanges())
         .containsExactly(new EnvoyServerProtoData.CidrRange("10.20.0.15", 32));
     assertThat(inFilterChainMatch.getSourcePrefixRanges())
@@ -111,6 +116,9 @@ public class EnvoyServerProtoDataTest {
             .setFilterChainMatch(
                 FilterChainMatch.newBuilder()
                     .setDestinationPort(UInt32Value.of(8000))
+                    .addAllServerNames(Arrays.asList("server1", "server2"))
+                    .setTransportProtocol("tls")
+                    .addAllApplicationProtocols(Arrays.asList("managed-mtls", "h2"))
                     .addPrefixRanges(CidrRange.newBuilder()
                         .setAddressPrefix("10.20.0.15")
                         .setPrefixLen(UInt32Value.of(32))
