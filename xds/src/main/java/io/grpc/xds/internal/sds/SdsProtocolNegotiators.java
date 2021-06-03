@@ -23,13 +23,10 @@ import io.grpc.Attributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
-import io.grpc.netty.InternalNettyChannelBuilder;
-import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiatorFactory;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
-import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
@@ -65,18 +62,7 @@ public final class SdsProtocolNegotiators {
   private static final AsciiString SCHEME = AsciiString.of("http");
 
   /**
-   * Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}.
-   *
-   * @param fallbackNegotiator protocol negotiator to use as fallback.
-   */
-  public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory(
-      @Nullable ProtocolNegotiator fallbackNegotiator) {
-    return new ClientSdsProtocolNegotiatorFactory(fallbackNegotiator);
-  }
-
-  /**
-   * Returns a {@link InternalProtocolNegotiator.ClientFactory} to be used on {@link
-   * NettyChannelBuilder}.
+   * Returns a {@link InternalProtocolNegotiator.ClientFactory}.
    *
    * @param fallbackNegotiator protocol negotiator to use as fallback.
    */
@@ -88,17 +74,6 @@ public final class SdsProtocolNegotiators {
   public static InternalProtocolNegotiator.ServerFactory serverProtocolNegotiatorFactory(
       @Nullable InternalProtocolNegotiator.ServerFactory fallbackNegotiator) {
     return new ServerFactory(fallbackNegotiator);
-  }
-
-  /**
-   * Creates an SDS based {@link ProtocolNegotiator} for a {@link io.grpc.netty.NettyServerBuilder}.
-   * If xDS returns no DownstreamTlsContext, it will fall back to plaintext.
-   *
-   * @param fallbackProtocolNegotiator protocol negotiator to use as fallback.
-   */
-  public static ServerSdsProtocolNegotiator serverProtocolNegotiator(
-      @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
-    return new ServerSdsProtocolNegotiator(fallbackProtocolNegotiator);
   }
 
   private static final class ServerFactory implements InternalProtocolNegotiator.ServerFactory {
@@ -132,41 +107,6 @@ public final class SdsProtocolNegotiators {
     @Override
     public int getDefaultPort() {
       return GrpcUtil.DEFAULT_PORT_SSL;
-    }
-  }
-
-  private static final class ClientSdsProtocolNegotiatorFactory
-      implements InternalNettyChannelBuilder.ProtocolNegotiatorFactory {
-
-    private final ProtocolNegotiator fallbackProtocolNegotiator;
-
-    private ClientSdsProtocolNegotiatorFactory(ProtocolNegotiator fallbackNegotiator) {
-      this.fallbackProtocolNegotiator = fallbackNegotiator;
-    }
-
-    @Override
-    public InternalProtocolNegotiator.ProtocolNegotiator buildProtocolNegotiator() {
-      final ClientSdsProtocolNegotiator negotiator =
-          new ClientSdsProtocolNegotiator(fallbackProtocolNegotiator);
-      final class LocalSdsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
-
-        @Override
-        public AsciiString scheme() {
-          return negotiator.scheme();
-        }
-
-        @Override
-        public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-          return negotiator.newHandler(grpcHandler);
-        }
-
-        @Override
-        public void close() {
-          negotiator.close();
-        }
-      }
-
-      return new LocalSdsNegotiator();
     }
   }
 
@@ -296,8 +236,7 @@ public final class SdsProtocolNegotiators {
     }
   }
 
-  @VisibleForTesting
-  public static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
+  private static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
 
     @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
 

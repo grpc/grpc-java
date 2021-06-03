@@ -41,7 +41,6 @@ import io.grpc.NameResolverRegistry;
 import io.grpc.ServerCredentials;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
@@ -52,7 +51,6 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import io.grpc.xds.internal.sds.TlsContextManagerImpl;
-import io.grpc.xds.internal.sds.XdsChannelBuilder;
 import io.netty.handler.ssl.NotSslRecordException;
 import java.io.IOException;
 import java.net.Inet4Address;
@@ -72,7 +70,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Unit tests for {@link XdsChannelBuilder} and {@link XdsServerBuilder} for plaintext/TLS/mTLS
+ * Unit tests for {@link XdsChannelCredentials} and {@link XdsServerBuilder} for plaintext/TLS/mTLS
  * modes.
  */
 @RunWith(JUnit4.class)
@@ -101,15 +99,6 @@ public class XdsSdsClientServerTest {
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
-    assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
-  }
-
-  @Test
-  public void plaintextClientServer_withXdsChannelCreds() throws IOException, URISyntaxException {
-    buildServerWithTlsContext(/* downstreamTlsContext= */ null);
-
-    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
-            getBlockingStubNewApi(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null);
     assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
@@ -304,7 +293,7 @@ public class XdsSdsClientServerTest {
         .getListenerWatcher();
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = newApi
-        ? getBlockingStubNewApi(upstreamTlsContext, "foo.test.google.fr") :
+        ? getBlockingStub(upstreamTlsContext, "foo.test.google.fr") :
         getBlockingStub(upstreamTlsContext, "foo.test.google.fr");
     assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
     return listenerWatcher;
@@ -387,33 +376,6 @@ public class XdsSdsClientServerTest {
   private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
       final UpstreamTlsContext upstreamTlsContext, String overrideAuthority)
       throws URISyntaxException {
-    URI expectedUri = new URI("sdstest://localhost:" + port);
-    fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
-    NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverFactory);
-    XdsChannelBuilder channelBuilder =
-        XdsChannelBuilder.forTarget("sdstest://localhost:" + port)
-            .fallbackProtocolNegotiator(InternalProtocolNegotiators.plaintext());
-    if (overrideAuthority != null) {
-      channelBuilder = channelBuilder.overrideAuthority(overrideAuthority);
-    }
-    InetSocketAddress socketAddress =
-        new InetSocketAddress(Inet4Address.getLoopbackAddress(), port);
-    Attributes attrs =
-        (upstreamTlsContext != null)
-            ? Attributes.newBuilder()
-                .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
-                    new SslContextProviderSupplier(
-                        upstreamTlsContext, tlsContextManager))
-                .build()
-            : Attributes.EMPTY;
-    fakeNameResolverFactory.setServers(
-        ImmutableList.of(new EquivalentAddressGroup(socketAddress, attrs)));
-    return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(channelBuilder.build()));
-  }
-
-  private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStubNewApi(
-          final UpstreamTlsContext upstreamTlsContext, String overrideAuthority)
-          throws URISyntaxException {
     URI expectedUri = new URI("sdstest://localhost:" + port);
     fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
     NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverFactory);
