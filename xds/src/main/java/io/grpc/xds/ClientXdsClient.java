@@ -224,9 +224,10 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   private static LdsUpdate processClientSideListener(Listener listener, boolean parseFilter)
       throws ResourceInvalidException {
-    HttpConnectionManager httpConnectionManagerProto;
+    // Unpack HttpConnectionManager from the Listener.
+    HttpConnectionManager hcm;
     try {
-      httpConnectionManagerProto = unpackCompatibleType(
+      hcm = unpackCompatibleType(
           listener.getApiListener().getApiListener(), HttpConnectionManager.class,
           TYPE_URL_HTTP_CONNECTION_MANAGER, TYPE_URL_HTTP_CONNECTION_MANAGER_V2);
     } catch (InvalidProtocolBufferException e) {
@@ -234,7 +235,7 @@ final class ClientXdsClient extends AbstractXdsClient {
           "Could not parse HttpConnectionManager config from ApiListener", e);
     }
     return LdsUpdate.forApiListener(
-        parseHttpConnectionManager(httpConnectionManagerProto, parseFilter, true /* forClient */));
+        parseHttpConnectionManager(hcm, parseFilter, true /* forClient */));
   }
 
   private LdsUpdate processServerSideListener(Listener proto, boolean parseFilter)
