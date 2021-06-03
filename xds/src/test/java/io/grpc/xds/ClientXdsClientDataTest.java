@@ -868,7 +868,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "FilterChain filter-chain-foo contains filter envoy.http_connection_manager with "
-            + "unsupported typed_config badTypeUrl");
+            + "unsupported typed_config type badTypeUrl");
     ClientXdsClient.parseServerSideListener(listener, null, true);
   }
 

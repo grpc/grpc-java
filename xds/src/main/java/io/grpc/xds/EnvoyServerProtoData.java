@@ -339,6 +339,7 @@ public final class EnvoyServerProtoData {
       return httpConnectionManager;
     }
 
+    @Nullable
     public SslContextProviderSupplier getSslContextProviderSupplier() {
       return sslContextProviderSupplier;
     }

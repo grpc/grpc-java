@@ -318,7 +318,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       if (!any.getTypeUrl().equals(TYPE_URL_HTTP_CONNECTION_MANAGER)) {
         throw new ResourceInvalidException(
             "FilterChain " + proto.getName() + " contains filter " + filter.getName()
-                + " with unsupported typed_config " + any.getTypeUrl());
+                + " with unsupported typed_config type " + any.getTypeUrl());
       }
       // Any filters after the first HttpConnectionManager are ignored.
       if (httpConnectionManager == null) {
