@@ -158,7 +158,9 @@ class XdsServerTestHelper {
             Arrays.<String>asList(),
             Arrays.<EnvoyServerProtoData.CidrRange>asList(),
             null,
-            sourcePorts);
+            sourcePorts,
+            Arrays.<String>asList(),
+            null);
     // HttpConnectionManager currently not used for server side.
     HttpConnectionManager httpConnectionManager = HttpConnectionManager.withRdsName(
         0L, "does not matter", Collections.<NamedFilterConfig>emptyList());

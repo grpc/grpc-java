@@ -395,7 +395,9 @@ final class ClientXdsClient extends AbstractXdsClient {
         proto.getApplicationProtocolsList(),
         sourcePrefixRanges,
         sourceType,
-        proto.getSourcePortsList());
+        proto.getSourcePortsList(),
+        proto.getServerNamesList(),
+        proto.getTransportProtocol());
   }
 
   @VisibleForTesting

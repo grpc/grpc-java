@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.UInt32Value;
 import io.grpc.Internal;
@@ -40,10 +41,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -225,6 +224,9 @@ public final class XdsClientWrapperForServerSds {
 
     filterChains = filterOnDestinationPort(filterChains);
     filterChains = filterOnIpAddress(filterChains, localInetAddr.getAddress(), true);
+    filterChains = filterOnServerNames(filterChains);
+    filterChains = filterOnTransportProtocol(filterChains);
+    filterChains = filterOnApplicationProtocols(filterChains);
     filterChains =
         filterOnSourceType(filterChains, remoteInetAddr.getAddress(), localInetAddr.getAddress());
     filterChains = filterOnIpAddress(filterChains, remoteInetAddr.getAddress(), false);
@@ -237,6 +239,46 @@ public final class XdsClientWrapperForServerSds {
       return filterChains.get(0).getSslContextProviderSupplier();
     }
     return listener.getDefaultFilterChain().getSslContextProviderSupplier();
+  }
+
+  // reject if filer-chain-match has non-empty application_protocols
+  private static List<FilterChain> filterOnApplicationProtocols(List<FilterChain> filterChains) {
+    ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
+    for (FilterChain filterChain : filterChains) {
+      FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+
+      if (filterChainMatch.getApplicationProtocols().isEmpty()) {
+        filtered.add(filterChain);
+      }
+    }
+    return filtered;
+  }
+
+  // reject if filer-chain-match has non-empty transport protocol other than "raw_buffer"
+  private static List<FilterChain> filterOnTransportProtocol(List<FilterChain> filterChains) {
+    ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
+    for (FilterChain filterChain : filterChains) {
+      FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+
+      String transportProtocol = filterChainMatch.getTransportProtocol();
+      if ( Strings.isNullOrEmpty(transportProtocol) || "raw_buffer".equals(transportProtocol)) {
+        filtered.add(filterChain);
+      }
+    }
+    return filtered;
+  }
+
+  // reject if filer-chain-match has server_name(s)
+  private static List<FilterChain> filterOnServerNames(List<FilterChain> filterChains) {
+    ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
+    for (FilterChain filterChain : filterChains) {
+      FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+
+      if (filterChainMatch.getServerNames().isEmpty()) {
+        filtered.add(filterChain);
+      }
+    }
+    return filtered;
   }
 
   // destination_port present => Always fail match
@@ -307,88 +349,55 @@ public final class XdsClientWrapperForServerSds {
     return cidrInt.equals(addrInt);
   }
 
-  private static class QueueElement {
-    FilterChain filterChain;
-    int indexOfMatchingPrefixRange;
+  private static int getMatchingPrefixLength(
+      FilterChainMatch filterChainMatch, InetAddress address, boolean forDestination) {
+    byte[] addressBytes = address.getAddress();
+    boolean isIPv6 = address instanceof Inet6Address;
+    List<CidrRange> cidrRanges =
+        forDestination
+            ? filterChainMatch.getPrefixRanges()
+            : filterChainMatch.getSourcePrefixRanges();
     int matchingPrefixLength;
-
-    public QueueElement(FilterChain filterChain, InetAddress address, boolean forDestination) {
-      this.filterChain = filterChain;
-      FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
-      byte[] addressBytes = address.getAddress();
-      boolean isIPv6 = address instanceof Inet6Address;
-      List<CidrRange> cidrRanges =
-          forDestination
-              ? filterChainMatch.getPrefixRanges()
-              : filterChainMatch.getSourcePrefixRanges();
-      indexOfMatchingPrefixRange = -1;
-      if (cidrRanges.isEmpty()) { // if there is no CidrRange assume 0-length match
-        matchingPrefixLength = 0;
-      } else {
-        matchingPrefixLength = -1;
-        int index = 0;
-        for (CidrRange cidrRange : cidrRanges) {
-          InetAddress cidrAddr = cidrRange.getAddressPrefix();
-          boolean cidrIsIpv6 = cidrAddr instanceof Inet6Address;
-          if (isIPv6 == cidrIsIpv6) {
-            byte[] cidrBytes = cidrAddr.getAddress();
-            int prefixLen = cidrRange.getPrefixLen();
-            if (isCidrMatching(cidrBytes, addressBytes, prefixLen)
-                && prefixLen > matchingPrefixLength) {
-              matchingPrefixLength = prefixLen;
-              indexOfMatchingPrefixRange = index;
-            }
+    if (cidrRanges.isEmpty()) { // if there is no CidrRange assume 0-length match
+      matchingPrefixLength = 0;
+    } else {
+      matchingPrefixLength = -1;
+      for (CidrRange cidrRange : cidrRanges) {
+        InetAddress cidrAddr = cidrRange.getAddressPrefix();
+        boolean cidrIsIpv6 = cidrAddr instanceof Inet6Address;
+        if (isIPv6 == cidrIsIpv6) {
+          byte[] cidrBytes = cidrAddr.getAddress();
+          int prefixLen = cidrRange.getPrefixLen();
+          if (isCidrMatching(cidrBytes, addressBytes, prefixLen)
+              && prefixLen > matchingPrefixLength) {
+            matchingPrefixLength = prefixLen;
           }
-          index++;
         }
       }
     }
-  }
-
-  private static final class QueueElementComparator implements Comparator<QueueElement> {
-
-    @Override
-    public int compare(QueueElement o1, QueueElement o2) {
-      // descending order for max heap
-      return o2.matchingPrefixLength - o1.matchingPrefixLength;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-      return obj instanceof QueueElementComparator;
-    }
-
-    @Override
-    public int hashCode() {
-      return super.hashCode();
-    }
+    return matchingPrefixLength;
   }
 
   // use prefix_ranges (CIDR) and get the most specific matches
   private static List<FilterChain> filterOnIpAddress(
       List<FilterChain> filterChains, InetAddress address, boolean forDestination) {
-    PriorityQueue<QueueElement> heap = new PriorityQueue<>(10, new QueueElementComparator());
-
-    for (FilterChain filterChain : filterChains) {
-      QueueElement element = new QueueElement(filterChain, address, forDestination);
-
-      if (element.matchingPrefixLength >= 0) {
-        heap.add(element);
-      }
-    }
-    // get the top ones
-    ArrayList<FilterChain> topOnes = new ArrayList<>(heap.size());
+    // curent list of top ones
+    ArrayList<FilterChain> topOnes = new ArrayList<>(filterChains.size());
     int topMatchingPrefixLen = -1;
-    while (!heap.isEmpty()) {
-      QueueElement element = heap.remove();
-      if (topMatchingPrefixLen == -1) {
-        topMatchingPrefixLen = element.matchingPrefixLength;
-      } else {
-        if (element.matchingPrefixLength < topMatchingPrefixLen) {
-          break;
+    for (FilterChain filterChain : filterChains) {
+      int currentMatchingPrefixLen =
+          getMatchingPrefixLength(filterChain.getFilterChainMatch(), address, forDestination);
+
+      if (currentMatchingPrefixLen >= 0) {
+        if (currentMatchingPrefixLen < topMatchingPrefixLen) {
+          continue;
         }
+        if (currentMatchingPrefixLen > topMatchingPrefixLen) {
+          topMatchingPrefixLen = currentMatchingPrefixLen;
+          topOnes.clear();
+        }
+        topOnes.add(filterChain);
       }
-      topOnes.add(element.filterChain);
     }
     return topOnes;
   }

@@ -208,6 +208,8 @@ public final class EnvoyServerProtoData {
     private final List<CidrRange> sourcePrefixRanges;
     private final ConnectionSourceType sourceType;
     private final List<Integer> sourcePorts;
+    private final List<String> serverNames;
+    private final String transportProtocol;
 
     @VisibleForTesting
     FilterChainMatch(
@@ -216,13 +218,17 @@ public final class EnvoyServerProtoData {
         List<String> applicationProtocols,
         List<CidrRange> sourcePrefixRanges,
         ConnectionSourceType sourceType,
-        List<Integer> sourcePorts) {
+        List<Integer> sourcePorts,
+        List<String> serverNames,
+        String transportProtocol) {
       this.destinationPort = destinationPort;
       this.prefixRanges = Collections.unmodifiableList(prefixRanges);
       this.applicationProtocols = Collections.unmodifiableList(applicationProtocols);
       this.sourcePrefixRanges = sourcePrefixRanges;
       this.sourceType = sourceType;
       this.sourcePorts = sourcePorts;
+      this.serverNames = Collections.unmodifiableList(serverNames);
+      this.transportProtocol = transportProtocol;
     }
 
     public int getDestinationPort() {
@@ -249,6 +255,14 @@ public final class EnvoyServerProtoData {
       return sourcePorts;
     }
 
+    public List<String> getServerNames() {
+      return serverNames;
+    }
+
+    public String getTransportProtocol() {
+      return transportProtocol;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) {
@@ -263,7 +277,9 @@ public final class EnvoyServerProtoData {
           && Objects.equals(applicationProtocols, that.applicationProtocols)
           && Objects.equals(sourcePrefixRanges, that.sourcePrefixRanges)
           && sourceType == that.sourceType
-          && Objects.equals(sourcePorts, that.sourcePorts);
+          && Objects.equals(sourcePorts, that.sourcePorts)
+          && Objects.equals(serverNames, that.serverNames)
+          && Objects.equals(transportProtocol, that.transportProtocol);
     }
 
     @Override
@@ -274,7 +290,9 @@ public final class EnvoyServerProtoData {
           applicationProtocols,
           sourcePrefixRanges,
           sourceType,
-          sourcePorts);
+          sourcePorts,
+          serverNames,
+          transportProtocol);
     }
 
     @Override
@@ -286,6 +304,8 @@ public final class EnvoyServerProtoData {
               .add("sourcePrefixRanges", sourcePrefixRanges)
               .add("sourceType", sourceType)
               .add("sourcePorts", sourcePorts)
+              .add("serverNames", serverNames)
+              .add("transportProtocol", transportProtocol)
               .toString();
     }
   }
