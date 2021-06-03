@@ -100,7 +100,7 @@ model {
                 } else if (osdetector.os == "windows") {
                     linker.args "-static", "-lprotoc", "-lprotobuf", "-static-libgcc", "-static-libstdc++",
                             "-s"
-                }else if (System.getProperty('os.arch').contains('ppc64')){
+		} else if (osdetector.arch == "ppcle_64") {
 			linker.args "-Wl,-Bstatic", "-lprotoc", "-lprotobuf", "-Wl,-Bdynamic", "-lpthread", "-s"
 		}else {
                     // Link protoc, protobuf, libgcc and libstdc++ statically.
