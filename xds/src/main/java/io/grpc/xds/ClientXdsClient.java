@@ -262,18 +262,20 @@ final class ClientXdsClient extends AbstractXdsClient {
           "Listener " + proto.getName() + " cannot have use_original_dst set to true");
     }
 
-    SocketAddress socketAddress = proto.getAddress().getSocketAddress();
-    String address = socketAddress.getAddress();
-    switch (socketAddress.getPortSpecifierCase()) {
-      case NAMED_PORT:
-        address = address + ":" + socketAddress.getNamedPort();
-        break;
-      case PORT_VALUE:
-        address = address + ":" + socketAddress.getPortValue();
-        break;
-      default:
-        throw new ResourceInvalidException(
-            "Listener " + proto.getName() + " invalid socket_address port");
+    String address = null;
+    if (proto.hasAddress() && proto.getAddress().hasSocketAddress()) {
+      SocketAddress socketAddress = proto.getAddress().getSocketAddress();
+      address = socketAddress.getAddress();
+      switch (socketAddress.getPortSpecifierCase()) {
+        case NAMED_PORT:
+          address = address + ":" + socketAddress.getNamedPort();
+          break;
+        case PORT_VALUE:
+          address = address + ":" + socketAddress.getPortValue();
+          break;
+        default:
+          // noop
+      }
     }
 
     List<FilterChain> filterChains = new ArrayList<>();

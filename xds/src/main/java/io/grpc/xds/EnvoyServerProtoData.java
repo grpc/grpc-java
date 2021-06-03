@@ -384,11 +384,11 @@ public final class EnvoyServerProtoData {
     @Nullable
     private final FilterChain defaultFilterChain;
 
-    Listener(String name, String address,
-        List<FilterChain> filterChains, FilterChain defaultFilterChain) {
-      this.name = name;
+    Listener(String name, @Nullable String address,
+        List<FilterChain> filterChains, @Nullable FilterChain defaultFilterChain) {
+      this.name = checkNotNull(name, "name");
       this.address = address;
-      this.filterChains = Collections.unmodifiableList(filterChains);
+      this.filterChains = Collections.unmodifiableList(checkNotNull(filterChains, "filterChains"));
       this.defaultFilterChain = defaultFilterChain;
     }
 
@@ -396,6 +396,7 @@ public final class EnvoyServerProtoData {
       return name;
     }
 
+    @Nullable
     public String getAddress() {
       return address;
     }
