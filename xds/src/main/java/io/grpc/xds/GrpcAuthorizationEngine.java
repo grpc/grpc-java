@@ -146,16 +146,18 @@ final class GrpcAuthorizationEngine {
     public boolean matches(EvaluateArgs args) {
       Collection<String> principalNames = args.getPrincipalNames();
       log.log(Level.FINER, "Matching principal names: {0}", new Object[]{principalNames});
-      // considered as match if unset:
       // https://github.com/envoyproxy/envoy/blob/main/api/envoy/config/rbac/v3/rbac.proto#L240
+      // not match if unauthenticated:
+      if (principalNames == null) {
+        return false;
+      }
+      // match any authenticated connection:
       if (delegate == null) {
         return true;
       }
-      if (principalNames != null) {
-        for (String name : principalNames) {
-          if (delegate.matches(name)) {
-            return true;
-          }
+      for (String name : principalNames) {
+        if (delegate.matches(name)) {
+          return true;
         }
       }
       return false;
@@ -243,10 +245,15 @@ final class GrpcAuthorizationEngine {
       return "/" + serverCall.getMethodDescriptor().getFullMethodName();
     }
 
+    // Returns null for unauthenticated connection.
+    // Returns empty list if no principal names we are interested in.
     private Collection<String> getPrincipalNames() {
       SSLSession sslSession = serverCall.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
+      if (sslSession == null) {
+        return null;
+      }
       try {
-        Certificate[] certs = sslSession == null ? null : sslSession.getPeerCertificates();
+        Certificate[] certs = sslSession.getPeerCertificates();
         if (certs == null || certs.length < 1) {
           return Collections.emptyList();
         }

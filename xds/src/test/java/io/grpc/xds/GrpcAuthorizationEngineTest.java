@@ -215,6 +215,23 @@ public class GrpcAuthorizationEngineTest {
         Arrays.asList(6, "*.test.google.fr")));
     assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.ALLOW);
 
+    // match any authenticated connection if StringMatcher not set in AuthenticatedMatcher
+    permission = OrMatcher.create(new AuthenticatedMatcher(null));
+    policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    when(mockCert.getSubjectAlternativeNames()).thenReturn(
+            Arrays.<List<?>>asList(Arrays.asList(6, "random")));
+    engine = new GrpcAuthorizationEngine(new AuthConfig(Collections.singletonList(policyMatcher),
+            Action.ALLOW));
+    assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.ALLOW);
+
+    // not match any unauthenticated connection
+    Attributes attributes = Attributes.newBuilder()
+            .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InetSocketAddress(IP_ADDR2, PORT))
+            .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InetSocketAddress(IP_ADDR1, PORT))
+            .build();
+    when(serverCall.getAttributes()).thenReturn(attributes);
+    assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.DENY);
+
     doThrow(new SSLPeerUnverifiedException("bad")).when(sslSession).getPeerCertificates();
     decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.DENY);
