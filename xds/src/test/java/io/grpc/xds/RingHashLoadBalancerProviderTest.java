@@ -82,14 +82,14 @@ public class RingHashLoadBalancerProviderTest {
   }
 
   @Test
-  public void parseLoadBalancingConfig_missingRingSize() throws IOException {
-    String lbConfig = "{\"minRingSize\" : 10}";
+  public void parseLoadBalancingConfig_missingRingSize_useDefaults() throws IOException {
+    String lbConfig = "{}";
     ConfigOrError configOrError =
         provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
-    assertThat(configOrError.getError()).isNotNull();
-    assertThat(configOrError.getError().getCode()).isEqualTo(Code.INVALID_ARGUMENT);
-    assertThat(configOrError.getError().getDescription())
-        .isEqualTo("Missing 'mingRingSize'/'maxRingSize'");
+    assertThat(configOrError.getConfig()).isNotNull();
+    RingHashConfig config = (RingHashConfig) configOrError.getConfig();
+    assertThat(config.minRingSize).isEqualTo(RingHashLoadBalancerProvider.DEFAULT_MIN_RING_SIZE);
+    assertThat(config.maxRingSize).isEqualTo(RingHashLoadBalancerProvider.DEFAULT_MAX_RING_SIZE);
   }
 
   @Test
