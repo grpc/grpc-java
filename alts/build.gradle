@@ -21,10 +21,10 @@ dependencies {
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.protobuf,
-            libraries.conscrypt
+            libraries.conscrypt,
+            libraries.guava,
+            libraries.google_auth_oauth2_http
     def nettyDependency = implementation project(':grpc-netty')
-    googleOauth2Dependency 'implementation'
-    guavaDependency 'implementation'
     compileOnly libraries.javax_annotation
 
     shadow configurations.implementation.getDependencies().minus(nettyDependency)

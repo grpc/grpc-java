@@ -14,13 +14,9 @@ dependencies {
     implementation project(':grpc-core'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
-            libraries.protobuf
-    implementation (libraries.protobuf_util) {
-        // prefer our own versions instead of protobuf-util's dependency
-        exclude group: 'com.google.guava', module: 'guava'
-        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
-    }
-    guavaDependency 'implementation'
+            libraries.protobuf,
+            libraries.protobuf_util,
+            libraries.guava
     runtimeOnly libraries.errorprone
     compileOnly libraries.javax_annotation
     testImplementation libraries.truth,
