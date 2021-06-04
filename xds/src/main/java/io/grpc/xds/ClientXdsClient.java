@@ -839,17 +839,9 @@ final class ClientXdsClient extends AbstractXdsClient {
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
 
     if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
-      if (!cluster.hasRingHashLbConfig()) {
-        throw new ResourceInvalidException(
-            "Cluster " + cluster.getName() + ": missing ring_hash_lb_config");
-      }
       RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
-      if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH) {
-        throw new ResourceInvalidException(
-            "Cluster " + cluster.getName() + ": unsupported ring hash function: "
-                + lbConfig.getHashFunction());
-      }
-      if (lbConfig.getMinimumRingSize().getValue() <= 0
+      if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH
+          || lbConfig.getMinimumRingSize().getValue() <= 0
           || lbConfig.getMinimumRingSize().getValue() > lbConfig.getMaximumRingSize().getValue()) {
         throw new ResourceInvalidException(
             "Cluster " + cluster.getName() + ": invalid ring_hash_lb_config: " + lbConfig);
