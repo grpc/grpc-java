@@ -790,7 +790,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       // Process Cluster into CdsUpdate.
       CdsUpdate cdsUpdate;
       try {
-        cdsUpdate = processCluster(cluster, retainedEdsResources);
+        cdsUpdate = parseCluster(cluster, retainedEdsResources);
       } catch (ResourceInvalidException e) {
         errors.add(
             "CDS response Cluster '" + clusterName + "' validation error: " + e.getMessage());
@@ -818,7 +818,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static CdsUpdate processCluster(Cluster cluster, Set<String> retainedEdsResources)
+  private static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources)
       throws ResourceInvalidException {
     StructOrError<CdsUpdate.Builder> structOrError;
     switch (cluster.getClusterDiscoveryTypeCase()) {
@@ -830,26 +830,37 @@ final class ClientXdsClient extends AbstractXdsClient {
         break;
       case CLUSTERDISCOVERYTYPE_NOT_SET:
       default:
-        throw new ResourceInvalidException("Unspecified cluster discovery type");
+        throw new ResourceInvalidException(
+            "Cluster " + cluster.getName() + ": unspecified cluster discovery type");
     }
     if (structOrError.getErrorDetail() != null) {
       throw new ResourceInvalidException(structOrError.getErrorDetail());
     }
-
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
 
     if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
+      if (!cluster.hasRingHashLbConfig()) {
+        throw new ResourceInvalidException(
+            "Cluster " + cluster.getName() + ": missing ring_hash_lb_config");
+      }
       RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
       if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH) {
         throw new ResourceInvalidException(
-            "Unsupported ring hash function: " + lbConfig.getHashFunction());
+            "Cluster " + cluster.getName() + ": unsupported ring hash function: "
+                + lbConfig.getHashFunction());
+      }
+      if (lbConfig.getMinimumRingSize().getValue() <= 0
+          || lbConfig.getMinimumRingSize().getValue() > lbConfig.getMaximumRingSize().getValue()) {
+        throw new ResourceInvalidException(
+            "Cluster " + cluster.getName() + ": invalid ring_hash_lb_config: " + lbConfig);
       }
       updateBuilder.lbPolicy(CdsUpdate.LbPolicy.RING_HASH,
           lbConfig.getMinimumRingSize().getValue(), lbConfig.getMaximumRingSize().getValue());
     } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
       updateBuilder.lbPolicy(CdsUpdate.LbPolicy.ROUND_ROBIN);
     } else {
-      throw new ResourceInvalidException("Unsupported lb policy: " + cluster.getLbPolicy());
+      throw new ResourceInvalidException(
+          "Cluster " + cluster.getName() + ": unsupported lb policy: " + cluster.getLbPolicy());
     }
 
     return updateBuilder.build();
