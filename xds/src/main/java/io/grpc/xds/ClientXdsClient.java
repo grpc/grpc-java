@@ -97,6 +97,8 @@ final class ClientXdsClient extends AbstractXdsClient {
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
+  private static final long DEFAULT_RING_HASH_LB_CONFIG_MIN_RING_SIZE = 1024L;
+  private static final long DEFAULT_RING_HASH_LB_CONFIG_MAX_RING_SIZE = 8 * 1024 * 1024L;
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   @VisibleForTesting
@@ -840,9 +842,12 @@ final class ClientXdsClient extends AbstractXdsClient {
 
     if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
       RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
+      long minRingSize = lbConfig.getMinimumRingSize().getValue();
+      long maxRingSize = lbConfig.getMaximumRingSize().getValue();
+      minRingSize = minRingSize == 0 ? DEFAULT_RING_HASH_LB_CONFIG_MIN_RING_SIZE : minRingSize;
+      maxRingSize = maxRingSize == 0 ? DEFAULT_RING_HASH_LB_CONFIG_MAX_RING_SIZE : maxRingSize;
       if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH
-          || lbConfig.getMinimumRingSize().getValue() <= 0
-          || lbConfig.getMinimumRingSize().getValue() > lbConfig.getMaximumRingSize().getValue()) {
+          || minRingSize > maxRingSize) {
         throw new ResourceInvalidException(
             "Cluster " + cluster.getName() + ": invalid ring_hash_lb_config: " + lbConfig);
       }
