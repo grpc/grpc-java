@@ -78,7 +78,7 @@ final class GrpcAuthorizationEngine {
     private final Action action;
 
     AuthConfig(List<PolicyMatcher> policies, Action action) {
-      this.policies = Collections.unmodifiableList(policies);
+      this.policies = Collections.unmodifiableList(new ArrayList<>(policies));
       this.action = action;
     }
   }
@@ -138,14 +138,19 @@ final class GrpcAuthorizationEngine {
   static final class AuthenticatedMatcher implements Matcher {
     private final Matchers.StringMatcher delegate;
 
-    AuthenticatedMatcher(Matchers.StringMatcher delegate) {
-      this.delegate = checkNotNull(delegate, "delegate");
+    AuthenticatedMatcher(@Nullable Matchers.StringMatcher delegate) {
+      this.delegate = delegate;
     }
 
     @Override
     public boolean matches(EvaluateArgs args) {
       Collection<String> principalNames = args.getPrincipalNames();
       log.log(Level.FINER, "Matching principal names: {0}", new Object[]{principalNames});
+      // considered as match if unset:
+      // https://github.com/envoyproxy/envoy/blob/main/api/envoy/config/rbac/v3/rbac.proto#L240
+      if (delegate == null) {
+        return true;
+      }
       if (principalNames != null) {
         for (String name : principalNames) {
           if (delegate.matches(name)) {
