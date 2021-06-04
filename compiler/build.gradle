@@ -101,8 +101,8 @@ model {
                     linker.args "-static", "-lprotoc", "-lprotobuf", "-static-libgcc", "-static-libstdc++",
                             "-s"
 		} else if (osdetector.arch == "ppcle_64") {
-			linker.args "-Wl,-Bstatic", "-lprotoc", "-lprotobuf", "-Wl,-Bdynamic", "-lpthread", "-s"
-		}else {
+		    linker.args "-Wl,-Bstatic", "-lprotoc", "-lprotobuf", "-Wl,-Bdynamic", "-lpthread", "-s"
+		} else {
                     // Link protoc, protobuf, libgcc and libstdc++ statically.
                     // Link other (system) libraries dynamically.
                     // Clang under OSX doesn't support these options.
