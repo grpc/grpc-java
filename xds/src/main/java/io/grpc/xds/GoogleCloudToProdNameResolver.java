@@ -91,7 +91,8 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
 
   @VisibleForTesting
   GoogleCloudToProdNameResolver(URI targetUri, Args args, Resource<Executor> executorResource,
-      Random rand, XdsClientPoolFactory xdsClientPoolFactory, NameResolver.Factory nameResolverFactory) {
+      Random rand, XdsClientPoolFactory xdsClientPoolFactory,
+      NameResolver.Factory nameResolverFactory) {
     this.executorResource = checkNotNull(executorResource, "executorResource");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
     this.rand = checkNotNull(rand, "rand");
