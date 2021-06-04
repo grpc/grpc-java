@@ -73,9 +73,9 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class CdsLoadBalancer2Test {
 
-  private static final String CLUSTER = "cluster-foo.googleapis.com";  // cluster of entry point
-
+  private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "backend-service-1.googleapis.com";
+  private static final String DNS_HOST_NAME = "backend-service-dns.googleapis.com:443";
   private static final String LRS_SERVER_NAME = "lrs.googleapis.com";
   private final UpstreamTlsContext upstreamTlsContext =
       CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
@@ -157,14 +157,14 @@ public class CdsLoadBalancer2Test {
     assertThat(childLbConfig.discoveryMechanisms).hasSize(1);
     DiscoveryMechanism instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
     assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.EDS, EDS_SERVICE_NAME,
-        LRS_SERVER_NAME, 100L, upstreamTlsContext);
+        null, LRS_SERVER_NAME, 100L, upstreamTlsContext);
     assertThat(childLbConfig.lbPolicy.getProvider().getPolicyName()).isEqualTo("round_robin");
   }
 
   @Test
   public void discoverTopLevelLogicalDnsCluster() {
     CdsUpdate update =
-        CdsUpdate.forLogicalDns(CLUSTER, LRS_SERVER_NAME, 100L, upstreamTlsContext)
+        CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, LRS_SERVER_NAME, 100L, upstreamTlsContext)
             .lbPolicy(LbPolicy.ROUND_ROBIN).build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
@@ -174,7 +174,7 @@ public class CdsLoadBalancer2Test {
     assertThat(childLbConfig.discoveryMechanisms).hasSize(1);
     DiscoveryMechanism instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
     assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.LOGICAL_DNS, null,
-        LRS_SERVER_NAME, 100L, upstreamTlsContext);
+        DNS_HOST_NAME, LRS_SERVER_NAME, 100L, upstreamTlsContext);
     assertThat(childLbConfig.lbPolicy.getProvider().getPolicyName()).isEqualTo("round_robin");
   }
 
@@ -198,8 +198,8 @@ public class CdsLoadBalancer2Test {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     DiscoveryMechanism instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
-    assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.EDS, null, null, 100L,
-        upstreamTlsContext);
+    assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.EDS, null, null, null,
+        100L, upstreamTlsContext);
 
     update = CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, 200L, null)
         .lbPolicy(LbPolicy.ROUND_ROBIN).build();
@@ -207,21 +207,21 @@ public class CdsLoadBalancer2Test {
     childLbConfig = (ClusterResolverConfig) childBalancer.config;
     instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
     assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.EDS, EDS_SERVICE_NAME,
-        LRS_SERVER_NAME, 200L, null);
+        null, LRS_SERVER_NAME, 200L, null);
   }
 
   @Test
   public void nonAggregateCluster_resourceRevoked() {
     CdsUpdate update =
-        CdsUpdate.forLogicalDns(CLUSTER, null, 100L, upstreamTlsContext)
+        CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, null, 100L, upstreamTlsContext)
             .lbPolicy(LbPolicy.ROUND_ROBIN).build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     DiscoveryMechanism instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
-    assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.LOGICAL_DNS, null, null,
-        100L, upstreamTlsContext);
+    assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.LOGICAL_DNS, null,
+        DNS_HOST_NAME, null, 100L, upstreamTlsContext);
 
     xdsClient.deliverResourceNotExist(CLUSTER);
     assertThat(childBalancer.shutdown).isTrue();
@@ -260,7 +260,7 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverCdsUpdate(cluster3, update3);
     assertThat(childBalancers).isEmpty();
     CdsUpdate update2 =
-        CdsUpdate.forLogicalDns(cluster2, null, 100L, null)
+        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, null, 100L, null)
             .lbPolicy(LbPolicy.ROUND_ROBIN).build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     assertThat(childBalancers).isEmpty();
@@ -275,11 +275,12 @@ public class CdsLoadBalancer2Test {
     assertThat(childLbConfig.discoveryMechanisms).hasSize(3);
     // Clusters on higher level has higher priority: [cluster2, cluster3, cluster4]
     assertDiscoveryMechanism(childLbConfig.discoveryMechanisms.get(0), cluster2,
-        DiscoveryMechanism.Type.LOGICAL_DNS, null, null, 100L, null);
+        DiscoveryMechanism.Type.LOGICAL_DNS, null, DNS_HOST_NAME, null, 100L, null);
     assertDiscoveryMechanism(childLbConfig.discoveryMechanisms.get(1), cluster3,
-        DiscoveryMechanism.Type.EDS, EDS_SERVICE_NAME, LRS_SERVER_NAME, 200L, upstreamTlsContext);
+        DiscoveryMechanism.Type.EDS, EDS_SERVICE_NAME, null, LRS_SERVER_NAME, 200L,
+        upstreamTlsContext);
     assertDiscoveryMechanism(childLbConfig.discoveryMechanisms.get(2), cluster4,
-        DiscoveryMechanism.Type.EDS, null, LRS_SERVER_NAME, 300L, null);
+        DiscoveryMechanism.Type.EDS, null, null, LRS_SERVER_NAME, 300L, null);
     assertThat(childLbConfig.lbPolicy.getProvider().getPolicyName())
         .isEqualTo("ring_hash");  // dominated by top-level cluster's config
     assertThat(((RingHashConfig) childLbConfig.lbPolicy.getConfig()).minRingSize).isEqualTo(100L);
@@ -318,16 +319,17 @@ public class CdsLoadBalancer2Test {
             .lbPolicy(LbPolicy.ROUND_ROBIN).build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     CdsUpdate update2 =
-        CdsUpdate.forLogicalDns(cluster2, LRS_SERVER_NAME, 100L, null)
+        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, LRS_SERVER_NAME, 100L, null)
             .lbPolicy(LbPolicy.ROUND_ROBIN).build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanisms).hasSize(2);
     assertDiscoveryMechanism(childLbConfig.discoveryMechanisms.get(0), cluster1,
-        DiscoveryMechanism.Type.EDS, EDS_SERVICE_NAME, LRS_SERVER_NAME, 200L, upstreamTlsContext);
+        DiscoveryMechanism.Type.EDS, EDS_SERVICE_NAME, null, LRS_SERVER_NAME, 200L,
+        upstreamTlsContext);
     assertDiscoveryMechanism(childLbConfig.discoveryMechanisms.get(1), cluster2,
-        DiscoveryMechanism.Type.LOGICAL_DNS, null, LRS_SERVER_NAME, 100L, null);
+        DiscoveryMechanism.Type.LOGICAL_DNS, null, DNS_HOST_NAME, LRS_SERVER_NAME, 100L, null);
 
     // Revoke cluster1, should still be able to proceed with cluster2.
     xdsClient.deliverResourceNotExist(cluster1);
@@ -335,7 +337,7 @@ public class CdsLoadBalancer2Test {
     childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanisms).hasSize(1);
     assertDiscoveryMechanism(Iterables.getOnlyElement(childLbConfig.discoveryMechanisms), cluster2,
-        DiscoveryMechanism.Type.LOGICAL_DNS, null, LRS_SERVER_NAME, 100L, null);
+        DiscoveryMechanism.Type.LOGICAL_DNS, null, DNS_HOST_NAME, LRS_SERVER_NAME, 100L, null);
     verify(helper, never()).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
@@ -364,16 +366,17 @@ public class CdsLoadBalancer2Test {
             .lbPolicy(LbPolicy.ROUND_ROBIN).build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     CdsUpdate update2 =
-        CdsUpdate.forLogicalDns(cluster2, LRS_SERVER_NAME, 100L, null)
+        CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, LRS_SERVER_NAME, 100L, null)
             .lbPolicy(LbPolicy.ROUND_ROBIN).build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanisms).hasSize(2);
     assertDiscoveryMechanism(childLbConfig.discoveryMechanisms.get(0), cluster1,
-        DiscoveryMechanism.Type.EDS, EDS_SERVICE_NAME, LRS_SERVER_NAME, 200L, upstreamTlsContext);
+        DiscoveryMechanism.Type.EDS, EDS_SERVICE_NAME, null, LRS_SERVER_NAME, 200L,
+        upstreamTlsContext);
     assertDiscoveryMechanism(childLbConfig.discoveryMechanisms.get(1), cluster2,
-        DiscoveryMechanism.Type.LOGICAL_DNS, null, LRS_SERVER_NAME, 100L, null);
+        DiscoveryMechanism.Type.LOGICAL_DNS, null, DNS_HOST_NAME, LRS_SERVER_NAME, 100L, null);
 
     xdsClient.deliverResourceNotExist(CLUSTER);
     assertThat(xdsClient.watchers.keySet())
@@ -420,7 +423,7 @@ public class CdsLoadBalancer2Test {
     assertThat(childLbConfig.discoveryMechanisms).hasSize(1);
     DiscoveryMechanism instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
     assertDiscoveryMechanism(instance, cluster3, DiscoveryMechanism.Type.EDS, EDS_SERVICE_NAME,
-        LRS_SERVER_NAME, 100L, upstreamTlsContext);
+        null, LRS_SERVER_NAME, 100L, upstreamTlsContext);
 
     // cluster2 revoked
     xdsClient.deliverResourceNotExist(cluster2);
@@ -460,7 +463,7 @@ public class CdsLoadBalancer2Test {
             .lbPolicy(LbPolicy.ROUND_ROBIN).build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     CdsUpdate update1 =
-        CdsUpdate.forLogicalDns(cluster1, LRS_SERVER_NAME, 200L, null)
+        CdsUpdate.forLogicalDns(cluster1, DNS_HOST_NAME, LRS_SERVER_NAME, 200L, null)
             .lbPolicy(LbPolicy.ROUND_ROBIN).build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     FakeLoadBalancer childLb = Iterables.getOnlyElement(childBalancers);
@@ -509,12 +512,13 @@ public class CdsLoadBalancer2Test {
   }
 
   private static void assertDiscoveryMechanism(DiscoveryMechanism instance, String name,
-      DiscoveryMechanism.Type type, @Nullable String edsServiceName,
+      DiscoveryMechanism.Type type, @Nullable String edsServiceName, @Nullable String dnsHostName,
       @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
       @Nullable UpstreamTlsContext tlsContext) {
     assertThat(instance.cluster).isEqualTo(name);
     assertThat(instance.type).isEqualTo(type);
     assertThat(instance.edsServiceName).isEqualTo(edsServiceName);
+    assertThat(instance.dnsHostName).isEqualTo(dnsHostName);
     assertThat(instance.lrsServerName).isEqualTo(lrsServerName);
     assertThat(instance.maxConcurrentRequests).isEqualTo(maxConcurrentRequests);
     assertThat(instance.tlsContext).isEqualTo(tlsContext);

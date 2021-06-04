@@ -35,10 +35,13 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.Context;
 import io.grpc.Deadline;
+import io.grpc.ForwardingClientCall;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.internal.DelayedClientCall;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.FaultConfig.FaultAbort;
@@ -215,23 +218,62 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
           // TODO(https://github.com/grpc/grpc-java/issues/7868)
           callExecutor = MoreExecutors.directExecutor();
         }
-        if (finalDelayNanos != null && finalAbortStatus != null) {
-          return new DelayInjectedCall<>(
-              finalDelayNanos, callExecutor, scheduler, callOptions.getDeadline(),
-              Suppliers.ofInstance(
-                  new FailingClientCall<ReqT, RespT>(finalAbortStatus, callExecutor)));
-        }
-        if (finalAbortStatus != null) {
-          return new FailingClientCall<>(finalAbortStatus, callExecutor);
+        if (finalDelayNanos != null) {
+          Supplier<? extends ClientCall<ReqT, RespT>> callSupplier;
+          if (finalAbortStatus != null) {
+            callSupplier = Suppliers.ofInstance(
+                new FailingClientCall<ReqT, RespT>(finalAbortStatus, callExecutor));
+          } else {
+            callSupplier = new Supplier<ClientCall<ReqT, RespT>>() {
+              @Override
+              public ClientCall<ReqT, RespT> get() {
+                return next.newCall(method, callOptions);
+              }
+            };
+          }
+          final DelayInjectedCall<ReqT, RespT> delayInjectedCall = new DelayInjectedCall<>(
+              finalDelayNanos, callExecutor, scheduler, callOptions.getDeadline(), callSupplier);
+
+          final class DeadlineInsightForwardingCall extends ForwardingClientCall<ReqT, RespT> {
+            @Override
+            protected ClientCall<ReqT, RespT> delegate() {
+              return delayInjectedCall;
+            }
+
+            @Override
+            public void start(Listener<RespT> listener, Metadata headers) {
+              Listener<RespT> finalListener =
+                  new SimpleForwardingClientCallListener<RespT>(listener) {
+                    @Override
+                    public void onClose(Status status, Metadata trailers) {
+                      if (status.getCode().equals(Code.DEADLINE_EXCEEDED)) {
+                        // TODO(zdapeng:) check effective deadline locally, and
+                        //   do the following only if the local deadline is exceeded.
+                        //   (If the server sends DEADLINE_EXCEEDED for its own deadline, then the
+                        //   injected delay does not contribute to the error, because the request is
+                        //   only sent out after the delay. There could be a race between local and
+                        //   remote, but it is rather rare.)
+                        String description = String.format(
+                            "Deadline exceeded after up to %d ns of fault-injected delay",
+                            finalDelayNanos);
+                        if (status.getDescription() != null) {
+                          description = description + ": " + status.getDescription();
+                        }
+                        status = Status.DEADLINE_EXCEEDED
+                            .withDescription(description).withCause(status.getCause());
+                        // Replace trailers to prevent mixing sources of status and trailers.
+                        trailers = new Metadata();
+                      }
+                      delegate().onClose(status, trailers);
+                    }
+                  };
+              delegate().start(finalListener, headers);
+            }
+          }
+
+          return new DeadlineInsightForwardingCall();
         } else {
-          return new DelayInjectedCall<>(
-              finalDelayNanos, callExecutor, scheduler, callOptions.getDeadline(),
-              new Supplier<ClientCall<ReqT, RespT>>() {
-                @Override
-                public ClientCall<ReqT, RespT> get() {
-                  return next.newCall(method, callOptions);
-                }
-              });
+          return new FailingClientCall<>(finalAbortStatus, callExecutor);
         }
       }
     }

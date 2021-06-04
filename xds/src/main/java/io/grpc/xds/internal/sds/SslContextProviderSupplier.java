@@ -19,11 +19,13 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.base.MoreObjects;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
+import java.util.Objects;
 
 /**
  * Enables Client or server side to initialize this object with the received {@link BaseTlsContext}
@@ -52,27 +54,36 @@ public final class SslContextProviderSupplier implements Closeable {
   /** Updates SslContext via the passed callback. */
   public synchronized void updateSslContext(final SslContextProvider.Callback callback) {
     checkNotNull(callback, "callback");
-    checkState(!shutdown, "Supplier is shutdown!");
-    if (sslContextProvider == null) {
-      sslContextProvider = getSslContextProvider();
+    try {
+      checkState(!shutdown, "Supplier is shutdown!");
+      if (sslContextProvider == null) {
+        sslContextProvider = getSslContextProvider();
+      }
+      // we want to increment the ref-count so call findOrCreate again...
+      final SslContextProvider toRelease = getSslContextProvider();
+      sslContextProvider.addCallback(
+          new SslContextProvider.Callback(callback.getExecutor()) {
+
+            @Override
+            public void updateSecret(SslContext sslContext) {
+              callback.updateSecret(sslContext);
+              releaseSslContextProvider(toRelease);
+            }
+
+            @Override
+            public void onException(Throwable throwable) {
+              callback.onException(throwable);
+              releaseSslContextProvider(toRelease);
+            }
+          });
+    } catch (final Throwable throwable) {
+      callback.getExecutor().execute(new Runnable() {
+        @Override
+        public void run() {
+          callback.onException(throwable);
+        }
+      });
     }
-    // we want to increment the ref-count so call findOrCreate again...
-    final SslContextProvider toRelease = getSslContextProvider();
-    sslContextProvider.addCallback(
-        new SslContextProvider.Callback(callback.getExecutor()) {
-
-          @Override
-          public void updateSecret(SslContext sslContext) {
-            callback.updateSecret(sslContext);
-            releaseSslContextProvider(toRelease);
-          }
-
-          @Override
-          public void onException(Throwable throwable) {
-            callback.onException(throwable);
-            releaseSslContextProvider(toRelease);
-          }
-        });
   }
 
   private void releaseSslContextProvider(SslContextProvider toRelease) {
@@ -100,5 +111,35 @@ public final class SslContextProviderSupplier implements Closeable {
       }
     }
     shutdown = true;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    SslContextProviderSupplier that = (SslContextProviderSupplier) o;
+    return shutdown == that.shutdown
+        && Objects.equals(tlsContext, that.tlsContext)
+        && Objects.equals(tlsContextManager, that.tlsContextManager)
+        && Objects.equals(sslContextProvider, that.sslContextProvider);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(tlsContext, tlsContextManager, sslContextProvider, shutdown);
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("tlsContext", tlsContext)
+        .add("tlsContextManager", tlsContextManager)
+        .add("sslContextProvider", sslContextProvider)
+        .add("shutdown", shutdown)
+        .toString();
   }
 }

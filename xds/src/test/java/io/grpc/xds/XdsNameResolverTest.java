@@ -42,6 +42,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
+import io.grpc.Deadline;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalConfigSelector.Result;
 import io.grpc.Metadata;
@@ -1178,6 +1179,36 @@ public class XdsNameResolverTest {
     ClientCall.Listener<Void> observer3 = startNewCall(TestMethodDescriptors.voidMethod(),
         configSelector, Collections.<String, String>emptyMap(), CallOptions.DEFAULT);
     verifyRpcDelayed(observer3, 5000L);
+  }
+
+  @Test
+  public void resolved_faultDelayInLdsUpdate_callWithEarlyDeadline() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
+
+    FaultConfig httpFilterFaultConfig = FaultConfig.create(
+        FaultDelay.forFixedDelay(5000L, FaultConfig.FractionalPercent.perMillion(1000_000)),
+        null,
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+
+    Deadline.Ticker fakeTicker = new Deadline.Ticker() {
+      @Override
+      public long nanoTime() {
+        return fakeClock.getTicker().read();
+      }
+    };
+    ClientCall.Listener<Void> observer = startNewCall(TestMethodDescriptors.voidMethod(),
+        configSelector, Collections.<String, String>emptyMap(), CallOptions.DEFAULT.withDeadline(
+            Deadline.after(4000, TimeUnit.NANOSECONDS, fakeTicker)));
+    assertThat(testCall).isNull();
+    verifyRpcDelayedThenAborted(observer, 4000L, Status.DEADLINE_EXCEEDED.withDescription(
+        "Deadline exceeded after up to 5000 ns of fault-injected delay:"
+            + " Deadline exceeded after 0.000004000s. "));
   }
 
   @Test

@@ -283,9 +283,25 @@ public final class ManagedChannelImplBuilder
   public ManagedChannelImplBuilder(SocketAddress directServerAddress, String authority,
       ClientTransportFactoryBuilder clientTransportFactoryBuilder,
       @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
+      this(directServerAddress, authority, null, null, clientTransportFactoryBuilder,
+          channelBuilderDefaultPortProvider);
+  }
+
+  /**
+   * Creates a new managed channel builder with the given server address, authority string of the
+   * channel. Transport implementors must provide client transport factory builder, and may set
+   * custom channel default port provider.
+   * 
+   * @param channelCreds The ChannelCredentials provided by the user. These may be used when
+   *     creating derivative channels.
+   */
+  public ManagedChannelImplBuilder(SocketAddress directServerAddress, String authority,
+      @Nullable ChannelCredentials channelCreds, @Nullable CallCredentials callCreds,
+      ClientTransportFactoryBuilder clientTransportFactoryBuilder,
+      @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
     this.target = makeTargetStringForDirectAddress(directServerAddress);
-    this.channelCredentials = null;
-    this.callCredentials = null;
+    this.channelCredentials = channelCreds;
+    this.callCredentials = callCreds;
     this.clientTransportFactoryBuilder = Preconditions
         .checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");
     this.directServerAddress = directServerAddress;
