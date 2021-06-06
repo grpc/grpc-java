@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.internal.rbac.engine;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.doThrow;
@@ -30,23 +30,23 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TestMethodDescriptors;
-import io.grpc.xds.GrpcAuthorizationEngine.Action;
-import io.grpc.xds.GrpcAuthorizationEngine.AlwaysTrueMatcher;
-import io.grpc.xds.GrpcAuthorizationEngine.AndMatcher;
-import io.grpc.xds.GrpcAuthorizationEngine.AuthConfig;
-import io.grpc.xds.GrpcAuthorizationEngine.AuthDecision;
-import io.grpc.xds.GrpcAuthorizationEngine.AuthenticatedMatcher;
-import io.grpc.xds.GrpcAuthorizationEngine.DestinationIpMatcher;
-import io.grpc.xds.GrpcAuthorizationEngine.DestinationPortMatcher;
-import io.grpc.xds.GrpcAuthorizationEngine.HeaderMatcher;
-import io.grpc.xds.GrpcAuthorizationEngine.InvertMatcher;
-import io.grpc.xds.GrpcAuthorizationEngine.OrMatcher;
-import io.grpc.xds.GrpcAuthorizationEngine.PathMatcher;
-import io.grpc.xds.GrpcAuthorizationEngine.PolicyMatcher;
-import io.grpc.xds.GrpcAuthorizationEngine.SourceIpMatcher;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.CidrMatcher;
 import io.grpc.xds.internal.Matchers.StringMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.Action;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AlwaysTrueMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AndMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthConfig;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthDecision;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthenticatedMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.DestinationIpMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.DestinationPortMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.HeaderMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.InvertMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.OrMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.PathMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.PolicyMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.SourceIpMatcher;
 import java.net.InetSocketAddress;
 import java.security.Principal;
 import java.security.cert.X509Certificate;

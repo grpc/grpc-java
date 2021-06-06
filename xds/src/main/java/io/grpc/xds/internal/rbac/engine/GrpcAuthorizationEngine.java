@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.internal.rbac.engine;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -48,11 +48,11 @@ import javax.net.ssl.SSLSession;
  * Policies are examined sequentially in order in an any match fashion, and the first matched policy
  * will be returned. If not matched at all, the opposite action type is returned as a result.
  */
-final class GrpcAuthorizationEngine {
+public final class GrpcAuthorizationEngine {
   private static final Logger log = Logger.getLogger(GrpcAuthorizationEngine.class.getName());
   private final AuthConfig authConfig;
 
-  enum Action {
+  public enum Action {
     ALLOW,
     DENY,
   }
@@ -61,11 +61,11 @@ final class GrpcAuthorizationEngine {
    * An authorization decision provides information about the decision type and the policy name
    * identifier based on the authorization engine evaluation. */
   @AutoValue
-  abstract static class AuthDecision {
-    abstract Action decision();
+  public abstract static class AuthDecision {
+    public abstract Action decision();
 
     @Nullable
-    abstract String matchingPolicyName();
+    public abstract String matchingPolicyName();
 
     static AuthDecision create(Action decisionType, @Nullable String matchingPolicy) {
       return new AutoValue_GrpcAuthorizationEngine_AuthDecision(decisionType, matchingPolicy);
@@ -73,23 +73,23 @@ final class GrpcAuthorizationEngine {
   }
 
   /** Represents authorization config policy that the engine will evaluate against. */
-  static final class AuthConfig {
+  public static final class AuthConfig {
     private final List<PolicyMatcher> policies;
     private final Action action;
 
-    AuthConfig(List<PolicyMatcher> policies, Action action) {
+    public AuthConfig(List<PolicyMatcher> policies, Action action) {
       this.policies = Collections.unmodifiableList(new ArrayList<>(policies));
       this.action = action;
     }
   }
 
   /** Instantiated with envoy policyMatcher configuration. */
-  GrpcAuthorizationEngine(AuthConfig authConfig) {
+  public GrpcAuthorizationEngine(AuthConfig authConfig) {
     this.authConfig = authConfig;
   }
 
   /** Return the auth decision for the request argument against the policies. */
-  AuthDecision evaluate(Metadata metadata, ServerCall<?,?> serverCall) {
+  public AuthDecision evaluate(Metadata metadata, ServerCall<?,?> serverCall) {
     checkNotNull(metadata, "metadata");
     checkNotNull(serverCall, "serverCall");
     String firstMatch = null;
@@ -117,13 +117,13 @@ final class GrpcAuthorizationEngine {
    * <p>Currently we only support matching some of the request fields. Those unsupported fields are
    * considered not match until we stop ignoring them.
    */
-  static final class PolicyMatcher implements Matcher {
+  public static final class PolicyMatcher implements Matcher {
     private final OrMatcher permissions;
     private final OrMatcher principals;
     private final String name;
 
     /** Constructs a matcher for one RBAC policy. */
-    PolicyMatcher(String name, OrMatcher permissions, OrMatcher principals) {
+    public PolicyMatcher(String name, OrMatcher permissions, OrMatcher principals) {
       this.name = name;
       this.permissions = permissions;
       this.principals = principals;
@@ -135,10 +135,10 @@ final class GrpcAuthorizationEngine {
     }
   }
 
-  static final class AuthenticatedMatcher implements Matcher {
+  public static final class AuthenticatedMatcher implements Matcher {
     private final Matchers.StringMatcher delegate;
 
-    AuthenticatedMatcher(@Nullable Matchers.StringMatcher delegate) {
+    public AuthenticatedMatcher(@Nullable Matchers.StringMatcher delegate) {
       this.delegate = delegate;
     }
 
@@ -164,10 +164,10 @@ final class GrpcAuthorizationEngine {
     }
   }
 
-  static final class DestinationIpMatcher implements Matcher {
+  public static final class DestinationIpMatcher implements Matcher {
     private final Matchers.CidrMatcher delegate;
 
-    DestinationIpMatcher(Matchers.CidrMatcher delegate) {
+    public DestinationIpMatcher(Matchers.CidrMatcher delegate) {
       this.delegate = checkNotNull(delegate, "delegate");
     }
 
@@ -177,10 +177,10 @@ final class GrpcAuthorizationEngine {
     }
   }
 
-  static final class SourceIpMatcher implements Matcher {
+  public static final class SourceIpMatcher implements Matcher {
     private final Matchers.CidrMatcher delegate;
 
-    SourceIpMatcher(Matchers.CidrMatcher delegate) {
+    public SourceIpMatcher(Matchers.CidrMatcher delegate) {
       this.delegate = checkNotNull(delegate, "delegate");
     }
 
@@ -190,10 +190,10 @@ final class GrpcAuthorizationEngine {
     }
   }
 
-  static final class PathMatcher implements Matcher {
+  public static final class PathMatcher implements Matcher {
     private final Matchers.StringMatcher delegate;
 
-    PathMatcher(Matchers.StringMatcher delegate) {
+    public PathMatcher(Matchers.StringMatcher delegate) {
       this.delegate = checkNotNull(delegate, "delegate");
     }
 
@@ -203,10 +203,10 @@ final class GrpcAuthorizationEngine {
     }
   }
 
-  static final class HeaderMatcher implements Matcher {
+  public static final class HeaderMatcher implements Matcher {
     private final Matchers.HeaderMatcher delegate;
 
-    HeaderMatcher(Matchers.HeaderMatcher delegate) {
+    public HeaderMatcher(Matchers.HeaderMatcher delegate) {
       this.delegate = checkNotNull(delegate, "delegate");
     }
 
@@ -216,10 +216,10 @@ final class GrpcAuthorizationEngine {
     }
   }
 
-  static final class DestinationPortMatcher implements Matcher {
+  public static final class DestinationPortMatcher implements Matcher {
     private final int port;
 
-    DestinationPortMatcher(int port) {
+    public DestinationPortMatcher(int port) {
       this.port = port;
     }
 
@@ -315,11 +315,11 @@ final class GrpcAuthorizationEngine {
     boolean matches(EvaluateArgs args);
   }
 
-  /** Matches when any of the matcher matches. */
-  static final class OrMatcher implements Matcher {
+  public static final class OrMatcher implements Matcher {
     private final List<? extends Matcher> anyMatch;
 
-    OrMatcher(List<? extends Matcher> matchers) {
+    /** Matches when any of the matcher matches. */
+    public OrMatcher(List<? extends Matcher> matchers) {
       checkNotNull(matchers, "matchers");
       for (Matcher matcher : matchers) {
         checkNotNull(matcher, "matcher");
@@ -327,7 +327,7 @@ final class GrpcAuthorizationEngine {
       this.anyMatch = Collections.unmodifiableList(new ArrayList<>(matchers));
     }
 
-    static OrMatcher create(Matcher...matchers) {
+    public static OrMatcher create(Matcher...matchers) {
       return new OrMatcher(Arrays.asList(matchers));
     }
 
@@ -342,11 +342,11 @@ final class GrpcAuthorizationEngine {
     }
   }
 
-  /** Matches when all of the matchers match. */
-  static final class AndMatcher implements Matcher {
+  public static final class AndMatcher implements Matcher {
     private final List<? extends Matcher> allMatch;
 
-    AndMatcher(List<? extends Matcher> matchers) {
+    /** Matches when all of the matchers match. */
+    public AndMatcher(List<? extends Matcher> matchers) {
       checkNotNull(matchers, "matchers");
       for (Matcher matcher : matchers) {
         checkNotNull(matcher, "matcher");
@@ -354,7 +354,7 @@ final class GrpcAuthorizationEngine {
       this.allMatch = Collections.unmodifiableList(new ArrayList<>(matchers));
     }
 
-    static AndMatcher create(Matcher...matchers) {
+    public static AndMatcher create(Matcher...matchers) {
       return new AndMatcher(Arrays.asList(matchers));
     }
 
@@ -370,7 +370,7 @@ final class GrpcAuthorizationEngine {
   }
 
   /** Always true matcher.*/
-  static final class AlwaysTrueMatcher implements Matcher {
+  public static final class AlwaysTrueMatcher implements Matcher {
     static AlwaysTrueMatcher INSTANCE = new AlwaysTrueMatcher();
 
     @Override
@@ -380,10 +380,10 @@ final class GrpcAuthorizationEngine {
   }
 
   /** Negate matcher.*/
-  static final class InvertMatcher implements Matcher {
+  public static final class InvertMatcher implements Matcher {
     private final Matcher toInvertMatcher;
 
-    InvertMatcher(Matcher matcher) {
+    public InvertMatcher(Matcher matcher) {
       this.toInvertMatcher = checkNotNull(matcher, "matcher");
     }
 
