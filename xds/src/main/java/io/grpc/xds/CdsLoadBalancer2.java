@@ -183,7 +183,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
         return;
       }
-      LoadBalancerProvider lbProvider;
+      LoadBalancerProvider lbProvider = null;
       Object lbConfig = null;
       if (root.result.lbPolicy() == LbPolicy.RING_HASH) {
         lbProvider = lbRegistry.getProvider("ring_hash");
