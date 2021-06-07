@@ -98,6 +98,12 @@ final class ClientXdsClient extends AbstractXdsClient {
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
   @VisibleForTesting
+  static final long DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE = 1024L;
+  @VisibleForTesting
+  static final long DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE = 8 * 1024 * 1024L;
+  @VisibleForTesting
+  static final long MAX_RING_HASH_LB_POLICY_RING_SIZE = 8 * 1024 * 1024L;
+  @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   @VisibleForTesting
   static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
@@ -818,7 +824,8 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources)
+  @VisibleForTesting
+  static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources)
       throws ResourceInvalidException {
     StructOrError<CdsUpdate.Builder> structOrError;
     switch (cluster.getClusterDiscoveryTypeCase()) {
@@ -840,10 +847,17 @@ final class ClientXdsClient extends AbstractXdsClient {
 
     if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
       RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
-      long minRingSize = lbConfig.getMinimumRingSize().getValue();
-      long maxRingSize = lbConfig.getMaximumRingSize().getValue();
+      long minRingSize =
+          lbConfig.hasMinimumRingSize()
+              ? lbConfig.getMinimumRingSize().getValue()
+              : DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE;
+      long maxRingSize =
+          lbConfig.hasMaximumRingSize()
+              ? lbConfig.getMaximumRingSize().getValue()
+              : DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE;
       if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH
-          || minRingSize > maxRingSize) {
+          || minRingSize > maxRingSize
+          || maxRingSize > MAX_RING_HASH_LB_POLICY_RING_SIZE) {
         throw new ResourceInvalidException(
             "Cluster " + cluster.getName() + ": invalid ring_hash_lb_config: " + lbConfig);
       }
@@ -1613,14 +1627,15 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static final class ResourceInvalidException extends Exception {
+  @VisibleForTesting
+  static final class ResourceInvalidException extends Exception {
     private static final long serialVersionUID = 0L;
 
-    public ResourceInvalidException(String message) {
+    private ResourceInvalidException(String message) {
       super(message, null, false, false);
     }
 
-    public ResourceInvalidException(String message, Throwable cause) {
+    private ResourceInvalidException(String message, Throwable cause) {
       super(cause != null ? message + ": " + cause.getMessage() : message, cause, false, false);
     }
   }
