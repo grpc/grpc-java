@@ -36,7 +36,7 @@ import javax.annotation.CheckReturnValue;
  * <p>Attaches authorization state to a newly-created transport, and contains a
  * ServerInterceptor which ensures calls are authorized before allowing them to proceed.
  */
-final class BinderTransportSecurity {
+public final class BinderTransportSecurity {
 
   private static final Attributes.Key<TransportAuthorizationState> TRANSPORT_AUTHORIZATION_STATE =
       Attributes.Key.create("transport-authorization-state");
@@ -48,7 +48,7 @@ final class BinderTransportSecurity {
    *
    * @param serverBuilder The ServerBuilder being used to create the server.
    */
-  static void installAuthInterceptor(ServerBuilder<?> serverBuilder) {
+  public static void installAuthInterceptor(ServerBuilder<?> serverBuilder) {
     serverBuilder.intercept(new ServerAuthInterceptor());
   }
 

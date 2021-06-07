@@ -106,6 +106,12 @@ final class ClientXdsClient extends AbstractXdsClient {
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
   private static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
   @VisibleForTesting
+  static final long DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE = 1024L;
+  @VisibleForTesting
+  static final long DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE = 8 * 1024 * 1024L;
+  @VisibleForTesting
+  static final long MAX_RING_HASH_LB_POLICY_RING_SIZE = 8 * 1024 * 1024L;
+  @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   @VisibleForTesting
   static final String HASH_POLICY_FILTER_STATE_KEY = "io.grpc.channel_id";
@@ -953,7 +959,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       // Process Cluster into CdsUpdate.
       CdsUpdate cdsUpdate;
       try {
-        cdsUpdate = processCluster(cluster, retainedEdsResources);
+        cdsUpdate = parseCluster(cluster, retainedEdsResources);
       } catch (ResourceInvalidException e) {
         errors.add(
             "CDS response Cluster '" + clusterName + "' validation error: " + e.getMessage());
@@ -981,7 +987,8 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static CdsUpdate processCluster(Cluster cluster, Set<String> retainedEdsResources)
+  @VisibleForTesting
+  static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources)
       throws ResourceInvalidException {
     StructOrError<CdsUpdate.Builder> structOrError;
     switch (cluster.getClusterDiscoveryTypeCase()) {
@@ -993,26 +1000,36 @@ final class ClientXdsClient extends AbstractXdsClient {
         break;
       case CLUSTERDISCOVERYTYPE_NOT_SET:
       default:
-        throw new ResourceInvalidException("Unspecified cluster discovery type");
+        throw new ResourceInvalidException(
+            "Cluster " + cluster.getName() + ": unspecified cluster discovery type");
     }
     if (structOrError.getErrorDetail() != null) {
       throw new ResourceInvalidException(structOrError.getErrorDetail());
     }
-
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
 
     if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
       RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
-      if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH) {
+      long minRingSize =
+          lbConfig.hasMinimumRingSize()
+              ? lbConfig.getMinimumRingSize().getValue()
+              : DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE;
+      long maxRingSize =
+          lbConfig.hasMaximumRingSize()
+              ? lbConfig.getMaximumRingSize().getValue()
+              : DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE;
+      if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH
+          || minRingSize > maxRingSize
+          || maxRingSize > MAX_RING_HASH_LB_POLICY_RING_SIZE) {
         throw new ResourceInvalidException(
-            "Unsupported ring hash function: " + lbConfig.getHashFunction());
+            "Cluster " + cluster.getName() + ": invalid ring_hash_lb_config: " + lbConfig);
       }
-      updateBuilder.lbPolicy(CdsUpdate.LbPolicy.RING_HASH,
-          lbConfig.getMinimumRingSize().getValue(), lbConfig.getMaximumRingSize().getValue());
+      updateBuilder.ringHashLbPolicy(minRingSize, maxRingSize);
     } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
-      updateBuilder.lbPolicy(CdsUpdate.LbPolicy.ROUND_ROBIN);
+      updateBuilder.roundRobinLbPolicy();
     } else {
-      throw new ResourceInvalidException("Unsupported lb policy: " + cluster.getLbPolicy());
+      throw new ResourceInvalidException(
+          "Cluster " + cluster.getName() + ": unsupported lb policy: " + cluster.getLbPolicy());
     }
 
     return updateBuilder.build();

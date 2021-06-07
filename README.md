@@ -134,7 +134,7 @@ For non-Android protobuf-based codegen integrated with the Gradle build system,
 you can use [protobuf-gradle-plugin][]:
 ```gradle
 plugins {
-    id 'com.google.protobuf' version '0.8.15'
+    id 'com.google.protobuf' version '0.8.16'
 }
 
 protobuf {
@@ -167,7 +167,7 @@ use protobuf-gradle-plugin but specify the 'lite' options:
 
 ```gradle
 plugins {
-    id 'com.google.protobuf' version '0.8.15'
+    id 'com.google.protobuf' version '0.8.16'
 }
 
 protobuf {

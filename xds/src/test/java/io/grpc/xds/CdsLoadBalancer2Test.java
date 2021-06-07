@@ -48,7 +48,6 @@ import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.Dis
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.XdsClient.CdsUpdate;
-import io.grpc.xds.XdsClient.CdsUpdate.LbPolicy;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -148,7 +147,7 @@ public class CdsLoadBalancer2Test {
   public void discoverTopLevelEdsCluster() {
     CdsUpdate update =
         CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, 100L, upstreamTlsContext)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
@@ -165,7 +164,7 @@ public class CdsLoadBalancer2Test {
   public void discoverTopLevelLogicalDnsCluster() {
     CdsUpdate update =
         CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, LRS_SERVER_NAME, 100L, upstreamTlsContext)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
@@ -192,7 +191,7 @@ public class CdsLoadBalancer2Test {
   public void nonAggregateCluster_resourceUpdate() {
     CdsUpdate update =
         CdsUpdate.forEds(CLUSTER, null, null, 100L, upstreamTlsContext)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
@@ -202,7 +201,7 @@ public class CdsLoadBalancer2Test {
         100L, upstreamTlsContext);
 
     update = CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, 200L, null)
-        .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+        .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     childLbConfig = (ClusterResolverConfig) childBalancer.config;
     instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
@@ -214,7 +213,7 @@ public class CdsLoadBalancer2Test {
   public void nonAggregateCluster_resourceRevoked() {
     CdsUpdate update =
         CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, null, 100L, upstreamTlsContext)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
@@ -240,7 +239,7 @@ public class CdsLoadBalancer2Test {
     // CLUSTER (aggr.) -> [cluster1 (aggr.), cluster2 (logical DNS)]
     CdsUpdate update =
         CdsUpdate.forAggregate(CLUSTER, Arrays.asList(cluster1, cluster2))
-            .lbPolicy(LbPolicy.RING_HASH, 100L, 1000L).build();
+            .ringHashLbPolicy(100L, 1000L).build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster1, cluster2);
     assertThat(childBalancers).isEmpty();
@@ -249,24 +248,24 @@ public class CdsLoadBalancer2Test {
     // cluster1 (aggr.) -> [cluster3 (EDS), cluster4 (EDS)]
     CdsUpdate update1 =
         CdsUpdate.forAggregate(cluster1, Arrays.asList(cluster3, cluster4))
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     assertThat(xdsClient.watchers.keySet()).containsExactly(
         CLUSTER, cluster1, cluster2, cluster3, cluster4);
     assertThat(childBalancers).isEmpty();
     CdsUpdate update3 =
         CdsUpdate.forEds(cluster3, EDS_SERVICE_NAME, LRS_SERVER_NAME, 200L, upstreamTlsContext)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster3, update3);
     assertThat(childBalancers).isEmpty();
     CdsUpdate update2 =
         CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, null, 100L, null)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     assertThat(childBalancers).isEmpty();
     CdsUpdate update4 =
         CdsUpdate.forEds(cluster4, null, LRS_SERVER_NAME, 300L, null)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster4, update4);
     assertThat(childBalancers).hasSize(1);  // all non-aggregate clusters discovered
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
@@ -293,7 +292,7 @@ public class CdsLoadBalancer2Test {
     // CLUSTER (aggr.) -> [cluster1 (EDS)]
     CdsUpdate update =
         CdsUpdate.forAggregate(CLUSTER, Collections.singletonList(cluster1))
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster1);
     xdsClient.deliverResourceNotExist(cluster1);
@@ -311,16 +310,16 @@ public class CdsLoadBalancer2Test {
     // CLUSTER (aggr.) -> [cluster1 (EDS), cluster2 (logical DNS)]
     CdsUpdate update =
         CdsUpdate.forAggregate(CLUSTER, Arrays.asList(cluster1, cluster2))
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster1, cluster2);
     CdsUpdate update1 =
         CdsUpdate.forEds(cluster1, EDS_SERVICE_NAME, LRS_SERVER_NAME, 200L, upstreamTlsContext)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     CdsUpdate update2 =
         CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, LRS_SERVER_NAME, 100L, null)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
@@ -358,16 +357,16 @@ public class CdsLoadBalancer2Test {
     // CLUSTER (aggr.) -> [cluster1 (EDS), cluster2 (logical DNS)]
     CdsUpdate update =
         CdsUpdate.forAggregate(CLUSTER, Arrays.asList(cluster1, cluster2))
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster1, cluster2);
     CdsUpdate update1 =
         CdsUpdate.forEds(cluster1, EDS_SERVICE_NAME, LRS_SERVER_NAME, 200L, upstreamTlsContext)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     CdsUpdate update2 =
         CdsUpdate.forLogicalDns(cluster2, DNS_HOST_NAME, LRS_SERVER_NAME, 100L, null)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
@@ -395,7 +394,7 @@ public class CdsLoadBalancer2Test {
     // CLUSTER (aggr.) -> [cluster1]
     CdsUpdate update =
         CdsUpdate.forAggregate(CLUSTER, Collections.singletonList(cluster1))
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster1);
 
@@ -403,7 +402,7 @@ public class CdsLoadBalancer2Test {
     String cluster2 = "cluster-02.googleapis.com";
     update =
         CdsUpdate.forAggregate(CLUSTER, Collections.singletonList(cluster2))
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster2);
 
@@ -411,12 +410,12 @@ public class CdsLoadBalancer2Test {
     String cluster3 = "cluster-03.googleapis.com";
     CdsUpdate update2 =
         CdsUpdate.forAggregate(cluster2, Collections.singletonList(cluster3))
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster2, update2);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster2, cluster3);
     CdsUpdate update3 =
         CdsUpdate.forEds(cluster3, EDS_SERVICE_NAME, LRS_SERVER_NAME, 100L, upstreamTlsContext)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster3, update3);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
@@ -443,7 +442,7 @@ public class CdsLoadBalancer2Test {
     // CLUSTER (aggr.) -> [cluster1]
     CdsUpdate update =
         CdsUpdate.forAggregate(CLUSTER, Collections.singletonList(cluster1))
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     assertThat(xdsClient.watchers.keySet()).containsExactly(CLUSTER, cluster1);
     Status error = Status.RESOURCE_EXHAUSTED.withDescription("OOM");
@@ -460,11 +459,11 @@ public class CdsLoadBalancer2Test {
     // CLUSTER (aggr.) -> [cluster1 (logical DNS)]
     CdsUpdate update =
         CdsUpdate.forAggregate(CLUSTER, Collections.singletonList(cluster1))
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     CdsUpdate update1 =
         CdsUpdate.forLogicalDns(cluster1, DNS_HOST_NAME, LRS_SERVER_NAME, 200L, null)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(cluster1, update1);
     FakeLoadBalancer childLb = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childLb.config;
@@ -489,7 +488,7 @@ public class CdsLoadBalancer2Test {
   public void handleNameResolutionErrorFromUpstream_afterChildLbCreated_fallThrough() {
     CdsUpdate update =
         CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, 100L, upstreamTlsContext)
-            .lbPolicy(LbPolicy.ROUND_ROBIN).build();
+            .roundRobinLbPolicy().build();
     xdsClient.deliverCdsUpdate(CLUSTER, update);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.shutdown).isFalse();
