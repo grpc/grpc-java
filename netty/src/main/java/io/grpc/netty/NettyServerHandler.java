@@ -464,7 +464,7 @@ class NettyServerHandler extends AbstractNettyHandler {
             statsTraceCtx,
             transportTracer);
         transportListener.streamCreated(stream, method, metadata);
-//        state.onStreamAllocated();
+        state.onStreamAllocated();
         http2Stream.setProperty(streamKey, state);
       } finally {
         PerfMark.stopTask("NettyServerHandler.onHeadersRead", state.tag());

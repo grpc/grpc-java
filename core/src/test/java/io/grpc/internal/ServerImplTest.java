@@ -100,7 +100,6 @@ import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -445,10 +444,10 @@ public class ServerImplTest {
             streamTracerFactories, "Waiter/nonexist", requestHeaders);
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
     transportListener.streamCreated(stream, "Waiter/nonexist", requestHeaders);
-    assertEquals(1, executor.runDueTasks());
-    verify(stream, never()).setListener(any(ServerStreamListener.class));
+    verify(stream).setListener(isA(ServerStreamListener.class));
     verify(stream, atLeast(1)).statsTraceContext();
 
+    assertEquals(1, executor.runDueTasks());
     verify(stream).close(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
     assertEquals(Status.Code.UNIMPLEMENTED, status.getCode());
@@ -530,13 +529,13 @@ public class ServerImplTest {
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
-    verify(fallbackRegistry, never()).lookupMethod(any(String.class), any(String.class));
-    assertEquals(2, executor.runDueTasks());
     verify(stream).setListener(streamListenerCaptor.capture());
     ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
     verify(stream, atLeast(1)).statsTraceContext();
+    verify(fallbackRegistry).lookupMethod(eq("Waiter/serve"), any(String.class));
 
+    assertEquals(1, executor.runDueTasks());
     ServerCall<String, Integer> call = callReference.get();
     assertNotNull(call);
     assertEquals(
@@ -737,7 +736,7 @@ public class ServerImplTest {
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
-    assertEquals(2, executor.runDueTasks());
+    assertEquals(1, executor.runDueTasks());
 
     Context ctx1 = capturedContexts.poll();
     assertEquals("value1", key1.get(ctx1));
@@ -782,20 +781,18 @@ public class ServerImplTest {
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
-    verify(fallbackRegistry, never()).lookupMethod(any(String.class), any(String.class));
-    assertEquals(2, executor.runDueTasks());
     verify(stream).streamId();
     verify(stream).setListener(streamListenerCaptor.capture());
     ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
     verify(stream, atLeast(1)).statsTraceContext();
-    verify(stream, times(2)).getAuthority();
-    verify(stream).getAttributes();
-
     verify(fallbackRegistry).lookupMethod("Waiter/serve", AUTHORITY);
+    verify(stream).getAuthority();
+    verifyNoMoreInteractions(stream);
+
+    assertEquals(1, executor.runDueTasks());
     verify(stream).close(same(status), ArgumentMatchers.<Metadata>notNull());
     verify(stream, atLeast(1)).statsTraceContext();
-    verifyNoMoreInteractions(stream);
   }
 
   @Test
@@ -947,7 +944,6 @@ public class ServerImplTest {
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
-    assertEquals(2, executor.runDueTasks());
     verify(stream).setListener(streamListenerCaptor.capture());
     ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
@@ -1016,7 +1012,6 @@ public class ServerImplTest {
         StatsTraceContext.newServerContext(streamTracerFactories, "Waitier/serve", requestHeaders);
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
-    assertEquals(2, executor.runDueTasks());
     verify(stream).setListener(streamListenerCaptor.capture());
     ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
@@ -1027,7 +1022,6 @@ public class ServerImplTest {
   }
 
   @Test
-  @Ignore
   public void testContextExpiredBeforeStreamCreate_StreamCancelNotCalledBeforeSetListener()
       throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
@@ -1172,7 +1166,7 @@ public class ServerImplTest {
 
     // This call will be handled by callHandler from the internal registry
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
-    assertEquals(2, executor.runDueTasks());
+    assertEquals(1, executor.runDueTasks());
     verify(callHandler).startCall(ArgumentMatchers.<ServerCall<String, Integer>>any(),
         ArgumentMatchers.<Metadata>any());
     // This call will be handled by the fallbackRegistry because it's not registred in the internal

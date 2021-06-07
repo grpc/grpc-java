@@ -163,7 +163,6 @@ public abstract class AbstractServerStream extends AbstractStream
   @Override
   public final void setListener(ServerStreamListener serverStreamListener) {
     transportState().setListener(serverStreamListener);
-    transportState().onStreamAllocated();
   }
 
   @Override
