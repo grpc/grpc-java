@@ -49,6 +49,7 @@ dependencies {
 
     guavaDependency 'implementation'
     implementation libraries.androidx_annotation
+    implementation libraries.androidx_core
     testImplementation libraries.androidx_core
     testImplementation libraries.androidx_test
     testImplementation libraries.junit
@@ -64,6 +65,7 @@ dependencies {
 
     androidTestAnnotationProcessor libraries.autovalue
     androidTestImplementation project(':grpc-testing')
+    androidTestImplementation project(':grpc-protobuf-lite')
     androidTestImplementation libraries.autovalue_annotation
     androidTestImplementation libraries.junit
     androidTestImplementation libraries.androidx_core
@@ -73,6 +75,9 @@ dependencies {
     androidTestImplementation libraries.truth
     androidTestImplementation libraries.mockito_android
     androidTestImplementation libraries.androidx_lifecycle_service
+    androidTestImplementation (libraries.guava_testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity

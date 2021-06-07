@@ -96,7 +96,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * https://github.com/grpc/proposal/blob/master/L73-java-binderchannel/wireformat.md
  */
 @ThreadSafe
-abstract class BinderTransport
+public abstract class BinderTransport
     implements LeakSafeOneWayBinder.TransactionHandler, IBinder.DeathRecipient {
 
   private static final Logger logger = Logger.getLogger(BinderTransport.class.getName());
@@ -544,7 +544,7 @@ abstract class BinderTransport
 
   /** Concrete client-side transport implementation. */
   @ThreadSafe
-  static final class BinderClientTransport extends BinderTransport
+  public static final class BinderClientTransport extends BinderTransport
       implements ConnectionClientTransport, Bindable.Observer {
 
     private final ObjectPool<? extends Executor> offloadExecutorPool;
@@ -561,7 +561,7 @@ abstract class BinderTransport
     @GuardedBy("this")
     private int latestCallId = FIRST_CALL_ID;
 
-    BinderClientTransport(
+    public BinderClientTransport(
         Context sourceContext,
         AndroidComponentAddress targetAddress,
         BindServiceFlags bindServiceFlags,
