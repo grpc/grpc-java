@@ -289,16 +289,21 @@ abstract class XdsClient {
       // Private, use one of the static factory methods instead.
       protected abstract Builder clusterType(ClusterType clusterType);
 
-      abstract Builder lbPolicy(LbPolicy lbPolicy);
+      // Private, use roundRobinLbPolicy() or ringHashLbPolicy(long, long).
+      protected abstract Builder lbPolicy(LbPolicy lbPolicy);
 
-      Builder lbPolicy(LbPolicy lbPolicy, long minRingSize, long maxRingSize) {
-        return this.lbPolicy(lbPolicy).minRingSize(minRingSize).maxRingSize(maxRingSize);
+      Builder roundRobinLbPolicy() {
+        return this.lbPolicy(LbPolicy.ROUND_ROBIN);
       }
 
-      // Private, use lbPolicy(LbPolicy, long, long).
+      Builder ringHashLbPolicy(long minRingSize, long maxRingSize) {
+        return this.lbPolicy(LbPolicy.RING_HASH).minRingSize(minRingSize).maxRingSize(maxRingSize);
+      }
+
+      // Private, use ringHashLbPolicy(long, long).
       protected abstract Builder minRingSize(long minRingSize);
 
-      // Private, use lbPolicy(.LbPolicy, long, long)
+      // Private, use ringHashLbPolicy(long, long).
       protected abstract Builder maxRingSize(long maxRingSize);
 
       // Private, use CdsUpdate.forEds() instead.
