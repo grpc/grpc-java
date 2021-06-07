@@ -19,6 +19,7 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
@@ -98,6 +99,10 @@ public final class SslContextProviderSupplier implements Closeable {
     return tlsContext instanceof UpstreamTlsContext
         ? tlsContextManager.findOrCreateClientSslContextProvider((UpstreamTlsContext) tlsContext)
         : tlsContextManager.findOrCreateServerSslContextProvider((DownstreamTlsContext) tlsContext);
+  }
+
+  @VisibleForTesting public boolean isShutdown() {
+    return shutdown;
   }
 
   /** Called by consumer when tlsContext changes. */
