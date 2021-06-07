@@ -161,27 +161,6 @@ public class CdsLoadBalancer2Test {
   }
 
   @Test
-  public void discoverTopLevelEdsCluster_ringHashLbPolicy() {
-    CdsUpdate update =
-        CdsUpdate.forEds(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME, 100L, upstreamTlsContext)
-            .ringHashLbPolicy(0L, 0L).build();
-    xdsClient.deliverCdsUpdate(CLUSTER, update);
-    assertThat(childBalancers).hasSize(1);
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(childBalancer.name).isEqualTo(CLUSTER_RESOLVER_POLICY_NAME);
-    ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanisms).hasSize(1);
-    DiscoveryMechanism instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
-    assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.EDS, EDS_SERVICE_NAME,
-        null, LRS_SERVER_NAME, 100L, upstreamTlsContext);
-    assertThat(childLbConfig.lbPolicy.getProvider().getPolicyName()).isEqualTo("ring_hash");
-    assertThat(((RingHashConfig) childLbConfig.lbPolicy.getConfig()).minRingSize)
-        .isEqualTo(RingHashLoadBalancerProvider.DEFAULT_MIN_RING_SIZE);
-    assertThat(((RingHashConfig) childLbConfig.lbPolicy.getConfig()).maxRingSize)
-        .isEqualTo(RingHashLoadBalancerProvider.DEFAULT_MAX_RING_SIZE);
-  }
-
-  @Test
   public void discoverTopLevelLogicalDnsCluster() {
     CdsUpdate update =
         CdsUpdate.forLogicalDns(CLUSTER, DNS_HOST_NAME, LRS_SERVER_NAME, 100L, upstreamTlsContext)
