@@ -847,9 +847,9 @@ final class ClientXdsClient extends AbstractXdsClient {
         throw new ResourceInvalidException(
             "Cluster " + cluster.getName() + ": invalid ring_hash_lb_config: " + lbConfig);
       }
-      updateBuilder.lbPolicy(CdsUpdate.LbPolicy.RING_HASH, minRingSize, maxRingSize);
+      updateBuilder.ringHashLbPolicy(minRingSize, maxRingSize);
     } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
-      updateBuilder.lbPolicy(CdsUpdate.LbPolicy.ROUND_ROBIN);
+      updateBuilder.roundRobinLbPolicy();
     } else {
       throw new ResourceInvalidException(
           "Cluster " + cluster.getName() + ": unsupported lb policy: " + cluster.getLbPolicy());
