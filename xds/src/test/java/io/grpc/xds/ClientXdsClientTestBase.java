@@ -60,6 +60,7 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.FaultConfig.FractionalPercent.DenominatorType;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
@@ -2034,9 +2035,14 @@ public abstract class ClientXdsClientTestBase {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
+    Message hcmFilter = mf.buildHttpConnectionManagerFilter(
+        "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+    Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+        "google-sds-config-default", "ROOTCA");
+    Message filterChain = mf.buildFilterChain(
+        Collections.<String>emptyList(), downstreamTlsContext, hcmFilter);
     Message listener =
-        mf.buildListenerWithFilterChain(
-            LISTENER_RESOURCE, 7000, "0.0.0.0", "google-sds-config-default", "ROOTCA");
+        mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain);
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
     // Client sends an ACK LDS request.
@@ -2046,8 +2052,13 @@ public abstract class ClientXdsClientTestBase {
     EnvoyServerProtoData.Listener parsedListener = ldsUpdateCaptor.getValue().listener();
     assertThat(parsedListener.getName()).isEqualTo(LISTENER_RESOURCE);
     assertThat(parsedListener.getAddress()).isEqualTo("0.0.0.0:7000");
-    assertThat(parsedListener.getFilterChains()).hasSize(1);
     assertThat(parsedListener.getDefaultFilterChain()).isNull();
+    assertThat(parsedListener.getFilterChains()).hasSize(1);
+    FilterChain parsedFilterChain = Iterables.getOnlyElement(parsedListener.getFilterChains());
+    assertThat(parsedFilterChain.getFilterChainMatch().getApplicationProtocols()).isEmpty();
+    assertThat(parsedFilterChain.getHttpConnectionManager().rdsName())
+        .isEqualTo("route-foo.googleapis.com");
+    assertThat(parsedFilterChain.getHttpConnectionManager().httpFilterConfigs()).isEmpty();
 
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -2057,18 +2068,14 @@ public abstract class ClientXdsClientTestBase {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
-    final Message filterChainInbound =
-        mf.buildFilterChain(
-            Arrays.asList("managed-mtls"),
-            CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-                "google-sds-config-default", "ROOTCA"),
-            mf.buildTestFilter("envoy.http_connection_manager"));
-    Message listener =
-        mf.buildListenerWithFilterChain(
-            "grpc/server?xds.resource.listening_address=0.0.0.0:8000",
-            7000,
-            "0.0.0.0",
-            filterChainInbound);
+    Message hcmFilter = mf.buildHttpConnectionManagerFilter(
+        "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+    Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+        "google-sds-config-default", "ROOTCA");
+    Message filterChain = mf.buildFilterChain(
+        Collections.singletonList("managed-mtls"), downstreamTlsContext, hcmFilter);
+    Message listener = mf.buildListenerWithFilterChain(
+        "grpc/server?xds.resource.listening_address=0.0.0.0:8000", 7000, "0.0.0.0", filterChain);
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
     // Client sends an ACK LDS request.
@@ -2241,9 +2248,7 @@ public abstract class ClientXdsClientTestBase {
     protected abstract Message buildListenerWithFilterChain(
         String name, int portValue, String address, Message... filterChains);
 
-    protected abstract Message buildListenerWithFilterChain(
-        String name, int portValue, String address, String certName, String validationContextName);
-
-    protected abstract Message buildTestFilter(String name);
+    protected abstract Message buildHttpConnectionManagerFilter(
+        @Nullable String rdsName, @Nullable Message routeConfig, List<Message> httpFilters);
   }
 }

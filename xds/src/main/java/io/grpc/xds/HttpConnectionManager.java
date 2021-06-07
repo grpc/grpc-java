@@ -57,13 +57,6 @@ abstract class HttpConnectionManager {
         httpFilterConfigs);
   }
 
-  // TODO(chengyuanzhang): server side RDS/RouteConfiguration spec has not been finalized yet,
-  //  so neither RDS name nor inlined virtual hosts are required now.
-  static HttpConnectionManager forLdsOnly(long httpMaxStreamDurationNano,
-      @Nullable List<NamedFilterConfig> httpFilterConfigs) {
-    return create(httpMaxStreamDurationNano, null, null, httpFilterConfigs);
-  }
-
   private static HttpConnectionManager create(long httpMaxStreamDurationNano,
       @Nullable String rdsName, @Nullable List<VirtualHost> virtualHosts,
       @Nullable List<NamedFilterConfig> httpFilterConfigs) {

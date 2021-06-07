@@ -26,6 +26,8 @@ import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
+import io.envoyproxy.envoy.config.core.v3.ConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ExtensionConfigSource;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.Locality;
@@ -52,6 +54,7 @@ import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatchAndSubstitute;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher.GoogleRE2;
@@ -699,7 +702,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("HttpConnectionManager neither has inlined route_config nor RDS");
-    ClientXdsClient.parseHttpConnectionManager(hcm, false /* does not matter */, true);
+    ClientXdsClient.parseHttpConnectionManager(hcm, false /* does not matter */);
   }
 
   @Test
@@ -713,7 +716,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("HttpConnectionManager contains duplicate HttpFilter: envoy.filter.foo");
-    ClientXdsClient.parseHttpConnectionManager(hcm, true, false /* does not matter */);
+    ClientXdsClient.parseHttpConnectionManager(hcm, true);
   }
 
   @Test
@@ -773,18 +776,11 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
-  public void parseServerSideListener_duplicateFilterName() throws ResourceInvalidException {
+  public void parseServerSideListener_duplicateFilter() throws ResourceInvalidException {
+    Filter filter = buildHttpConnectionManagerFilter(
+        HttpFilter.newBuilder().setName("http-filter-foo").setIsOptional(true).build());
     FilterChain filterChain =
-        buildFilterChain(
-            "filter-chain-foo",
-            Filter.newBuilder()
-                .setName("envoy.http_connection_manager")
-                .setTypedConfig(Any.pack(HttpConnectionManager.getDefaultInstance()))
-                .build(),
-            Filter.newBuilder()
-                .setName("envoy.http_connection_manager")
-                .setTypedConfig(Any.pack(HttpConnectionManager.getDefaultInstance()))
-                .build());
+        buildFilterChain("filter-chain-foo", filter, filter);
     Listener listener =
         Listener.newBuilder()
             .setName("listener1")
@@ -900,6 +896,12 @@ public class ClientXdsClientDataTest {
         .setTypedConfig(
             Any.pack(
                 HttpConnectionManager.newBuilder()
+                    .setRds(
+                        Rds.newBuilder()
+                            .setRouteConfigName("route-config.googleapis.com")
+                            .setConfigSource(
+                                ConfigSource.newBuilder()
+                                    .setAds(AggregatedConfigSource.getDefaultInstance())))
                     .addAllHttpFilters(Arrays.asList(httpFilters))
                     .build(),
                 "type.googleapis.com"))

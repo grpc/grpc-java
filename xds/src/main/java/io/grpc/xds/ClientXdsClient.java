@@ -234,8 +234,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       throw new ResourceInvalidException(
           "Could not parse HttpConnectionManager config from ApiListener", e);
     }
-    return LdsUpdate.forApiListener(
-        parseHttpConnectionManager(hcm, parseHttpFilter, true /* forClient */));
+    return LdsUpdate.forApiListener(parseHttpConnectionManager(hcm, parseHttpFilter));
   }
 
   private LdsUpdate processServerSideListener(Listener proto, boolean parseHttpFilter)
@@ -329,8 +328,7 @@ final class ClientXdsClient extends AbstractXdsClient {
           throw new ResourceInvalidException("FilterChain " + proto.getName() + " with filter "
               + filter.getName() + " failed to unpack message", e);
         }
-        httpConnectionManager =
-            parseHttpConnectionManager(hcmProto, parseHttpFilters, false /* forClient */);
+        httpConnectionManager = parseHttpConnectionManager(hcmProto, parseHttpFilters);
       }
     }
     if (httpConnectionManager == null) {
@@ -405,7 +403,7 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @VisibleForTesting
   static io.grpc.xds.HttpConnectionManager parseHttpConnectionManager(
-      HttpConnectionManager proto, boolean parseHttpFilter, boolean forClient)
+      HttpConnectionManager proto, boolean parseHttpFilter)
       throws ResourceInvalidException {
     // Obtain max_stream_duration from Http Protocol Options.
     long maxStreamDuration = 0;
@@ -441,41 +439,38 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
     }
 
-    if (forClient) {
-      // Parse inlined RouteConfiguration or RDS.
-      if (proto.hasRouteConfig()) {
-        List<VirtualHost> virtualHosts = new ArrayList<>();
-        for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
-            : proto.getRouteConfig().getVirtualHostsList()) {
-          StructOrError<VirtualHost> virtualHost =
-              parseVirtualHost(virtualHostProto, parseHttpFilter);
-          if (virtualHost.getErrorDetail() != null) {
-            throw new ResourceInvalidException(
-                "HttpConnectionManager contains invalid virtual host: "
-                    + virtualHost.getErrorDetail());
-          }
-          virtualHosts.add(virtualHost.getStruct());
-        }
-        return io.grpc.xds.HttpConnectionManager.withVirtualHosts(
-            maxStreamDuration, virtualHosts, filterConfigs);
-      }
-      if (proto.hasRds()) {
-        Rds rds = proto.getRds();
-        if (!rds.hasConfigSource()) {
+    // Parse inlined RouteConfiguration or RDS.
+    if (proto.hasRouteConfig()) {
+      List<VirtualHost> virtualHosts = new ArrayList<>();
+      for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
+          : proto.getRouteConfig().getVirtualHostsList()) {
+        StructOrError<VirtualHost> virtualHost =
+            parseVirtualHost(virtualHostProto, parseHttpFilter);
+        if (virtualHost.getErrorDetail() != null) {
           throw new ResourceInvalidException(
-              "HttpConnectionManager contains invalid RDS: missing config_source");
+              "HttpConnectionManager contains invalid virtual host: "
+                  + virtualHost.getErrorDetail());
         }
-        if (!rds.getConfigSource().hasAds()) {
-          throw new ResourceInvalidException(
-              "HttpConnectionManager contains invalid RDS: must specify ADS");
-        }
-        return io.grpc.xds.HttpConnectionManager.withRdsName(
-            maxStreamDuration, rds.getRouteConfigName(), filterConfigs);
+        virtualHosts.add(virtualHost.getStruct());
       }
-      throw new ResourceInvalidException(
-          "HttpConnectionManager neither has inlined route_config nor RDS");
+      return io.grpc.xds.HttpConnectionManager.withVirtualHosts(
+          maxStreamDuration, virtualHosts, filterConfigs);
     }
-    return io.grpc.xds.HttpConnectionManager.forLdsOnly(maxStreamDuration, filterConfigs);
+    if (proto.hasRds()) {
+      Rds rds = proto.getRds();
+      if (!rds.hasConfigSource()) {
+        throw new ResourceInvalidException(
+            "HttpConnectionManager contains invalid RDS: missing config_source");
+      }
+      if (!rds.getConfigSource().hasAds()) {
+        throw new ResourceInvalidException(
+            "HttpConnectionManager contains invalid RDS: must specify ADS");
+      }
+      return io.grpc.xds.HttpConnectionManager.withRdsName(
+          maxStreamDuration, rds.getRouteConfigName(), filterConfigs);
+    }
+    throw new ResourceInvalidException(
+        "HttpConnectionManager neither has inlined route_config nor RDS");
   }
 
   @VisibleForTesting
