@@ -43,11 +43,11 @@ This section is only necessary if you are making changes to the code
 generation. Most users only need to use `skipCodegen=true` as discussed above.
 
 ### Build Protobuf
-The codegen plugin is C++ code and requires protobuf 3.12.0 or later.
+The codegen plugin is C++ code and requires protobuf 3.17.2 or later.
 
 For Linux, Mac and MinGW:
 ```
-$ PROTOBUF_VERSION=3.12.0
+$ PROTOBUF_VERSION=3.17.2
 $ curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOBUF_VERSION/protobuf-all-$PROTOBUF_VERSION.tar.gz
 $ tar xzf protobuf-all-$PROTOBUF_VERSION.tar.gz
 $ cd protobuf-$PROTOBUF_VERSION
@@ -80,16 +80,16 @@ When building on Windows and VC++, you need to specify project properties for
 Gradle to find protobuf:
 ```
 .\gradlew publishToMavenLocal ^
-    -PvcProtobufInclude=C:\path\to\protobuf-3.12.0\src ^
-    -PvcProtobufLibs=C:\path\to\protobuf-3.12.0\vsprojects\Release ^
+    -PvcProtobufInclude=C:\path\to\protobuf\src ^
+    -PvcProtobufLibs=C:\path\to\protobuf\vsprojects\Release ^
     -PtargetArch=x86_32
 ```
 
 Since specifying those properties every build is bothersome, you can instead
 create ``<project-root>\gradle.properties`` with contents like:
 ```
-vcProtobufInclude=C:\\path\\to\\protobuf-3.12.0\\src
-vcProtobufLibs=C:\\path\\to\\protobuf-3.12.0\\vsprojects\\Release
+vcProtobufInclude=C:\\path\\to\\protobuf\\src
+vcProtobufLibs=C:\\path\\to\\protobuf\\vsprojects\\Release
 targetArch=x86_32
 ```
 

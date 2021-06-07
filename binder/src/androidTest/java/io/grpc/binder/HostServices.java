@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
@@ -31,10 +32,12 @@ import com.google.auto.value.AutoValue;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import io.grpc.NameResolver;
+import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.internal.InternalServer;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +64,11 @@ public final class HostServices {
         HostService1.class, HostService2.class,
       };
 
+
+  public interface ServerFactory {
+    Server createServer(Service service, IBinderReceiver receiver);
+  }
+
   @AutoValue
   public abstract static class ServiceParams {
     @Nullable
@@ -68,6 +76,9 @@ public final class HostServices {
 
     @Nullable
     abstract Supplier<IBinder> rawBinderSupplier();
+
+    @Nullable
+    abstract ServerFactory serverFactory();
 
     public abstract Builder toBuilder();
 
@@ -78,6 +89,9 @@ public final class HostServices {
     @AutoValue.Builder
     public abstract static class Builder {
       public abstract Builder setRawBinderSupplier(Supplier<IBinder> binderSupplier);
+
+      public abstract Builder setServerFactory(ServerFactory serverFactory);
+
       /**
        * If set, this executor will be used to pass any inbound transactions to the server. This can
        * be used to simulate delayed, re-ordered, or dropped packets.
@@ -185,6 +199,7 @@ public final class HostServices {
 
     @Nullable private ServiceParams params;
     @Nullable private Supplier<IBinder> binderSupplier;
+    @Nullable private Server server;
 
     @Override
     public final void onCreate() {
@@ -195,7 +210,22 @@ public final class HostServices {
         activeServices.put(cls, this);
         checkState(serviceParams.containsKey(cls));
         params = serviceParams.get(cls);
-        binderSupplier = params.rawBinderSupplier();
+        ServerFactory factory = params.serverFactory();
+        if (factory != null) {
+          IBinderReceiver receiver = new IBinderReceiver();
+          server = factory.createServer(this, receiver);
+          try {
+            server.start();
+          } catch (IOException ioe) {
+            throw new AssertionError("Failed to start server", ioe);
+          }
+          binderSupplier = () -> receiver.get();
+        } else {
+          binderSupplier = params.rawBinderSupplier();
+          if (binderSupplier == null) {
+            throw new AssertionError("Insufficient params for host service");
+          }
+        }
       }
     }
 
@@ -217,6 +247,10 @@ public final class HostServices {
     @Override
     public final void onDestroy() {
       synchronized (HostServices.class) {
+        if (server != null) {
+          server.shutdown();
+          server = null;
+        }
         HostService removed = activeServices.remove(getClass());
         checkState(removed == this);
         serviceAddresses.remove(getClass());
