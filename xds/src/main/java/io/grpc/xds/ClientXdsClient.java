@@ -222,7 +222,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static LdsUpdate processClientSideListener(Listener listener, boolean parseFilter)
+  private static LdsUpdate processClientSideListener(Listener listener, boolean parseHttpFilter)
       throws ResourceInvalidException {
     // Unpack HttpConnectionManager from the Listener.
     HttpConnectionManager hcm;
@@ -235,18 +235,18 @@ final class ClientXdsClient extends AbstractXdsClient {
           "Could not parse HttpConnectionManager config from ApiListener", e);
     }
     return LdsUpdate.forApiListener(
-        parseHttpConnectionManager(hcm, parseFilter, true /* forClient */));
+        parseHttpConnectionManager(hcm, parseHttpFilter, true /* forClient */));
   }
 
-  private LdsUpdate processServerSideListener(Listener proto, boolean parseFilter)
+  private LdsUpdate processServerSideListener(Listener proto, boolean parseHttpFilter)
       throws ResourceInvalidException {
     return LdsUpdate.forTcpListener(
-        parseServerSideListener(proto, tlsContextManager, parseFilter));
+        parseServerSideListener(proto, tlsContextManager, parseHttpFilter));
   }
 
   @VisibleForTesting
   static EnvoyServerProtoData.Listener parseServerSideListener(
-      Listener proto, TlsContextManager tlsContextManager, boolean parseFilter)
+      Listener proto, TlsContextManager tlsContextManager, boolean parseHttpFilter)
       throws ResourceInvalidException {
     if (!proto.getTrafficDirection().equals(TrafficDirection.INBOUND)) {
       throw new ResourceInvalidException(
@@ -280,12 +280,12 @@ final class ClientXdsClient extends AbstractXdsClient {
 
     List<FilterChain> filterChains = new ArrayList<>();
     for (io.envoyproxy.envoy.config.listener.v3.FilterChain fc : proto.getFilterChainsList()) {
-      filterChains.add(parseFilterChain(fc, tlsContextManager, parseFilter));
+      filterChains.add(parseFilterChain(fc, tlsContextManager, parseHttpFilter));
     }
     FilterChain defaultFilterChain = null;
     if (proto.hasDefaultFilterChain()) {
       defaultFilterChain = parseFilterChain(
-          proto.getDefaultFilterChain(), tlsContextManager, parseFilter);
+          proto.getDefaultFilterChain(), tlsContextManager, parseHttpFilter);
     }
 
     return new EnvoyServerProtoData.Listener(
@@ -405,7 +405,7 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @VisibleForTesting
   static io.grpc.xds.HttpConnectionManager parseHttpConnectionManager(
-      HttpConnectionManager proto, boolean parseFilter, boolean forClient)
+      HttpConnectionManager proto, boolean parseHttpFilter, boolean forClient)
       throws ResourceInvalidException {
     // Obtain max_stream_duration from Http Protocol Options.
     long maxStreamDuration = 0;
@@ -418,7 +418,7 @@ final class ClientXdsClient extends AbstractXdsClient {
 
     // Parse http filters.
     List<NamedFilterConfig> filterConfigs = null;
-    if (parseFilter) {
+    if (parseHttpFilter) {
       filterConfigs = new ArrayList<>();
       Set<String> names = new HashSet<>();
       for (io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
@@ -447,7 +447,8 @@ final class ClientXdsClient extends AbstractXdsClient {
         List<VirtualHost> virtualHosts = new ArrayList<>();
         for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
             : proto.getRouteConfig().getVirtualHostsList()) {
-          StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseFilter);
+          StructOrError<VirtualHost> virtualHost =
+              parseVirtualHost(virtualHostProto, parseHttpFilter);
           if (virtualHost.getErrorDetail() != null) {
             throw new ResourceInvalidException(
                 "HttpConnectionManager contains invalid virtual host: "
@@ -549,11 +550,11 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   private static StructOrError<VirtualHost> parseVirtualHost(
-      io.envoyproxy.envoy.config.route.v3.VirtualHost proto, boolean parseFilter) {
+      io.envoyproxy.envoy.config.route.v3.VirtualHost proto, boolean parseHttpFilter) {
     String name = proto.getName();
     List<Route> routes = new ArrayList<>(proto.getRoutesCount());
     for (io.envoyproxy.envoy.config.route.v3.Route routeProto : proto.getRoutesList()) {
-      StructOrError<Route> route = parseRoute(routeProto, parseFilter);
+      StructOrError<Route> route = parseRoute(routeProto, parseHttpFilter);
       if (route == null) {
         continue;
       }
@@ -563,7 +564,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       routes.add(route.getStruct());
     }
-    if (!parseFilter) {
+    if (!parseHttpFilter) {
       return StructOrError.fromStruct(VirtualHost.create(
           name, proto.getDomainsList(), routes, new HashMap<String, FilterConfig>()));
     }
@@ -599,7 +600,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   @VisibleForTesting
   @Nullable
   static StructOrError<Route> parseRoute(
-      io.envoyproxy.envoy.config.route.v3.Route proto, boolean parseFilter) {
+      io.envoyproxy.envoy.config.route.v3.Route proto, boolean parseHttpFilter) {
     StructOrError<RouteMatch> routeMatch = parseRouteMatch(proto.getMatch());
     if (routeMatch == null) {
       return null;
@@ -612,7 +613,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     StructOrError<RouteAction> routeAction;
     switch (proto.getActionCase()) {
       case ROUTE:
-        routeAction = parseRouteAction(proto.getRoute(), parseFilter);
+        routeAction = parseRouteAction(proto.getRoute(), parseHttpFilter);
         break;
       case REDIRECT:
         return StructOrError.fromError("Unsupported action type: redirect");
@@ -631,7 +632,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       return StructOrError.fromError(
           "Invalid route [" + proto.getName() + "]: " + routeAction.getErrorDetail());
     }
-    if (!parseFilter) {
+    if (!parseHttpFilter) {
       return StructOrError.fromStruct(Route.create(
           routeMatch.getStruct(), routeAction.getStruct(), new HashMap<String, FilterConfig>()));
     }
@@ -769,7 +770,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   @VisibleForTesting
   @Nullable
   static StructOrError<RouteAction> parseRouteAction(
-      io.envoyproxy.envoy.config.route.v3.RouteAction proto, boolean parseFilter) {
+      io.envoyproxy.envoy.config.route.v3.RouteAction proto, boolean parseHttpFilter) {
     Long timeoutNano = null;
     if (proto.hasMaxStreamDuration()) {
       io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration maxStreamDuration
@@ -828,7 +829,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
             : clusterWeights) {
           StructOrError<ClusterWeight> clusterWeightOrError =
-              parseClusterWeight(clusterWeight, parseFilter);
+              parseClusterWeight(clusterWeight, parseHttpFilter);
           if (clusterWeightOrError.getErrorDetail() != null) {
             return StructOrError.fromError("RouteAction contains invalid ClusterWeight: "
                 + clusterWeightOrError.getErrorDetail());
@@ -848,8 +849,8 @@ final class ClientXdsClient extends AbstractXdsClient {
   @VisibleForTesting
   static StructOrError<ClusterWeight> parseClusterWeight(
       io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto,
-      boolean parseFilter) {
-    if (!parseFilter) {
+      boolean parseHttpFilter) {
+    if (!parseHttpFilter) {
       return StructOrError.fromStruct(ClusterWeight.create(
           proto.getName(), proto.getWeight().getValue(), new HashMap<String, FilterConfig>()));
     }
@@ -911,11 +912,11 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   private static RdsUpdate processRouteConfiguration(
-      RouteConfiguration routeConfig, boolean parseFilter) throws ResourceInvalidException {
+      RouteConfiguration routeConfig, boolean parseHttpFilter) throws ResourceInvalidException {
     List<VirtualHost> virtualHosts = new ArrayList<>(routeConfig.getVirtualHostsCount());
     for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
         : routeConfig.getVirtualHostsList()) {
-      StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseFilter);
+      StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseHttpFilter);
       if (virtualHost.getErrorDetail() != null) {
         throw new ResourceInvalidException(
             "RouteConfiguration contains invalid virtual host: " + virtualHost.getErrorDetail());
