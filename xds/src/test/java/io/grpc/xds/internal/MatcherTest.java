@@ -38,7 +38,7 @@ public class MatcherTest {
 
   @Test
   public void ipMatcher_Ipv4() throws Exception {
-    CidrMatcher matcher = CidrMatcher.create("10.10.24.10", 20);
+    CidrMatcher matcher = CidrMatcher.create(InetAddress.getByName("10.10.24.10"), 20);
     assertThat(matcher.matches(InetAddress.getByName("::0"))).isFalse();
     assertThat(matcher.matches(InetAddress.getByName("10.10.20.0"))).isTrue();
     assertThat(matcher.matches(InetAddress.getByName("10.10.16.0"))).isTrue();
@@ -47,7 +47,7 @@ public class MatcherTest {
     assertThat(matcher.matches(InetAddress.getByName("10.10.17.0"))).isTrue();
     assertThat(matcher.matches(InetAddress.getByName("10.32.20.0"))).isFalse();
     assertThat(matcher.matches(InetAddress.getByName("10.10.40.0"))).isFalse();
-    matcher = CidrMatcher.create("0.0.0.0", 20);
+    matcher = CidrMatcher.create(InetAddress.getByName("0.0.0.0"), 20);
     assertThat(matcher.matches(InetAddress.getByName("10.32.20.0"))).isFalse();
     assertThat(matcher.matches(InetAddress.getByName("0.0.31.0"))).isFalse();
     assertThat(matcher.matches(InetAddress.getByName("0.0.15.0"))).isTrue();
@@ -56,7 +56,7 @@ public class MatcherTest {
 
   @Test
   public void ipMatcher_Ipv6() throws Exception {
-    CidrMatcher matcher = CidrMatcher.create("2012:00fe:d808::", 36);
+    CidrMatcher matcher = CidrMatcher.create(InetAddress.getByName("2012:00fe:d808::"), 36);
     assertThat(matcher.matches(InetAddress.getByName("0.0.0.0"))).isFalse();
     assertThat(matcher.matches(InetAddress.getByName("2012:00fe:d000::0"))).isTrue();
     assertThat(matcher.matches(InetAddress.getByName("2012:00fe:d808::"))).isTrue();

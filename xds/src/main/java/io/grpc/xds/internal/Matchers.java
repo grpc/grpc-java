@@ -22,7 +22,6 @@ import com.google.auto.value.AutoValue;
 import com.google.re2j.Pattern;
 import java.math.BigInteger;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import javax.annotation.Nullable;
 
 /**
@@ -114,22 +113,10 @@ public final class Matchers {
           prefix, suffix, inverted);
     }
 
-    /** Represents an integer range. */
-    @AutoValue
-    public abstract static class Range {
-      public abstract long start();
-
-      public abstract long end();
-
-      public static Range create(long start, long end) {
-        return new AutoValue_Matchers_HeaderMatcher_Range(start, end);
-      }
-    }
-
     /** Returns the matching result. */
     public boolean matches(String value) {
       if (present() != null) {
-        return ((value == null) == present()) == inverted();
+        return (value == null) == present().equals(inverted());
       }
       if (value == null) {
         return false;
@@ -154,6 +141,18 @@ public final class Matchers {
         baseMatch = value.endsWith(suffix());
       }
       return baseMatch != inverted();
+    }
+
+    /** Represents an integer range. */
+    @AutoValue
+    public abstract static class Range {
+      public abstract long start();
+
+      public abstract long end();
+
+      public static Range create(long start, long end) {
+        return new AutoValue_Matchers_HeaderMatcher_Range(start, end);
+      }
     }
   }
 
@@ -288,20 +287,11 @@ public final class Matchers {
       return cidrInt.equals(addrInt);
     }
 
-    /** Constructs a CidrMatcher with this prefix and prefix length. */
+    /** Constructs a CidrMatcher with this prefix and prefix length.
+     * Do not provide string addressPrefix constructor to avoid IO exception handling.
+     * */
     public static CidrMatcher create(InetAddress addressPrefix, int prefixLen) {
       return new AutoValue_Matchers_CidrMatcher(addressPrefix, prefixLen);
-    }
-
-    /** Constructs a CidrMatcher with this prefix string and prefix length. */
-    public static CidrMatcher create(String addressPrefix, int prefixLen) {
-      InetAddress prefix;
-      try {
-        prefix = InetAddress.getByName(addressPrefix);
-      } catch (UnknownHostException e) {
-        throw new IllegalArgumentException(e.getMessage());
-      }
-      return new AutoValue_Matchers_CidrMatcher(prefix, prefixLen);
     }
   }
 }

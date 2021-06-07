@@ -51,7 +51,34 @@ import javax.net.ssl.SSLSession;
  */
 public final class GrpcAuthorizationEngine {
   private static final Logger log = Logger.getLogger(GrpcAuthorizationEngine.class.getName());
+
   private final AuthConfig authConfig;
+
+  /** Instantiated with envoy policyMatcher configuration. */
+  public GrpcAuthorizationEngine(AuthConfig authConfig) {
+    this.authConfig = authConfig;
+  }
+
+  /** Return the auth decision for the request argument against the policies. */
+  public AuthDecision evaluate(Metadata metadata, ServerCall<?,?> serverCall) {
+    checkNotNull(metadata, "metadata");
+    checkNotNull(serverCall, "serverCall");
+    String firstMatch = null;
+    EvaluateArgs args = new EvaluateArgs(metadata, serverCall);
+    for (PolicyMatcher policyMatcher : authConfig.policies) {
+      if (policyMatcher.matches(args)) {
+        firstMatch = policyMatcher.name;
+        break;
+      }
+    }
+    Action decisionType = Action.DENY;
+    if (Action.DENY.equals(authConfig.action) == (firstMatch == null)) {
+      decisionType = Action.ALLOW;
+    }
+    log.log(Level.FINER, "RBAC decision: {0}, policy match: {1}.",
+            new Object[]{decisionType, firstMatch});
+    return AuthDecision.create(decisionType, firstMatch);
+  }
 
   public enum Action {
     ALLOW,
@@ -84,32 +111,6 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  /** Instantiated with envoy policyMatcher configuration. */
-  public GrpcAuthorizationEngine(AuthConfig authConfig) {
-    this.authConfig = authConfig;
-  }
-
-  /** Return the auth decision for the request argument against the policies. */
-  public AuthDecision evaluate(Metadata metadata, ServerCall<?,?> serverCall) {
-    checkNotNull(metadata, "metadata");
-    checkNotNull(serverCall, "serverCall");
-    String firstMatch = null;
-    EvaluateArgs args = new EvaluateArgs(metadata, serverCall);
-    for (PolicyMatcher policyMatcher : authConfig.policies) {
-      if (policyMatcher.matches(args)) {
-        firstMatch = policyMatcher.name;
-        break;
-      }
-    }
-    Action decisionType = Action.DENY;
-    if (Action.DENY.equals(authConfig.action) == (firstMatch == null)) {
-      decisionType = Action.ALLOW;
-    }
-    log.log(Level.FINER, "RBAC decision: {0}, policy match: {1}.",
-            new Object[]{decisionType, firstMatch});
-    return AuthDecision.create(decisionType, firstMatch);
-  }
-
   /**
    * Implements a top level {@link Matcher} for a single RBAC policy configuration per envoy
    * protocol:
@@ -139,6 +140,10 @@ public final class GrpcAuthorizationEngine {
   public static final class AuthenticatedMatcher implements Matcher {
     private final Matchers.StringMatcher delegate;
 
+    /**
+     * Passing in null will match all authenticated user, i.e. SSL session is present.
+     * https://github.com/envoyproxy/envoy/blob/main/api/envoy/config/rbac/v3/rbac.proto#L240
+     * */
     public AuthenticatedMatcher(@Nullable Matchers.StringMatcher delegate) {
       this.delegate = delegate;
     }
@@ -147,12 +152,11 @@ public final class GrpcAuthorizationEngine {
     public boolean matches(EvaluateArgs args) {
       Collection<String> principalNames = args.getPrincipalNames();
       log.log(Level.FINER, "Matching principal names: {0}", new Object[]{principalNames});
-      // https://github.com/envoyproxy/envoy/blob/main/api/envoy/config/rbac/v3/rbac.proto#L240
-      // not match if unauthenticated:
+      // Null means unauthenticated connection.
       if (principalNames == null) {
         return false;
       }
-      // match any authenticated connection:
+      // Connection is authenticated, so returns match when delegated string matcher is not present.
       if (delegate == null) {
         return true;
       }
@@ -246,8 +250,12 @@ public final class GrpcAuthorizationEngine {
       return "/" + serverCall.getMethodDescriptor().getFullMethodName();
     }
 
-    // Returns null for unauthenticated connection.
-    // Returns empty list if no principal names we are interested in.
+    /**
+     * Returns null for unauthenticated connection.
+     * Returns empty string collection if no valid certificate and no
+     * principal names we are interested in.
+     * https://github.com/envoyproxy/envoy/blob/0fae6970ddaf93f024908ba304bbd2b34e997a51/envoy/ssl/connection.h#L70
+     */
     private Collection<String> getPrincipalNames() {
       SSLSession sslSession = serverCall.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
       if (sslSession == null) {
@@ -256,11 +264,11 @@ public final class GrpcAuthorizationEngine {
       try {
         Certificate[] certs = sslSession.getPeerCertificates();
         if (certs == null || certs.length < 1) {
-          return Collections.emptyList();
+          return Collections.singleton("");
         }
         X509Certificate cert = (X509Certificate)certs[0];
         if (cert == null) {
-          return Collections.emptyList();
+          return Collections.singleton("");
         }
         Collection<List<?>> names = cert.getSubjectAlternativeNames();
         List<String> principalNames = new ArrayList<>();
@@ -283,12 +291,12 @@ public final class GrpcAuthorizationEngine {
           }
         }
         if (cert.getSubjectDN() == null || cert.getSubjectDN().getName() == null) {
-          return Collections.emptyList();
+          return Collections.singleton("");
         }
         return Collections.singleton(cert.getSubjectDN().getName());
       } catch (SSLPeerUnverifiedException | CertificateParsingException ex) {
         log.log(Level.FINE, "Unexpected getPrincipalNames error.", ex);
-        return Collections.emptyList();
+        return Collections.singleton("");
       }
     }
 

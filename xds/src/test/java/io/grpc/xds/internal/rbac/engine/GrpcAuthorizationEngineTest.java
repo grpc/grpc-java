@@ -47,6 +47,8 @@ import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.OrMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.PathMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.PolicyMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.SourceIpMatcher;
+
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.security.Principal;
 import java.security.cert.X509Certificate;
@@ -99,9 +101,9 @@ public class GrpcAuthorizationEngineTest {
 
   @Test
   public void ipMatcher() throws Exception {
-    CidrMatcher ip1 = CidrMatcher.create(IP_ADDR1, 24);
+    CidrMatcher ip1 = CidrMatcher.create(InetAddress.getByName(IP_ADDR1), 24);
     DestinationIpMatcher destIpMatcher = new DestinationIpMatcher(ip1);
-    CidrMatcher ip2 = CidrMatcher.create(IP_ADDR2, 24);
+    CidrMatcher ip2 = CidrMatcher.create(InetAddress.getByName(IP_ADDR2), 24);
     SourceIpMatcher sourceIpMatcher = new SourceIpMatcher(ip2);
     DestinationPortMatcher portMatcher = new DestinationPortMatcher(PORT);
     OrMatcher permission = OrMatcher.create(AndMatcher.create(portMatcher, destIpMatcher));
@@ -274,7 +276,7 @@ public class GrpcAuthorizationEngineTest {
     authMatcher = new AuthenticatedMatcher(
         StringMatcher.forContains("TEST.google.fr"));
     principal = OrMatcher.create(headerMatcher, authMatcher);
-    CidrMatcher ip1 = CidrMatcher.create(IP_ADDR1, 24);
+    CidrMatcher ip1 = CidrMatcher.create(InetAddress.getByName(IP_ADDR1), 24);
     DestinationIpMatcher destIpMatcher = new DestinationIpMatcher(ip1);
     permission = OrMatcher.create(destIpMatcher, pathMatcher);
     PolicyMatcher policyMatcher2 = new PolicyMatcher(POLICY_NAME + "-2", permission, principal);
