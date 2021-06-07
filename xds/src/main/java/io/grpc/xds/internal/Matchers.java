@@ -19,9 +19,7 @@ package io.grpc.xds.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.base.Joiner;
 import com.google.re2j.Pattern;
-import io.grpc.Metadata;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.UnknownHostException;

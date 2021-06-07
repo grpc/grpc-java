@@ -157,7 +157,8 @@ public class GrpcAuthorizationEngineTest {
     headerMatcher = new HeaderMatcher(Matchers.HeaderMatcher
             .forExactValue(HEADER_KEY, HEADER_VALUE + "," + HEADER_VALUE, false));
     principal = OrMatcher.create(headerMatcher);
-    policyMatcher = new PolicyMatcher(POLICY_NAME, OrMatcher.create(AlwaysTrueMatcher.INSTANCE), principal);
+    policyMatcher = new PolicyMatcher(POLICY_NAME,
+            OrMatcher.create(AlwaysTrueMatcher.INSTANCE), principal);
     engine = new GrpcAuthorizationEngine(
             new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
     decision = engine.evaluate(HEADER, serverCall);
@@ -166,7 +167,8 @@ public class GrpcAuthorizationEngineTest {
     headerMatcher = new HeaderMatcher(Matchers.HeaderMatcher
             .forExactValue(HEADER_KEY + Metadata.BINARY_HEADER_SUFFIX, HEADER_VALUE, false));
     principal = OrMatcher.create(headerMatcher);
-    policyMatcher = new PolicyMatcher(POLICY_NAME, OrMatcher.create(AlwaysTrueMatcher.INSTANCE), principal);
+    policyMatcher = new PolicyMatcher(POLICY_NAME,
+            OrMatcher.create(AlwaysTrueMatcher.INSTANCE), principal);
     engine = new GrpcAuthorizationEngine(
             new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
     decision = engine.evaluate(HEADER, serverCall);

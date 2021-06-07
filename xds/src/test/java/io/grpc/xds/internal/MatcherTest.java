@@ -19,7 +19,6 @@ package io.grpc.xds.internal;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.re2j.Pattern;
-import io.grpc.Metadata;
 import io.grpc.xds.internal.Matchers.CidrMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher.Range;
@@ -130,13 +129,14 @@ public class MatcherTest {
     assertThat(matcher.matches( "v2")).isTrue();
 
     matcher = HeaderMatcher.forPresent("version", true, false);
-    assertThat(matcher.matches("version")).isFalse();
+    assertThat(matcher.matches("any")).isTrue();
+    assertThat(matcher.matches(null)).isFalse();
     matcher = HeaderMatcher.forPresent("version", true, true);
     assertThat(matcher.matches("version")).isFalse();
     matcher = HeaderMatcher.forPresent("version", false, true);
-    assertThat(matcher.matches("tag")).isFalse();
-    matcher = HeaderMatcher.forPresent("version", false, false);
     assertThat(matcher.matches("tag")).isTrue();
+    matcher = HeaderMatcher.forPresent("version", false, false);
+    assertThat(matcher.matches("tag")).isFalse();
 
     matcher = HeaderMatcher.forPrefix("version", "v2", false);
     assertThat(matcher.matches("v22")).isTrue();
@@ -147,14 +147,14 @@ public class MatcherTest {
     assertThat(matcher.matches("xv1")).isTrue();
     assertThat(matcher.matches("v1x")).isFalse();
     matcher = HeaderMatcher.forSuffix("version", "v2", true);
-    assertThat(matcher.matches("xv1")).isFalse();
-    assertThat(matcher.matches("v1x")).isTrue();
+    assertThat(matcher.matches("xv1")).isTrue();
+    assertThat(matcher.matches("1v2")).isFalse();
 
     matcher = HeaderMatcher.forSafeRegEx("version", Pattern.compile("v2.*"), false);
     assertThat(matcher.matches("v2..")).isTrue();
     assertThat(matcher.matches("v1")).isFalse();
     matcher = HeaderMatcher.forSafeRegEx("version", Pattern.compile("v1\\..*"), true);
-    assertThat(matcher.matches("v143")).isFalse();
+    assertThat(matcher.matches("v1.43")).isFalse();
     assertThat(matcher.matches("v2")).isTrue();
 
     matcher = HeaderMatcher.forRange("version", Range.create(8080L, 8090L), false);
