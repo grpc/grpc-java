@@ -20,6 +20,7 @@ dependencies {
             libraries.netty
     implementation libraries.netty_proxy_handler,
             libraries.guava,
+            libraries.errorprone,
             libraries.perfmark
 
     // Tests depend on base class defined by core module.
