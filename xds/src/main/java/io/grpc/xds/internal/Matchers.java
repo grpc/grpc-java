@@ -128,28 +128,8 @@ public final class Matchers {
       }
     }
 
-    @Nullable
-    private static String getHeaderValue(Metadata headers, String headerName) {
-      if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-        return null;
-      }
-      if (headerName.equals("content-type")) {
-        return "application/grpc";
-      }
-      Metadata.Key<String> key;
-      try {
-        key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
-      } catch (IllegalArgumentException e) {
-        return null;
-      }
-      Iterable<String> values = headers.getAll(key);
-      return values == null ? null : Joiner.on(",").join(values);
-    }
-
     /** Returns the matching result. */
-    public boolean matches(Metadata headers) {
-      checkNotNull(headers);
-      String value = getHeaderValue(headers, name());
+    public boolean matches(String value) {
       if (present() != null) {
         return ((value == null) == present()) == inverted();
       }

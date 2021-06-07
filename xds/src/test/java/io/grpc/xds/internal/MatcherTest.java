@@ -119,72 +119,49 @@ public class MatcherTest {
     assertThat(matcher.matches("essence")).isTrue();
   }
 
-  private Metadata metadata(String key, String value) {
-    Metadata metadata = new Metadata();
-    metadata.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value);
-    return metadata;
-  }
-
   @Test
   public void headerMatcher() {
     HeaderMatcher matcher = HeaderMatcher.forExactValue("version", "v1", false);
-    Metadata metadata = metadata("version", "v1");
-    assertThat(matcher.matches(metadata)).isTrue();
-    metadata = metadata("version", "v2");
-    assertThat(matcher.matches(metadata)).isFalse();
+    assertThat(matcher.matches("v1")).isTrue();
+    assertThat(matcher.matches("v2")).isFalse();
 
     matcher = HeaderMatcher.forExactValue("version", "v1", true);
-    metadata = metadata("version", "v1");
-    assertThat(matcher.matches(metadata)).isFalse();
-    metadata = metadata("version", "v2");
-    assertThat(matcher.matches( metadata)).isTrue();
+    assertThat(matcher.matches("v1")).isFalse();
+    assertThat(matcher.matches( "v2")).isTrue();
 
     matcher = HeaderMatcher.forPresent("version", true, false);
-    assertThat(matcher.matches(metadata)).isTrue();
+    assertThat(matcher.matches("version")).isFalse();
+    matcher = HeaderMatcher.forPresent("version", true, true);
+    assertThat(matcher.matches("version")).isFalse();
     matcher = HeaderMatcher.forPresent("version", false, true);
-    metadata.put(Metadata.Key.of("tag", Metadata.ASCII_STRING_MARSHALLER), "todo");
-    assertThat(matcher.matches(metadata)).isTrue();
-    matcher = HeaderMatcher.forExactValue("versions", "v1", true);
-    assertThat(matcher.matches(metadata)).isFalse();
+    assertThat(matcher.matches("tag")).isFalse();
+    matcher = HeaderMatcher.forPresent("version", false, false);
+    assertThat(matcher.matches("tag")).isTrue();
 
     matcher = HeaderMatcher.forPrefix("version", "v2", false);
-    assertThat(matcher.matches(metadata)).isTrue();
-    metadata.put(Metadata.Key.of("version", Metadata.ASCII_STRING_MARSHALLER), "v2.1");
-    assertThat(matcher.matches(metadata)).isTrue();
+    assertThat(matcher.matches("v22")).isTrue();
     matcher = HeaderMatcher.forPrefix("version", "v2", true);
-    metadata.put(Metadata.Key.of("version", Metadata.ASCII_STRING_MARSHALLER), "v1");
-    assertThat(matcher.matches(metadata)).isFalse();
-    metadata.put(Metadata.Key.of("version-bin", Metadata.BINARY_BYTE_MARSHALLER), new byte[0]);
-    assertThat(matcher.matches(metadata)).isFalse();
+    assertThat(matcher.matches("v22")).isFalse();
 
     matcher = HeaderMatcher.forSuffix("version", "v1", false);
-    assertThat(matcher.matches(metadata)).isTrue();
-    metadata.put(Metadata.Key.of("version", Metadata.ASCII_STRING_MARSHALLER), "v.v2");
-    assertThat(matcher.matches(metadata)).isFalse();
+    assertThat(matcher.matches("xv1")).isTrue();
+    assertThat(matcher.matches("v1x")).isFalse();
     matcher = HeaderMatcher.forSuffix("version", "v2", true);
-    assertThat(matcher.matches(metadata)).isFalse();
-    metadata.put(Metadata.Key.of("version", Metadata.ASCII_STRING_MARSHALLER), "v1");
-    assertThat(matcher.matches(metadata)).isTrue();
+    assertThat(matcher.matches("xv1")).isFalse();
+    assertThat(matcher.matches("v1x")).isTrue();
 
     matcher = HeaderMatcher.forSafeRegEx("version", Pattern.compile("v2.*"), false);
-    assertThat(matcher.matches(metadata)).isTrue();
-    metadata = metadata("version", "v1.0");
-    assertThat(matcher.matches(metadata)).isFalse();
+    assertThat(matcher.matches("v2..")).isTrue();
+    assertThat(matcher.matches("v1")).isFalse();
     matcher = HeaderMatcher.forSafeRegEx("version", Pattern.compile("v1\\..*"), true);
-    assertThat(matcher.matches(metadata)).isFalse();
-    metadata.put(Metadata.Key.of("version", Metadata.ASCII_STRING_MARSHALLER), "v2");
-    assertThat(matcher.matches(metadata)).isFalse();
-    metadata = metadata("version", "v2");
-    assertThat(matcher.matches(metadata)).isTrue();
+    assertThat(matcher.matches("v143")).isFalse();
+    assertThat(matcher.matches("v2")).isTrue();
 
     matcher = HeaderMatcher.forRange("version", Range.create(8080L, 8090L), false);
-    metadata = metadata("version", "8080");
-    assertThat(matcher.matches(metadata)).isTrue();
-    metadata.put(Metadata.Key.of("version", Metadata.ASCII_STRING_MARSHALLER), "1");
-    assertThat(matcher.matches(metadata)).isFalse();
+    assertThat(matcher.matches("8080")).isTrue();
+    assertThat(matcher.matches("1")).isFalse();
     matcher = HeaderMatcher.forRange("version", Range.create(8080L, 8090L), true);
-    assertThat(matcher.matches(metadata)).isTrue();
-    metadata = metadata("version", "8080");
-    assertThat(matcher.matches(metadata)).isFalse();
+    assertThat(matcher.matches("1")).isTrue();
+    assertThat(matcher.matches("8080")).isFalse();
   }
 }

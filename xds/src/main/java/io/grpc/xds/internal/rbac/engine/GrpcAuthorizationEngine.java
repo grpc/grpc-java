@@ -19,6 +19,7 @@ package io.grpc.xds.internal.rbac.engine;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
+import com.google.common.base.Joiner;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -212,7 +213,7 @@ public final class GrpcAuthorizationEngine {
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return delegate.matches(args.getHeader());
+      return delegate.matches(args.getHeader(delegate.name()));
     }
   }
 
@@ -291,8 +292,19 @@ public final class GrpcAuthorizationEngine {
       }
     }
 
-    private Metadata getHeader() {
-      return metadata;
+    @Nullable
+    private String getHeader(String headerName) {
+      if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+        return null;
+      }
+      Metadata.Key<String> key;
+      try {
+        key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
+      } catch (IllegalArgumentException e) {
+        return null;
+      }
+      Iterable<String> values = metadata.getAll(key);
+      return values == null ? null : Joiner.on(",").join(values);
     }
 
     private InetAddress getDestinationIp() {
