@@ -47,14 +47,13 @@ abstract class HttpConnectionManager {
   static HttpConnectionManager withRdsName(long httpMaxStreamDurationNano, String rdsName,
       @Nullable List<NamedFilterConfig> httpFilterConfigs) {
     checkNotNull(rdsName, "rdsName");
-    return HttpConnectionManager.create(
-        httpMaxStreamDurationNano, rdsName, null, httpFilterConfigs);
+    return create(httpMaxStreamDurationNano, rdsName, null, httpFilterConfigs);
   }
 
   static HttpConnectionManager withVirtualHosts(long httpMaxStreamDurationNano,
       List<VirtualHost> virtualHosts, @Nullable List<NamedFilterConfig> httpFilterConfigs) {
     checkNotNull(virtualHosts, "virtualHosts");
-    return HttpConnectionManager.create(httpMaxStreamDurationNano, null, virtualHosts,
+    return create(httpMaxStreamDurationNano, null, virtualHosts,
         httpFilterConfigs);
   }
 
@@ -62,7 +61,7 @@ abstract class HttpConnectionManager {
   //  so neither RDS name nor inlined virtual hosts are required now.
   static HttpConnectionManager forLdsOnly(long httpMaxStreamDurationNano,
       @Nullable List<NamedFilterConfig> httpFilterConfigs) {
-    return HttpConnectionManager.create(httpMaxStreamDurationNano, null, null, httpFilterConfigs);
+    return create(httpMaxStreamDurationNano, null, null, httpFilterConfigs);
   }
 
   private static HttpConnectionManager create(long httpMaxStreamDurationNano,
