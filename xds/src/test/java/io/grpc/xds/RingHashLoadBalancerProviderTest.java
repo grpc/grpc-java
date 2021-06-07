@@ -93,6 +93,40 @@ public class RingHashLoadBalancerProviderTest {
   }
 
   @Test
+  public void parseLoadBalancingConfig_invalid_negativeSize() throws IOException {
+    String lbConfig = "{\"minRingSize\" : -10}";
+    ConfigOrError configOrError =
+        provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+    assertThat(configOrError.getError()).isNotNull();
+    assertThat(configOrError.getError().getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+    assertThat(configOrError.getError().getDescription())
+        .isEqualTo("Invalid 'mingRingSize'/'maxRingSize'");
+  }
+
+  @Test
+  public void parseLoadBalancingConfig_invalid_minGreaterThanMax() throws IOException {
+    String lbConfig = "{\"minRingSize\" : 1000, \"maxRingSize\" : 100}";
+    ConfigOrError configOrError =
+        provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+    assertThat(configOrError.getError()).isNotNull();
+    assertThat(configOrError.getError().getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+    assertThat(configOrError.getError().getDescription())
+        .isEqualTo("Invalid 'mingRingSize'/'maxRingSize'");
+  }
+
+  @Test
+  public void parseLoadBalancingConfig_invalid_ringTooLarge() throws IOException {
+    long ringSize = RingHashLoadBalancerProvider.MAX_RING_SIZE + 1;
+    String lbConfig = String.format("{\"minRingSize\" : 10, \"maxRingSize\" : %d}", ringSize);
+    ConfigOrError configOrError =
+        provider.parseLoadBalancingPolicyConfig(parseJsonObject(lbConfig));
+    assertThat(configOrError.getError()).isNotNull();
+    assertThat(configOrError.getError().getCode()).isEqualTo(Code.INVALID_ARGUMENT);
+    assertThat(configOrError.getError().getDescription())
+        .isEqualTo("Invalid 'mingRingSize'/'maxRingSize'");
+  }
+
+  @Test
   public void parseLoadBalancingConfig_zeroMinRingSize() throws IOException {
     String lbConfig = "{\"minRingSize\" : 0, \"maxRingSize\" : 100}";
     ConfigOrError configOrError =
