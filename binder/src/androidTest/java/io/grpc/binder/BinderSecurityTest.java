@@ -79,7 +79,7 @@ public final class BinderSecurityTest {
           .build());
 
     channel =
-        BinderChannelBuilder.create(appContext, addr)
+        BinderChannelBuilder.forAddress(addr, appContext)
             .securityPolicy(channelPolicy)
             .build();
   }

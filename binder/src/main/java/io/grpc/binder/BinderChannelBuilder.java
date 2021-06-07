@@ -22,10 +22,12 @@ import android.app.Application;
 import android.content.ComponentName;
 import android.content.Context;
 import androidx.core.content.ContextCompat;
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
+import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -65,17 +67,34 @@ public final class BinderChannelBuilder
    * <p>You the caller are responsible for managing the lifecycle of any channels built by the
    * resulting builder. They will not be shut down automatically.
    *
-   * @param sourceContext the context to bind from (e.g. The current Activity or Application).
    * @param targetAddress the {@link AndroidComponentAddress} referencing the service to bind to.
+   * @param sourceContext the context to bind from (e.g. The current Activity or Application).
    * @return a new builder
    */
-  public static BinderChannelBuilder create(
-      Context sourceContext, AndroidComponentAddress targetAddress) {
-    return new BinderChannelBuilder(sourceContext, targetAddress);
+  public static BinderChannelBuilder forAddress(
+      AndroidComponentAddress targetAddress, Context sourceContext) {
+    return new BinderChannelBuilder(targetAddress, sourceContext);
+  }
+
+  /**
+   * Always fails. Call {@link #forAddress(AndroidComponentAddress, Context)} instead.
+   */
+  @DoNotCall("Unsupported. Use forAddress(AndroidComponentAddress, Context) instead")
+  public static BinderChannelBuilder forAddress(String name, int port) {
+    throw new UnsupportedOperationException(
+        "call forAddress(AndroidComponentAddress, Context) instead");
+  }
+
+  /**
+   * Always fails. Call {@link #forAddress(AndroidComponentAddress, Context)} instead.
+   */
+  @DoNotCall("Unsupported. Use forAddress(AndroidComponentAddress, Context) instead")
+  public static BinderChannelBuilder forTarget(String target) {
+    throw new UnsupportedOperationException(
+        "call forAddress(AndroidComponentAddress, Context) instead");
   }
 
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
-
 
   private Executor mainThreadExecutor;
   private ObjectPool<ScheduledExecutorService> schedulerPool =
@@ -84,10 +103,9 @@ public final class BinderChannelBuilder
   private InboundParcelablePolicy inboundParcelablePolicy;
   private BindServiceFlags bindServiceFlags;
 
-
   private BinderChannelBuilder(
-      Context sourceContext,
-      AndroidComponentAddress targetAddress) {
+      AndroidComponentAddress targetAddress,
+      Context sourceContext) {
     mainThreadExecutor = ContextCompat.getMainExecutor(sourceContext);
     securityPolicy = SecurityPolicies.internalOnly();
     inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
@@ -114,15 +132,6 @@ public final class BinderChannelBuilder
             targetAddress.getAuthority(),
             new BinderChannelTransportFactoryBuilder(),
             null);
-
-    // Disable compression by default, since there's little benefit when all communication is
-    // on-device, and it means sending supported-encoding headers with every call.
-    decompressorRegistry(DecompressorRegistry.emptyInstance());
-    compressorRegistry(CompressorRegistry.newEmptyInstance());
-
-    // Disable stats and tracing by default.
-    managedChannelImplBuilder.setStatsEnabled(false);
-    managedChannelImplBuilder.setTracingEnabled(false);
   }
 
   @Override
@@ -133,18 +142,6 @@ public final class BinderChannelBuilder
   /** Specifies certain optional aspects of the underlying Android Service binding. */
   public BinderChannelBuilder setBindServiceFlags(BindServiceFlags bindServiceFlags) {
     this.bindServiceFlags = bindServiceFlags;
-    return this;
-  }
-
-  /** Enable stats collection using census. */
-  public BinderChannelBuilder enableStats() {
-    managedChannelImplBuilder.setStatsEnabled(true);
-    return this;
-  }
-
-  /** Enable tracing using census. */
-  public BinderChannelBuilder enableTracing() {
-    managedChannelImplBuilder.setTracingEnabled(true);
     return this;
   }
 

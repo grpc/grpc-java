@@ -22,14 +22,16 @@ import static com.google.common.base.Preconditions.checkState;
 import android.app.Service;
 import android.os.IBinder;
 import com.google.common.base.Supplier;
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
+import io.grpc.ExperimentalApi;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.binder.internal.BinderServer;
 import io.grpc.binder.internal.BinderTransportSecurity;
-import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.ForwardingServerBuilder;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
@@ -48,7 +50,7 @@ import javax.annotation.Nullable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public final class BinderServerBuilder
-    extends AbstractServerImplBuilder<BinderServerBuilder> {
+    extends ForwardingServerBuilder<BinderServerBuilder> {
 
   /**
    * Creates a server builder that will bind with the given name.
@@ -62,6 +64,14 @@ public final class BinderServerBuilder
    */
   public static BinderServerBuilder forService(Service service, IBinderReceiver receiver) {
     return new BinderServerBuilder(service, receiver);
+  }
+
+  /**
+   * Always fails. Call {@link #forService(Service, IBinderReceiver)} instead.
+   */
+  @DoNotCall("Unsupported. Use forService() instead")
+  public static BinderServerBuilder forPort(int port) {
+    throw new UnsupportedOperationException("call forService() instead");
   }
 
   private final ServerImplBuilder serverImplBuilder;

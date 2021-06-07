@@ -104,7 +104,7 @@ public final class BinderChannelSmokeTest {
                 .build())
           .build());
 
-    channel = BinderChannelBuilder.create(appContext, serverAddress).build();
+    channel = BinderChannelBuilder.forAddress(serverAddress, appContext).build();
   }
 
   @After
