@@ -268,7 +268,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
 
     String address = null;
-    if (proto.hasAddress() && proto.getAddress().hasSocketAddress()) {
+    if (proto.getAddress().hasSocketAddress()) {
       SocketAddress socketAddress = proto.getAddress().getSocketAddress();
       address = socketAddress.getAddress();
       switch (socketAddress.getPortSpecifierCase()) {
