@@ -818,8 +818,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  @VisibleForTesting
-  static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources)
+  private static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources)
       throws ResourceInvalidException {
     StructOrError<CdsUpdate.Builder> structOrError;
     switch (cluster.getClusterDiscoveryTypeCase()) {
