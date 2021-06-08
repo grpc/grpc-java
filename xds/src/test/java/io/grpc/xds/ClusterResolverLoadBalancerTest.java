@@ -214,10 +214,9 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertThat(childBalancers).isEmpty();
 
-    // One priority with three localities of different weights.
+    // One priority with two localities of different weights.
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
-    EquivalentAddressGroup endpoint3 = makeAddress("endpoint-addr-3");
     LocalityLbEndpoints localityLbEndpoints1 =
         LocalityLbEndpoints.create(
             Collections.singletonList(
@@ -228,32 +227,20 @@ public class ClusterResolverLoadBalancerTest {
             Collections.singletonList(
                 LbEndpoint.create(endpoint2, 60 /* loadBalancingWeight */, true)),
             50 /* localityWeight */, 1 /* priority */);
-    LocalityLbEndpoints localityLbEndpoints3 =
-        LocalityLbEndpoints.create(
-            Collections.singletonList(
-                LbEndpoint.create(endpoint3, 100 /* loadBalancingWeight */, true)),
-            0 /* localityWeight */, 1 /* priority */);  // locality level weight unspecified
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1,
-        ImmutableMap.of(
-            locality1, localityLbEndpoints1,
-            locality2, localityLbEndpoints2,
-            locality3, localityLbEndpoints3));
+        ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(childBalancer.addresses).hasSize(3);
+    assertThat(childBalancer.addresses).hasSize(2);
     EquivalentAddressGroup addr1 = childBalancer.addresses.get(0);
     EquivalentAddressGroup addr2 = childBalancer.addresses.get(1);
-    EquivalentAddressGroup addr3 = childBalancer.addresses.get(2);
     assertThat(addr1.getAddresses()).isEqualTo(endpoint1.getAddresses());
     assertThat(addr1.getAttributes().get(InternalXdsAttributes.ATTR_SERVER_WEIGHT))
         .isNull();  // weight attribute unspecified since endpoint-level weight is unspecified
     assertThat(addr2.getAddresses()).isEqualTo(endpoint2.getAddresses());
     assertThat(addr2.getAttributes().get(InternalXdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(50 * 60);
-    assertThat(addr3.getAddresses()).isEqualTo(endpoint3.getAddresses());
-    assertThat(addr3.getAttributes().get(InternalXdsAttributes.ATTR_SERVER_WEIGHT))
-        .isNull();  // weight attribute unspecified since locality-level weight is unspecified
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
     assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER1 + "[priority1]");
