@@ -46,15 +46,13 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.Matchers.FractionMatcher;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import io.grpc.xds.Matchers.PathMatcher;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
+import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
@@ -62,6 +60,8 @@ import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import io.grpc.xds.internal.Matchers.FractionMatcher;
+import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -577,6 +577,7 @@ final class XdsNameResolver extends NameResolver {
     return pathMatcher.regEx().matches(fullMethodName);
   }
 
+  // TODO(zivy): consider reuse Matchers.HeaderMatcher.matches()
   private static boolean matchHeader(HeaderMatcher headerMatcher, @Nullable String value) {
     if (headerMatcher.present() != null) {
       return (value == null) == headerMatcher.present().equals(headerMatcher.inverted());
