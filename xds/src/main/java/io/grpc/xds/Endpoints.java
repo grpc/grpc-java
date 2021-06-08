@@ -33,7 +33,7 @@ final class Endpoints {
     // Endpoints to be load balanced.
     abstract ImmutableList<LbEndpoint> endpoints();
 
-    // Locality's weight for inter-locality load balancing.
+    // Locality's weight for inter-locality load balancing. If unspecified, value of 0 is returned.
     abstract int localityWeight();
 
     // Locality's priority level.
@@ -52,7 +52,7 @@ final class Endpoints {
     // The endpoint address to be connected to.
     abstract EquivalentAddressGroup eag();
 
-    // Endpoint's wight for load balancing.
+    // Endpoint's weight for load balancing. If unspecified, value of 0 is returned.
     abstract int loadBalancingWeight();
 
     // Whether the endpoint is healthy.
