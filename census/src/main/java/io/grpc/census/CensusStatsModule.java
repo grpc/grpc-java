@@ -36,6 +36,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StreamTracer;
 import io.grpc.census.internal.DeprecatedCensusConstants;
+import io.opencensus.contrib.exemplar.util.ExemplarUtils;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.stats.Measure.MeasureDouble;
 import io.opencensus.stats.Measure.MeasureLong;
@@ -49,6 +50,10 @@ import io.opencensus.tags.Tags;
 import io.opencensus.tags.propagation.TagContextBinarySerializer;
 import io.opencensus.tags.propagation.TagContextSerializationException;
 import io.opencensus.tags.unsafe.ContextUtils;
+import io.opencensus.trace.Span;
+import io.opencensus.trace.Span.Options;
+import io.opencensus.trace.Tracer;
+import io.opencensus.trace.Tracing;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -75,6 +80,7 @@ final class CensusStatsModule {
   private final Tagger tagger;
   private final StatsRecorder statsRecorder;
   private final Supplier<Stopwatch> stopwatchSupplier;
+  private final Tracer censusTracer;
   @VisibleForTesting
   final Metadata.Key<TagContext> statsHeader;
   private final boolean propagateTags;
@@ -93,6 +99,7 @@ final class CensusStatsModule {
         Tags.getTagPropagationComponent().getBinarySerializer(),
         Stats.getStatsRecorder(),
         stopwatchSupplier,
+        Tracing.getTracer(),
         propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
   }
 
@@ -103,12 +110,13 @@ final class CensusStatsModule {
       final Tagger tagger,
       final TagContextBinarySerializer tagCtxSerializer,
       StatsRecorder statsRecorder, Supplier<Stopwatch> stopwatchSupplier,
-      boolean propagateTags, boolean recordStartedRpcs, boolean recordFinishedRpcs,
-      boolean recordRealTimeMetrics) {
+      Tracer censusTracer, boolean propagateTags, boolean recordStartedRpcs,
+      boolean recordFinishedRpcs, boolean recordRealTimeMetrics) {
     this.tagger = checkNotNull(tagger, "tagger");
     this.statsRecorder = checkNotNull(statsRecorder, "statsRecorder");
     checkNotNull(tagCtxSerializer, "tagCtxSerializer");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
+    this.censusTracer = checkNotNull(censusTracer, "censusTracer");
     this.propagateTags = propagateTags;
     this.recordStartedRpcs = recordStartedRpcs;
     this.recordFinishedRpcs = recordFinishedRpcs;
@@ -512,6 +520,8 @@ final class CensusStatsModule {
     private final TagContext parentCtx;
     private volatile int streamClosed;
     private final Stopwatch stopwatch;
+    private Span span;
+    private volatile boolean isSampledToLocalTracing;
     private volatile long outboundMessageCount;
     private volatile long inboundMessageCount;
     private volatile long outboundWireSize;
@@ -525,6 +535,7 @@ final class CensusStatsModule {
       this.module = checkNotNull(module, "module");
       this.parentCtx = checkNotNull(parentCtx, "parentCtx");
       this.stopwatch = module.stopwatchSupplier.get().start();
+      this.span = null;
       if (module.recordStartedRpcs) {
         module.statsRecorder.newMeasureMap()
             .put(DeprecatedCensusConstants.RPC_SERVER_STARTED_COUNT, 1)
@@ -600,6 +611,12 @@ final class CensusStatsModule {
           parentCtx, RpcMeasureConstants.GRPC_SERVER_SENT_MESSAGES_PER_METHOD, 1);
     }
 
+    @Override
+    public void serverCallStarted(ServerCallInfo<?, ?> callInfo) {
+      isSampledToLocalTracing = callInfo.getMethodDescriptor().isSampledToLocalTracing();
+      span = module.censusTracer.getCurrentSpan();
+    }
+
     /**
      * Record a finished stream and mark the current time as the end time.
      *
@@ -642,6 +659,13 @@ final class CensusStatsModule {
               inboundUncompressedSize);
       if (!status.isOk()) {
         measureMap.put(DeprecatedCensusConstants.RPC_SERVER_ERROR_COUNT, 1);
+      }
+      if (span != null && isSampledToLocalTracing && span.getOptions()
+          .contains(Options.RECORD_EVENTS)
+          && span.getContext().getTraceOptions().isSampled()
+      ) {
+        // Add exemplar if there is a current span being sampled
+        ExemplarUtils.putSpanContextAttachments(measureMap, span.getContext());
       }
       TagValue statusTag = TagValue.create(status.getCode().toString());
       measureMap.record(
