@@ -78,6 +78,9 @@ public class MatcherTest {
     matcher = StringMatcher.forExact("essence", true);
     assertThat(matcher.matches("Essence")).isTrue();
     assertThat(matcher.matches("essence")).isTrue();
+    matcher = StringMatcher.forExact("", true);
+    assertThat(matcher.matches("essence")).isFalse();
+    assertThat(matcher.matches("")).isTrue();
 
     matcher = StringMatcher.forPrefix("Ess", false);
     assertThat(matcher.matches("elite")).isFalse();
@@ -92,6 +95,8 @@ public class MatcherTest {
     assertThat(matcher.matches("esSEncE")).isTrue();
     assertThat(matcher.matches("ess")).isTrue();
     assertThat(matcher.matches("ES")).isFalse();
+    matcher = StringMatcher.forPrefix("", false);
+    assertThat(matcher.matches("elite")).isTrue();
 
     matcher = StringMatcher.forSuffix("ess", false);
     assertThat(matcher.matches("elite")).isFalse();
@@ -104,6 +109,9 @@ public class MatcherTest {
     matcher = StringMatcher.forSuffix("ess", true);
     assertThat(matcher.matches("esSEncESs")).isTrue();
     assertThat(matcher.matches("ess")).isTrue();
+    matcher = StringMatcher.forSuffix("", true);
+    assertThat(matcher.matches("")).isTrue();
+    assertThat(matcher.matches("any")).isTrue();
 
     matcher = StringMatcher.forContains("ess");
     assertThat(matcher.matches("elite")).isFalse();
@@ -116,6 +124,7 @@ public class MatcherTest {
 
     matcher = StringMatcher.forSafeRegEx(Pattern.compile("^es*.*"));
     assertThat(matcher.matches("essence")).isTrue();
+    assertThat(matcher.matches("")).isFalse();
   }
 
   @Test

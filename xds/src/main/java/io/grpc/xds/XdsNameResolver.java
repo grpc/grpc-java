@@ -577,6 +577,7 @@ final class XdsNameResolver extends NameResolver {
     return pathMatcher.regEx().matches(fullMethodName);
   }
 
+  // TODO(zivy): consider reuse Matchers.HeaderMatcher.matches()
   private static boolean matchHeader(HeaderMatcher headerMatcher, @Nullable String value) {
     if (headerMatcher.present() != null) {
       return (value == null) == headerMatcher.present().equals(headerMatcher.inverted());
