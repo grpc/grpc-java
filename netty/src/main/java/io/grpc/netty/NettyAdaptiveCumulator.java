@@ -143,7 +143,7 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
       if (tail.refCnt() == 1 && !tail.isReadOnly() && totalBytes <= tail.maxCapacity()) {
         // Ideal case: the tail isn't shared, and can be expanded to the required capacity.
         // Take ownership of the tail.
-        merged = tail.retain();
+        merged = composite.internalComponent(tailIndex).retainedDuplicate();
         /*
          * The tail is a readable non-composite buffer, so writeBytes() handles everything for us.
          *
