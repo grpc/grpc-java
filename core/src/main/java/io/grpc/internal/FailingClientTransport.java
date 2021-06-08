@@ -45,8 +45,9 @@ class FailingClientTransport implements ClientTransport {
 
   @Override
   public ClientStream newStream(
-      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-    return new FailingClientStream(error, rpcProgress);
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      StatsTraceContext statsTraceContext) {
+    return new FailingClientStream(error, rpcProgress, statsTraceContext);
   }
 
   @Override

@@ -99,10 +99,12 @@ public abstract class ClientStreamTracer extends StreamTracer {
   public static final class StreamInfo {
     private final Attributes transportAttrs;
     private final CallOptions callOptions;
+    private final boolean isTransparentRetry;
 
-    StreamInfo(Attributes transportAttrs, CallOptions callOptions) {
+    StreamInfo(Attributes transportAttrs, CallOptions callOptions, boolean isTransparentRetry) {
       this.transportAttrs = checkNotNull(transportAttrs, "transportAttrs");
       this.callOptions = checkNotNull(callOptions, "callOptions");
+      this.isTransparentRetry = isTransparentRetry;
     }
 
     /**
@@ -118,6 +120,10 @@ public abstract class ClientStreamTracer extends StreamTracer {
      */
     public CallOptions getCallOptions() {
       return callOptions;
+    }
+
+    public boolean isTransparentRetry() {
+      return isTransparentRetry;
     }
 
     /**
@@ -157,6 +163,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
     public static final class Builder {
       private Attributes transportAttrs = Attributes.EMPTY;
       private CallOptions callOptions = CallOptions.DEFAULT;
+      private boolean isTransparentRetry;
 
       Builder() {
       }
@@ -179,11 +186,16 @@ public abstract class ClientStreamTracer extends StreamTracer {
         return this;
       }
 
+      public Builder setIsTransparentRetry(boolean isTransparentRetry) {
+        this.isTransparentRetry = isTransparentRetry;
+        return this;
+      }
+
       /**
        * Builds a new StreamInfo.
        */
       public StreamInfo build() {
-        return new StreamInfo(transportAttrs, callOptions);
+        return new StreamInfo(transportAttrs, callOptions, isTransparentRetry);
       }
     }
   }

@@ -30,27 +30,31 @@ public final class FailingClientStream extends NoopClientStream {
   private boolean started;
   private final Status error;
   private final RpcProgress rpcProgress;
+  private final StatsTraceContext statsTraceContext;
 
   /**
    * Creates a {@code FailingClientStream} that would fail with the given error.
    */
-  public FailingClientStream(Status error) {
-    this(error, RpcProgress.PROCESSED);
+  public FailingClientStream(Status error, StatsTraceContext statsTraceContext) {
+    this(error, RpcProgress.PROCESSED, statsTraceContext);
   }
 
   /**
    * Creates a {@code FailingClientStream} that would fail with the given error.
    */
-  public FailingClientStream(Status error, RpcProgress rpcProgress) {
+  public FailingClientStream(
+      Status error, RpcProgress rpcProgress, StatsTraceContext statsTraceContext) {
     Preconditions.checkArgument(!error.isOk(), "error must not be OK");
     this.error = error;
     this.rpcProgress = rpcProgress;
+    this.statsTraceContext = statsTraceContext;
   }
 
   @Override
   public void start(ClientStreamListener listener) {
     Preconditions.checkState(!started, "already started");
     started = true;
+    statsTraceContext.streamClosed(error);
     listener.closed(error, rpcProgress, new Metadata());
   }
 

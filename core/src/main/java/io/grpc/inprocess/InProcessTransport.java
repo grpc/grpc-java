@@ -204,10 +204,10 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
   @Override
   public synchronized ClientStream newStream(
-      final MethodDescriptor<?, ?> method, final Metadata headers, final CallOptions callOptions) {
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      StatsTraceContext statsTraceContext) {
     if (shutdownStatus != null) {
-      return failedClientStream(
-          StatsTraceContext.newClientContext(callOptions, attributes, headers), shutdownStatus);
+      return failedClientStream(statsTraceContext, shutdownStatus);
     }
 
     headers.put(GrpcUtil.USER_AGENT_KEY, userAgent);
@@ -225,12 +225,12 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
                 "Request metadata larger than %d: %d",
                 serverMaxInboundMetadataSize,
                 metadataSize));
-        return failedClientStream(
-            StatsTraceContext.newClientContext(callOptions, attributes, headers), status);
+        return failedClientStream(statsTraceContext, status);
       }
     }
 
-    return new InProcessStream(method, headers, callOptions, authority).clientStream;
+    return new InProcessStream(method, headers, callOptions, authority, statsTraceContext)
+        .clientStream;
   }
 
   private ClientStream failedClientStream(
@@ -376,12 +376,12 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
     private InProcessStream(
         MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
-        String authority) {
+        String authority , StatsTraceContext statsTraceContext) {
       this.method = checkNotNull(method, "method");
       this.headers = checkNotNull(headers, "headers");
       this.callOptions = checkNotNull(callOptions, "callOptions");
       this.authority = authority;
-      this.clientStream = new InProcessClientStream(callOptions, headers);
+      this.clientStream = new InProcessClientStream(callOptions, statsTraceContext);
       this.serverStream = new InProcessServerStream(method, headers);
     }
 
@@ -671,9 +671,10 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       @GuardedBy("this")
       private int outboundSeqNo;
 
-      InProcessClientStream(CallOptions callOptions, Metadata headers) {
+      InProcessClientStream(
+          CallOptions callOptions, StatsTraceContext statsTraceContext) {
         this.callOptions = callOptions;
-        statsTraceCtx = StatsTraceContext.newClientContext(callOptions, attributes, headers);
+        statsTraceCtx = statsTraceContext;
       }
 
       private synchronized void setListener(ServerStreamListener listener) {

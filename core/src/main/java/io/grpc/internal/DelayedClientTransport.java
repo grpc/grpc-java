@@ -133,7 +133,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
    */
   @Override
   public final ClientStream newStream(
-      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      StatsTraceContext statsTraceContext) {
     try {
       PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
       SubchannelPicker picker = null;
@@ -141,14 +142,14 @@ final class DelayedClientTransport implements ManagedClientTransport {
       while (true) {
         synchronized (lock) {
           if (shutdownStatus != null) {
-            return new FailingClientStream(shutdownStatus);
+            return new FailingClientStream(shutdownStatus, statsTraceContext);
           }
           if (lastPicker == null) {
-            return createPendingStream(args);
+            return createPendingStream(args, statsTraceContext);
           }
           // Check for second time through the loop, and whether anything changed
           if (picker != null && pickerVersion == lastPickerVersion) {
-            return createPendingStream(args);
+            return createPendingStream(args, statsTraceContext);
           }
           picker = lastPicker;
           pickerVersion = lastPickerVersion;
@@ -158,7 +159,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
             callOptions.isWaitForReady());
         if (transport != null) {
           return transport.newStream(
-              args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions());
+              args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions(),
+              statsTraceContext);
         }
         // This picker's conclusion is "buffer".  If there hasn't been a newer picker set (possible
         // race with reprocess()), we will buffer it.  Otherwise, will try with the new picker.
@@ -173,8 +175,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
    * schedule tasks on syncContext.
    */
   @GuardedBy("lock")
-  private PendingStream createPendingStream(PickSubchannelArgs args) {
-    PendingStream pendingStream = new PendingStream(args);
+  private PendingStream createPendingStream(
+      PickSubchannelArgs args, StatsTraceContext statsTraceContext) {
+    PendingStream pendingStream = new PendingStream(args, statsTraceContext);
     pendingStreams.add(pendingStream);
     if (getPendingStreamsCount() == 1) {
       syncContext.executeLater(reportTransportInUse);
@@ -239,7 +242,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
     if (savedReportTransportTerminated != null) {
       for (PendingStream stream : savedPendingStreams) {
-        Runnable runnable = stream.setStream(new FailingClientStream(status, RpcProgress.REFUSED));
+        Runnable runnable = stream.setStream(
+            new FailingClientStream(status, RpcProgress.REFUSED, stream.statsTraceContext));
         if (runnable != null) {
           // Drain in-line instead of using an executor as failing stream just throws everything
           // away. This is essentially the same behavior as DelayedStream.cancel() but can be done
@@ -346,9 +350,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
   private class PendingStream extends DelayedStream {
     private final PickSubchannelArgs args;
     private final Context context = Context.current();
+    private final StatsTraceContext statsTraceContext;
 
-    private PendingStream(PickSubchannelArgs args) {
+    private PendingStream(PickSubchannelArgs args, StatsTraceContext statsTraceContext) {
       this.args = args;
+      this.statsTraceContext = statsTraceContext;
     }
 
     /** Runnable may be null. */
@@ -357,7 +363,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
       Context origContext = context.attach();
       try {
         realStream = transport.newStream(
-            args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions());
+            args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions(),
+            statsTraceContext);
       } finally {
         context.detach(origContext);
       }

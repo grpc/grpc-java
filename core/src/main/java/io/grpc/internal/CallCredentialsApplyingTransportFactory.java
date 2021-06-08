@@ -104,7 +104,8 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     @Override
     @SuppressWarnings("deprecation")
     public ClientStream newStream(
-        final MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions) {
+        final MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions,
+        StatsTraceContext statsTraceCtx) {
       CallCredentials creds = callOptions.getCredentials();
       if (creds == null) {
         creds = channelCallCredentials;
@@ -113,10 +114,10 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
       }
       if (creds != null) {
         MetadataApplierImpl applier = new MetadataApplierImpl(
-            delegate, method, headers, callOptions, applierListener);
+            delegate, method, headers, callOptions, applierListener, statsTraceCtx);
         if (pendingApplier.incrementAndGet() > 0) {
           applierListener.onComplete();
-          return new FailingClientStream(shutdownStatus);
+          return new FailingClientStream(shutdownStatus, statsTraceCtx);
         }
         RequestInfo requestInfo = new RequestInfo() {
             @Override
@@ -152,9 +153,9 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
         return applier.returnStream();
       } else {
         if (pendingApplier.get() >= 0) {
-          return new FailingClientStream(shutdownStatus);
+          return new FailingClientStream(shutdownStatus, statsTraceCtx);
         }
-        return delegate.newStream(method, headers, callOptions);
+        return delegate.newStream(method, headers, callOptions, statsTraceCtx);
       }
     }
 

@@ -667,8 +667,9 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
     @Override
     public ClientStream newStream(
-        MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-      final ClientStream streamDelegate = super.newStream(method, headers, callOptions);
+        MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+        StatsTraceContext statsCtx) {
+      final ClientStream streamDelegate = super.newStream(method, headers, callOptions, statsCtx);
       return new ForwardingClientStream() {
         @Override
         protected ClientStream delegate() {

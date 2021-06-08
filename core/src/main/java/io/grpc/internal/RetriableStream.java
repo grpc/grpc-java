@@ -23,7 +23,6 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import io.grpc.Attributes;
-import io.grpc.CallAttemptTracer;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
@@ -79,7 +78,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final ChannelBufferMeter channelBufferUsed;
   private final long perRpcBufferLimit;
   private final long channelBufferLimit;
-  private final CallAttemptTracer callAttemptTracer;
   @Nullable
   private final Throttle throttle;
   @GuardedBy("lock")
@@ -111,7 +109,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
       Executor callExecutor, ScheduledExecutorService scheduledExecutorService,
       @Nullable RetryPolicy retryPolicy, @Nullable HedgingPolicy hedgingPolicy,
-      CallAttemptTracer callAttemptTracer,
       @Nullable Throttle throttle) {
     this.method = method;
     this.channelBufferUsed = channelBufferUsed;
@@ -129,7 +126,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         retryPolicy == null || hedgingPolicy == null,
         "Should not provide both retryPolicy and hedgingPolicy");
     this.isHedging = hedgingPolicy != null;
-    this.callAttemptTracer = callAttemptTracer;
     this.throttle = throttle;
   }
 
@@ -206,8 +202,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
   }
 
-  private Substream createSubstream(int previousAttemptCount) {
-    Substream sub = new Substream(previousAttemptCount);
+  private Substream createSubstream(int previousAttemptCount, boolean isTransparentRetry) {
+    Substream sub = new Substream(previousAttemptCount, isTransparentRetry);
     // one tracer per substream
     final ClientStreamTracer bufferSizeTracer = new BufferSizeTracer(sub);
     ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
@@ -220,10 +216,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     Metadata newHeaders = updateHeaders(headers, previousAttemptCount);
     // TODO: pass real substream id and transparentRetry flag
-    ClientStreamTracer.Factory tracerFactory2 =
-        callAttemptTracer.newAttempt(previousAttemptCount, false);
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
-    sub.stream = newSubstream(newHeaders, tracerFactory, tracerFactory2);
+    sub.stream = newSubstream(newHeaders, tracerFactory, isTransparentRetry);
     return sub;
   }
 
@@ -232,7 +226,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
    * Client stream is not yet started.
    */
   abstract ClientStream newSubstream(
-      Metadata headers, ClientStreamTracer.Factory... tracerFactory);
+      Metadata headers, ClientStreamTracer.Factory tracerFactory, boolean isTransparentRetry);
 
   /** Adds grpc-previous-rpc-attempts in the headers of a retry/hedging RPC. */
   @VisibleForTesting
@@ -328,7 +322,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       state.buffer.add(new StartEntry());
     }
 
-    Substream substream = createSubstream(0);
+    Substream substream = createSubstream(0, false);
     if (isHedging) {
       FutureCanceller scheduledHedgingRef = null;
 
@@ -405,7 +399,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
               // If this run is not cancelled, the value of state.hedgingAttemptCount won't change
               // until state.addActiveHedge() is called subsequently, even the state could possibly
               // change.
-              Substream newSubstream = createSubstream(state.hedgingAttemptCount);
+              Substream newSubstream = createSubstream(state.hedgingAttemptCount, false);
               boolean cancelled = false;
               FutureCanceller future = null;
 
@@ -446,7 +440,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public final void cancel(Status reason) {
-    Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here */);
+    Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here */, false);
     noopSubstream.stream = new NoopClientStream();
     Runnable runnable = commit(noopSubstream);
 
@@ -795,8 +789,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         if (rpcProgress == RpcProgress.REFUSED
             && noMoreTransparentRetry.compareAndSet(false, true)) {
           // transparent retry
-          final Substream newSubstream = createSubstream(
-              substream.previousAttemptCount);
+          final Substream newSubstream = createSubstream(substream.previousAttemptCount, true);
           if (isHedging) {
             boolean commit = false;
             synchronized (lock) {
@@ -874,8 +867,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
                                 @Override
                                 public void run() {
                                   // retry
-                                  Substream newSubstream =
-                                      createSubstream(substream.previousAttemptCount + 1);
+                                  Substream newSubstream = createSubstream(
+                                      substream.previousAttemptCount + 1,
+                                      false);
                                   drain(newSubstream);
                                 }
                               });
@@ -1089,7 +1083,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     // GuardedBy RetriableStream.lock
     State substreamClosed(Substream substream) {
       substream.closed = true;
-      callAttemptTracer.substreamClosed(substream.id, status);
       if (this.drainedSubstreams.contains(substream)) {
         Collection<Substream> drainedSubstreams = new ArrayList<>(this.drainedSubstreams);
         drainedSubstreams.remove(substream);
@@ -1201,11 +1194,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     boolean bufferLimitExceeded;
 
     final int previousAttemptCount;
+    final boolean isTransparentRetry;
 
-    // TODO: final int id;
-
-    Substream(int previousAttemptCount) {
+    Substream(int previousAttemptCount, boolean isTransparentRetry) {
       this.previousAttemptCount = previousAttemptCount;
+      this.isTransparentRetry = isTransparentRetry;
     }
   }
 

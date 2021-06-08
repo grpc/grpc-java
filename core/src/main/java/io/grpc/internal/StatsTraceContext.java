@@ -19,9 +19,8 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.Attributes;
-import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Context;
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
@@ -32,35 +31,31 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * The stats and tracing information for a stream.
  */
-@ThreadSafe
 public final class StatsTraceContext {
   public static final StatsTraceContext NOOP = new StatsTraceContext(new StreamTracer[0]);
 
   private final StreamTracer[] tracers;
   private final AtomicBoolean closed = new AtomicBoolean(false);
+  private ClientStreamTracer transportStreamTracer;
 
   /**
    * Factory method for the client-side.
    */
-  public static StatsTraceContext newClientContext(
-      final CallOptions callOptions, final Attributes transportAttrs, Metadata headers) {
-    List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
+  public static StatsTraceContext newClientContext(StreamInfo streamInfo, Metadata headers) {
+    List<ClientStreamTracer.Factory> factories =
+        streamInfo.getCallOptions().getStreamTracerFactories();
     if (factories.isEmpty()) {
       return NOOP;
     }
-    ClientStreamTracer.StreamInfo info =
-        ClientStreamTracer.StreamInfo.newBuilder()
-            .setTransportAttrs(transportAttrs).setCallOptions(callOptions).build();
     // This array will be iterated multiple times per RPC. Use primitive array instead of Collection
     // so that for-each doesn't create an Iterator every time.
     StreamTracer[] tracers = new StreamTracer[factories.size()];
     for (int i = 0; i < tracers.length; i++) {
-      tracers[i] = factories.get(i).newClientStreamTracer(info, headers);
+      tracers[i] = factories.get(i).newClientStreamTracer(streamInfo, headers);
     }
     return new StatsTraceContext(tracers);
   }
@@ -88,6 +83,14 @@ public final class StatsTraceContext {
   }
 
   /**
+   * Sets the ClientStreamTracer from lb pick result. Can only be called prior to all other member
+   * methods.
+   */
+  public void setTransportStreamTracer(ClientStreamTracer transportStreamTracer) {
+    this.transportStreamTracer = transportStreamTracer;
+  }
+
+  /**
    * Returns a copy of the tracer list.
    */
   @VisibleForTesting
@@ -104,6 +107,9 @@ public final class StatsTraceContext {
     for (StreamTracer tracer : tracers) {
       ((ClientStreamTracer) tracer).outboundHeaders();
     }
+    if (transportStreamTracer != null) {
+      transportStreamTracer.outboundHeaders();
+    }
   }
 
   /**
@@ -115,6 +121,9 @@ public final class StatsTraceContext {
     for (StreamTracer tracer : tracers) {
       ((ClientStreamTracer) tracer).inboundHeaders();
     }
+    if (transportStreamTracer != null) {
+      transportStreamTracer.inboundHeaders();
+    }
   }
 
   /**
@@ -125,6 +134,9 @@ public final class StatsTraceContext {
   public void clientInboundTrailers(Metadata trailers) {
     for (StreamTracer tracer : tracers) {
       ((ClientStreamTracer) tracer).inboundTrailers(trailers);
+    }
+    if (transportStreamTracer != null) {
+      transportStreamTracer.inboundTrailers(trailers);
     }
   }
 
@@ -164,6 +176,9 @@ public final class StatsTraceContext {
       for (StreamTracer tracer : tracers) {
         tracer.streamClosed(status);
       }
+      if (transportStreamTracer != null) {
+        transportStreamTracer.streamClosed(status);
+      }
     }
   }
 
@@ -176,6 +191,9 @@ public final class StatsTraceContext {
     for (StreamTracer tracer : tracers) {
       tracer.outboundMessage(seqNo);
     }
+    if (transportStreamTracer != null) {
+      transportStreamTracer.outboundMessage(seqNo);
+    }
   }
 
   /**
@@ -186,6 +204,9 @@ public final class StatsTraceContext {
   public void inboundMessage(int seqNo) {
     for (StreamTracer tracer : tracers) {
       tracer.inboundMessage(seqNo);
+    }
+    if (transportStreamTracer != null) {
+      transportStreamTracer.inboundMessage(seqNo);
     }
   }
 
@@ -198,6 +219,9 @@ public final class StatsTraceContext {
     for (StreamTracer tracer : tracers) {
       tracer.outboundMessageSent(seqNo, optionalWireSize, optionalUncompressedSize);
     }
+    if (transportStreamTracer != null) {
+      transportStreamTracer.outboundMessageSent(seqNo, optionalWireSize, optionalUncompressedSize);
+    }
   }
 
   /**
@@ -208,6 +232,9 @@ public final class StatsTraceContext {
   public void inboundMessageRead(int seqNo, long optionalWireSize, long optionalUncompressedSize) {
     for (StreamTracer tracer : tracers) {
       tracer.inboundMessageRead(seqNo, optionalWireSize, optionalUncompressedSize);
+    }
+    if (transportStreamTracer != null) {
+      transportStreamTracer.inboundMessageRead(seqNo, optionalWireSize, optionalUncompressedSize);
     }
   }
 
@@ -220,6 +247,9 @@ public final class StatsTraceContext {
     for (StreamTracer tracer : tracers) {
       tracer.outboundUncompressedSize(bytes);
     }
+    if (transportStreamTracer != null) {
+      transportStreamTracer.outboundUncompressedSize(bytes);
+    }
   }
 
   /**
@@ -230,6 +260,9 @@ public final class StatsTraceContext {
   public void outboundWireSize(long bytes) {
     for (StreamTracer tracer : tracers) {
       tracer.outboundWireSize(bytes);
+    }
+    if (transportStreamTracer != null) {
+      transportStreamTracer.outboundWireSize(bytes);
     }
   }
 
@@ -242,6 +275,9 @@ public final class StatsTraceContext {
     for (StreamTracer tracer : tracers) {
       tracer.inboundUncompressedSize(bytes);
     }
+    if (transportStreamTracer != null) {
+      transportStreamTracer.inboundUncompressedSize(bytes);
+    }
   }
 
   /**
@@ -252,6 +288,9 @@ public final class StatsTraceContext {
   public void inboundWireSize(long bytes) {
     for (StreamTracer tracer : tracers) {
       tracer.inboundWireSize(bytes);
+    }
+    if (transportStreamTracer != null) {
+      transportStreamTracer.inboundWireSize(bytes);
     }
   }
 }

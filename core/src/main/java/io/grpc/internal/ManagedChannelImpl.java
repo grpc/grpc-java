@@ -31,7 +31,6 @@ import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
-import io.grpc.CallAttemptTracer;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -42,6 +41,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.CompressorRegistry;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -529,16 +529,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
         final CallOptions callOptions,
         final Metadata headers,
         final Context context) {
-      CallAttemptTracer callAttemptTracer =
-          callOptions.getCallAttemptTracerFactor().newCallAttemptTracer();
       if (!retryEnabled) {
-        ClientStreamTracer.Factory tracerFacotry = callAttemptTracer.newAttempt(0, false);
-        CallOptions newCallOptions = callOptions.withStreamTracerFactory(tracerFacotry);
         ClientTransport transport =
             getTransport(new PickSubchannelArgsImpl(method, headers, callOptions));
         Context origContext = context.attach();
+        StreamInfo streamInfo = StreamInfo.newBuilder().setCallOptions(callOptions).build();
+        StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(streamInfo, headers);
         try {
-          return transport.newStream(method, headers, newCallOptions);
+          return transport.newStream(method, headers, callOptions, statsTraceCtx);
         } finally {
           context.detach(origContext);
         }
@@ -560,7 +558,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 transportFactory.getScheduledExecutorService(),
                 retryPolicy,
                 hedgingPolicy,
-                callAttemptTracer,
                 throttle);
           }
 
@@ -576,16 +573,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
           @Override
           ClientStream newSubstream(
-              Metadata newHeaders, ClientStreamTracer.Factory... tracerFactories) {
+              Metadata newHeaders, ClientStreamTracer.Factory factory, boolean isTransparentRetry) {
             CallOptions newOptions = callOptions;
-            for (ClientStreamTracer.Factory factory : tracerFactories) {
-              newOptions = newOptions.withStreamTracerFactory(factory);
-            }
+            newOptions = newOptions.withStreamTracerFactory(factory);
+            StreamInfo streamInfo = StreamInfo.newBuilder()
+                .setCallOptions(newOptions)
+                .setIsTransparentRetry(isTransparentRetry)
+                .build();
+            StatsTraceContext statsTraceContext =
+                StatsTraceContext.newClientContext(streamInfo, newHeaders);
             ClientTransport transport =
                 getTransport(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
             Context origContext = context.attach();
             try {
-              return transport.newStream(method, newHeaders, newOptions);
+              return transport.newStream(method, newHeaders, newOptions, statsTraceContext);
             } finally {
               context.detach(origContext);
             }

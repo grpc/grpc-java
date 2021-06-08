@@ -26,8 +26,10 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.InternalMetadata;
@@ -695,7 +697,8 @@ public final class GrpcUtil {
    * Returns a transport out of a PickResult, or {@code null} if the result is "buffer".
    */
   @Nullable
-  static ClientTransport getTransportFromPickResult(PickResult result, boolean isWaitForReady) {
+  static ClientTransport getTransportFromPickResult(
+      final PickResult result, boolean isWaitForReady) {
     final ClientTransport transport;
     Subchannel subchannel = result.getSubchannel();
     if (subchannel != null) {
@@ -711,9 +714,17 @@ public final class GrpcUtil {
       return new ClientTransport() {
         @Override
         public ClientStream newStream(
-            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-          return transport.newStream(
-              method, headers, callOptions.withStreamTracerFactory(streamTracerFactory));
+            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+            StatsTraceContext statsTraceContext) {
+          Attributes transportAttributes = ((ConnectionClientTransport) transport).getAttributes();
+          ClientStreamTracer streamTracer = streamTracerFactory.newClientStreamTracer(
+              StreamInfo.newBuilder()
+                  .setCallOptions(callOptions)
+                  .setTransportAttrs(transportAttributes)
+                  .build(),
+              headers);
+          statsTraceContext.setTransportStreamTracer(streamTracer);
+          return transport.newStream(method, headers, callOptions, statsTraceContext);
         }
 
         @Override

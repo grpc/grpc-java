@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Context;
 import io.grpc.InternalConfigSelector;
 import io.grpc.Metadata;
@@ -57,9 +58,11 @@ final class SubchannelChannel extends Channel {
         if (transport == null) {
           transport = notReadyTransport;
         }
+        StreamInfo streamInfo = StreamInfo.newBuilder().setCallOptions(callOptions).build();
+        StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(streamInfo, headers);
         Context origContext = context.attach();
         try {
-          return transport.newStream(method, headers, callOptions);
+          return transport.newStream(method, headers, callOptions, statsTraceCtx);
         } finally {
           context.detach(origContext);
         }

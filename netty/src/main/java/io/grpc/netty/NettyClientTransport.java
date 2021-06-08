@@ -167,14 +167,13 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   @Override
   public ClientStream newStream(
-      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      StatsTraceContext statsTraceCtx) {
     Preconditions.checkNotNull(method, "method");
     Preconditions.checkNotNull(headers, "headers");
     if (channel == null) {
-      return new FailingClientStream(statusExplainingWhyTheChannelIsNull);
+      return new FailingClientStream(statusExplainingWhyTheChannelIsNull, statsTraceCtx);
     }
-    StatsTraceContext statsTraceCtx =
-        StatsTraceContext.newClientContext(callOptions, getAttributes(), headers);
     return new NettyClientStream(
         new NettyClientStream.TransportState(
             handler,
