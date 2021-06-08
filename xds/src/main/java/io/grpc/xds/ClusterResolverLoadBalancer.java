@@ -387,15 +387,17 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               for (LbEndpoint endpoint : localityLbInfo.endpoints()) {
                 if (endpoint.isHealthy()) {
                   discard = false;
-                  long weight =
-                      (long) localityLbInfo.localityWeight() * endpoint.loadBalancingWeight();
-                  Attributes.Builder attrBuilder = endpoint.eag().getAttributes().toBuilder();
-                  attrBuilder.set(InternalXdsAttributes.ATTR_LOCALITY, locality);
-                  if (weight != 0L) {
-                    attrBuilder.set(InternalXdsAttributes.ATTR_SERVER_WEIGHT, weight);
+                  long weight = localityLbInfo.localityWeight();
+                  if (endpoint.loadBalancingWeight() != 0) {
+                    weight *= endpoint.loadBalancingWeight();
                   }
+                  Attributes attr =
+                      endpoint.eag().getAttributes().toBuilder()
+                          .set(InternalXdsAttributes.ATTR_LOCALITY, locality)
+                          .set(InternalXdsAttributes.ATTR_SERVER_WEIGHT, weight)
+                          .build();
                   EquivalentAddressGroup eag = new EquivalentAddressGroup(
-                      endpoint.eag().getAddresses(), attrBuilder.build());
+                      endpoint.eag().getAddresses(), attr);
                   eag = AddressFilter.setPathFilter(
                       eag, Arrays.asList(priorityName, localityName(locality)));
                   addresses.add(eag);
