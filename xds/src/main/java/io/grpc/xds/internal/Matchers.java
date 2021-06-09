@@ -29,6 +29,8 @@ import javax.annotation.Nullable;
  * argument in the input matches a predefined matching pattern.
  */
 public final class Matchers {
+  // Prevent instantiation.
+  private Matchers() {}
 
   /** Matcher for HTTP request headers. */
   @AutoValue
