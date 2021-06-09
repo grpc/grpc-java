@@ -162,7 +162,7 @@ class XdsServerTestHelper {
             Arrays.<String>asList(),
             null);
     // HttpConnectionManager currently not used for server side.
-    HttpConnectionManager httpConnectionManager = HttpConnectionManager.withRdsName(
+    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
         0L, "does not matter", Collections.<NamedFilterConfig>emptyList());
     EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
         filterChainMatch1, httpConnectionManager, tlsContext, tlsContextManager);

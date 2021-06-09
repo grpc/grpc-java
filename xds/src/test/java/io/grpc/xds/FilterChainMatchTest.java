@@ -48,7 +48,7 @@ public class FilterChainMatchTest {
   private static final String LOCAL_IP = "10.1.2.3";  // dest
   private static final String REMOTE_IP = "10.4.2.3"; // source
   private static final HttpConnectionManager HTTP_CONNECTION_MANAGER =
-      HttpConnectionManager.withRdsName(
+      HttpConnectionManager.forRdsName(
           10L, "route-config", Collections.<NamedFilterConfig>emptyList());
 
   @Mock private Channel channel;

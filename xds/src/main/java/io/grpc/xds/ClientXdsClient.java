@@ -458,7 +458,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
         virtualHosts.add(virtualHost.getStruct());
       }
-      return io.grpc.xds.HttpConnectionManager.withVirtualHosts(
+      return io.grpc.xds.HttpConnectionManager.forVirtualHosts(
           maxStreamDuration, virtualHosts, filterConfigs);
     }
     if (proto.hasRds()) {
@@ -471,7 +471,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         throw new ResourceInvalidException(
             "HttpConnectionManager contains invalid RDS: must specify ADS");
       }
-      return io.grpc.xds.HttpConnectionManager.withRdsName(
+      return io.grpc.xds.HttpConnectionManager.forRdsName(
           maxStreamDuration, rds.getRouteConfigName(), filterConfigs);
     }
     throw new ResourceInvalidException(

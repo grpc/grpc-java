@@ -44,13 +44,13 @@ abstract class HttpConnectionManager {
   @Nullable
   abstract ImmutableList<NamedFilterConfig> httpFilterConfigs();
 
-  static HttpConnectionManager withRdsName(long httpMaxStreamDurationNano, String rdsName,
+  static HttpConnectionManager forRdsName(long httpMaxStreamDurationNano, String rdsName,
       @Nullable List<NamedFilterConfig> httpFilterConfigs) {
     checkNotNull(rdsName, "rdsName");
     return create(httpMaxStreamDurationNano, rdsName, null, httpFilterConfigs);
   }
 
-  static HttpConnectionManager withVirtualHosts(long httpMaxStreamDurationNano,
+  static HttpConnectionManager forVirtualHosts(long httpMaxStreamDurationNano,
       List<VirtualHost> virtualHosts, @Nullable List<NamedFilterConfig> httpFilterConfigs) {
     checkNotNull(virtualHosts, "virtualHosts");
     return create(httpMaxStreamDurationNano, null, virtualHosts,

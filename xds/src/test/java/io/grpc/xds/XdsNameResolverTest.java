@@ -1591,7 +1591,7 @@ public class XdsNameResolverTest {
     }
 
     void deliverLdsUpdate(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.withVirtualHosts(
+      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
           httpMaxStreamDurationNano, virtualHosts, null)));
     }
 
@@ -1600,7 +1600,7 @@ public class XdsNameResolverTest {
           VirtualHost.create(
               "virtual-host", Collections.singletonList(AUTHORITY), routes,
               ImmutableMap.<String, FilterConfig>of());
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.withVirtualHosts(
+      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
           0L, Collections.singletonList(virtualHost), null)));
     }
 
@@ -1644,7 +1644,7 @@ public class XdsNameResolverTest {
           Collections.singletonList(AUTHORITY),
           Collections.singletonList(route),
           overrideConfig);
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.withVirtualHosts(
+      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
           0L, Collections.singletonList(virtualHost), filterChain)));
     }
 
@@ -1654,7 +1654,7 @@ public class XdsNameResolverTest {
           Collections.singletonList(AUTHORITY),
           Collections.<Route>emptyList(),
           Collections.<String, FilterConfig>emptyMap());
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.withVirtualHosts(
+      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
           0L, Collections.singletonList(virtualHost), ImmutableList.<NamedFilterConfig>of())));
     }
 
@@ -1667,12 +1667,12 @@ public class XdsNameResolverTest {
       ImmutableList<NamedFilterConfig> filterChain = ImmutableList.of(
           new NamedFilterConfig(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
           new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.withRdsName(
+      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
           0L, rdsName, filterChain)));
     }
 
     void deliverLdsUpdateForRdsName(String rdsName) {
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.withRdsName(
+      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
           0, rdsName, null)));
     }
 
