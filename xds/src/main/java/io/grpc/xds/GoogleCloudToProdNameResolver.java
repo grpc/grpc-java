@@ -40,6 +40,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.util.Random;
 import java.util.concurrent.Executor;
 
 /**
@@ -71,6 +72,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   private final Resource<Executor> executorResource;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final NameResolver delegate;
+  private final Random rand;
   private final boolean usingExecutorResource;
   // It's not possible to use both PSM and DirectPath C2P in the same application.
   // Delegate to DNS if user-provided bootstrap is found.
@@ -83,15 +85,17 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
 
   GoogleCloudToProdNameResolver(URI targetUri, Args args, Resource<Executor> executorResource,
       XdsClientPoolFactory xdsClientPoolFactory) {
-    this(targetUri, args, executorResource, xdsClientPoolFactory,
+    this(targetUri, args, executorResource, new Random(), xdsClientPoolFactory,
         NameResolverRegistry.getDefaultRegistry().asFactory());
   }
 
   @VisibleForTesting
   GoogleCloudToProdNameResolver(URI targetUri, Args args, Resource<Executor> executorResource,
-      XdsClientPoolFactory xdsClientPoolFactory, NameResolver.Factory nameResolverFactory) {
+      Random rand, XdsClientPoolFactory xdsClientPoolFactory,
+      NameResolver.Factory nameResolverFactory) {
     this.executorResource = checkNotNull(executorResource, "executorResource");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    this.rand = checkNotNull(rand, "rand");
     String targetPath = checkNotNull(checkNotNull(targetUri, "targetUri").getPath(), "targetPath");
     Preconditions.checkArgument(
         targetPath.startsWith("/"),
@@ -169,9 +173,9 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     executor.execute(new Resolve());
   }
 
-  private static ImmutableMap<String, ?> generateBootstrap(String zone, boolean supportIpv6) {
+  private ImmutableMap<String, ?> generateBootstrap(String zone, boolean supportIpv6) {
     ImmutableMap.Builder<String, Object> nodeBuilder = ImmutableMap.builder();
-    nodeBuilder.put("id", "C2P");
+    nodeBuilder.put("id", "C2P-" + rand.nextInt());
     if (!zone.isEmpty()) {
       nodeBuilder.put("locality", ImmutableMap.of("zone", zone));
     }
