@@ -392,7 +392,7 @@ public final class GrpcAuthorizationEngine {
 
   /** Always true matcher.*/
   public static final class AlwaysTrueMatcher implements Matcher {
-    static AlwaysTrueMatcher INSTANCE = new AlwaysTrueMatcher();
+    static final AlwaysTrueMatcher INSTANCE = new AlwaysTrueMatcher();
 
     @Override
     public boolean matches(EvaluateArgs args) {
