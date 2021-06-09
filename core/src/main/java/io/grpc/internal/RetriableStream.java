@@ -203,7 +203,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   private Substream createSubstream(int previousAttemptCount, boolean isTransparentRetry) {
-    Substream sub = new Substream(previousAttemptCount, isTransparentRetry);
+    Substream sub = new Substream(previousAttemptCount);
     // one tracer per substream
     final ClientStreamTracer bufferSizeTracer = new BufferSizeTracer(sub);
     ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
@@ -440,7 +440,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public final void cancel(Status reason) {
-    Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here */, false);
+    Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here */);
     noopSubstream.stream = new NoopClientStream();
     Runnable runnable = commit(noopSubstream);
 
@@ -1194,11 +1194,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     boolean bufferLimitExceeded;
 
     final int previousAttemptCount;
-    final boolean isTransparentRetry;
 
-    Substream(int previousAttemptCount, boolean isTransparentRetry) {
+    Substream(int previousAttemptCount) {
       this.previousAttemptCount = previousAttemptCount;
-      this.isTransparentRetry = isTransparentRetry;
     }
   }
 
