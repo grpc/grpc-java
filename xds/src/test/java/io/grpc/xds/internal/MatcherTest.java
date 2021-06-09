@@ -24,17 +24,12 @@ import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher.Range;
 import io.grpc.xds.internal.Matchers.StringMatcher;
 import java.net.InetAddress;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.junit.MockitoJUnit;
-import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class MatcherTest {
-  @Rule
-  public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Test
   public void ipMatcher_Ipv4() throws Exception {
