@@ -32,7 +32,7 @@ import org.junit.runners.JUnit4;
 public class MatcherTest {
 
   @Test
-  public void ipMatcher_Ipv4() throws Exception {
+  public void ipMatcher_ipv4() throws Exception {
     CidrMatcher matcher = CidrMatcher.create(InetAddress.getByName("10.10.24.10"), 20);
     assertThat(matcher.matches(InetAddress.getByName("::0"))).isFalse();
     assertThat(matcher.matches(InetAddress.getByName("10.10.20.0"))).isTrue();
@@ -50,7 +50,7 @@ public class MatcherTest {
   }
 
   @Test
-  public void ipMatcher_Ipv6() throws Exception {
+  public void ipMatcher_ipv6() throws Exception {
     CidrMatcher matcher = CidrMatcher.create(InetAddress.getByName("2012:00fe:d808::"), 36);
     assertThat(matcher.matches(InetAddress.getByName("0.0.0.0"))).isFalse();
     assertThat(matcher.matches(InetAddress.getByName("2012:00fe:d000::0"))).isTrue();
