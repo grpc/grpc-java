@@ -256,6 +256,7 @@ public final class GrpcAuthorizationEngine {
      * principal names we are interested in.
      * https://github.com/envoyproxy/envoy/blob/0fae6970ddaf93f024908ba304bbd2b34e997a51/envoy/ssl/connection.h#L70
      */
+    @Nullable
     private Collection<String> getPrincipalNames() {
       SSLSession sslSession = serverCall.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
       if (sslSession == null) {
