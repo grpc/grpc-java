@@ -153,7 +153,10 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
     if (childLb != null) {
       childLb.shutdown();
-      childLbHelper = null;
+      if (childLbHelper != null) {
+        childLbHelper.updateSslContextProviderSupplier(null);
+        childLbHelper = null;
+      }
     }
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);

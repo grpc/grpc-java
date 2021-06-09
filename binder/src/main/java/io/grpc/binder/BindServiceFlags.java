@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.binder.internal;
+package io.grpc.binder;
 
 import static android.content.Context.BIND_ABOVE_CLIENT;
 import static android.content.Context.BIND_ADJUST_WITH_ACTIVITY;
