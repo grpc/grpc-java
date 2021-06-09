@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -33,7 +35,7 @@ final class Endpoints {
     // Endpoints to be load balanced.
     abstract ImmutableList<LbEndpoint> endpoints();
 
-    // Locality's weight for inter-locality load balancing.
+    // Locality's weight for inter-locality load balancing. Guaranteed to be greater than 0.
     abstract int localityWeight();
 
     // Locality's priority level.
@@ -41,6 +43,7 @@ final class Endpoints {
 
     static LocalityLbEndpoints create(List<LbEndpoint> endpoints, int localityWeight,
         int priority) {
+      checkArgument(localityWeight > 0, "localityWeight must be greater than 0");
       return new AutoValue_Endpoints_LocalityLbEndpoints(
           ImmutableList.copyOf(endpoints), localityWeight, priority);
     }
@@ -52,7 +55,7 @@ final class Endpoints {
     // The endpoint address to be connected to.
     abstract EquivalentAddressGroup eag();
 
-    // Endpoint's wight for load balancing.
+    // Endpoint's weight for load balancing. If unspecified, value of 0 is returned.
     abstract int loadBalancingWeight();
 
     // Whether the endpoint is healthy.
