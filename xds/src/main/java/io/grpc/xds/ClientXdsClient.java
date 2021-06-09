@@ -192,7 +192,6 @@ final class ClientXdsClient extends AbstractXdsClient {
         if (listener.hasApiListener()) {
           ldsUpdate = processClientSideListener(listener, enableFaultInjection && isResourceV3);
         } else {
-          // TODO(chengyuanzhang): change env var for supporting HttpFilter.
           ldsUpdate = processServerSideListener(listener, enableFaultInjection && isResourceV3);
         }
       } catch (ResourceInvalidException e) {
