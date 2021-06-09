@@ -19,10 +19,6 @@ dependencies {
         // 'com.google.api:api-common' transitively depends on auto-value, which breaks our
         // annotations.
         exclude group: 'com.google.api', module: 'api-common'
-        // Prefer our more up-to-date protobuf over 3.2.0
-        // TODO: this is excluding a newer version of protobuf, which is a
-        // no-no, but we need to upgrade protobuf separately before removing this.
-        exclude group: 'com.google.protobuf', module: 'protobuf-java'
     }
 
     api (project(':grpc-protobuf-lite')) {
