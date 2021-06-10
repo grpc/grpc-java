@@ -41,7 +41,6 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
-import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.CompressorRegistry;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -534,8 +533,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         ClientTransport transport =
             getTransport(new PickSubchannelArgsImpl(method, headers, callOptions));
         Context origContext = context.attach();
-        StreamInfo streamInfo = StreamInfo.newBuilder().setCallOptions(callOptions).build();
-        ClientStreamTracer[] tracers = getStreamTracers(streamInfo);
+        ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(callOptions, false);
         try {
           return transport.newStream(method, headers, callOptions, tracers);
         } finally {
@@ -577,11 +575,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
               Metadata newHeaders, ClientStreamTracer.Factory factory, boolean isTransparentRetry) {
             CallOptions newOptions = callOptions;
             newOptions = newOptions.withStreamTracerFactory(factory);
-            StreamInfo streamInfo = StreamInfo.newBuilder()
-                .setCallOptions(newOptions)
-                .setIsTransparentRetry(isTransparentRetry)
-                .build();
-            ClientStreamTracer[] tracers = getStreamTracers(streamInfo);
+            ClientStreamTracer[] tracers =
+                GrpcUtil.getClientStreamTracers(callOptions, isTransparentRetry);
             // TODO(zdapeng): include isTransparentRetry in PickSubchannelArgs
             ClientTransport transport =
                 getTransport(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
@@ -596,16 +591,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
         return new RetryStream<>();
       }
-    }
-
-    ClientStreamTracer[] getStreamTracers(StreamInfo streamInfo) {
-      List<ClientStreamTracer.Factory> factories =
-          streamInfo.getCallOptions().getStreamTracerFactories();
-      ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
-      for (int i = 0; i < factories.size(); i++) {
-        tracers[i] = factories.get(i).newClientStreamTracer(streamInfo);
-      }
-      return tracers;
     }
   }
 

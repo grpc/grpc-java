@@ -48,7 +48,7 @@ public interface ClientTransport extends InternalInstrumented<SocketStats> {
    * @param headers to send at the beginning of the call
    * @param callOptions runtime options of the call
    * @param tracers a non-empty array of tracers. The last element in it is reserved to be set by
-   *        the load balancer's pick result and otherwise is null.
+   *        the load balancer's pick result and otherwise is a no-op tracer.
    * @return the newly created stream.
    */
   // TODO(nmittler): Consider also throwing for stopping.

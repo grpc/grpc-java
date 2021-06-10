@@ -23,7 +23,6 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientStreamTracer;
-import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Context;
 import io.grpc.InternalConfigSelector;
 import io.grpc.Metadata;
@@ -31,7 +30,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
-import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
@@ -60,12 +58,7 @@ final class SubchannelChannel extends Channel {
         if (transport == null) {
           transport = notReadyTransport;
         }
-        StreamInfo streamInfo = StreamInfo.newBuilder().setCallOptions(callOptions).build();
-        List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
-        ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
-        for (int i = 0; i < factories.size(); i++) {
-          tracers[i] = factories.get(i).newClientStreamTracer(streamInfo);
-        }
+        ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(callOptions, false);
         Context origContext = context.attach();
         try {
           return transport.newStream(method, headers, callOptions, tracers);
