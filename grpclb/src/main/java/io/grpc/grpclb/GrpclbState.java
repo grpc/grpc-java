@@ -573,8 +573,9 @@ final class GrpclbState {
 
     @Override
     public void run() {
-      // Timer should have been cancelled if entered fallback early.
-      checkState(!usingFallbackBackends, "already in fallback");
+      if (usingFallbackBackends) {
+        return;
+      }
       fallbackReason = reason;
       maybeUseFallbackBackends();
       maybeUpdatePicker();
