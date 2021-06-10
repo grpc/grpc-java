@@ -64,6 +64,17 @@ public abstract class ClientStreamTracer extends StreamTracer {
    * Factory class for {@link ClientStreamTracer}.
    */
   public abstract static class Factory {
+
+    /**
+     * Creates a {@link ClientStreamTracer} for a new client stream.
+     *
+     * @param info information about the stream
+     */
+    @SuppressWarnings("deprecation")
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info) {
+      return newClientStreamTracer(info, new Metadata());
+    }
+
     /**
      * Creates a {@link ClientStreamTracer} for a new client stream.  This is called inside the
      * transport when it's creating the stream.
@@ -80,16 +91,6 @@ public abstract class ClientStreamTracer extends StreamTracer {
     @Deprecated
     public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
       throw new UnsupportedOperationException("Not implemented");
-    }
-
-    /**
-     * Creates a {@link ClientStreamTracer} for a new client stream.
-     *
-     * @param info information about the stream
-     */
-    @SuppressWarnings("deprecation")
-    public ClientStreamTracer newClientStreamTracer(StreamInfo info) {
-      return newClientStreamTracer(info, new Metadata());
     }
   }
 
