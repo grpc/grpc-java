@@ -535,7 +535,7 @@ def requireUpperBoundDepsMatch(Configuration conf, Project project) {
     // Breadth-first search like Maven for dependency resolution
     Queue<DepAndParents> queue = new ArrayDeque<>()
     conf.incoming.resolutionResult.root.dependencies.each {
-        queue.add(new DepAndParents(dep: it, parents: ["" + project]))
+        queue.add(new DepAndParents(dep: it, parents: [project.displayName]))
     }
     Set<String> found = new HashSet<>()
     while (!queue.isEmpty()) {
