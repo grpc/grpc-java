@@ -847,10 +847,6 @@ public class ClientXdsClientDataTest {
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addFilterChains(FilterChain.newBuilder().setName("filter-chain-foo").build())
-            .setAddress(
-                Address.newBuilder()
-                    .setSocketAddress(
-                        SocketAddress.newBuilder().setAddress("10.0.1.2").setPortValue(8080)))
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
@@ -869,10 +865,6 @@ public class ClientXdsClientDataTest {
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addFilterChains(filterChain)
-            .setAddress(
-                Address.newBuilder()
-                    .setSocketAddress(
-                        SocketAddress.newBuilder().setAddress("10.0.1.2").setPortValue(8080)))
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
@@ -893,10 +885,6 @@ public class ClientXdsClientDataTest {
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addFilterChains(filterChain)
-            .setAddress(
-                Address.newBuilder()
-                    .setSocketAddress(
-                        SocketAddress.newBuilder().setAddress("10.0.1.2").setPortValue(8080)))
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
@@ -914,10 +902,6 @@ public class ClientXdsClientDataTest {
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addFilterChains(filterChain)
-            .setAddress(
-                Address.newBuilder()
-                    .setSocketAddress(
-                        SocketAddress.newBuilder().setAddress("10.0.1.2").setPortValue(8080)))
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
