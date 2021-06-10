@@ -17,12 +17,15 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
@@ -57,14 +60,21 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 final class XdsServerWrapper extends Server {
+  private static final Logger logger = Logger.getLogger(XdsServerWrapper.class.getName());
+
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -79,20 +89,29 @@ final class XdsServerWrapper extends Server {
   private static final Attributes.Key<ServerRoutingConfig> ATTR_SERVER_ROUTING_CONFIG =
       Attributes.Key.create("io.grpc.xds.ServerWrapper.serverRoutingConfig");
 
-  private final Server delegate;
+  private final String listenerAddress;
+  private final ServerBuilder<?> delegateBuilder;
   private final FilterRegistry filterRegistry;
   private final ThreadSafeRandom random;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final XdsServingStatusListener listener;
   private final AtomicReference<FilterChainSelector> filterChainSelectorRef;
   private final AtomicReference<ServerInterceptor> configApplyingInterceptorRef;
+  private final AtomicBoolean started = new AtomicBoolean(false);
+  private final AtomicBoolean shutdown = new AtomicBoolean(false);
+  private Server delegate;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
+  private DiscoveryState discoveryState;
 
-  XdsServerWrapper(Server delegate, XdsServingStatusListener listener,
+  XdsServerWrapper(
+      String listenerAddress,
+      ServerBuilder<?> delegateBuilder,
+      XdsServingStatusListener listener,
       AtomicReference<FilterChainSelector> filterChainSelectorRef,
       AtomicReference<ServerInterceptor> configApplyingInterceptorRef) {
-    this.delegate = checkNotNull(delegate, "delegate");
+    this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
+    this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
     this.listener = checkNotNull(listener, "listener");
     this.filterChainSelectorRef = checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
     this.configApplyingInterceptorRef =
@@ -104,6 +123,7 @@ final class XdsServerWrapper extends Server {
 
   @Override
   public Server start() throws IOException {
+    checkState(started.compareAndSet(false, true), "Already started");
     try {
       xdsClientPool = xdsClientPoolFactory.getOrCreate();
     } catch (Exception e) {
@@ -113,16 +133,36 @@ final class XdsServerWrapper extends Server {
       return this;
     }
     xdsClient = xdsClientPool.getObject();
+    // TODO(chengyuanzhang): add an API on XdsClient indicating if it is using v3, don't get
+    //  from bootstrap.
+    boolean useProtocolV3 = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
     String listenerTemplate = xdsClient.getBootstrapInfo().getServerListenerResourceNameTemplate();
-    // TODO(chengyuanzhang): create and start DiscoveryState and block until all
-    //  RouteConfigurations being discovered.
+    if (!useProtocolV3 || listenerTemplate == null) {
+      listener.onNotServing(
+          Status.UNAVAILABLE.withDescription(
+              "Can only support xDS v3 with listener resource name template").asException());
+      return this;
+    }
+    discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", listenerAddress));
     return this;
   }
 
   @Override
   public Server shutdown() {
-    // TODO
-    return null;
+    if (!shutdown.compareAndSet(false, true)) {
+      return this;
+    }
+    logger.log(Level.FINER, "Shutting down XdsServerWrapper");
+    if (discoveryState != null) {
+      discoveryState.shutdown();
+    }
+    if (xdsClient != null) {
+      xdsClient = xdsClientPool.returnObject(xdsClient);
+    }
+    if (delegate != null) {
+      delegate.shutdown();
+    }
+    return this;
   }
 
   @Override
@@ -156,33 +196,52 @@ final class XdsServerWrapper extends Server {
 
   @Override
   public int getPort() {
-    return delegate.getPort();
+    // TODO
+    return -1;
   }
 
   @Override
   public List<? extends SocketAddress> getListenSockets() {
-    return delegate.getListenSockets();
+    // TODO
+    return null;
   }
 
   @Override
   public List<ServerServiceDefinition> getServices() {
-    return delegate.getServices();
+    // TODO
+    return null;
   }
 
   @Override
   public List<ServerServiceDefinition> getImmutableServices() {
-    return delegate.getImmutableServices();
+    // TODO
+    return null;
   }
 
   @Override
   public List<ServerServiceDefinition> getMutableServices() {
-    return delegate.getMutableServices();
+    // TODO
+    return null;
   }
 
   private final class DiscoveryState implements LdsResourceWatcher {
-    private final Map<FilterChain, ServerRoutingConfig> routingConfigs = new HashMap<>();
+    private final String resourceName;
     private final Map<String, RouteDiscoveryState> routeDiscoveryStates = new HashMap<>();
+    private final Map<FilterChain, ServerRoutingConfig> routingConfigs = new HashMap<>();
+    // Most recently discovered filter chains.
+    private List<FilterChain> filterChains = Collections.emptyList();
+    // Most recently discovered default filter chain.
+    @Nullable
+    private FilterChain defaultFilterChain;
+    // Config for the most recently discovered default filter chain.
+    @Nullable
+    private ServerRoutingConfig defaultRoutingConfig;
     private boolean stopped;
+
+    private DiscoveryState(String resourceName) {
+      this.resourceName = checkNotNull(resourceName, "reourceName");
+      xdsClient.watchLdsResource(resourceName, this);
+    }
 
     @Override
     public void onChanged(final LdsUpdate update) {
@@ -192,14 +251,32 @@ final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
-          List<FilterChain> filterChains = update.listener.getFilterChains();
-          for (FilterChain filterChain : filterChains) {
+          if (update.listener == null) {
+            // Ignore updates not for servers.
+            return;
+          }
+          filterChains = update.listener.getFilterChains();
+          if (!Objects.equals(defaultFilterChain, update.listener.getDefaultFilterChain())) {
+            defaultFilterChain = update.listener.getDefaultFilterChain();
+            // Discard config for the stale default filter chain.
+            defaultRoutingConfig = null;
+          }
+          defaultFilterChain = update.listener.getDefaultFilterChain();
+          List<FilterChain> allFilterChains = filterChains;
+          if (defaultFilterChain != null) {
+            allFilterChains = new ArrayList<>(filterChains);
+            allFilterChains.add(defaultFilterChain);
+          }
+          for (FilterChain filterChain : allFilterChains) {
             // TODO(chengyuanzhang): populate HttpConnectionManager. If has RDS name, create and
             //  start a RouteDiscoveryState; if has virtual host list, create a ServerRoutingConfig
             //  result entry and put into routingConfigs.
             //  Prerequisite: https://github.com/grpc/grpc-java/pull/8228
             // TODO(chengyuanzhang): adjust RouteDiscoveryStates and results based on latest HCMs.
           }
+          // Discard configs for revoked filter chains.
+          // FIXME(chengyuanzhang): SslContextProviderSupplier in each FilterChain is leaked.
+          routingConfigs.keySet().retainAll(filterChains);
         }
       });
     }
@@ -212,7 +289,8 @@ final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
-          // TODO
+          cleanUpRouteDiscoveryStates();
+          filterChainSelectorRef.set(FilterChainSelector.NO_FILTER_CHAIN);
         }
       });
     }
@@ -231,15 +309,53 @@ final class XdsServerWrapper extends Server {
       });
     }
 
+    private void shutdown() {
+      stopped = true;
+      cleanUpRouteDiscoveryStates();
+      logger.log(Level.FINE, "Stop watching LDS resource {0}", resourceName);
+      xdsClient.cancelLdsResourceWatch(resourceName, this);
+      for (FilterChain filterChain : filterChains) {
+        SslContextProviderSupplier sslContextProviderSupplier =
+            filterChain.getSslContextProviderSupplier();
+        if (sslContextProviderSupplier != null) {
+          sslContextProviderSupplier.close();
+        }
+      }
+    }
+
     private void handleConfigDiscovered(
         FilterChain filterChain, ServerRoutingConfig routingConfig) {
-      // TODO(chengyuanzhang): add/update the entry in routingConfigs. If RouteConfigurations for
-      //  all FilterChains have been discovered, update the filterChainSelector ref.
+      if (Objects.equals(filterChain, defaultFilterChain)) {
+        defaultRoutingConfig = routingConfig;
+      } else {
+        routingConfigs.put(filterChain, routingConfig);
+      }
+      // Update the selector to use the most recently updated configs only after all
+      // RouteConfigurations (including default) have been discovered.
+      if (routingConfigs.keySet().containsAll(filterChains)
+          && (defaultFilterChain == null) == (defaultRoutingConfig == null)) {
+        FilterChainSelector selector = new FilterChainSelector(
+            ImmutableMap.copyOf(routingConfigs), defaultRoutingConfig);
+        filterChainSelectorRef.set(selector);
+      }
     }
 
     private void handleConfigNotFound(FilterChain filterChain) {
-      // TODO(chengyuanzhang): remove the entry from routingConfigs. Need to figure out if/how to
-      //  propagate partial results.
+      if (Objects.equals(filterChain, defaultFilterChain)) {
+        defaultRoutingConfig = null;
+      } else {
+        routingConfigs.remove(filterChain);
+      }
+      // TODO(chengyuanzhang): figure out if we should update the filter chain selector.
+    }
+
+    private void cleanUpRouteDiscoveryStates() {
+      for (RouteDiscoveryState rdsState : routeDiscoveryStates.values()) {
+        String rdsName = rdsState.resourceName;
+        logger.log(Level.FINE, "Stop watching RDS resource {0}", rdsName);
+        xdsClient.cancelRdsResourceWatch(rdsName, rdsState);
+      }
+      routeDiscoveryStates.clear();
     }
 
     private final class RouteDiscoveryState implements RdsResourceWatcher {
@@ -256,7 +372,6 @@ final class XdsServerWrapper extends Server {
 
       @Override
       public void onChanged(final RdsUpdate update) {
-        // TODO(chengyuanzhang): create a ServerRoutingConfig
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
@@ -305,15 +420,15 @@ final class XdsServerWrapper extends Server {
         Metadata headers, ServerCallHandler<ReqT, RespT> next) {
       ServerRoutingConfig routingConfig = call.getAttributes().get(ATTR_SERVER_ROUTING_CONFIG);
       if (routingConfig != null) {
-        VirtualHost virtualHost = RouteMatchingUtils.findVirtualHostForHostName(
+        VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(
             routingConfig.virtualHosts, call.getAuthority());
         if (virtualHost == null) {
-          // TODO(chengyuanzhang): handle virtualhost not found.
+          // TODO(chengyuanzhang): handle virtualhost not found. Can this really happen?
           throw new AssertionError();
         }
         MethodDescriptor<ReqT, RespT> method = call.getMethodDescriptor();
         for (Route route : virtualHost.routes()) {
-          if (RouteMatchingUtils.matchRoute(
+          if (RoutingUtils.matchRoute(
               route.routeMatch(), "/" + method.getFullMethodName(), headers, random)) {
 
           }
@@ -328,6 +443,9 @@ final class XdsServerWrapper extends Server {
     }
   }
 
+  /**
+   * The resolved HttpConnectionManager level configuration.
+   */
   private static final class ServerRoutingConfig {
     // Top level http filter configs.
     private final List<NamedFilterConfig> httpFilterConfigs;
@@ -361,10 +479,17 @@ final class XdsServerWrapper extends Server {
   }
 
   private static final class FilterChainSelector {
-    private final Map<FilterChain, ServerRoutingConfig> routingConfigs;
+    private static final FilterChainSelector NO_FILTER_CHAIN =
+        new FilterChainSelector(Collections.<FilterChain, ServerRoutingConfig>emptyMap(), null);
 
-    private FilterChainSelector(Map<FilterChain, ServerRoutingConfig> routingConfigs) {
+    private final Map<FilterChain, ServerRoutingConfig> routingConfigs;
+    @Nullable
+    private final ServerRoutingConfig defaultRoutingConfig;
+
+    private FilterChainSelector(Map<FilterChain, ServerRoutingConfig> routingConfigs,
+        ServerRoutingConfig defaultRoutingConfig) {
       this.routingConfigs = checkNotNull(routingConfigs, "routingConfigs");
+      this.defaultRoutingConfig = defaultRoutingConfig;
     }
 
     @Nullable
