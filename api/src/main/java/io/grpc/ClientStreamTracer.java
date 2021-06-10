@@ -30,7 +30,7 @@ import javax.annotation.concurrent.ThreadSafe;
 public abstract class ClientStreamTracer extends StreamTracer {
 
   /**
-   * The stream is being created on an active transport.
+   * The stream is being created on a ready transport.
    *
    * @param headers the mutable initial metadata. Modifications to it will be sent to the socket but
    *     not be seen by client interceptors and the application.
