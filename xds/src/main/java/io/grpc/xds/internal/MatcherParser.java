@@ -19,6 +19,7 @@ package io.grpc.xds.internal;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
 
+// TODO(zivy@): may reuse common matchers parsers.
 public final class MatcherParser {
   /** Translates envoy proto HeaderMatcher to internal HeaderMatcher.*/
   public static Matchers.HeaderMatcher parseHeaderMatcher(

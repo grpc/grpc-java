@@ -19,6 +19,7 @@ package io.grpc.xds;
 import com.google.auto.value.AutoValue;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthConfig;
+import javax.annotation.Nullable;
 
 /** Rbac configuration for Rbac filter. */
 @AutoValue
@@ -28,9 +29,10 @@ abstract class RbacConfig implements FilterConfig {
     return RbacFilter.TYPE_URL;
   }
 
+  @Nullable
   abstract AuthConfig authConfig();
 
-  static RbacConfig create(AuthConfig authConfig) {
+  static RbacConfig create(@Nullable AuthConfig authConfig) {
     return new AutoValue_RbacConfig(authConfig);
   }
 }

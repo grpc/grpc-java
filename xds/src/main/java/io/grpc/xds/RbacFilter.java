@@ -27,8 +27,10 @@ import io.envoyproxy.envoy.config.rbac.v3.Permission;
 import io.envoyproxy.envoy.config.rbac.v3.Policy;
 import io.envoyproxy.envoy.config.rbac.v3.Principal;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC;
+import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBACPerRoute;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
@@ -60,7 +62,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
-
 /** RBAC Http filter implementation. */
 final class RbacFilter implements Filter, ServerInterceptorBuilder {
   private static final Logger logger = Logger.getLogger(RbacFilter.class.getName());
@@ -70,6 +71,8 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
   static final String TYPE_URL =
           "type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC";
 
+  private static final ServerCall.Listener<?> NOOP_LISTENER = new NoopListener<>();
+
   RbacFilter() {}
 
   @Override
@@ -78,7 +81,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
   }
 
   @Override
-  public ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
+  public ConfigOrError<RbacConfig> parseFilterConfig(Message rawProtoMessage) {
     RBAC rbacProto;
     if (!(rawProtoMessage instanceof Any)) {
       return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
@@ -93,9 +96,8 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
   }
 
   @VisibleForTesting
-  @Nullable
   static ConfigOrError<RbacConfig> parseRbacConfig(RBAC rbac) {
-    // https://github.com/envoyproxy/envoy/blob/a12869fa9e9add4301a700978d5489e6a0cc0526/api/envoy/extensions/filters/http/rbac/v3/rbac.proto#L25
+    checkNotNull(rbac, "rbac");
     if (!rbac.hasRules()) {
       return null;
     }
@@ -119,13 +121,12 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
         Policy policy = entry.getValue();
         if (policy.hasCondition() || policy.hasCheckedCondition()) {
           return ConfigOrError.fromError(
-                  "Policy.condition and Policy.checked_condition must not set.");
+                  "Policy.condition and Policy.checked_condition must not set: " + entry.getKey());
         }
         policyMatchers.add(new PolicyMatcher(entry.getKey(),
                 parsePermissionList(policy.getPermissionsList()),
                 parsePrincipalList(policy.getPrincipalsList())));
       } catch (Exception e) {
-        logger.log(Level.FINE, "Unexpected error parsing policy {0}", new Object[]{entry});
         return ConfigOrError.fromError("Encountered error parsing policy: " + e);
       }
     }
@@ -133,8 +134,22 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
   }
 
   @Override
-  public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
-    return parseFilterConfig(rawProtoMessage);
+  public ConfigOrError<RbacConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+    RBACPerRoute rbacPerRoute;
+    if (!(rawProtoMessage instanceof Any)) {
+      return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+    }
+    Any anyMessage = (Any) rawProtoMessage;
+    try {
+      rbacPerRoute = anyMessage.unpack(RBACPerRoute.class);
+    } catch (InvalidProtocolBufferException e) {
+      return ConfigOrError.fromError("Invalid proto: " + e);
+    }
+    if (rbacPerRoute.hasRbac()) {
+      return parseRbacConfig(rbacPerRoute.getRbac());
+    } else {
+      return ConfigOrError.fromConfig(RbacConfig.create(null));
+    }
   }
 
   @Override
@@ -145,12 +160,14 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
       config = overrideConfig;
     }
     AuthConfig authConfig = ((RbacConfig) config).authConfig();
-    return generateAuthorizationInterceptor(authConfig);
+    return authConfig == null ? null : generateAuthorizationInterceptor(authConfig);
   }
 
   private ServerInterceptor generateAuthorizationInterceptor(AuthConfig config) {
+    checkNotNull(config, "config");
     final GrpcAuthorizationEngine authEngine = new GrpcAuthorizationEngine(config);
     return new ServerInterceptor() {
+        @SuppressWarnings("unchecked")
         @Override
         public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
                 final ServerCall<ReqT, RespT> call,
@@ -163,7 +180,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
             Status status = Status.UNAUTHENTICATED.withDescription(
                     "Access Denied, matching policy: " + authResult.matchingPolicyName());
             call.close(status, new Metadata());
-            return new NoopListener<>();
+            return (Listener<ReqT>) NOOP_LISTENER;
           }
           return next.startCall(call, headers);
         }
@@ -300,7 +317,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
     try {
       return InetAddress.getByName(cidrRange.getAddressPrefix());
     } catch (UnknownHostException ex) {
-      throw new IllegalArgumentException("Invalid proto: IP address can not be found: " + ex);
+      throw new IllegalArgumentException("IP address can not be found: " + ex);
     }
   }
 
