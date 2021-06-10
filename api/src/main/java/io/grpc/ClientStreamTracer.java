@@ -69,9 +69,78 @@ public abstract class ClientStreamTracer extends StreamTracer {
      *
      * @param info information about the stream
      */
-    @SuppressWarnings("deprecation")
-    public ClientStreamTracer newClientStreamTracer(StreamInfo info) {
-      return newClientStreamTracer(info, new Metadata());
+    public ClientStreamTracer newClientStreamTracer(final StreamInfo info) {
+      return new ClientStreamTracer() {
+        volatile ClientStreamTracer delegate = new ClientStreamTracer() {};
+
+        @Override
+        public void streamCreated(Attributes transportAttrs, Metadata headers) {
+          delegate = newClientStreamTracer(info, headers);
+          delegate.streamCreated(transportAttrs, headers);
+        }
+
+        @Override
+        public void outboundHeaders() {
+          delegate.outboundHeaders();
+        }
+
+        @Override
+        public void inboundHeaders() {
+          delegate.inboundHeaders();
+        }
+
+        @Override
+        public void inboundTrailers(Metadata trailers) {
+          delegate.inboundTrailers(trailers);
+        }
+
+        @Override
+        public void streamClosed(Status status) {
+          delegate.streamClosed(status);
+        }
+
+        @Override
+        public void outboundMessage(int seqNo) {
+          delegate.outboundMessage(seqNo);
+        }
+
+        @Override
+        public void inboundMessage(int seqNo) {
+          delegate.inboundMessage(seqNo);
+        }
+
+        @Override
+        public void outboundMessageSent(int seqNo, long optionalWireSize,
+            long optionalUncompressedSize) {
+          delegate.outboundMessageSent(seqNo, optionalWireSize, optionalUncompressedSize);
+        }
+
+        @Override
+        public void inboundMessageRead(int seqNo, long optionalWireSize,
+            long optionalUncompressedSize) {
+          delegate.inboundMessageRead(seqNo, optionalWireSize, optionalUncompressedSize);
+        }
+
+        @Override
+        public void outboundWireSize(long bytes) {
+          delegate.outboundWireSize(bytes);
+        }
+
+        @Override
+        public void outboundUncompressedSize(long bytes) {
+          delegate.outboundUncompressedSize(bytes);
+        }
+
+        @Override
+        public void inboundWireSize(long bytes) {
+          delegate.inboundWireSize(bytes);
+        }
+
+        @Override
+        public void inboundUncompressedSize(long bytes) {
+          delegate.inboundUncompressedSize(bytes);
+        }
+      };
     }
 
     /**
