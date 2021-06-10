@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -172,6 +173,7 @@ final class CensusStatsModule {
   private static final class ClientTracer extends ClientStreamTracer {
     final CensusStatsModule module;
     final Stopwatch stopwatch;
+    final TagContext parentCtx;
     final TagContext startCtx;
     final CallAttemptsTracerFactory attemptsState;
 
@@ -240,6 +242,7 @@ final class CensusStatsModule {
         CallAttemptsTracerFactory attemptsState) {
       this.module = checkNotNull(module, "module");
       TagValue methodTag = TagValue.create(fullMethodName);
+      this.parentCtx = parentCtx;
       this.startCtx = module.tagger.toBuilder(parentCtx)
           .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
           .build();
@@ -249,6 +252,16 @@ final class CensusStatsModule {
         module.statsRecorder.newMeasureMap()
             .put(DeprecatedCensusConstants.RPC_CLIENT_STARTED_COUNT, 1)
             .record(startCtx);
+      }
+    }
+
+    @Override
+    public void streamCreated(Attributes transportAtts, Metadata headers) {
+      if (module.propagateTags) {
+        headers.discardAll(module.statsHeader);
+        if (!module.tagger.empty().equals(parentCtx)) {
+          headers.put(module.statsHeader, parentCtx);
+        }
       }
     }
 
@@ -651,7 +664,7 @@ final class CensusStatsModule {
     }
 
     @Override
-    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info) {
 
       if (activeStreams.incrementAndGet() == 1) {
         if (!activated.compareAndSet(false, true)) {
@@ -662,12 +675,6 @@ final class CensusStatsModule {
         transparentRetriesPerCall.incrementAndGet();
       } else {
         retriesPerCall.incrementAndGet();
-      }
-      if (module.propagateTags) {
-        headers.discardAll(module.statsHeader);
-        if (!module.tagger.empty().equals(tagContext)) {
-          headers.put(module.statsHeader, tagContext);
-        }
       }
       return new ClientTracer(module, tagContext, fullMethodName, this);
     }

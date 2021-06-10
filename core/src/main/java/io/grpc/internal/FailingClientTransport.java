@@ -21,6 +21,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
@@ -46,8 +47,8 @@ class FailingClientTransport implements ClientTransport {
   @Override
   public ClientStream newStream(
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
-      StatsTraceContext statsTraceContext) {
-    return new FailingClientStream(error, rpcProgress, statsTraceContext);
+      ClientStreamTracer[] tracers) {
+    return new FailingClientStream(error, rpcProgress, tracers);
   }
 
   @Override

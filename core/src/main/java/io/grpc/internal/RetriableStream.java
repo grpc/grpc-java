@@ -208,8 +208,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     final ClientStreamTracer bufferSizeTracer = new BufferSizeTracer(sub);
     ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
       @Override
-      public ClientStreamTracer newClientStreamTracer(
-          ClientStreamTracer.StreamInfo info, Metadata headers) {
+      public ClientStreamTracer newClientStreamTracer(ClientStreamTracer.StreamInfo info) {
         return bufferSizeTracer;
       }
     };

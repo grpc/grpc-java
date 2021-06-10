@@ -28,6 +28,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
@@ -168,12 +169,14 @@ class NettyClientTransport implements ConnectionClientTransport {
   @Override
   public ClientStream newStream(
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
-      StatsTraceContext statsTraceCtx) {
+      ClientStreamTracer[] tracers) {
     Preconditions.checkNotNull(method, "method");
     Preconditions.checkNotNull(headers, "headers");
     if (channel == null) {
-      return new FailingClientStream(statusExplainingWhyTheChannelIsNull, statsTraceCtx);
+      return new FailingClientStream(statusExplainingWhyTheChannelIsNull, tracers);
     }
+    StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
     return new NettyClientStream(
         new NettyClientStream.TransportState(
             handler,

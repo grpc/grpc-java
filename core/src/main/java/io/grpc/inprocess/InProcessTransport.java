@@ -26,6 +26,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
 import io.grpc.Decompressor;
@@ -205,7 +206,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   @Override
   public synchronized ClientStream newStream(
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
-      StatsTraceContext statsTraceContext) {
+      ClientStreamTracer[] tracers) {
+    StatsTraceContext statsTraceContext =
+        StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
     if (shutdownStatus != null) {
       return failedClientStream(statsTraceContext, shutdownStatus);
     }

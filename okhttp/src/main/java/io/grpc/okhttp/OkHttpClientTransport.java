@@ -34,6 +34,7 @@ import com.squareup.okhttp.Request;
 import com.squareup.okhttp.internal.http.StatusLine;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Grpc;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InternalChannelz;
@@ -388,10 +389,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
   @Override
   public OkHttpClientStream newStream(
-      final MethodDescriptor<?, ?> method, final Metadata headers, CallOptions callOptions,
-      StatsTraceContext statsTraceContext) {
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      ClientStreamTracer[] tracers) {
     Preconditions.checkNotNull(method, "method");
     Preconditions.checkNotNull(headers, "headers");
+    StatsTraceContext statsTraceContext =
+        StatsTraceContext.newClientContext(tracers, getAttributes(), headers);
     // FIXME: it is likely wrong to pass the transportTracer here as it'll exit the lock's scope
     synchronized (lock) { // to make @GuardedBy linter happy
       return new OkHttpClientStream(

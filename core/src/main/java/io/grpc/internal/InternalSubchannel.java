@@ -34,6 +34,7 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -668,8 +669,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     @Override
     public ClientStream newStream(
         MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
-        StatsTraceContext statsCtx) {
-      final ClientStream streamDelegate = super.newStream(method, headers, callOptions, statsCtx);
+        ClientStreamTracer[] tracers) {
+      final ClientStream streamDelegate = super.newStream(method, headers, callOptions, tracers);
       return new ForwardingClientStream() {
         @Override
         protected ClientStream delegate() {

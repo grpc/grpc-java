@@ -341,7 +341,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info) {
       stats.recordCallStarted();
       inFlights.incrementAndGet();
       if (delegate == null) {
@@ -353,7 +353,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           }
         };
       }
-      final ClientStreamTracer delegatedTracer = delegate.newClientStreamTracer(info, headers);
+      final ClientStreamTracer delegatedTracer = delegate.newClientStreamTracer(info);
       return new ForwardingClientStreamTracer() {
         @Override
         protected ClientStreamTracer delegate() {

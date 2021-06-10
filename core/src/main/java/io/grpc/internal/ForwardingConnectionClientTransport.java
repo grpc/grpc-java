@@ -20,6 +20,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
@@ -46,8 +47,8 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
   @Override
   public ClientStream newStream(
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
-      StatsTraceContext statsTraceCtx) {
-    return delegate().newStream(method, headers, callOptions, statsTraceCtx);
+      ClientStreamTracer[] tracers) {
+    return delegate().newStream(method, headers, callOptions, tracers);
   }
 
   @Override

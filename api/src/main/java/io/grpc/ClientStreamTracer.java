@@ -28,6 +28,16 @@ import javax.annotation.concurrent.ThreadSafe;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
 @ThreadSafe
 public abstract class ClientStreamTracer extends StreamTracer {
+
+  /**
+   * The stream is being created on an active transport.
+   *
+   * @param headers the mutable initial metadata. Modifications to it will be sent to the socket but
+   *     not be seen by client interceptors and the application.
+   */
+  public void streamCreated(Attributes transportAttrs, Metadata headers) {
+  }
+
   /**
    * Headers has been sent to the socket.
    */
@@ -55,22 +65,6 @@ public abstract class ClientStreamTracer extends StreamTracer {
    */
   public abstract static class Factory {
     /**
-     * Creates a {@link ClientStreamTracer} for a new client stream.
-     *
-     * @param callOptions the effective CallOptions of the call
-     * @param headers the mutable headers of the stream. It can be safely mutated within this
-     *        method.  It should not be saved because it is not safe for read or write after the
-     *        method returns.
-     *
-     * @deprecated use {@link
-     * #newClientStreamTracer(io.grpc.ClientStreamTracer.StreamInfo, io.grpc.Metadata)} instead.
-     */
-    @Deprecated
-    public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
-      throw new UnsupportedOperationException("Not implemented");
-    }
-
-    /**
      * Creates a {@link ClientStreamTracer} for a new client stream.  This is called inside the
      * transport when it's creating the stream.
      *
@@ -80,10 +74,22 @@ public abstract class ClientStreamTracer extends StreamTracer {
      *        because it is not safe for read or write after the method returns.
      *
      * @since 1.20.0
+     * @deprecated Use {@link ClientStreamTracer#streamCreated(Attributes, Metadata)} of the
+     *             returned tracer to handle the headers instead.
+     */
+    @Deprecated
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+      throw new UnsupportedOperationException("Not implemented");
+    }
+
+    /**
+     * Creates a {@link ClientStreamTracer} for a new client stream.
+     *
+     * @param info information about the stream
      */
     @SuppressWarnings("deprecation")
-    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-      return newClientStreamTracer(info.getCallOptions(), headers);
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info) {
+      return newClientStreamTracer(info, new Metadata());
     }
   }
 
@@ -109,7 +115,11 @@ public abstract class ClientStreamTracer extends StreamTracer {
 
     /**
      * Returns the attributes of the transport that this stream was created on.
+     *
+     * @deprecated Use {@link ClientStreamTracer#streamCreated(Attributes, Metadata)} to handle
+     *             the transport Attributes instead.
      */
+    @Deprecated
     @Grpc.TransportAttr
     public Attributes getTransportAttrs() {
       return transportAttrs;
@@ -133,7 +143,6 @@ public abstract class ClientStreamTracer extends StreamTracer {
      */
     public Builder toBuilder() {
       Builder builder = new Builder();
-      builder.setTransportAttrs(transportAttrs);
       builder.setCallOptions(callOptions);
       return builder;
     }
@@ -150,7 +159,6 @@ public abstract class ClientStreamTracer extends StreamTracer {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("transportAttrs", transportAttrs)
           .add("callOptions", callOptions)
           .toString();
     }
@@ -171,7 +179,11 @@ public abstract class ClientStreamTracer extends StreamTracer {
       /**
        * Sets the attributes of the transport that this stream was created on.  This field is
        * optional.
+       *
+       * @deprecated Use {@link ClientStreamTracer#streamCreated(Attributes, Metadata)} to handle
+       *             the transport Attributes instead.
        */
+      @Deprecated
       @Grpc.TransportAttr
       public Builder setTransportAttrs(Attributes transportAttrs) {
         this.transportAttrs = checkNotNull(transportAttrs, "transportAttrs cannot be null");

@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import io.grpc.CallCredentials.MetadataApplier;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -36,7 +37,7 @@ final class MetadataApplierImpl extends MetadataApplier {
   private final CallOptions callOptions;
   private final Context ctx;
   private final MetadataApplierListener listener;
-  private final StatsTraceContext statsTraceCtx;
+  private final ClientStreamTracer[] tracers;
   private final Object lock = new Object();
 
   // null if neither apply() or returnStream() are called.
@@ -52,14 +53,14 @@ final class MetadataApplierImpl extends MetadataApplier {
 
   MetadataApplierImpl(
       ClientTransport transport, MethodDescriptor<?, ?> method, Metadata origHeaders,
-      CallOptions callOptions, MetadataApplierListener listener, StatsTraceContext statsTraceCtx) {
+      CallOptions callOptions, MetadataApplierListener listener, ClientStreamTracer[] tracers) {
     this.transport = transport;
     this.method = method;
     this.origHeaders = origHeaders;
     this.callOptions = callOptions;
     this.ctx = Context.current();
     this.listener = listener;
-    this.statsTraceCtx = statsTraceCtx;
+    this.tracers = tracers;
   }
 
   @Override
@@ -70,7 +71,7 @@ final class MetadataApplierImpl extends MetadataApplier {
     ClientStream realStream;
     Context origCtx = ctx.attach();
     try {
-      realStream = transport.newStream(method, origHeaders, callOptions, statsTraceCtx);
+      realStream = transport.newStream(method, origHeaders, callOptions, tracers);
     } finally {
       ctx.detach(origCtx);
     }
@@ -81,7 +82,7 @@ final class MetadataApplierImpl extends MetadataApplier {
   public void fail(Status status) {
     checkArgument(!status.isOk(), "Cannot fail with OK status");
     checkState(!finalized, "apply() or fail() already called");
-    finalizeWith(new FailingClientStream(status, statsTraceCtx));
+    finalizeWith(new FailingClientStream(status, tracers));
   }
 
   private void finalizeWith(ClientStream stream) {

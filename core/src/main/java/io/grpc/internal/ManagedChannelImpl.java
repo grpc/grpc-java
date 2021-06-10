@@ -515,6 +515,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       // stream, which would have reported in-use state to the channel that would have cancelled
       // the idle timer.
       PickResult pickResult = pickerCopy.pickSubchannel(args);
+      // TODO(zdapeng): pass args.isTransparentRetry() in getTransportFromPickResult()
       ClientTransport transport = GrpcUtil.getTransportFromPickResult(
           pickResult, args.getCallOptions().isWaitForReady());
       if (transport != null) {
@@ -534,9 +535,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
             getTransport(new PickSubchannelArgsImpl(method, headers, callOptions));
         Context origContext = context.attach();
         StreamInfo streamInfo = StreamInfo.newBuilder().setCallOptions(callOptions).build();
-        StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(streamInfo, headers);
+        ClientStreamTracer[] tracers = getStreamTracers(streamInfo);
         try {
-          return transport.newStream(method, headers, callOptions, statsTraceCtx);
+          return transport.newStream(method, headers, callOptions, tracers);
         } finally {
           context.detach(origContext);
         }
@@ -580,13 +581,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 .setCallOptions(newOptions)
                 .setIsTransparentRetry(isTransparentRetry)
                 .build();
-            StatsTraceContext statsTraceContext =
-                StatsTraceContext.newClientContext(streamInfo, newHeaders);
+            ClientStreamTracer[] tracers = getStreamTracers(streamInfo);
+            // TODO(zdapeng): include isTransparentRetry in PickSubchannelArgs
             ClientTransport transport =
                 getTransport(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
             Context origContext = context.attach();
             try {
-              return transport.newStream(method, newHeaders, newOptions, statsTraceContext);
+              return transport.newStream(method, newHeaders, newOptions, tracers);
             } finally {
               context.detach(origContext);
             }
@@ -595,6 +596,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
         return new RetryStream<>();
       }
+    }
+
+    ClientStreamTracer[] getStreamTracers(StreamInfo streamInfo) {
+      List<ClientStreamTracer.Factory> factories =
+          streamInfo.getCallOptions().getStreamTracerFactories();
+      ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
+      for (int i = 0; i < factories.size(); i++) {
+        tracers[i] = factories.get(i).newClientStreamTracer(streamInfo);
+      }
+      return tracers;
     }
   }
 

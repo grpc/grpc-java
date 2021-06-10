@@ -26,7 +26,6 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
@@ -715,16 +714,13 @@ public final class GrpcUtil {
         @Override
         public ClientStream newStream(
             MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
-            StatsTraceContext statsTraceContext) {
-          Attributes transportAttributes = ((ConnectionClientTransport) transport).getAttributes();
+            ClientStreamTracer[] tracers) {
           ClientStreamTracer streamTracer = streamTracerFactory.newClientStreamTracer(
               StreamInfo.newBuilder()
                   .setCallOptions(callOptions)
-                  .setTransportAttrs(transportAttributes)
-                  .build(),
-              headers);
-          statsTraceContext.setTransportStreamTracer(streamTracer);
-          return transport.newStream(method, headers, callOptions, statsTraceContext);
+                  .build());
+          tracers[tracers.length - 1] = streamTracer;
+          return transport.newStream(method, headers, callOptions, tracers);
         }
 
         @Override
