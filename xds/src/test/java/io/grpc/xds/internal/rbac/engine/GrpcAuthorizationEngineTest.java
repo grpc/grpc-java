@@ -38,10 +38,10 @@ import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AlwaysTrueMatche
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AndMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthConfig;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthDecision;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthHeaderMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthenticatedMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.DestinationIpMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.DestinationPortMatcher;
-import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.HeaderMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.InvertMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.OrMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.PathMatcher;
@@ -143,7 +143,7 @@ public class GrpcAuthorizationEngineTest {
 
   @Test
   public void headerMatcher() {
-    HeaderMatcher headerMatcher = new HeaderMatcher(Matchers.HeaderMatcher
+    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
         .forExactValue(HEADER_KEY, HEADER_VALUE, false));
     OrMatcher principal = OrMatcher.create(headerMatcher);
     OrMatcher permission = OrMatcher.create(
@@ -156,7 +156,7 @@ public class GrpcAuthorizationEngineTest {
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
 
     HEADER.put(Metadata.Key.of(HEADER_KEY, Metadata.ASCII_STRING_MARSHALLER), HEADER_VALUE);
-    headerMatcher = new HeaderMatcher(Matchers.HeaderMatcher
+    headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
             .forExactValue(HEADER_KEY, HEADER_VALUE + "," + HEADER_VALUE, false));
     principal = OrMatcher.create(headerMatcher);
     policyMatcher = new PolicyMatcher(POLICY_NAME,
@@ -166,7 +166,7 @@ public class GrpcAuthorizationEngineTest {
     decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.ALLOW);
 
-    headerMatcher = new HeaderMatcher(Matchers.HeaderMatcher
+    headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
             .forExactValue(HEADER_KEY + Metadata.BINARY_HEADER_SUFFIX, HEADER_VALUE, false));
     principal = OrMatcher.create(headerMatcher);
     policyMatcher = new PolicyMatcher(POLICY_NAME,
@@ -271,7 +271,7 @@ public class GrpcAuthorizationEngineTest {
         new InvertMatcher(new DestinationPortMatcher(PORT + 1))));
     PolicyMatcher policyMatcher1 = new PolicyMatcher(POLICY_NAME, permission, principal);
 
-    HeaderMatcher headerMatcher = new HeaderMatcher(Matchers.HeaderMatcher
+    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
         .forExactValue(HEADER_KEY, HEADER_VALUE + 1, false));
     authMatcher = new AuthenticatedMatcher(
         StringMatcher.forContains("TEST.google.fr"));
