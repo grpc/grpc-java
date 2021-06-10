@@ -25,7 +25,6 @@ import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
@@ -90,7 +89,7 @@ final class XdsServerWrapper extends Server {
       Attributes.Key.create("io.grpc.xds.ServerWrapper.serverRoutingConfig");
 
   private final String listenerAddress;
-  private final ServerBuilder<?> delegateBuilder;
+  private final Server delegate;
   private final FilterRegistry filterRegistry;
   private final ThreadSafeRandom random;
   private final XdsClientPoolFactory xdsClientPoolFactory;
@@ -99,19 +98,18 @@ final class XdsServerWrapper extends Server {
   private final AtomicReference<ServerInterceptor> configApplyingInterceptorRef;
   private final AtomicBoolean started = new AtomicBoolean(false);
   private final AtomicBoolean shutdown = new AtomicBoolean(false);
-  private Server delegate;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private DiscoveryState discoveryState;
 
   XdsServerWrapper(
       String listenerAddress,
-      ServerBuilder<?> delegateBuilder,
+      Server delegate,
       XdsServingStatusListener listener,
       AtomicReference<FilterChainSelector> filterChainSelectorRef,
       AtomicReference<ServerInterceptor> configApplyingInterceptorRef) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
-    this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
+    this.delegate = checkNotNull(delegate, "delegate");
     this.listener = checkNotNull(listener, "listener");
     this.filterChainSelectorRef = checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
     this.configApplyingInterceptorRef =
@@ -127,10 +125,10 @@ final class XdsServerWrapper extends Server {
     try {
       xdsClientPool = xdsClientPoolFactory.getOrCreate();
     } catch (Exception e) {
+      String errorMsg = "Failed to initialize xDS";
       listener.onNotServing(
-          Status.UNAVAILABLE.withDescription(
-              "Failed to initialize xDS").withCause(e).asException());
-      return this;
+          Status.UNAVAILABLE.withDescription(errorMsg).withCause(e).asException());
+      throw new IOException(errorMsg, e);
     }
     xdsClient = xdsClientPool.getObject();
     // TODO(chengyuanzhang): add an API on XdsClient indicating if it is using v3, don't get
@@ -138,12 +136,15 @@ final class XdsServerWrapper extends Server {
     boolean useProtocolV3 = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
     String listenerTemplate = xdsClient.getBootstrapInfo().getServerListenerResourceNameTemplate();
     if (!useProtocolV3 || listenerTemplate == null) {
-      listener.onNotServing(
-          Status.UNAVAILABLE.withDescription(
-              "Can only support xDS v3 with listener resource name template").asException());
-      return this;
+      String errorMsg = "Can only support xDS v3 with listener resource name template";
+      listener.onNotServing(Status.UNAVAILABLE.withDescription(errorMsg).asException());
+      xdsClient = xdsClientPool.returnObject(xdsClient);
+      throw new IOException(errorMsg);
     }
     discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", listenerAddress));
+    // TODO(chengyuanzhang): block until all RouteConfigurations are discovered.
+    delegate.start();
+    // TODO(chengyuanzhang): shall we retry if delegate fails to bind?
     return this;
   }
 
@@ -152,6 +153,22 @@ final class XdsServerWrapper extends Server {
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
+    internalShutdown();
+    delegate.shutdown();
+    return this;
+  }
+
+  @Override
+  public Server shutdownNow() {
+    if (!shutdown.compareAndSet(false, true)) {
+      return this;
+    }
+    internalShutdown();
+    delegate.shutdownNow();
+    return this;
+  }
+
+  private void internalShutdown() {
     logger.log(Level.FINER, "Shutting down XdsServerWrapper");
     if (discoveryState != null) {
       discoveryState.shutdown();
@@ -159,69 +176,51 @@ final class XdsServerWrapper extends Server {
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
-    if (delegate != null) {
-      delegate.shutdown();
-    }
-    return this;
-  }
-
-  @Override
-  public Server shutdownNow() {
-    // TODO
-    return null;
   }
 
   @Override
   public boolean isShutdown() {
-    // TODO
-    return false;
+    return shutdown.get();
   }
 
   @Override
   public boolean isTerminated() {
-    // TODO
-    return false;
+    return delegate.isTerminated();
   }
 
   @Override
   public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
-    // TODO
-    return false;
+    return delegate.awaitTermination(timeout, unit);
   }
 
   @Override
   public void awaitTermination() throws InterruptedException {
-    // TODO
+    delegate.awaitTermination();
   }
 
   @Override
   public int getPort() {
-    // TODO
-    return -1;
+    return delegate.getPort();
   }
 
   @Override
   public List<? extends SocketAddress> getListenSockets() {
-    // TODO
-    return null;
+    return delegate.getListenSockets();
   }
 
   @Override
   public List<ServerServiceDefinition> getServices() {
-    // TODO
-    return null;
+    return delegate.getServices();
   }
 
   @Override
   public List<ServerServiceDefinition> getImmutableServices() {
-    // TODO
-    return null;
+    return delegate.getImmutableServices();
   }
 
   @Override
   public List<ServerServiceDefinition> getMutableServices() {
-    // TODO
-    return null;
+    return delegate.getMutableServices();
   }
 
   private final class DiscoveryState implements LdsResourceWatcher {
