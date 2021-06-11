@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -29,6 +30,7 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
+import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -39,7 +41,9 @@ import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
+import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
+import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
@@ -226,6 +230,7 @@ final class XdsServerWrapper extends Server {
   private final class DiscoveryState implements LdsResourceWatcher {
     private final String resourceName;
     private final Map<String, RouteDiscoveryState> routeDiscoveryStates = new HashMap<>();
+    // TODO(chengyuanzhang): key by FilterChain's unique name instead.
     private final Map<FilterChain, ServerRoutingConfig> routingConfigs = new HashMap<>();
     // Most recently discovered filter chains.
     private List<FilterChain> filterChains = Collections.emptyList();
@@ -238,7 +243,7 @@ final class XdsServerWrapper extends Server {
     private boolean stopped;
 
     private DiscoveryState(String resourceName) {
-      this.resourceName = checkNotNull(resourceName, "reourceName");
+      this.resourceName = checkNotNull(resourceName, "resourceName");
       xdsClient.watchLdsResource(resourceName, this);
     }
 
@@ -414,31 +419,74 @@ final class XdsServerWrapper extends Server {
   }
 
   private final class ConfigApplyingInterceptor implements ServerInterceptor {
+    private final ServerInterceptor noopInterceptor = new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+          Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+        return next.startCall(call, headers);
+      }
+    };
+
     @Override
     public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
         Metadata headers, ServerCallHandler<ReqT, RespT> next) {
       ServerRoutingConfig routingConfig = call.getAttributes().get(ATTR_SERVER_ROUTING_CONFIG);
-      if (routingConfig != null) {
-        VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(
-            routingConfig.virtualHosts, call.getAuthority());
-        if (virtualHost == null) {
-          // TODO(chengyuanzhang): handle virtualhost not found. Can this really happen?
-          throw new AssertionError();
-        }
-        MethodDescriptor<ReqT, RespT> method = call.getMethodDescriptor();
-        for (Route route : virtualHost.routes()) {
-          if (RoutingUtils.matchRoute(
-              route.routeMatch(), "/" + method.getFullMethodName(), headers, random)) {
-
-          }
-        }
-
-
-      } else {
+      if (routingConfig == null) {
         // TODO(chengyuanzhang): handle routingConfig not found, the root cause should be
         //  FilterChain matching failed
+        return new Listener<ReqT>() {};
       }
-      return null;
+      VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(
+          routingConfig.virtualHosts, call.getAuthority());
+      if (virtualHost == null) {
+        // TODO(chengyuanzhang): handle virtualhost not found. Can this really happen?
+        throw new AssertionError();
+      }
+      Route selectedRoute = null;
+      MethodDescriptor<ReqT, RespT> method = call.getMethodDescriptor();
+      for (Route route : virtualHost.routes()) {
+        if (RoutingUtils.matchRoute(
+            route.routeMatch(), "/" + method.getFullMethodName(), headers, random)) {
+          selectedRoute = route;
+          break;
+        }
+      }
+      if (selectedRoute == null) {
+        call.close(
+            Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"),
+            new Metadata());
+        return new ServerCall.Listener<ReqT>() {};
+      }
+      List<ServerInterceptor> filterInterceptors = new ArrayList<>();
+      for (NamedFilterConfig namedFilterConfig : routingConfig.httpFilterConfigs) {
+        FilterConfig filterConfig = namedFilterConfig.filterConfig;
+        Filter filter = filterRegistry.get(filterConfig.typeUrl());
+        if (filter instanceof ServerInterceptorBuilder) {
+          ServerInterceptor interceptor =
+              ((ServerInterceptorBuilder) filter).buildServerInterceptor(
+                  filterConfig, selectedRoute.filterConfigOverrides().get(namedFilterConfig.name));
+          filterInterceptors.add(interceptor);
+        }
+      }
+      ServerInterceptor interceptor = combineInterceptors(filterInterceptors);
+      return interceptor.interceptCall(call, headers, next);
+    }
+
+    private ServerInterceptor combineInterceptors(final List<ServerInterceptor> interceptors) {
+      if (interceptors.isEmpty()) {
+        return noopInterceptor;
+      }
+      if (interceptors.size() == 1) {
+        interceptors.get(0);
+      }
+      return new ServerInterceptor() {
+        @Override
+        public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+            Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+          // TODO(chengyuanzhang): chain interceptors together.
+          return next.startCall(call, headers);
+        }
+      };
     }
   }
 
