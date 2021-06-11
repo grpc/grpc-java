@@ -314,21 +314,32 @@ public final class EnvoyServerProtoData {
    * Corresponds to Envoy proto message {@link io.envoyproxy.envoy.api.v2.listener.FilterChain}.
    */
   static final class FilterChain {
+    // Unique name for the FilterChain.
+    private final String name;
     // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.
     private final FilterChainMatch filterChainMatch;
     private final HttpConnectionManager httpConnectionManager;
     @Nullable
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    @VisibleForTesting
     FilterChain(
-        FilterChainMatch filterChainMatch, HttpConnectionManager httpConnectionManager,
-        @Nullable DownstreamTlsContext downstreamTlsContext, TlsContextManager tlsContextManager) {
+        String name,
+        FilterChainMatch filterChainMatch,
+        HttpConnectionManager httpConnectionManager,
+        @Nullable DownstreamTlsContext downstreamTlsContext,
+        TlsContextManager tlsContextManager) {
       SslContextProviderSupplier sslContextProviderSupplier1 = downstreamTlsContext == null ? null
           : new SslContextProviderSupplier(downstreamTlsContext, tlsContextManager);
+      this.name = checkNotNull(name, "name");
+      // TODO(chengyuanzhang): enforce non-null, change tests to use a default/empty
+      //  FilterChainMatch instead of null, as that's how the proto is converted.
       this.filterChainMatch = filterChainMatch;
       this.sslContextProviderSupplier = sslContextProviderSupplier1;
       this.httpConnectionManager = checkNotNull(httpConnectionManager, "httpConnectionManager");
+    }
+
+    String getName() {
+      return name;
     }
 
     public FilterChainMatch getFilterChainMatch() {
@@ -353,19 +364,22 @@ public final class EnvoyServerProtoData {
         return false;
       }
       FilterChain that = (FilterChain) o;
-      return Objects.equals(filterChainMatch, that.filterChainMatch)
+      return Objects.equals(name, that.name)
+          && Objects.equals(filterChainMatch, that.filterChainMatch)
           && Objects.equals(httpConnectionManager, that.httpConnectionManager)
           && Objects.equals(sslContextProviderSupplier, that.sslContextProviderSupplier);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(filterChainMatch, httpConnectionManager, sslContextProviderSupplier);
+      return Objects.hash(
+          name, filterChainMatch, httpConnectionManager, sslContextProviderSupplier);
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
+          .add("name", name)
           .add("filterChainMatch", filterChainMatch)
           .add("httpConnectionManager", httpConnectionManager)
           .add("sslContextProviderSupplier", sslContextProviderSupplier)
