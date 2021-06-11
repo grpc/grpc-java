@@ -36,20 +36,10 @@ dependencies {
             libraries.gson,
             libraries.re2j,
             libraries.bouncycastle,
-            libraries.autovalue_annotation
+            libraries.autovalue_annotation,
+            libraries.opencensus_proto,
+            libraries.protobuf_util
     def nettyDependency = implementation project(':grpc-netty')
-
-    implementation (libraries.opencensus_proto) {
-        // prefer our own versions instead of opencensus_proto's
-        exclude group: 'com.google.protobuf', module: 'protobuf-java'
-        exclude group: 'io.grpc', module: 'grpc-protobuf'
-        exclude group: 'io.grpc', module: 'grpc-stub'
-    }
-    implementation (libraries.protobuf_util) {
-        // prefer our own versions instead of protobuf-util's dependency
-        exclude group: 'com.google.guava', module: 'guava'
-        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
-    }
 
     testImplementation project(':grpc-core').sourceSets.test.output
 

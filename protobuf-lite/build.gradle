@@ -12,8 +12,8 @@ description = 'gRPC: Protobuf Lite'
 dependencies {
     api project(':grpc-api'),
             libraries.protobuf_lite
-    implementation libraries.jsr305
-    guavaDependency 'implementation'
+    implementation libraries.jsr305,
+            libraries.guava
 
     testImplementation project(':grpc-core')
 

@@ -63,12 +63,12 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-testing'),
             libraries.junit,
-            libraries.truth
+            libraries.truth,
+            libraries.opencensus_contrib_grpc_metrics
 
     implementation (libraries.google_auth_oauth2_http) {
         exclude group: 'org.apache.httpcomponents'
     }
-    censusGrpcMetricDependency 'implementation'
 
     compileOnly libraries.javax_annotation
 

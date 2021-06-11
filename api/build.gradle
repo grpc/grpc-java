@@ -13,7 +13,8 @@ evaluationDependsOn(project(':grpc-context').path)
 dependencies {
     api project(':grpc-context'),
             libraries.jsr305
-    guavaDependency 'implementation'
+    implementation libraries.guava,
+            libraries.errorprone
 
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),
