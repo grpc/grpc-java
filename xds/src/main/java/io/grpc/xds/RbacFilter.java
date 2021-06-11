@@ -30,7 +30,6 @@ import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBACPerRoute;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
-import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
@@ -71,8 +70,6 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
   static final String TYPE_URL =
           "type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC";
 
-  private static final ServerCall.Listener<?> NOOP_LISTENER = new NoopListener<>();
-
   RbacFilter() {}
 
   @Override
@@ -97,9 +94,8 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
 
   @VisibleForTesting
   static ConfigOrError<RbacConfig> parseRbacConfig(RBAC rbac) {
-    checkNotNull(rbac, "rbac");
     if (!rbac.hasRules()) {
-      return null;
+      return ConfigOrError.fromConfig(RbacConfig.create(null));
     }
     io.envoyproxy.envoy.config.rbac.v3.RBAC rbacConfig = rbac.getRules();
     GrpcAuthorizationEngine.Action authAction;
@@ -111,8 +107,10 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
         authAction = GrpcAuthorizationEngine.Action.DENY;
         break;
       case LOG:
+        return ConfigOrError.fromConfig(RbacConfig.create(null));
+      case UNRECOGNIZED:
       default:
-        return null;
+        return ConfigOrError.fromError("Unknown rbacConfig action type: " + rbacConfig.getAction());
     }
     Map<String, Policy> policyMap = rbacConfig.getPoliciesMap();
     List<GrpcAuthorizationEngine.PolicyMatcher> policyMatchers = new ArrayList<>();
@@ -152,6 +150,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
     }
   }
 
+  @Nullable
   @Override
   public ServerInterceptor buildServerInterceptor(FilterConfig config,
                                                   @Nullable FilterConfig overrideConfig) {
@@ -167,7 +166,6 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
     checkNotNull(config, "config");
     final GrpcAuthorizationEngine authEngine = new GrpcAuthorizationEngine(config);
     return new ServerInterceptor() {
-        @SuppressWarnings("unchecked")
         @Override
         public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
                 final ServerCall<ReqT, RespT> call,
@@ -180,7 +178,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
             Status status = Status.UNAUTHENTICATED.withDescription(
                     "Access Denied, matching policy: " + authResult.matchingPolicyName());
             call.close(status, new Metadata());
-            return (Listener<ReqT>) NOOP_LISTENER;
+            return new ServerCall.Listener<ReqT>(){};
           }
           return next.startCall(call, headers);
         }
@@ -320,6 +318,5 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
       throw new IllegalArgumentException("IP address can not be found: " + ex);
     }
   }
-
-  private static final class NoopListener<ReqT> extends ServerCall.Listener<ReqT> { }
 }
+

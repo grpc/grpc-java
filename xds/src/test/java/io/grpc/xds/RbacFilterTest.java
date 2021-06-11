@@ -292,8 +292,8 @@ public class RbacFilterTest {
     Message rawProto = io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC.newBuilder()
             .setRules(RBAC.newBuilder().setAction(Action.LOG)
                     .putPolicies("policy-name", Policy.newBuilder().build()).build()).build();
-    ConfigOrError<?> result = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
-    assertThat(result).isNull();
+    ConfigOrError<RbacConfig> result = new RbacFilter().parseFilterConfig(Any.pack(rawProto));
+    assertThat(result.config).isEqualTo(RbacConfig.create(null));
   }
 
   private static Metadata metadata(String key, String value) {
