@@ -957,6 +957,30 @@ public class ClientXdsClientDataTest {
     ClientXdsClient.parseServerSideListener(listener, null, true);
   }
 
+  @Test
+  public void parseFilterChain_noName_generatedUuid() throws ResourceInvalidException {
+    FilterChain filterChain1 =
+        FilterChain.newBuilder()
+            .setFilterChainMatch(FilterChainMatch.getDefaultInstance())
+            .addFilters(buildHttpConnectionManagerFilter(
+                HttpFilter.newBuilder()
+                    .setName("http-filter-foo")
+                    .setIsOptional(true)
+                    .build()))
+            .build();
+    FilterChain filterChain2 =
+        FilterChain.newBuilder()
+            .setFilterChainMatch(FilterChainMatch.getDefaultInstance())
+            .addFilters(buildHttpConnectionManagerFilter(
+                HttpFilter.newBuilder()
+                    .setName("http-filter-bar")
+                    .setIsOptional(true)
+                    .build()))
+            .build();
+    assertThat(ClientXdsClient.parseFilterChain(filterChain1, null, true).getName())
+        .isNotEqualTo(ClientXdsClient.parseFilterChain(filterChain2, null, true).getName());
+  }
+
   private static Filter buildHttpConnectionManagerFilter(HttpFilter... httpFilters) {
     return Filter.newBuilder()
         .setName("envoy.http_connection_manager")

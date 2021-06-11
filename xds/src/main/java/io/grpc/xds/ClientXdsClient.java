@@ -297,7 +297,8 @@ final class ClientXdsClient extends AbstractXdsClient {
         proto.getName(), address, Collections.unmodifiableList(filterChains), defaultFilterChain);
   }
 
-  private static FilterChain parseFilterChain(
+  @VisibleForTesting
+  static FilterChain parseFilterChain(
       io.envoyproxy.envoy.config.listener.v3.FilterChain proto,
       TlsContextManager tlsContextManager, boolean parseHttpFilters)
       throws ResourceInvalidException {
