@@ -104,12 +104,7 @@ message LoadBalanceResponse {
 message FallbackResponse {}
 
 message InitialLoadBalanceResponse {
-  // This is an application layer redirect that indicates the client should use
-  // the specified server for load balancing. When this field is non-empty in
-  // the response, the client should open a separate connection to the
-  // load_balancer_delegate and call the BalanceLoad method. Its length should
-  // be less than 64 bytes.
-  string load_balancer_delegate = 1;
+  reserved 1; // never-used load_balancer_delegate
 
   // This interval defines how often the client should send the client stats
   // to the load balancer. Stats should only be reported when the duration is
