@@ -92,6 +92,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -356,7 +357,12 @@ final class ClientXdsClient extends AbstractXdsClient {
               downstreamTlsContextProto);
     }
 
+    String name = proto.getName();
+    if (name.isEmpty()) {
+      name = UUID.randomUUID().toString();
+    }
     return new FilterChain(
+        name,
         parseFilterChainMatch(proto.getFilterChainMatch()),
         httpConnectionManager,
         downstreamTlsContext,

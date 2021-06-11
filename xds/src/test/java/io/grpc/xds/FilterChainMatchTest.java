@@ -98,7 +98,8 @@ public class FilterChainMatchTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContext =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChain filterChain = new EnvoyServerProtoData.FilterChain(
-        filterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext, tlsContextManager);
+        "filter-chain-foo", filterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext,
+        tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener("listener1", LOCAL_IP, Arrays.asList(filterChain), null);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
@@ -123,11 +124,13 @@ public class FilterChainMatchTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContext =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChain filterChain = new EnvoyServerProtoData.FilterChain(
-        filterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext, tlsContextManager);
+        "filter-chain-foo", filterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext,
+        tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext defaultTlsContext =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, defaultTlsContext, tlsContextManager);
+        "filter-chain-bar", null, HTTP_CONNECTION_MANAGER, defaultTlsContext,
+        tlsContextManager);
     EnvoyServerProtoData.Listener listener = new EnvoyServerProtoData.Listener(
         "listener1", LOCAL_IP, Arrays.asList(filterChain), defaultFilterChain);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
@@ -142,7 +145,7 @@ public class FilterChainMatchTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContext =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChain filterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, tlsContext, tlsContextManager);
+        "filter-chain-foo", null, HTTP_CONNECTION_MANAGER, tlsContext, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.<EnvoyServerProtoData.FilterChain>asList(), filterChain);
@@ -169,13 +172,14 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainWithDestPort =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchWithDestPort, HTTP_CONNECTION_MANAGER, tlsContextWithDestPort,
-            tlsContextManager);
+            "filter-chain-foo", filterChainMatchWithDestPort, HTTP_CONNECTION_MANAGER,
+            tlsContextWithDestPort, tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChain defaultFilterChain =
         new EnvoyServerProtoData.FilterChain(
-            null, HTTP_CONNECTION_MANAGER, tlsContextForDefaultFilterChain, tlsContextManager);
+            "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
+            tlsContextForDefaultFilterChain, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.asList(filterChainWithDestPort), defaultFilterChain);
@@ -201,12 +205,13 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             null);
     EnvoyServerProtoData.FilterChain filterChainWithMatch = new EnvoyServerProtoData.FilterChain(
-        filterChainMatchWithMatch, HTTP_CONNECTION_MANAGER, tlsContextMatch, tlsContextManager);
+        "filter-chain-foo", filterChainMatchWithMatch, HTTP_CONNECTION_MANAGER,
+        tlsContextMatch, tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, tlsContextForDefaultFilterChain,
-        tlsContextManager);
+        "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
+        tlsContextForDefaultFilterChain, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.asList(filterChainWithMatch), defaultFilterChain);
@@ -235,12 +240,13 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainWithMismatch =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchWithMismatch, HTTP_CONNECTION_MANAGER, tlsContextMismatch,
-            tlsContextManager);
+            "filter-chain-foo", filterChainMatchWithMismatch, HTTP_CONNECTION_MANAGER,
+            tlsContextMismatch, tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, tlsContextForDefaultFilterChain, tlsContextManager);
+        "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
+        tlsContextForDefaultFilterChain, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.asList(filterChainWithMismatch), defaultFilterChain);
@@ -268,12 +274,13 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             null);
     EnvoyServerProtoData.FilterChain filterChain0Length = new EnvoyServerProtoData.FilterChain(
-        filterChainMatch0Length, HTTP_CONNECTION_MANAGER, tlsContext0Length, tlsContextManager);
+        "filter-chain-foo", filterChainMatch0Length, HTTP_CONNECTION_MANAGER,
+        tlsContext0Length, tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, tlsContextForDefaultFilterChain,
-        tlsContextManager);
+        "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
+        tlsContextForDefaultFilterChain, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.asList(filterChain0Length), defaultFilterChain);
@@ -301,8 +308,8 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER, tlsContextLessSpecific,
-            tlsContextManager);
+            "filter-chain-foo", filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER,
+            tlsContextLessSpecific, tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContextMoreSpecific =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
@@ -318,10 +325,11 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainMoreSpecific =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchMoreSpecific, HTTP_CONNECTION_MANAGER, tlsContextMoreSpecific,
+            "filter-chain-bar", filterChainMatchMoreSpecific, HTTP_CONNECTION_MANAGER,
+            tlsContextMoreSpecific,
             tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+        "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1",
@@ -352,8 +360,8 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER, tlsContextLessSpecific,
-            tlsContextManager);
+            "filter-chain-foo", filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER,
+            tlsContextLessSpecific, tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContextMoreSpecific =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
@@ -369,10 +377,11 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainMoreSpecific =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchMoreSpecific, HTTP_CONNECTION_MANAGER, tlsContextMoreSpecific,
+            "filter-chain-bar", filterChainMatchMoreSpecific, HTTP_CONNECTION_MANAGER,
+            tlsContextMoreSpecific,
             tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+        "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1",
@@ -403,8 +412,8 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER, tlsContextLessSpecific,
-            tlsContextManager);
+            "filter-chain-foo", filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER,
+            tlsContextLessSpecific, tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContextMoreSpecific =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
@@ -420,10 +429,10 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainMoreSpecific =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchMoreSpecific, HTTP_CONNECTION_MANAGER, tlsContextMoreSpecific,
-            tlsContextManager);
+            "filter-chain-bar", filterChainMatchMoreSpecific, HTTP_CONNECTION_MANAGER,
+            tlsContextMoreSpecific, tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+        "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1",
@@ -456,7 +465,7 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainMoreSpecificWith2 =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchMoreSpecificWith2, HTTP_CONNECTION_MANAGER,
+            "filter-chain-foo", filterChainMatchMoreSpecificWith2, HTTP_CONNECTION_MANAGER,
             tlsContextMoreSpecificWith2, tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContextLessSpecific =
@@ -473,10 +482,10 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER, tlsContextLessSpecific,
-            tlsContextManager);
+            "filter-chain-bar", filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER,
+            tlsContextLessSpecific, tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+        "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1",
@@ -506,12 +515,13 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainWithMismatch =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchWithMismatch, HTTP_CONNECTION_MANAGER, tlsContextMismatch,
-            tlsContextManager);
+            "filter-chain-foo", filterChainMatchWithMismatch, HTTP_CONNECTION_MANAGER,
+            tlsContextMismatch, tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, tlsContextForDefaultFilterChain, tlsContextManager);
+        "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,tlsContextForDefaultFilterChain,
+        tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.asList(filterChainWithMismatch), defaultFilterChain);
@@ -537,11 +547,13 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             null);
     EnvoyServerProtoData.FilterChain filterChainWithMatch = new EnvoyServerProtoData.FilterChain(
-        filterChainMatchWithMatch, HTTP_CONNECTION_MANAGER, tlsContextMatch, tlsContextManager);
+        "filter-chain-foo", filterChainMatchWithMatch, HTTP_CONNECTION_MANAGER, tlsContextMatch,
+        tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, tlsContextForDefaultFilterChain, tlsContextManager);
+        "filter-chain-bar", null, HTTP_CONNECTION_MANAGER, tlsContextForDefaultFilterChain,
+        tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.asList(filterChainWithMatch), defaultFilterChain);
@@ -571,7 +583,7 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainMoreSpecificWith2 =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchMoreSpecificWith2, HTTP_CONNECTION_MANAGER,
+            "filter-chain-foo", filterChainMatchMoreSpecificWith2, HTTP_CONNECTION_MANAGER,
             tlsContextMoreSpecificWith2, tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContextLessSpecific =
@@ -588,10 +600,10 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER, tlsContextLessSpecific,
-            tlsContextManager);
+            "filter-chain-bar", filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER,
+            tlsContextLessSpecific, tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+        "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1",
@@ -623,7 +635,8 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             null);
     EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
-        filterChainMatch1, HTTP_CONNECTION_MANAGER, tlsContext1, tlsContextManager);
+        "filter-chain-foo", filterChainMatch1, HTTP_CONNECTION_MANAGER, tlsContext1,
+        tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContext2 =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
@@ -638,9 +651,10 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             null);
     EnvoyServerProtoData.FilterChain filterChain2 = new EnvoyServerProtoData.FilterChain(
-        filterChainMatch2, HTTP_CONNECTION_MANAGER, tlsContext2, tlsContextManager);
+        "filter-chain-bar", filterChainMatch2, HTTP_CONNECTION_MANAGER, tlsContext2,
+        tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, null, null);
+        "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, null);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1", LOCAL_IP, Arrays.asList(filterChain1, filterChain2), defaultFilterChain);
@@ -674,8 +688,8 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainEmptySourcePorts =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchEmptySourcePorts, HTTP_CONNECTION_MANAGER, tlsContextEmptySourcePorts,
-            tlsContextManager);
+            "filter-chain-foo", filterChainMatchEmptySourcePorts, HTTP_CONNECTION_MANAGER,
+            tlsContextEmptySourcePorts, tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContextSourcePortMatch =
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
@@ -691,10 +705,10 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChainSourcePortMatch =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatchSourcePortMatch, HTTP_CONNECTION_MANAGER, tlsContextSourcePortMatch,
-            tlsContextManager);
+            "filter-chain-bar", filterChainMatchSourcePortMatch, HTTP_CONNECTION_MANAGER,
+            tlsContextSourcePortMatch, tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+        "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1",
@@ -742,7 +756,8 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             null);
     EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
-        filterChainMatch1, HTTP_CONNECTION_MANAGER, tlsContext1, tlsContextManager);
+        "filter-chain-1", filterChainMatch1, HTTP_CONNECTION_MANAGER, tlsContext1,
+        tlsContextManager);
 
     // next 5 use prefix range: 4 with prefixLen of 30 and last one with 29
 
@@ -758,7 +773,8 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             null);
     EnvoyServerProtoData.FilterChain filterChain2 = new EnvoyServerProtoData.FilterChain(
-        filterChainMatch2, HTTP_CONNECTION_MANAGER, tlsContext2, tlsContextManager);
+        "filter-chain-2", filterChainMatch2, HTTP_CONNECTION_MANAGER, tlsContext2,
+        tlsContextManager);
 
     // has prefix ranges with one not matching and source type local: gets eliminated in step 3
     EnvoyServerProtoData.FilterChainMatch filterChainMatch3 =
@@ -774,7 +790,8 @@ public class FilterChainMatchTest {
             Arrays.<String>asList(),
             null);
     EnvoyServerProtoData.FilterChain filterChain3 = new EnvoyServerProtoData.FilterChain(
-        filterChainMatch3, HTTP_CONNECTION_MANAGER, tlsContext3, tlsContextManager);
+        "filter-chain-3", filterChainMatch3, HTTP_CONNECTION_MANAGER, tlsContext3,
+        tlsContextManager);
 
     // has prefix ranges with both matching and source type external but non matching source port:
     // gets eliminated in step 5
@@ -792,7 +809,8 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChain4 =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatch4, HTTP_CONNECTION_MANAGER, tlsContext4, tlsContextManager);
+            "filter-chain-4", filterChainMatch4, HTTP_CONNECTION_MANAGER, tlsContext4,
+            tlsContextManager);
 
     // has prefix ranges with both matching and source type external and matching source port: this
     // gets selected
@@ -812,7 +830,8 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChain5 =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatch5, HTTP_CONNECTION_MANAGER, tlsContext5, tlsContextManager);
+            "filter-chain-5", filterChainMatch5, HTTP_CONNECTION_MANAGER, tlsContext5,
+            tlsContextManager);
 
     // has prefix range with prefixLen of 29: gets eliminated in step 2
     EnvoyServerProtoData.FilterChainMatch filterChainMatch6 =
@@ -827,10 +846,11 @@ public class FilterChainMatchTest {
             null);
     EnvoyServerProtoData.FilterChain filterChain6 =
         new EnvoyServerProtoData.FilterChain(
-            filterChainMatch6, HTTP_CONNECTION_MANAGER, tlsContext6, tlsContextManager);
+            "filter-chain-6", filterChainMatch6, HTTP_CONNECTION_MANAGER, tlsContext6,
+            tlsContextManager);
 
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+        "filter-chain-7", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             "listener1",
@@ -891,12 +911,14 @@ public class FilterChainMatchTest {
             "" /* transportProtocol */);
 
     EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
-        filterChainMatch1, HTTP_CONNECTION_MANAGER, tlsContext1, mock(TlsContextManager.class));
+        "filter-chain-foo", filterChainMatch1, HTTP_CONNECTION_MANAGER, tlsContext1,
+        mock(TlsContextManager.class));
     EnvoyServerProtoData.FilterChain filterChain2 = new EnvoyServerProtoData.FilterChain(
-        filterChainMatch2, HTTP_CONNECTION_MANAGER, tlsContext2, mock(TlsContextManager.class));
+        "filter-chain-bar", filterChainMatch2, HTTP_CONNECTION_MANAGER, tlsContext2,
+        mock(TlsContextManager.class));
 
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        defaultFilterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext3,
+        "filter-chain-baz", defaultFilterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext3,
         mock(TlsContextManager.class));
 
     EnvoyServerProtoData.Listener listener = new EnvoyServerProtoData.Listener(

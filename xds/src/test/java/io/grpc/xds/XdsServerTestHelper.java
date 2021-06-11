@@ -165,9 +165,11 @@ class XdsServerTestHelper {
     HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
         0L, "does not matter", Collections.<NamedFilterConfig>emptyList());
     EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
-        filterChainMatch1, httpConnectionManager, tlsContext, tlsContextManager);
+        "filter-chain-foo", filterChainMatch1, httpConnectionManager, tlsContext,
+        tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        null, httpConnectionManager, tlsContextForDefaultFilterChain, tlsContextManager);
+        "filter-chain-bar", null, httpConnectionManager, tlsContextForDefaultFilterChain,
+        tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             name, address, Arrays.asList(filterChain1), defaultFilterChain);

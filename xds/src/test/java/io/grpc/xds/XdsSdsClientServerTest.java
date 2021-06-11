@@ -373,7 +373,8 @@ public class XdsSdsClientServerTest {
     HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
         0L, "does not matter", Collections.<NamedFilterConfig>emptyList());
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        filterChainMatch, httpConnectionManager, tlsContext, tlsContextManager);
+        "filter-chain-foo", filterChainMatch, httpConnectionManager, tlsContext,
+        tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(name, address, Arrays.asList(defaultFilterChain), null);
     return listener;
