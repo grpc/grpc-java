@@ -261,8 +261,11 @@ final class GrpclbState {
         newBackendServers);
     fallbackBackendList = newBackendServers;
     if (newLbAddressGroups.isEmpty()) {
-      // No balancer address: close existing balancer connection and enter fallback mode
-      // immediately.
+      // No balancer address: close existing balancer connection and prepare to enter fallback
+      // mode. If there is no successful backend connection, it enters fallback mode immediately.
+      // Otherwise, fallback does not happen until backend connections are lost. This behavior
+      // might be different from other languages (e.g., existing balancer connection is not
+      // closed in C-core), but we aren't changing it at this time.
       shutdownLbComm();
       if (!usingFallbackBackends) {
         fallbackReason = NO_LB_ADDRESS_PROVIDED_STATUS;
