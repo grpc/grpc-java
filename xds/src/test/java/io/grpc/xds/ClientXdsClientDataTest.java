@@ -50,6 +50,7 @@ import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.listener.v3.ListenerFilter;
 import io.envoyproxy.envoy.config.route.v3.DirectResponseAction;
 import io.envoyproxy.envoy.config.route.v3.FilterAction;
+import io.envoyproxy.envoy.config.route.v3.NonForwardingAction;
 import io.envoyproxy.envoy.config.route.v3.RedirectAction;
 import io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.ConnectionProperties;
 import io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.FilterState;
@@ -119,10 +120,29 @@ public class ClientXdsClientDataTest {
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct())
         .isEqualTo(
-            Route.create(
+            Route.forAction(
                 RouteMatch.create(PathMatcher.fromPath("/service/method", false),
                     Collections.<HeaderMatcher>emptyList(), null),
                 RouteAction.forCluster("cluster-foo", Collections.<HashPolicy>emptyList(), null),
+                ImmutableMap.<String, FilterConfig>of()));
+  }
+
+  @Test
+  public void parseRoute_withNonForwardingAction() {
+    io.envoyproxy.envoy.config.route.v3.Route proto =
+        io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
+            .setName("route-blade")
+            .setMatch(
+                io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
+                    .setPath("/service/method"))
+            .setNonForwardingAction(NonForwardingAction.getDefaultInstance())
+            .build();
+    StructOrError<Route> struct = ClientXdsClient.parseRoute(proto, false);
+    assertThat(struct.getStruct())
+        .isEqualTo(
+            Route.forNonForwardingAction(
+                RouteMatch.create(PathMatcher.fromPath("/service/method", false),
+                    Collections.<HeaderMatcher>emptyList(), null),
                 ImmutableMap.<String, FilterConfig>of()));
   }
 
@@ -137,7 +157,8 @@ public class ClientXdsClientDataTest {
             .build();
     res = ClientXdsClient.parseRoute(redirectRoute, false);
     assertThat(res.getStruct()).isNull();
-    assertThat(res.getErrorDetail()).isEqualTo("Unsupported action type: redirect");
+    assertThat(res.getErrorDetail())
+        .isEqualTo("Route [route-blade] with unsupported action type: redirect");
 
     io.envoyproxy.envoy.config.route.v3.Route directResponseRoute =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
@@ -147,7 +168,8 @@ public class ClientXdsClientDataTest {
             .build();
     res = ClientXdsClient.parseRoute(directResponseRoute, false);
     assertThat(res.getStruct()).isNull();
-    assertThat(res.getErrorDetail()).isEqualTo("Unsupported action type: direct_response");
+    assertThat(res.getErrorDetail())
+        .isEqualTo("Route [route-blade] with unsupported action type: direct_response");
 
     io.envoyproxy.envoy.config.route.v3.Route filterRoute =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
@@ -157,7 +179,8 @@ public class ClientXdsClientDataTest {
             .build();
     res = ClientXdsClient.parseRoute(filterRoute, false);
     assertThat(res.getStruct()).isNull();
-    assertThat(res.getErrorDetail()).isEqualTo("Unsupported action type: filter_action");
+    assertThat(res.getErrorDetail())
+        .isEqualTo("Route [route-blade] with unsupported action type: filter_action");
   }
 
   @Test

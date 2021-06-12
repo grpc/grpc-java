@@ -614,44 +614,53 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     if (routeMatch.getErrorDetail() != null) {
       return StructOrError.fromError(
-          "Invalid route [" + proto.getName() + "]: " + routeMatch.getErrorDetail());
+          "Route [" + proto.getName() + "] contains invalid RouteMatch: "
+              + routeMatch.getErrorDetail());
     }
 
-    StructOrError<RouteAction> routeAction;
+    Map<String, FilterConfig> overrideConfigs = Collections.emptyMap();
+    if (parseHttpFilter) {
+      StructOrError<Map<String, FilterConfig>> overrideConfigsOrError =
+          parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap());
+      if (overrideConfigsOrError.errorDetail != null) {
+        return StructOrError.fromError(
+            "Route [" + proto.getName() + "] contains invalid HttpFilter config: "
+                + overrideConfigsOrError.errorDetail);
+      }
+      overrideConfigs = overrideConfigsOrError.struct;
+    }
+
     switch (proto.getActionCase()) {
       case ROUTE:
-        routeAction = parseRouteAction(proto.getRoute(), parseHttpFilter);
-        break;
+        StructOrError<RouteAction> routeAction =
+            parseRouteAction(proto.getRoute(), parseHttpFilter);
+        if (routeAction == null) {
+          return null;
+        }
+        if (routeAction.errorDetail != null) {
+          return StructOrError.fromError(
+              "Route [" + proto.getName() + "] contains invalid RouteAction: "
+                  + routeAction.getErrorDetail());
+        }
+        return StructOrError.fromStruct(
+            Route.forAction(routeMatch.struct, routeAction.struct, overrideConfigs));
+      case NON_FORWARDING_ACTION:
+        return StructOrError.fromStruct(
+            Route.forNonForwardingAction(routeMatch.struct, overrideConfigs));
       case REDIRECT:
-        return StructOrError.fromError("Unsupported action type: redirect");
+        return StructOrError.fromError(
+            "Route [" + proto.getName() + "] with unsupported action type: redirect");
       case DIRECT_RESPONSE:
-        return StructOrError.fromError("Unsupported action type: direct_response");
+        return StructOrError.fromError(
+            "Route [" + proto.getName() + "] with unsupported action type: direct_response");
       case FILTER_ACTION:
-        return StructOrError.fromError("Unsupported action type: filter_action");
+        return StructOrError.fromError(
+            "Route [" + proto.getName() + "] with unsupported action type: filter_action");
       case ACTION_NOT_SET:
       default:
-        return StructOrError.fromError("Unknown action type: " + proto.getActionCase());
+        return StructOrError.fromError(
+            "Route [" + proto.getName() + "] with unknown action type: " + proto.getActionCase());
     }
-    if (routeAction == null) {
-      return null;
-    }
-    if (routeAction.getErrorDetail() != null) {
-      return StructOrError.fromError(
-          "Invalid route [" + proto.getName() + "]: " + routeAction.getErrorDetail());
-    }
-    if (!parseHttpFilter) {
-      return StructOrError.fromStruct(Route.create(
-          routeMatch.getStruct(), routeAction.getStruct(), new HashMap<String, FilterConfig>()));
-    }
-    StructOrError<Map<String, FilterConfig>> overrideConfigs =
-        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap());
-    if (overrideConfigs.errorDetail != null) {
-      return StructOrError.fromError(
-          "Route [" + proto.getName() + "] contains invalid HttpFilter config: "
-              + overrideConfigs.errorDetail);
-    }
-    return StructOrError.fromStruct(Route.create(
-        routeMatch.getStruct(), routeAction.getStruct(), overrideConfigs.struct));
   }
 
   @VisibleForTesting
@@ -774,6 +783,11 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
+  /**
+   * Parses the RouteAction config. The returned result may contain a (parsed form)
+   * {@link RouteAction} or an error message. Returns {@code null} if the RouteAction
+   * should be ignored.
+   */
   @VisibleForTesting
   @Nullable
   static StructOrError<RouteAction> parseRouteAction(

@@ -359,6 +359,10 @@ final class XdsNameResolver extends NameResolver {
           return Result.forError(
               Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"));
         }
+        if (selectedRoute.routeAction() == null) {
+          return Result.forError(Status.UNAVAILABLE.withDescription(
+              "Could not route RPC to route with non-forwarding action"));
+        }
         RouteAction action = selectedRoute.routeAction();
         if (action.cluster() != null) {
           cluster = action.cluster();
