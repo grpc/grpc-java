@@ -19,8 +19,11 @@ package io.grpc.xds;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.JsonParser;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 public class CommonBootstrapperTestUtils {
   private static final String FILE_WATCHER_CONFIG = "{\"path\": \"/etc/secret/certs\"}";
@@ -71,5 +74,59 @@ public class CommonBootstrapperTestUtils {
     } catch (IOException e) {
       throw new AssertionError(e);
     }
+  }
+
+  /**
+   * Build {@link Bootstrapper.BootstrapInfo} for certProviderInstance tests.
+   * Populates with temp file paths.
+   */
+  public static Bootstrapper.BootstrapInfo buildBootstrapInfo(
+      String certInstanceName1, @Nullable String privateKey1,
+      @Nullable String cert1,
+      @Nullable String trustCa1, String certInstanceName2, String privateKey2, String cert2,
+      String trustCa2) {
+    // get temp file for each file
+    try {
+      if (privateKey1 != null) {
+        privateKey1 = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(privateKey1);
+      }
+      if (cert1 != null) {
+        cert1 = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(cert1);
+      }
+      if (trustCa1 != null) {
+        trustCa1 = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(trustCa1);
+      }
+      if (privateKey2 != null) {
+        privateKey2 = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(privateKey2);
+      }
+      if (cert2 != null) {
+        cert2 = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(cert2);
+      }
+      if (trustCa2 != null) {
+        trustCa2 = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(trustCa2);
+      }
+    } catch (IOException ioe) {
+      throw new RuntimeException(ioe);
+    }
+    HashMap<String, String> config = new HashMap<>();
+    config.put("certificate_file", cert1);
+    config.put("private_key_file", privateKey1);
+    config.put("ca_certificate_file", trustCa1);
+    Bootstrapper.CertificateProviderInfo certificateProviderInfo =
+        new Bootstrapper.CertificateProviderInfo("file_watcher", config);
+    HashMap<String, Bootstrapper.CertificateProviderInfo> certProviders =
+        new HashMap<>();
+    certProviders.put(certInstanceName1, certificateProviderInfo);
+    if (certInstanceName2 != null) {
+      config = new HashMap<>();
+      config.put("certificate_file", cert2);
+      config.put("private_key_file", privateKey2);
+      config.put("ca_certificate_file", trustCa2);
+      certificateProviderInfo =
+          new Bootstrapper.CertificateProviderInfo("file_watcher", config);
+      certProviders.put(certInstanceName2, certificateProviderInfo);
+    }
+    return new Bootstrapper.BootstrapInfo(null, EnvoyProtoData.Node.newBuilder().build(),
+        certProviders, null);
   }
 }
