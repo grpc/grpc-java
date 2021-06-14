@@ -47,9 +47,9 @@ repositories {
 dependencies {
     api project(':grpc-core')
 
-    guavaDependency 'implementation'
     implementation libraries.androidx_annotation
     implementation libraries.androidx_core
+    implementation libraries.guava
     testImplementation libraries.androidx_core
     testImplementation libraries.androidx_test
     testImplementation libraries.junit

@@ -65,8 +65,9 @@ interface Filter {
         ScheduledExecutorService scheduler);
   }
 
-  // Server side filters are not currently supported, but this interface is defined for clarity.
+  /** Uses the FilterConfigs produced above to produce an HTTP filter interceptor for the server. */
   interface ServerInterceptorBuilder {
+    @Nullable
     ServerInterceptor buildServerInterceptor(
         FilterConfig config, @Nullable FilterConfig overrideConfig);
   }
