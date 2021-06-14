@@ -529,7 +529,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
     }
     ConfigOrError<? extends FilterConfig> filterConfig =
-        filter.parseFilterConfigOverride(rawConfig);
+        filter.parseFilterConfig(rawConfig);
     if (filterConfig.errorDetail != null) {
       return StructOrError.fromError(
           "Invalid filter config for HttpFilter [" + filterName + "]: " + filterConfig.errorDetail);
