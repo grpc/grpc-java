@@ -528,8 +528,7 @@ final class ClientXdsClient extends AbstractXdsClient {
                 + (isForClient ? "client" : "server"));
       }
     }
-    ConfigOrError<? extends FilterConfig> filterConfig =
-        filter.parseFilterConfig(rawConfig);
+    ConfigOrError<? extends FilterConfig> filterConfig = filter.parseFilterConfig(rawConfig);
     if (filterConfig.errorDetail != null) {
       return StructOrError.fromError(
           "Invalid filter config for HttpFilter [" + filterName + "]: " + filterConfig.errorDetail);

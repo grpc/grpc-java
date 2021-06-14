@@ -58,17 +58,12 @@ abstract class XdsClient {
 
     static LdsUpdate forApiListener(HttpConnectionManager httpConnectionManager) {
       checkNotNull(httpConnectionManager, "httpConnectionManager");
-      return LdsUpdate.create(httpConnectionManager, null);
+      return new AutoValue_XdsClient_LdsUpdate(httpConnectionManager, null);
     }
 
     static LdsUpdate forTcpListener(Listener listener) {
       checkNotNull(listener, "listener");
-      return LdsUpdate.create(null, listener);
-    }
-
-    private static LdsUpdate create(@Nullable HttpConnectionManager httpConnectionManager,
-        @Nullable Listener listener) {
-      return new AutoValue_XdsClient_LdsUpdate(httpConnectionManager, listener);
+      return new AutoValue_XdsClient_LdsUpdate(null, listener);
     }
   }
 
