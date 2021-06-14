@@ -179,6 +179,16 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
     return parseFilterConfig(rawProtoMessage);
   }
 
+  @Override
+  public boolean isSupportedOnClients() {
+    return true;
+  }
+
+  @Override
+  public boolean isSupportedOnServers() {
+    return false;
+  }
+
   @Nullable
   @Override
   public ClientInterceptor buildClientInterceptor(

@@ -59,6 +59,7 @@ import io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy.QueryParameter
 import io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration;
 import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay;
+import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
@@ -69,12 +70,10 @@ import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher.GoogleRE2;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.envoyproxy.envoy.type.v3.Int64Range;
-import io.grpc.Status.Code;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.ClientXdsClient.StructOrError;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Matchers.FractionMatcher;
 import io.grpc.xds.Matchers.HeaderMatcher;
@@ -103,6 +102,7 @@ public class ClientXdsClientDataTest {
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
+  private final FilterRegistry filterRegistry = FilterRegistry.newRegistry();
 
   @Test
   public void parseRoute_withRouteAction() {
@@ -116,7 +116,7 @@ public class ClientXdsClientDataTest {
                 io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
                     .setCluster("cluster-foo"))
             .build();
-    StructOrError<Route> struct = ClientXdsClient.parseRoute(proto, false);
+    StructOrError<Route> struct = ClientXdsClient.parseRoute(proto, filterRegistry, false);
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct())
         .isEqualTo(
@@ -137,7 +137,7 @@ public class ClientXdsClientDataTest {
                     .setPath("/service/method"))
             .setNonForwardingAction(NonForwardingAction.getDefaultInstance())
             .build();
-    StructOrError<Route> struct = ClientXdsClient.parseRoute(proto, false);
+    StructOrError<Route> struct = ClientXdsClient.parseRoute(proto, filterRegistry, false);
     assertThat(struct.getStruct())
         .isEqualTo(
             Route.forNonForwardingAction(
@@ -155,7 +155,7 @@ public class ClientXdsClientDataTest {
             .setMatch(io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPath(""))
             .setRedirect(RedirectAction.getDefaultInstance())
             .build();
-    res = ClientXdsClient.parseRoute(redirectRoute, false);
+    res = ClientXdsClient.parseRoute(redirectRoute, filterRegistry, false);
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail())
         .isEqualTo("Route [route-blade] with unsupported action type: redirect");
@@ -166,7 +166,7 @@ public class ClientXdsClientDataTest {
             .setMatch(io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPath(""))
             .setDirectResponse(DirectResponseAction.getDefaultInstance())
             .build();
-    res = ClientXdsClient.parseRoute(directResponseRoute, false);
+    res = ClientXdsClient.parseRoute(directResponseRoute, filterRegistry, false);
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail())
         .isEqualTo("Route [route-blade] with unsupported action type: direct_response");
@@ -177,7 +177,7 @@ public class ClientXdsClientDataTest {
             .setMatch(io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder().setPath(""))
             .setFilterAction(FilterAction.getDefaultInstance())
             .build();
-    res = ClientXdsClient.parseRoute(filterRoute, false);
+    res = ClientXdsClient.parseRoute(filterRoute, filterRegistry, false);
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail())
         .isEqualTo("Route [route-blade] with unsupported action type: filter_action");
@@ -198,7 +198,7 @@ public class ClientXdsClientDataTest {
                 io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
                     .setCluster("cluster-foo"))
             .build();
-    assertThat(ClientXdsClient.parseRoute(proto, false)).isNull();
+    assertThat(ClientXdsClient.parseRoute(proto, filterRegistry, false)).isNull();
   }
 
   @Test
@@ -213,7 +213,7 @@ public class ClientXdsClientDataTest {
                 io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
                     .setClusterHeader("cluster header"))  // cluster_header action not supported
             .build();
-    assertThat(ClientXdsClient.parseRoute(proto, false)).isNull();
+    assertThat(ClientXdsClient.parseRoute(proto, filterRegistry, false)).isNull();
   }
 
   @Test
@@ -392,7 +392,8 @@ public class ClientXdsClientDataTest {
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
             .setCluster("cluster-foo")
             .build();
-    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto, false);
+    StructOrError<RouteAction> struct =
+        ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct().cluster()).isEqualTo("cluster-foo");
     assertThat(struct.getStruct().weightedClusters()).isNull();
@@ -414,7 +415,8 @@ public class ClientXdsClientDataTest {
                         .setName("cluster-bar")
                         .setWeight(UInt32Value.newBuilder().setValue(70))))
             .build();
-    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto, false);
+    StructOrError<RouteAction> struct =
+        ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct().cluster()).isNull();
     assertThat(struct.getStruct().weightedClusters()).containsExactly(
@@ -432,7 +434,8 @@ public class ClientXdsClientDataTest {
                     .setGrpcTimeoutHeaderMax(Durations.fromSeconds(5L))
                     .setMaxStreamDuration(Durations.fromMillis(20L)))
             .build();
-    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto, false);
+    StructOrError<RouteAction> struct =
+        ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
     assertThat(struct.getStruct().timeoutNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L));
   }
 
@@ -445,7 +448,8 @@ public class ClientXdsClientDataTest {
                 MaxStreamDuration.newBuilder()
                     .setMaxStreamDuration(Durations.fromSeconds(5L)))
             .build();
-    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto, false);
+    StructOrError<RouteAction> struct =
+        ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
     assertThat(struct.getStruct().timeoutNano()).isEqualTo(TimeUnit.SECONDS.toNanos(5L));
   }
 
@@ -455,7 +459,8 @@ public class ClientXdsClientDataTest {
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
             .setCluster("cluster-foo")
             .build();
-    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto, false);
+    StructOrError<RouteAction> struct =
+        ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
     assertThat(struct.getStruct().timeoutNano()).isNull();
   }
 
@@ -490,7 +495,8 @@ public class ClientXdsClientDataTest {
                     .setQueryParameter(
                         QueryParameter.newBuilder().setName("param"))) // unsupported
             .build();
-    StructOrError<RouteAction> struct = ClientXdsClient.parseRouteAction(proto, false);
+    StructOrError<RouteAction> struct =
+        ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
     List<HashPolicy> policies = struct.getStruct().hashPolicies();
     assertThat(policies).hasSize(2);
     assertThat(policies.get(0).type()).isEqualTo(HashPolicy.Type.HEADER);
@@ -510,37 +516,10 @@ public class ClientXdsClientDataTest {
             .setName("cluster-foo")
             .setWeight(UInt32Value.newBuilder().setValue(30))
             .build();
-    ClusterWeight clusterWeight = ClientXdsClient.parseClusterWeight(proto, false).getStruct();
+    ClusterWeight clusterWeight =
+        ClientXdsClient.parseClusterWeight(proto, filterRegistry, false).getStruct();
     assertThat(clusterWeight.name()).isEqualTo("cluster-foo");
     assertThat(clusterWeight.weight()).isEqualTo(30);
-  }
-
-  @Test
-  public void parseFaultAbort_withHttpStatus() {
-    io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort proto =
-        io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
-            .setPercentage(FractionalPercent.newBuilder()
-               .setNumerator(100).setDenominator(DenominatorType.TEN_THOUSAND))
-            .setHttpStatus(400).build();
-    FaultAbort res = FaultFilter.parseFaultAbort(proto).config;
-    assertThat(res.percent().numerator()).isEqualTo(100);
-    assertThat(res.percent().denominatorType())
-        .isEqualTo(FaultConfig.FractionalPercent.DenominatorType.TEN_THOUSAND);
-    assertThat(res.status().getCode()).isEqualTo(Code.INTERNAL);
-  }
-
-  @Test
-  public void parseFaultAbort_withGrpcStatus() {
-    io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort proto =
-        io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.newBuilder()
-            .setPercentage(FractionalPercent.newBuilder()
-                .setNumerator(600).setDenominator(DenominatorType.MILLION))
-            .setGrpcStatus(Code.DEADLINE_EXCEEDED.value()).build();
-    FaultAbort faultAbort = FaultFilter.parseFaultAbort(proto).config;
-    assertThat(faultAbort.percent().numerator()).isEqualTo(600);
-    assertThat(faultAbort.percent().denominatorType())
-        .isEqualTo(FaultConfig.FractionalPercent.DenominatorType.MILLION);
-    assertThat(faultAbort.status().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
   }
 
   @Test
@@ -662,7 +641,7 @@ public class ClientXdsClientDataTest {
         .setIsOptional(true)
         .setTypedConfig(Any.pack(StringValue.of("unsupported")))
         .build();
-    assertThat(ClientXdsClient.parseHttpFilter(httpFilter)).isNull();
+    assertThat(ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, true)).isNull();
   }
 
   @Test
@@ -672,13 +651,72 @@ public class ClientXdsClientDataTest {
         .setName("unsupported.filter")
         .setTypedConfig(Any.pack(StringValue.of("string value")))
         .build();
-    assertThat(ClientXdsClient.parseHttpFilter(httpFilter).getErrorDetail()).isEqualTo(
-        "HttpFilter [unsupported.filter] is not optional and has an unsupported config type: "
-            + "type.googleapis.com/google.protobuf.StringValue");
+    assertThat(ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, true)
+        .getErrorDetail()).isEqualTo(
+            "HttpFilter [unsupported.filter]"
+                + "(type.googleapis.com/google.protobuf.StringValue) is required but unsupported "
+                + "for client");
+  }
+
+  @Test
+  public void parseHttpFilter_faultConfigForClient() {
+    filterRegistry.register(FaultFilter.INSTANCE);
+    HttpFilter httpFilter =
+        HttpFilter.newBuilder()
+            .setIsOptional(false)
+            .setName("envoy.fault")
+            .setTypedConfig(
+                Any.pack(
+                    HTTPFault.newBuilder()
+                        .setDelay(
+                            FaultDelay.newBuilder()
+                                .setFixedDelay(Durations.fromNanos(1234L)))
+                        .setAbort(
+                            FaultAbort.newBuilder()
+                                .setHttpStatus(300)
+                                .setPercentage(
+                                    FractionalPercent.newBuilder()
+                                        .setNumerator(10)
+                                        .setDenominator(DenominatorType.HUNDRED)))
+                        .build()))
+            .build();
+    FilterConfig config =
+        ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, true).getStruct();
+    assertThat(config).isInstanceOf(FaultConfig.class);
+  }
+
+  @Test
+  public void parseHttpFilter_faultConfigUnsupportedForServer() {
+    filterRegistry.register(FaultFilter.INSTANCE);
+    HttpFilter httpFilter =
+        HttpFilter.newBuilder()
+            .setIsOptional(false)
+            .setName("envoy.fault")
+            .setTypedConfig(
+                Any.pack(
+                    HTTPFault.newBuilder()
+                        .setDelay(
+                            FaultDelay.newBuilder()
+                                .setFixedDelay(Durations.fromNanos(1234L)))
+                        .setAbort(
+                            FaultAbort.newBuilder()
+                                .setHttpStatus(300)
+                                .setPercentage(
+                                    FractionalPercent.newBuilder()
+                                        .setNumerator(10)
+                                        .setDenominator(DenominatorType.HUNDRED)))
+                        .build()))
+            .build();
+    StructOrError<FilterConfig> config =
+        ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, false);
+    assertThat(config.getErrorDetail()).isEqualTo(
+        "HttpFilter [envoy.fault](" + FaultFilter.TYPE_URL + ") is required but "
+            + "unsupported for server");
   }
 
   @Test
   public void parseOverrideFilterConfigs_unsupportedButOptional() {
+    filterRegistry.register(FaultFilter.INSTANCE);
     HTTPFault httpFault = HTTPFault.newBuilder()
         .setDelay(FaultDelay.newBuilder().setFixedDelay(Durations.fromNanos(3000)))
         .build();
@@ -690,13 +728,14 @@ public class ClientXdsClientDataTest {
             .setIsOptional(true).setConfig(Any.pack(StringValue.of("string value")))
             .build()));
     Map<String, FilterConfig> parsedConfigs =
-        ClientXdsClient.parseOverrideFilterConfigs(configOverrides).getStruct();
+        ClientXdsClient.parseOverrideFilterConfigs(configOverrides, filterRegistry).getStruct();
     assertThat(parsedConfigs).hasSize(1);
     assertThat(parsedConfigs).containsKey("envoy.fault");
   }
 
   @Test
   public void parseOverrideFilterConfigs_unsupportedAndRequired() {
+    filterRegistry.register(FaultFilter.INSTANCE);
     HTTPFault httpFault = HTTPFault.newBuilder()
         .setDelay(FaultDelay.newBuilder().setFixedDelay(Durations.fromNanos(3000)))
         .build();
@@ -707,24 +746,24 @@ public class ClientXdsClientDataTest {
         Any.pack(io.envoyproxy.envoy.config.route.v3.FilterConfig.newBuilder()
             .setIsOptional(false).setConfig(Any.pack(StringValue.of("string value")))
             .build()));
-    assertThat(ClientXdsClient.parseOverrideFilterConfigs(configOverrides).getErrorDetail())
-        .isEqualTo(
-            "HttpFilter [unsupported.filter] is not optional and has an unsupported config type: "
-                + "type.googleapis.com/google.protobuf.StringValue");
+    assertThat(ClientXdsClient.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+        .getErrorDetail()).isEqualTo(
+            "HttpFilter [unsupported.filter]"
+                + "(type.googleapis.com/google.protobuf.StringValue) is required but unsupported");
 
     configOverrides = ImmutableMap.of(
         "envoy.fault",
         Any.pack(httpFault),
         "unsupported.filter",
         Any.pack(StringValue.of("string value")));
-    assertThat(ClientXdsClient.parseOverrideFilterConfigs(configOverrides).getErrorDetail())
-        .isEqualTo(
-            "HttpFilter [unsupported.filter] is not optional and has an unsupported config type: "
-                + "type.googleapis.com/google.protobuf.StringValue");
+    assertThat(ClientXdsClient.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+        .getErrorDetail()).isEqualTo(
+            "HttpFilter [unsupported.filter]"
+                + "(type.googleapis.com/google.protobuf.StringValue) is required but unsupported");
   }
 
   @Test
-  public void parseHttpConnectionManager_forClient_missingRdsAndInlinedRouteConfiguration()
+  public void parseHttpConnectionManager_missingRdsAndInlinedRouteConfiguration()
       throws ResourceInvalidException {
     HttpConnectionManager hcm =
         HttpConnectionManager.newBuilder()
@@ -734,7 +773,8 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("HttpConnectionManager neither has inlined route_config nor RDS");
-    ClientXdsClient.parseHttpConnectionManager(hcm, false /* does not matter */);
+    ClientXdsClient.parseHttpConnectionManager(
+        hcm, filterRegistry, false /* does not matter */, true /* does not matter */);
   }
 
   @Test
@@ -748,7 +788,8 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("HttpConnectionManager contains duplicate HttpFilter: envoy.filter.foo");
-    ClientXdsClient.parseHttpConnectionManager(hcm, true);
+    ClientXdsClient.parseHttpConnectionManager(
+        hcm, filterRegistry, true, true /* does not matter */);
   }
 
   @Test
@@ -834,7 +875,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Listener listener1 with invalid traffic direction: OUTBOUND");
-    ClientXdsClient.parseServerSideListener(listener, null, true);
+    ClientXdsClient.parseServerSideListener(listener, null, filterRegistry, true);
   }
 
   @Test
@@ -847,7 +888,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Listener listener1 cannot have listener_filters");
-    ClientXdsClient.parseServerSideListener(listener, null, true);
+    ClientXdsClient.parseServerSideListener(listener, null, filterRegistry, true);
   }
 
   @Test
@@ -860,7 +901,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Listener listener1 cannot have use_original_dst set to true");
-    ClientXdsClient.parseServerSideListener(listener, null, true);
+    ClientXdsClient.parseServerSideListener(listener, null, filterRegistry, true);
   }
 
   @Test
@@ -874,7 +915,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "FilterChain filter-chain-foo missing required HttpConnectionManager filter");
-    ClientXdsClient.parseServerSideListener(listener, null, true);
+    ClientXdsClient.parseServerSideListener(listener, null, filterRegistry, true);
   }
 
   @Test
@@ -892,7 +933,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "FilterChain filter-chain-foo with duplicated filter: envoy.http_connection_manager");
-    ClientXdsClient.parseServerSideListener(listener, null, true);
+    ClientXdsClient.parseServerSideListener(listener, null, filterRegistry, true);
   }
 
   @Test
@@ -913,7 +954,7 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "FilterChain filter-chain-foo contains filter envoy.http_connection_manager "
             + "with config_discovery not supported");
-    ClientXdsClient.parseServerSideListener(listener, null, true);
+    ClientXdsClient.parseServerSideListener(listener, null, filterRegistry, true);
   }
 
   @Test
@@ -930,7 +971,7 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "FilterChain filter-chain-foo contains filter envoy.http_connection_manager "
             + "without typed_config");
-    ClientXdsClient.parseServerSideListener(listener, null, true);
+    ClientXdsClient.parseServerSideListener(listener, null, filterRegistry, true);
   }
 
   @Test
@@ -955,7 +996,7 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "FilterChain filter-chain-foo contains filter envoy.http_connection_manager with "
             + "unsupported typed_config type badTypeUrl");
-    ClientXdsClient.parseServerSideListener(listener, null, true);
+    ClientXdsClient.parseServerSideListener(listener, null, filterRegistry, true);
   }
 
   @Test
@@ -977,7 +1018,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("HttpConnectionManager contains duplicate HttpFilter: hf");
-    ClientXdsClient.parseServerSideListener(listener, null, true);
+    ClientXdsClient.parseServerSideListener(listener, null, filterRegistry, true);
   }
 
   @Test
@@ -1000,8 +1041,12 @@ public class ClientXdsClientDataTest {
                     .setIsOptional(true)
                     .build()))
             .build();
-    assertThat(ClientXdsClient.parseFilterChain(filterChain1, null, true).getName())
-        .isNotEqualTo(ClientXdsClient.parseFilterChain(filterChain2, null, true).getName());
+
+    EnvoyServerProtoData.FilterChain parsedFilterChain1 =
+        ClientXdsClient.parseFilterChain(filterChain1, null, filterRegistry, true);
+    EnvoyServerProtoData.FilterChain parsedFilterChain2 =
+        ClientXdsClient.parseFilterChain(filterChain2, null, filterRegistry, true);
+    assertThat(parsedFilterChain1.getName()).isNotEqualTo(parsedFilterChain2.getName());
   }
 
   private static Filter buildHttpConnectionManagerFilter(HttpFilter... httpFilters) {

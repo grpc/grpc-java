@@ -52,6 +52,18 @@ interface Filter {
    */
   ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage);
 
+  /**
+   * Returns {@code true} if the filter is supported no clients. Otherwise, return {@code false}.
+   */
+  // TODO(chengyuanzhang): implement as default method after dropping Java 7 support.
+  boolean isSupportedOnClients();
+
+  /**
+   * Returns {@code true} if the filter is supported on servers. Otherwise, return {@code false}.
+   */
+  // TODO(chengyuanzhang): implement as default method after dropping Java 7 support.
+  boolean isSupportedOnServers();
+
   /** Represents an opaque data structure holding configuration for a filter. */
   interface FilterConfig {
     String typeUrl();

@@ -65,6 +65,17 @@ enum LameFilter implements Filter, ClientInterceptorBuilder {
     throw new UnsupportedOperationException();
   }
 
+  @Override
+  public boolean isSupportedOnClients() {
+    return true;
+  }
+
+  @Override
+  public boolean isSupportedOnServers() {
+    return false;
+  }
+
+
   @Nullable
   @Override
   public ClientInterceptor buildClientInterceptor(

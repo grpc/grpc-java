@@ -59,6 +59,17 @@ enum RouterFilter implements Filter, ClientInterceptorBuilder {
     return ConfigOrError.fromError("Router Filter should not have override config");
   }
 
+  @Override
+  public boolean isSupportedOnClients() {
+    return true;
+  }
+
+  @Override
+  public boolean isSupportedOnServers() {
+    return false;
+  }
+
+
   @Nullable
   @Override
   public ClientInterceptor buildClientInterceptor(
