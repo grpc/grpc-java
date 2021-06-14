@@ -9,9 +9,9 @@ evaluationDependsOn(project(':grpc-api').path)
 
 dependencies {
     api project(':grpc-api')
-    guavaDependency 'implementation'
-    censusApiDependency 'implementation'
-    censusGrpcMetricDependency 'implementation'
+    implementation libraries.guava,
+            libraries.opencensus_api,
+            libraries.opencensus_contrib_grpc_metrics
 
     testImplementation project(':grpc-api').sourceSets.test.output,
             project(':grpc-context').sourceSets.test.output,

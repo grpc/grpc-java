@@ -35,11 +35,7 @@ import javax.annotation.CheckReturnValue;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public abstract class SecurityPolicy {
 
-  /**
-   * Package visible constructor because we want this package to retain control over any new
-   * policies for now.
-   */
-  SecurityPolicy() {}
+  public SecurityPolicy() {}
 
   /**
    * Decides whether the given Android UID is authorized. (Validity is implementation dependent).
