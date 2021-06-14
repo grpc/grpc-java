@@ -97,7 +97,7 @@ test.dependsOn testShadow
  */
 class NettyResourceTransformer implements Transformer {
 
-    // A map of resource file paths to the modiid
+    // A map of resource file paths to be modified
     private Map<String, String> resources = [:]
 
     @Override
