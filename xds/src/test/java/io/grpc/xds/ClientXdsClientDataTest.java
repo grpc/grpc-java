@@ -48,6 +48,11 @@ import io.envoyproxy.envoy.config.listener.v3.FilterChain;
 import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.listener.v3.ListenerFilter;
+import io.envoyproxy.envoy.config.rbac.v3.Permission;
+import io.envoyproxy.envoy.config.rbac.v3.Policy;
+import io.envoyproxy.envoy.config.rbac.v3.Principal;
+import io.envoyproxy.envoy.config.rbac.v3.RBAC;
+import io.envoyproxy.envoy.config.rbac.v3.RBAC.Action;
 import io.envoyproxy.envoy.config.route.v3.DirectResponseAction;
 import io.envoyproxy.envoy.config.route.v3.FilterAction;
 import io.envoyproxy.envoy.config.route.v3.NonForwardingAction;
@@ -680,8 +685,8 @@ public class ClientXdsClientDataTest {
                                         .setDenominator(DenominatorType.HUNDRED)))
                         .build()))
             .build();
-    FilterConfig config =
-        ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, true).getStruct();
+    FilterConfig config = ClientXdsClient.parseHttpFilter(
+        httpFilter, filterRegistry, true /* isForClient */).getStruct();
     assertThat(config).isInstanceOf(FaultConfig.class);
   }
 
@@ -708,10 +713,66 @@ public class ClientXdsClientDataTest {
                         .build()))
             .build();
     StructOrError<FilterConfig> config =
-        ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, false);
+        ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, false /* isForClient */);
     assertThat(config.getErrorDetail()).isEqualTo(
         "HttpFilter [envoy.fault](" + FaultFilter.TYPE_URL + ") is required but "
             + "unsupported for server");
+  }
+
+  @Test
+  public void parseHttpFilter_rbacConfigForServer() {
+    filterRegistry.register(RbacFilter.INSTANCE);
+    HttpFilter httpFilter =
+        HttpFilter.newBuilder()
+            .setIsOptional(false)
+            .setName("envoy.auth")
+            .setTypedConfig(
+                Any.pack(
+                    io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC.newBuilder()
+                        .setRules(
+                            RBAC.newBuilder()
+                                .setAction(Action.ALLOW)
+                                .putPolicies(
+                                    "allow-all",
+                                    Policy.newBuilder()
+                                        .addPrincipals(Principal.newBuilder().setAny(true))
+                                        .addPermissions(Permission.newBuilder().setAny(true))
+                                        .build())
+                                .build())
+                        .build()))
+            .build();
+    FilterConfig config = ClientXdsClient.parseHttpFilter(
+        httpFilter, filterRegistry, false /* isForClient */).getStruct();
+    assertThat(config).isInstanceOf(RbacConfig.class);
+  }
+
+  @Test
+  public void parseHttpFilter_rbacConfigUnsupportedForClient() {
+    filterRegistry.register(RbacFilter.INSTANCE);
+    HttpFilter httpFilter =
+        HttpFilter.newBuilder()
+            .setIsOptional(false)
+            .setName("envoy.auth")
+            .setTypedConfig(
+                Any.pack(
+                    io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC.newBuilder()
+                        .setRules(
+                            RBAC.newBuilder()
+                                .setAction(Action.ALLOW)
+                                .putPolicies(
+                                    "allow-all",
+                                    Policy.newBuilder()
+                                        .addPrincipals(Principal.newBuilder().setAny(true))
+                                        .addPermissions(Permission.newBuilder().setAny(true))
+                                        .build())
+                                .build())
+                        .build()))
+            .build();
+    StructOrError<FilterConfig> config =
+        ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, true /* isForClient */);
+    assertThat(config.getErrorDetail()).isEqualTo(
+        "HttpFilter [envoy.auth](" + RbacFilter.TYPE_URL + ") is required but "
+            + "unsupported for client");
   }
 
   @Test

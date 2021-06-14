@@ -150,6 +150,16 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
     }
   }
 
+  @Override
+  public boolean isSupportedOnClients() {
+    return false;
+  }
+
+  @Override
+  public boolean isSupportedOnServers() {
+    return true;
+  }
+
   @Nullable
   @Override
   public ServerInterceptor buildServerInterceptor(FilterConfig config,
