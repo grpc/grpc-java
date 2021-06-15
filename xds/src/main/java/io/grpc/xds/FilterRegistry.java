@@ -34,7 +34,10 @@ final class FilterRegistry {
 
   static synchronized FilterRegistry getDefaultRegistry() {
     if (instance == null) {
-      instance = newRegistry().register(FaultFilter.INSTANCE, RouterFilter.INSTANCE);
+      instance = newRegistry().register(
+              FaultFilter.INSTANCE,
+              RouterFilter.INSTANCE,
+              RbacFilter.INSTANCE);
     }
     return instance;
   }

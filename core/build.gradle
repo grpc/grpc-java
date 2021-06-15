@@ -27,9 +27,9 @@ dependencies {
     implementation libraries.gson,
             libraries.android_annotations,
             libraries.animalsniffer_annotations,
-            libraries.errorprone
-    guavaDependency 'implementation'
-    perfmarkDependency 'implementation'
+            libraries.errorprone,
+            libraries.guava,
+            libraries.perfmark
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),

@@ -13,8 +13,8 @@ dependencies {
     api project(':grpc-core'),
             project(':grpc-stub'),
             libraries.junit
-
-    censusApiDependency 'implementation'
+    implementation libraries.opencensus_api
+    runtimeOnly project(":grpc-context") // Pull in newer version than census-api
 
     testImplementation (libraries.mockito) {
         // prefer our own versions instead of mockito's dependency

@@ -11,14 +11,11 @@ description = "gRPC: OkHttp"
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    api project(':grpc-core')
-    api (libraries.okhttp) {
-        // prefer our own versions instead of okhttp's dependency
-        exclude group: 'com.squareup.okio', module: 'okio'
-    }
-    implementation libraries.okio
-    guavaDependency 'implementation'
-    perfmarkDependency 'implementation'
+    api project(':grpc-core'),
+            libraries.okhttp
+    implementation libraries.okio,
+            libraries.guava,
+            libraries.perfmark
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,

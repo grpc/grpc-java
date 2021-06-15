@@ -208,10 +208,10 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  public static final class HeaderMatcher implements Matcher {
+  public static final class AuthHeaderMatcher implements Matcher {
     private final Matchers.HeaderMatcher delegate;
 
-    public HeaderMatcher(Matchers.HeaderMatcher delegate) {
+    public AuthHeaderMatcher(Matchers.HeaderMatcher delegate) {
       this.delegate = checkNotNull(delegate, "delegate");
     }
 
@@ -231,6 +231,19 @@ public final class GrpcAuthorizationEngine {
     @Override
     public boolean matches(EvaluateArgs args) {
       return port == args.getDestinationPort();
+    }
+  }
+
+  public static final class RequestedServerNameMatcher implements Matcher {
+    private final Matchers.StringMatcher delegate;
+
+    public RequestedServerNameMatcher(Matchers.StringMatcher delegate) {
+      this.delegate = checkNotNull(delegate, "delegate");
+    }
+
+    @Override
+    public boolean matches(EvaluateArgs args) {
+      return delegate.matches(args.getRequestedServerName());
     }
   }
 
@@ -256,6 +269,7 @@ public final class GrpcAuthorizationEngine {
      * principal names we are interested in.
      * https://github.com/envoyproxy/envoy/blob/0fae6970ddaf93f024908ba304bbd2b34e997a51/envoy/ssl/connection.h#L70
      */
+    @Nullable
     private Collection<String> getPrincipalNames() {
       SSLSession sslSession = serverCall.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
       if (sslSession == null) {
@@ -329,9 +343,13 @@ public final class GrpcAuthorizationEngine {
       SocketAddress addr = serverCall.getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR);
       return addr == null ? -1 : ((InetSocketAddress) addr).getPort();
     }
+
+    private String getRequestedServerName() {
+      return "";
+    }
   }
 
-  interface Matcher {
+  public interface Matcher {
     boolean matches(EvaluateArgs args);
   }
 
@@ -391,7 +409,7 @@ public final class GrpcAuthorizationEngine {
 
   /** Always true matcher.*/
   public static final class AlwaysTrueMatcher implements Matcher {
-    static AlwaysTrueMatcher INSTANCE = new AlwaysTrueMatcher();
+    public static AlwaysTrueMatcher INSTANCE = new AlwaysTrueMatcher();
 
     @Override
     public boolean matches(EvaluateArgs args) {

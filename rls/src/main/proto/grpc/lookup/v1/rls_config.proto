@@ -29,6 +29,9 @@ option java_outer_classname = "RlsConfigProto";
 // present for the keybuilder to match.
 message NameMatcher {
   // The name that will be used in the RLS key_map to refer to this value.
+  // If required_match is true, you may omit this field or set it to an empty
+  // string, in which case the matcher will require a match, but won't update
+  // the key_map.
   string key = 1;
 
   // Ordered list of names (headers or query parameter names) that can supply
@@ -52,10 +55,29 @@ message GrpcKeyBuilder {
   }
   repeated Name names = 1;
 
+  // If you wish to include the host, service, or method names as keys in the
+  // generated RouteLookupRequest, specify key names to use in the extra_keys
+  // submessage. If a key name is empty, no key will be set for that value.
+  // If this submessage is specified, the normal host/path fields will be left
+  // unset in the RouteLookupRequest. We are deprecating host/path in the
+  // RouteLookupRequest, so services should migrate to the ExtraKeys approach.
+  message ExtraKeys {
+    string host = 1;
+    string service = 2;
+    string method = 3;
+  }
+  ExtraKeys extra_keys = 3;
+
   // Extract keys from all listed headers.
   // For gRPC, it is an error to specify "required_match" on the NameMatcher
   // protos.
   repeated NameMatcher headers = 2;
+
+  // You can optionally set one or more specific key/value pairs to be added to
+  // the key_map.  This can be useful to identify which builder built the key,
+  // for example if you are suppressing the actual method, but need to
+  // separately cache and request all the matched methods.
+  map<string, string> constant_keys = 4;
 }
 
 // An HttpKeyBuilder applies to a given HTTP URL and headers.
@@ -131,6 +153,12 @@ message HttpKeyBuilder {
   // to match.  If a given header appears multiple times in the request we will
   // report it as a comma-separated string, in standard HTTP fashion.
   repeated NameMatcher headers = 4;
+
+  // You can optionally set one or more specific key/value pairs to be added to
+  // the key_map.  This can be useful to identify which builder built the key,
+  // for example if you are suppressing a lot of information from the URL, but
+  // need to separately cache and request URLs with that content.
+  map<string, string> constant_keys = 5;
 }
 
 message RouteLookupConfig {
@@ -176,40 +204,15 @@ message RouteLookupConfig {
 
   // This is a list of all the possible targets that can be returned by the
   // lookup service.  If a target not on this list is returned, it will be
-  // treated the same as an RPC error from the RLS.
+  // treated the same as an unhealthy target.
   repeated string valid_targets = 8;
 
-  // This value provides a default target to use if needed.  It will be used for
-  // request processing strategy SYNC_LOOKUP_DEFAULT_TARGET_ON_ERROR if RLS
-  // returns an error, or strategy ASYNC_LOOKUP_DEFAULT_TARGET_ON_MISS if RLS
-  // returns an error or there is a cache miss in the client.  It will also be
-  // used if there are no healthy backends for an RLS target.  Note that
-  // requests can be routed only to a subdomain of the original target,
-  // e.g. "us_east_1.cloudbigtable.googleapis.com".
+  // This value provides a default target to use if needed.  If set, it will be
+  // used if RLS returns an error, times out, or returns an invalid response.
+  // Note that requests can be routed only to a subdomain of the original
+  // target, e.g. "us_east_1.cloudbigtable.googleapis.com".
   string default_target = 9;
 
-  // Specify how to process a request when not already in the cache.
-  enum RequestProcessingStrategy {
-    STRATEGY_UNSPECIFIED = 0;
-
-    // Query the RLS and process the request using target returned by the
-    // lookup. The target will then be cached and used for processing
-    // subsequent requests for the same key. Any errors during lookup service
-    // processing will fall back to default target for request processing.
-    SYNC_LOOKUP_DEFAULT_TARGET_ON_ERROR = 1;
-
-    // Query the RLS and process the request using target returned by the
-    // lookup. The target will then be cached and used for processing
-    // subsequent requests for the same key. Any errors during lookup service
-    // processing will return an error back to the client.  Services with
-    // strict regional routing requirements should use this strategy.
-    SYNC_LOOKUP_CLIENT_SEES_ERROR = 2;
-
-    // Query the RLS asynchronously but respond with the default target.  The
-    // target in the lookup response will then be cached and used for
-    // subsequent requests.  Services with strict latency requirements (but not
-    // strict regional routing requirements) should use this strategy.
-    ASYNC_LOOKUP_DEFAULT_TARGET_ON_MISS = 3;
-  }
-  RequestProcessingStrategy request_processing_strategy = 10;
+  reserved 10;
+  reserved "request_processing_strategy";
 }

@@ -41,6 +41,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class RlsProtoConvertersTest {
 
+  @SuppressWarnings("deprecation")
   @Test
   public void convert_toRequestProto() {
     Converter<RouteLookupRequest, RlsProtoData.RouteLookupRequest> converter =
@@ -60,6 +61,7 @@ public class RlsProtoConvertersTest {
     assertThat(object.getKeyMap()).containsExactly("key1", "val1");
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void convert_toRequestObject() {
     Converter<RlsProtoData.RouteLookupRequest, RouteLookupRequest> converter =
