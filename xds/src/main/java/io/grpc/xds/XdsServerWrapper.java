@@ -16,13 +16,13 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Attributes;
+import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -30,7 +30,6 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
-import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -62,6 +61,7 @@ import io.netty.handler.ssl.SslContext;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.security.cert.CertStoreException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -483,7 +483,11 @@ final class XdsServerWrapper extends Server {
         @Override
         public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
             Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-          // TODO(chengyuanzhang): chain interceptors together.
+          // intercept forward
+          for (int i = interceptors.size() - 1; i >= 0; i--) {
+            next = InternalServerInterceptors.interceptCallHandlerCreate(
+                interceptors.get(i), next);
+          }
           return next.startCall(call, headers);
         }
       };
@@ -491,7 +495,7 @@ final class XdsServerWrapper extends Server {
   }
 
   /**
-   * The resolved HttpConnectionManager level configuration.
+   * The HttpConnectionManager level configuration.
    */
   private static final class ServerRoutingConfig {
     // Top level http filter configs.
@@ -513,6 +517,9 @@ final class XdsServerWrapper extends Server {
     }
   }
 
+  /**
+   * The FilterChain level configuration.
+   */
   private static final class FilteredConfig {
     private final ServerRoutingConfig routingConfig;
     @Nullable
@@ -562,21 +569,33 @@ final class XdsServerWrapper extends Server {
 
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-      if (evt instanceof ProtocolNegotiationEvent) {
-        ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
-        FilteredConfig config = selector.select(
-            (InetSocketAddress) ctx.channel().localAddress(),
-            (InetSocketAddress) ctx.channel().remoteAddress());
-        if (config != null) {
-          Attributes attr = InternalProtocolNegotiationEvent.getAttributes(pne)
-              .toBuilder().set(ATTR_SERVER_ROUTING_CONFIG, config.routingConfig).build();
-          pne = InternalProtocolNegotiationEvent.withAttributes(pne, attr);
-        }
-        // TODO(chengyuanzhang): handle all cases
-        ctx.fireUserEventTriggered(pne);
-      } else {
+      if (!(evt instanceof ProtocolNegotiationEvent)) {
         super.userEventTriggered(ctx, evt);
+        return;
       }
+      FilteredConfig config = selector.select(
+          (InetSocketAddress) ctx.channel().localAddress(),
+          (InetSocketAddress) ctx.channel().remoteAddress());
+      ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
+      SslContextProviderSupplier sslContextProviderSupplier = null;
+      ChannelHandler handler;
+      if (config != null) {
+        Attributes attr = InternalProtocolNegotiationEvent.getAttributes(pne)
+            .toBuilder().set(ATTR_SERVER_ROUTING_CONFIG, config.routingConfig).build();
+        pne = InternalProtocolNegotiationEvent.withAttributes(pne, attr);
+        sslContextProviderSupplier = config.sslContextProviderSupplier;
+      }
+      if (sslContextProviderSupplier == null) {
+        if (fallbackProtocolNegotiator == null) {
+          ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
+          return;
+        }
+        handler = fallbackProtocolNegotiator.newHandler(grpcHandler);
+      } else {
+        handler = new ServerHandler(grpcHandler, sslContextProviderSupplier);
+      }
+      ctx.pipeline().replace(this, null, handler);
+      ctx.fireUserEventTriggered(pne);
     }
   }
 
