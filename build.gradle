@@ -205,92 +205,11 @@ subprojects {
             jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.10'
         ]
 
-        // A util function to config guava dependency with transitive dependencies
-        // properly resolved for the failOnVersionConflict strategy.
-        guavaDependency = { configurationName ->
-            dependencies."$configurationName"(libraries.guava) {
-                exclude group: 'com.google.code.findbugs', module: 'jsr305'
-                exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
-                exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
-            }
-            dependencies."$configurationName" libraries.errorprone
-            dependencies.runtimeOnly libraries.animalsniffer_annotations
-            dependencies.runtimeOnly libraries.jsr305
-        }
-
-        // A util function to config opencensus_api dependency with transitive
-        // dependencies properly resolved for the failOnVersionConflict strategy.
-        censusApiDependency = { configurationName ->
-            dependencies."$configurationName"(libraries.opencensus_api) {
-                exclude group: 'com.google.code.findbugs', module: 'jsr305'
-                exclude group: 'com.google.guava', module: 'guava'
-                // we'll always be more up-to-date
-                exclude group: 'io.grpc', module: 'grpc-context'
-            }
-            dependencies.runtimeOnly project(':grpc-context')
-            dependencies.runtimeOnly libraries.jsr305
-            guavaDependency 'runtimeOnly'
-        }
-
-        // A util function to config opencensus_contrib_grpc_metrics dependency
-        // with transitive dependencies properly resolved for the failOnVersionConflict
-        // strategy.
-        censusGrpcMetricDependency = { configurationName ->
-            dependencies."$configurationName"(libraries.opencensus_contrib_grpc_metrics) {
-                exclude group: 'com.google.code.findbugs', module: 'jsr305'
-                exclude group: 'com.google.guava', module: 'guava'
-                // we'll always be more up-to-date
-                exclude group: 'io.grpc', module: 'grpc-context'
-            }
-            dependencies.runtimeOnly project(':grpc-context')
-            dependencies.runtimeOnly libraries.jsr305
-            guavaDependency 'runtimeOnly'
-        }
-
-        googleOauth2Dependency = { configurationName ->
-            dependencies."$configurationName"(libraries.google_auth_oauth2_http) {
-                exclude group: 'com.google.guava', module: 'guava'
-                exclude group: 'io.grpc', module: 'grpc-context'
-                exclude group: 'io.opencensus', module: 'opencensus-api'
-            }
-            dependencies.runtimeOnly project(':grpc-context')
-            censusApiDependency 'runtimeOnly'
-            guavaDependency 'runtimeOnly'
-        }
-
-        // A util function to config perfmark dependency with transitive
-        // dependencies properly resolved for the failOnVersionConflict strategy.
-        perfmarkDependency = { configurationName ->
-            dependencies."$configurationName"(libraries.perfmark) {
-                exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
-            }
-            dependencies.runtimeOnly libraries.errorprone
-        }
-
         appendToProperty = { Property<String> property, String value, String separator ->
             if (property.present) {
                 property.set(property.get() + separator + value)
             } else {
                 property.set(value)
-            }
-        }
-    }
-
-    configurations {
-        // Detect Maven Enforcer's dependencyConvergence failures. We only
-        // care for artifacts used as libraries by others.
-        if (isAndroid && !(project.name in ['grpc-android-interop-testing'])) {
-            releaseRuntimeClasspath {
-                resolutionStrategy.failOnVersionConflict()
-            }
-        }
-        if (!isAndroid && !(project.name in [
-                'grpc-benchmarks',
-                'grpc-interop-testing',
-                'grpc-gae-interop-testing-jdk8',
-        ])) {
-            runtimeClasspath {
-                resolutionStrategy.failOnVersionConflict()
             }
         }
     }
@@ -403,6 +322,19 @@ subprojects {
             options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
             options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
+        }
+    }
+
+    plugins.withId("java-library") {
+        // Detect Maven Enforcer's dependencyConvergence failures. We only care
+        // for artifacts used as libraries by others with Maven.
+        tasks.register('checkUpperBoundDeps') {
+            doLast {
+                requireUpperBoundDepsMatch(configurations.runtimeClasspath, project)
+            }
+        }
+        tasks.named('compileJava') {
+            dependsOn checkUpperBoundDeps
         }
     }
 
@@ -579,6 +511,59 @@ subprojects {
             // Ignore any classes or methods marked @ExperimentalApi
             // TODO(zpencer): enable after japicmp-gradle-plugin/pull/15
             // annotationExcludes = ['@io.grpc.ExperimentalApi']
+        }
+    }
+}
+
+class DepAndParents {
+    DependencyResult dep
+    List<String> parents
+}
+
+/**
+ * Make sure that Maven would select the same versions as Gradle selected.
+ * This is essentially the same as if we used Maven Enforcer's
+ * requireUpperBoundDeps for our artifacts.
+ */
+def requireUpperBoundDepsMatch(Configuration conf, Project project) {
+    // artifact name => version
+    Map<String,String> golden = conf.resolvedConfiguration.resolvedArtifacts.collectEntries {
+        ResolvedArtifact it ->
+            ModuleVersionIdentifier id = it.moduleVersion.id
+            [id.group + ":" + id.name, id.version]
+    }
+    // Breadth-first search like Maven for dependency resolution
+    Queue<DepAndParents> queue = new ArrayDeque<>()
+    conf.incoming.resolutionResult.root.dependencies.each {
+        queue.add(new DepAndParents(dep: it, parents: [project.displayName]))
+    }
+    Set<String> found = new HashSet<>()
+    while (!queue.isEmpty()) {
+        DepAndParents depAndParents = queue.remove()
+        ResolvedDependencyResult result = (ResolvedDependencyResult) depAndParents.dep
+        ModuleVersionIdentifier id = result.selected.moduleVersion
+        String artifact = id.group + ":" + id.name
+        if (found.contains(artifact))
+            continue
+        found.add(artifact)
+        String version
+        if (result.requested instanceof ProjectComponentSelector) {
+            ProjectComponentSelector selector = (ProjectComponentSelector) result.requested
+            version = project.findProject(selector.projectPath).version
+        } else {
+            version = ((ModuleComponentSelector) result.requested).version
+        }
+        String goldenVersion = golden[artifact]
+        if (goldenVersion != version && "[$goldenVersion]" != version) {
+            throw new RuntimeException(
+                "Maven version skew: $artifact ($version != $goldenVersion) "
+                + "Bad version dependency path: " + depAndParents.parents
+                + " Run './gradlew $project.path:dependencies --configuration $conf.name' "
+                + "to diagnose")
+        }
+        result.selected.dependencies.each {
+            queue.add(new DepAndParents(
+                dep: it, parents: depAndParents.parents + [artifact + ":" + version]))
         }
     }
 }

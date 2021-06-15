@@ -477,7 +477,7 @@ final class XdsServerWrapper extends Server {
         return noopInterceptor;
       }
       if (interceptors.size() == 1) {
-        interceptors.get(0);
+        return interceptors.get(0);
       }
       return new ServerInterceptor() {
         @Override

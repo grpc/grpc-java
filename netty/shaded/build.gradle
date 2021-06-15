@@ -47,21 +47,18 @@ shadowJar {
 publishing {
     publications {
         maven(MavenPublication) {
-            // Ideally swap to project.shadow.component(it) when it isn't broken for project deps
-            artifact shadowJar
+            project.shadow.component(it)
+
             // Empty jars are not published via withJavadocJar() and withSourcesJar()
             artifact javadocJar
             artifact sourcesJar
 
+            // shadow.component() is run after the main build.gradle's withXml
             pom.withXml {
-                def dependencies = asNode().appendNode('dependencies')
-                project.configurations.shadow.allDependencies.each { dep ->
-                    def dependencyNode = dependencies.appendNode('dependency')
-                    dependencyNode.appendNode('groupId', dep.group)
-                    dependencyNode.appendNode('artifactId', dep.name)
-                    def version = (dep.name == 'grpc-core') ? '[' + dep.version + ']' : dep.version
-                    dependencyNode.appendNode('version', version)
-                    dependencyNode.appendNode('scope', 'compile')
+                asNode().dependencies.'*'.findAll() { dep ->
+                    dep.artifactId.text() in ['grpc-api', 'grpc-core']
+                }.each() { core ->
+                    core.version*.value = "[" + core.version.text() + "]"
                 }
             }
         }
