@@ -65,6 +65,7 @@ import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
+import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBACPerRoute;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
@@ -772,6 +773,31 @@ public class ClientXdsClientDataTest {
     assertThat(config.getErrorDetail()).isEqualTo(
         "HttpFilter [envoy.auth](" + RbacFilter.TYPE_URL + ") is required but "
             + "unsupported for client");
+  }
+
+  @Test
+  public void parseOverrideRbacFilterConfig() {
+    filterRegistry.register(RbacFilter.INSTANCE);
+    RBACPerRoute rbacPerRoute =
+        RBACPerRoute.newBuilder()
+            .setRbac(
+                io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC.newBuilder()
+                    .setRules(
+                        RBAC.newBuilder()
+                            .setAction(Action.ALLOW)
+                            .putPolicies(
+                                "allow-all",
+                                Policy.newBuilder()
+                                    .addPrincipals(Principal.newBuilder().setAny(true))
+                                    .addPermissions(Permission.newBuilder().setAny(true))
+                            .build())))
+            .build();
+    Map<String, Any> configOverrides = ImmutableMap.of("envoy.auth", Any.pack(rbacPerRoute));
+    Map<String, FilterConfig> parsedConfigs =
+        ClientXdsClient.parseOverrideFilterConfigs(configOverrides, filterRegistry).getStruct();
+    assertThat(parsedConfigs).hasSize(1);
+    assertThat(parsedConfigs).containsKey("envoy.auth");
+    assertThat(parsedConfigs.get("envoy.auth")).isInstanceOf(RbacConfig.class);
   }
 
   @Test
