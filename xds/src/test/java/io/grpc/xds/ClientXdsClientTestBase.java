@@ -944,7 +944,7 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
-  public void rdsResourceDeletedByLds() {
+  public void rdsResourceDeletedByLdsApiListener() {
     xdsClient.watchLdsResource(LDS_RESOURCE, ldsResourceWatcher);
     xdsClient.watchRdsResource(RDS_RESOURCE, rdsResourceWatcher);
     verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
@@ -975,6 +975,68 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
     verifyResourceMetadataAcked(
         LDS, LDS_RESOURCE, testListenerVhosts, VERSION_2, TIME_INCREMENT * 3);
+    verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
+  }
+
+  @Test
+  public void rdsResourcesDeletedByLdsTcpListener() {
+    Assume.assumeTrue(useProtocolV3());
+    xdsClient.watchLdsResource(LISTENER_RESOURCE, ldsResourceWatcher);
+    xdsClient.watchRdsResource(RDS_RESOURCE, rdsResourceWatcher);
+    verifyResourceMetadataRequested(LDS, LISTENER_RESOURCE);
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
+
+    Message hcmFilter = mf.buildHttpConnectionManagerFilter(
+        RDS_RESOURCE, null, Collections.<Message>emptyList());
+    Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+        "google-sds-config-default", "ROOTCA");
+    Message filterChain = mf.buildFilterChain(
+        Collections.<String>emptyList(), downstreamTlsContext, hcmFilter);
+    Any packedListener =
+        Any.pack(mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain));
+
+    // Simulates receiving the requested LDS resource as a TCP listener with a filter chain
+    // referencing RDS_RESOURCE.
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    call.sendResponse(LDS, packedListener, VERSION_1, "0000");
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+
+    assertThat(ldsUpdateCaptor.getValue().listener().getFilterChains()).hasSize(1);
+    FilterChain parsedFilterChain = Iterables.getOnlyElement(
+        ldsUpdateCaptor.getValue().listener().getFilterChains());
+    assertThat(parsedFilterChain.getHttpConnectionManager().rdsName()).isEqualTo(RDS_RESOURCE);
+    verifyResourceMetadataAcked(LDS, LISTENER_RESOURCE, packedListener, VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
+
+    // Simulates receiving the requested RDS resource.
+    call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
+    verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
+    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT * 2);
+
+    // Simulates receiving an updated version of the requested LDS resource as a TCP listener
+    // with a filter chain containing inlined RouteConfiguration.
+    hcmFilter = mf.buildHttpConnectionManagerFilter(
+        null,
+        mf.buildRouteConfiguration(
+            "route-bar.googleapis.com", mf.buildOpaqueVirtualHosts(VHOST_SIZE)),
+        Collections.<Message>emptyList());
+    filterChain = mf.buildFilterChain(
+        Collections.<String>emptyList(), downstreamTlsContext, hcmFilter);
+    packedListener =
+        Any.pack(mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain));
+    call.sendResponse(LDS, packedListener, VERSION_2, "0001");
+    verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
+    assertThat(ldsUpdateCaptor.getValue().listener().getFilterChains()).hasSize(1);
+    parsedFilterChain = Iterables.getOnlyElement(
+        ldsUpdateCaptor.getValue().listener().getFilterChains());
+    assertThat(parsedFilterChain.getHttpConnectionManager().virtualHosts()).hasSize(VHOST_SIZE);
+    verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
+    verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
+    verifyResourceMetadataAcked(
+        LDS, LISTENER_RESOURCE, packedListener, VERSION_2, TIME_INCREMENT * 3);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
   }
 
