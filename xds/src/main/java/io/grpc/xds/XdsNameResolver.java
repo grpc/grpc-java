@@ -361,7 +361,7 @@ final class XdsNameResolver extends NameResolver {
         }
         if (selectedRoute.routeAction() == null) {
           return Result.forError(Status.UNAVAILABLE.withDescription(
-              "Could not route RPC to route with non-forwarding action"));
+              "Could not route RPC to Route with non-forwarding action"));
         }
         RouteAction action = selectedRoute.routeAction();
         if (action.cluster() != null) {
@@ -746,11 +746,13 @@ final class XdsNameResolver extends NameResolver {
       Set<String> clusters = new HashSet<>();
       for (Route route : routes) {
         RouteAction action = route.routeAction();
-        if (action.cluster() != null) {
-          clusters.add(action.cluster());
-        } else if (action.weightedClusters() != null) {
-          for (ClusterWeight weighedCluster : action.weightedClusters()) {
-            clusters.add(weighedCluster.name());
+        if (action != null) {
+          if (action.cluster() != null) {
+            clusters.add(action.cluster());
+          } else if (action.weightedClusters() != null) {
+            for (ClusterWeight weighedCluster : action.weightedClusters()) {
+              clusters.add(weighedCluster.name());
+            }
           }
         }
       }

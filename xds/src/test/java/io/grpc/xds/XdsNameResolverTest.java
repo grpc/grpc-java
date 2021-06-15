@@ -436,7 +436,7 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void resolved_simpleCallFailedToRoute() {
+  public void resolved_simpleCallFailedToRoute_noMatchingRoute() {
     InternalConfigSelector configSelector = resolveToClusters();
     CallInfo call = new CallInfo("FooService", "barMethod");
     Result selectResult = configSelector.selectConfig(
@@ -445,6 +445,41 @@ public class XdsNameResolverTest {
     assertThat(status.isOk()).isFalse();
     assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(status.getDescription()).isEqualTo("Could not find xDS route matching RPC");
+    verifyNoMoreInteractions(mockListener);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void resolved_simpleCallFailedToRoute_routeWithNonForwardingAction() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(
+        Arrays.asList(
+            Route.forNonForwardingAction(
+                RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+                ImmutableMap.<String, FilterConfig>of()),
+            Route.forAction(
+                RouteMatch.withPathExactOnly(call2.getFullMethodNameForPath()),
+                RouteAction.forCluster(cluster2, Collections.<HashPolicy>emptyList(),
+                    TimeUnit.SECONDS.toNanos(15L)),
+                ImmutableMap.<String, FilterConfig>of())));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    assertThat(result.getAddresses()).isEmpty();
+    assertServiceConfigForLoadBalancingConfig(
+        Collections.singletonList(cluster2),
+        (Map<String, ?>) result.getServiceConfig().getConfig());
+    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    assertThat(result.getAttributes().get(InternalXdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    // Simulates making a call1 RPC.
+    Result selectResult = configSelector.selectConfig(
+        new PickSubchannelArgsImpl(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    Status status = selectResult.getStatus();
+    assertThat(status.isOk()).isFalse();
+    assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(status.getDescription())
+        .isEqualTo("Could not route RPC to Route with non-forwarding action");
     verifyNoMoreInteractions(mockListener);
   }
 
