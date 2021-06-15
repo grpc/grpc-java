@@ -1452,8 +1452,11 @@ public class GrpclbLoadBalancerTest {
   public void grpclbFallback_noBalancerAddress() {
     InOrder inOrder = inOrder(helper, subchannelPool);
 
-    // Create just backend addresses
-    List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
+    // Create 5 distinct backends
+    List<EquivalentAddressGroup> backends = createResolvedBackendAddresses(5);
+
+    // Name resolver gives the first two backend addresses
+    List<EquivalentAddressGroup> backendList = backends.subList(0, 2);
     deliverResolvedAddresses(backendList, Collections.<EquivalentAddressGroup>emptyList());
 
     assertThat(logs).containsAtLeast(
@@ -1472,6 +1475,28 @@ public class GrpclbLoadBalancerTest {
     assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
     verify(helper, never())
         .createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>anyList(), anyString());
+    logs.clear();
+
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // Name resolver sends new resolution results with new backend addr but no balancer addr
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // Name resolver then gives the last three backends
+    backendList = backends.subList(2, 5);
+    deliverResolvedAddresses(backendList, Collections.<EquivalentAddressGroup>emptyList());
+
+    assertThat(logs).containsAtLeast(
+        "INFO: [grpclb-<api.google.com>] Using fallback backends",
+        "INFO: [grpclb-<api.google.com>] "
+            + "Using RR list=[[[FakeSocketAddress-fake-address-2]/{}], "
+            + "[[FakeSocketAddress-fake-address-3]/{}], "
+            + "[[FakeSocketAddress-fake-address-4]/{}]], drop=[null, null, null]",
+        "INFO: [grpclb-<api.google.com>] "
+            + "Update balancing state to CONNECTING: picks=[BUFFER_ENTRY], "
+            + "drops=[null, null, null]")
+        .inOrder();
+
+    // Shift to use updated backends
+    fallbackTestVerifyUseOfFallbackBackendLists(inOrder, backendList);
     logs.clear();
 
     ///////////////////////////////////////////////////////////////////////////////////////
