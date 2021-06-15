@@ -70,11 +70,14 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
   static final String TYPE_URL =
           "type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC";
 
+  private static final String TYPE_URL_OVERRIDE_CONFIG =
+          "type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBACPerRoute";
+
   RbacFilter() {}
 
   @Override
   public String[] typeUrls() {
-    return new String[] { TYPE_URL };
+    return new String[] { TYPE_URL, TYPE_URL_OVERRIDE_CONFIG };
   }
 
   @Override
