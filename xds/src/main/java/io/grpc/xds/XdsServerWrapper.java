@@ -21,11 +21,13 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
@@ -33,6 +35,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
@@ -68,6 +71,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -86,6 +91,7 @@ final class XdsServerWrapper extends Server {
         }
       });
 
+  // TODO(chengyuanzhang): move this to XdsServerBuilder.
   private static final Attributes.Key<AtomicReference<FilterChainSelector>>
       ATTR_FILTER_CHAIN_SELECTOR_REF = Attributes.Key.create(
           "io.grpc.xds.ServerWrapper.filterChainSelectorRef");
@@ -93,7 +99,9 @@ final class XdsServerWrapper extends Server {
       Attributes.Key.create("io.grpc.xds.ServerWrapper.serverRoutingConfig");
 
   private final String listenerAddress;
-  private final Server delegate;
+  private final ServerBuilder<?> delegateBuilder;
+  private final ScheduledExecutorService timeService;
+  private final long retryDelayNano;
   private final FilterRegistry filterRegistry;
   private final ThreadSafeRandom random;
   private final XdsClientPoolFactory xdsClientPoolFactory;
@@ -102,18 +110,26 @@ final class XdsServerWrapper extends Server {
   private final AtomicReference<ServerInterceptor> configApplyingInterceptorRef;
   private final AtomicBoolean started = new AtomicBoolean(false);
   private final AtomicBoolean shutdown = new AtomicBoolean(false);
+  private final SettableFuture<IOException> initialStartFuture = SettableFuture.create();
+  private boolean initialStarted;
+  private ScheduledHandle restartTimer;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private DiscoveryState discoveryState;
+  private volatile Server delegate;
 
   XdsServerWrapper(
       String listenerAddress,
-      Server delegate,
+      ServerBuilder<?> delegateBuilder,
+      ScheduledExecutorService timeService,
+      long retryDelayNano,
       XdsServingStatusListener listener,
       AtomicReference<FilterChainSelector> filterChainSelectorRef,
       AtomicReference<ServerInterceptor> configApplyingInterceptorRef) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
-    this.delegate = checkNotNull(delegate, "delegate");
+    this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
+    this.timeService = checkNotNull(timeService, "timeService");
+    this.retryDelayNano = retryDelayNano;
     this.listener = checkNotNull(listener, "listener");
     this.filterChainSelectorRef = checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
     this.configApplyingInterceptorRef =
@@ -126,13 +142,34 @@ final class XdsServerWrapper extends Server {
   @Override
   public Server start() throws IOException {
     checkState(started.compareAndSet(false, true), "Already started");
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        internalStart();
+      }
+    });
+    syncContext.drain();
+    IOException exception;
+    try {
+      exception = initialStartFuture.get();
+    } catch (InterruptedException | ExecutionException e) {
+      throw new RuntimeException(e);
+    }
+    if (exception != null) {
+      throw exception;
+    }
+    return this;
+  }
+
+  private void internalStart() {
     try {
       xdsClientPool = xdsClientPoolFactory.getOrCreate();
     } catch (Exception e) {
-      String errorMsg = "Failed to initialize xDS";
       listener.onNotServing(
-          Status.UNAVAILABLE.withDescription(errorMsg).withCause(e).asException());
-      throw new IOException(errorMsg, e);
+          Status.UNAVAILABLE.withDescription(
+              "Failed to initialize xDS").withCause(e).asException());
+      initialStartFuture.set(null);
+      return;
     }
     xdsClient = xdsClientPool.getObject();
     // TODO(chengyuanzhang): add an API on XdsClient indicating if it is using v3, don't get
@@ -140,16 +177,14 @@ final class XdsServerWrapper extends Server {
     boolean useProtocolV3 = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
     String listenerTemplate = xdsClient.getBootstrapInfo().getServerListenerResourceNameTemplate();
     if (!useProtocolV3 || listenerTemplate == null) {
-      String errorMsg = "Can only support xDS v3 with listener resource name template";
-      listener.onNotServing(Status.UNAVAILABLE.withDescription(errorMsg).asException());
+      listener.onNotServing(
+          Status.UNAVAILABLE.withDescription(
+              "Can only support xDS v3 with listener resource name template").asException());
+      initialStartFuture.set(null);
       xdsClient = xdsClientPool.returnObject(xdsClient);
-      throw new IOException(errorMsg);
+      return;
     }
     discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", listenerAddress));
-    // TODO(chengyuanzhang): block until all RouteConfigurations are discovered.
-    delegate.start();
-    // TODO(chengyuanzhang): shall we retry if delegate fails to bind?
-    return this;
   }
 
   @Override
@@ -157,8 +192,16 @@ final class XdsServerWrapper extends Server {
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
-    internalShutdown();
-    delegate.shutdown();
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        internalShutdown();
+        if (delegate != null) {
+          delegate.shutdown();
+        }
+      }
+    });
+    syncContext.drain();
     return this;
   }
 
@@ -167,11 +210,20 @@ final class XdsServerWrapper extends Server {
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
-    internalShutdown();
-    delegate.shutdownNow();
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        internalShutdown();
+        if (delegate != null) {
+          delegate.shutdownNow();
+        }
+      }
+    });
+    syncContext.drain();
     return this;
   }
 
+  // Must run in SynchronizationContext
   private void internalShutdown() {
     logger.log(Level.FINER, "Shutting down XdsServerWrapper");
     if (discoveryState != null) {
@@ -179,6 +231,9 @@ final class XdsServerWrapper extends Server {
     }
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
+    }
+    if (restartTimer != null) {
+      restartTimer.cancel();
     }
   }
 
@@ -189,48 +244,99 @@ final class XdsServerWrapper extends Server {
 
   @Override
   public boolean isTerminated() {
-    return delegate.isTerminated();
+    boolean shutdownCalled = shutdown.get();
+    if (!shutdownCalled) {
+      return false;
+    }
+    if (delegate != null) {
+      delegate.isTerminated();
+    }
+    return true;
   }
 
   @Override
   public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
-    return delegate.awaitTermination(timeout, unit);
+    // TODO
+    return false;
   }
 
   @Override
   public void awaitTermination() throws InterruptedException {
-    delegate.awaitTermination();
+    // TODO
   }
 
   @Override
   public int getPort() {
-    return delegate.getPort();
+    if (delegate != null) {
+      return delegate.getPort();
+    }
+    return -1;
   }
 
   @Override
   public List<? extends SocketAddress> getListenSockets() {
-    return delegate.getListenSockets();
+    if (delegate != null) {
+      return delegate.getListenSockets();
+    }
+    return Collections.emptyList();
   }
 
   @Override
   public List<ServerServiceDefinition> getServices() {
-    return delegate.getServices();
+    if (delegate != null) {
+      return delegate.getServices();
+    }
+    return Collections.emptyList();
   }
 
   @Override
   public List<ServerServiceDefinition> getImmutableServices() {
-    return delegate.getImmutableServices();
+    if (delegate != null) {
+      return delegate.getImmutableServices();
+    }
+    return Collections.emptyList();
   }
 
   @Override
   public List<ServerServiceDefinition> getMutableServices() {
-    return delegate.getMutableServices();
+    if (delegate != null) {
+      return delegate.getMutableServices();
+    }
+    return Collections.emptyList();
+  }
+
+  // Must run in SynchronizationContext
+  private void startDelegateServer() {
+    if (restartTimer != null && restartTimer.isPending()) {
+      return;
+    }
+    delegate = delegateBuilder.build();
+    try {
+      delegate.start();
+      listener.onServing();
+    } catch (IOException e) {
+      if (!initialStarted) {
+        initialStarted = true;
+        initialStartFuture.set(e);
+      } else {
+        restartTimer = syncContext.schedule(
+            new RestartTask(), retryDelayNano, TimeUnit.NANOSECONDS, timeService);
+      }
+    }
+  }
+
+  private final class RestartTask implements Runnable {
+    @Override
+    public void run() {
+      startDelegateServer();
+    }
   }
 
   private final class DiscoveryState implements LdsResourceWatcher {
     private final String resourceName;
     private final Map<String, RouteDiscoveryState> routeDiscoveryStates = new HashMap<>();
     // TODO(chengyuanzhang): key by FilterChain's unique name instead.
+    //  Prerequisite: https://github.com/grpc/grpc-java/pull/8228
     private final Map<FilterChain, ServerRoutingConfig> routingConfigs = new HashMap<>();
     // Most recently discovered filter chains.
     private List<FilterChain> filterChains = Collections.emptyList();
@@ -286,7 +392,7 @@ final class XdsServerWrapper extends Server {
     }
 
     @Override
-    public void onResourceDoesNotExist(String resourceName) {
+    public void onResourceDoesNotExist(final String resourceName) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -295,20 +401,33 @@ final class XdsServerWrapper extends Server {
           }
           cleanUpRouteDiscoveryStates();
           filterChainSelectorRef.set(FilterChainSelector.NO_FILTER_CHAIN);
+          if (!initialStarted) {
+            initialStarted = true;
+            initialStartFuture.set(null);
+          }
+          if (restartTimer != null) {
+            restartTimer.cancel();
+          }
+          if (delegate != null) {
+            delegate.shutdown();  // let in-progress calls finish
+          }
+          listener.onNotServing(
+              Status.UNAVAILABLE.withDescription(
+                  "Listener " + resourceName + " unavailable").asException());
         }
       });
     }
 
     @Override
-    public void onError(Status error) {
+    public void onError(final Status error) {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
           if (stopped) {
             return;
           }
-          // TODO(chengyuanzhang): report transient error through ServingStatusListener
-          //  and that's it (keep using existing resources if previously succeeded)?
+          logger.log(Level.FINE, "Transient error from XdsClient: {0}", error);
+          // TODO(chengyuanzhang): shall we do anything with transient error?
         }
       });
     }
@@ -341,6 +460,7 @@ final class XdsServerWrapper extends Server {
         FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.copyOf(routingConfigs), defaultRoutingConfig);
         filterChainSelectorRef.set(selector);
+        startDelegateServer();
       }
     }
 
@@ -403,15 +523,15 @@ final class XdsServerWrapper extends Server {
       }
 
       @Override
-      public void onError(Status error) {
+      public void onError(final Status error) {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            // TODO(chengyuanzhang): report transient error through ServingStatusListener
-            //  and that's it (keep using existing resources if previously succeeded)?
+            logger.log(Level.FINE, "Transient error from XdsClient: {0}", error);
+            // TODO(chengyuanzhang): shall we do anything with transient error?
           }
         });
       }
