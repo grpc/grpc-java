@@ -21,11 +21,6 @@ package io.grpc;
  */
 @Internal
 public final class InternalServerInterceptors {
-  public static <ReqT, RespT> ServerCallHandler<ReqT, RespT> interceptCallHandler(
-      ServerInterceptor interceptor, ServerCallHandler<ReqT, RespT> callHandler) {
-    return ServerInterceptors.InterceptCallHandler.create(interceptor, callHandler);
-  }
-
   public static <OrigReqT, OrigRespT, WrapReqT, WrapRespT>
       ServerMethodDefinition<WrapReqT, WrapRespT> wrapMethod(
       final ServerMethodDefinition<OrigReqT, OrigRespT> definition,

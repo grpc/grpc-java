@@ -39,6 +39,11 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.grpc.testing.protobuf.SimpleServiceGrpc.SimpleServiceBlockingStub;
 import io.grpc.testing.protobuf.SimpleServiceGrpc.SimpleServiceImplBase;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Test;
@@ -67,6 +72,19 @@ public final class ShadingTest {
   @Test(expected = ClassNotFoundException.class)
   public void noNormalNetty() throws Exception {
     Class.forName("io.grpc.netty.NettyServerBuilder");
+  }
+
+  /** Verify that resources under META-INF/native-image reference shaded class names. */
+  @Test
+  public void nettyResourcesUpdated() throws IOException {
+    InputStream inputStream = NettyChannelBuilder.class.getClassLoader()
+        .getResourceAsStream("META-INF/native-image/io.netty/transport/reflection-config.json");
+    assertThat(inputStream).isNotNull();
+
+    Scanner s = new Scanner(inputStream, StandardCharsets.UTF_8.name()).useDelimiter("\\A");
+    String reflectionConfig = s.hasNext() ? s.next() : "";
+
+    assertThat(reflectionConfig).contains("io.grpc.netty.shaded.io.netty");
   }
 
   @Test
