@@ -1,3 +1,19 @@
+import com.github.jengelman.gradle.plugins.shadow.transformers.Transformer
+import com.github.jengelman.gradle.plugins.shadow.transformers.TransformerContext
+import org.gradle.api.file.FileTreeElement
+import shadow.org.apache.tools.zip.ZipOutputStream
+import shadow.org.apache.tools.zip.ZipEntry
+
+
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath "com.github.jengelman.gradle.plugins:shadow:6.1.0"
+    }
+}
+
 plugins {
     id "java"
     id "maven-publish"
@@ -41,6 +57,7 @@ shadowJar {
     // this includes concatenation of string literals and constants.
     relocate 'META-INF/native/libnetty', 'META-INF/native/libio_grpc_netty_shaded_netty'
     relocate 'META-INF/native/netty', 'META-INF/native/io_grpc_netty_shaded_netty'
+    transform(NettyResourceTransformer.class)
     mergeServiceFiles()
 }
 
@@ -73,3 +90,41 @@ compileTestShadowJava.options.compilerArgs = compileTestJava.options.compilerArg
 compileTestShadowJava.options.encoding = compileTestJava.options.encoding
 
 test.dependsOn testShadow
+
+/**
+ * A Transformer which updates the Netty JAR META-INF/ resources to accurately
+ * reference shaded class names.
+ */
+class NettyResourceTransformer implements Transformer {
+
+    // A map of resource file paths to be modified
+    private Map<String, String> resources = [:]
+
+    @Override
+    boolean canTransformResource(FileTreeElement fileTreeElement) {
+        fileTreeElement.name.startsWith("META-INF/native-image/io.netty")
+    }
+
+    @Override
+    void transform(TransformerContext context) {
+        String updatedContent = context.is.getText().replace("io.netty", "io.grpc.netty.shaded.io.netty")
+        resources.put(context.path, updatedContent)
+    }
+
+    @Override
+    boolean hasTransformedResource() {
+        resources.size() > 0
+    }
+
+    @Override
+    void modifyOutputStream(ZipOutputStream outputStream, boolean preserveFileTimestamps) {
+        for (resourceEntry in resources) {
+            ZipEntry entry = new ZipEntry(resourceEntry.key)
+            entry.time = TransformerContext.getEntryTimestamp(preserveFileTimestamps, entry.time)
+
+            outputStream.putNextEntry(entry)
+            outputStream.write(resourceEntry.value.getBytes())
+            outputStream.closeEntry()
+        }
+    }
+}
