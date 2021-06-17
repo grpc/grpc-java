@@ -163,7 +163,7 @@ public class ClientXdsClientDataTest {
     res = ClientXdsClient.parseRoute(redirectRoute, filterRegistry, false);
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail())
-        .isEqualTo("Route [route-blade] with unsupported action type: redirect");
+        .isEqualTo("Route [route-blade] with unknown action type: REDIRECT");
 
     io.envoyproxy.envoy.config.route.v3.Route directResponseRoute =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
@@ -174,7 +174,7 @@ public class ClientXdsClientDataTest {
     res = ClientXdsClient.parseRoute(directResponseRoute, filterRegistry, false);
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail())
-        .isEqualTo("Route [route-blade] with unsupported action type: direct_response");
+        .isEqualTo("Route [route-blade] with unknown action type: DIRECT_RESPONSE");
 
     io.envoyproxy.envoy.config.route.v3.Route filterRoute =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
@@ -185,7 +185,7 @@ public class ClientXdsClientDataTest {
     res = ClientXdsClient.parseRoute(filterRoute, filterRegistry, false);
     assertThat(res.getStruct()).isNull();
     assertThat(res.getErrorDetail())
-        .isEqualTo("Route [route-blade] with unsupported action type: filter_action");
+        .isEqualTo("Route [route-blade] with unknown action type: FILTER_ACTION");
   }
 
   @Test

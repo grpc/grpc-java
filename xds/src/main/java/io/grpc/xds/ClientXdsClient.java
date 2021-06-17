@@ -323,7 +323,6 @@ final class ClientXdsClient extends AbstractXdsClient {
             "FilterChain " + proto.getName() + " contains filter " + filter.getName()
                 + " with unsupported typed_config type " + any.getTypeUrl());
       }
-      // Any filters after the first HttpConnectionManager are ignored.
       if (httpConnectionManager == null) {
         HttpConnectionManager hcmProto;
         try {
@@ -586,7 +585,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         typeUrl = anyConfig.getTypeUrl();
       }
       Message rawConfig = anyConfig;
-      if (anyConfig.getTypeUrl().equals(TYPE_URL_TYPED_STRUCT)) {
+      if (typeUrl.equals(TYPE_URL_TYPED_STRUCT)) {
         TypedStruct typedStruct;
         try {
           typedStruct = anyConfig.unpack(TypedStruct.class);
@@ -661,14 +660,8 @@ final class ClientXdsClient extends AbstractXdsClient {
         return StructOrError.fromStruct(
             Route.forNonForwardingAction(routeMatch.struct, overrideConfigs));
       case REDIRECT:
-        return StructOrError.fromError(
-            "Route [" + proto.getName() + "] with unsupported action type: redirect");
       case DIRECT_RESPONSE:
-        return StructOrError.fromError(
-            "Route [" + proto.getName() + "] with unsupported action type: direct_response");
       case FILTER_ACTION:
-        return StructOrError.fromError(
-            "Route [" + proto.getName() + "] with unsupported action type: filter_action");
       case ACTION_NOT_SET:
       default:
         return StructOrError.fromError(
