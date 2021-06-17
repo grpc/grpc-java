@@ -416,6 +416,10 @@ final class ClientXdsClient extends AbstractXdsClient {
   static io.grpc.xds.HttpConnectionManager parseHttpConnectionManager(
       HttpConnectionManager proto, Set<String> rdsResources, FilterRegistry filterRegistry,
       boolean parseHttpFilter, boolean isForClient) throws ResourceInvalidException {
+    if (proto.getXffNumTrustedHops() != 0) {
+      throw new ResourceInvalidException(
+          "HttpConnectionManager with xff_num_trusted_hops unsupported");
+    }
     // Obtain max_stream_duration from Http Protocol Options.
     long maxStreamDuration = 0;
     if (proto.hasCommonHttpProtocolOptions()) {
