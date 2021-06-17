@@ -7,7 +7,7 @@ on:
     - 'v1.*'
   pull_request:
   schedule:
-  - cron: 54 19 * * SUN # weekly at a "random" time
+  - cron: '54 19 * * SUN' # weekly at a "random" time
 
 permissions:
   contents: read
