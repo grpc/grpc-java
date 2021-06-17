@@ -70,6 +70,19 @@ publishing {
             artifact javadocJar
             artifact sourcesJar
 
+            // Avoid confusing error message "class file for
+            // io.grpc.internal.AbstractServerImplBuilder not found"
+            // (https://github.com/grpc/grpc-java/issues/5881). This can be
+            // removed after https://github.com/grpc/grpc-java/issues/7211 is
+            // resolved.
+            pom.withXml {
+                asNode().dependencies.'*'.findAll() { dep ->
+                    dep.artifactId.text() == 'grpc-core'
+                }.each() { core ->
+                    core.scope*.value = "compile"
+                }
+            }
+
             // shadow.component() is run after the main build.gradle's withXml
             pom.withXml {
                 asNode().dependencies.'*'.findAll() { dep ->
