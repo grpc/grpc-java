@@ -514,8 +514,8 @@ final class ClientXdsClient extends AbstractXdsClient {
       rawConfig = typedStruct.getValue();
     }
     Filter filter = filterRegistry.get(typeUrl);
-    if (filter == null || (!isForClient && filter.isSupportedOnClients())
-        || (isForClient && filter.isSupportedOnServers())) {
+    if (filter == null || (isForClient && !filter.isSupportedOnClients())
+        || (!isForClient && !filter.isSupportedOnServers())) {
       if (isOptional) {
         return null;
       } else {

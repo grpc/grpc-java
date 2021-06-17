@@ -66,6 +66,7 @@ import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBACPerRoute;
+import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
@@ -661,6 +662,34 @@ public class ClientXdsClientDataTest {
             "HttpFilter [unsupported.filter]"
                 + "(type.googleapis.com/google.protobuf.StringValue) is required but unsupported "
                 + "for client");
+  }
+
+  @Test
+  public void parseHttpFilter_routerFilterForClient() {
+    filterRegistry.register(RouterFilter.INSTANCE);
+    HttpFilter httpFilter =
+        HttpFilter.newBuilder()
+            .setIsOptional(false)
+            .setName("envoy.router")
+            .setTypedConfig(Any.pack(Router.getDefaultInstance()))
+            .build();
+    FilterConfig config = ClientXdsClient.parseHttpFilter(
+        httpFilter, filterRegistry, true /* isForClient */).getStruct();
+    assertThat(config.typeUrl()).isEqualTo(RouterFilter.TYPE_URL);
+  }
+
+  @Test
+  public void parseHttpFilter_routerFilterForServer() {
+    filterRegistry.register(RouterFilter.INSTANCE);
+    HttpFilter httpFilter =
+        HttpFilter.newBuilder()
+            .setIsOptional(false)
+            .setName("envoy.router")
+            .setTypedConfig(Any.pack(Router.getDefaultInstance()))
+            .build();
+    FilterConfig config = ClientXdsClient.parseHttpFilter(
+        httpFilter, filterRegistry, false /* isForClient */).getStruct();
+    assertThat(config.typeUrl()).isEqualTo(RouterFilter.TYPE_URL);
   }
 
   @Test
