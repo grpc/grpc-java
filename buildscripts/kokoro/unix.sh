@@ -57,12 +57,15 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
     exit 1
   fi
   # Run tests
-  ./gradlew build $GRADLE_FLAGS
+  ./gradlew build :grpc-all:jacocoTestReport $GRADLE_FLAGS
   pushd examples
   ./gradlew clean $GRADLE_FLAGS
   ./gradlew build $GRADLE_FLAGS
   # --batch-mode reduces log spam
   mvn verify --batch-mode
+  popd
+  pushd examples/example-alts
+  ../gradlew build $GRADLE_FLAGS
   popd
   pushd examples/example-hostname
   ../gradlew build $GRADLE_FLAGS
