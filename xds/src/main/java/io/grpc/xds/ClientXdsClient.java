@@ -66,9 +66,11 @@ import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.ConfigOrError;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
+import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.VirtualHost.Route;
@@ -514,8 +516,8 @@ final class ClientXdsClient extends AbstractXdsClient {
       rawConfig = typedStruct.getValue();
     }
     Filter filter = filterRegistry.get(typeUrl);
-    if (filter == null || (isForClient && !filter.isSupportedOnClients())
-        || (!isForClient && !filter.isSupportedOnServers())) {
+    if (filter == null || (isForClient && !(filter instanceof ClientInterceptorBuilder))
+        || (!isForClient && !(filter instanceof ServerInterceptorBuilder))) {
       if (isOptional) {
         return null;
       } else {
