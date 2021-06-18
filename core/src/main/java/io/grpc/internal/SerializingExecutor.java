@@ -59,7 +59,7 @@ public final class SerializingExecutor implements Executor, Runnable {
   private static final int RUNNING = -1;
 
   /** Underlying executor that all submitted Runnable objects are run on. */
-  private volatile Executor executor;
+  private Executor executor;
 
   /** A list of Runnables to be run in order. */
   private final Queue<Runnable> runQueue = new ConcurrentLinkedQueue<>();
@@ -124,7 +124,7 @@ public final class SerializingExecutor implements Executor, Runnable {
     Runnable r;
     try {
       Executor oldExecutor = executor;
-      while ((r = runQueue.poll()) != null && oldExecutor == executor ) {
+      while (oldExecutor == executor && (r = runQueue.poll()) != null ) {
         try {
           r.run();
         } catch (RuntimeException e) {
