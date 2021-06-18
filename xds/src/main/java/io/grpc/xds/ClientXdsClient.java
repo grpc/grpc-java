@@ -520,7 +520,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       rawConfig = typedStruct.getValue();
     }
     Filter filter = filterRegistry.get(typeUrl);
-    if (filter == null || (isForClient && !(filter instanceof ClientInterceptorBuilder))
+    if ((isForClient && !(filter instanceof ClientInterceptorBuilder))
         || (!isForClient && !(filter instanceof ServerInterceptorBuilder))) {
       if (isOptional) {
         return null;
