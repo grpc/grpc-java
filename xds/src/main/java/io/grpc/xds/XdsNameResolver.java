@@ -359,6 +359,10 @@ final class XdsNameResolver extends NameResolver {
           return Result.forError(
               Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"));
         }
+        if (selectedRoute.routeAction() == null) {
+          return Result.forError(Status.UNAVAILABLE.withDescription(
+              "Could not route RPC to Route with non-forwarding action"));
+        }
         RouteAction action = selectedRoute.routeAction();
         if (action.cluster() != null) {
           cluster = action.cluster();
@@ -648,14 +652,17 @@ final class XdsNameResolver extends NameResolver {
             return;
           }
           logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
-          List<VirtualHost> virtualHosts = update.virtualHosts;
-          String rdsName = update.rdsName;
+          HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
+          List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
+          String rdsName = httpConnectionManager.rdsName();
           cleanUpRouteDiscoveryState();
           if (virtualHosts != null) {
-            updateRoutes(virtualHosts, update.httpMaxStreamDurationNano, update.filterChain);
+            updateRoutes(virtualHosts, httpConnectionManager.httpMaxStreamDurationNano(),
+                httpConnectionManager.httpFilterConfigs());
           } else {
             routeDiscoveryState = new RouteDiscoveryState(
-                rdsName, update.httpMaxStreamDurationNano, update.filterChain);
+                rdsName, httpConnectionManager.httpMaxStreamDurationNano(),
+                httpConnectionManager.httpFilterConfigs());
             logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
             xdsClient.watchRdsResource(rdsName, routeDiscoveryState);
           }
@@ -739,11 +746,13 @@ final class XdsNameResolver extends NameResolver {
       Set<String> clusters = new HashSet<>();
       for (Route route : routes) {
         RouteAction action = route.routeAction();
-        if (action.cluster() != null) {
-          clusters.add(action.cluster());
-        } else if (action.weightedClusters() != null) {
-          for (ClusterWeight weighedCluster : action.weightedClusters()) {
-            clusters.add(weighedCluster.name());
+        if (action != null) {
+          if (action.cluster() != null) {
+            clusters.add(action.cluster());
+          } else if (action.weightedClusters() != null) {
+            for (ClusterWeight weighedCluster : action.weightedClusters()) {
+              clusters.add(weighedCluster.name());
+            }
           }
         }
       }

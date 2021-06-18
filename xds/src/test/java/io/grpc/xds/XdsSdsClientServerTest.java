@@ -48,6 +48,8 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.Filter.NamedFilterConfig;
+import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import io.grpc.xds.internal.sds.TlsContextManagerImpl;
@@ -59,6 +61,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
@@ -336,7 +339,7 @@ public class XdsSdsClientServerTest {
       TlsContextManager tlsContextManager) {
     EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0", tlsContext,
         tlsContextManager);
-    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     registeredWatcher.onChanged(listenerUpdate);
   }
 
@@ -366,8 +369,12 @@ public class XdsSdsClientServerTest {
             Arrays.<Integer>asList(),
             Arrays.<String>asList(),
             null);
-    EnvoyServerProtoData.FilterChain defaultFilterChain =
-        new EnvoyServerProtoData.FilterChain(filterChainMatch, tlsContext, tlsContextManager);
+    // HttpConnectionManager currently not used for server side.
+    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
+        0L, "does not matter", Collections.<NamedFilterConfig>emptyList());
+    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
+        "filter-chain-foo", filterChainMatch, httpConnectionManager, tlsContext,
+        tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(name, address, Arrays.asList(defaultFilterChain), null);
     return listener;

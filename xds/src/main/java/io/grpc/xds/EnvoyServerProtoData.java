@@ -16,24 +16,16 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.protobuf.Any;
-import com.google.protobuf.InvalidProtocolBufferException;
-import io.envoyproxy.envoy.config.core.v3.Address;
-import io.envoyproxy.envoy.config.core.v3.SocketAddress;
-import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
-import io.envoyproxy.envoy.config.listener.v3.Filter;
-import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
-import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import javax.annotation.Nullable;
@@ -44,8 +36,6 @@ import javax.annotation.Nullable;
  */
 @Internal
 public final class EnvoyServerProtoData {
-
-  static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
 
   // Prevent instantiation.
   private EnvoyServerProtoData() {
@@ -156,19 +146,9 @@ public final class EnvoyServerProtoData {
     private final InetAddress addressPrefix;
     private final int prefixLen;
 
-    @VisibleForTesting
-    CidrRange(String addressPrefix, int prefixLen) throws InvalidProtocolBufferException {
-      try {
-        this.addressPrefix = InetAddress.getByName(addressPrefix);
-      } catch (UnknownHostException e) {
-        throw new InvalidProtocolBufferException(e.getMessage());
-      }
+    CidrRange(String addressPrefix, int prefixLen) throws UnknownHostException {
+      this.addressPrefix = InetAddress.getByName(addressPrefix);
       this.prefixLen = prefixLen;
-    }
-
-    static CidrRange fromEnvoyProtoCidrRange(
-        io.envoyproxy.envoy.config.core.v3.CidrRange proto) throws InvalidProtocolBufferException {
-      return new CidrRange(proto.getAddressPrefix(), proto.getPrefixLen().getValue());
     }
 
     public InetAddress getAddressPrefix() {
@@ -249,50 +229,6 @@ public final class EnvoyServerProtoData {
       this.sourcePorts = sourcePorts;
       this.serverNames = Collections.unmodifiableList(serverNames);
       this.transportProtocol = transportProtocol;
-    }
-
-    static FilterChainMatch fromEnvoyProtoFilterChainMatch(
-        io.envoyproxy.envoy.config.listener.v3.FilterChainMatch proto)
-        throws InvalidProtocolBufferException {
-      List<CidrRange> prefixRanges = new ArrayList<>();
-      for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getPrefixRangesList()) {
-        prefixRanges.add(CidrRange.fromEnvoyProtoCidrRange(range));
-      }
-      List<CidrRange> sourcePrefixRanges = new ArrayList<>();
-      for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getSourcePrefixRangesList()) {
-        sourcePrefixRanges.add(CidrRange.fromEnvoyProtoCidrRange(range));
-      }
-      List<String> applicationProtocols = new ArrayList<>();
-      for (String appProtocol : proto.getApplicationProtocolsList()) {
-        applicationProtocols.add(appProtocol);
-      }
-      ConnectionSourceType sourceType = null;
-      switch (proto.getSourceType()) {
-        case ANY:
-          sourceType = ConnectionSourceType.ANY;
-          break;
-        case EXTERNAL:
-          sourceType = ConnectionSourceType.EXTERNAL;
-          break;
-        case SAME_IP_OR_LOOPBACK:
-          sourceType = ConnectionSourceType.SAME_IP_OR_LOOPBACK;
-          break;
-        default:
-          throw new InvalidProtocolBufferException("Unknown source-type:" + proto.getSourceType());
-      }
-      List<String> serverNames = new ArrayList<>();
-      for (String serverName : proto.getServerNamesList()) {
-        serverNames.add(serverName);
-      }
-      return new FilterChainMatch(
-          proto.getDestinationPort().getValue(),
-          prefixRanges,
-          applicationProtocols,
-          sourcePrefixRanges,
-          sourceType,
-          proto.getSourcePortsList(),
-          serverNames,
-          proto.getTransportProtocol());
     }
 
     public int getDestinationPort() {
@@ -378,116 +314,43 @@ public final class EnvoyServerProtoData {
    * Corresponds to Envoy proto message {@link io.envoyproxy.envoy.api.v2.listener.FilterChain}.
    */
   static final class FilterChain {
+    // Unique name for the FilterChain.
+    private final String name;
     // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.
     private final FilterChainMatch filterChainMatch;
+    private final HttpConnectionManager httpConnectionManager;
     @Nullable
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    @VisibleForTesting
     FilterChain(
-        FilterChainMatch filterChainMatch, @Nullable DownstreamTlsContext downstreamTlsContext,
+        String name,
+        FilterChainMatch filterChainMatch,
+        HttpConnectionManager httpConnectionManager,
+        @Nullable DownstreamTlsContext downstreamTlsContext,
         TlsContextManager tlsContextManager) {
       SslContextProviderSupplier sslContextProviderSupplier1 = downstreamTlsContext == null ? null
           : new SslContextProviderSupplier(downstreamTlsContext, tlsContextManager);
+      this.name = checkNotNull(name, "name");
+      // TODO(chengyuanzhang): enforce non-null, change tests to use a default/empty
+      //  FilterChainMatch instead of null, as that's how the proto is converted.
       this.filterChainMatch = filterChainMatch;
       this.sslContextProviderSupplier = sslContextProviderSupplier1;
+      this.httpConnectionManager = checkNotNull(httpConnectionManager, "httpConnectionManager");
     }
 
-    static FilterChain fromEnvoyProtoFilterChain(
-        io.envoyproxy.envoy.config.listener.v3.FilterChain proto,
-        TlsContextManager tlsContextManager, boolean isDefaultFilterChain)
-        throws InvalidProtocolBufferException {
-      if (!isDefaultFilterChain && proto.getFiltersList().isEmpty()) {
-        throw new IllegalArgumentException(
-            "filerChain " + proto.getName() + " has to have envoy.http_connection_manager");
-      }
-      HashSet<String> uniqueNames = new HashSet<>();
-      for (Filter filter : proto.getFiltersList()) {
-        if (!uniqueNames.add(filter.getName())) {
-          throw new IllegalArgumentException(
-              "filerChain " + proto.getName() + " has non-unique filter name:" + filter.getName());
-        }
-        validateFilter(filter);
-      }
-      return new FilterChain(
-          FilterChainMatch.fromEnvoyProtoFilterChainMatch(proto.getFilterChainMatch()),
-          getTlsContextFromFilterChain(proto),
-          tlsContextManager
-      );
-    }
-
-    private static void validateFilter(Filter filter)
-        throws InvalidProtocolBufferException, IllegalArgumentException {
-      if (filter.hasConfigDiscovery()) {
-        throw new IllegalArgumentException(
-            "filter " + filter.getName() + " with config_discovery not supported");
-      }
-      if (!filter.hasTypedConfig()) {
-        throw new IllegalArgumentException(
-            "filter " + filter.getName() + " expected to have typed_config");
-      }
-      Any any = filter.getTypedConfig();
-      if (!any.getTypeUrl().equals(ClientXdsClient.TYPE_URL_HTTP_CONNECTION_MANAGER)) {
-        throw new IllegalArgumentException(
-            "filter " + filter.getName() + " with unsupported typed_config type:" + any
-                .getTypeUrl());
-      }
-      validateHttpConnectionManager(any.unpack(HttpConnectionManager.class));
-    }
-
-    private static void validateHttpConnectionManager(HttpConnectionManager hcm)
-        throws IllegalArgumentException {
-      List<HttpFilter> httpFilters = hcm.getHttpFiltersList();
-      HashSet<String> uniqueNames = new HashSet<>();
-      for (HttpFilter httpFilter : httpFilters) {
-        String httpFilterName = httpFilter.getName();
-        if (!uniqueNames.add(httpFilterName)) {
-          throw new IllegalArgumentException(
-              "http-connection-manager has non-unique http-filter name:" + httpFilterName);
-        }
-        if (!httpFilter.getIsOptional()) {
-          if (httpFilter.hasConfigDiscovery()) {
-            throw new IllegalArgumentException(
-                "http-connection-manager http-filter " + httpFilterName
-                    + " uses config-discovery which is unsupported");
-          }
-          if (httpFilter.hasTypedConfig()) {
-            Any any = httpFilter.getTypedConfig();
-            if (!any.getTypeUrl()
-                .equals("type.googleapis.com/envoy.extensions.filters.http.router.v3.Router")) {
-              throw new IllegalArgumentException(
-                  "http-connection-manager http-filter " + httpFilterName
-                      + " has unsupported typed-config type:" + any.getTypeUrl());
-            }
-          } else {
-            throw new IllegalArgumentException(
-                "http-connection-manager http-filter "
-                    + httpFilterName
-                    + " should have typed-config type "
-                    + "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router");
-          }
-        }
-      }
-    }
-
-    @Nullable
-    private static DownstreamTlsContext getTlsContextFromFilterChain(
-        io.envoyproxy.envoy.config.listener.v3.FilterChain filterChain)
-        throws InvalidProtocolBufferException {
-      if (filterChain.hasTransportSocket()
-          && TRANSPORT_SOCKET_NAME_TLS.equals(filterChain.getTransportSocket().getName())) {
-        Any any = filterChain.getTransportSocket().getTypedConfig();
-        return DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
-            io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext.parseFrom(
-                any.getValue()));
-      }
-      return null;
+    String getName() {
+      return name;
     }
 
     public FilterChainMatch getFilterChainMatch() {
       return filterChainMatch;
     }
 
+    HttpConnectionManager getHttpConnectionManager() {
+      return httpConnectionManager;
+    }
+
+    @Nullable
     public SslContextProviderSupplier getSslContextProviderSupplier() {
       return sslContextProviderSupplier;
     }
@@ -501,21 +364,26 @@ public final class EnvoyServerProtoData {
         return false;
       }
       FilterChain that = (FilterChain) o;
-      return java.util.Objects.equals(filterChainMatch, that.filterChainMatch)
-          && java.util.Objects.equals(sslContextProviderSupplier, that.sslContextProviderSupplier);
+      return Objects.equals(name, that.name)
+          && Objects.equals(filterChainMatch, that.filterChainMatch)
+          && Objects.equals(httpConnectionManager, that.httpConnectionManager)
+          && Objects.equals(sslContextProviderSupplier, that.sslContextProviderSupplier);
     }
 
     @Override
     public int hashCode() {
-      return java.util.Objects.hash(filterChainMatch, sslContextProviderSupplier);
+      return Objects.hash(
+          name, filterChainMatch, httpConnectionManager, sslContextProviderSupplier);
     }
 
     @Override
     public String toString() {
-      return "FilterChain{"
-          + "filterChainMatch=" + filterChainMatch
-          + ", sslContextProviderSupplier=" + sslContextProviderSupplier
-          + '}';
+      return MoreObjects.toStringHelper(this)
+          .add("name", name)
+          .add("filterChainMatch", filterChainMatch)
+          .add("httpConnectionManager", httpConnectionManager)
+          .add("sslContextProviderSupplier", sslContextProviderSupplier)
+          .toString();
     }
   }
 
@@ -528,73 +396,22 @@ public final class EnvoyServerProtoData {
     @Nullable
     private final String address;
     private final List<FilterChain> filterChains;
+    @Nullable
     private final FilterChain defaultFilterChain;
 
-    @VisibleForTesting
-    Listener(String name, String address,
-        List<FilterChain> filterChains, FilterChain defaultFilterChain) {
-      this.name = name;
+    Listener(String name, @Nullable String address,
+        List<FilterChain> filterChains, @Nullable FilterChain defaultFilterChain) {
+      this.name = checkNotNull(name, "name");
       this.address = address;
-      this.filterChains = Collections.unmodifiableList(filterChains);
+      this.filterChains = Collections.unmodifiableList(checkNotNull(filterChains, "filterChains"));
       this.defaultFilterChain = defaultFilterChain;
-    }
-
-    private static String convertEnvoyAddressToString(Address proto) {
-      if (proto.hasSocketAddress()) {
-        SocketAddress socketAddress = proto.getSocketAddress();
-        String address = socketAddress.getAddress();
-        switch (socketAddress.getPortSpecifierCase()) {
-          case NAMED_PORT:
-            return address + ":" + socketAddress.getNamedPort();
-          case PORT_VALUE:
-            return address + ":" + socketAddress.getPortValue();
-          default:
-            return address;
-        }
-      }
-      return null;
-    }
-
-    static Listener fromEnvoyProtoListener(io.envoyproxy.envoy.config.listener.v3.Listener proto,
-        TlsContextManager tlsContextManager)
-        throws InvalidProtocolBufferException {
-      if (!proto.getTrafficDirection().equals(TrafficDirection.INBOUND)) {
-        throw new IllegalArgumentException("Listener " + proto.getName() + " is not INBOUND");
-      }
-      if (!proto.getListenerFiltersList().isEmpty()) {
-        throw new IllegalArgumentException(
-            "Listener " + proto.getName() + " cannot have listener_filters");
-      }
-      if (proto.hasUseOriginalDst()) {
-        throw new IllegalArgumentException(
-            "Listener " + proto.getName() + " cannot have use_original_dst set to true");
-      }
-      List<FilterChain> filterChains = validateAndSelectFilterChains(proto.getFilterChainsList(),
-          tlsContextManager);
-      return new Listener(
-          proto.getName(),
-          convertEnvoyAddressToString(proto.getAddress()),
-          filterChains, FilterChain
-          .fromEnvoyProtoFilterChain(proto.getDefaultFilterChain(), tlsContextManager, true));
-    }
-
-    private static List<FilterChain> validateAndSelectFilterChains(
-        List<io.envoyproxy.envoy.config.listener.v3.FilterChain> inputFilterChains,
-        TlsContextManager tlsContextManager)
-        throws InvalidProtocolBufferException {
-      List<FilterChain> filterChains = new ArrayList<>(inputFilterChains.size());
-      for (io.envoyproxy.envoy.config.listener.v3.FilterChain filterChain :
-          inputFilterChains) {
-        filterChains
-            .add(FilterChain.fromEnvoyProtoFilterChain(filterChain, tlsContextManager, false));
-      }
-      return filterChains;
     }
 
     public String getName() {
       return name;
     }
 
+    @Nullable
     public String getAddress() {
       return address;
     }
@@ -603,6 +420,7 @@ public final class EnvoyServerProtoData {
       return filterChains;
     }
 
+    @Nullable
     public FilterChain getDefaultFilterChain() {
       return defaultFilterChain;
     }
@@ -629,18 +447,12 @@ public final class EnvoyServerProtoData {
 
     @Override
     public String toString() {
-      return "Listener{"
-          + "name='"
-          + name
-          + '\''
-          + ", address='"
-          + address
-          + '\''
-          + ", filterChains="
-          + filterChains
-          + ", defaultFilterChain="
-          + defaultFilterChain
-          + '}';
+      return MoreObjects.toStringHelper(this)
+          .add("name", name)
+          .add("address", address)
+          .add("filterChains", filterChains)
+          .add("defaultFilterChain", defaultFilterChain)
+          .toString();
     }
   }
 }
