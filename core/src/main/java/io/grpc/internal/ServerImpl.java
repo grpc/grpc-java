@@ -53,6 +53,7 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
@@ -469,13 +470,13 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
     private void streamCreatedInternal(
         final ServerStream stream, final String methodName, final Metadata headers, final Tag tag) {
-      final Executor wrapExecutor;
+      final Executor wrappedExecutor;
       // This is a performance optimization that avoids the synchronization and queuing overhead
       // that comes with SerializingExecutor.
       if (executorSupplier != null || executor != directExecutor()) {
-        wrapExecutor = new SerializingExecutor(executor);
+        wrappedExecutor = new SerializingExecutor(executor);
       } else {
-        wrapExecutor = new SerializeReentrantCallsDirectExecutor();
+        wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
         stream.optimizeForDirectExecutor();
       }
 
@@ -502,14 +503,17 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
       final JumpToApplicationThreadServerStreamListener jumpListener
           = new JumpToApplicationThreadServerStreamListener(
-                  wrapExecutor, executor, stream, context, tag);
+                  wrappedExecutor, executor, stream, context, tag);
       stream.setListener(jumpListener);
       final SettableFuture<ServerCallParameters<?,?>> future = SettableFuture.create();
       // Run in serializing executor so jumpListener.setListener() is called before any callbacks
-      // are delivered, including any errors. Callbacks can still be triggered.
-      // If callExecutor needs no executor switch, they will be queued at serializing executor.
-      // If callExecutor needs a switch due to executorSupplier, they will be queued at jumpListener
-      // first then delivered to serializing executor for the second queueing.
+      // are delivered, including any errors. MethodLookup() and HandleServerCall() are proactively
+      // queued before any callbacks are queued at serializing executor.
+      // MethodLookup() runs on the default executor.
+      // When executorSupplier is enabled, MethodLookup() may set/change the executor in the
+      // SerializingExecutor before it finishes running.
+      // Then HandleServerCall() and callbacks would switch to the executorSupplier executor.
+      // Otherwise, they all run on the default executor.
 
       final class MethodLookup extends ContextRunnable {
         MethodLookup() {
@@ -577,26 +581,26 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           if (executorSupplier != null) {
             Executor switchingExecutor = executorSupplier.getExecutor(call, headers);
             if (switchingExecutor != null) {
-              ((SerializingExecutor)wrapExecutor).setExecutor(switchingExecutor);
+              ((SerializingExecutor)wrappedExecutor).setExecutor(switchingExecutor);
             }
           }
-          return new ServerCallParameters<>(call, methodDef);
+          return new ServerCallParameters<>(call, methodDef.getServerCallHandler());
         }
       }
 
-      final class ServerCallHandled extends ContextRunnable {
-        ServerCallHandled() {
+      final class HandleServerCall extends ContextRunnable {
+        HandleServerCall() {
           super(context);
         }
 
         @Override
         public void runInContext() {
-          PerfMark.startTask("ServerTransportListener$ServerCallHandled.startCall", tag);
+          PerfMark.startTask("ServerTransportListener$HandleServerCall.startCall", tag);
           PerfMark.linkIn(link);
           try {
             runInternal();
           } finally {
-            PerfMark.stopTask("ServerTransportListener$ServerCallHandled.startCall", tag);
+            PerfMark.stopTask("ServerTransportListener$HandleServerCall.startCall", tag);
           }
         }
 
@@ -609,10 +613,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
             }
             if (!future.isDone() || (callParameters = future.get()) == null) {
               Status status = Status.INTERNAL.withDescription(
-                      "Fail to start server call.");
-              stream.close(status, new Metadata());
-              context.cancel(null);
-              return;
+                      "Unexpected failure retrieving server call parameters.");
+              throw new StatusException(status);
             }
             listener = startWrappedCall(methodName, callParameters, headers);
           } catch (Throwable ex) {
@@ -642,8 +644,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         }
       }
 
-      wrapExecutor.execute(new MethodLookup());
-      wrapExecutor.execute(new ServerCallHandled());
+      wrappedExecutor.execute(new MethodLookup());
+      wrappedExecutor.execute(new HandleServerCall());
     }
 
     private Context.CancellableContext createContext(
@@ -688,12 +690,12 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
     private final class ServerCallParameters<ReqT, RespT> {
       ServerCallImpl<ReqT, RespT> call;
-      ServerMethodDefinition<ReqT, RespT> methodDef;
+      ServerCallHandler<ReqT, RespT> callHandler;
 
       public ServerCallParameters(ServerCallImpl<ReqT, RespT> call,
-                                  ServerMethodDefinition<ReqT, RespT> methodDef) {
+                                  ServerCallHandler<ReqT, RespT> callHandler) {
         this.call = call;
-        this.methodDef = methodDef;
+        this.callHandler = callHandler;
       }
     }
 
@@ -702,7 +704,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         ServerCallParameters<WReqT, WRespT> params,
         Metadata headers) {
       ServerCall.Listener<WReqT> callListener =
-              params.methodDef.getServerCallHandler().startCall(params.call, headers);
+              params.callHandler.startCall(params.call, headers);
       if (callListener == null) {
         throw new NullPointerException(
                 "startCall() returned a null listener for method " + fullMethodName);

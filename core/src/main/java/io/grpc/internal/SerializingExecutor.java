@@ -76,6 +76,10 @@ public final class SerializingExecutor implements Executor, Runnable {
     this.executor = executor;
   }
 
+  /**
+   * Only call this from this SerializingExecutor Runnable, so that the executor is immediately
+   * visible to this SerializingExecutor executor.
+   * */
   public void setExecutor(Executor executor) {
     Preconditions.checkNotNull(executor, "'executor' must not be null.");
     this.executor = executor;

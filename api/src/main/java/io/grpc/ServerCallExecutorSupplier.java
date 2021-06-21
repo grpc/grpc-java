@@ -20,7 +20,7 @@ import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 /**
- * Defines what executor the server call is handled, based on each RPC call information at runtime.
+ * Defines what executor handles the server call, based on each RPC call information at runtime.
  * */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8274")
 public interface ServerCallExecutorSupplier {
