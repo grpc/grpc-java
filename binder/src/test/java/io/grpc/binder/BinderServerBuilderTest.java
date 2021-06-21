@@ -41,23 +41,10 @@ public final class BinderServerBuilderTest {
     ServiceController<SomeService> controller = Robolectric.buildService(SomeService.class);
     SomeService service = controller.create().get();
 
-    Server server = BinderServerBuilder.forService(service, binderReceiver).build();
+    AndroidComponentAddress listenAddress = AndroidComponentAddress.forContext(service);
+    Server server = BinderServerBuilder.forAddress(listenAddress, binderReceiver).build();
     try {
       assertThat(binderReceiver.get()).isNotNull();
-    } finally {
-      server.shutdownNow();
-    }
-  }
-
-  @Test
-  public void shouldExposeDefaultListeningAddressUponBuild() throws IOException {
-    ServiceController<SomeService> controller = Robolectric.buildService(SomeService.class);
-    SomeService service = controller.create().get();
-
-    Server server = BinderServerBuilder.forService(service, binderReceiver).build().start();
-    try {
-      assertThat(server.getListenSockets())
-          .containsExactly(AndroidComponentAddress.forContext(service));
     } finally {
       server.shutdownNow();
     }
