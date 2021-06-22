@@ -69,11 +69,11 @@ public final class BinderServerBuilder
   }
 
   /**
-   * Always fails. Call {@link #forService(Service, IBinderReceiver)} instead.
+   * Always fails. Call {@link #forAddress(AndroidComponentAddress, IBinderReceiver)} instead.
    */
-  @DoNotCall("Unsupported. Use forService() instead")
+  @DoNotCall("Unsupported. Use forAddress() instead")
   public static BinderServerBuilder forPort(int port) {
-    throw new UnsupportedOperationException("call forService() instead");
+    throw new UnsupportedOperationException("call forAddress() instead");
   }
 
   private final ServerImplBuilder serverImplBuilder;
@@ -170,7 +170,7 @@ public final class BinderServerBuilder
 
   /**
    * Builds a {@link Server} according to this builder's parameters and stores its listening {@link
-   * IBinder} in the {@link IBinderReceiver} passed to {@link #forService(Service,
+   * IBinder} in the {@link IBinderReceiver} passed to {@link #forAddress(AndroidComponentAddress,
    * IBinderReceiver)}.
    *
    * @return the new Server
