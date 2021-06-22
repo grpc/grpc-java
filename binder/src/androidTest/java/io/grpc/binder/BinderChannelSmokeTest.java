@@ -99,7 +99,7 @@ public final class BinderChannelSmokeTest {
     HostServices.configureService(serverAddress,
         HostServices.serviceParamsBuilder()
           .setServerFactory((service, receiver) ->
-              BinderServerBuilder.forService(service, receiver)
+              BinderServerBuilder.forAddress(serverAddress, receiver)
                 .addService(serviceDef)
                 .build())
           .build());
