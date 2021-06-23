@@ -63,6 +63,20 @@ public final class DynamicServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static DynamicServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<DynamicServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<DynamicServiceStub>() {
+        @java.lang.Override
+        public DynamicServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new DynamicServiceStub(channel, callOptions);
+        }
+      };
+    return DynamicServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static DynamicServiceBlockingStub newBlockingStub(
@@ -78,6 +92,21 @@ public final class DynamicServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static DynamicServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<DynamicServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<DynamicServiceBlockingStub>() {
+        @java.lang.Override
+        public DynamicServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new DynamicServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return DynamicServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static DynamicServiceFutureStub newFutureStub(
@@ -90,6 +119,21 @@ public final class DynamicServiceGrpc {
         }
       };
     return DynamicServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static DynamicServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<DynamicServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<DynamicServiceFutureStub>() {
+        @java.lang.Override
+        public DynamicServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new DynamicServiceFutureStub(channel, callOptions);
+        }
+      };
+    return DynamicServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**
