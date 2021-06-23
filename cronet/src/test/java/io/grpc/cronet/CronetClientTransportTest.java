@@ -158,9 +158,6 @@ public final class CronetClientTransportTest {
     public void headersRead(Metadata headers) {}
 
     @Override
-    public void closed(Status status, Metadata trailers) {}
-
-    @Override
     public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
       this.status = status;
     }

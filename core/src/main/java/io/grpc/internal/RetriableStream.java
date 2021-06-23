@@ -30,6 +30,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -444,7 +445,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Runnable runnable = commit(noopSubstream);
 
     if (runnable != null) {
-      masterListener.closed(reason, new Metadata());
+      masterListener.closed(reason, RpcProgress.PROCESSED, new Metadata());
       runnable.run();
       return;
     }
@@ -763,11 +764,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
 
     @Override
-    public void closed(Status status, Metadata trailers) {
-      closed(status, RpcProgress.PROCESSED, trailers);
-    }
-
-    @Override
     public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
       synchronized (lock) {
         state = state.substreamClosed(substream);
@@ -779,7 +775,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       if (substream.bufferLimitExceeded) {
         commitAndRun(substream);
         if (state.winningSubstream == substream) {
-          masterListener.closed(status, trailers);
+          masterListener.closed(status, rpcProgress, trailers);
         }
         return;
       }
@@ -884,7 +880,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       commitAndRun(substream);
       if (state.winningSubstream == substream) {
-        masterListener.closed(status, trailers);
+        masterListener.closed(status, rpcProgress, trailers);
       }
     }
 

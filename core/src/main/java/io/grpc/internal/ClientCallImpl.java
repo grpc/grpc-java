@@ -672,11 +672,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
 
     @Override
-    public void closed(Status status, Metadata trailers) {
-      closed(status, RpcProgress.PROCESSED, trailers);
-    }
-
-    @Override
     public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
       PerfMark.startTask("ClientStreamListener.closed", tag);
       try {

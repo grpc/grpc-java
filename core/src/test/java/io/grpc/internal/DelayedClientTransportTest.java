@@ -206,7 +206,8 @@ public class DelayedClientTransportTest {
     assertEquals(1, delayedTransport.getPendingStreamsCount());
     stream.cancel(Status.CANCELLED);
     assertEquals(0, delayedTransport.getPendingStreamsCount());
-    verify(streamListener).closed(same(Status.CANCELLED), any(Metadata.class));
+    verify(streamListener).closed(
+        same(Status.CANCELLED), same(RpcProgress.PROCESSED), any(Metadata.class));
     verifyNoMoreInteractions(mockRealTransport);
     verifyNoMoreInteractions(mockRealStream);
   }
@@ -233,7 +234,8 @@ public class DelayedClientTransportTest {
 
     // Further newStream() will return a failing stream
     stream = delayedTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
-    verify(streamListener, never()).closed(any(Status.class), any(Metadata.class));
+    verify(streamListener, never()).closed(
+        any(Status.class), any(RpcProgress.class), any(Metadata.class));
     stream.start(streamListener);
     verify(streamListener).closed(
         statusCaptor.capture(), any(RpcProgress.class), any(Metadata.class));
