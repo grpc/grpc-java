@@ -128,6 +128,20 @@ public final class ListenerDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static ListenerDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceStub>() {
+        @java.lang.Override
+        public ListenerDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ListenerDiscoveryServiceStub(channel, callOptions);
+        }
+      };
+    return ListenerDiscoveryServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ListenerDiscoveryServiceBlockingStub newBlockingStub(
@@ -143,6 +157,21 @@ public final class ListenerDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static ListenerDiscoveryServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceBlockingStub>() {
+        @java.lang.Override
+        public ListenerDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ListenerDiscoveryServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return ListenerDiscoveryServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static ListenerDiscoveryServiceFutureStub newFutureStub(
@@ -155,6 +184,21 @@ public final class ListenerDiscoveryServiceGrpc {
         }
       };
     return ListenerDiscoveryServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static ListenerDiscoveryServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceFutureStub>() {
+        @java.lang.Override
+        public ListenerDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ListenerDiscoveryServiceFutureStub(channel, callOptions);
+        }
+      };
+    return ListenerDiscoveryServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

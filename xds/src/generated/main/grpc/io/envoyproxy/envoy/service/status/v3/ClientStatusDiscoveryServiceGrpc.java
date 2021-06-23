@@ -96,6 +96,20 @@ public final class ClientStatusDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static ClientStatusDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ClientStatusDiscoveryServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ClientStatusDiscoveryServiceStub>() {
+        @java.lang.Override
+        public ClientStatusDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ClientStatusDiscoveryServiceStub(channel, callOptions);
+        }
+      };
+    return ClientStatusDiscoveryServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ClientStatusDiscoveryServiceBlockingStub newBlockingStub(
@@ -111,6 +125,21 @@ public final class ClientStatusDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static ClientStatusDiscoveryServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ClientStatusDiscoveryServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ClientStatusDiscoveryServiceBlockingStub>() {
+        @java.lang.Override
+        public ClientStatusDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ClientStatusDiscoveryServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return ClientStatusDiscoveryServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static ClientStatusDiscoveryServiceFutureStub newFutureStub(
@@ -123,6 +152,21 @@ public final class ClientStatusDiscoveryServiceGrpc {
         }
       };
     return ClientStatusDiscoveryServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static ClientStatusDiscoveryServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ClientStatusDiscoveryServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ClientStatusDiscoveryServiceFutureStub>() {
+        @java.lang.Override
+        public ClientStatusDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ClientStatusDiscoveryServiceFutureStub(channel, callOptions);
+        }
+      };
+    return ClientStatusDiscoveryServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

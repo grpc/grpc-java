@@ -281,6 +281,20 @@ public final class TestServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static TestServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<TestServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<TestServiceStub>() {
+        @java.lang.Override
+        public TestServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new TestServiceStub(channel, callOptions);
+        }
+      };
+    return TestServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static TestServiceBlockingStub newBlockingStub(
@@ -296,6 +310,21 @@ public final class TestServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static TestServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<TestServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<TestServiceBlockingStub>() {
+        @java.lang.Override
+        public TestServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new TestServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return TestServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static TestServiceFutureStub newFutureStub(
@@ -308,6 +337,21 @@ public final class TestServiceGrpc {
         }
       };
     return TestServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static TestServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<TestServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<TestServiceFutureStub>() {
+        @java.lang.Override
+        public TestServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new TestServiceFutureStub(channel, callOptions);
+        }
+      };
+    return TestServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

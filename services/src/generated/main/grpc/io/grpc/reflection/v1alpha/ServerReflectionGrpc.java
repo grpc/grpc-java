@@ -60,6 +60,20 @@ public final class ServerReflectionGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static ServerReflectionStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ServerReflectionStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ServerReflectionStub>() {
+        @java.lang.Override
+        public ServerReflectionStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ServerReflectionStub(channel, callOptions);
+        }
+      };
+    return ServerReflectionStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ServerReflectionBlockingStub newBlockingStub(
@@ -75,6 +89,21 @@ public final class ServerReflectionGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static ServerReflectionBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ServerReflectionBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ServerReflectionBlockingStub>() {
+        @java.lang.Override
+        public ServerReflectionBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ServerReflectionBlockingStub(channel, callOptions);
+        }
+      };
+    return ServerReflectionBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static ServerReflectionFutureStub newFutureStub(
@@ -87,6 +116,21 @@ public final class ServerReflectionGrpc {
         }
       };
     return ServerReflectionFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static ServerReflectionFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ServerReflectionFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ServerReflectionFutureStub>() {
+        @java.lang.Override
+        public ServerReflectionFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ServerReflectionFutureStub(channel, callOptions);
+        }
+      };
+    return ServerReflectionFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

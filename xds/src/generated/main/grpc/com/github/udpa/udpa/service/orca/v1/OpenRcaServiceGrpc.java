@@ -70,6 +70,20 @@ public final class OpenRcaServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static OpenRcaServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceStub>() {
+        @java.lang.Override
+        public OpenRcaServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new OpenRcaServiceStub(channel, callOptions);
+        }
+      };
+    return OpenRcaServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static OpenRcaServiceBlockingStub newBlockingStub(
@@ -85,6 +99,21 @@ public final class OpenRcaServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static OpenRcaServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceBlockingStub>() {
+        @java.lang.Override
+        public OpenRcaServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new OpenRcaServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return OpenRcaServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static OpenRcaServiceFutureStub newFutureStub(
@@ -97,6 +126,21 @@ public final class OpenRcaServiceGrpc {
         }
       };
     return OpenRcaServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static OpenRcaServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceFutureStub>() {
+        @java.lang.Override
+        public OpenRcaServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new OpenRcaServiceFutureStub(channel, callOptions);
+        }
+      };
+    return OpenRcaServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

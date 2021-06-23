@@ -153,6 +153,20 @@ public final class WorkerServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static WorkerServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<WorkerServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<WorkerServiceStub>() {
+        @java.lang.Override
+        public WorkerServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new WorkerServiceStub(channel, callOptions);
+        }
+      };
+    return WorkerServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static WorkerServiceBlockingStub newBlockingStub(
@@ -168,6 +182,21 @@ public final class WorkerServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static WorkerServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<WorkerServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<WorkerServiceBlockingStub>() {
+        @java.lang.Override
+        public WorkerServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new WorkerServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return WorkerServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static WorkerServiceFutureStub newFutureStub(
@@ -180,6 +209,21 @@ public final class WorkerServiceGrpc {
         }
       };
     return WorkerServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static WorkerServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<WorkerServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<WorkerServiceFutureStub>() {
+        @java.lang.Override
+        public WorkerServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new WorkerServiceFutureStub(channel, callOptions);
+        }
+      };
+    return WorkerServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

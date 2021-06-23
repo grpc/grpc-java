@@ -131,6 +131,20 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static ScopedRoutesDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceStub>() {
+        @java.lang.Override
+        public ScopedRoutesDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ScopedRoutesDiscoveryServiceStub(channel, callOptions);
+        }
+      };
+    return ScopedRoutesDiscoveryServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ScopedRoutesDiscoveryServiceBlockingStub newBlockingStub(
@@ -146,6 +160,21 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static ScopedRoutesDiscoveryServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceBlockingStub>() {
+        @java.lang.Override
+        public ScopedRoutesDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ScopedRoutesDiscoveryServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return ScopedRoutesDiscoveryServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static ScopedRoutesDiscoveryServiceFutureStub newFutureStub(
@@ -158,6 +187,21 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
         }
       };
     return ScopedRoutesDiscoveryServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static ScopedRoutesDiscoveryServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceFutureStub>() {
+        @java.lang.Override
+        public ScopedRoutesDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ScopedRoutesDiscoveryServiceFutureStub(channel, callOptions);
+        }
+      };
+    return ScopedRoutesDiscoveryServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

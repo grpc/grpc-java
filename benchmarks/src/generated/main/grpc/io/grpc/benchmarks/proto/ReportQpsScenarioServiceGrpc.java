@@ -60,6 +60,20 @@ public final class ReportQpsScenarioServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static ReportQpsScenarioServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceStub>() {
+        @java.lang.Override
+        public ReportQpsScenarioServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReportQpsScenarioServiceStub(channel, callOptions);
+        }
+      };
+    return ReportQpsScenarioServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ReportQpsScenarioServiceBlockingStub newBlockingStub(
@@ -75,6 +89,21 @@ public final class ReportQpsScenarioServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static ReportQpsScenarioServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceBlockingStub>() {
+        @java.lang.Override
+        public ReportQpsScenarioServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReportQpsScenarioServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return ReportQpsScenarioServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static ReportQpsScenarioServiceFutureStub newFutureStub(
@@ -87,6 +116,21 @@ public final class ReportQpsScenarioServiceGrpc {
         }
       };
     return ReportQpsScenarioServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static ReportQpsScenarioServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReportQpsScenarioServiceFutureStub>() {
+        @java.lang.Override
+        public ReportQpsScenarioServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReportQpsScenarioServiceFutureStub(channel, callOptions);
+        }
+      };
+    return ReportQpsScenarioServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

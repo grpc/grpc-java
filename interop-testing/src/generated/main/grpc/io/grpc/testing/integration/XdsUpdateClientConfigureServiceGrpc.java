@@ -63,6 +63,20 @@ public final class XdsUpdateClientConfigureServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static XdsUpdateClientConfigureServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<XdsUpdateClientConfigureServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<XdsUpdateClientConfigureServiceStub>() {
+        @java.lang.Override
+        public XdsUpdateClientConfigureServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new XdsUpdateClientConfigureServiceStub(channel, callOptions);
+        }
+      };
+    return XdsUpdateClientConfigureServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static XdsUpdateClientConfigureServiceBlockingStub newBlockingStub(
@@ -78,6 +92,21 @@ public final class XdsUpdateClientConfigureServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static XdsUpdateClientConfigureServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<XdsUpdateClientConfigureServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<XdsUpdateClientConfigureServiceBlockingStub>() {
+        @java.lang.Override
+        public XdsUpdateClientConfigureServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new XdsUpdateClientConfigureServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return XdsUpdateClientConfigureServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static XdsUpdateClientConfigureServiceFutureStub newFutureStub(
@@ -90,6 +119,21 @@ public final class XdsUpdateClientConfigureServiceGrpc {
         }
       };
     return XdsUpdateClientConfigureServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static XdsUpdateClientConfigureServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<XdsUpdateClientConfigureServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<XdsUpdateClientConfigureServiceFutureStub>() {
+        @java.lang.Override
+        public XdsUpdateClientConfigureServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new XdsUpdateClientConfigureServiceFutureStub(channel, callOptions);
+        }
+      };
+    return XdsUpdateClientConfigureServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

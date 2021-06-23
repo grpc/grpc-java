@@ -94,6 +94,20 @@ public final class XdsUpdateHealthServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static XdsUpdateHealthServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<XdsUpdateHealthServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<XdsUpdateHealthServiceStub>() {
+        @java.lang.Override
+        public XdsUpdateHealthServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new XdsUpdateHealthServiceStub(channel, callOptions);
+        }
+      };
+    return XdsUpdateHealthServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static XdsUpdateHealthServiceBlockingStub newBlockingStub(
@@ -109,6 +123,21 @@ public final class XdsUpdateHealthServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static XdsUpdateHealthServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<XdsUpdateHealthServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<XdsUpdateHealthServiceBlockingStub>() {
+        @java.lang.Override
+        public XdsUpdateHealthServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new XdsUpdateHealthServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return XdsUpdateHealthServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static XdsUpdateHealthServiceFutureStub newFutureStub(
@@ -121,6 +150,21 @@ public final class XdsUpdateHealthServiceGrpc {
         }
       };
     return XdsUpdateHealthServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static XdsUpdateHealthServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<XdsUpdateHealthServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<XdsUpdateHealthServiceFutureStub>() {
+        @java.lang.Override
+        public XdsUpdateHealthServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new XdsUpdateHealthServiceFutureStub(channel, callOptions);
+        }
+      };
+    return XdsUpdateHealthServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

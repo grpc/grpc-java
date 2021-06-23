@@ -156,6 +156,20 @@ public final class SimpleServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static SimpleServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<SimpleServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<SimpleServiceStub>() {
+        @java.lang.Override
+        public SimpleServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new SimpleServiceStub(channel, callOptions);
+        }
+      };
+    return SimpleServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static SimpleServiceBlockingStub newBlockingStub(
@@ -171,6 +185,21 @@ public final class SimpleServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static SimpleServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<SimpleServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<SimpleServiceBlockingStub>() {
+        @java.lang.Override
+        public SimpleServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new SimpleServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return SimpleServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static SimpleServiceFutureStub newFutureStub(
@@ -183,6 +212,21 @@ public final class SimpleServiceGrpc {
         }
       };
     return SimpleServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static SimpleServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<SimpleServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<SimpleServiceFutureStub>() {
+        @java.lang.Override
+        public SimpleServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new SimpleServiceFutureStub(channel, callOptions);
+        }
+      };
+    return SimpleServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

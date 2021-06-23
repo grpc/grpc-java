@@ -99,6 +99,20 @@ public final class AggregatedDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static AggregatedDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<AggregatedDiscoveryServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<AggregatedDiscoveryServiceStub>() {
+        @java.lang.Override
+        public AggregatedDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new AggregatedDiscoveryServiceStub(channel, callOptions);
+        }
+      };
+    return AggregatedDiscoveryServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static AggregatedDiscoveryServiceBlockingStub newBlockingStub(
@@ -114,6 +128,21 @@ public final class AggregatedDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static AggregatedDiscoveryServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<AggregatedDiscoveryServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<AggregatedDiscoveryServiceBlockingStub>() {
+        @java.lang.Override
+        public AggregatedDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new AggregatedDiscoveryServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return AggregatedDiscoveryServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static AggregatedDiscoveryServiceFutureStub newFutureStub(
@@ -126,6 +155,21 @@ public final class AggregatedDiscoveryServiceGrpc {
         }
       };
     return AggregatedDiscoveryServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static AggregatedDiscoveryServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<AggregatedDiscoveryServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<AggregatedDiscoveryServiceFutureStub>() {
+        @java.lang.Override
+        public AggregatedDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new AggregatedDiscoveryServiceFutureStub(channel, callOptions);
+        }
+      };
+    return AggregatedDiscoveryServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

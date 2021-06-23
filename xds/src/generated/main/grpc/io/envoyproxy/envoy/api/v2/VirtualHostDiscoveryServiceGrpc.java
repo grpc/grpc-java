@@ -72,6 +72,20 @@ public final class VirtualHostDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static VirtualHostDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceStub>() {
+        @java.lang.Override
+        public VirtualHostDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new VirtualHostDiscoveryServiceStub(channel, callOptions);
+        }
+      };
+    return VirtualHostDiscoveryServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static VirtualHostDiscoveryServiceBlockingStub newBlockingStub(
@@ -87,6 +101,21 @@ public final class VirtualHostDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static VirtualHostDiscoveryServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceBlockingStub>() {
+        @java.lang.Override
+        public VirtualHostDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new VirtualHostDiscoveryServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return VirtualHostDiscoveryServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static VirtualHostDiscoveryServiceFutureStub newFutureStub(
@@ -99,6 +128,21 @@ public final class VirtualHostDiscoveryServiceGrpc {
         }
       };
     return VirtualHostDiscoveryServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static VirtualHostDiscoveryServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceFutureStub>() {
+        @java.lang.Override
+        public VirtualHostDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new VirtualHostDiscoveryServiceFutureStub(channel, callOptions);
+        }
+      };
+    return VirtualHostDiscoveryServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

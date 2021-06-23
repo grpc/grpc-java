@@ -63,6 +63,20 @@ public final class MeshCertificateServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static MeshCertificateServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<MeshCertificateServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MeshCertificateServiceStub>() {
+        @java.lang.Override
+        public MeshCertificateServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MeshCertificateServiceStub(channel, callOptions);
+        }
+      };
+    return MeshCertificateServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static MeshCertificateServiceBlockingStub newBlockingStub(
@@ -78,6 +92,21 @@ public final class MeshCertificateServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static MeshCertificateServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<MeshCertificateServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MeshCertificateServiceBlockingStub>() {
+        @java.lang.Override
+        public MeshCertificateServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MeshCertificateServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return MeshCertificateServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static MeshCertificateServiceFutureStub newFutureStub(
@@ -90,6 +119,21 @@ public final class MeshCertificateServiceGrpc {
         }
       };
     return MeshCertificateServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static MeshCertificateServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<MeshCertificateServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MeshCertificateServiceFutureStub>() {
+        @java.lang.Override
+        public MeshCertificateServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MeshCertificateServiceFutureStub(channel, callOptions);
+        }
+      };
+    return MeshCertificateServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

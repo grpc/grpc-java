@@ -91,6 +91,20 @@ public final class HealthGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static HealthStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<HealthStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HealthStub>() {
+        @java.lang.Override
+        public HealthStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HealthStub(channel, callOptions);
+        }
+      };
+    return HealthStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static HealthBlockingStub newBlockingStub(
@@ -106,6 +120,21 @@ public final class HealthGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static HealthBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<HealthBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HealthBlockingStub>() {
+        @java.lang.Override
+        public HealthBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HealthBlockingStub(channel, callOptions);
+        }
+      };
+    return HealthBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static HealthFutureStub newFutureStub(
@@ -118,6 +147,21 @@ public final class HealthGrpc {
         }
       };
     return HealthFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static HealthFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<HealthFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HealthFutureStub>() {
+        @java.lang.Override
+        public HealthFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HealthFutureStub(channel, callOptions);
+        }
+      };
+    return HealthFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

@@ -94,6 +94,20 @@ public final class ReconnectServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static ReconnectServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceStub>() {
+        @java.lang.Override
+        public ReconnectServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReconnectServiceStub(channel, callOptions);
+        }
+      };
+    return ReconnectServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ReconnectServiceBlockingStub newBlockingStub(
@@ -109,6 +123,21 @@ public final class ReconnectServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static ReconnectServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceBlockingStub>() {
+        @java.lang.Override
+        public ReconnectServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReconnectServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return ReconnectServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static ReconnectServiceFutureStub newFutureStub(
@@ -121,6 +150,21 @@ public final class ReconnectServiceGrpc {
         }
       };
     return ReconnectServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static ReconnectServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceFutureStub>() {
+        @java.lang.Override
+        public ReconnectServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReconnectServiceFutureStub(channel, callOptions);
+        }
+      };
+    return ReconnectServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

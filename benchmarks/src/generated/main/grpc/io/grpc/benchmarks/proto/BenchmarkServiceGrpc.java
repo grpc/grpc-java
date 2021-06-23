@@ -184,6 +184,20 @@ public final class BenchmarkServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static BenchmarkServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceStub>() {
+        @java.lang.Override
+        public BenchmarkServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new BenchmarkServiceStub(channel, callOptions);
+        }
+      };
+    return BenchmarkServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static BenchmarkServiceBlockingStub newBlockingStub(
@@ -199,6 +213,21 @@ public final class BenchmarkServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static BenchmarkServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceBlockingStub>() {
+        @java.lang.Override
+        public BenchmarkServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new BenchmarkServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return BenchmarkServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static BenchmarkServiceFutureStub newFutureStub(
@@ -211,6 +240,21 @@ public final class BenchmarkServiceGrpc {
         }
       };
     return BenchmarkServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static BenchmarkServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceFutureStub>() {
+        @java.lang.Override
+        public BenchmarkServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new BenchmarkServiceFutureStub(channel, callOptions);
+        }
+      };
+    return BenchmarkServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

@@ -250,6 +250,20 @@ public final class ChannelzGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static ChannelzStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ChannelzStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ChannelzStub>() {
+        @java.lang.Override
+        public ChannelzStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ChannelzStub(channel, callOptions);
+        }
+      };
+    return ChannelzStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static ChannelzBlockingStub newBlockingStub(
@@ -265,6 +279,21 @@ public final class ChannelzGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static ChannelzBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ChannelzBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ChannelzBlockingStub>() {
+        @java.lang.Override
+        public ChannelzBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ChannelzBlockingStub(channel, callOptions);
+        }
+      };
+    return ChannelzBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static ChannelzFutureStub newFutureStub(
@@ -277,6 +306,21 @@ public final class ChannelzGrpc {
         }
       };
     return ChannelzFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static ChannelzFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<ChannelzFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ChannelzFutureStub>() {
+        @java.lang.Override
+        public ChannelzFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ChannelzFutureStub(channel, callOptions);
+        }
+      };
+    return ChannelzFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

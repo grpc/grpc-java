@@ -122,6 +122,20 @@ public final class EndpointDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static EndpointDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceStub>() {
+        @java.lang.Override
+        public EndpointDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new EndpointDiscoveryServiceStub(channel, callOptions);
+        }
+      };
+    return EndpointDiscoveryServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static EndpointDiscoveryServiceBlockingStub newBlockingStub(
@@ -137,6 +151,21 @@ public final class EndpointDiscoveryServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static EndpointDiscoveryServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceBlockingStub>() {
+        @java.lang.Override
+        public EndpointDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new EndpointDiscoveryServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return EndpointDiscoveryServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static EndpointDiscoveryServiceFutureStub newFutureStub(
@@ -149,6 +178,21 @@ public final class EndpointDiscoveryServiceGrpc {
         }
       };
     return EndpointDiscoveryServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static EndpointDiscoveryServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceFutureStub>() {
+        @java.lang.Override
+        public EndpointDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new EndpointDiscoveryServiceFutureStub(channel, callOptions);
+        }
+      };
+    return EndpointDiscoveryServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

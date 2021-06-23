@@ -91,6 +91,20 @@ public final class MetricsServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static MetricsServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<MetricsServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MetricsServiceStub>() {
+        @java.lang.Override
+        public MetricsServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MetricsServiceStub(channel, callOptions);
+        }
+      };
+    return MetricsServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static MetricsServiceBlockingStub newBlockingStub(
@@ -106,6 +120,21 @@ public final class MetricsServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static MetricsServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<MetricsServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MetricsServiceBlockingStub>() {
+        @java.lang.Override
+        public MetricsServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MetricsServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return MetricsServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static MetricsServiceFutureStub newFutureStub(
@@ -118,6 +147,21 @@ public final class MetricsServiceGrpc {
         }
       };
     return MetricsServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static MetricsServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<MetricsServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MetricsServiceFutureStub>() {
+        @java.lang.Override
+        public MetricsServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MetricsServiceFutureStub(channel, callOptions);
+        }
+      };
+    return MetricsServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

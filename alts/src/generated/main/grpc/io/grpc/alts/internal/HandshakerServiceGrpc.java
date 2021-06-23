@@ -60,6 +60,20 @@ public final class HandshakerServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static HandshakerServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<HandshakerServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HandshakerServiceStub>() {
+        @java.lang.Override
+        public HandshakerServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HandshakerServiceStub(channel, callOptions);
+        }
+      };
+    return HandshakerServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static HandshakerServiceBlockingStub newBlockingStub(
@@ -75,6 +89,21 @@ public final class HandshakerServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static HandshakerServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<HandshakerServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HandshakerServiceBlockingStub>() {
+        @java.lang.Override
+        public HandshakerServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HandshakerServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return HandshakerServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static HandshakerServiceFutureStub newFutureStub(
@@ -87,6 +116,21 @@ public final class HandshakerServiceGrpc {
         }
       };
     return HandshakerServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static HandshakerServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<HandshakerServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HandshakerServiceFutureStub>() {
+        @java.lang.Override
+        public HandshakerServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HandshakerServiceFutureStub(channel, callOptions);
+        }
+      };
+    return HandshakerServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

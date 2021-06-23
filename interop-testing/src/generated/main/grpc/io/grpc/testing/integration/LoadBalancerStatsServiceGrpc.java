@@ -94,6 +94,20 @@ public final class LoadBalancerStatsServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static LoadBalancerStatsServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<LoadBalancerStatsServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<LoadBalancerStatsServiceStub>() {
+        @java.lang.Override
+        public LoadBalancerStatsServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new LoadBalancerStatsServiceStub(channel, callOptions);
+        }
+      };
+    return LoadBalancerStatsServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static LoadBalancerStatsServiceBlockingStub newBlockingStub(
@@ -109,6 +123,21 @@ public final class LoadBalancerStatsServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static LoadBalancerStatsServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<LoadBalancerStatsServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<LoadBalancerStatsServiceBlockingStub>() {
+        @java.lang.Override
+        public LoadBalancerStatsServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new LoadBalancerStatsServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return LoadBalancerStatsServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static LoadBalancerStatsServiceFutureStub newFutureStub(
@@ -121,6 +150,21 @@ public final class LoadBalancerStatsServiceGrpc {
         }
       };
     return LoadBalancerStatsServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static LoadBalancerStatsServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<LoadBalancerStatsServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<LoadBalancerStatsServiceFutureStub>() {
+        @java.lang.Override
+        public LoadBalancerStatsServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new LoadBalancerStatsServiceFutureStub(channel, callOptions);
+        }
+      };
+    return LoadBalancerStatsServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

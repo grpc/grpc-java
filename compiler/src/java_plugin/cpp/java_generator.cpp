@@ -427,7 +427,7 @@ static void PrintMethodFields(
         "            $MethodDescriptor$.<$input_type$, $output_type$>newBuilder()\n"
         "            .setType($MethodType$.$method_type$)\n"
         "            .setFullMethodName(generateFullMethodName(SERVICE_NAME, \"$method_name$\"))\n");
-        
+
     bool safe = method->options().idempotency_level()
         == protobuf::MethodOptions_IdempotencyLevel_NO_SIDE_EFFECTS;
     if (safe) {
@@ -439,7 +439,7 @@ static void PrintMethodFields(
         p->Print(*vars, "            .setIdempotent(true)\n");
       }
     }
-        
+
     p->Print(
         *vars,
         "            .setSampledToLocalTracing(true)\n"
@@ -1118,6 +1118,18 @@ static void PrintService(const ServiceDescriptor* service,
   p->Outdent();
   p->Print("}\n\n");
 
+    // TODO(nmittler): Replace with WriteDocComment once included by protobuf distro.
+    GrpcWriteDocComment(p, " Creates a new async stub with option that supports all call types "
+                           "for the service");
+    p->Print(
+        *vars,
+        "public static $service_name$Stub newStub($Channel$ channel, $CallOptions$ callOptions) {\n");
+    p->Indent();
+    PrintStubFactory(service, vars, p, ASYNC_CLIENT_IMPL);
+    p->Print(*vars, "return $service_name$Stub.newStub(factory, channel, callOptions);\n");
+    p->Outdent();
+    p->Print("}\n\n");
+
   // TODO(nmittler): Replace with WriteDocComment once included by protobuf distro.
   GrpcWriteDocComment(p, " Creates a new blocking-style stub that supports unary and streaming "
                          "output calls on the service");
@@ -1133,6 +1145,20 @@ static void PrintService(const ServiceDescriptor* service,
   p->Outdent();
   p->Print("}\n\n");
 
+    GrpcWriteDocComment(p, " Creates a new blocking-style stub with option that supports unary "
+                           "and streaming output calls on the service");
+    p->Print(
+        *vars,
+        "public static $service_name$BlockingStub newBlockingStub(\n"
+        "    $Channel$ channel, $CallOptions$ callOptions) {\n");
+    p->Indent();
+    PrintStubFactory(service, vars, p, BLOCKING_CLIENT_IMPL);
+    p->Print(
+        *vars,
+        "return $service_name$BlockingStub.newStub(factory, channel, callOptions);\n");
+    p->Outdent();
+    p->Print("}\n\n");
+
   // TODO(nmittler): Replace with WriteDocComment once included by protobuf distro.
   GrpcWriteDocComment(p, " Creates a new ListenableFuture-style stub that supports unary calls "
                          "on the service");
@@ -1147,6 +1173,21 @@ static void PrintService(const ServiceDescriptor* service,
       "return $service_name$FutureStub.newStub(factory, channel);\n");
   p->Outdent();
   p->Print("}\n\n");
+
+    // TODO(nmittler): Replace with WriteDocComment once included by protobuf distro.
+    GrpcWriteDocComment(p, " Creates a new ListenableFuture-style stub with option that supports "
+                           "unary calls on the service");
+    p->Print(
+        *vars,
+        "public static $service_name$FutureStub newFutureStub(\n"
+        "    $Channel$ channel, $CallOptions$ callOptions) {\n");
+    p->Indent();
+    PrintStubFactory(service, vars, p, FUTURE_CLIENT_IMPL);
+    p->Print(
+        *vars,
+        "return $service_name$FutureStub.newStub(factory, channel, callOptions);\n");
+    p->Outdent();
+    p->Print("}\n\n");
 
   PrintStub(service, vars, p, ABSTRACT_CLASS);
   PrintStub(service, vars, p, ASYNC_CLIENT_IMPL);

@@ -60,6 +60,20 @@ public final class LoadReportingServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static LoadReportingServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceStub>() {
+        @java.lang.Override
+        public LoadReportingServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new LoadReportingServiceStub(channel, callOptions);
+        }
+      };
+    return LoadReportingServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static LoadReportingServiceBlockingStub newBlockingStub(
@@ -75,6 +89,21 @@ public final class LoadReportingServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static LoadReportingServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceBlockingStub>() {
+        @java.lang.Override
+        public LoadReportingServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new LoadReportingServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return LoadReportingServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static LoadReportingServiceFutureStub newFutureStub(
@@ -87,6 +116,21 @@ public final class LoadReportingServiceGrpc {
         }
       };
     return LoadReportingServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static LoadReportingServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceFutureStub>() {
+        @java.lang.Override
+        public LoadReportingServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new LoadReportingServiceFutureStub(channel, callOptions);
+        }
+      };
+    return LoadReportingServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**

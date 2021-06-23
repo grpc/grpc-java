@@ -60,6 +60,20 @@ public final class RouteLookupServiceGrpc {
   }
 
   /**
+   * Creates a new async stub with option that supports all call types for the service
+   */
+  public static RouteLookupServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<RouteLookupServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<RouteLookupServiceStub>() {
+        @java.lang.Override
+        public RouteLookupServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new RouteLookupServiceStub(channel, callOptions);
+        }
+      };
+    return RouteLookupServiceStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
   public static RouteLookupServiceBlockingStub newBlockingStub(
@@ -75,6 +89,21 @@ public final class RouteLookupServiceGrpc {
   }
 
   /**
+   * Creates a new blocking-style stub with option that supports unary and streaming output calls on the service
+   */
+  public static RouteLookupServiceBlockingStub newBlockingStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<RouteLookupServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<RouteLookupServiceBlockingStub>() {
+        @java.lang.Override
+        public RouteLookupServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new RouteLookupServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return RouteLookupServiceBlockingStub.newStub(factory, channel, callOptions);
+  }
+
+  /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
   public static RouteLookupServiceFutureStub newFutureStub(
@@ -87,6 +116,21 @@ public final class RouteLookupServiceGrpc {
         }
       };
     return RouteLookupServiceFutureStub.newStub(factory, channel);
+  }
+
+  /**
+   * Creates a new ListenableFuture-style stub with option that supports unary calls on the service
+   */
+  public static RouteLookupServiceFutureStub newFutureStub(
+      io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    io.grpc.stub.AbstractStub.StubFactory<RouteLookupServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<RouteLookupServiceFutureStub>() {
+        @java.lang.Override
+        public RouteLookupServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new RouteLookupServiceFutureStub(channel, callOptions);
+        }
+      };
+    return RouteLookupServiceFutureStub.newStub(factory, channel, callOptions);
   }
 
   /**
