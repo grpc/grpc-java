@@ -156,6 +156,10 @@ class NettyAdaptiveCumulator implements io.netty.handler.codec.ByteToMessageDeco
          *   Unwrapping buffers is unsafe, and potential benefit of fast writes may not be
          *   as pronounced because the capacity is doubled with each reallocation.
          */
+        // TODO(sergiitk): re-consider removing the tail component from the composite buf
+        //   before writing to it. Was it done to simplify two cases? Or to be safe wrt not
+        //   losing bytes in case an error is raised? Will this eliminate the necessity of
+        //   making tail duplicate?
         merged.writeBytes(in);
       } else {
         // The tail is shared, or not expandable. Replace it with a new buffer of desired capacity.
