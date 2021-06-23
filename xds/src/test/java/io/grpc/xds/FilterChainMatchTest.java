@@ -927,8 +927,8 @@ public class FilterChainMatchTest {
     registeredWatcher.onChanged(listenerUpdate);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextPicked = getDownstreamTlsContext();
     // assert defaultFilterChain match
-    assertThat(tlsContextPicked.getCommonTlsContext().getTlsCertificateSdsSecretConfigsList()
-        .get(0).getName()).isEqualTo("CERT3");
+    assertThat(tlsContextPicked.getCommonTlsContext().getTlsCertificateCertificateProviderInstance()
+        .getCertificateName()).isEqualTo("CERT3");
   }
 
   private void setupChannel(String localIp, String remoteIp, int remotePort)
