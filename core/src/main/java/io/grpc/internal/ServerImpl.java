@@ -28,6 +28,7 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -611,7 +612,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
             if (future.isCancelled()) {
               return;
             }
-            if (!future.isDone() || (callParameters = future.get()) == null) {
+            if (!future.isDone() || (callParameters = Futures.getDone(future)) == null) {
               Status status = Status.INTERNAL.withDescription(
                       "Unexpected failure retrieving server call parameters.");
               throw new StatusException(status);
