@@ -16,6 +16,8 @@
 
 package io.grpc.netty;
 
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import com.google.common.util.concurrent.MoreExecutors;
@@ -55,7 +57,9 @@ import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLEngine;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 public class AdvancedTlsTest {
   public static final String SERVER_0_KEY_FILE = "server0.key";
@@ -78,6 +82,9 @@ public class AdvancedTlsTest {
   private X509Certificate[] serverCert0;
   private PrivateKey clientKey0;
   private X509Certificate[] clientCert0;
+
+  @Rule
+  public ExpectedException exceptionRule = ExpectedException.none();
 
   @Before
   public void setUp()
@@ -340,6 +347,106 @@ public class AdvancedTlsTest {
     serverTrustShutdown.close();
     clientKeyShutdown.close();
     clientTrustShutdown.close();
+  }
+
+  @Test
+  public void keyManagerAliasesTest() throws Exception {
+    AdvancedTlsX509KeyManager km = new AdvancedTlsX509KeyManager();
+    assertArrayEquals(
+        new String[] {"default"}, km.getClientAliases("", null));
+    assertEquals(
+        "default", km.chooseClientAlias(new String[] {"default"}, null, null));
+    assertArrayEquals(
+        new String[] {"default"}, km.getServerAliases("", null));
+    assertEquals(
+        "default", km.chooseServerAlias("default", null, null));
+  }
+
+  @Test
+  public void trustManagerCheckTrustTest() throws Exception {
+    AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.InsecurelySkipAllVerification)
+        .setSslSocketAndEnginePeerVerifier(
+            new SslSocketAndEnginePeerVerifier() {
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  Socket socket) throws CertificateException { }
+
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  SSLEngine engine) throws CertificateException { }
+            })
+        .setPeerVerifier(new PeerVerifier() {
+          @Override
+          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
+              throws CertificateException { }
+        })
+        .build();
+    tm.updateTrustCredentials(caCert);
+    tm.checkClientTrusted(serverCert0, "RSA", new Socket());
+    tm.checkClientTrusted(serverCert0, "RSA");
+    tm.useSystemDefaultTrustCerts();
+    tm.checkServerTrusted(clientCert0, "RSA", new Socket());
+    tm.checkServerTrusted(clientCert0, "RSA");
+  }
+
+  @Test
+  public void trustManagerEmptyChainTest() throws Exception {
+    exceptionRule.expect(CertificateException.class);
+    exceptionRule.expectMessage(
+        "Want certificate verification but got null or empty certificates");
+    AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.CertificateOnlyVerification)
+        .setSslSocketAndEnginePeerVerifier(
+            new SslSocketAndEnginePeerVerifier() {
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  Socket socket) throws CertificateException { }
+
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  SSLEngine engine) throws CertificateException { }
+            })
+        .setPeerVerifier(new PeerVerifier() {
+          @Override
+          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
+              throws CertificateException { }
+        })
+        .build();
+    tm.updateTrustCredentials(caCert);
+    tm.checkClientTrusted(null, "RSA");
+  }
+
+  @Test
+  public void trustManagerBadCustomVerificationTest() throws Exception {
+    exceptionRule.expect(CertificateException.class);
+    exceptionRule.expectMessage("Bad Custom Verification");
+    AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.CertificateOnlyVerification)
+        .setSslSocketAndEnginePeerVerifier(
+            new SslSocketAndEnginePeerVerifier() {
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  Socket socket) throws CertificateException {
+                throw new CertificateException("Bad Custom Verification");
+              }
+
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  SSLEngine engine) throws CertificateException {
+                throw new CertificateException("Bad Custom Verification");
+              }
+            })
+        .setPeerVerifier(new PeerVerifier() {
+          @Override
+          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
+              throws CertificateException {
+            throw new CertificateException("Bad Custom Verification");
+          }
+        })
+        .build();
+    tm.updateTrustCredentials(caCert);
+    tm.checkClientTrusted(serverCert0, "RSA", new Socket());
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
