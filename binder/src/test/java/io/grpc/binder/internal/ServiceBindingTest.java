@@ -289,8 +289,7 @@ public final class ServiceBindingTest {
   private static class ServiceBindingBuilder {
     private Context sourceContext;
     private Observer observer;
-    private ComponentName targetComponent;
-    private String bindAction;
+    private Intent bindIntent = new Intent();
     private int bindServiceFlags;
 
     public ServiceBindingBuilder setSourceContext(Context sourceContext) {
@@ -299,7 +298,7 @@ public final class ServiceBindingTest {
     }
 
     public ServiceBindingBuilder setBindingAction(String bindAction) {
-      this.bindAction = bindAction;
+      this.bindIntent.setAction(bindAction);
       return this;
     }
 
@@ -309,7 +308,7 @@ public final class ServiceBindingTest {
     }
 
     public ServiceBindingBuilder setTargetComponent(ComponentName targetComponent) {
-      this.targetComponent = targetComponent;
+      this.bindIntent.setComponent(targetComponent);
       return this;
     }
 
@@ -322,8 +321,7 @@ public final class ServiceBindingTest {
       return new ServiceBinding(
           ContextCompat.getMainExecutor(sourceContext),
           sourceContext,
-          targetComponent,
-          bindAction,
+          bindIntent,
           bindServiceFlags,
           observer);
     }

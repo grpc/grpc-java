@@ -56,8 +56,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     UNBOUND,
   }
 
-  private final ComponentName targetComponent;
-  private final String bindAction;
+  private final Intent bindIntent;
   private final int bindFlags;
   private final Observer observer;
   private final Executor mainThreadExecutor;
@@ -77,15 +76,13 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   ServiceBinding(
       Executor mainThreadExecutor,
       Context sourceContext,
-      ComponentName targetComponent,
-      String bindAction,
+      Intent bindIntent,
       int bindFlags,
       Observer observer) {
     // We need to synchronize here ensure other threads see all
     // non-final fields initialized after the constructor.
     synchronized (this) {
-      this.targetComponent = targetComponent;
-      this.bindAction = bindAction;
+      this.bindIntent = bindIntent;
       this.bindFlags = bindFlags;
       this.observer = observer;
       this.sourceContext = sourceContext;
@@ -120,8 +117,6 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   public synchronized void bind() {
     if (state == State.NOT_BINDING) {
       state = State.BINDING;
-      Intent bindIntent = new Intent(bindAction);
-      bindIntent.setComponent(targetComponent);
       Status bindResult = bindInternal(sourceContext, bindIntent, this, bindFlags);
       if (!bindResult.isOk()) {
         state = State.UNBOUND;
