@@ -64,16 +64,16 @@ final class MultiMessageClientStream implements ClientStream {
     }
     if (outbound.isReady()) {
       listener.onReady();
-      try {
-        synchronized (outbound) {
-          // The ClientStream contract promises no more header changes after start().
-          outbound.onPrefixReady();
-          outbound.send();
-        }
-      } catch (StatusException se) {
-        synchronized (inbound) {
-          inbound.closeAbnormal(se.getStatus());
-        }
+    }
+    try {
+      synchronized (outbound) {
+        // The ClientStream contract promises no more header changes after start().
+        outbound.onPrefixReady();
+        outbound.send();
+      }
+    } catch (StatusException se) {
+      synchronized (inbound) {
+        inbound.closeAbnormal(se.getStatus());
       }
     }
   }
