@@ -18,8 +18,11 @@ package io.grpc.binder.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
+import static java.lang.Math.max;
 
 import android.os.Parcel;
+import io.grpc.Deadline;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -29,6 +32,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -108,7 +112,7 @@ abstract class Outbound {
     return statsTraceContext;
   }
 
-  /** Call to add a message to be delivered. */
+  /** Call to add a message to be delivered. Implies onPrefixReady(). */
   @GuardedBy("this")
   final void addMessage(InputStream message) throws StatusException {
     onPrefixReady(); // This is implied.
@@ -215,7 +219,6 @@ abstract class Outbound {
   }
 
   @GuardedBy("this")
-  @SuppressWarnings("fallthrough")
   protected final void sendInternal() throws StatusException {
     Parcel parcel = Parcel.obtain();
     int flags = 0;
@@ -354,7 +357,6 @@ abstract class Outbound {
       this.method = method;
       this.headers = headers;
       this.statsTraceContext = statsTraceContext;
-      onPrefixReady(); // Client prefix is available immediately.
     }
 
     @Override
@@ -369,6 +371,7 @@ abstract class Outbound {
       return 0;
     }
 
+    // Implies onPrefixReady() and onSuffixReady().
     @GuardedBy("this")
     void sendSingleMessageAndHalfClose(@Nullable InputStream singleMessage) throws StatusException {
       if (singleMessage != null) {
@@ -389,6 +392,14 @@ abstract class Outbound {
     protected int writeSuffix(Parcel parcel) throws IOException {
       // Client doesn't include anything in the suffix.
       return 0;
+    }
+
+    // Must not be called after onPrefixReady() (explicitly or via another method that implies it).
+    @GuardedBy("this")
+    void setDeadline(Deadline deadline) {
+      headers.discardAll(TIMEOUT_KEY);
+      long effectiveTimeoutNanos = max(0, deadline.timeRemaining(TimeUnit.NANOSECONDS));
+      headers.put(TIMEOUT_KEY, effectiveTimeoutNanos);
     }
   }
 
