@@ -18,12 +18,10 @@ package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.certprovider.CertProviderClientSslContextProvider;
 import io.grpc.xds.internal.sds.ReferenceCountingMap.ValueFactory;
-import java.util.concurrent.Executors;
 
 /** Factory to create client-side SslContextProvider from UpstreamTlsContext. */
 final class ClientSslContextProviderFactory
@@ -56,19 +54,6 @@ final class ClientSslContextProviderFactory
           upstreamTlsContext,
           bootstrapInfo.getNode().toEnvoyProtoNode(),
           bootstrapInfo.getCertProviders());
-    } else if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
-        upstreamTlsContext.getCommonTlsContext())) {
-      return SecretVolumeClientSslContextProvider.getProvider(upstreamTlsContext);
-    } else if (CommonTlsContextUtil.hasAllSecretsUsingSds(
-        upstreamTlsContext.getCommonTlsContext())) {
-      return SdsClientSslContextProvider.getProvider(
-          upstreamTlsContext,
-          bootstrapInfo.getNode().toEnvoyProtoNodeV2(),
-          Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-              .setNameFormat("client-sds-sslcontext-provider-%d")
-              .setDaemon(true)
-              .build()),
-          /* channelExecutor= */ null);
     }
     throw new UnsupportedOperationException("Unsupported configurations in UpstreamTlsContext!");
   }

@@ -114,7 +114,7 @@ public final class XdsClientWrapperForServerSds {
         new XdsClient.LdsResourceWatcher() {
           @Override
           public void onChanged(XdsClient.LdsUpdate update) {
-            releaseOldSuppliers(curListener.getAndSet(update.listener));
+            releaseOldSuppliers(curListener.getAndSet(update.listener()));
             reportSuccess();
           }
 
