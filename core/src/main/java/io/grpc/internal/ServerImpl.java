@@ -28,6 +28,7 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -53,7 +54,6 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
-import io.grpc.StatusException;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
@@ -606,17 +606,11 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
         private void runInternal() {
           ServerStreamListener listener = NOOP_LISTENER;
-          ServerCallParameters<?,?> callParameters;
           try {
             if (future.isCancelled()) {
               return;
             }
-            if (!future.isDone() || (callParameters = future.get()) == null) {
-              Status status = Status.INTERNAL.withDescription(
-                      "Unexpected failure retrieving server call parameters.");
-              throw new StatusException(status);
-            }
-            listener = startWrappedCall(methodName, callParameters, headers);
+            listener = startWrappedCall(methodName, Futures.getDone(future), headers);
           } catch (Throwable ex) {
             stream.close(Status.fromThrowable(ex), new Metadata());
             context.cancel(null);
