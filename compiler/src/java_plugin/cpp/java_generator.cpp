@@ -1086,7 +1086,8 @@ static void PrintService(const ServiceDescriptor* service,
       *vars,
       "@$Generated$(\n"
       "    value = \"by gRPC proto compiler$grpc_version$\",\n"
-      "    comments = \"Source: $file_name$\")\n");
+      "    comments = \"Source: $file_name$\")\n"
+      "@$GrpcGenerated$\n");
 
   if (service->options().deprecated()) {
     p->Print(*vars, "@$Deprecated$\n");
@@ -1201,6 +1202,7 @@ void GenerateService(const ServiceDescriptor* service,
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";
   vars["Iterator"] = "java.util.Iterator";
   vars["Generated"] = "javax.annotation.Generated";
+  vars["GrpcGenerated"] = "io.grpc.stub.annotations.GrpcGenerated";
   vars["ListenableFuture"] =
       "com.google.common.util.concurrent.ListenableFuture";
 
