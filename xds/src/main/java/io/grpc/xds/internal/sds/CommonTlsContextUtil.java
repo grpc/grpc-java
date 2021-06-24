@@ -16,36 +16,13 @@
 
 package io.grpc.xds.internal.sds;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
-
-import io.envoyproxy.envoy.config.core.v3.DataSource.SpecifierCase;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.ValidationContextTypeCase;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
-import javax.annotation.Nullable;
 
 /** Class for utility functions for {@link CommonTlsContext}. */
 final class CommonTlsContextUtil {
 
   private CommonTlsContextUtil() {}
-
-  /** Returns true only if given CommonTlsContext uses no SdsSecretConfigs. */
-  static boolean hasAllSecretsUsingFilename(CommonTlsContext commonTlsContext) {
-    return commonTlsContext != null
-        && (commonTlsContext.getTlsCertificatesCount() > 0
-            || commonTlsContext.hasValidationContext());
-  }
-
-  /** Returns true only if given CommonTlsContext uses only SdsSecretConfigs. */
-  static boolean hasAllSecretsUsingSds(CommonTlsContext commonTlsContext) {
-    return commonTlsContext != null
-        && (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() > 0
-            || commonTlsContext.hasValidationContextSdsSecretConfig());
-  }
 
   static boolean hasCertProviderInstance(CommonTlsContext commonTlsContext) {
     return commonTlsContext != null
@@ -60,54 +37,5 @@ final class CommonTlsContextUtil {
       return combinedCertificateValidationContext.hasValidationContextCertificateProviderInstance();
     }
     return commonTlsContext.hasValidationContextCertificateProviderInstance();
-  }
-
-  @Nullable
-  static CertificateValidationContext getCertificateValidationContext(
-      CommonTlsContext commonTlsContext) {
-    checkNotNull(commonTlsContext, "commonTlsContext");
-    ValidationContextTypeCase type = commonTlsContext.getValidationContextTypeCase();
-    checkState(
-        type == ValidationContextTypeCase.VALIDATION_CONTEXT
-            || type == ValidationContextTypeCase.VALIDATIONCONTEXTTYPE_NOT_SET,
-        "incorrect ValidationContextTypeCase");
-    return type == ValidationContextTypeCase.VALIDATION_CONTEXT
-        ? commonTlsContext.getValidationContext()
-        : null;
-  }
-
-  @Nullable
-  static CertificateValidationContext validateCertificateContext(
-      @Nullable CertificateValidationContext certContext, boolean optional) {
-    if (certContext == null || !certContext.hasTrustedCa()) {
-      checkArgument(optional, "certContext is required");
-      return null;
-    }
-    checkArgument(
-        certContext.getTrustedCa().getSpecifierCase() == SpecifierCase.FILENAME,
-        "filename expected");
-    return certContext;
-  }
-
-  @Nullable
-  static TlsCertificate validateTlsCertificate(
-      @Nullable TlsCertificate tlsCertificate, boolean optional) {
-    if (tlsCertificate == null) {
-      checkArgument(optional, "tlsCertificate is required");
-      return null;
-    }
-    if (optional
-        && (tlsCertificate.getPrivateKey().getSpecifierCase() == SpecifierCase.SPECIFIER_NOT_SET)
-        && (tlsCertificate.getCertificateChain().getSpecifierCase()
-            == SpecifierCase.SPECIFIER_NOT_SET)) {
-      return null;
-    }
-    checkArgument(
-        tlsCertificate.getPrivateKey().getSpecifierCase() == SpecifierCase.FILENAME,
-        "filename expected");
-    checkArgument(
-        tlsCertificate.getCertificateChain().getSpecifierCase() == SpecifierCase.FILENAME,
-        "filename expected");
-    return tlsCertificate;
   }
 }
