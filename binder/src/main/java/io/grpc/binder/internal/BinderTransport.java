@@ -585,8 +585,7 @@ public abstract class BinderTransport
           new ServiceBinding(
               mainThreadExecutor,
               sourceContext,
-              targetAddress.getComponent(),
-              ApiConstants.ACTION_BIND,
+              targetAddress.asBindIntent(),
               bindServiceFlags.toInteger(),
               this);
     }

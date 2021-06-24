@@ -23,6 +23,8 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.ClusterManagerLoadBalancerProvider.ClusterManagerConfig;
@@ -36,11 +38,12 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ClusterManagerLoadBalancerProviderTest {
 
+  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
+  private final ClusterManagerLoadBalancerProvider provider =
+      new ClusterManagerLoadBalancerProvider(lbRegistry);
+
   @Test
-  public void parseClusterManagerLoadBalancingPolicyConfig() throws IOException {
-    LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
-    ClusterManagerLoadBalancerProvider provider =
-        new ClusterManagerLoadBalancerProvider(lbRegistry);
+  public void parseLoadBalancingConfig_valid() throws IOException {
     final Object fooConfig = new Object();
     LoadBalancerProvider lbProviderFoo = new LoadBalancerProvider() {
       @Override
@@ -134,6 +137,20 @@ public class ClusterManagerLoadBalancerProviderTest {
                 lbProviderFoo, fooConfig),
             "child2",
             new PolicySelection(lbProviderBar, barConfig));
+  }
+
+  @Test
+  public void parseLoadBalancingPolicyConfig_emptyChildPolicy() throws IOException {
+    String clusterManagerConfigJson = "{\n"
+        + "  \"childPolicy\": {}\n"
+        + "}";
+    @SuppressWarnings("unchecked")
+    Map<String, ?> rawLbConfigMap = (Map<String, ?>) JsonParser.parse(clusterManagerConfigJson);
+    ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(rawLbConfigMap);
+    Status error = configOrError.getError();
+    assertThat(error.getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(error.getDescription())
+        .startsWith("No child policy provided for cluster_manager LB policy");
   }
 
   @Test

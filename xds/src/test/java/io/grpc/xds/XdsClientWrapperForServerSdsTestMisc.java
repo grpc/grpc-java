@@ -31,6 +31,7 @@ import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
@@ -131,7 +132,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
             "10.1.2.3",
             Collections.<EnvoyServerProtoData.FilterChain>emptyList(),
             null);
-    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     registeredWatcher.onChanged(listenerUpdate);
     DownstreamTlsContext tlsContext = getDownstreamTlsContext();
     assertThat(tlsContext).isNull();

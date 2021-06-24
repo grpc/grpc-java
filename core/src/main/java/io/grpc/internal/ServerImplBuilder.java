@@ -32,6 +32,7 @@ import io.grpc.HandlerRegistry;
 import io.grpc.InternalChannelz;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerCallExecutorSupplier;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
@@ -93,6 +94,8 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   @Nullable BinaryLog binlog;
   InternalChannelz channelz = InternalChannelz.instance();
   CallTracer.Factory callTracerFactory = CallTracer.getDefaultFactory();
+  @Nullable
+  ServerCallExecutorSupplier executorSupplier;
 
   /**
    * An interface to provide to provide transport specific information for the server. This method
@@ -119,6 +122,12 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   @Override
   public ServerImplBuilder executor(@Nullable Executor executor) {
     this.executorPool = executor != null ? new FixedObjectPool<>(executor) : DEFAULT_EXECUTOR_POOL;
+    return this;
+  }
+
+  @Override
+  public ServerImplBuilder callExecutor(ServerCallExecutorSupplier executorSupplier) {
+    this.executorSupplier = checkNotNull(executorSupplier);
     return this;
   }
 

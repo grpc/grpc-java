@@ -494,10 +494,7 @@ public class ClusterImplLoadBalancerTest {
 
   private void subtest_endpointAddressesAttachedWithTlsConfig(boolean enableSecurity) {
     UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
-            CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
     WeightedTargetConfig weightedTargetConfig =
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
@@ -541,10 +538,7 @@ public class ClusterImplLoadBalancerTest {
 
     // Config with a new UpstreamTlsContext.
     upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.BAD_CLIENT_KEY_FILE,
-            CommonTlsContextTestsUtil.BAD_CLIENT_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe1", true);
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
         null, Collections.<DropOverload>emptyList(),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig), upstreamTlsContext);

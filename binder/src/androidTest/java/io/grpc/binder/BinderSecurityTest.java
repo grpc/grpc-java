@@ -75,7 +75,7 @@ public final class BinderSecurityTest {
     AndroidComponentAddress addr = HostServices.allocateService(appContext);
     HostServices.configureService(addr,
         HostServices.serviceParamsBuilder()
-          .setServerFactory((service, receiver) -> buildServer(service, receiver, serverPolicy))
+          .setServerFactory((service, receiver) -> buildServer(addr, receiver, serverPolicy))
           .build());
 
     channel =
@@ -85,10 +85,10 @@ public final class BinderSecurityTest {
   }
 
   private Server buildServer(
-      Service service,
+      AndroidComponentAddress listenAddr,
       IBinderReceiver receiver,
       ServerSecurityPolicy serverPolicy) {
-    BinderServerBuilder serverBuilder = BinderServerBuilder.forService(service, receiver);
+    BinderServerBuilder serverBuilder = BinderServerBuilder.forAddress(listenAddr, receiver);
     serverBuilder.securityPolicy(serverPolicy);
 
     MethodDescriptor.Marshaller<Empty> marshaller =

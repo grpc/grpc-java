@@ -254,7 +254,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
 
     @SuppressWarnings("unchecked")
     @Override
-    protected Message buildListener(
+    protected Message buildListenerWithApiListener(
         String name, Message routeConfiguration, List<? extends Message> httpFilters) {
       return Listener.newBuilder()
           .setName(name)
@@ -270,7 +270,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildListenerForRds(String name, String rdsResourceName) {
+    protected Message buildListenerWithApiListenerForRds(String name, String rdsResourceName) {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(Address.getDefaultInstance())
@@ -289,7 +289,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildListenerInvalid(String name) {
+    protected Message buildListenerWithApiListenerInvalid(String name) {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(Address.getDefaultInstance())
@@ -629,13 +629,8 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildListenerWithFilterChain(
-        String name, int portValue, String address, String certName, String validationContextName) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected Message buildTestFilter(String name) {
+    protected Message buildHttpConnectionManagerFilter(
+        @Nullable String rdsName, @Nullable Message routeConfig, List<Message> httpFilters) {
       throw new UnsupportedOperationException();
     }
   }

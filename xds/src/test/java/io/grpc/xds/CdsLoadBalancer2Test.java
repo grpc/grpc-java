@@ -77,10 +77,7 @@ public class CdsLoadBalancer2Test {
   private static final String DNS_HOST_NAME = "backend-service-dns.googleapis.com:443";
   private static final String LRS_SERVER_NAME = "lrs.googleapis.com";
   private final UpstreamTlsContext upstreamTlsContext =
-      CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
-          CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
-          CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
-          CommonTlsContextTestsUtil.CA_PEM_FILE);
+      CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
