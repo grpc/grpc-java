@@ -74,7 +74,6 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
 import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
@@ -534,7 +533,6 @@ public class ServerImplTest {
   }
 
   @Test
-  @SuppressWarnings("CheckReturnValue")
   public void executorSupplierFutureNotSet() throws Exception {
     builder.executorSupplier = new ServerCallExecutorSupplier() {
       @Override
@@ -577,8 +575,7 @@ public class ServerImplTest {
     assertThat(callReference.get()).isNull();
     verify(stream, times(2)).close(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getAllValues().get(1);
-    assertEquals(Code.UNKNOWN, status.getCode());
-    assertThat(status.getCause() instanceof IllegalStateException);
+    assertEquals(Status.Code.INTERNAL, status.getCode());
   }
 
   @Test
