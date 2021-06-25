@@ -62,12 +62,6 @@ public abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extend
   }
 
   @Override
-  public T callExecutor(ServerCallExecutorSupplier executorSupplier) {
-    delegate().callExecutor(executorSupplier);
-    return thisT();
-  }
-
-  @Override
   public T addService(ServerServiceDefinition service) {
     delegate().addService(service);
     return thisT();

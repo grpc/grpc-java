@@ -24,7 +24,6 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
-import io.grpc.ServerCallExecutorSupplier;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
@@ -65,12 +64,6 @@ public abstract class AbstractServerImplBuilder
   @Override
   public T directExecutor() {
     delegate().directExecutor();
-    return thisT();
-  }
-
-  @Override
-  public T callExecutor(ServerCallExecutorSupplier executorSupplier) {
-    delegate().callExecutor(executorSupplier);
     return thisT();
   }
 

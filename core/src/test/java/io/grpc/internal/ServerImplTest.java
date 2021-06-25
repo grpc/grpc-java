@@ -65,7 +65,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
-import io.grpc.ServerCallExecutorSupplier;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
@@ -74,7 +73,6 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
 import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
@@ -458,127 +456,6 @@ public class ServerImplTest {
     verify(streamTracerFactory).newServerStreamTracer(eq("Waiter/nonexist"), same(requestHeaders));
     assertNull(streamTracer.getServerCallInfo());
     assertEquals(Status.Code.UNIMPLEMENTED, statusCaptor.getValue().getCode());
-  }
-
-
-  @Test
-  public void executorSupplierSameExecutorBasic() throws Exception {
-    builder.executorSupplier = new ServerCallExecutorSupplier() {
-      @Override
-      public <ReqT, RespT> Executor getExecutor(ServerCall<ReqT, RespT> call, Metadata metadata) {
-        return executor.getScheduledExecutorService();
-      }
-    };
-    basicExchangeSuccessful();
-  }
-
-  @Test
-  public void executorSupplierNullBasic() throws Exception {
-    builder.executorSupplier = new ServerCallExecutorSupplier() {
-      @Override
-      public <ReqT, RespT> Executor getExecutor(ServerCall<ReqT, RespT> call, Metadata metadata) {
-        return null;
-      }
-    };
-    basicExchangeSuccessful();
-  }
-
-  @Test
-  @SuppressWarnings("unchecked")
-  public void executorSupplierSwitchExecutor() throws Exception {
-    SingleExecutor switchingExecutor = new SingleExecutor();
-    ServerCallExecutorSupplier mockSupplier = mock(ServerCallExecutorSupplier.class);
-    when(mockSupplier.getExecutor(any(ServerCall.class), any(Metadata.class)))
-            .thenReturn(switchingExecutor);
-    builder.executorSupplier = mockSupplier;
-    final AtomicReference<ServerCall<String, Integer>> callReference
-            = new AtomicReference<>();
-    mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
-            new ServiceDescriptor("Waiter", METHOD))
-            .addMethod(METHOD,
-                new ServerCallHandler<String, Integer>() {
-                  @Override
-                  public ServerCall.Listener<String> startCall(
-                          ServerCall<String, Integer> call,
-                          Metadata headers) {
-                    callReference.set(call);
-                    return callListener;
-                  }
-                }).build());
-
-    createAndStartServer();
-    ServerTransportListener transportListener
-            = transportServer.registerNewServerTransport(new SimpleServerTransport());
-    transportListener.transportReady(Attributes.EMPTY);
-    Metadata requestHeaders = new Metadata();
-    StatsTraceContext statsTraceCtx =
-            StatsTraceContext.newServerContext(
-                    streamTracerFactories, "Waiter/serve", requestHeaders);
-    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
-    transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
-    verify(stream).setListener(isA(ServerStreamListener.class));
-    verify(stream, atLeast(1)).statsTraceContext();
-
-    assertEquals(1, executor.runDueTasks());
-    verify(fallbackRegistry).lookupMethod("Waiter/serve", AUTHORITY);
-    verify(streamTracerFactory).newServerStreamTracer(eq("Waiter/serve"), same(requestHeaders));
-    ArgumentCaptor<ServerCall<?,?>> callCapture = ArgumentCaptor.forClass(ServerCall.class);
-    verify(mockSupplier).getExecutor(callCapture.capture(), eq(requestHeaders));
-
-    assertThat(switchingExecutor.runnable).isNotNull();
-    assertEquals(0, executor.numPendingTasks());
-    switchingExecutor.drain();
-    ServerCall<String, Integer> call = callReference.get();
-    assertNotNull(call);
-    assertThat(call).isEqualTo(callCapture.getValue());
-  }
-
-  @Test
-  @SuppressWarnings("CheckReturnValue")
-  public void executorSupplierFutureNotSet() throws Exception {
-    builder.executorSupplier = new ServerCallExecutorSupplier() {
-      @Override
-      public <ReqT, RespT> Executor getExecutor(ServerCall<ReqT, RespT> call, Metadata metadata) {
-        throw new IllegalStateException("Yeah!");
-      }
-    };
-    doThrow(new IllegalStateException("Yeah")).doNothing()
-            .when(stream).close(any(Status.class), any(Metadata.class));
-    final AtomicReference<ServerCall<String, Integer>> callReference
-            = new AtomicReference<>();
-    mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
-        new ServiceDescriptor("Waiter", METHOD))
-        .addMethod(METHOD,
-            new ServerCallHandler<String, Integer>() {
-                @Override
-                public ServerCall.Listener<String> startCall(
-                        ServerCall<String, Integer> call,
-                        Metadata headers) {
-                  callReference.set(call);
-                  return callListener;
-                }
-            }).build());
-
-    createAndStartServer();
-    ServerTransportListener transportListener
-            = transportServer.registerNewServerTransport(new SimpleServerTransport());
-    transportListener.transportReady(Attributes.EMPTY);
-    Metadata requestHeaders = new Metadata();
-    StatsTraceContext statsTraceCtx =
-            StatsTraceContext.newServerContext(
-                    streamTracerFactories, "Waiter/serve", requestHeaders);
-    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
-    transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
-    verify(stream).setListener(isA(ServerStreamListener.class));
-    verify(stream, atLeast(1)).statsTraceContext();
-
-    assertEquals(1, executor.runDueTasks());
-    verify(fallbackRegistry).lookupMethod("Waiter/serve", AUTHORITY);
-    assertThat(callReference.get()).isNull();
-    verify(stream, times(2)).close(statusCaptor.capture(), any(Metadata.class));
-    Status status = statusCaptor.getAllValues().get(1);
-    assertEquals(Code.UNKNOWN, status.getCode());
-    assertThat(status.getCause() instanceof IllegalStateException);
   }
 
   @Test
@@ -1636,24 +1513,4 @@ public class ServerImplTest {
 
   /** Allows more precise catch blocks than plain Error to avoid catching AssertionError. */
   private static final class TestError extends Error {}
-
-  private static class SingleExecutor implements Executor {
-    private Runnable runnable;
-
-    @Override
-    public void execute(Runnable r) {
-      if (runnable != null) {
-        fail("Already have runnable scheduled");
-      }
-      runnable = r;
-    }
-
-    public void drain() {
-      if (runnable != null) {
-        Runnable r = runnable;
-        runnable = null;
-        r.run();
-      }
-    }
-  }
 }
