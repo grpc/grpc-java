@@ -74,30 +74,6 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    */
   public abstract T executor(@Nullable Executor executor);
 
-
-  /**
-   * Allows for defining a way to provide a custom executor to handle the server call.
-   * This executor is the result of calling
-   * {@link ServerCallExecutorSupplier#getExecutor(ServerCall, Metadata)} per RPC.
-   *
-   * <p>It's an optional parameter. If it is provided, the {@link #executor(Executor)} would still
-   * run necessary tasks before the {@link ServerCallExecutorSupplier} is ready to be called, then
-   * it switches over.
-   *
-   * <p>If it is provided, {@link #directExecutor()} optimization is disabled. But if calling
-   * {@link ServerCallExecutorSupplier} returns null, the server call is still handled by the
-   * default {@link #executor(Executor)} as a fallback.
-   *
-   * @param executorSupplier the server call executor provider
-   * @return this
-   * @since 1.39.0
-   *
-   * */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8274")
-  public T callExecutor(ServerCallExecutorSupplier executorSupplier) {
-    return thisT();
-  }
-
   /**
    * Adds a service implementation to the handler registry.
    *
