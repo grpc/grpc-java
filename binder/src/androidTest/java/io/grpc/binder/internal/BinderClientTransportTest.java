@@ -125,7 +125,7 @@ public final class BinderClientTransportTest {
     HostServices.configureService(serverAddress,
         HostServices.serviceParamsBuilder()
           .setServerFactory((service, receiver) ->
-              BinderServerBuilder.forService(service, receiver)
+              BinderServerBuilder.forAddress(serverAddress, receiver)
                 .addService(serviceDef)
                 .build())
           .build());

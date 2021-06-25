@@ -31,20 +31,19 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.google.common.base.Strings;
-import io.envoyproxy.envoy.config.core.v3.DataSource;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
-import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
+import io.grpc.xds.Bootstrapper;
+import io.grpc.xds.CommonBootstrapperTestUtils;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.InternalXdsAttributes;
@@ -66,6 +65,7 @@ import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Settings;
+import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import java.io.IOException;
@@ -74,6 +74,9 @@ import java.net.SocketAddress;
 import java.security.cert.CertStoreException;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -88,70 +91,6 @@ public class SdsProtocolNegotiatorsTest {
   private EmbeddedChannel channel = new EmbeddedChannel();
   private ChannelPipeline pipeline = channel.pipeline();
   private ChannelHandlerContext channelHandlerCtx;
-
-  private static String getTempFileNameForResourcesFile(String resFile) throws IOException {
-    return Strings.isNullOrEmpty(resFile) ? null : TestUtils.loadCert(resFile).getAbsolutePath();
-  }
-
-  /** Builds DownstreamTlsContext from file-names. */
-  private static DownstreamTlsContext buildDownstreamTlsContextFromFilenames(
-      String privateKey, String certChain, String trustCa) throws IOException {
-    return buildDownstreamTlsContext(
-        buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa));
-  }
-
-  /** Builds UpstreamTlsContext from file-names. */
-  private static UpstreamTlsContext buildUpstreamTlsContextFromFilenames(
-      String privateKey, String certChain, String trustCa) throws IOException {
-    return CommonTlsContextTestsUtil.buildUpstreamTlsContext(
-        buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa));
-  }
-
-  /** Builds DownstreamTlsContext from commonTlsContext. */
-  private static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
-    io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
-        downstreamTlsContext =
-            io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
-                .newBuilder()
-                .setCommonTlsContext(commonTlsContext)
-                .build();
-    return DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(downstreamTlsContext);
-  }
-
-  private static CommonTlsContext buildCommonTlsContextFromFilenames(
-      String privateKey, String certChain, String trustCa) throws IOException {
-    TlsCertificate tlsCert = null;
-    privateKey = getTempFileNameForResourcesFile(privateKey);
-    certChain = getTempFileNameForResourcesFile(certChain);
-    trustCa = getTempFileNameForResourcesFile(trustCa);
-    if (!Strings.isNullOrEmpty(privateKey) && !Strings.isNullOrEmpty(certChain)) {
-      tlsCert =
-          TlsCertificate.newBuilder()
-              .setCertificateChain(DataSource.newBuilder().setFilename(certChain))
-              .setPrivateKey(DataSource.newBuilder().setFilename(privateKey))
-              .build();
-    }
-    CertificateValidationContext certContext = null;
-    if (!Strings.isNullOrEmpty(trustCa)) {
-      certContext =
-          CertificateValidationContext.newBuilder()
-              .setTrustedCa(DataSource.newBuilder().setFilename(trustCa))
-              .build();
-    }
-    return getCommonTlsContext(tlsCert, certContext);
-  }
-
-  private static CommonTlsContext getCommonTlsContext(
-      TlsCertificate tlsCertificate, CertificateValidationContext certContext) {
-    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
-    if (tlsCertificate != null) {
-      builder = builder.addTlsCertificates(tlsCertificate);
-    }
-    if (certContext != null) {
-      builder = builder.setValidationContext(certContext);
-    }
-    return builder.build();
-  }
 
   @Test
   public void clientSdsProtocolNegotiatorNewHandler_noTlsContextAttribute() {
@@ -181,8 +120,7 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void clientSdsProtocolNegotiatorNewHandler_withTlsContextAttribute() {
     UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext(
-            getCommonTlsContext(/* tlsCertificate= */ null, /* certContext= */ null));
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build());
     ClientSdsProtocolNegotiator pn =
         new ClientSdsProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
@@ -202,12 +140,18 @@ public class SdsProtocolNegotiatorsTest {
   }
 
   @Test
-  public void clientSdsHandler_addLast() throws IOException {
+  public void clientSdsHandler_addLast()
+      throws InterruptedException, TimeoutException, ExecutionException {
+    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
+        .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
+            CA_PEM_FILE, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
-        buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
+        CommonTlsContextTestsUtil
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
 
     SslContextProviderSupplier sslContextProviderSupplier =
-        new SslContextProviderSupplier(upstreamTlsContext, new TlsContextManagerImpl(null));
+        new SslContextProviderSupplier(upstreamTlsContext,
+            new TlsContextManagerImpl(bootstrapInfoForClient));
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
     pipeline.addLast(clientSdsHandler);
@@ -216,7 +160,23 @@ public class SdsProtocolNegotiatorsTest {
 
     // kick off protocol negotiation.
     pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
-    channel.runPendingTasks(); // need this for tasks to execute on eventLoop
+    final SettableFuture<Object> future = SettableFuture.create();
+    sslContextProviderSupplier
+        .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
+          @Override
+          public void updateSecret(SslContext sslContext) {
+            future.set(sslContext);
+          }
+
+          @Override
+          protected void onException(Throwable throwable) {
+            future.set(throwable);
+          }
+        });
+    channel.runPendingTasks();
+    Object fromFuture = future.get(2, TimeUnit.SECONDS);
+    assertThat(fromFuture).isInstanceOf(SslContext.class);
+    channel.runPendingTasks();
     channelHandlerCtx = pipeline.context(clientSdsHandler);
     assertThat(channelHandlerCtx).isNull();
 
@@ -229,7 +189,8 @@ public class SdsProtocolNegotiatorsTest {
   }
 
   @Test
-  public void serverSdsHandler_addLast() throws IOException {
+  public void serverSdsHandler_addLast()
+      throws InterruptedException, TimeoutException, ExecutionException {
     // we need InetSocketAddress instead of EmbeddedSocketAddress as localAddress for this test
     channel =
         new EmbeddedChannel() {
@@ -244,12 +205,17 @@ public class SdsProtocolNegotiatorsTest {
           }
         };
     pipeline = channel.pipeline();
+    Bootstrapper.BootstrapInfo bootstrapInfoForServer = CommonBootstrapperTestUtils
+        .buildBootstrapInfo("google_cloud_private_spiffe-server", SERVER_1_KEY_FILE,
+            SERVER_1_PEM_FILE, CA_PEM_FILE, null, null, null, null);
     DownstreamTlsContext downstreamTlsContext =
-        buildDownstreamTlsContextFromFilenames(SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
+        CommonTlsContextTestsUtil.buildDownstreamTlsContext(
+            "google_cloud_private_spiffe-server", true, true);
 
+    TlsContextManagerImpl tlsContextManager = new TlsContextManagerImpl(bootstrapInfoForServer);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         XdsClientWrapperForServerSdsTestMisc.createXdsClientWrapperForServerSds(
-            80, downstreamTlsContext, new TlsContextManagerImpl(null));
+            80, downstreamTlsContext, tlsContextManager);
     SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
         new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds,
             InternalProtocolNegotiators.serverPlaintext());
@@ -263,7 +229,26 @@ public class SdsProtocolNegotiatorsTest {
     assertThat(channelHandlerCtx).isNull();
     channelHandlerCtx = pipeline.context(SdsProtocolNegotiators.ServerSdsHandler.class);
     assertThat(channelHandlerCtx).isNotNull();
+
+    SslContextProviderSupplier sslContextProviderSupplier =
+        new SslContextProviderSupplier(downstreamTlsContext, tlsContextManager);
+    final SettableFuture<Object> future = SettableFuture.create();
+    sslContextProviderSupplier
+        .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
+          @Override
+          public void updateSecret(SslContext sslContext) {
+            future.set(sslContext);
+          }
+
+          @Override
+          protected void onException(Throwable throwable) {
+            future.set(throwable);
+          }
+        });
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
+    Object fromFuture = future.get(2, TimeUnit.SECONDS);
+    assertThat(fromFuture).isInstanceOf(SslContext.class);
+    channel.runPendingTasks();
     channelHandlerCtx = pipeline.context(SdsProtocolNegotiators.ServerSdsHandler.class);
     assertThat(channelHandlerCtx).isNull();
 
@@ -365,12 +350,17 @@ public class SdsProtocolNegotiatorsTest {
 
   @Test
   public void clientSdsProtocolNegotiatorNewHandler_fireProtocolNegotiationEvent()
-      throws IOException, InterruptedException {
+          throws InterruptedException, TimeoutException, ExecutionException {
+    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
+        .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
+            CA_PEM_FILE, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
-        buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
+        CommonTlsContextTestsUtil
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
 
     SslContextProviderSupplier sslContextProviderSupplier =
-        new SslContextProviderSupplier(upstreamTlsContext, new TlsContextManagerImpl(null));
+        new SslContextProviderSupplier(upstreamTlsContext,
+            new TlsContextManagerImpl(bootstrapInfoForClient));
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
         new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
 
@@ -380,7 +370,23 @@ public class SdsProtocolNegotiatorsTest {
 
     // kick off protocol negotiation.
     pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+    final SettableFuture<Object> future = SettableFuture.create();
+    sslContextProviderSupplier
+        .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
+          @Override
+          public void updateSecret(SslContext sslContext) {
+            future.set(sslContext);
+          }
+
+          @Override
+          protected void onException(Throwable throwable) {
+            future.set(throwable);
+          }
+        });
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
+    Object fromFuture = future.get(5, TimeUnit.SECONDS);
+    assertThat(fromFuture).isInstanceOf(SslContext.class);
+    channel.runPendingTasks();
     channelHandlerCtx = pipeline.context(clientSdsHandler);
     assertThat(channelHandlerCtx).isNull();
     Object sslEvent = SslHandshakeCompletionEvent.SUCCESS;

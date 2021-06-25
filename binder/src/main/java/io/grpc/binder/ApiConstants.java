@@ -25,7 +25,8 @@ public final class ApiConstants {
   private ApiConstants() {}
 
   /**
-   * Service Action: Identifies gRPC clients in a {@link android.app.Service#onBind(Intent)} call.
+   * The "action" part of the binding {@link Intent} that gRPC clients use by default to identify
+   * themselves in a {@link android.app.Service#onBind(Intent)} call.
    */
   public static final String ACTION_BIND = "grpc.io.action.BIND";
 }
