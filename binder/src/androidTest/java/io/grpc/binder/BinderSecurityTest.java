@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -53,10 +54,39 @@ public final class BinderSecurityTest {
   private final Context appContext = ApplicationProvider.getApplicationContext();
 
   String[] serviceNames = new String[] {"foo", "bar", "baz"};
+  List<ServerServiceDefinition> serviceDefinitions = new ArrayList<>();
 
   @Nullable ManagedChannel channel;
   Map<String, MethodDescriptor<Empty, Empty>> methods = new HashMap<>();
   List<MethodDescriptor<Empty, Empty>> calls = new ArrayList<>();
+
+  @Before
+  public void setupServiceDefinitionsAndMethods() {
+    MethodDescriptor.Marshaller<Empty> marshaller =
+        ProtoLiteUtils.marshaller(Empty.getDefaultInstance());
+    for (String serviceName : serviceNames) {
+      ServerServiceDefinition.Builder builder = ServerServiceDefinition.builder(serviceName);
+      for (int i = 0; i < 2; i++) {
+        // Add two methods to the service.
+        String name = serviceName + "/method" + i;
+        MethodDescriptor<Empty, Empty> method =
+            MethodDescriptor.newBuilder(marshaller, marshaller)
+                .setFullMethodName(name)
+                .setType(MethodDescriptor.MethodType.UNARY)
+                .build();
+        ServerCallHandler<Empty, Empty> callHandler =
+            ServerCalls.asyncUnaryCall(
+                (req, respObserver) -> {
+                  calls.add(method);
+                  respObserver.onNext(req);
+                  respObserver.onCompleted();
+                });
+        builder.addMethod(method, callHandler);
+        methods.put(name, method);
+      }
+      serviceDefinitions.add(builder.build());
+    }
+  }
 
   @After
   public void tearDown() throws Exception {
@@ -91,29 +121,8 @@ public final class BinderSecurityTest {
     BinderServerBuilder serverBuilder = BinderServerBuilder.forAddress(listenAddr, receiver);
     serverBuilder.securityPolicy(serverPolicy);
 
-    MethodDescriptor.Marshaller<Empty> marshaller =
-        ProtoLiteUtils.marshaller(Empty.getDefaultInstance());
-    for (String serviceName : serviceNames) {
-      ServerServiceDefinition.Builder builder = ServerServiceDefinition.builder(serviceName);
-      for (int i = 0; i < 2; i++) {
-        // Add two methods to the service.
-        String name = serviceName + "/method" + i;
-        MethodDescriptor<Empty, Empty> method =
-            MethodDescriptor.newBuilder(marshaller, marshaller)
-                .setFullMethodName(name)
-                .setType(MethodDescriptor.MethodType.UNARY)
-                .build();
-        ServerCallHandler<Empty, Empty> callHandler =
-            ServerCalls.asyncUnaryCall(
-                (req, respObserver) -> {
-                  calls.add(method);
-                  respObserver.onNext(req);
-                  respObserver.onCompleted();
-                });
-        builder.addMethod(method, callHandler);
-        methods.put(name, method);
-      }
-      serverBuilder.addService(builder.build());
+    for (ServerServiceDefinition serviceDefinition : serviceDefinitions) {
+      serverBuilder.addService(serviceDefinition);
     }
     return serverBuilder.build();
   }
@@ -137,6 +146,7 @@ public final class BinderSecurityTest {
   @Test
   public void testAllowedCall() throws Exception {
     createChannel();
+    assertThat(methods).isNotEmpty();
     for (MethodDescriptor<Empty, Empty> method : methods.values()) {
       assertCallSuccess(method);
     }
@@ -151,6 +161,7 @@ public final class BinderSecurityTest {
             .servicePolicy("baz", policy((uid) -> false))
             .build(),
         SecurityPolicies.internalOnly());
+    assertThat(methods).isNotEmpty();
     for (MethodDescriptor<Empty, Empty> method : methods.values()) {
       assertCallFailure(method, Status.PERMISSION_DENIED);
     }
@@ -159,6 +170,7 @@ public final class BinderSecurityTest {
   @Test
   public void testClientDoesntTrustServer() throws Exception {
     createChannel(SecurityPolicies.serverInternalOnly(), policy((uid) -> false));
+    assertThat(methods).isNotEmpty();
     for (MethodDescriptor<Empty, Empty> method : methods.values()) {
       assertCallFailure(method, Status.PERMISSION_DENIED);
     }
@@ -173,6 +185,7 @@ public final class BinderSecurityTest {
             .build(),
         SecurityPolicies.internalOnly());
 
+    assertThat(methods).isNotEmpty();
     for (MethodDescriptor<Empty, Empty> method : methods.values()) {
       if (method.getServiceName().equals("bar")) {
         assertCallFailure(method, Status.PERMISSION_DENIED);
