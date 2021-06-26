@@ -547,6 +547,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               // client to blow up the server in-memory stats storage by sending large number of
               // distinct unimplemented method
               // names. (https://github.com/grpc/grpc-java/issues/2285)
+              jumpListener.setListener(NOOP_LISTENER);
               stream.close(status, new Metadata());
               context.cancel(null);
               future.cancel(false);
@@ -556,6 +557,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
             callParams = maySwitchExecutor(wrapMethod, stream, headers, context, tag);
             future.set(callParams);
           } catch (Throwable t) {
+            jumpListener.setListener(NOOP_LISTENER);
             stream.close(Status.fromThrowable(t), new Metadata());
             context.cancel(null);
             future.cancel(false);
@@ -606,10 +608,10 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
         private void runInternal() {
           ServerStreamListener listener = NOOP_LISTENER;
+          if (future.isCancelled()) {
+            return;
+          }
           try {
-            if (future.isCancelled()) {
-              return;
-            }
             listener = startWrappedCall(methodName, Futures.getDone(future), headers);
           } catch (Throwable ex) {
             stream.close(Status.fromThrowable(ex), new Metadata());
