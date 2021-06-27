@@ -46,10 +46,9 @@ public class HandlerRegistryBenchmark {
           "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.";
 
   @Param({"50"})
-  public int nameLength;
+  public int nameLength // 数字shi d
 
-  @Param({"100"})
-  public int serviceCount;
+  puberviceCount;
 
   @Param({"100"})
   public int methodCountPerService;
