@@ -399,6 +399,7 @@ public final class EnvoyServerProtoData {
     @Nullable
     private final FilterChain defaultFilterChain;
 
+    /** Construct a Listener. */
     public Listener(String name, @Nullable String address,
         List<FilterChain> filterChains, @Nullable FilterChain defaultFilterChain) {
       this.name = checkNotNull(name, "name");

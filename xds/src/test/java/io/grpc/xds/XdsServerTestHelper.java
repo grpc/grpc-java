@@ -88,6 +88,7 @@ public class XdsServerTestHelper {
     }
   }
 
+  /** Create an XdsClientWrapperForServerSds with a mock XdsClient. */
   public static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port,
       TlsContextManager tlsContextManager) {
     FakeXdsClientPoolFactory fakeXdsClientPoolFactory = new FakeXdsClientPoolFactory(
