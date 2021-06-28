@@ -26,16 +26,12 @@ import com.google.protobuf.UInt32Value;
 import io.grpc.Internal;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.internal.Matchers.CidrMatcher;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import io.netty.channel.Channel;
-import io.netty.channel.epoll.Epoll;
-import io.netty.channel.epoll.EpollEventLoopGroup;
-import io.netty.util.concurrent.DefaultThreadFactory;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -44,10 +40,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -62,15 +54,11 @@ public final class XdsClientWrapperForServerSds {
   private static final Logger logger =
       Logger.getLogger(XdsClientWrapperForServerSds.class.getName());
 
-  private static final TimeServiceResource timeServiceResource =
-      new TimeServiceResource("GrpcServerXdsClient");
-
   private AtomicReference<EnvoyServerProtoData.Listener> curListener = new AtomicReference<>();
   private ObjectPool<XdsClient> xdsClientPool;
   private final XdsNameResolverProvider.XdsClientPoolFactory xdsClientPoolFactory;
   @Nullable private XdsClient xdsClient;
   private final int port;
-  private ScheduledExecutorService timeService;
   private XdsClient.LdsResourceWatcher listenerWatcher;
   private boolean newServerApi;
   private String grpcServerResourceId;
@@ -455,44 +443,5 @@ public final class XdsClientWrapperForServerSds {
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
     releaseOldSuppliers(curListener.getAndSet(null));
-    if (timeService != null) {
-      timeService = SharedResourceHolder.release(timeServiceResource, timeService);
-    }
-  }
-
-  private static final class TimeServiceResource
-          implements SharedResourceHolder.Resource<ScheduledExecutorService> {
-
-    private final String name;
-
-    TimeServiceResource(String name) {
-      this.name = name;
-    }
-
-    @Override
-    public ScheduledExecutorService create() {
-      // Use Netty's DefaultThreadFactory in order to get the benefit of FastThreadLocal.
-      ThreadFactory threadFactory = new DefaultThreadFactory(name, /* daemon= */ true);
-      if (Epoll.isAvailable()) {
-        return new EpollEventLoopGroup(1, threadFactory);
-      } else {
-        return Executors.newSingleThreadScheduledExecutor(threadFactory);
-      }
-    }
-
-    @SuppressWarnings("FutureReturnValueIgnored")
-    @Override
-    public void close(ScheduledExecutorService instance) {
-      try {
-        if (instance instanceof EpollEventLoopGroup) {
-          ((EpollEventLoopGroup)instance).shutdownGracefully(0, 0, TimeUnit.SECONDS).sync();
-        } else {
-          instance.shutdown();
-        }
-      } catch (InterruptedException e) {
-        logger.log(Level.SEVERE, "Interrupted during shutdown", e);
-        Thread.currentThread().interrupt();
-      }
-    }
   }
 }
