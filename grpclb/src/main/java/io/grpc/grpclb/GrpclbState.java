@@ -690,11 +690,12 @@ final class GrpclbState {
       if (closed) {
         return;
       }
-      logger.log(
-          ChannelLogLevel.DEBUG, "[grpclb-<{0}>] Got an LB response: {1}", serviceName, response);
 
       LoadBalanceResponseTypeCase typeCase = response.getLoadBalanceResponseTypeCase();
       if (!initialResponseReceived) {
+        logger.log(
+            ChannelLogLevel.INFO,
+            "[grpclb-<{0}>] Got an LB initial response: {1}", serviceName, response);
         if (typeCase != LoadBalanceResponseTypeCase.INITIAL_RESPONSE) {
           logger.log(
               ChannelLogLevel.WARNING,
@@ -709,6 +710,9 @@ final class GrpclbState {
         scheduleNextLoadReport();
         return;
       }
+
+      logger.log(
+          ChannelLogLevel.DEBUG, "[grpclb-<{0}>] Got an LB response: {1}", serviceName, response);
 
       if (typeCase == LoadBalanceResponseTypeCase.FALLBACK_RESPONSE) {
         // Force entering fallback requested by balancer.
