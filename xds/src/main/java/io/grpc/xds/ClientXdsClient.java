@@ -85,6 +85,7 @@ import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -286,15 +287,17 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
 
     List<FilterChain> filterChains = new ArrayList<>();
+    Set<FilterChainMatch> uniqueSet = new HashSet<>();
     for (io.envoyproxy.envoy.config.listener.v3.FilterChain fc : proto.getFilterChainsList()) {
       filterChains.add(
-          parseFilterChain(fc, rdsResources, tlsContextManager, filterRegistry, parseHttpFilter));
+          parseFilterChain(fc, rdsResources, tlsContextManager, filterRegistry, uniqueSet,
+              parseHttpFilter));
     }
     FilterChain defaultFilterChain = null;
     if (proto.hasDefaultFilterChain()) {
       defaultFilterChain = parseFilterChain(
           proto.getDefaultFilterChain(), rdsResources, tlsContextManager, filterRegistry,
-          parseHttpFilter);
+          null, parseHttpFilter);
     }
 
     return new EnvoyServerProtoData.Listener(
@@ -304,7 +307,8 @@ final class ClientXdsClient extends AbstractXdsClient {
   @VisibleForTesting
   static FilterChain parseFilterChain(
       io.envoyproxy.envoy.config.listener.v3.FilterChain proto, Set<String> rdsResources,
-      TlsContextManager tlsContextManager, FilterRegistry filterRegistry, boolean parseHttpFilters)
+      TlsContextManager tlsContextManager, FilterRegistry filterRegistry,
+      Set<FilterChainMatch> uniqueSet, boolean parseHttpFilters)
       throws ResourceInvalidException {
     io.grpc.xds.HttpConnectionManager httpConnectionManager = null;
     HashSet<String> uniqueNames = new HashSet<>();
@@ -361,13 +365,141 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (name.isEmpty()) {
       name = UUID.randomUUID().toString();
     }
+    FilterChainMatch filterChainMatch = parseFilterChainMatch(proto.getFilterChainMatch());
+    checkForUniqueness(uniqueSet, filterChainMatch);
     return new FilterChain(
         name,
-        parseFilterChainMatch(proto.getFilterChainMatch()),
+        filterChainMatch,
         httpConnectionManager,
         downstreamTlsContext,
         tlsContextManager
     );
+  }
+
+  private static void checkForUniqueness(Set<FilterChainMatch> uniqueSet,
+      FilterChainMatch filterChainMatch) throws ResourceInvalidException {
+    if (uniqueSet != null) {
+      Set<FilterChainMatch> crossProduct = getCrossProduct(filterChainMatch);
+      for (FilterChainMatch cur : crossProduct) {
+        if (uniqueSet.contains(cur)) {
+          throw new ResourceInvalidException("Found duplicate matcher: " + cur);
+        }
+      }
+      uniqueSet.addAll(crossProduct);
+    }
+  }
+
+  private static Set<FilterChainMatch> getCrossProduct(FilterChainMatch filterChainMatch) {
+    // repeating fields to process:
+    // prefixRanges, applicationProtocols, sourcePrefixRanges, sourcePorts, serverNames
+    Set<FilterChainMatch> expandedSet = expandOnPrefixRange(filterChainMatch);
+    expandedSet = expandOnApplicationProtocols(expandedSet);
+    expandedSet = expandOnSourcePrefixRange(expandedSet);
+    expandedSet = expandOnSourcePorts(expandedSet);
+    return expandOnServerNames(expandedSet);
+  }
+
+  private static Set<FilterChainMatch> expandOnPrefixRange(FilterChainMatch filterChainMatch) {
+    if (filterChainMatch.getPrefixRanges().isEmpty()) {
+      return Collections.singleton(filterChainMatch);
+    }
+    HashSet<FilterChainMatch> expandedSet = new HashSet<>(
+        filterChainMatch.getPrefixRanges().size());
+    for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getPrefixRanges()) {
+      expandedSet.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+          Arrays.asList(cidrRange),
+          ImmutableList.copyOf(filterChainMatch.getApplicationProtocols()),
+          ImmutableList.copyOf(filterChainMatch.getSourcePrefixRanges()),
+          filterChainMatch.getConnectionSourceType(),
+          ImmutableList.copyOf(filterChainMatch.getSourcePorts()),
+          ImmutableList.copyOf(filterChainMatch.getServerNames()),
+          filterChainMatch.getTransportProtocol()));
+    }
+    return expandedSet;
+  }
+
+  private static Set<FilterChainMatch> expandOnApplicationProtocols(Set<FilterChainMatch> set) {
+    HashSet<FilterChainMatch> expandedSet = new HashSet<>();
+    for (FilterChainMatch filterChainMatch : set) {
+      if (filterChainMatch.getApplicationProtocols().isEmpty()) {
+        expandedSet.add(filterChainMatch);
+      } else {
+        for (String applicationProtocol : filterChainMatch.getApplicationProtocols()) {
+          expandedSet.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+              ImmutableList.copyOf(filterChainMatch.getPrefixRanges()),
+              Arrays.asList(applicationProtocol),
+              ImmutableList.copyOf(filterChainMatch.getSourcePrefixRanges()),
+              filterChainMatch.getConnectionSourceType(),
+              ImmutableList.copyOf(filterChainMatch.getSourcePorts()),
+              ImmutableList.copyOf(filterChainMatch.getServerNames()),
+              filterChainMatch.getTransportProtocol()));
+        }
+      }
+    }
+    return expandedSet;
+  }
+
+  private static Set<FilterChainMatch> expandOnSourcePrefixRange(Set<FilterChainMatch> set) {
+    HashSet<FilterChainMatch> expandedSet = new HashSet<>();
+    for (FilterChainMatch filterChainMatch : set) {
+      if (filterChainMatch.getSourcePrefixRanges().isEmpty()) {
+        expandedSet.add(filterChainMatch);
+      } else {
+        for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getSourcePrefixRanges()) {
+          expandedSet.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+              ImmutableList.copyOf(filterChainMatch.getPrefixRanges()),
+              ImmutableList.copyOf(filterChainMatch.getApplicationProtocols()),
+              Arrays.asList(cidrRange),
+              filterChainMatch.getConnectionSourceType(),
+              ImmutableList.copyOf(filterChainMatch.getSourcePorts()),
+              ImmutableList.copyOf(filterChainMatch.getServerNames()),
+              filterChainMatch.getTransportProtocol()));
+        }
+      }
+    }
+    return expandedSet;
+  }
+
+  private static Set<FilterChainMatch> expandOnSourcePorts(Set<FilterChainMatch> set) {
+    HashSet<FilterChainMatch> expandedSet = new HashSet<>();
+    for (FilterChainMatch filterChainMatch : set) {
+      if (filterChainMatch.getSourcePorts().isEmpty()) {
+        expandedSet.add(filterChainMatch);
+      } else {
+        for (Integer sourcePort : filterChainMatch.getSourcePorts()) {
+          expandedSet.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+              ImmutableList.copyOf(filterChainMatch.getPrefixRanges()),
+              ImmutableList.copyOf(filterChainMatch.getApplicationProtocols()),
+              ImmutableList.copyOf(filterChainMatch.getSourcePrefixRanges()),
+              filterChainMatch.getConnectionSourceType(),
+              Arrays.asList(sourcePort),
+              ImmutableList.copyOf(filterChainMatch.getServerNames()),
+              filterChainMatch.getTransportProtocol()));
+        }
+      }
+    }
+    return expandedSet;
+  }
+
+  private static Set<FilterChainMatch> expandOnServerNames(Set<FilterChainMatch> set) {
+    HashSet<FilterChainMatch> expandedSet = new HashSet<>();
+    for (FilterChainMatch filterChainMatch : set) {
+      if (filterChainMatch.getServerNames().isEmpty()) {
+        expandedSet.add(filterChainMatch);
+      } else {
+        for (String serverName : filterChainMatch.getServerNames()) {
+          expandedSet.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+              ImmutableList.copyOf(filterChainMatch.getPrefixRanges()),
+              ImmutableList.copyOf(filterChainMatch.getApplicationProtocols()),
+              ImmutableList.copyOf(filterChainMatch.getSourcePrefixRanges()),
+              filterChainMatch.getConnectionSourceType(),
+              ImmutableList.copyOf(filterChainMatch.getSourcePorts()),
+              Arrays.asList(serverName),
+              filterChainMatch.getTransportProtocol()));
+        }
+      }
+    }
+    return expandedSet;
   }
 
   private static FilterChainMatch parseFilterChainMatch(
