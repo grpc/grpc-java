@@ -50,6 +50,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
@@ -304,7 +305,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     // Remove once b/16290036 is fixed.
     headers.status(new AsciiString("500"));
     stream().transportState().transportHeadersReceived(headers, false);
-    verify(listener, never()).closed(any(Status.class), any(Metadata.class));
+    verify(listener, never()).closed(
+        any(Status.class), any(RpcProgress.class), any(Metadata.class));
 
     // We are now waiting for 100 bytes of error context on the stream, cancel has not yet been
     // sent
