@@ -313,7 +313,7 @@ public final class EnvoyServerProtoData {
   /**
    * Corresponds to Envoy proto message {@link io.envoyproxy.envoy.api.v2.listener.FilterChain}.
    */
-  static final class FilterChain {
+  public static final class FilterChain {
     // Unique name for the FilterChain.
     private final String name;
     // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.
@@ -391,7 +391,7 @@ public final class EnvoyServerProtoData {
    * Corresponds to Envoy proto message {@link io.envoyproxy.envoy.api.v2.Listener} & related
    * classes.
    */
-  static final class Listener {
+  public static final class Listener {
     private final String name;
     @Nullable
     private final String address;
@@ -399,7 +399,8 @@ public final class EnvoyServerProtoData {
     @Nullable
     private final FilterChain defaultFilterChain;
 
-    Listener(String name, @Nullable String address,
+    /** Construct a Listener. */
+    public Listener(String name, @Nullable String address,
         List<FilterChain> filterChains, @Nullable FilterChain defaultFilterChain) {
       this.name = checkNotNull(name, "name");
       this.address = address;

@@ -238,6 +238,11 @@ public final class XdsClientWrapperForServerSds {
     } else if (filterChains.size() == 1) {
       return filterChains.get(0).getSslContextProviderSupplier();
     }
+    if (listener.getDefaultFilterChain() == null) {
+      // close the connection
+      throw new RuntimeException(
+          "no matching filter chain. local: " + localInetAddr + " remote: " + remoteInetAddr);
+    }
     return listener.getDefaultFilterChain().getSslContextProviderSupplier();
   }
 
@@ -428,7 +433,7 @@ public final class XdsClientWrapperForServerSds {
   }
 
   @VisibleForTesting
-  XdsClient.LdsResourceWatcher getListenerWatcher() {
+  public XdsClient.LdsResourceWatcher getListenerWatcher() {
     return listenerWatcher;
   }
 
