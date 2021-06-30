@@ -155,13 +155,14 @@ public class ManagedChannelServiceConfigTest {
         "name", ImmutableList.of(name1, name2),
         "timeout", "1.234s",
         "retryPolicy",
-        ImmutableMap.of(
-            "maxAttempts", 3.0D,
-            "initialBackoff", "1s",
-            "maxBackoff", "10s",
-            "backoffMultiplier", 1.5D,
-            "retryableStatusCodes", ImmutableList.of("UNAVAILABLE")
-        ));
+        ImmutableMap.builder()
+            .put("maxAttempts", 3.0D)
+            .put("initialBackoff", "1s")
+            .put("maxBackoff", "10s")
+            .put("backoffMultiplier", 1.5D)
+            .put("perAttemptRecvTimeout", "2.5s")
+            .put("retryableStatusCodes", ImmutableList.of("UNAVAILABLE"))
+            .build());
     Map<String, ?> defaultMethodConfig = ImmutableMap.of(
         "name", ImmutableList.of(ImmutableMap.of()),
         "timeout", "4.321s");
@@ -187,6 +188,8 @@ public class ManagedChannelServiceConfigTest {
     methodInfo = serviceConfig.getMethodConfig(methodForName("service1", "method1"));
     assertThat(methodInfo.timeoutNanos).isEqualTo(MILLISECONDS.toNanos(1234));
     assertThat(methodInfo.retryPolicy.maxAttempts).isEqualTo(2);
+    assertThat(methodInfo.retryPolicy.perAttemptRecvTimeoutNanos)
+        .isEqualTo(MILLISECONDS.toNanos(2500));
     assertThat(methodInfo.retryPolicy.retryableStatusCodes).containsExactly(UNAVAILABLE);
     methodInfo = serviceConfig.getMethodConfig(methodForName("service1", "methodX"));
     assertThat(methodInfo.timeoutNanos).isEqualTo(MILLISECONDS.toNanos(4321));
