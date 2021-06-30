@@ -102,6 +102,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   @GuardedBy("lock")
   private FutureCanceller scheduledRetry;
   @GuardedBy("lock")
+  private FutureCanceller scheduledPerAttemptTimer;
+  @GuardedBy("lock")
   private FutureCanceller scheduledHedging;
   private long nextBackoffIntervalNanos;
 
@@ -313,8 +315,36 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     class StartEntry implements BufferEntry {
       @Override
-      public void runWith(Substream substream) {
-        substream.stream.start(new Sublistener(substream));
+      public void runWith(final Substream substream) {
+        final Sublistener sublistener = new Sublistener(substream);
+        substream.stream.start(sublistener);
+        if (retryPolicy != null && retryPolicy.perAttemptRecvTimeoutNanos != null) {
+          final FutureCanceller scheduledPerAttemptTimerRef;
+          synchronized (lock) {
+            scheduledPerAttemptTimer = scheduledPerAttemptTimerRef = new FutureCanceller(lock);
+          }
+
+          final class PerAttemptTimeoutRunnable implements Runnable {
+
+            @Override
+            public void run() {
+              synchronized (lock) {
+                if (scheduledPerAttemptTimer != scheduledPerAttemptTimerRef) {
+                  return;
+                }
+                sublistener.attemptRecvTimeout();
+              }
+              substream.stream.cancel(Status.CANCELLED.withDescription("The attempt was timeout"));
+            }
+          }
+
+          scheduledPerAttemptTimerRef.setFuture(
+              scheduledExecutorService.schedule(
+                  new PerAttemptTimeoutRunnable(),
+                  retryPolicy.perAttemptRecvTimeoutNanos,
+                  TimeUnit.NANOSECONDS));
+
+        }
       }
     }
 
@@ -747,13 +777,34 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   private final class Sublistener implements ClientStreamListener {
     final Substream substream;
+    boolean timeout;
 
     Sublistener(Substream substream) {
       this.substream = substream;
     }
 
+    @SuppressWarnings("GuardedBy")
+    @GuardedBy("RetriableStream.this.lock")
+    Future<?> resetPerAttemptTimer() {
+      Future<?> timeoutFuture = null;
+      if (scheduledPerAttemptTimer != null) {
+        // TODO(b/145386688): This access should be guarded by 'RetriableStream.this.lock';
+        //  instead found: 'this.lock'
+        timeoutFuture = scheduledPerAttemptTimer.markCancelled();
+        scheduledPerAttemptTimer = null;
+      }
+      return timeoutFuture;
+    }
+
     @Override
     public void headersRead(Metadata headers) {
+      Future<?> timeoutFuture;
+      synchronized (lock) {
+        timeoutFuture = resetPerAttemptTimer();
+      }
+      if (timeoutFuture != null) {
+        timeoutFuture.cancel(false);
+      }
       commitAndRun(substream);
       if (state.winningSubstream == substream) {
         masterListener.headersRead(headers);
@@ -763,11 +814,17 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
     }
 
+    @SuppressWarnings("GuardedBy")
     @Override
     public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
+      Future<?> timeoutFuture;
       synchronized (lock) {
         state = state.substreamClosed(substream);
         closedSubstreamsInsight.append(status.getCode());
+        timeoutFuture = resetPerAttemptTimer();
+      }
+      if (timeoutFuture != null) {
+        timeoutFuture.cancel(false);
       }
 
       // handle a race between buffer limit exceeded and closed, when setting
@@ -884,6 +941,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
     }
 
+    // GuardedBy RetriableStream.lock
+    // This method can only get called if resetPerAttemptTimer() is not called yet.
+    void attemptRecvTimeout() {
+      timeout = true;
+    }
+
     /**
      * Decides in current situation whether or not the RPC should retry and if it should retry how
      * long the backoff should be. The decision does not take the commitment status into account, so
@@ -895,18 +958,19 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
       boolean shouldRetry = false;
       long backoffNanos = 0L;
-      boolean isRetryableStatusCode = retryPolicy.retryableStatusCodes.contains(status.getCode());
+      boolean isRetryableStatus =
+          retryPolicy.retryableStatusCodes.contains(status.getCode()) || timeout;
       Integer pushbackMillis = getPushbackMills(trailer);
       boolean isThrottled = false;
       if (throttle != null) {
-        if (isRetryableStatusCode || (pushbackMillis != null && pushbackMillis < 0)) {
+        if (isRetryableStatus || (pushbackMillis != null && pushbackMillis < 0)) {
           isThrottled = !throttle.onQualifiedFailureThenCheckIsAboveThreshold();
         }
       }
 
       if (retryPolicy.maxAttempts > substream.previousAttemptCount + 1 && !isThrottled) {
         if (pushbackMillis == null) {
-          if (isRetryableStatusCode) {
+          if (isRetryableStatus) {
             shouldRetry = true;
             backoffNanos = (long) (nextBackoffIntervalNanos * random.nextDouble());
             nextBackoffIntervalNanos = Math.min(
