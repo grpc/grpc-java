@@ -408,11 +408,11 @@ final class ClientXdsClient extends AbstractXdsClient {
     for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getPrefixRanges()) {
       expandedSet.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
           Arrays.asList(cidrRange),
-          ImmutableList.copyOf(filterChainMatch.getApplicationProtocols()),
-          ImmutableList.copyOf(filterChainMatch.getSourcePrefixRanges()),
+          Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
+          Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
           filterChainMatch.getConnectionSourceType(),
-          ImmutableList.copyOf(filterChainMatch.getSourcePorts()),
-          ImmutableList.copyOf(filterChainMatch.getServerNames()),
+          Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
+          Collections.unmodifiableList(filterChainMatch.getServerNames()),
           filterChainMatch.getTransportProtocol()));
     }
     return expandedSet;
@@ -426,12 +426,12 @@ final class ClientXdsClient extends AbstractXdsClient {
       } else {
         for (String applicationProtocol : filterChainMatch.getApplicationProtocols()) {
           expandedSet.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
-              ImmutableList.copyOf(filterChainMatch.getPrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
               Arrays.asList(applicationProtocol),
-              ImmutableList.copyOf(filterChainMatch.getSourcePrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
               filterChainMatch.getConnectionSourceType(),
-              ImmutableList.copyOf(filterChainMatch.getSourcePorts()),
-              ImmutableList.copyOf(filterChainMatch.getServerNames()),
+              Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
+              Collections.unmodifiableList(filterChainMatch.getServerNames()),
               filterChainMatch.getTransportProtocol()));
         }
       }
@@ -447,12 +447,12 @@ final class ClientXdsClient extends AbstractXdsClient {
       } else {
         for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getSourcePrefixRanges()) {
           expandedSet.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
-              ImmutableList.copyOf(filterChainMatch.getPrefixRanges()),
-              ImmutableList.copyOf(filterChainMatch.getApplicationProtocols()),
+              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
               Arrays.asList(cidrRange),
               filterChainMatch.getConnectionSourceType(),
-              ImmutableList.copyOf(filterChainMatch.getSourcePorts()),
-              ImmutableList.copyOf(filterChainMatch.getServerNames()),
+              Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
+              Collections.unmodifiableList(filterChainMatch.getServerNames()),
               filterChainMatch.getTransportProtocol()));
         }
       }
@@ -468,12 +468,12 @@ final class ClientXdsClient extends AbstractXdsClient {
       } else {
         for (Integer sourcePort : filterChainMatch.getSourcePorts()) {
           expandedSet.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
-              ImmutableList.copyOf(filterChainMatch.getPrefixRanges()),
-              ImmutableList.copyOf(filterChainMatch.getApplicationProtocols()),
-              ImmutableList.copyOf(filterChainMatch.getSourcePrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
+              Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
               filterChainMatch.getConnectionSourceType(),
               Arrays.asList(sourcePort),
-              ImmutableList.copyOf(filterChainMatch.getServerNames()),
+              Collections.unmodifiableList(filterChainMatch.getServerNames()),
               filterChainMatch.getTransportProtocol()));
         }
       }
@@ -489,11 +489,11 @@ final class ClientXdsClient extends AbstractXdsClient {
       } else {
         for (String serverName : filterChainMatch.getServerNames()) {
           expandedSet.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
-              ImmutableList.copyOf(filterChainMatch.getPrefixRanges()),
-              ImmutableList.copyOf(filterChainMatch.getApplicationProtocols()),
-              ImmutableList.copyOf(filterChainMatch.getSourcePrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
+              Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
               filterChainMatch.getConnectionSourceType(),
-              ImmutableList.copyOf(filterChainMatch.getSourcePorts()),
+              Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
               Arrays.asList(serverName),
               filterChainMatch.getTransportProtocol()));
         }
