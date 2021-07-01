@@ -57,12 +57,23 @@ abstract class VirtualHost {
   abstract static class Route {
     abstract RouteMatch routeMatch();
 
+    @Nullable
     abstract RouteAction routeAction();
 
     abstract ImmutableMap<String, FilterConfig> filterConfigOverrides();
 
-    static Route create(
-        RouteMatch routeMatch, RouteAction routeAction,
+    static Route forAction(RouteMatch routeMatch, RouteAction routeAction,
+        Map<String, FilterConfig> filterConfigOverrides) {
+      return create(routeMatch, routeAction, filterConfigOverrides);
+    }
+
+    static Route forNonForwardingAction(RouteMatch routeMatch,
+        Map<String, FilterConfig> filterConfigOverrides) {
+      return create(routeMatch, null, filterConfigOverrides);
+    }
+
+    private static Route create(
+        RouteMatch routeMatch, @Nullable RouteAction routeAction,
         Map<String, FilterConfig> filterConfigOverrides) {
       return new AutoValue_VirtualHost_Route(
           routeMatch, routeAction, ImmutableMap.copyOf(filterConfigOverrides));

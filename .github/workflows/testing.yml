@@ -1,0 +1,63 @@
+name: GitHub Actions Linux Testing
+
+on:
+  push:
+    branches:
+    - master
+    - 'v1.*'
+  pull_request:
+  schedule:
+  - cron: '54 19 * * SUN' # weekly at a "random" time
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        jre: [8, 11]
+      fail-fast: false # Should swap to true if we grow a large matrix
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-java@v2
+      with:
+        java-version: ${{ matrix.jre }}
+        distribution: 'adopt'
+
+    - name: Gradle cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    - name: Maven cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.m2/repository
+          !~/.m2/repository/io/grpc
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml', 'build.gradle') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    - name: Protobuf cache
+      uses: actions/cache@v2
+      with:
+        path: /tmp/protobuf-cache
+        key: ${{ runner.os }}-maven-${{ hashFiles('buildscripts/make_dependencies.sh') }}
+
+    - name: Build
+      run: buildscripts/kokoro/unix.sh
+    - name: Check for modified codegen
+      run: test -z "$(git status --porcelain)" || (git status && echo Error Working directory is not clean. Forget to commit generated files? && false)
+
+    - name: Coveralls
+      if: matrix.jre == 8 # Upload once, instead of for each job in the matrix
+      run: ./gradlew :grpc-all:coveralls -x compileJava
+    - name: Codecov
+      uses: codecov/codecov-action@v1

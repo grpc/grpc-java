@@ -23,9 +23,12 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.Filter.NamedFilterConfig;
+import io.grpc.xds.XdsClient.LdsUpdate;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -34,7 +37,7 @@ import org.mockito.ArgumentCaptor;
 /**
  * Helper methods related to {@link XdsServerBuilder} and related classes.
  */
-class XdsServerTestHelper {
+public class XdsServerTestHelper {
 
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String NODE_ID =
@@ -85,7 +88,8 @@ class XdsServerTestHelper {
     }
   }
 
-  static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port,
+  /** Create an XdsClientWrapperForServerSds with a mock XdsClient. */
+  public static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port,
       TlsContextManager tlsContextManager) {
     FakeXdsClientPoolFactory fakeXdsClientPoolFactory = new FakeXdsClientPoolFactory(
         buildMockXdsClient(tlsContextManager));
@@ -121,7 +125,7 @@ class XdsServerTestHelper {
       EnvoyServerProtoData.DownstreamTlsContext tlsContext, TlsContextManager tlsContextManager) {
     EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3",
         Arrays.<Integer>asList(), tlsContext, null, tlsContextManager);
-    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     registeredWatcher.onChanged(listenerUpdate);
   }
 
@@ -132,8 +136,13 @@ class XdsServerTestHelper {
       TlsContextManager tlsContextManager) {
     EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3", sourcePorts,
         tlsContext, tlsContextForDefaultFilterChain, tlsContextManager);
-    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     registeredWatcher.onChanged(listenerUpdate);
+  }
+
+  public static void generateListenerUpdate(
+      XdsClient.LdsResourceWatcher registeredWatcher, EnvoyServerProtoData.Listener listener) {
+    registeredWatcher.onChanged(LdsUpdate.forTcpListener(listener));
   }
 
   static int findFreePort() throws IOException {
@@ -158,11 +167,15 @@ class XdsServerTestHelper {
             sourcePorts,
             Arrays.<String>asList(),
             null);
-    EnvoyServerProtoData.FilterChain filterChain1 =
-        new EnvoyServerProtoData.FilterChain(filterChainMatch1, tlsContext, tlsContextManager);
-    EnvoyServerProtoData.FilterChain defaultFilterChain =
-        new EnvoyServerProtoData.FilterChain(null, tlsContextForDefaultFilterChain,
-            tlsContextManager);
+    // HttpConnectionManager currently not used for server side.
+    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
+        0L, "does not matter", Collections.<NamedFilterConfig>emptyList());
+    EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
+        "filter-chain-foo", filterChainMatch1, httpConnectionManager, tlsContext,
+        tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
+        "filter-chain-bar", null, httpConnectionManager, tlsContextForDefaultFilterChain,
+        tlsContextManager);
     EnvoyServerProtoData.Listener listener =
         new EnvoyServerProtoData.Listener(
             name, address, Arrays.asList(filterChain1), defaultFilterChain);

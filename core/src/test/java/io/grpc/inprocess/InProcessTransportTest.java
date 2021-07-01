@@ -20,14 +20,18 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import io.grpc.CallOptions;
+import io.grpc.ClientCall;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.GrpcUtil;
@@ -37,6 +41,8 @@ import io.grpc.stub.ClientCalls;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.TestMethodDescriptors;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
@@ -129,6 +135,46 @@ public class InProcessTransportTest extends AbstractTransportTest {
     } catch (StatusRuntimeException e) {
       // When propagateCauseWithStatus is true, the cause should be sent forward
       assertEquals(s.getCause(), e.getCause());
+    }
+  }
+
+  @Test
+  public void methodNotFound() throws Exception {
+    server = null;
+    ServerServiceDefinition definition = ServerServiceDefinition.builder("service_foo")
+            .addMethod(TestMethodDescriptors.voidMethod(), new ServerCallHandler<Void, Void>() {
+              @Override
+              public Listener<Void> startCall(ServerCall<Void, Void> call, Metadata headers) {
+                return null;
+              }
+            })
+            .build();
+    Server failingServer = InProcessServerBuilder
+            .forName("nocall-service")
+            .addService(definition)
+            .directExecutor()
+            .build()
+            .start();
+    grpcCleanupRule.register(failingServer);
+    ManagedChannel channel = InProcessChannelBuilder
+            .forName("nocall-service")
+            .propagateCauseWithStatus(true)
+            .build();
+    grpcCleanupRule.register(channel);
+    MethodDescriptor<Void, Void> nonMatchMethod =
+            MethodDescriptor.<Void, Void>newBuilder()
+                    .setType(MethodDescriptor.MethodType.UNKNOWN)
+                    .setFullMethodName("Waiter/serve")
+                    .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
+                    .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
+                    .build();
+    ClientCall<Void,Void> call = channel.newCall(nonMatchMethod, CallOptions.DEFAULT);
+    try {
+      ClientCalls.futureUnaryCall(call, null).get(5, TimeUnit.SECONDS);
+      fail("Call should fail.");
+    } catch (ExecutionException ex) {
+      StatusRuntimeException s = (StatusRuntimeException)ex.getCause();
+      assertEquals(s.getStatus().getCode(), Code.UNIMPLEMENTED);
     }
   }
 }

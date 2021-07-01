@@ -26,6 +26,7 @@ import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -235,7 +236,7 @@ class DelayedStream implements ClientStream {
       startTimeNanos = System.nanoTime();
     }
     if (savedError != null) {
-      listener.closed(savedError, new Metadata());
+      listener.closed(savedError, RpcProgress.PROCESSED, new Metadata());
       return;
     }
 
@@ -324,7 +325,7 @@ class DelayedStream implements ClientStream {
     } else {
       drainPendingCalls();
       // Note that listener is a DelayedStreamListener
-      listener.closed(reason, new Metadata());
+      listener.closed(reason, RpcProgress.PROCESSED, new Metadata());
     }
   }
 
@@ -491,16 +492,6 @@ class DelayedStream implements ClientStream {
         @Override
         public void run() {
           realListener.headersRead(headers);
-        }
-      });
-    }
-
-    @Override
-    public void closed(final Status status, final Metadata trailers) {
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realListener.closed(status, trailers);
         }
       });
     }

@@ -38,7 +38,6 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
-import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
@@ -61,6 +60,7 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.FaultConfig.FractionalPercent.DenominatorType;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
@@ -182,9 +182,10 @@ public abstract class ClientXdsClientTestBase {
 
   private static final int VHOST_SIZE = 2;
   // LDS test resources.
-  private final Any testListenerVhosts = Any.pack(mf.buildListener(LDS_RESOURCE,
+  private final Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(LDS_RESOURCE,
       mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
-  private final Any testListenerRds = Any.pack(mf.buildListenerForRds(LDS_RESOURCE, RDS_RESOURCE));
+  private final Any testListenerRds =
+      Any.pack(mf.buildListenerWithApiListenerForRds(LDS_RESOURCE, RDS_RESOURCE));
 
   // RDS test resources.
   private final Any testRouteConfig =
@@ -420,7 +421,7 @@ public abstract class ClientXdsClientTestBase {
   public void ldsResourceNotFound() {
     DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
 
-    Any listener = Any.pack(mf.buildListener("bar.googleapis.com",
+    Any listener = Any.pack(mf.buildListenerWithApiListener("bar.googleapis.com",
         mf.buildRouteConfiguration("route-bar.googleapis.com", mf.buildOpaqueVirtualHosts(1))));
     call.sendResponse(LDS, listener, VERSION_1, "0000");
 
@@ -494,9 +495,9 @@ public abstract class ClientXdsClientTestBase {
 
     // LDS -> {A, B, C}, version 1
     ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
-        "A", Any.pack(mf.buildListenerForRds("A", "A.1")),
-        "B", Any.pack(mf.buildListenerForRds("B", "B.1")),
-        "C", Any.pack(mf.buildListenerForRds("C", "C.1")));
+        "A", Any.pack(mf.buildListenerWithApiListenerForRds("A", "A.1")),
+        "B", Any.pack(mf.buildListenerWithApiListenerForRds("B", "B.1")),
+        "C", Any.pack(mf.buildListenerWithApiListenerForRds("C", "C.1")));
     call.sendResponse(LDS, resourcesV1.values().asList(), VERSION_1, "0000");
     // {A, B, C} -> ACK, version 1
     verifyResourceMetadataAcked(LDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
@@ -507,8 +508,8 @@ public abstract class ClientXdsClientTestBase {
     // LDS -> {A, B}, version 2
     // Failed to parse endpoint B
     ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
-        "A", Any.pack(mf.buildListenerForRds("A", "A.2")),
-        "B", Any.pack(mf.buildListenerInvalid("B")));
+        "A", Any.pack(mf.buildListenerWithApiListenerForRds("A", "A.2")),
+        "B", Any.pack(mf.buildListenerWithApiListenerInvalid("B")));
     call.sendResponse(LDS, resourcesV2.values().asList(), VERSION_2, "0001");
     // {A, B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
     // {C} -> ACK, version 1
@@ -522,8 +523,8 @@ public abstract class ClientXdsClientTestBase {
 
     // LDS -> {B, C} version 3
     ImmutableMap<String, Any> resourcesV3 = ImmutableMap.of(
-        "B", Any.pack(mf.buildListenerForRds("B", "B.3")),
-        "C", Any.pack(mf.buildListenerForRds("C", "C.3")));
+        "B", Any.pack(mf.buildListenerWithApiListenerForRds("B", "B.3")),
+        "C", Any.pack(mf.buildListenerWithApiListenerForRds("C", "C.3")));
     call.sendResponse(LDS, resourcesV3.values().asList(), VERSION_3, "0002");
     // {A} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
     // {B, C} -> ACK, version 3
@@ -542,7 +543,8 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
+        .hasSize(VHOST_SIZE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -556,7 +558,8 @@ public abstract class ClientXdsClientTestBase {
     // Client sends an ACK LDS request.
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().rdsName())
+        .isEqualTo(RDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -573,7 +576,8 @@ public abstract class ClientXdsClientTestBase {
     LdsResourceWatcher watcher = mock(LdsResourceWatcher.class);
     xdsClient.watchLdsResource(LDS_RESOURCE, watcher);
     verify(watcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().rdsName())
+        .isEqualTo(RDS_RESOURCE);
     call.verifyNoMoreRequest();
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
@@ -602,14 +606,16 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
+        .hasSize(VHOST_SIZE);
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
 
     // Updated LDS response.
     call.sendResponse(LDS, testListenerRds, VERSION_2, "0001");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_2, "0001", NODE);
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().rdsName())
+        .isEqualTo(RDS_RESOURCE);
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_2, TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
   }
@@ -619,7 +625,7 @@ public abstract class ClientXdsClientTestBase {
     Assume.assumeTrue(useProtocolV3());
     DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
     Any listener = Any.pack(
-        mf.buildListener(
+        mf.buildListenerWithApiListener(
             LDS_RESOURCE,
             mf.buildRouteConfiguration(
                 "do not care",
@@ -657,9 +663,10 @@ public abstract class ClientXdsClientTestBase {
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
 
     LdsUpdate ldsUpdate = ldsUpdateCaptor.getValue();
-    assertThat(ldsUpdate.virtualHosts).hasSize(2);
-    assertThat(ldsUpdate.filterChain.get(0).name).isEqualTo("envoy.fault");
-    FaultConfig faultConfig = (FaultConfig) ldsUpdate.virtualHosts.get(0)
+    assertThat(ldsUpdate.httpConnectionManager().virtualHosts()).hasSize(2);
+    assertThat(ldsUpdate.httpConnectionManager().httpFilterConfigs().get(0).name)
+        .isEqualTo("envoy.fault");
+    FaultConfig faultConfig = (FaultConfig) ldsUpdate.httpConnectionManager().virtualHosts().get(0)
         .filterConfigOverrides().get("envoy.fault");
     assertThat(faultConfig.faultDelay().delayNanos()).isEqualTo(300);
     assertThat(faultConfig.faultDelay().percent().numerator()).isEqualTo(1000);
@@ -667,7 +674,7 @@ public abstract class ClientXdsClientTestBase {
         .isEqualTo(DenominatorType.MILLION);
     assertThat(faultConfig.faultAbort()).isNull();
     assertThat(faultConfig.maxActiveFaults()).isEqualTo(100);
-    faultConfig = (FaultConfig) ldsUpdate.virtualHosts.get(1)
+    faultConfig = (FaultConfig) ldsUpdate.httpConnectionManager().virtualHosts().get(1)
         .filterConfigOverrides().get("envoy.fault");
     assertThat(faultConfig.faultDelay()).isNull();
     assertThat(faultConfig.faultAbort().status().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
@@ -686,7 +693,8 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
     call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
+        .hasSize(VHOST_SIZE);
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
 
@@ -721,19 +729,22 @@ public abstract class ClientXdsClientTestBase {
     verifyResourceMetadataDoesNotExist(LDS, ldsResourceTwo);
     verifySubscribedResourcesMetadataSizes(2, 0, 0, 0);
 
-    Any listenerTwo = Any.pack(mf.buildListenerForRds(ldsResourceTwo, RDS_RESOURCE));
+    Any listenerTwo = Any.pack(mf.buildListenerWithApiListenerForRds(ldsResourceTwo, RDS_RESOURCE));
     call.sendResponse(LDS, ImmutableList.of(testListenerVhosts, listenerTwo), VERSION_1, "0000");
     // ldsResourceWatcher called with listenerVhosts.
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
+        .hasSize(VHOST_SIZE);
     // watcher1 called with listenerTwo.
     verify(watcher1).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
-    assertThat(ldsUpdateCaptor.getValue().virtualHosts).isNull();
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().rdsName())
+        .isEqualTo(RDS_RESOURCE);
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts()).isNull();
     // watcher2 called with listenerTwo.
     verify(watcher2).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
-    assertThat(ldsUpdateCaptor.getValue().virtualHosts).isNull();
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().rdsName())
+        .isEqualTo(RDS_RESOURCE);
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts()).isNull();
     // Metadata of both listeners is stored.
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(LDS, ldsResourceTwo, listenerTwo, VERSION_1, TIME_INCREMENT);
@@ -933,7 +944,7 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
-  public void rdsResourceDeletedByLds() {
+  public void rdsResourceDeletedByLdsApiListener() {
     xdsClient.watchLdsResource(LDS_RESOURCE, ldsResourceWatcher);
     xdsClient.watchRdsResource(RDS_RESOURCE, rdsResourceWatcher);
     verifyResourceMetadataRequested(LDS, LDS_RESOURCE);
@@ -943,7 +954,8 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().rdsName())
+        .isEqualTo(RDS_RESOURCE);
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
@@ -957,11 +969,74 @@ public abstract class ClientXdsClientTestBase {
 
     call.sendResponse(LDS, testListenerVhosts, VERSION_2, "0001");
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
+        .hasSize(VHOST_SIZE);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
     verifyResourceMetadataAcked(
         LDS, LDS_RESOURCE, testListenerVhosts, VERSION_2, TIME_INCREMENT * 3);
+    verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
+  }
+
+  @Test
+  public void rdsResourcesDeletedByLdsTcpListener() {
+    Assume.assumeTrue(useProtocolV3());
+    xdsClient.watchLdsResource(LISTENER_RESOURCE, ldsResourceWatcher);
+    xdsClient.watchRdsResource(RDS_RESOURCE, rdsResourceWatcher);
+    verifyResourceMetadataRequested(LDS, LISTENER_RESOURCE);
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
+
+    Message hcmFilter = mf.buildHttpConnectionManagerFilter(
+        RDS_RESOURCE, null, Collections.<Message>emptyList());
+    Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+        "google-sds-config-default", "ROOTCA");
+    Message filterChain = mf.buildFilterChain(
+        Collections.<String>emptyList(), downstreamTlsContext, hcmFilter);
+    Any packedListener =
+        Any.pack(mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain));
+
+    // Simulates receiving the requested LDS resource as a TCP listener with a filter chain
+    // referencing RDS_RESOURCE.
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    call.sendResponse(LDS, packedListener, VERSION_1, "0000");
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+
+    assertThat(ldsUpdateCaptor.getValue().listener().getFilterChains()).hasSize(1);
+    FilterChain parsedFilterChain = Iterables.getOnlyElement(
+        ldsUpdateCaptor.getValue().listener().getFilterChains());
+    assertThat(parsedFilterChain.getHttpConnectionManager().rdsName()).isEqualTo(RDS_RESOURCE);
+    verifyResourceMetadataAcked(LDS, LISTENER_RESOURCE, packedListener, VERSION_1, TIME_INCREMENT);
+    verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
+    verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
+
+    // Simulates receiving the requested RDS resource.
+    call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
+    verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
+    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT * 2);
+
+    // Simulates receiving an updated version of the requested LDS resource as a TCP listener
+    // with a filter chain containing inlined RouteConfiguration.
+    hcmFilter = mf.buildHttpConnectionManagerFilter(
+        null,
+        mf.buildRouteConfiguration(
+            "route-bar.googleapis.com", mf.buildOpaqueVirtualHosts(VHOST_SIZE)),
+        Collections.<Message>emptyList());
+    filterChain = mf.buildFilterChain(
+        Collections.<String>emptyList(), downstreamTlsContext, hcmFilter);
+    packedListener =
+        Any.pack(mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain));
+    call.sendResponse(LDS, packedListener, VERSION_2, "0001");
+    verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
+    assertThat(ldsUpdateCaptor.getValue().listener().getFilterChains()).hasSize(1);
+    parsedFilterChain = Iterables.getOnlyElement(
+        ldsUpdateCaptor.getValue().listener().getFilterChains());
+    assertThat(parsedFilterChain.getHttpConnectionManager().virtualHosts()).hasSize(VHOST_SIZE);
+    verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
+    verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
+    verifyResourceMetadataAcked(
+        LDS, LISTENER_RESOURCE, packedListener, VERSION_2, TIME_INCREMENT * 3);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
   }
 
@@ -1873,7 +1948,7 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(EDS, EDS_RESOURCE, "", "", NODE);
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(mf.buildListener(LDS_RESOURCE,
+        Any.pack(mf.buildListenerWithApiListener(LDS_RESOURCE,
             mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(2)))));
     call.sendResponse(LDS, listeners, "63", "3242");
     call.verifyRequest(LDS, LDS_RESOURCE, "63", "3242", NODE);
@@ -2018,36 +2093,34 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
-  public void serverSideListenerFound() throws InvalidProtocolBufferException {
+  public void serverSideListenerFound() {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
+    Message hcmFilter = mf.buildHttpConnectionManagerFilter(
+        "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+    Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+        "google-sds-config-default", "ROOTCA");
+    Message filterChain = mf.buildFilterChain(
+        Collections.<String>emptyList(), downstreamTlsContext, hcmFilter);
     Message listener =
-        mf.buildListenerWithFilterChain(
-            LISTENER_RESOURCE, 7000, "0.0.0.0", "google-sds-config-default", "ROOTCA");
+        mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain);
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
     // Client sends an ACK LDS request.
     call.verifyRequest(
         ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().listener)
-        .isEqualTo(EnvoyServerProtoData.Listener
-            .fromEnvoyProtoListener((Listener) listener, tlsContextManager));
-
-    listener =
-        mf.buildListenerWithFilterChain(
-            LISTENER_RESOURCE, 7000, "0.0.0.0", "CERT2", "ROOTCA2");
-    listeners = ImmutableList.of(Any.pack(listener));
-    call.sendResponse(ResourceType.LDS, listeners, "1", "0001");
-
-    // Client sends an ACK LDS request.
-    call.verifyRequest(
-        ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "1", "0001", NODE);
-    verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().listener)
-        .isEqualTo(EnvoyServerProtoData.Listener
-            .fromEnvoyProtoListener((Listener) listener, tlsContextManager));
+    EnvoyServerProtoData.Listener parsedListener = ldsUpdateCaptor.getValue().listener();
+    assertThat(parsedListener.getName()).isEqualTo(LISTENER_RESOURCE);
+    assertThat(parsedListener.getAddress()).isEqualTo("0.0.0.0:7000");
+    assertThat(parsedListener.getDefaultFilterChain()).isNull();
+    assertThat(parsedListener.getFilterChains()).hasSize(1);
+    FilterChain parsedFilterChain = Iterables.getOnlyElement(parsedListener.getFilterChains());
+    assertThat(parsedFilterChain.getFilterChainMatch().getApplicationProtocols()).isEmpty();
+    assertThat(parsedFilterChain.getHttpConnectionManager().rdsName())
+        .isEqualTo("route-foo.googleapis.com");
+    assertThat(parsedFilterChain.getHttpConnectionManager().httpFilterConfigs()).isEmpty();
 
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -2057,18 +2130,14 @@ public abstract class ClientXdsClientTestBase {
     Assume.assumeTrue(useProtocolV3());
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
-    final Message filterChainInbound =
-        mf.buildFilterChain(
-            Arrays.asList("managed-mtls"),
-            CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-                "google-sds-config-default", "ROOTCA"),
-            mf.buildTestFilter("envoy.http_connection_manager"));
-    Message listener =
-        mf.buildListenerWithFilterChain(
-            "grpc/server?xds.resource.listening_address=0.0.0.0:8000",
-            7000,
-            "0.0.0.0",
-            filterChainInbound);
+    Message hcmFilter = mf.buildHttpConnectionManagerFilter(
+        "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+    Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+        "google-sds-config-default", "ROOTCA");
+    Message filterChain = mf.buildFilterChain(
+        Collections.singletonList("managed-mtls"), downstreamTlsContext, hcmFilter);
+    Message listener = mf.buildListenerWithFilterChain(
+        "grpc/server?xds.resource.listening_address=0.0.0.0:8000", 7000, "0.0.0.0", filterChain);
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
     // Client sends an ACK LDS request.
@@ -2162,16 +2231,18 @@ public abstract class ClientXdsClientTestBase {
     /** Throws {@link InvalidProtocolBufferException} on {@link Any#unpack(Class)}. */
     protected static final Any FAILING_ANY = Any.newBuilder().setTypeUrl("fake").build();
 
-    protected final Message buildListener(String name, Message routeConfiguration) {
-      return buildListener(name, routeConfiguration, Collections.<Message>emptyList());
+    protected final Message buildListenerWithApiListener(String name, Message routeConfiguration) {
+      return buildListenerWithApiListener(
+          name, routeConfiguration, Collections.<Message>emptyList());
     }
 
-    protected abstract Message buildListener(
+    protected abstract Message buildListenerWithApiListener(
         String name, Message routeConfiguration, List<? extends Message> httpFilters);
 
-    protected abstract Message buildListenerForRds(String name, String rdsResourceName);
+    protected abstract Message buildListenerWithApiListenerForRds(
+        String name, String rdsResourceName);
 
-    protected abstract Message buildListenerInvalid(String name);
+    protected abstract Message buildListenerWithApiListenerInvalid(String name);
 
     protected abstract Message buildHttpFilter(
         String name, @Nullable Any typedConfig, boolean isOptional);
@@ -2239,9 +2310,7 @@ public abstract class ClientXdsClientTestBase {
     protected abstract Message buildListenerWithFilterChain(
         String name, int portValue, String address, Message... filterChains);
 
-    protected abstract Message buildListenerWithFilterChain(
-        String name, int portValue, String address, String certName, String validationContextName);
-
-    protected abstract Message buildTestFilter(String name);
+    protected abstract Message buildHttpConnectionManagerFilter(
+        @Nullable String rdsName, @Nullable Message routeConfig, List<Message> httpFilters);
   }
 }

@@ -53,25 +53,27 @@ public final class BinderServerBuilder
     extends ForwardingServerBuilder<BinderServerBuilder> {
 
   /**
-   * Creates a server builder that will bind with the given name.
+   * Creates a server builder that will listen for bindings to the specified address.
    *
-   * <p>The listening {@link IBinder} associated with new {@link Server}s will be stored in {@code
-   * binderReceiver} upon {@link #build()}.
+   * <p>The listening {@link IBinder} associated with new {@link Server}s will be stored
+   * in {@code binderReceiver} upon {@link #build()}. Callers should return it from {@link
+   * Service#onBind(Intent)} when the binding intent matches {@code listenAddress}.
    *
-   * @param service the concrete Android Service that will host this server.
+   * @param listenAddress an Android Service and binding Intent associated with this server.
    * @param receiver an "out param" for the new {@link Server}'s listening {@link IBinder}
    * @return a new builder
    */
-  public static BinderServerBuilder forService(Service service, IBinderReceiver receiver) {
-    return new BinderServerBuilder(service, receiver);
+  public static BinderServerBuilder forAddress(AndroidComponentAddress listenAddress,
+      IBinderReceiver receiver) {
+    return new BinderServerBuilder(listenAddress, receiver);
   }
 
   /**
-   * Always fails. Call {@link #forService(Service, IBinderReceiver)} instead.
+   * Always fails. Call {@link #forAddress(AndroidComponentAddress, IBinderReceiver)} instead.
    */
-  @DoNotCall("Unsupported. Use forService() instead")
+  @DoNotCall("Unsupported. Use forAddress() instead")
   public static BinderServerBuilder forPort(int port) {
-    throw new UnsupportedOperationException("call forService() instead");
+    throw new UnsupportedOperationException("call forAddress() instead");
   }
 
   private final ServerImplBuilder serverImplBuilder;
@@ -80,13 +82,15 @@ public final class BinderServerBuilder
   private ServerSecurityPolicy securityPolicy;
   private InboundParcelablePolicy inboundParcelablePolicy;
 
-  private BinderServerBuilder(Service service, IBinderReceiver binderReceiver) {
+  private BinderServerBuilder(
+      AndroidComponentAddress listenAddress,
+      IBinderReceiver binderReceiver) {
     securityPolicy = SecurityPolicies.serverInternalOnly();
     inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
 
     serverImplBuilder = new ServerImplBuilder(streamTracerFactories -> {
       BinderServer server = new BinderServer(
-          AndroidComponentAddress.forContext(service),
+          listenAddress,
           schedulerPool,
           streamTracerFactories,
           securityPolicy,
@@ -166,7 +170,7 @@ public final class BinderServerBuilder
 
   /**
    * Builds a {@link Server} according to this builder's parameters and stores its listening {@link
-   * IBinder} in the {@link IBinderReceiver} passed to {@link #forService(Service,
+   * IBinder} in the {@link IBinderReceiver} passed to {@link #forAddress(AndroidComponentAddress,
    * IBinderReceiver)}.
    *
    * @return the new Server

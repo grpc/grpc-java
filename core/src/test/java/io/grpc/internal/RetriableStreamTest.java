@@ -53,6 +53,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
 import io.grpc.internal.StreamListener.MessageProducer;
@@ -271,7 +272,8 @@ public class RetriableStreamTest {
 
     // retry1
     doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
-    sublistenerCaptor1.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_2), new Metadata());
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_2), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
 
     // send more messages during backoff
@@ -315,7 +317,8 @@ public class RetriableStreamTest {
 
     // retry2
     doReturn(mockStream3).when(retriableStreamRecorder).newSubstream(2);
-    sublistenerCaptor2.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor2.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
 
     // send more messages during backoff
@@ -359,10 +362,11 @@ public class RetriableStreamTest {
 
     // no more retry
     sublistenerCaptor3.getValue().closed(
-        Status.fromCode(NON_RETRIABLE_STATUS_CODE), new Metadata());
+        Status.fromCode(NON_RETRIABLE_STATUS_CODE), PROCESSED, new Metadata());
 
     inOrder.verify(retriableStreamRecorder).postCommit();
-    inOrder.verify(masterListener).closed(any(Status.class), any(Metadata.class));
+    inOrder.verify(masterListener).closed(
+        any(Status.class), any(RpcProgress.class), any(Metadata.class));
     inOrder.verifyNoMoreInteractions();
 
     insight = new InsightBuilder();
@@ -407,7 +411,8 @@ public class RetriableStreamTest {
     // retry
     ClientStream mockStream2 = mock(ClientStream.class);
     doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
-    sublistenerCaptor1.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
 
@@ -445,9 +450,9 @@ public class RetriableStreamTest {
 
     Status status = Status.fromCode(RETRIABLE_STATUS_CODE_1);
     Metadata metadata = new Metadata();
-    sublistenerCaptor1.getValue().closed(status, metadata);
+    sublistenerCaptor1.getValue().closed(status, PROCESSED, metadata);
 
-    verify(masterListener).closed(status, metadata);
+    verify(masterListener).closed(status, PROCESSED, metadata);
     inOrder.verify(retriableStreamRecorder, never()).postCommit();
   }
 
@@ -466,7 +471,8 @@ public class RetriableStreamTest {
     // retry
     ClientStream mockStream2 = mock(ClientStream.class);
     doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
-    sublistenerCaptor1.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
 
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
@@ -482,9 +488,9 @@ public class RetriableStreamTest {
     // closed even with retriable status
     Status status = Status.fromCode(RETRIABLE_STATUS_CODE_1);
     Metadata metadata = new Metadata();
-    sublistenerCaptor2.getValue().closed(status, metadata);
+    sublistenerCaptor2.getValue().closed(status, PROCESSED, metadata);
 
-    verify(masterListener).closed(status, metadata);
+    verify(masterListener).closed(status, PROCESSED, metadata);
     inOrder.verify(retriableStreamRecorder, never()).postCommit();
   }
 
@@ -512,7 +518,7 @@ public class RetriableStreamTest {
     // closed even with retriable status
     Status status = Status.fromCode(RETRIABLE_STATUS_CODE_1);
     Metadata metadata = new Metadata();
-    sublistenerCaptor1.getValue().closed(status, metadata);
+    sublistenerCaptor1.getValue().closed(status, PROCESSED, metadata);
     inOrder.verify(retriableStreamRecorder, never()).postCommit();
   }
 
@@ -531,7 +537,8 @@ public class RetriableStreamTest {
     // retry
     ClientStream mockStream2 = mock(ClientStream.class);
     doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
-    sublistenerCaptor1.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
 
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
@@ -551,7 +558,7 @@ public class RetriableStreamTest {
     // closed
     Status status = Status.fromCode(NON_RETRIABLE_STATUS_CODE);
     Metadata metadata = new Metadata();
-    sublistenerCaptor2.getValue().closed(status, metadata);
+    sublistenerCaptor2.getValue().closed(status, PROCESSED, metadata);
     inOrder.verify(retriableStreamRecorder, never()).postCommit();
   }
 
@@ -570,10 +577,10 @@ public class RetriableStreamTest {
     // closed
     Status status = Status.fromCode(NON_RETRIABLE_STATUS_CODE);
     Metadata metadata = new Metadata();
-    sublistenerCaptor1.getValue().closed(status, metadata);
+    sublistenerCaptor1.getValue().closed(status, PROCESSED, metadata);
 
     inOrder.verify(retriableStreamRecorder).postCommit();
-    verify(masterListener).closed(status, metadata);
+    verify(masterListener).closed(status, PROCESSED, metadata);
 
     // cancel
     retriableStream.cancel(Status.CANCELLED);
@@ -595,7 +602,8 @@ public class RetriableStreamTest {
     // retry
     ClientStream mockStream2 = mock(ClientStream.class);
     doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
-    sublistenerCaptor1.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
 
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor2 =
@@ -606,10 +614,10 @@ public class RetriableStreamTest {
     // closed
     Status status = Status.fromCode(NON_RETRIABLE_STATUS_CODE);
     Metadata metadata = new Metadata();
-    sublistenerCaptor2.getValue().closed(status, metadata);
+    sublistenerCaptor2.getValue().closed(status, PROCESSED, metadata);
 
     inOrder.verify(retriableStreamRecorder).postCommit();
-    verify(masterListener).closed(status, metadata);
+    verify(masterListener).closed(status, PROCESSED, metadata);
 
     // cancel
     retriableStream.cancel(Status.CANCELLED);
@@ -630,7 +638,8 @@ public class RetriableStreamTest {
     // retry
     ClientStream mockStream2 = mock(ClientStream.class);
     doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
-    sublistenerCaptor1.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
 
     // cancel while backoff
     assertEquals(1, fakeClock.numPendingTasks());
@@ -707,7 +716,8 @@ public class RetriableStreamTest {
 
     // retry
     doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
-    sublistenerCaptor1.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
 
     // send more requests during backoff
@@ -821,7 +831,8 @@ public class RetriableStreamTest {
     // retry
     doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
     doReturn(false).when(mockStream1).isReady(); // mockStream1 closed, so isReady false
-    sublistenerCaptor1.get().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor1.get().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
 
     // send more requests during backoff
@@ -865,7 +876,8 @@ public class RetriableStreamTest {
                   @Override
                   public void start(ClientStreamListener listener) {
                     // closed while draning
-                    listener.closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+                    listener.closed(
+                        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
                   }
                 }));
     final ClientStream mockStream3 = mock(ClientStream.class);
@@ -884,7 +896,8 @@ public class RetriableStreamTest {
     ClientStreamListener listener1 = sublistenerCaptor1.getValue();
 
     // retry
-    listener1.closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    listener1.closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
     assertEquals(1, fakeClock.numPendingTasks());
@@ -937,7 +950,8 @@ public class RetriableStreamTest {
     // retry
     ClientStream mockStream2 = mock(ClientStream.class);
     doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
-    sublistenerCaptor1.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
 
     // bufferSizeTracer.outboundWireSize() quits immediately while backoff b/c substream1 is closed
     assertEquals(1, fakeClock.numPendingTasks());
@@ -1013,7 +1027,8 @@ public class RetriableStreamTest {
 
 
     // retry1
-    sublistenerCaptor1.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM) - 1L, TimeUnit.SECONDS);
     assertEquals(1, fakeClock.numPendingTasks());
@@ -1026,7 +1041,8 @@ public class RetriableStreamTest {
     inOrder.verifyNoMoreInteractions();
 
     // retry2
-    sublistenerCaptor2.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_2), new Metadata());
+    sublistenerCaptor2.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_2), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime(
         (long) (INITIAL_BACKOFF_IN_SECONDS * BACKOFF_MULTIPLIER * FAKE_RANDOM) - 1L,
@@ -1041,7 +1057,8 @@ public class RetriableStreamTest {
     inOrder.verifyNoMoreInteractions();
 
     // retry3
-    sublistenerCaptor3.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor3.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime(
         (long) (INITIAL_BACKOFF_IN_SECONDS * BACKOFF_MULTIPLIER * BACKOFF_MULTIPLIER * FAKE_RANDOM)
@@ -1057,7 +1074,8 @@ public class RetriableStreamTest {
     inOrder.verifyNoMoreInteractions();
 
     // retry4
-    sublistenerCaptor4.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_2), new Metadata());
+    sublistenerCaptor4.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_2), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime((long) (MAX_BACKOFF_IN_SECONDS * FAKE_RANDOM) - 1L, TimeUnit.SECONDS);
     assertEquals(1, fakeClock.numPendingTasks());
@@ -1070,7 +1088,8 @@ public class RetriableStreamTest {
     inOrder.verifyNoMoreInteractions();
 
     // retry5
-    sublistenerCaptor5.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_2), new Metadata());
+    sublistenerCaptor5.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_2), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime((long) (MAX_BACKOFF_IN_SECONDS * FAKE_RANDOM) - 1L, TimeUnit.SECONDS);
     assertEquals(1, fakeClock.numPendingTasks());
@@ -1084,7 +1103,8 @@ public class RetriableStreamTest {
 
     // can not retry any more
     verify(retriableStreamRecorder, never()).postCommit();
-    sublistenerCaptor6.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor6.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     verify(retriableStreamRecorder).postCommit();
     inOrder.verifyNoMoreInteractions();
   }
@@ -1116,7 +1136,8 @@ public class RetriableStreamTest {
     int pushbackInMillis = 123;
     Metadata headers = new Metadata();
     headers.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "" + pushbackInMillis);
-    sublistenerCaptor1.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), headers);
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, headers);
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime(pushbackInMillis - 1, TimeUnit.MILLISECONDS);
     assertEquals(1, fakeClock.numPendingTasks());
@@ -1132,7 +1153,8 @@ public class RetriableStreamTest {
     pushbackInMillis = 4567 * 1000;
     headers = new Metadata();
     headers.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "" + pushbackInMillis);
-    sublistenerCaptor2.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_2), headers);
+    sublistenerCaptor2.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_2), PROCESSED, headers);
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime(pushbackInMillis - 1, TimeUnit.MILLISECONDS);
     assertEquals(1, fakeClock.numPendingTasks());
@@ -1145,7 +1167,8 @@ public class RetriableStreamTest {
     inOrder.verifyNoMoreInteractions();
 
     // retry3
-    sublistenerCaptor3.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor3.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM) - 1L, TimeUnit.SECONDS);
     assertEquals(1, fakeClock.numPendingTasks());
@@ -1158,7 +1181,8 @@ public class RetriableStreamTest {
     inOrder.verifyNoMoreInteractions();
 
     // retry4
-    sublistenerCaptor4.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_2), new Metadata());
+    sublistenerCaptor4.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_2), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime(
         (long) (INITIAL_BACKOFF_IN_SECONDS * BACKOFF_MULTIPLIER * FAKE_RANDOM) - 1L,
@@ -1173,7 +1197,8 @@ public class RetriableStreamTest {
     inOrder.verifyNoMoreInteractions();
 
     // retry5
-    sublistenerCaptor5.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_2), new Metadata());
+    sublistenerCaptor5.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_2), PROCESSED, new Metadata());
     assertEquals(1, fakeClock.numPendingTasks());
     fakeClock.forwardTime(
         (long) (INITIAL_BACKOFF_IN_SECONDS * BACKOFF_MULTIPLIER * BACKOFF_MULTIPLIER * FAKE_RANDOM)
@@ -1193,7 +1218,8 @@ public class RetriableStreamTest {
     headers = new Metadata();
     headers.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "" + pushbackInMillis);
     verify(retriableStreamRecorder, never()).postCommit();
-    sublistenerCaptor6.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), headers);
+    sublistenerCaptor6.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, headers);
     verify(retriableStreamRecorder).postCommit();
     inOrder.verifyNoMoreInteractions();
   }
@@ -1214,7 +1240,8 @@ public class RetriableStreamTest {
     // pushback no retry
     Metadata headers = new Metadata();
     headers.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "");
-    sublistenerCaptor1.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), headers);
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, headers);
 
     verify(retriableStreamRecorder, never()).newSubstream(1);
     verify(retriableStreamRecorder).postCommit();
@@ -1269,7 +1296,8 @@ public class RetriableStreamTest {
     // mimic some other call in the channel triggers a throttle countdown
     assertTrue(throttle.onQualifiedFailureThenCheckIsAboveThreshold()); // count = 3
 
-    sublistenerCaptor.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
     verify(retriableStreamRecorder).postCommit();
     assertFalse(throttle.isAboveThreshold()); // count = 2
   }
@@ -1289,7 +1317,8 @@ public class RetriableStreamTest {
     // mimic some other call in the channel triggers a throttle countdown
     assertTrue(throttle.onQualifiedFailureThenCheckIsAboveThreshold()); // count = 3
 
-    sublistenerCaptor.getValue().closed(Status.fromCode(NON_RETRIABLE_STATUS_CODE), new Metadata());
+    sublistenerCaptor.getValue().closed(
+        Status.fromCode(NON_RETRIABLE_STATUS_CODE), PROCESSED, new Metadata());
     verify(retriableStreamRecorder).postCommit();
     assertTrue(throttle.isAboveThreshold()); // count = 3
 
@@ -1314,7 +1343,8 @@ public class RetriableStreamTest {
     int pushbackInMillis = 123;
     Metadata headers = new Metadata();
     headers.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "" + pushbackInMillis);
-    sublistenerCaptor.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), headers);
+    sublistenerCaptor.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, headers);
     verify(retriableStreamRecorder).postCommit();
     assertFalse(throttle.isAboveThreshold()); // count = 2
   }
@@ -1337,7 +1367,8 @@ public class RetriableStreamTest {
     int pushbackInMillis = 123;
     Metadata headers = new Metadata();
     headers.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "" + pushbackInMillis);
-    sublistenerCaptor.getValue().closed(Status.fromCode(NON_RETRIABLE_STATUS_CODE), headers);
+    sublistenerCaptor.getValue().closed(
+        Status.fromCode(NON_RETRIABLE_STATUS_CODE), PROCESSED, headers);
     verify(retriableStreamRecorder, never()).postCommit();
     assertTrue(throttle.isAboveThreshold()); // count = 3
 
@@ -1365,7 +1396,8 @@ public class RetriableStreamTest {
 
     Metadata headers = new Metadata();
     headers.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "");
-    sublistenerCaptor.getValue().closed(Status.fromCode(RETRIABLE_STATUS_CODE_1), headers);
+    sublistenerCaptor.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, headers);
     verify(retriableStreamRecorder).postCommit();
     assertFalse(throttle.isAboveThreshold()); // count = 2
   }
@@ -1387,7 +1419,8 @@ public class RetriableStreamTest {
 
     Metadata headers = new Metadata();
     headers.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "");
-    sublistenerCaptor.getValue().closed(Status.fromCode(NON_RETRIABLE_STATUS_CODE), headers);
+    sublistenerCaptor.getValue().closed(
+        Status.fromCode(NON_RETRIABLE_STATUS_CODE), PROCESSED, headers);
     verify(retriableStreamRecorder).postCommit();
     assertFalse(throttle.isAboveThreshold()); // count = 2
   }
@@ -1613,7 +1646,7 @@ public class RetriableStreamTest {
 
     verifyNoMoreInteractions(mockStream1, mockStream2);
     verify(retriableStreamRecorder).postCommit();
-    verify(masterListener).closed(same(status), any(Metadata.class));
+    verify(masterListener).closed(same(status), any(RpcProgress.class), any(Metadata.class));
   }
 
 
@@ -1764,7 +1797,8 @@ public class RetriableStreamTest {
     inOrder.verify(mockStream3).writeMessage(any(InputStream.class));
 
     // hedge3 receives nonFatalStatus
-    sublistenerCaptor3.getValue().closed(NON_FATAL_STATUS_CODE_1.toStatus(), new Metadata());
+    sublistenerCaptor3.getValue().closed(
+        NON_FATAL_STATUS_CODE_1.toStatus(), PROCESSED, new Metadata());
     inOrder.verifyNoMoreInteractions();
 
     // send one more message
@@ -1806,7 +1840,7 @@ public class RetriableStreamTest {
 
     // commit
     sublistenerCaptor2.getValue().closed(
-        Status.fromCode(FATAL_STATUS_CODE), new Metadata());
+        Status.fromCode(FATAL_STATUS_CODE), PROCESSED, new Metadata());
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     inOrder.verify(mockStream1).cancel(statusCaptor.capture());
@@ -1816,7 +1850,8 @@ public class RetriableStreamTest {
     assertEquals(Status.CANCELLED.getCode(), statusCaptor.getValue().getCode());
     assertEquals(CANCELLED_BECAUSE_COMMITTED, statusCaptor.getValue().getDescription());
     inOrder.verify(retriableStreamRecorder).postCommit();
-    inOrder.verify(masterListener).closed(any(Status.class), any(Metadata.class));
+    inOrder.verify(masterListener).closed(
+        any(Status.class), any(RpcProgress.class), any(Metadata.class));
     inOrder.verifyNoMoreInteractions();
 
     insight = new InsightBuilder();
@@ -1869,7 +1904,8 @@ public class RetriableStreamTest {
     inOrder.verifyNoMoreInteractions();
 
     // a random one of the hedges fails
-    sublistenerCaptor2.getValue().closed(NON_FATAL_STATUS_CODE_1.toStatus(), new Metadata());
+    sublistenerCaptor2.getValue().closed(
+        NON_FATAL_STATUS_CODE_1.toStatus(), PROCESSED, new Metadata());
 
     fakeClock.forwardTime(HEDGING_DELAY_IN_SECONDS, TimeUnit.SECONDS);
     assertEquals(1, fakeClock.numPendingTasks());
@@ -1889,11 +1925,15 @@ public class RetriableStreamTest {
     inOrder.verifyNoMoreInteractions();
 
     // all but one of the hedges fail
-    sublistenerCaptor1.getValue().closed(NON_FATAL_STATUS_CODE_2.toStatus(), new Metadata());
-    sublistenerCaptor4.getValue().closed(NON_FATAL_STATUS_CODE_2.toStatus(), new Metadata());
-    sublistenerCaptor5.getValue().closed(NON_FATAL_STATUS_CODE_2.toStatus(), new Metadata());
+    sublistenerCaptor1.getValue().closed(
+        NON_FATAL_STATUS_CODE_2.toStatus(), PROCESSED, new Metadata());
+    sublistenerCaptor4.getValue().closed(
+        NON_FATAL_STATUS_CODE_2.toStatus(), PROCESSED, new Metadata());
+    sublistenerCaptor5.getValue().closed(
+        NON_FATAL_STATUS_CODE_2.toStatus(), PROCESSED, new Metadata());
     inOrder.verifyNoMoreInteractions();
-    sublistenerCaptor6.getValue().closed(NON_FATAL_STATUS_CODE_1.toStatus(), new Metadata());
+    sublistenerCaptor6.getValue().closed(
+        NON_FATAL_STATUS_CODE_1.toStatus(), PROCESSED, new Metadata());
     inOrder.verifyNoMoreInteractions();
 
     hedgingStream.sendMessage("msg1 after commit");
@@ -1993,7 +2033,8 @@ public class RetriableStreamTest {
     // a random one of the hedges receives a negative pushback
     Metadata headers = new Metadata();
     headers.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "-1");
-    sublistenerCaptor2.getValue().closed(Status.fromCode(NON_FATAL_STATUS_CODE_1), headers);
+    sublistenerCaptor2.getValue().closed(
+        Status.fromCode(NON_FATAL_STATUS_CODE_1), PROCESSED, headers);
     assertEquals(0, fakeClock.numPendingTasks());
 
     fakeClock.forwardTime(HEDGING_DELAY_IN_SECONDS, TimeUnit.SECONDS);
@@ -2031,7 +2072,8 @@ public class RetriableStreamTest {
     // hedge1 receives a pushback for HEDGING_DELAY_IN_SECONDS + 1 second
     Metadata headers = new Metadata();
     headers.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "101000");
-    sublistenerCaptor1.getValue().closed(Status.fromCode(NON_FATAL_STATUS_CODE_1), headers);
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(NON_FATAL_STATUS_CODE_1), PROCESSED, headers);
 
     fakeClock.forwardTime(HEDGING_DELAY_IN_SECONDS, TimeUnit.SECONDS);
     inOrder.verifyNoMoreInteractions();
@@ -2046,7 +2088,8 @@ public class RetriableStreamTest {
     // hedge2 receives a pushback for HEDGING_DELAY_IN_SECONDS - 1 second
     headers = new Metadata();
     headers.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "99000");
-    sublistenerCaptor2.getValue().closed(Status.fromCode(NON_FATAL_STATUS_CODE_1), headers);
+    sublistenerCaptor2.getValue().closed(
+        Status.fromCode(NON_FATAL_STATUS_CODE_1), PROCESSED, headers);
 
     fakeClock.forwardTime(HEDGING_DELAY_IN_SECONDS - 1, TimeUnit.SECONDS);
     assertEquals(1, fakeClock.numPendingTasks());
@@ -2058,13 +2101,13 @@ public class RetriableStreamTest {
     // commit
     Status fatal = FATAL_STATUS_CODE.toStatus();
     Metadata metadata = new Metadata();
-    sublistenerCaptor4.getValue().closed(fatal, metadata);
+    sublistenerCaptor4.getValue().closed(fatal, PROCESSED, metadata);
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     inOrder.verify(mockStream3).cancel(statusCaptor.capture());
     assertEquals(Status.CANCELLED.getCode(), statusCaptor.getValue().getCode());
     assertEquals(CANCELLED_BECAUSE_COMMITTED, statusCaptor.getValue().getDescription());
     inOrder.verify(retriableStreamRecorder).postCommit();
-    inOrder.verify(masterListener).closed(fatal, metadata);
+    inOrder.verify(masterListener).closed(fatal, PROCESSED, metadata);
     inOrder.verifyNoMoreInteractions();
   }
 
@@ -2220,8 +2263,7 @@ public class RetriableStreamTest {
     // no more transparent retry
     Status status = Status.fromCode(FATAL_STATUS_CODE);
     Metadata metadata = new Metadata();
-    sublistenerCaptor3.getValue()
-        .closed(status, REFUSED, metadata);
+    sublistenerCaptor3.getValue().closed(status, REFUSED, metadata);
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(mockStream1).cancel(statusCaptor.capture());
@@ -2231,7 +2273,7 @@ public class RetriableStreamTest {
     assertEquals(Status.CANCELLED.getCode(), statusCaptor.getValue().getCode());
     assertEquals(CANCELLED_BECAUSE_COMMITTED, statusCaptor.getValue().getDescription());
     verify(retriableStreamRecorder).postCommit();
-    verify(masterListener).closed(status, metadata);
+    verify(masterListener).closed(status, REFUSED, metadata);
   }
 
   @Test
@@ -2258,7 +2300,7 @@ public class RetriableStreamTest {
     verify(mockStream3).start(sublistenerCaptor3.capture());
 
     sublistenerCaptor2.getValue()
-        .closed(Status.fromCode(NON_FATAL_STATUS_CODE_1), new Metadata());
+        .closed(Status.fromCode(NON_FATAL_STATUS_CODE_1), PROCESSED, new Metadata());
 
     // no more transparent retry
     Status status = Status.fromCode(FATAL_STATUS_CODE);
@@ -2271,7 +2313,7 @@ public class RetriableStreamTest {
     assertEquals(Status.CANCELLED.getCode(), statusCaptor.getValue().getCode());
     assertEquals(CANCELLED_BECAUSE_COMMITTED, statusCaptor.getValue().getDescription());
     verify(retriableStreamRecorder).postCommit();
-    verify(masterListener).closed(status, metadata);
+    verify(masterListener).closed(status, REFUSED, metadata);
   }
 
   @Test
@@ -2293,7 +2335,8 @@ public class RetriableStreamTest {
     fakeClock.forwardTime(HEDGING_DELAY_IN_SECONDS, TimeUnit.SECONDS);
     verify(mockStream2).start(any(ClientStreamListener.class));
 
-    sublistenerCaptor1.getValue().closed(Status.fromCode(NON_FATAL_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(NON_FATAL_STATUS_CODE_1), PROCESSED, new Metadata());
     assertTrue(throttle.isAboveThreshold()); // count = 3
 
     // mimic some other call in the channel triggers a throttle countdown
@@ -2325,12 +2368,14 @@ public class RetriableStreamTest {
         ArgumentCaptor.forClass(ClientStreamListener.class);
     verify(mockStream2).start(sublistenerCaptor2.capture());
 
-    sublistenerCaptor1.getValue().closed(Status.fromCode(NON_FATAL_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(NON_FATAL_STATUS_CODE_1), PROCESSED, new Metadata());
     assertTrue(throttle.isAboveThreshold()); // count = 3
-    sublistenerCaptor2.getValue().closed(Status.fromCode(NON_FATAL_STATUS_CODE_1), new Metadata());
+    sublistenerCaptor2.getValue().closed(
+        Status.fromCode(NON_FATAL_STATUS_CODE_1), PROCESSED, new Metadata());
     assertFalse(throttle.isAboveThreshold()); // count = 2
 
-    verify(masterListener).closed(any(Status.class), any(Metadata.class));
+    verify(masterListener).closed(any(Status.class), any(RpcProgress.class), any(Metadata.class));
     verifyNoInteractions(mockStream3);
     assertEquals(0, fakeClock.numPendingTasks());
   }

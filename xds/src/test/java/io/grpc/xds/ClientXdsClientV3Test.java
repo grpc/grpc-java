@@ -98,7 +98,6 @@ import io.grpc.Context.CancellationListener;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -264,7 +263,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
 
     @SuppressWarnings("unchecked")
     @Override
-    protected Message buildListener(
+    protected Message buildListenerWithApiListener(
         String name, Message routeConfiguration, List<? extends Message> httpFilters) {
       return Listener.newBuilder()
           .setName(name)
@@ -280,7 +279,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildListenerForRds(String name, String rdsResourceName) {
+    protected Message buildListenerWithApiListenerForRds(String name, String rdsResourceName) {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(Address.getDefaultInstance())
@@ -299,7 +298,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildListenerInvalid(String name) {
+    protected Message buildListenerWithApiListenerInvalid(String name) {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(Address.getDefaultInstance())
@@ -700,40 +699,33 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(listenerAddress)
-          .setDefaultFilterChain(FilterChain.getDefaultInstance())
           .addAllFilterChains(Arrays.asList(filterChainsArray))
           .setTrafficDirection(TrafficDirection.INBOUND)
           .build();
     }
 
     @Override
-    protected Listener buildListenerWithFilterChain(
-        String name, int portValue, String address, String certName, String validationContextName) {
-      FilterChain filterChain =
-          buildFilterChain(
-              Arrays.<String>asList(),
-              CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-                  certName, validationContextName),
-              buildTestFilter("envoy.http_connection_manager"));
-      io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
-          io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
-              .setSocketAddress(
-                  SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
-              .build();
-      return Listener.newBuilder()
-          .setName(name)
-          .setAddress(listenerAddress)
-          .setDefaultFilterChain(FilterChain.getDefaultInstance())
-          .addAllFilterChains(Arrays.asList(filterChain))
-          .setTrafficDirection(TrafficDirection.INBOUND)
-          .build();
-    }
-
-    @Override
-    protected Filter buildTestFilter(String name) {
+    protected Message buildHttpConnectionManagerFilter(
+        @Nullable String rdsName, @Nullable Message routeConfig, List<Message> httpFilters) {
+      HttpConnectionManager.Builder hcmBuilder = HttpConnectionManager.newBuilder();
+      if (rdsName != null) {
+        hcmBuilder.setRds(
+            Rds.newBuilder()
+                .setRouteConfigName(rdsName)
+                .setConfigSource(
+                    ConfigSource.newBuilder()
+                        .setAds(AggregatedConfigSource.getDefaultInstance())));
+      }
+      if (routeConfig != null) {
+        hcmBuilder.setRouteConfig((RouteConfiguration) routeConfig);
+      }
+      for (Message httpFilter : httpFilters) {
+        hcmBuilder.addHttpFilters((HttpFilter) httpFilter);
+      }
       return Filter.newBuilder()
-          .setName(name)
-          .setTypedConfig(Any.pack(HttpConnectionManager.getDefaultInstance()))
+          .setName("envoy.http_connection_manager")
+          .setTypedConfig(
+              Any.pack(hcmBuilder.build(), "type.googleapis.com"))
           .build();
     }
   }

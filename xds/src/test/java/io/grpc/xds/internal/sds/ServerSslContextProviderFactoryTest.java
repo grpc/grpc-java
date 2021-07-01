@@ -19,9 +19,6 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.internal.sds.ClientSslContextProviderFactoryTest.createAndRegisterProviderProvider;
 import static io.grpc.xds.internal.sds.ClientSslContextProviderFactoryTest.verifyWatcher;
-import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
-import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
-import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 
 import com.google.common.collect.ImmutableSet;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
@@ -36,8 +33,6 @@ import io.grpc.xds.internal.certprovider.CertProviderServerSslContextProvider;
 import io.grpc.xds.internal.certprovider.CertificateProvider;
 import io.grpc.xds.internal.certprovider.CertificateProviderRegistry;
 import io.grpc.xds.internal.certprovider.CertificateProviderStore;
-import java.io.IOException;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -58,62 +53,6 @@ public class ServerSslContextProviderFactoryTest {
     certificateProviderStore = new CertificateProviderStore(certificateProviderRegistry);
     certProviderServerSslContextProviderFactory =
         new CertProviderServerSslContextProvider.Factory(certificateProviderStore);
-  }
-
-  @Test
-  public void createSslContextProvider_allFilenames() {
-    serverSslContextProviderFactory =
-            new ServerSslContextProviderFactory(
-                    null, certProviderServerSslContextProviderFactory);
-    DownstreamTlsContext downstreamTlsContext =
-        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
-            SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
-
-    SslContextProvider sslContextProvider =
-        serverSslContextProviderFactory.create(downstreamTlsContext);
-    assertThat(sslContextProvider).isNotNull();
-  }
-
-  @Test
-  public void createSslContextProvider_sdsConfigForTlsCert_expectException() {
-    serverSslContextProviderFactory =
-            new ServerSslContextProviderFactory(
-                    null, certProviderServerSslContextProviderFactory);
-    CommonTlsContext commonTlsContext =
-        CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForTlsCertificate(
-            "name", "unix:/tmp/sds/path", CA_PEM_FILE);
-    DownstreamTlsContext downstreamTlsContext =
-        CommonTlsContextTestsUtil.buildInternalDownstreamTlsContext(
-            commonTlsContext, /* requireClientCert= */ false);
-
-    try {
-      SslContextProvider unused =
-          serverSslContextProviderFactory.create(downstreamTlsContext);
-      Assert.fail("no exception thrown");
-    } catch (IllegalArgumentException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("unexpected TlsCertificateSdsSecretConfigs");
-    }
-  }
-
-  @Test
-  public void createSslContextProvider_sdsConfigForCertValidationContext_expectException() {
-    serverSslContextProviderFactory =
-            new ServerSslContextProviderFactory(
-                    null, certProviderServerSslContextProviderFactory);
-    CommonTlsContext commonTlsContext =
-        CommonTlsContextTestsUtil.buildCommonTlsContextFromSdsConfigForValidationContext(
-            "name", "unix:/tmp/sds/path", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE);
-    DownstreamTlsContext downstreamTlsContext =
-        CommonTlsContextTestsUtil.buildInternalDownstreamTlsContext(
-            commonTlsContext, /* requireClientCert= */ false);
-
-    try {
-      SslContextProvider unused =
-          serverSslContextProviderFactory.create(downstreamTlsContext);
-      Assert.fail("no exception thrown");
-    } catch (IllegalStateException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("incorrect ValidationContextTypeCase");
-    }
   }
 
   @Test
@@ -266,38 +205,5 @@ public class ServerSslContextProviderFactoryTest {
     assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
     verifyWatcher(sslContextProvider, watcherCaptor[1]);
-  }
-
-  @Test
-  public void createEmptyCommonTlsContext_exception() throws IOException {
-    DownstreamTlsContext downstreamTlsContext =
-        CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(null, null, null);
-    serverSslContextProviderFactory =
-            new ServerSslContextProviderFactory(
-                    null, certProviderServerSslContextProviderFactory);
-    try {
-      serverSslContextProviderFactory.create(downstreamTlsContext);
-      Assert.fail("no exception thrown");
-    } catch (UnsupportedOperationException expected) {
-      assertThat(expected)
-          .hasMessageThat()
-          .isEqualTo("Unsupported configurations in DownstreamTlsContext!");
-    }
-  }
-
-  @Test
-  public void createNullCommonTlsContext_exception() throws IOException {
-    serverSslContextProviderFactory =
-            new ServerSslContextProviderFactory(
-                    null, certProviderServerSslContextProviderFactory);
-    DownstreamTlsContext downstreamTlsContext = new DownstreamTlsContext(null, true);
-    try {
-      serverSslContextProviderFactory.create(downstreamTlsContext);
-      Assert.fail("no exception thrown");
-    } catch (NullPointerException expected) {
-      assertThat(expected)
-              .hasMessageThat()
-              .isEqualTo("downstreamTlsContext should have CommonTlsContext");
-    }
   }
 }
