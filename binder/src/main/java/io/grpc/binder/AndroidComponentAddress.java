@@ -41,7 +41,7 @@ import java.net.SocketAddress;
  * type and data URI.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
-public final class AndroidComponentAddress extends SocketAddress {
+public class AndroidComponentAddress extends SocketAddress { // NOTE: Only temporarily non-final.
   private static final long serialVersionUID = 0L;
 
   private final Intent bindIntent; // An "explicit" Intent. In other words, getComponent() != null.
