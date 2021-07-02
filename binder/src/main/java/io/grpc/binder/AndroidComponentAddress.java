@@ -46,7 +46,7 @@ public class AndroidComponentAddress extends SocketAddress { // NOTE: Only tempo
 
   private final Intent bindIntent; // An "explicit" Intent. In other words, getComponent() != null.
 
-  private AndroidComponentAddress(Intent bindIntent) {
+  protected AndroidComponentAddress(Intent bindIntent) {
     checkArgument(bindIntent.getComponent() != null, "Missing required component");
     this.bindIntent = bindIntent;
   }
