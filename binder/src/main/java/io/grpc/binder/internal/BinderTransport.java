@@ -33,6 +33,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Grpc;
+import io.grpc.Internal;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
@@ -105,13 +106,16 @@ public abstract class BinderTransport
    * Attribute used to store the Android UID of the remote app. This is guaranteed to be set on any
    * active transport.
    */
-  static final Attributes.Key<Integer> REMOTE_UID = Attributes.Key.create("remote-uid");
+  @Internal
+  public static final Attributes.Key<Integer> REMOTE_UID = Attributes.Key.create("remote-uid");
 
   /** The authority of the server. */
-  static final Attributes.Key<String> SERVER_AUTHORITY = Attributes.Key.create("server-authority");
+  @Internal
+  public static final Attributes.Key<String> SERVER_AUTHORITY = Attributes.Key.create("server-authority");
 
   /** A transport attribute to hold the {@link InboundParcelablePolicy}. */
-  static final Attributes.Key<InboundParcelablePolicy> INBOUND_PARCELABLE_POLICY =
+  @Internal
+  public static final Attributes.Key<InboundParcelablePolicy> INBOUND_PARCELABLE_POLICY =
       Attributes.Key.create("inbound-parcelable-policy");
 
   /**
@@ -120,10 +124,12 @@ public abstract class BinderTransport
    * <p>Should this change, we should still endeavor to support earlier wire-format versions. If
    * that's not possible, {@link EARLIEST_SUPPORTED_WIRE_FORMAT_VERSION} should be updated below.
    */
-  static final int WIRE_FORMAT_VERSION = 1;
+  @Internal
+  public static final int WIRE_FORMAT_VERSION = 1;
 
   /** The version code of the earliest wire format we support. */
-  static final int EARLIEST_SUPPORTED_WIRE_FORMAT_VERSION = 1;
+  @Internal
+  public static final int EARLIEST_SUPPORTED_WIRE_FORMAT_VERSION = 1;
 
   /** The max number of "in-flight" bytes before we start buffering transactions. */
   private static final int TRANSACTION_BYTES_WINDOW = 128 * 1024;
@@ -136,10 +142,12 @@ public abstract class BinderTransport
    * the binder. and from the host s Followed by: int wire_protocol_version IBinder
    * client_transports_callback_binder
    */
-  static final int SETUP_TRANSPORT = IBinder.FIRST_CALL_TRANSACTION;
+  @Internal
+  public static final int SETUP_TRANSPORT = IBinder.FIRST_CALL_TRANSACTION;
 
   /** Send to shutdown the transport from either end. */
-  static final int SHUTDOWN_TRANSPORT = IBinder.FIRST_CALL_TRANSACTION + 1;
+  @Internal
+  public static final int SHUTDOWN_TRANSPORT = IBinder.FIRST_CALL_TRANSACTION + 1;
 
   /** Send to acknowledge receipt of rpc bytes, for flow control. */
   static final int ACKNOWLEDGE_BYTES = IBinder.FIRST_CALL_TRANSACTION + 2;
@@ -544,6 +552,7 @@ public abstract class BinderTransport
 
   /** Concrete client-side transport implementation. */
   @ThreadSafe
+  @Internal
   public static final class BinderClientTransport extends BinderTransport
       implements ConnectionClientTransport, Bindable.Observer {
 
@@ -799,12 +808,13 @@ public abstract class BinderTransport
   }
 
   /** Concrete server-side transport implementation. */
-  static final class BinderServerTransport extends BinderTransport implements ServerTransport {
+  @Internal
+  public static final class BinderServerTransport extends BinderTransport implements ServerTransport {
 
     private final List<ServerStreamTracer.Factory> streamTracerFactories;
     @Nullable private ServerTransportListener serverTransportListener;
 
-    BinderServerTransport(
+    public BinderServerTransport(
         ObjectPool<ScheduledExecutorService> executorServicePool,
         Attributes attributes,
         List<ServerStreamTracer.Factory> streamTracerFactories,
@@ -814,7 +824,7 @@ public abstract class BinderTransport
       setOutgoingBinder(callbackBinder);
     }
 
-    synchronized void setServerTransportListener(ServerTransportListener serverTransportListener) {
+    public synchronized void setServerTransportListener(ServerTransportListener serverTransportListener) {
       this.serverTransportListener = serverTransportListener;
       if (isShutdown()) {
         setState(TransportState.SHUTDOWN_TERMINATED);

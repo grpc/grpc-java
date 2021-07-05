@@ -18,6 +18,7 @@ package io.grpc.binder.internal;
 
 import android.os.Binder;
 import android.os.Parcel;
+import io.grpc.Internal;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -34,21 +35,23 @@ import javax.annotation.Nullable;
  * <p>Since two-way transactions block the calling thread on a remote process, this class only
  * supports one-way calls.
  */
-final class LeakSafeOneWayBinder extends Binder {
+@Internal
+public final class LeakSafeOneWayBinder extends Binder {
 
   private static final Logger logger = Logger.getLogger(LeakSafeOneWayBinder.class.getName());
 
-  interface TransactionHandler {
+  @Internal
+  public interface TransactionHandler {
     boolean handleTransaction(int code, Parcel data);
   }
 
   @Nullable private TransactionHandler handler;
 
-  LeakSafeOneWayBinder(TransactionHandler handler) {
+  public LeakSafeOneWayBinder(TransactionHandler handler) {
     this.handler = handler;
   }
 
-  void detach() {
+  public void detach() {
     handler = null;
   }
 
