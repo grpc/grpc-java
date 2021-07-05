@@ -326,11 +326,6 @@ public final class BinderClientTransportTest {
     }
 
     @Override
-    public void closed(Status status, Metadata trailers) {
-      this.closedStatus = status;
-    }
-
-    @Override
     public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
       this.closedStatus = status;
     }
