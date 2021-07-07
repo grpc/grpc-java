@@ -43,7 +43,6 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.binder.AndroidComponentAddress;
-import io.grpc.binder.ApiConstants;
 import io.grpc.binder.BindServiceFlags;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicy;
