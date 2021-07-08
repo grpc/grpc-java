@@ -399,20 +399,20 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   private static List<FilterChainMatch> expandOnPrefixRange(FilterChainMatch filterChainMatch) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
     if (filterChainMatch.getPrefixRanges().isEmpty()) {
-      return Collections.singletonList(filterChainMatch);
-    }
-    ArrayList<FilterChainMatch> expandedList = new ArrayList<>(
-        filterChainMatch.getPrefixRanges().size());
-    for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getPrefixRanges()) {
-      expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
-          Arrays.asList(cidrRange),
-          Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
-          Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
-          filterChainMatch.getConnectionSourceType(),
-          Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
-          Collections.unmodifiableList(filterChainMatch.getServerNames()),
-          filterChainMatch.getTransportProtocol()));
+      expandedList.add(filterChainMatch);
+    } else {
+      for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getPrefixRanges()) {
+        expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+            Arrays.asList(cidrRange),
+            Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
+            Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
+            filterChainMatch.getConnectionSourceType(),
+            Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
+            Collections.unmodifiableList(filterChainMatch.getServerNames()),
+            filterChainMatch.getTransportProtocol()));
+      }
     }
     return expandedList;
   }
