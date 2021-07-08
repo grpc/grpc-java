@@ -379,44 +379,33 @@ final class ClientXdsClient extends AbstractXdsClient {
   private static void checkForUniqueness(Set<FilterChainMatch> uniqueSet,
       FilterChainMatch filterChainMatch) throws ResourceInvalidException {
     if (uniqueSet != null) {
-      Set<FilterChainMatch> crossProduct = getCrossProduct(filterChainMatch);
+      List<FilterChainMatch> crossProduct = getCrossProduct(filterChainMatch);
       for (FilterChainMatch cur : crossProduct) {
-        if (uniqueSet.contains(cur)) {
+        if (!uniqueSet.add(cur)) {
           throw new ResourceInvalidException("Found duplicate matcher: " + cur);
         }
       }
-      uniqueSet.addAll(crossProduct);
     }
   }
 
-  private static Set<FilterChainMatch> getCrossProduct(FilterChainMatch filterChainMatch)
-      throws ResourceInvalidException {
+  private static List<FilterChainMatch> getCrossProduct(FilterChainMatch filterChainMatch) {
     // repeating fields to process:
     // prefixRanges, applicationProtocols, sourcePrefixRanges, sourcePorts, serverNames
-    Set<FilterChainMatch> expandedSet = expandOnPrefixRange(filterChainMatch);
-    expandedSet = expandOnApplicationProtocols(expandedSet);
-    expandedSet = expandOnSourcePrefixRange(expandedSet);
-    expandedSet = expandOnSourcePorts(expandedSet);
-    return expandOnServerNames(expandedSet);
+    List<FilterChainMatch> expandedList = expandOnPrefixRange(filterChainMatch);
+    expandedList = expandOnApplicationProtocols(expandedList);
+    expandedList = expandOnSourcePrefixRange(expandedList);
+    expandedList = expandOnSourcePorts(expandedList);
+    return expandOnServerNames(expandedList);
   }
 
-  private static void checkAndAdd(HashSet<FilterChainMatch> expandedSet,
-      FilterChainMatch filterChainMatch)
-      throws ResourceInvalidException {
-    if (!expandedSet.add(filterChainMatch)) {
-      throw new ResourceInvalidException("Found duplicate matcher: " + filterChainMatch);
-    }
-  }
-
-  private static Set<FilterChainMatch> expandOnPrefixRange(FilterChainMatch filterChainMatch)
-      throws ResourceInvalidException {
+  private static List<FilterChainMatch> expandOnPrefixRange(FilterChainMatch filterChainMatch) {
     if (filterChainMatch.getPrefixRanges().isEmpty()) {
-      return Collections.singleton(filterChainMatch);
+      return Collections.singletonList(filterChainMatch);
     }
-    HashSet<FilterChainMatch> expandedSet = new HashSet<>(
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>(
         filterChainMatch.getPrefixRanges().size());
     for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getPrefixRanges()) {
-      checkAndAdd(expandedSet, new FilterChainMatch(filterChainMatch.getDestinationPort(),
+      expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
           Arrays.asList(cidrRange),
           Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
           Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
@@ -425,18 +414,18 @@ final class ClientXdsClient extends AbstractXdsClient {
           Collections.unmodifiableList(filterChainMatch.getServerNames()),
           filterChainMatch.getTransportProtocol()));
     }
-    return expandedSet;
+    return expandedList;
   }
 
-  private static Set<FilterChainMatch> expandOnApplicationProtocols(Set<FilterChainMatch> set)
-      throws ResourceInvalidException {
-    HashSet<FilterChainMatch> expandedSet = new HashSet<>();
+  private static List<FilterChainMatch> expandOnApplicationProtocols(
+      Collection<FilterChainMatch> set) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
     for (FilterChainMatch filterChainMatch : set) {
       if (filterChainMatch.getApplicationProtocols().isEmpty()) {
-        checkAndAdd(expandedSet, filterChainMatch);
+        expandedList.add(filterChainMatch);
       } else {
         for (String applicationProtocol : filterChainMatch.getApplicationProtocols()) {
-          checkAndAdd(expandedSet, new FilterChainMatch(filterChainMatch.getDestinationPort(),
+          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
               Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
               Arrays.asList(applicationProtocol),
               Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
@@ -447,18 +436,18 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
     }
-    return expandedSet;
+    return expandedList;
   }
 
-  private static Set<FilterChainMatch> expandOnSourcePrefixRange(Set<FilterChainMatch> set)
-      throws ResourceInvalidException {
-    HashSet<FilterChainMatch> expandedSet = new HashSet<>();
+  private static List<FilterChainMatch> expandOnSourcePrefixRange(
+      Collection<FilterChainMatch> set) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
     for (FilterChainMatch filterChainMatch : set) {
       if (filterChainMatch.getSourcePrefixRanges().isEmpty()) {
-        checkAndAdd(expandedSet, filterChainMatch);
+        expandedList.add(filterChainMatch);
       } else {
         for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getSourcePrefixRanges()) {
-          checkAndAdd(expandedSet, new FilterChainMatch(filterChainMatch.getDestinationPort(),
+          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
               Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
               Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
               Arrays.asList(cidrRange),
@@ -469,18 +458,17 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
     }
-    return expandedSet;
+    return expandedList;
   }
 
-  private static Set<FilterChainMatch> expandOnSourcePorts(Set<FilterChainMatch> set)
-      throws ResourceInvalidException {
-    HashSet<FilterChainMatch> expandedSet = new HashSet<>();
+  private static List<FilterChainMatch> expandOnSourcePorts(Collection<FilterChainMatch> set) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
     for (FilterChainMatch filterChainMatch : set) {
       if (filterChainMatch.getSourcePorts().isEmpty()) {
-        checkAndAdd(expandedSet, filterChainMatch);
+        expandedList.add(filterChainMatch);
       } else {
         for (Integer sourcePort : filterChainMatch.getSourcePorts()) {
-          checkAndAdd(expandedSet, new FilterChainMatch(filterChainMatch.getDestinationPort(),
+          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
               Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
               Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
               Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
@@ -491,18 +479,17 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
     }
-    return expandedSet;
+    return expandedList;
   }
 
-  private static Set<FilterChainMatch> expandOnServerNames(Set<FilterChainMatch> set)
-      throws ResourceInvalidException {
-    HashSet<FilterChainMatch> expandedSet = new HashSet<>();
+  private static List<FilterChainMatch> expandOnServerNames(Collection<FilterChainMatch> set) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
     for (FilterChainMatch filterChainMatch : set) {
       if (filterChainMatch.getServerNames().isEmpty()) {
-        checkAndAdd(expandedSet, filterChainMatch);
+        expandedList.add(filterChainMatch);
       } else {
         for (String serverName : filterChainMatch.getServerNames()) {
-          checkAndAdd(expandedSet, new FilterChainMatch(filterChainMatch.getDestinationPort(),
+          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
               Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
               Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
               Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
@@ -513,7 +500,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
     }
-    return expandedSet;
+    return expandedList;
   }
 
   private static FilterChainMatch parseFilterChainMatch(
