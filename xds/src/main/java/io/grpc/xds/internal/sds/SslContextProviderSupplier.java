@@ -115,7 +115,7 @@ public final class SslContextProviderSupplier implements Closeable {
         tlsContextManager.releaseServerSslContextProvider(sslContextProvider);
       }
     }
-    // don't set sslContextProvider to null since we don't want reallocation under any circumstances
+    sslContextProvider = null;
     shutdown = true;
   }
 
