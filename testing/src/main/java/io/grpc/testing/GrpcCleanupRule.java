@@ -41,6 +41,34 @@ import org.junit.runners.model.Statement;
  * the end of the test. If any of the resources registered to the rule can not be successfully
  * released, the test will fail.
  *
+ * <p>Example usage:
+ * <pre>{@code @Rule public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
+ * ...
+ * // The Channel and Server can be created in any order
+ * grpcCleanup.register(
+ *     InProcessServerBuilder.forName("my-test-case")
+ *         .directExecutor()
+ *         .addService(serviceImpl)
+ *         .build()
+ *         .start());
+ * ManagedChannel channel = grpcCleanup.register(
+ *     InProcessChannelBuilder.forName("my-test-case")
+ *         .directExecutor()
+ *         .build());
+ * }</pre>
+ *
+ * <p>To use as a replacement for {@link GrpcServerRule}:
+ * <pre>{@code String serverName = InProcessServerBuilder.generateName();
+ * MutableHandlerRegistry serviceRegistry = new MutableHandlerRegistry();
+ * Server server = grpcCleanup.register(
+ *     InProcessServerBuilder.forName(serverName)
+ *         .fallbackHandlerRegistry(serviceRegistry)
+ *         .build()
+ *         .start());
+ * ManagedChannel channel = grpcCleanup.register(
+ *     InProcessChannelBuilder.forName(serverName).build());
+ * }</pre>
+ *
  * @since 1.13.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2488")
