@@ -19,12 +19,11 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.common.base.MoreObjects;
-import com.google.common.base.Strings;
+import com.google.auto.value.AutoValue;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.SettableFuture;
-import com.google.protobuf.UInt32Value;
 import io.grpc.Attributes;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
@@ -40,18 +39,11 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ObjectPool;
-import io.grpc.netty.GrpcHttp2ConnectionHandler;
-import io.grpc.netty.InternalProtocolNegotiationEvent;
-import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
-import io.grpc.netty.InternalProtocolNegotiators;
-import io.grpc.netty.ProtocolNegotiationEvent;
-import io.grpc.xds.EnvoyServerProtoData.CidrRange;
-import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
-import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
+import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
@@ -60,27 +52,18 @@ import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
-import io.grpc.xds.internal.Matchers.CidrMatcher;
-import io.grpc.xds.internal.sds.SslContextProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerAdapter;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.handler.ssl.SslContext;
 import java.io.IOException;
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.security.cert.CertStoreException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -90,23 +73,20 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
-final class XdsServerWrapper extends Server {
+public final class XdsServerWrapper extends Server {
   private static final Logger logger = Logger.getLogger(XdsServerWrapper.class.getName());
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
         public void uncaughtException(Thread t, Throwable e) {
+          logger.log(Level.SEVERE, "Exception!" + e);
           // TODO(chengyuanzhang): implement cleanup.
         }
       });
 
-  // TODO(chengyuanzhang): move this to XdsServerBuilder.
-  private static final Attributes.Key<AtomicReference<FilterChainSelector>>
-      ATTR_FILTER_CHAIN_SELECTOR_REF = Attributes.Key.create(
-          "io.grpc.xds.ServerWrapper.filterChainSelectorRef");
-  private static final Attributes.Key<ServerRoutingConfig> ATTR_SERVER_ROUTING_CONFIG =
-      Attributes.Key.create("io.grpc.xds.ServerWrapper.serverRoutingConfig");
+  public static final Attributes.Key<ServerRoutingConfig> ATTR_SERVER_ROUTING_CONFIG =
+          Attributes.Key.create("io.grpc.xds.ServerWrapper.serverRoutingConfig");
 
   private final String listenerAddress;
   private final ServerBuilder<?> delegateBuilder;
@@ -117,9 +97,11 @@ final class XdsServerWrapper extends Server {
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final XdsServingStatusListener listener;
   private final AtomicReference<FilterChainSelector> filterChainSelectorRef;
-  private final AtomicReference<ServerInterceptor> configApplyingInterceptorRef;
+  private final ServerInterceptor configApplyingInterceptor = new ConfigApplyingInterceptor();
   private final AtomicBoolean started = new AtomicBoolean(false);
   private final AtomicBoolean shutdown = new AtomicBoolean(false);
+  private boolean isServing;
+  private final CountDownLatch internalTerminationLatch = new CountDownLatch(1);
   private final SettableFuture<IOException> initialStartFuture = SettableFuture.create();
   private boolean initialStarted;
   private ScheduledHandle restartTimer;
@@ -135,18 +117,17 @@ final class XdsServerWrapper extends Server {
       long retryDelayNano,
       XdsServingStatusListener listener,
       AtomicReference<FilterChainSelector> filterChainSelectorRef,
-      AtomicReference<ServerInterceptor> configApplyingInterceptorRef) {
+      XdsClientPoolFactory xdsClientPoolFactory,
+      FilterRegistry filterRegistry) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
     this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
     this.timeService = checkNotNull(timeService, "timeService");
     this.retryDelayNano = retryDelayNano;
     this.listener = checkNotNull(listener, "listener");
     this.filterChainSelectorRef = checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
-    this.configApplyingInterceptorRef =
-        checkNotNull(configApplyingInterceptorRef, "configApplyingInterceptorRef");
-    this.filterRegistry = FilterRegistry.getDefaultRegistry();
+    this.filterRegistry = filterRegistry;
     this.random = ThreadSafeRandomImpl.instance;
-    this.xdsClientPoolFactory = SharedXdsClientPoolProvider.getDefaultProvider();
+    this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
   }
 
   @Override
@@ -194,6 +175,7 @@ final class XdsServerWrapper extends Server {
       xdsClient = xdsClientPool.returnObject(xdsClient);
       return;
     }
+    delegateBuilder.intercept(configApplyingInterceptor);
     discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", listenerAddress));
   }
 
@@ -245,6 +227,7 @@ final class XdsServerWrapper extends Server {
     if (restartTimer != null) {
       restartTimer.cancel();
     }
+    internalTerminationLatch.countDown();
   }
 
   @Override
@@ -254,25 +237,32 @@ final class XdsServerWrapper extends Server {
 
   @Override
   public boolean isTerminated() {
-    boolean shutdownCalled = shutdown.get();
-    if (!shutdownCalled) {
+    if (internalTerminationLatch.getCount() != 0) {
       return false;
     }
     if (delegate != null) {
-      delegate.isTerminated();
+      return delegate.isTerminated();
     }
     return true;
   }
 
   @Override
   public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
-    // TODO
-    return false;
+    if (!internalTerminationLatch.await(timeout, unit)) {
+      return false;
+    }
+    if (delegate != null) {
+      delegate.awaitTermination();
+    }
+    return true;
   }
 
   @Override
   public void awaitTermination() throws InterruptedException {
-    // TODO
+    internalTerminationLatch.await();
+    if (delegate != null) {
+      delegate.awaitTermination();
+    }
   }
 
   @Override
@@ -320,18 +310,28 @@ final class XdsServerWrapper extends Server {
     if (restartTimer != null && restartTimer.isPending()) {
       return;
     }
-    delegate = delegateBuilder.build();
+    if (isServing) {
+      return;
+    }
+    if (delegate == null || delegate.isShutdown()) {
+      delegate = delegateBuilder.build();
+    }
     try {
       delegate.start();
       listener.onServing();
+      isServing = true;
+      if (!initialStarted) {
+        initialStarted = true;
+        initialStartFuture.set(null);
+      }
     } catch (IOException e) {
+      logger.log(Level.FINE, "Fail to start delegate server: {0}", e);
       if (!initialStarted) {
         initialStarted = true;
         initialStartFuture.set(e);
-      } else {
-        restartTimer = syncContext.schedule(
-            new RestartTask(), retryDelayNano, TimeUnit.NANOSECONDS, timeService);
       }
+      restartTimer = syncContext.schedule(
+        new RestartTask(), retryDelayNano, TimeUnit.NANOSECONDS, timeService);
     }
   }
 
@@ -345,11 +345,9 @@ final class XdsServerWrapper extends Server {
   private final class DiscoveryState implements LdsResourceWatcher {
     private final String resourceName;
     private final Map<String, RouteDiscoveryState> routeDiscoveryStates = new HashMap<>();
-    // TODO(chengyuanzhang): key by FilterChain's unique name instead.
-    //  Prerequisite: https://github.com/grpc/grpc-java/pull/8228
-    private final Map<FilterChain, ServerRoutingConfig> routingConfigs = new HashMap<>();
+    private final Map<String, ServerRoutingConfig> routingConfigs = new HashMap<>();
     // Most recently discovered filter chains.
-    private List<FilterChain> filterChains = Collections.emptyList();
+    private Map<String, FilterChain> filterChains = new HashMap<>();
     // Most recently discovered default filter chain.
     @Nullable
     private FilterChain defaultFilterChain;
@@ -357,6 +355,7 @@ final class XdsServerWrapper extends Server {
     @Nullable
     private ServerRoutingConfig defaultRoutingConfig;
     private boolean stopped;
+    private boolean inflight = false;
 
     private DiscoveryState(String resourceName) {
       this.resourceName = checkNotNull(resourceName, "resourceName");
@@ -371,32 +370,52 @@ final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
-          if (update.listener == null) {
+          if (update.listener() == null) {
             // Ignore updates not for servers.
             return;
           }
-          filterChains = update.listener.getFilterChains();
-          if (!Objects.equals(defaultFilterChain, update.listener.getDefaultFilterChain())) {
-            defaultFilterChain = update.listener.getDefaultFilterChain();
-            // Discard config for the stale default filter chain.
-            defaultRoutingConfig = null;
+          inflight = true;
+          filterChains = new HashMap<>();
+          for (FilterChain filterChain: update.listener().getFilterChains()) {
+            filterChains.put(filterChain.getName(), filterChain);
           }
-          defaultFilterChain = update.listener.getDefaultFilterChain();
-          List<FilterChain> allFilterChains = filterChains;
+          defaultFilterChain = update.listener().getDefaultFilterChain();
+          List<FilterChain> allFilterChains = update.listener().getFilterChains();
           if (defaultFilterChain != null) {
-            allFilterChains = new ArrayList<>(filterChains);
+            allFilterChains = new ArrayList<>(update.listener().getFilterChains());
             allFilterChains.add(defaultFilterChain);
           }
+          routingConfigs.clear();
+          List<String> currentRdsResources = new ArrayList<>();
           for (FilterChain filterChain : allFilterChains) {
-            // TODO(chengyuanzhang): populate HttpConnectionManager. If has RDS name, create and
-            //  start a RouteDiscoveryState; if has virtual host list, create a ServerRoutingConfig
-            //  result entry and put into routingConfigs.
-            //  Prerequisite: https://github.com/grpc/grpc-java/pull/8228
-            // TODO(chengyuanzhang): adjust RouteDiscoveryStates and results based on latest HCMs.
+            HttpConnectionManager hcm = filterChain.getHttpConnectionManager();
+            if (hcm.virtualHosts() != null) {
+                routingConfigs.put(filterChain.getName(),
+                        ServerRoutingConfig.create(hcm.httpFilterConfigs(), hcm.virtualHosts()));
+            } else {
+              currentRdsResources.add(hcm.rdsName());
+              RouteDiscoveryState rdsState = routeDiscoveryStates.get(hcm.rdsName());
+              if (rdsState == null) {
+                rdsState = new RouteDiscoveryState(hcm.rdsName(), filterChain,
+                        hcm.httpFilterConfigs());
+                routeDiscoveryStates.put(hcm.rdsName(), rdsState);
+              }
+              xdsClient.watchRdsResource(hcm.rdsName(), rdsState);
+            }
           }
-          // Discard configs for revoked filter chains.
-          // FIXME(chengyuanzhang): SslContextProviderSupplier in each FilterChain is leaked.
-          routingConfigs.keySet().retainAll(filterChains);
+          for (String rdsName : routeDiscoveryStates.keySet()) {
+            if (!currentRdsResources.contains(rdsName)) {
+              xdsClient.cancelRdsResourceWatch(rdsName, routeDiscoveryStates.get(rdsName));
+            }
+          }
+          routeDiscoveryStates.keySet().retainAll(currentRdsResources);
+          if (defaultFilterChain != null) {
+            defaultRoutingConfig = routingConfigs.get(defaultFilterChain.getName());
+          } else {
+            defaultRoutingConfig = null;
+          }
+          routingConfigs.keySet().retainAll(filterChains.keySet());
+          maybeUpdateSelector();
         }
       });
     }
@@ -409,18 +428,7 @@ final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
-          cleanUpRouteDiscoveryStates();
-          filterChainSelectorRef.set(FilterChainSelector.NO_FILTER_CHAIN);
-          if (!initialStarted) {
-            initialStarted = true;
-            initialStartFuture.set(null);
-          }
-          if (restartTimer != null) {
-            restartTimer.cancel();
-          }
-          if (delegate != null) {
-            delegate.shutdown();  // let in-progress calls finish
-          }
+          handleConfigNotFound(null);
           listener.onNotServing(
               Status.UNAVAILABLE.withDescription(
                   "Listener " + resourceName + " unavailable").asException());
@@ -436,8 +444,10 @@ final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
+          // XdsClient communication error does not impact server xds configuration
           logger.log(Level.FINE, "Transient error from XdsClient: {0}", error);
-          // TODO(chengyuanzhang): shall we do anything with transient error?
+          // TODO(zivy@): notify error
+          // TODO(zivy@): handle config not found for permanent error
         }
       });
     }
@@ -447,7 +457,7 @@ final class XdsServerWrapper extends Server {
       cleanUpRouteDiscoveryStates();
       logger.log(Level.FINE, "Stop watching LDS resource {0}", resourceName);
       xdsClient.cancelLdsResourceWatch(resourceName, this);
-      for (FilterChain filterChain : filterChains) {
+      for (FilterChain filterChain : filterChains.values()) {
         SslContextProviderSupplier sslContextProviderSupplier =
             filterChain.getSslContextProviderSupplier();
         if (sslContextProviderSupplier != null) {
@@ -461,28 +471,60 @@ final class XdsServerWrapper extends Server {
       if (Objects.equals(filterChain, defaultFilterChain)) {
         defaultRoutingConfig = routingConfig;
       } else {
-        routingConfigs.put(filterChain, routingConfig);
+        routingConfigs.put(filterChain.getName(), routingConfig);
       }
-      // Update the selector to use the most recently updated configs only after all
-      // RouteConfigurations (including default) have been discovered.
-      if (routingConfigs.keySet().containsAll(filterChains)
-          && (defaultFilterChain == null) == (defaultRoutingConfig == null)) {
+      maybeUpdateSelector();
+    }
+
+    // Update the selector to use the most recently updated configs only after all
+    // RouteConfigurations (including default) have been discovered.
+    private void maybeUpdateSelector() {
+      if (routingConfigs.size() == filterChains.size()
+              && (defaultFilterChain == null) == (defaultRoutingConfig == null)) {
+        Map<FilterChain, ServerRoutingConfig> filterChainRouting = new HashMap<>();
+        for (String name : filterChains.keySet()) {
+          filterChainRouting.put(filterChains.get(name), routingConfigs.get(name));
+        }
         FilterChainSelector selector = new FilterChainSelector(
-            ImmutableMap.copyOf(routingConfigs),
+            ImmutableMap.copyOf(filterChainRouting),
             defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
             defaultRoutingConfig);
+        Set<SslContextProviderSupplier> toRelease = new HashSet<>();
+        if (filterChainSelectorRef.get() != null && inflight) {
+          for (FilterChain previous : filterChainSelectorRef.get().getRoutingConfigs().keySet()) {
+            if (previous.getSslContextProviderSupplier() != null) {
+              toRelease.add(previous.getSslContextProviderSupplier());
+            }
+          }
+          SslContextProviderSupplier previousDefault =
+                  filterChainSelectorRef.get().getDefaultSslContextProviderSupplier();
+          if (previousDefault != null) {
+            toRelease.add(previousDefault);
+          }
+          inflight = false;
+        }
         filterChainSelectorRef.set(selector);
+        for (SslContextProviderSupplier e: toRelease) {
+          e.close();
+        }
         startDelegateServer();
       }
     }
 
-    private void handleConfigNotFound(FilterChain filterChain) {
-      if (Objects.equals(filterChain, defaultFilterChain)) {
-        defaultRoutingConfig = null;
-      } else {
-        routingConfigs.remove(filterChain);
+    private void handleConfigNotFound(@Nullable IOException exception) {
+      cleanUpRouteDiscoveryStates();
+      filterChainSelectorRef.set(FilterChainSelector.NO_FILTER_CHAIN);
+      if (!initialStarted) {
+        initialStarted = true;
+        initialStartFuture.set(exception);
       }
-      // TODO(chengyuanzhang): figure out if we should update the filter chain selector.
+      if (restartTimer != null) {
+        restartTimer.cancel();
+      }
+      if (delegate != null && !delegate.isShutdown()) {
+        delegate.shutdown();  // let in-progress calls finish
+      }
+      isServing = false;
     }
 
     private void cleanUpRouteDiscoveryStates() {
@@ -490,6 +532,10 @@ final class XdsServerWrapper extends Server {
         String rdsName = rdsState.resourceName;
         logger.log(Level.FINE, "Stop watching RDS resource {0}", rdsName);
         xdsClient.cancelRdsResourceWatch(rdsName, rdsState);
+        SslContextProviderSupplier supplier;
+        if ((supplier = rdsState.filterChain.getSslContextProviderSupplier()) != null) {
+          supplier.close();
+        }
       }
       routeDiscoveryStates.clear();
     }
@@ -515,7 +561,7 @@ final class XdsServerWrapper extends Server {
               return;
             }
             ServerRoutingConfig routingConfig =
-                new ServerRoutingConfig(httpFilterConfigs, update.virtualHosts);
+                    ServerRoutingConfig.create(httpFilterConfigs, update.virtualHosts);
             handleConfigDiscovered(filterChain, routingConfig);
           }
         });
@@ -529,7 +575,9 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            handleConfigNotFound(filterChain);
+            handleConfigNotFound(null);
+            listener.onNotServing(Status.UNAVAILABLE.withDescription(
+                    "Rds " + resourceName + " unavailable").asException());
           }
         });
       }
@@ -542,15 +590,18 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
+            // XdsClient communication error does not impact server xds configuration
             logger.log(Level.FINE, "Transient error from XdsClient: {0}", error);
-            // TODO(chengyuanzhang): shall we do anything with transient error?
+            // TODO(zivy@): notify error
+            // TODO(zivy@): handle config not found for permanent error
           }
         });
       }
     }
   }
 
-  private final class ConfigApplyingInterceptor implements ServerInterceptor {
+  @VisibleForTesting
+  final class ConfigApplyingInterceptor implements ServerInterceptor {
     private final ServerInterceptor noopInterceptor = new ServerInterceptor() {
       @Override
       public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
@@ -566,20 +617,29 @@ final class XdsServerWrapper extends Server {
       if (routingConfig == null) {
         // TODO(chengyuanzhang): handle routingConfig not found, the root cause should be
         //  FilterChain matching failed
+        call.close(
+                Status.UNAVAILABLE.withDescription("Missing xDS routing config"),
+                new Metadata());
         return new Listener<ReqT>() {};
       }
       VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(
-          routingConfig.virtualHosts, call.getAuthority());
+          routingConfig.virtualHosts(), call.getAuthority());
       if (virtualHost == null) {
         // TODO(chengyuanzhang): handle virtualhost not found. Can this really happen?
-        throw new AssertionError();
+        call.close(
+                Status.UNAVAILABLE.withDescription("Could not find xDS virtual host matching RPC"),
+                new Metadata());
+        return new Listener<ReqT>() {};
       }
       Route selectedRoute = null;
+      Map<String, FilterConfig> selectedOverrideConfigs =
+              new HashMap<>(virtualHost.filterConfigOverrides());
       MethodDescriptor<ReqT, RespT> method = call.getMethodDescriptor();
       for (Route route : virtualHost.routes()) {
         if (RoutingUtils.matchRoute(
             route.routeMatch(), "/" + method.getFullMethodName(), headers, random)) {
           selectedRoute = route;
+          selectedOverrideConfigs.putAll(route.filterConfigOverrides());
           break;
         }
       }
@@ -590,14 +650,16 @@ final class XdsServerWrapper extends Server {
         return new ServerCall.Listener<ReqT>() {};
       }
       List<ServerInterceptor> filterInterceptors = new ArrayList<>();
-      for (NamedFilterConfig namedFilterConfig : routingConfig.httpFilterConfigs) {
+      for (NamedFilterConfig namedFilterConfig : routingConfig.httpFilterConfigs()) {
         FilterConfig filterConfig = namedFilterConfig.filterConfig;
         Filter filter = filterRegistry.get(filterConfig.typeUrl());
         if (filter instanceof ServerInterceptorBuilder) {
           ServerInterceptor interceptor =
               ((ServerInterceptorBuilder) filter).buildServerInterceptor(
-                  filterConfig, selectedRoute.filterConfigOverrides().get(namedFilterConfig.name));
-          filterInterceptors.add(interceptor);
+                  filterConfig, selectedOverrideConfigs.get(namedFilterConfig.name));
+          if (interceptor != null) {
+            filterInterceptors.add(interceptor);
+          }
         }
       }
       ServerInterceptor interceptor = combineInterceptors(filterInterceptors);
@@ -629,366 +691,22 @@ final class XdsServerWrapper extends Server {
   /**
    * The HttpConnectionManager level configuration.
    */
-  private static final class ServerRoutingConfig {
+  @AutoValue
+  public abstract static class ServerRoutingConfig {
     // Top level http filter configs.
-    private final List<NamedFilterConfig> httpFilterConfigs;
-    private final List<VirtualHost> virtualHosts;
+    abstract ImmutableList<NamedFilterConfig> httpFilterConfigs();
 
-    private ServerRoutingConfig(List<NamedFilterConfig> httpFilterConfigs,
-        List<VirtualHost> virtualHosts) {
-      this.httpFilterConfigs = checkNotNull(httpFilterConfigs, "httpFilterConfigs");
-      this.virtualHosts = checkNotNull(virtualHosts, "virtualHosts");
-    }
+    abstract ImmutableList<VirtualHost> virtualHosts();
 
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("httpFilterConfigs", httpFilterConfigs)
-          .add("virtualHost", virtualHosts)
-          .toString();
-    }
-  }
-
-  /**
-   * The FilterChain level configuration.
-   */
-  private static final class FilteredConfig {
-    private final ServerRoutingConfig routingConfig;
-    @Nullable
-    private final SslContextProviderSupplier sslContextProviderSupplier;
-
-    private FilteredConfig(ServerRoutingConfig routingConfig,
-        @Nullable SslContextProviderSupplier sslContextProviderSupplier) {
-      this.routingConfig = checkNotNull(routingConfig, "routingConfig");
-      this.sslContextProviderSupplier = sslContextProviderSupplier;
-    }
-  }
-
-  private static final class FilterChainSelector {
-    private static final FilterChainSelector NO_FILTER_CHAIN = new FilterChainSelector(
-        Collections.<FilterChain, ServerRoutingConfig>emptyMap(), null, null);
-
-    private final Map<FilterChain, ServerRoutingConfig> routingConfigs;
-    @Nullable
-    private final SslContextProviderSupplier defaultSslContextProviderSupplier;
-    @Nullable
-    private final ServerRoutingConfig defaultRoutingConfig;
-
-    private FilterChainSelector(Map<FilterChain, ServerRoutingConfig> routingConfigs,
-        @Nullable SslContextProviderSupplier defaultSslContextProviderSupplier,
-        @Nullable ServerRoutingConfig defaultRoutingConfig) {
-      this.routingConfigs = checkNotNull(routingConfigs, "routingConfigs");
-      this.defaultSslContextProviderSupplier = defaultSslContextProviderSupplier;
-      this.defaultRoutingConfig = defaultRoutingConfig;
-    }
-
-    @Nullable
-    private FilteredConfig select(InetSocketAddress localAddr, InetSocketAddress remoteAddr) {
-      Collection<FilterChain> filterChains = routingConfigs.keySet();
-      filterChains = filterOnDestinationPort(filterChains);
-      filterChains = filterOnIpAddress(filterChains, localAddr.getAddress(), true);
-      filterChains = filterOnServerNames(filterChains);
-      filterChains = filterOnTransportProtocol(filterChains);
-      filterChains = filterOnApplicationProtocols(filterChains);
-      filterChains =
-          filterOnSourceType(filterChains, remoteAddr.getAddress(), localAddr.getAddress());
-      filterChains = filterOnIpAddress(filterChains, remoteAddr.getAddress(), false);
-      filterChains = filterOnSourcePort(filterChains, remoteAddr.getPort());
-
-      if (filterChains.size() > 1) {
-        // TODO(chengyuanzhang): should we just return any matched one?
-        return null;
-      }
-      if (filterChains.size() == 1) {
-        FilterChain selected = Iterables.getOnlyElement(filterChains);
-        return new FilteredConfig(
-            routingConfigs.get(selected), selected.getSslContextProviderSupplier());
-      }
-      if (defaultRoutingConfig != null) {
-        return new FilteredConfig(defaultRoutingConfig, defaultSslContextProviderSupplier);
-      }
-      return null;
-    }
-
-    // reject if filer-chain-match has non-empty application_protocols
-    private static Collection<FilterChain> filterOnApplicationProtocols(
-        Collection<FilterChain> filterChains) {
-      ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
-      for (FilterChain filterChain : filterChains) {
-        FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
-
-        if (filterChainMatch.getApplicationProtocols().isEmpty()) {
-          filtered.add(filterChain);
-        }
-      }
-      return filtered;
-    }
-
-    // reject if filer-chain-match has non-empty transport protocol other than "raw_buffer"
-    private static Collection<FilterChain> filterOnTransportProtocol(
-        Collection<FilterChain> filterChains) {
-      ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
-      for (FilterChain filterChain : filterChains) {
-        FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
-
-        String transportProtocol = filterChainMatch.getTransportProtocol();
-        if ( Strings.isNullOrEmpty(transportProtocol) || "raw_buffer".equals(transportProtocol)) {
-          filtered.add(filterChain);
-        }
-      }
-      return filtered;
-    }
-
-    // reject if filer-chain-match has server_name(s)
-    private static Collection<FilterChain> filterOnServerNames(
-        Collection<FilterChain> filterChains) {
-      ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
-      for (FilterChain filterChain : filterChains) {
-        FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
-
-        if (filterChainMatch.getServerNames().isEmpty()) {
-          filtered.add(filterChain);
-        }
-      }
-      return filtered;
-    }
-
-    // destination_port present => Always fail match
-    private static Collection<FilterChain> filterOnDestinationPort(
-        Collection<FilterChain> filterChains) {
-      ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
-      for (FilterChain filterChain : filterChains) {
-        FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
-
-        if (filterChainMatch.getDestinationPort() == UInt32Value.getDefaultInstance().getValue()) {
-          filtered.add(filterChain);
-        }
-      }
-      return filtered;
-    }
-
-    private static Collection<FilterChain> filterOnSourcePort(
-        Collection<FilterChain> filterChains, int sourcePort) {
-      ArrayList<FilterChain> filteredOnMatch = new ArrayList<>(filterChains.size());
-      ArrayList<FilterChain> filteredOnEmpty = new ArrayList<>(filterChains.size());
-      for (FilterChain filterChain : filterChains) {
-        FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
-
-        List<Integer> sourcePortsToMatch = filterChainMatch.getSourcePorts();
-        if (sourcePortsToMatch.isEmpty()) {
-          filteredOnEmpty.add(filterChain);
-        } else if (sourcePortsToMatch.contains(sourcePort)) {
-          filteredOnMatch.add(filterChain);
-        }
-      }
-      // match against source port is more specific than match against empty list
-      return filteredOnMatch.isEmpty() ? filteredOnEmpty : filteredOnMatch;
-    }
-
-    private static Collection<FilterChain> filterOnSourceType(
-        Collection<FilterChain> filterChains, InetAddress sourceAddress, InetAddress destAddress) {
-      ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
-      for (FilterChain filterChain : filterChains) {
-        FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
-        ConnectionSourceType sourceType =
-            filterChainMatch.getConnectionSourceType();
-
-        boolean matching = false;
-        if (sourceType == ConnectionSourceType.SAME_IP_OR_LOOPBACK) {
-          matching =
-              sourceAddress.isLoopbackAddress()
-                  || sourceAddress.isAnyLocalAddress()
-                  || sourceAddress.equals(destAddress);
-        } else if (sourceType == ConnectionSourceType.EXTERNAL) {
-          matching = !sourceAddress.isLoopbackAddress() && !sourceAddress.isAnyLocalAddress();
-        } else { // ANY or null
-          matching = true;
-        }
-        if (matching) {
-          filtered.add(filterChain);
-        }
-      }
-      return filtered;
-    }
-
-    private static int getMatchingPrefixLength(
-        FilterChainMatch filterChainMatch, InetAddress address, boolean forDestination) {
-      boolean isIPv6 = address instanceof Inet6Address;
-      List<CidrRange> cidrRanges =
-          forDestination
-              ? filterChainMatch.getPrefixRanges()
-              : filterChainMatch.getSourcePrefixRanges();
-      int matchingPrefixLength;
-      if (cidrRanges.isEmpty()) { // if there is no CidrRange assume 0-length match
-        matchingPrefixLength = 0;
-      } else {
-        matchingPrefixLength = -1;
-        for (CidrRange cidrRange : cidrRanges) {
-          InetAddress cidrAddr = cidrRange.getAddressPrefix();
-          boolean cidrIsIpv6 = cidrAddr instanceof Inet6Address;
-          if (isIPv6 == cidrIsIpv6) {
-            int prefixLen = cidrRange.getPrefixLen();
-            CidrMatcher matcher = CidrMatcher.create(cidrAddr, prefixLen);
-            if (matcher.matches(address) && prefixLen > matchingPrefixLength) {
-              matchingPrefixLength = prefixLen;
-            }
-          }
-        }
-      }
-      return matchingPrefixLength;
-    }
-
-    // use prefix_ranges (CIDR) and get the most specific matches
-    private static Collection<FilterChain> filterOnIpAddress(
-        Collection<FilterChain> filterChains, InetAddress address, boolean forDestination) {
-      // curent list of top ones
-      ArrayList<FilterChain> topOnes = new ArrayList<>(filterChains.size());
-      int topMatchingPrefixLen = -1;
-      for (FilterChain filterChain : filterChains) {
-        int currentMatchingPrefixLen =
-            getMatchingPrefixLength(filterChain.getFilterChainMatch(), address, forDestination);
-
-        if (currentMatchingPrefixLen >= 0) {
-          if (currentMatchingPrefixLen < topMatchingPrefixLen) {
-            continue;
-          }
-          if (currentMatchingPrefixLen > topMatchingPrefixLen) {
-            topMatchingPrefixLen = currentMatchingPrefixLen;
-            topOnes.clear();
-          }
-          topOnes.add(filterChain);
-        }
-      }
-      return topOnes;
-    }
-  }
-
-  private static final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapter {
-    private final GrpcHttp2ConnectionHandler grpcHandler;
-    private final FilterChainSelector selector;
-    @Nullable
-    private final ProtocolNegotiator fallbackProtocolNegotiator;
-
-    private FilterChainMatchingHandler(
-        GrpcHttp2ConnectionHandler grpcHandler, FilterChainSelector selector,
-        @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
-      this.grpcHandler = checkNotNull(grpcHandler, "grpcHandler");
-      this.selector = checkNotNull(selector, "selector");
-      this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
-    }
-
-    @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-      if (!(evt instanceof ProtocolNegotiationEvent)) {
-        super.userEventTriggered(ctx, evt);
-        return;
-      }
-      FilteredConfig config = selector.select(
-          (InetSocketAddress) ctx.channel().localAddress(),
-          (InetSocketAddress) ctx.channel().remoteAddress());
-      ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
-      SslContextProviderSupplier sslContextProviderSupplier = null;
-      ChannelHandler handler;
-      if (config != null) {
-        Attributes attr = InternalProtocolNegotiationEvent.getAttributes(pne)
-            .toBuilder().set(ATTR_SERVER_ROUTING_CONFIG, config.routingConfig).build();
-        pne = InternalProtocolNegotiationEvent.withAttributes(pne, attr);
-        sslContextProviderSupplier = config.sslContextProviderSupplier;
-      }
-      if (sslContextProviderSupplier == null) {
-        if (fallbackProtocolNegotiator == null) {
-          ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
-          return;
-        }
-        handler = fallbackProtocolNegotiator.newHandler(grpcHandler);
-      } else {
-        handler = new ServerHandler(grpcHandler, sslContextProviderSupplier);
-      }
-      ctx.pipeline().replace(this, null, handler);
-      ctx.fireUserEventTriggered(pne);
-    }
-  }
-
-  private static final class ServerHandler
-      extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
-    private final GrpcHttp2ConnectionHandler grpcHandler;
-    private final SslContextProviderSupplier sslContextProviderSupplier;
-
-    ServerHandler(
-        GrpcHttp2ConnectionHandler grpcHandler,
-        SslContextProviderSupplier sslContextProviderSupplier) {
-      super(
-          // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
-          // handler but we don't have a next handler _yet_. So we "disable" superclass's
-          // behavior here and then manually add 'next' when we call
-          // fireProtocolNegotiationEvent()
-          new ChannelHandlerAdapter() {
-            @Override
-            public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-              ctx.pipeline().remove(this);
-            }
-          }, checkNotNull(grpcHandler, "grpcHandler").getNegotiationLogger());
-      this.grpcHandler = grpcHandler;
-      this.sslContextProviderSupplier = sslContextProviderSupplier;
-    }
-
-    @Override
-    protected void handlerAdded0(final ChannelHandlerContext ctx) {
-      final BufferReadsHandler bufferReads = new BufferReadsHandler();
-      ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
-
-      sslContextProviderSupplier.updateSslContext(
-          new SslContextProvider.Callback(ctx.executor()) {
-
-            @Override
-            public void updateSecret(SslContext sslContext) {
-              ChannelHandler handler =
-                  InternalProtocolNegotiators.serverTls(sslContext).newHandler(grpcHandler);
-
-              // Delegate rest of handshake to TLS handler
-              if (!ctx.isRemoved()) {
-                ctx.pipeline().addAfter(ctx.name(), null, handler);
-                fireProtocolNegotiationEvent(ctx);
-                ctx.pipeline().remove(bufferReads);
-              }
-            }
-
-            @Override
-            public void onException(Throwable throwable) {
-              ctx.fireExceptionCaught(throwable);
-            }
-          }
-      );
-    }
-  }
-
-  private static class BufferReadsHandler extends ChannelInboundHandlerAdapter {
-    private final List<Object> reads = new ArrayList<>();
-    private boolean readComplete;
-
-    @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) {
-      reads.add(msg);
-    }
-
-    @Override
-    public void channelReadComplete(ChannelHandlerContext ctx) {
-      readComplete = true;
-    }
-
-    @Override
-    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-      for (Object msg : reads) {
-        super.channelRead(ctx, msg);
-      }
-      if (readComplete) {
-        super.channelReadComplete(ctx);
-      }
-    }
-
-    @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-      ctx.fireExceptionCaught(cause);
+    /**
+     * Server routing configuration.
+     * */
+    public static ServerRoutingConfig create(List<NamedFilterConfig> httpFilterConfigs,
+                                             List<VirtualHost> virtualHosts) {
+      checkNotNull(httpFilterConfigs, "httpFilterConfigs");
+      checkNotNull(virtualHosts, "virtualHosts");
+      return new AutoValue_XdsServerWrapper_ServerRoutingConfig(
+              ImmutableList.copyOf(httpFilterConfigs), ImmutableList.copyOf(virtualHosts));
     }
   }
 }

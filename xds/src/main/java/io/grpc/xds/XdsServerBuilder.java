@@ -25,14 +25,18 @@ import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
-import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.SharedResourceHolder;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
-import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
-import io.grpc.xds.internal.sds.ServerWrapperForXds;
+import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
+import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 
 /**
@@ -41,10 +45,22 @@ import java.util.logging.Logger;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
 public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBuilder> {
 
+  public static final Attributes.Key<AtomicReference<FilterChainSelector>>
+          ATTR_FILTER_CHAIN_SELECTOR_REF = Attributes.Key.create(
+          "io.grpc.xds.ServerWrapper.filterChainSelectorRef");
+  private static final long RETRY_DELAY_NANOS = TimeUnit.MINUTES.toNanos(1);
+
   private final NettyServerBuilder delegate;
   private final int port;
   private XdsServingStatusListener xdsServingStatusListener;
   private AtomicBoolean isServerBuilt = new AtomicBoolean(false);
+  private final AtomicReference<FilterChainSelector> filterChainSelectorRef =
+          new AtomicReference<>();
+  private XdsClientPoolFactory xdsClientPoolFactory =
+          SharedXdsClientPoolProvider.getDefaultProvider();
+  private final ScheduledExecutorService timeService =
+          SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
+  private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
@@ -83,21 +99,20 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   }
 
   @Override
-  public Server build() {
-    return buildServer(new XdsClientWrapperForServerSds(port));
-  }
-
-  /**
-   * Creates a Server using the given xdsClient.
-   */
-  @VisibleForTesting
-  ServerWrapperForXds buildServer(
-      XdsClientWrapperForServerSds xdsClient) {
+  public XdsServerWrapper build() {
     checkState(isServerBuilt.compareAndSet(false, true), "Server already built!");
     InternalNettyServerBuilder.eagAttributes(delegate, Attributes.newBuilder()
-        .set(SdsProtocolNegotiators.SERVER_XDS_CLIENT, xdsClient)
-        .build());
-    return new ServerWrapperForXds(delegate, xdsClient, xdsServingStatusListener);
+            .set(ATTR_FILTER_CHAIN_SELECTOR_REF, filterChainSelectorRef)
+            .build());
+    return new XdsServerWrapper("0.0.0.0:" + port, delegate, timeService,
+            RETRY_DELAY_NANOS, xdsServingStatusListener, filterChainSelectorRef,
+            xdsClientPoolFactory, filterRegistry);
+  }
+
+  @VisibleForTesting
+  XdsServerBuilder xdsClientPoolFactory(XdsClientPoolFactory xdsClientPoolFactory) {
+    this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    return this;
   }
 
   /**

@@ -19,27 +19,26 @@ package io.grpc.xds.internal.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.Attributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
-import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
-import io.grpc.netty.ProtocolNegotiationEvent;
+import io.grpc.xds.FilterChainMatchingHandler;
+import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.InternalXdsAttributes;
-import io.grpc.xds.XdsClientWrapperForServerSds;
+import io.grpc.xds.XdsServerBuilder;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
-import java.security.cert.CertStoreException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -57,8 +56,6 @@ public final class SdsProtocolNegotiators {
 
   private static final Logger logger = Logger.getLogger(SdsProtocolNegotiators.class.getName());
 
-  public static final Attributes.Key<XdsClientWrapperForServerSds> SERVER_XDS_CLIENT
-      = Attributes.Key.create("serverXdsClient");
   private static final AsciiString SCHEME = AsciiString.of("http");
 
   /**
@@ -253,10 +250,11 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-          grpcHandler.getEagAttributes().get(SERVER_XDS_CLIENT);
-      return new HandlerPickerHandler(grpcHandler, xdsClientWrapperForServerSds,
-          fallbackProtocolNegotiator);
+      AtomicReference<FilterChainSelector> filterChainSelectorRef = grpcHandler.getEagAttributes()
+              .get(XdsServerBuilder.ATTR_FILTER_CHAIN_SELECTOR_REF);
+      checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
+      return new FilterChainMatchingHandler(grpcHandler, filterChainSelectorRef.get(),
+              fallbackProtocolNegotiator);
     }
 
     @Override
@@ -264,66 +262,15 @@ public final class SdsProtocolNegotiators {
   }
 
   @VisibleForTesting
-  static final class HandlerPickerHandler
-      extends ChannelInboundHandlerAdapter {
-    private final GrpcHttp2ConnectionHandler grpcHandler;
-    private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
-    @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
-
-    HandlerPickerHandler(
-        GrpcHttp2ConnectionHandler grpcHandler,
-        @Nullable XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
-        ProtocolNegotiator fallbackProtocolNegotiator) {
-      this.grpcHandler = checkNotNull(grpcHandler, "grpcHandler");
-      this.xdsClientWrapperForServerSds = xdsClientWrapperForServerSds;
-      this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
-    }
-
-    @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-      if (evt instanceof ProtocolNegotiationEvent) {
-        SslContextProviderSupplier sslContextProviderSupplier =
-            xdsClientWrapperForServerSds == null
-                ? null
-                : xdsClientWrapperForServerSds.getSslContextProviderSupplier(ctx.channel());
-        if (sslContextProviderSupplier == null) {
-          if (fallbackProtocolNegotiator == null) {
-            ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
-            return;
-          }
-          logger.log(Level.INFO, "Using fallback for {0}", ctx.channel().localAddress());
-          ctx.pipeline()
-              .replace(
-                  this,
-                  null,
-                  fallbackProtocolNegotiator.newHandler(grpcHandler));
-          ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
-          ctx.fireUserEventTriggered(pne);
-          return;
-        } else {
-          ctx.pipeline()
-              .replace(
-                  this,
-                  null,
-                  new ServerSdsHandler(
-                      grpcHandler, sslContextProviderSupplier));
-          ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
-          ctx.fireUserEventTriggered(pne);
-          return;
-        }
-      } else {
-        super.userEventTriggered(ctx, evt);
-      }
-    }
-  }
-
-  @VisibleForTesting
-  static final class ServerSdsHandler
+  public static final class ServerSdsHandler
           extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    ServerSdsHandler(
+    /**
+     * Consumes server xds credential configuration.
+     * */
+    public ServerSdsHandler(
             GrpcHttp2ConnectionHandler grpcHandler,
             SslContextProviderSupplier sslContextProviderSupplier) {
       super(

@@ -16,19 +16,29 @@
 
 package io.grpc.xds;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.EnvoyServerProtoData.FilterChain;
+import io.grpc.xds.EnvoyServerProtoData.Listener;
+import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
+import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.XdsClient.LdsUpdate;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -47,46 +57,10 @@ public class XdsServerTestHelper {
   static final Bootstrapper.BootstrapInfo BOOTSTRAP_INFO =
       new Bootstrapper.BootstrapInfo(
           Arrays.asList(
-              new Bootstrapper.ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), false)),
+              new Bootstrapper.ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), true)),
           BOOTSTRAP_NODE,
           null,
           "grpc/server?udpa.resource.listening_address=%s");
-
-  static final class FakeXdsClientPoolFactory
-      implements XdsNameResolverProvider.XdsClientPoolFactory {
-
-    private XdsClient xdsClient;
-
-    FakeXdsClientPoolFactory(XdsClient xdsClient) {
-      this.xdsClient = xdsClient;
-    }
-
-    @Override
-    public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      throw new UnsupportedOperationException("Should not be called");
-    }
-
-    @Override
-    @Nullable
-    public ObjectPool<XdsClient> get() {
-      throw new UnsupportedOperationException("Should not be called");
-    }
-
-    @Override
-    public ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
-      return new ObjectPool<XdsClient>() {
-        @Override
-        public XdsClient getObject() {
-          return xdsClient;
-        }
-
-        @Override
-        public XdsClient returnObject(Object object) {
-          return null;
-        }
-      };
-    }
-  }
 
   /** Create an XdsClientWrapperForServerSds with a mock XdsClient. */
   public static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port,
@@ -129,6 +103,15 @@ public class XdsServerTestHelper {
     registeredWatcher.onChanged(listenerUpdate);
   }
 
+  static void generateListenerUpdate(FakeXdsClient xdsClient,
+                                     EnvoyServerProtoData.DownstreamTlsContext tlsContext,
+                                     TlsContextManager tlsContextManager) {
+    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3",
+            Arrays.<Integer>asList(), tlsContext, null, tlsContextManager);
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
+    xdsClient.deliverLdsUpdate(listenerUpdate);
+  }
+
   static void generateListenerUpdate(
       XdsClient.LdsResourceWatcher registeredWatcher, List<Integer> sourcePorts,
       EnvoyServerProtoData.DownstreamTlsContext tlsContext,
@@ -138,11 +121,6 @@ public class XdsServerTestHelper {
         tlsContext, tlsContextForDefaultFilterChain, tlsContextManager);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     registeredWatcher.onChanged(listenerUpdate);
-  }
-
-  public static void generateListenerUpdate(
-      XdsClient.LdsResourceWatcher registeredWatcher, EnvoyServerProtoData.Listener listener) {
-    registeredWatcher.onChanged(LdsUpdate.forTcpListener(listener));
   }
 
   static int findFreePort() throws IOException {
@@ -167,9 +145,12 @@ public class XdsServerTestHelper {
             sourcePorts,
             Arrays.<String>asList(),
             null);
-    // HttpConnectionManager currently not used for server side.
-    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
-        0L, "does not matter", Collections.<NamedFilterConfig>emptyList());
+    VirtualHost virtualHost =
+            VirtualHost.create(
+                    "virtual-host", Collections.singletonList("auth"), new ArrayList<Route>(),
+                    ImmutableMap.<String, FilterConfig>of());
+    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
     EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
         "filter-chain-foo", filterChainMatch1, httpConnectionManager, tlsContext,
         tlsContextManager);
@@ -180,5 +161,106 @@ public class XdsServerTestHelper {
         new EnvoyServerProtoData.Listener(
             name, address, Arrays.asList(filterChain1), defaultFilterChain);
     return listener;
+  }
+
+  static final class FakeXdsClientPoolFactory
+        implements XdsNameResolverProvider.XdsClientPoolFactory {
+
+    private XdsClient xdsClient;
+
+    FakeXdsClientPoolFactory(XdsClient xdsClient) {
+      this.xdsClient = xdsClient;
+    }
+
+    @Override
+    public void setBootstrapOverride(Map<String, ?> bootstrap) {
+      throw new UnsupportedOperationException("Should not be called");
+    }
+
+    @Override
+    @Nullable
+    public ObjectPool<XdsClient> get() {
+      throw new UnsupportedOperationException("Should not be called");
+    }
+
+    @Override
+    public ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
+      return new ObjectPool<XdsClient>() {
+        @Override
+        public XdsClient getObject() {
+          return xdsClient;
+        }
+
+        @Override
+        public XdsClient returnObject(Object object) {
+          xdsClient.shutdown();
+          return null;
+        }
+      };
+    }
+  }
+
+  static final class FakeXdsClient extends XdsClient {
+    boolean shutdown;
+    SettableFuture<String> ldsResource = SettableFuture.create();
+    LdsResourceWatcher ldsWatcher;
+    Map<String, RdsResourceWatcher> rdsResources = new HashMap<>();
+
+    @Override
+    public TlsContextManager getTlsContextManager() {
+      return null;
+    }
+
+    @Override
+    public BootstrapInfo getBootstrapInfo() {
+      return BOOTSTRAP_INFO;
+    }
+
+    @Override
+    void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
+      assertThat(ldsWatcher).isNull();
+      ldsResource.set(resourceName);
+      ldsWatcher = watcher;
+    }
+
+    @Override
+    void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
+      assertThat(ldsResource.isDone()).isTrue();
+      ldsResource = null;
+      ldsWatcher = null;
+    }
+
+    @Override
+    void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
+      rdsResources.put(resourceName, watcher);
+    }
+
+    @Override
+    void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
+      rdsResources.remove(resourceName);
+    }
+
+    @Override
+    void shutdown() {
+      shutdown = true;
+    }
+
+    @Override
+    boolean isShutDown() {
+      return shutdown;
+    }
+
+    void deliverLdsUpdate(List<FilterChain> filterChains, FilterChain defaultFilterChain) {
+      ldsWatcher.onChanged(LdsUpdate.forTcpListener(new Listener(
+              "listener", "0.0.0.0:1", filterChains, defaultFilterChain)));
+    }
+
+    void deliverLdsUpdate(LdsUpdate ldsUpdate) {
+      ldsWatcher.onChanged(ldsUpdate);
+    }
+
+    void deliverRdsUpdate(String rdsName, List<VirtualHost> virtualHosts) {
+      rdsResources.get(rdsName).onChanged(new RdsUpdate(virtualHosts));
+    }
   }
 }

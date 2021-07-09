@@ -40,6 +40,7 @@ import org.junit.runners.JUnit4;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+// TODO(zivy@): merge into FilterChainMatchingHandlerTest.
 /** Tests for {@link XdsClientWrapperForServerSds}. */
 @RunWith(JUnit4.class)
 public class FilterChainMatchTest {
