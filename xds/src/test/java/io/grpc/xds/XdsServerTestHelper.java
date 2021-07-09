@@ -37,7 +37,7 @@ import org.mockito.ArgumentCaptor;
 /**
  * Helper methods related to {@link XdsServerBuilder} and related classes.
  */
-class XdsServerTestHelper {
+public class XdsServerTestHelper {
 
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String NODE_ID =
@@ -88,7 +88,8 @@ class XdsServerTestHelper {
     }
   }
 
-  static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port,
+  /** Create an XdsClientWrapperForServerSds with a mock XdsClient. */
+  public static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port,
       TlsContextManager tlsContextManager) {
     FakeXdsClientPoolFactory fakeXdsClientPoolFactory = new FakeXdsClientPoolFactory(
         buildMockXdsClient(tlsContextManager));
@@ -137,6 +138,11 @@ class XdsServerTestHelper {
         tlsContext, tlsContextForDefaultFilterChain, tlsContextManager);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     registeredWatcher.onChanged(listenerUpdate);
+  }
+
+  public static void generateListenerUpdate(
+      XdsClient.LdsResourceWatcher registeredWatcher, EnvoyServerProtoData.Listener listener) {
+    registeredWatcher.onChanged(LdsUpdate.forTcpListener(listener));
   }
 
   static int findFreePort() throws IOException {

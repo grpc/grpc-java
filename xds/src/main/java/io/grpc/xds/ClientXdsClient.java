@@ -85,6 +85,7 @@ import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -286,15 +287,17 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
 
     List<FilterChain> filterChains = new ArrayList<>();
+    Set<FilterChainMatch> uniqueSet = new HashSet<>();
     for (io.envoyproxy.envoy.config.listener.v3.FilterChain fc : proto.getFilterChainsList()) {
       filterChains.add(
-          parseFilterChain(fc, rdsResources, tlsContextManager, filterRegistry, parseHttpFilter));
+          parseFilterChain(fc, rdsResources, tlsContextManager, filterRegistry, uniqueSet,
+              parseHttpFilter));
     }
     FilterChain defaultFilterChain = null;
     if (proto.hasDefaultFilterChain()) {
       defaultFilterChain = parseFilterChain(
           proto.getDefaultFilterChain(), rdsResources, tlsContextManager, filterRegistry,
-          parseHttpFilter);
+          null, parseHttpFilter);
     }
 
     return new EnvoyServerProtoData.Listener(
@@ -304,7 +307,8 @@ final class ClientXdsClient extends AbstractXdsClient {
   @VisibleForTesting
   static FilterChain parseFilterChain(
       io.envoyproxy.envoy.config.listener.v3.FilterChain proto, Set<String> rdsResources,
-      TlsContextManager tlsContextManager, FilterRegistry filterRegistry, boolean parseHttpFilters)
+      TlsContextManager tlsContextManager, FilterRegistry filterRegistry,
+      Set<FilterChainMatch> uniqueSet, boolean parseHttpFilters)
       throws ResourceInvalidException {
     io.grpc.xds.HttpConnectionManager httpConnectionManager = null;
     HashSet<String> uniqueNames = new HashSet<>();
@@ -361,13 +365,142 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (name.isEmpty()) {
       name = UUID.randomUUID().toString();
     }
+    FilterChainMatch filterChainMatch = parseFilterChainMatch(proto.getFilterChainMatch());
+    checkForUniqueness(uniqueSet, filterChainMatch);
     return new FilterChain(
         name,
-        parseFilterChainMatch(proto.getFilterChainMatch()),
+        filterChainMatch,
         httpConnectionManager,
         downstreamTlsContext,
         tlsContextManager
     );
+  }
+
+  private static void checkForUniqueness(Set<FilterChainMatch> uniqueSet,
+      FilterChainMatch filterChainMatch) throws ResourceInvalidException {
+    if (uniqueSet != null) {
+      List<FilterChainMatch> crossProduct = getCrossProduct(filterChainMatch);
+      for (FilterChainMatch cur : crossProduct) {
+        if (!uniqueSet.add(cur)) {
+          throw new ResourceInvalidException("Found duplicate matcher: " + cur);
+        }
+      }
+    }
+  }
+
+  private static List<FilterChainMatch> getCrossProduct(FilterChainMatch filterChainMatch) {
+    // repeating fields to process:
+    // prefixRanges, applicationProtocols, sourcePrefixRanges, sourcePorts, serverNames
+    List<FilterChainMatch> expandedList = expandOnPrefixRange(filterChainMatch);
+    expandedList = expandOnApplicationProtocols(expandedList);
+    expandedList = expandOnSourcePrefixRange(expandedList);
+    expandedList = expandOnSourcePorts(expandedList);
+    return expandOnServerNames(expandedList);
+  }
+
+  private static List<FilterChainMatch> expandOnPrefixRange(FilterChainMatch filterChainMatch) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
+    if (filterChainMatch.getPrefixRanges().isEmpty()) {
+      expandedList.add(filterChainMatch);
+    } else {
+      for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getPrefixRanges()) {
+        expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+            Arrays.asList(cidrRange),
+            Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
+            Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
+            filterChainMatch.getConnectionSourceType(),
+            Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
+            Collections.unmodifiableList(filterChainMatch.getServerNames()),
+            filterChainMatch.getTransportProtocol()));
+      }
+    }
+    return expandedList;
+  }
+
+  private static List<FilterChainMatch> expandOnApplicationProtocols(
+      Collection<FilterChainMatch> set) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
+    for (FilterChainMatch filterChainMatch : set) {
+      if (filterChainMatch.getApplicationProtocols().isEmpty()) {
+        expandedList.add(filterChainMatch);
+      } else {
+        for (String applicationProtocol : filterChainMatch.getApplicationProtocols()) {
+          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
+              Arrays.asList(applicationProtocol),
+              Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
+              filterChainMatch.getConnectionSourceType(),
+              Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
+              Collections.unmodifiableList(filterChainMatch.getServerNames()),
+              filterChainMatch.getTransportProtocol()));
+        }
+      }
+    }
+    return expandedList;
+  }
+
+  private static List<FilterChainMatch> expandOnSourcePrefixRange(
+      Collection<FilterChainMatch> set) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
+    for (FilterChainMatch filterChainMatch : set) {
+      if (filterChainMatch.getSourcePrefixRanges().isEmpty()) {
+        expandedList.add(filterChainMatch);
+      } else {
+        for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getSourcePrefixRanges()) {
+          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
+              Arrays.asList(cidrRange),
+              filterChainMatch.getConnectionSourceType(),
+              Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
+              Collections.unmodifiableList(filterChainMatch.getServerNames()),
+              filterChainMatch.getTransportProtocol()));
+        }
+      }
+    }
+    return expandedList;
+  }
+
+  private static List<FilterChainMatch> expandOnSourcePorts(Collection<FilterChainMatch> set) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
+    for (FilterChainMatch filterChainMatch : set) {
+      if (filterChainMatch.getSourcePorts().isEmpty()) {
+        expandedList.add(filterChainMatch);
+      } else {
+        for (Integer sourcePort : filterChainMatch.getSourcePorts()) {
+          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
+              Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
+              filterChainMatch.getConnectionSourceType(),
+              Arrays.asList(sourcePort),
+              Collections.unmodifiableList(filterChainMatch.getServerNames()),
+              filterChainMatch.getTransportProtocol()));
+        }
+      }
+    }
+    return expandedList;
+  }
+
+  private static List<FilterChainMatch> expandOnServerNames(Collection<FilterChainMatch> set) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
+    for (FilterChainMatch filterChainMatch : set) {
+      if (filterChainMatch.getServerNames().isEmpty()) {
+        expandedList.add(filterChainMatch);
+      } else {
+        for (String serverName : filterChainMatch.getServerNames()) {
+          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
+              Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
+              filterChainMatch.getConnectionSourceType(),
+              Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
+              Arrays.asList(serverName),
+              filterChainMatch.getTransportProtocol()));
+        }
+      }
+    }
+    return expandedList;
   }
 
   private static FilterChainMatch parseFilterChainMatch(

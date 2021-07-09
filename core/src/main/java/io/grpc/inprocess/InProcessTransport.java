@@ -41,6 +41,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
@@ -240,7 +241,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         public void start(ClientStreamListener listener) {
           statsTraceCtx.clientOutboundHeaders();
           statsTraceCtx.streamClosed(status);
-          listener.closed(status, new Metadata());
+          listener.closed(status, RpcProgress.PROCESSED, new Metadata());
         }
       };
   }
@@ -469,7 +470,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           closed = true;
           clientStream.statsTraceCtx.clientInboundTrailers(clientNotifyTrailers);
           clientStream.statsTraceCtx.streamClosed(clientNotifyStatus);
-          clientStreamListener.closed(clientNotifyStatus, clientNotifyTrailers);
+          clientStreamListener.closed(
+              clientNotifyStatus, RpcProgress.PROCESSED, clientNotifyTrailers);
         }
         boolean nowReady = clientRequested > 0;
         return !previouslyReady && nowReady;
@@ -579,7 +581,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
             closed = true;
             clientStream.statsTraceCtx.clientInboundTrailers(trailers);
             clientStream.statsTraceCtx.streamClosed(clientStatus);
-            clientStreamListener.closed(clientStatus, trailers);
+            clientStreamListener.closed(clientStatus, RpcProgress.PROCESSED, trailers);
           } else {
             clientNotifyStatus = clientStatus;
             clientNotifyTrailers = trailers;
@@ -615,7 +617,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
           }
         }
         clientStream.statsTraceCtx.streamClosed(clientStatus);
-        clientStreamListener.closed(clientStatus, new Metadata());
+        clientStreamListener.closed(clientStatus, RpcProgress.PROCESSED, new Metadata());
         return true;
       }
 

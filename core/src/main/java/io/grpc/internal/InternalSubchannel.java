@@ -685,12 +685,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
             }
 
             @Override
-            public void closed(Status status, Metadata trailers) {
-              callTracer.reportCallEnded(status.isOk());
-              super.closed(status, trailers);
-            }
-
-            @Override
             public void closed(
                 Status status, RpcProgress rpcProgress, Metadata trailers) {
               callTracer.reportCallEnded(status.isOk());

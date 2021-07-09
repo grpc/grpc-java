@@ -16,17 +16,19 @@
 
 package io.grpc.binder.internal;
 
+import io.grpc.Internal;
 import java.net.SocketAddress;
 
 /** An address to represent a binding from a remote client. */
-final class BoundClientAddress extends SocketAddress {
+@Internal
+public final class BoundClientAddress extends SocketAddress {
 
   private static final long serialVersionUID = 0L;
 
   /** The UID of the address. For incoming binder transactions, this is all the info we have. */
   private final int uid;
 
-  BoundClientAddress(int uid) {
+  public BoundClientAddress(int uid) {
     this.uid = uid;
   }
 

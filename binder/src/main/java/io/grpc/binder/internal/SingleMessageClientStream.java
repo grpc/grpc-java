@@ -52,6 +52,7 @@ final class SingleMessageClientStream implements ClientStream {
   private final Attributes attributes;
 
   @Nullable private InputStream pendingSingleMessage;
+  @Nullable private Deadline pendingDeadline;
 
   SingleMessageClientStream(
       Inbound.ClientInbound inbound, Outbound.ClientOutbound outbound, Attributes attributes) {
@@ -97,6 +98,10 @@ final class SingleMessageClientStream implements ClientStream {
   public void halfClose() {
     try {
       synchronized (outbound) {
+        if (pendingDeadline != null) {
+          outbound.setDeadline(pendingDeadline);
+        }
+        outbound.onPrefixReady();
         outbound.sendSingleMessageAndHalfClose(pendingSingleMessage);
       }
     } catch (StatusException se) {
@@ -111,6 +116,11 @@ final class SingleMessageClientStream implements ClientStream {
     synchronized (inbound) {
       inbound.closeOnCancel(status);
     }
+  }
+
+  @Override
+  public void setDeadline(@Nonnull Deadline deadline) {
+    this.pendingDeadline = deadline;
   }
 
   @Override
@@ -139,11 +149,6 @@ final class SingleMessageClientStream implements ClientStream {
   @Override
   public final void setMessageCompression(boolean enable) {
     // Ignore.
-  }
-
-  @Override
-  public void setDeadline(@Nonnull Deadline deadline) {
-    // Ignore. (Deadlines should still work at a higher level).
   }
 
   @Override

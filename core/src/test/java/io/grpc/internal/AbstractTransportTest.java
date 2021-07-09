@@ -1157,12 +1157,6 @@ public abstract class AbstractTransportTest {
     final ClientStream clientStream =
         client.newStream(methodDescriptor, new Metadata(), callOptions);
     ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase() {
-      @Override
-      public void closed(Status status, Metadata trailers) {
-        super.closed(status, trailers);
-        // This simulates the blocking calls which can trigger clientStream.cancel().
-        clientStream.cancel(Status.CANCELLED.withCause(status.asRuntimeException()));
-      }
 
       @Override
       public void closed(
@@ -1243,11 +1237,6 @@ public abstract class AbstractTransportTest {
 
       @Override
       public void headersRead(Metadata headers) {
-      }
-
-      @Override
-      public void closed(Status status, Metadata trailers) {
-        closed(status, RpcProgress.PROCESSED, trailers);
       }
 
       @Override
@@ -2287,11 +2276,6 @@ public abstract class AbstractTransportTest {
         fail("headersRead invoked after closed");
       }
       this.headers.set(headers);
-    }
-
-    @Override
-    public void closed(Status status, Metadata trailers) {
-      closed(status, RpcProgress.PROCESSED, trailers);
     }
 
     @Override

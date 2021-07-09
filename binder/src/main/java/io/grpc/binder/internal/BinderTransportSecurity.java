@@ -17,6 +17,7 @@
 package io.grpc.binder.internal;
 
 import io.grpc.Attributes;
+import io.grpc.Internal;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -48,6 +49,7 @@ public final class BinderTransportSecurity {
    *
    * @param serverBuilder The ServerBuilder being used to create the server.
    */
+  @Internal
   public static void installAuthInterceptor(ServerBuilder<?> serverBuilder) {
     serverBuilder.intercept(new ServerAuthInterceptor());
   }
@@ -60,7 +62,8 @@ public final class BinderTransportSecurity {
    * @param remoteUid The remote UID of the transport.
    * @param securityPolicy The policy to enforce on this transport.
    */
-  static void attachAuthAttrs(
+  @Internal
+  public static void attachAuthAttrs(
       Attributes.Builder builder, int remoteUid, ServerSecurityPolicy securityPolicy) {
     builder
         .set(
