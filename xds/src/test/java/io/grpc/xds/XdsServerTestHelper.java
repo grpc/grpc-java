@@ -38,9 +38,9 @@ import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 import org.mockito.ArgumentCaptor;
 
@@ -203,8 +203,8 @@ public class XdsServerTestHelper {
   static final class FakeXdsClient extends XdsClient {
     boolean shutdown;
     SettableFuture<String> ldsResource = SettableFuture.create();
-    LdsResourceWatcher ldsWatcher;
-    Map<String, RdsResourceWatcher> rdsResources = new HashMap<>();
+    volatile LdsResourceWatcher ldsWatcher;
+    Map<String, RdsResourceWatcher> rdsResources = new ConcurrentHashMap<>();
 
     @Override
     public TlsContextManager getTlsContextManager() {
