@@ -139,7 +139,6 @@ final class RoutingUtils {
         && hostName.startsWith(pattern.substring(0, pattern.length() - 1));
   }
 
-
   /**
    * Returns {@code true} iff the given {@link RouteMatch} matches the RPC's full method name and
    * headers.

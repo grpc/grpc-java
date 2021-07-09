@@ -125,7 +125,7 @@ public final class XdsServerWrapper extends Server {
     this.retryDelayNano = retryDelayNano;
     this.listener = checkNotNull(listener, "listener");
     this.filterChainSelectorRef = checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
-    this.filterRegistry = filterRegistry;
+    this.filterRegistry = checkNotNull(filterRegistry,"filterRegistry");
     this.random = ThreadSafeRandomImpl.instance;
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
   }
@@ -227,6 +227,7 @@ public final class XdsServerWrapper extends Server {
     if (restartTimer != null) {
       restartTimer.cancel();
     }
+    isServing = false;
     internalTerminationLatch.countDown();
   }
 
@@ -444,10 +445,9 @@ public final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
-          // XdsClient communication error does not impact server xds configuration
           logger.log(Level.FINE, "Transient error from XdsClient: {0}", error);
-          // TODO(zivy@): notify error
-          // TODO(zivy@): handle config not found for permanent error
+          // TODO(zivy@): notify error.
+          // TODO(zivy@): maybe handle config not found for permanent error.
         }
       });
     }
@@ -590,10 +590,9 @@ public final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            // XdsClient communication error does not impact server xds configuration
             logger.log(Level.FINE, "Transient error from XdsClient: {0}", error);
-            // TODO(zivy@): notify error
-            // TODO(zivy@): handle config not found for permanent error
+            // TODO(zivy@): notify error.
+            // TODO(zivy@): handle config not found for permanent error.
           }
         });
       }
@@ -615,8 +614,6 @@ public final class XdsServerWrapper extends Server {
         Metadata headers, ServerCallHandler<ReqT, RespT> next) {
       ServerRoutingConfig routingConfig = call.getAttributes().get(ATTR_SERVER_ROUTING_CONFIG);
       if (routingConfig == null) {
-        // TODO(chengyuanzhang): handle routingConfig not found, the root cause should be
-        //  FilterChain matching failed
         call.close(
                 Status.UNAVAILABLE.withDescription("Missing xDS routing config"),
                 new Metadata());
@@ -625,7 +622,6 @@ public final class XdsServerWrapper extends Server {
       VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(
           routingConfig.virtualHosts(), call.getAuthority());
       if (virtualHost == null) {
-        // TODO(chengyuanzhang): handle virtualhost not found. Can this really happen?
         call.close(
                 Status.UNAVAILABLE.withDescription("Could not find xDS virtual host matching RPC"),
                 new Metadata());

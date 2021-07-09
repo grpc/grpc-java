@@ -32,7 +32,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -84,34 +83,20 @@ import org.mockito.junit.MockitoRule;
 public class XdsServerWrapperTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
+
   @Mock
   private ServerBuilder<?> mockBuilder;
   @Mock
   private Server mockServer;
   @Mock
   private static TlsContextManager tlsContextManager;
+  @Mock
+  private XdsServingStatusListener listener;
+
   private AtomicReference<FilterChainSelector> selectorRef = new AtomicReference<>();
   private FakeClock executor = new FakeClock();
   private FakeXdsClient xdsClient = new FakeXdsClient();
   private FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
-
-  @Mock
-  private XdsServingStatusListener listener;
-
-  private static final String SERVER_URI = "trafficdirector.googleapis.com";
-  private static final String NODE_ID =
-          "projects/42/networks/default/nodes/5c85b298-6f5b-4722-b74a-f7d1f0ccf5ad";
-  private static final EnvoyProtoData.Node BOOTSTRAP_NODE =
-          EnvoyProtoData.Node.newBuilder().setId(NODE_ID).build();
-  static final Bootstrapper.BootstrapInfo BOOTSTRAP_INFO =
-          new Bootstrapper.BootstrapInfo(
-                  Arrays.asList(
-                          new Bootstrapper.ServerInfo(SERVER_URI,
-                                  InsecureChannelCredentials.create(), true)),
-                  BOOTSTRAP_NODE,
-                  null,
-                  "grpc/server?udpa.resource.listening_address=%s");
-
   private XdsServerWrapper xdsServerWrapper;
 
   @Before

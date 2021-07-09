@@ -47,7 +47,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
 
   public static final Attributes.Key<AtomicReference<FilterChainSelector>>
           ATTR_FILTER_CHAIN_SELECTOR_REF = Attributes.Key.create(
-          "io.grpc.xds.ServerWrapper.filterChainSelectorRef");
+          "io.grpc.xds.XdsServerBuilder.filterChainSelectorRef");
   private static final long RETRY_DELAY_NANOS = TimeUnit.MINUTES.toNanos(1);
 
   private final NettyServerBuilder delegate;
