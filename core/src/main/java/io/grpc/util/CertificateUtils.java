@@ -65,24 +65,26 @@ public final class CertificateUtils {
   public static PrivateKey getPrivateKey(InputStream inputStream)
       throws UnsupportedEncodingException, IOException, NoSuchAlgorithmException,
       InvalidKeySpecException {
-    BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"));
-    String line;
-    while ((line = reader.readLine()) != null) {
-      if ("-----BEGIN PRIVATE KEY-----".equals(line)) {
-        break;
+    try (InputStreamReader isr = new InputStreamReader(inputStream, "UTF-8");
+        BufferedReader reader = new BufferedReader(isr)) {
+      String line;
+      while ((line = reader.readLine()) != null) {
+        if ("-----BEGIN PRIVATE KEY-----".equals(line)) {
+          break;
+        }
       }
-    }
-    StringBuilder keyContent = new StringBuilder();
-    while ((line = reader.readLine()) != null) {
-      if ("-----END PRIVATE KEY-----".equals(line)) {
-        break;
+      StringBuilder keyContent = new StringBuilder();
+      while ((line = reader.readLine()) != null) {
+        if ("-----END PRIVATE KEY-----".equals(line)) {
+          break;
+        }
+        keyContent.append(line);
       }
-      keyContent.append(line);
+      byte[] decodedKeyBytes = BaseEncoding.base64().decode(keyContent.toString());
+      KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+      PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decodedKeyBytes);
+      return keyFactory.generatePrivate(keySpec);
     }
-    byte[] decodedKeyBytes = BaseEncoding.base64().decode(keyContent.toString());
-    KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-    PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decodedKeyBytes);
-    return keyFactory.generatePrivate(keySpec);
   }
 }
 
