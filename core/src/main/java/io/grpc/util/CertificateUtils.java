@@ -65,8 +65,11 @@ public final class CertificateUtils {
   public static PrivateKey getPrivateKey(InputStream inputStream)
       throws UnsupportedEncodingException, IOException, NoSuchAlgorithmException,
       InvalidKeySpecException {
-    try (InputStreamReader isr = new InputStreamReader(inputStream, "UTF-8");
-        BufferedReader reader = new BufferedReader(isr)) {
+    InputStreamReader isr = null;
+    BufferedReader reader = null;
+    try {
+      isr = new InputStreamReader(inputStream, "UTF-8");
+      reader = new BufferedReader(isr);
       String line;
       while ((line = reader.readLine()) != null) {
         if ("-----BEGIN PRIVATE KEY-----".equals(line)) {
@@ -84,6 +87,13 @@ public final class CertificateUtils {
       KeyFactory keyFactory = KeyFactory.getInstance("RSA");
       PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decodedKeyBytes);
       return keyFactory.generatePrivate(keySpec);
+    } finally {
+      if (null != reader) {
+        reader.close();
+      }
+      if (null != isr) {
+        isr.close();
+      }
     }
   }
 }
