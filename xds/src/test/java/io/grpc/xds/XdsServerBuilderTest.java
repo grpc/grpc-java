@@ -132,7 +132,7 @@ public class XdsServerBuilderTest {
         }
       }
     });
-    xdsClient.ldsResource.get(1000, TimeUnit.MILLISECONDS);
+    xdsClient.ldsResource.get(5000, TimeUnit.MILLISECONDS);
     return settableFuture;
   }
 
@@ -196,8 +196,8 @@ public class XdsServerBuilderTest {
     verify(mockXdsServingStatusListener, never()).onNotServing(any(StatusException.class));
     reset(mockXdsServingStatusListener);
     xdsClient.ldsWatcher.onResourceDoesNotExist("not found error");
+    future.get(5000, TimeUnit.MILLISECONDS);
     verify(mockXdsServingStatusListener).onNotServing(any(StatusException.class));
-    assertThat(future.isDone()).isTrue();
     reset(mockXdsServingStatusListener);
     XdsServerTestHelper.generateListenerUpdate(
         xdsClient,

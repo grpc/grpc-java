@@ -29,7 +29,6 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.withSettings;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
@@ -128,6 +127,7 @@ public class XdsServerWrapperTest {
     EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", hcm_virtual);
     SslContextProviderSupplier sslSupplier = f0.getSslContextProviderSupplier();
     xdsClient.deliverLdsUpdate(Collections.singletonList(f0), null);
+    start.get(5000, TimeUnit.MILLISECONDS);
     verify(mockServer).start();
     xdsServerWrapper.shutdown();
     assertThat(xdsServerWrapper.isShutdown()).isTrue();
@@ -156,6 +156,7 @@ public class XdsServerWrapperTest {
       }
     });
     String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
     VirtualHost virtualHost =
             VirtualHost.create(
                     "virtual-host", Collections.singletonList("auth"), new ArrayList<Route>(),
@@ -166,6 +167,7 @@ public class XdsServerWrapperTest {
             "filter-chain-foo", createMatch(), httpConnectionManager, createTls(),
             tlsContextManager);
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
+    start.get(5000, TimeUnit.MILLISECONDS);
     FilterChainSelector selector = selectorRef.get();
     assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
     assertThat(selector.getRoutingConfigs()).isEqualTo(ImmutableMap.of(
@@ -196,16 +198,15 @@ public class XdsServerWrapperTest {
             0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
     EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", hcm_virtual);
     EnvoyServerProtoData.FilterChain f1 = createFilterChain("filter-chain-1", createRds("r0"));
-
     xdsClient.deliverLdsUpdate(Arrays.asList(f0, f1), null);
+    assertThat(start.isDone()).isFalse();
     assertThat(selectorRef.get()).isNull();
     verify(mockServer, never()).start();
-    assertThat(xdsClient.rdsResources.keySet()).isEqualTo(ImmutableSet.of("r0"));
+    verify(listener, never()).onServing();
 
     EnvoyServerProtoData.FilterChain f2 = createFilterChain("filter-chain-2", createRds("r1"));
     EnvoyServerProtoData.FilterChain f3 = createFilterChain("filter-chain-3", createRds("r2"));
     xdsClient.deliverLdsUpdate(Arrays.asList(f0, f2), f3);
-    assertThat(xdsClient.rdsResources.keySet()).isEqualTo(ImmutableSet.of("r1", "r2"));
     verify(mockServer, never()).start();
     verify(listener, never()).onServing();
 
@@ -214,6 +215,7 @@ public class XdsServerWrapperTest {
     verify(mockServer, never()).start();
     xdsClient.deliverRdsUpdate("r2",
             Collections.singletonList(createVirtualHost("virtual-host-2")));
+    start.get(5000, TimeUnit.MILLISECONDS);
     verify(mockServer).start();
     assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
         f0, ServerRoutingConfig.create(hcm_virtual.httpFilterConfigs(), hcm_virtual.virtualHosts()),
@@ -242,6 +244,7 @@ public class XdsServerWrapperTest {
     });
     String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
+    start.get(5000, TimeUnit.MILLISECONDS);
     verify(listener, times(1)).onNotServing(any(StatusException.class));
     verify(mockBuilder, never()).build();
     FilterChain filterChain = createFilterChain("filter-chain-0", createRds("rds"));

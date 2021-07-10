@@ -139,7 +139,6 @@ public final class XdsServerWrapper extends Server {
         internalStart();
       }
     });
-    syncContext.drain();
     IOException exception;
     try {
       exception = initialStartFuture.get();

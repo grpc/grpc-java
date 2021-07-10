@@ -367,11 +367,12 @@ public class XdsSdsClientServerTest {
         .addService(new SimpleServiceImpl());
     tlsContextManagerForServer = new TlsContextManagerImpl(bootstrapInfoForServer);
     XdsServerWrapper xdsServer = builder.build();
-    startServerAsync(xdsServer);
+    SettableFuture<Throwable> startFuture = startServerAsync(xdsServer);
     EnvoyServerProtoData.Listener listener = buildListener("listener1", "10.1.2.3",
-            downstreamTlsContext,  tlsContextManagerForServer);
+            downstreamTlsContext, tlsContextManagerForServer);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.deliverLdsUpdate(listenerUpdate);
+    startFuture.get(10, TimeUnit.SECONDS);
     port = xdsServer.getPort();
   }
 
@@ -447,7 +448,7 @@ public class XdsSdsClientServerTest {
     return response.getResponseMessage();
   }
 
-  private void startServerAsync(final Server xdsServer) throws Exception {
+  private SettableFuture<Throwable> startServerAsync(final Server xdsServer) throws Exception {
     cleanupRule.register(xdsServer);
     final SettableFuture<Throwable> settableFuture = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
@@ -461,7 +462,8 @@ public class XdsSdsClientServerTest {
         }
       }
     });
-    xdsClient.ldsResource.get(1000, TimeUnit.MILLISECONDS);
+    xdsClient.ldsResource.get(8000, TimeUnit.MILLISECONDS);
+    return settableFuture;
   }
 
   private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {

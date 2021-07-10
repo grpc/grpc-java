@@ -38,9 +38,9 @@ import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 import org.mockito.ArgumentCaptor;
 
@@ -203,8 +203,8 @@ public class XdsServerTestHelper {
   static final class FakeXdsClient extends XdsClient {
     boolean shutdown;
     SettableFuture<String> ldsResource = SettableFuture.create();
-    volatile LdsResourceWatcher ldsWatcher;
-    Map<String, RdsResourceWatcher> rdsResources = new ConcurrentHashMap<>();
+    LdsResourceWatcher ldsWatcher;
+    Map<String, RdsResourceWatcher> rdsResources = new HashMap<>();
 
     @Override
     public TlsContextManager getTlsContextManager() {
@@ -219,24 +219,24 @@ public class XdsServerTestHelper {
     @Override
     void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
       assertThat(ldsWatcher).isNull();
-      ldsResource.set(resourceName);
       ldsWatcher = watcher;
+      ldsResource.set(resourceName);
     }
 
     @Override
     void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
-      assertThat(ldsResource.isDone()).isTrue();
+      assertThat(ldsWatcher).isNotNull();
       ldsResource = null;
       ldsWatcher = null;
     }
 
     @Override
-    void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
+    synchronized void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
       rdsResources.put(resourceName, watcher);
     }
 
     @Override
-    void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
+    synchronized void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
       rdsResources.remove(resourceName);
     }
 
@@ -259,7 +259,7 @@ public class XdsServerTestHelper {
       ldsWatcher.onChanged(ldsUpdate);
     }
 
-    void deliverRdsUpdate(String rdsName, List<VirtualHost> virtualHosts) {
+    synchronized void deliverRdsUpdate(String rdsName, List<VirtualHost> virtualHosts) {
       rdsResources.get(rdsName).onChanged(new RdsUpdate(virtualHosts));
     }
   }
