@@ -41,6 +41,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import javax.annotation.Nullable;
 import org.mockito.ArgumentCaptor;
 
@@ -204,7 +205,8 @@ public class XdsServerTestHelper {
     boolean shutdown;
     SettableFuture<String> ldsResource = SettableFuture.create();
     LdsResourceWatcher ldsWatcher;
-    Map<String, RdsResourceWatcher> rdsResources = new HashMap<>();
+    CountDownLatch rdsCount = new CountDownLatch(1);
+    final Map<String, RdsResourceWatcher> rdsWatchers = new HashMap<>();
 
     @Override
     public TlsContextManager getTlsContextManager() {
@@ -231,13 +233,14 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    synchronized void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
-      rdsResources.put(resourceName, watcher);
+    void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
+      rdsWatchers.put(resourceName, watcher);
+      rdsCount.countDown();
     }
 
     @Override
-    synchronized void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
-      rdsResources.remove(resourceName);
+    void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
+      rdsWatchers.remove(resourceName);
     }
 
     @Override
@@ -250,7 +253,8 @@ public class XdsServerTestHelper {
       return shutdown;
     }
 
-    void deliverLdsUpdate(List<FilterChain> filterChains, FilterChain defaultFilterChain) {
+    void deliverLdsUpdate(List<FilterChain> filterChains,
+                                       FilterChain defaultFilterChain) {
       ldsWatcher.onChanged(LdsUpdate.forTcpListener(new Listener(
               "listener", "0.0.0.0:1", filterChains, defaultFilterChain)));
     }
@@ -259,8 +263,8 @@ public class XdsServerTestHelper {
       ldsWatcher.onChanged(ldsUpdate);
     }
 
-    synchronized void deliverRdsUpdate(String rdsName, List<VirtualHost> virtualHosts) {
-      rdsResources.get(rdsName).onChanged(new RdsUpdate(virtualHosts));
+    void deliverRdsUpdate(String rdsName, List<VirtualHost> virtualHosts) {
+      rdsWatchers.get(rdsName).onChanged(new RdsUpdate(virtualHosts));
     }
   }
 }
