@@ -34,6 +34,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig.HashFunction;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
+import io.envoyproxy.envoy.config.core.v3.CidrRange;
 import io.envoyproxy.envoy.config.core.v3.ConfigSource;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.Locality;
@@ -1039,6 +1040,153 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  public void parseServerSideListener_nonUniqueFilterChainMatch() throws ResourceInvalidException {
+    Filter filter1 = buildHttpConnectionManagerFilter(
+        HttpFilter.newBuilder().setName("http-filter-1").setIsOptional(true).build());
+    FilterChainMatch filterChainMatch1 =
+        FilterChainMatch.newBuilder()
+            .addAllSourcePorts(Arrays.asList(80, 8080))
+            .addAllPrefixRanges(Arrays.asList(CidrRange.newBuilder().setAddressPrefix("192.168.0.0")
+                    .setPrefixLen(UInt32Value.of(16)).build(),
+                CidrRange.newBuilder().setAddressPrefix("10.0.0.0").setPrefixLen(UInt32Value.of(8))
+                    .build()))
+            .build();
+    FilterChain filterChain1 =
+        FilterChain.newBuilder()
+            .setName("filter-chain-1")
+            .setFilterChainMatch(filterChainMatch1)
+            .setTransportSocket(TransportSocket.getDefaultInstance())
+            .addFilters(filter1)
+            .build();
+    Filter filter2 = buildHttpConnectionManagerFilter(
+        HttpFilter.newBuilder().setName("http-filter-2").setIsOptional(true).build());
+    FilterChainMatch filterChainMatch2 =
+        FilterChainMatch.newBuilder()
+            .addAllSourcePorts(Arrays.asList(443, 8080))
+            .addAllPrefixRanges(Arrays.asList(
+                CidrRange.newBuilder().setAddressPrefix("2001:DB8::8:800:200C:417A")
+                    .setPrefixLen(UInt32Value.of(60)).build(),
+                CidrRange.newBuilder().setAddressPrefix("192.168.0.0")
+                    .setPrefixLen(UInt32Value.of(16)).build()))
+            .build();
+    FilterChain filterChain2 =
+        FilterChain.newBuilder()
+            .setName("filter-chain-2")
+            .setFilterChainMatch(filterChainMatch2)
+            .setTransportSocket(TransportSocket.getDefaultInstance())
+            .addFilters(filter2)
+            .build();
+    Listener listener =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .addAllFilterChains(Arrays.asList(filterChain1, filterChain2))
+            .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("Found duplicate matcher:");
+    ClientXdsClient.parseServerSideListener(
+        listener, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+  }
+
+  @Test
+  public void parseServerSideListener_nonUniqueFilterChainMatch_sameFilter()
+      throws ResourceInvalidException {
+    Filter filter1 = buildHttpConnectionManagerFilter(
+        HttpFilter.newBuilder().setName("http-filter-1").setIsOptional(true).build());
+    FilterChainMatch filterChainMatch1 =
+        FilterChainMatch.newBuilder()
+            .addAllSourcePorts(Arrays.asList(80, 8080))
+            .addAllPrefixRanges(Arrays.asList(
+                CidrRange.newBuilder().setAddressPrefix("10.0.0.0").setPrefixLen(UInt32Value.of(8))
+                    .build()))
+            .build();
+    FilterChain filterChain1 =
+        FilterChain.newBuilder()
+            .setName("filter-chain-1")
+            .setFilterChainMatch(filterChainMatch1)
+            .setTransportSocket(TransportSocket.getDefaultInstance())
+            .addFilters(filter1)
+            .build();
+    Filter filter2 = buildHttpConnectionManagerFilter(
+        HttpFilter.newBuilder().setName("http-filter-2").setIsOptional(true).build());
+    FilterChainMatch filterChainMatch2 =
+        FilterChainMatch.newBuilder()
+            .addAllSourcePorts(Arrays.asList(443, 8080))
+            .addAllPrefixRanges(Arrays.asList(
+                CidrRange.newBuilder().setAddressPrefix("192.168.0.0")
+                    .setPrefixLen(UInt32Value.of(16)).build(),
+                CidrRange.newBuilder().setAddressPrefix("192.168.0.0")
+                    .setPrefixLen(UInt32Value.of(16)).build()))
+            .build();
+    FilterChain filterChain2 =
+        FilterChain.newBuilder()
+            .setName("filter-chain-2")
+            .setFilterChainMatch(filterChainMatch2)
+            .setTransportSocket(TransportSocket.getDefaultInstance())
+            .addFilters(filter2)
+            .build();
+    Listener listener =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .addAllFilterChains(Arrays.asList(filterChain1, filterChain2))
+            .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("Found duplicate matcher:");
+    ClientXdsClient.parseServerSideListener(
+        listener, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+  }
+
+  @Test
+  public void parseServerSideListener_uniqueFilterChainMatch() throws ResourceInvalidException {
+    Filter filter1 = buildHttpConnectionManagerFilter(
+        HttpFilter.newBuilder().setName("http-filter-1").setIsOptional(true).build());
+    FilterChainMatch filterChainMatch1 =
+        FilterChainMatch.newBuilder()
+            .addAllSourcePorts(Arrays.asList(80, 8080))
+            .addAllPrefixRanges(Arrays.asList(CidrRange.newBuilder().setAddressPrefix("192.168.0.0")
+                    .setPrefixLen(UInt32Value.of(16)).build(),
+                CidrRange.newBuilder().setAddressPrefix("10.0.0.0").setPrefixLen(UInt32Value.of(8))
+                    .build()))
+            .setSourceType(FilterChainMatch.ConnectionSourceType.EXTERNAL)
+            .build();
+    FilterChain filterChain1 =
+        FilterChain.newBuilder()
+            .setName("filter-chain-1")
+            .setFilterChainMatch(filterChainMatch1)
+            .setTransportSocket(TransportSocket.getDefaultInstance())
+            .addFilters(filter1)
+            .build();
+    Filter filter2 = buildHttpConnectionManagerFilter(
+        HttpFilter.newBuilder().setName("http-filter-2").setIsOptional(true).build());
+    FilterChainMatch filterChainMatch2 =
+        FilterChainMatch.newBuilder()
+            .addAllSourcePorts(Arrays.asList(443, 8080))
+            .addAllPrefixRanges(Arrays.asList(
+                CidrRange.newBuilder().setAddressPrefix("2001:DB8::8:800:200C:417A")
+                    .setPrefixLen(UInt32Value.of(60)).build(),
+                CidrRange.newBuilder().setAddressPrefix("192.168.0.0")
+                    .setPrefixLen(UInt32Value.of(16)).build()))
+            .setSourceType(FilterChainMatch.ConnectionSourceType.ANY)
+            .build();
+    FilterChain filterChain2 =
+        FilterChain.newBuilder()
+            .setName("filter-chain-2")
+            .setFilterChainMatch(filterChainMatch2)
+            .setTransportSocket(TransportSocket.getDefaultInstance())
+            .addFilters(filter2)
+            .build();
+    Listener listener =
+        Listener.newBuilder()
+            .setName("listener1")
+            .setTrafficDirection(TrafficDirection.INBOUND)
+            .addAllFilterChains(Arrays.asList(filterChain1, filterChain2))
+            .build();
+    ClientXdsClient.parseServerSideListener(
+        listener, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+  }
+
+  @Test
   public void parseFilterChain_noHcm() throws ResourceInvalidException {
     FilterChain filterChain =
         FilterChain.newBuilder()
@@ -1050,7 +1198,7 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "FilterChain filter-chain-foo missing required HttpConnectionManager filter");
     ClientXdsClient.parseFilterChain(
-        filterChain, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+        filterChain, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
 
   @Test
@@ -1068,7 +1216,7 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "FilterChain filter-chain-foo with duplicated filter: envoy.http_connection_manager");
     ClientXdsClient.parseFilterChain(
-        filterChain, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+        filterChain, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
 
   @Test
@@ -1086,7 +1234,7 @@ public class ClientXdsClientDataTest {
         "FilterChain filter-chain-foo contains filter envoy.http_connection_manager "
             + "without typed_config");
     ClientXdsClient.parseFilterChain(
-        filterChain, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+        filterChain, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
 
   @Test
@@ -1108,7 +1256,7 @@ public class ClientXdsClientDataTest {
         "FilterChain filter-chain-foo contains filter unsupported with unsupported "
             + "typed_config type unsupported-type-url");
     ClientXdsClient.parseFilterChain(
-        filterChain, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+        filterChain, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
 
   @Test
@@ -1133,9 +1281,11 @@ public class ClientXdsClientDataTest {
             .build();
 
     EnvoyServerProtoData.FilterChain parsedFilterChain1 = ClientXdsClient.parseFilterChain(
-        filterChain1, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+        filterChain1, new HashSet<String>(), null, filterRegistry, null,
+        true /* does not matter */);
     EnvoyServerProtoData.FilterChain parsedFilterChain2 = ClientXdsClient.parseFilterChain(
-        filterChain2, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+        filterChain2, new HashSet<String>(), null, filterRegistry, null,
+        true /* does not matter */);
     assertThat(parsedFilterChain1.getName()).isNotEqualTo(parsedFilterChain2.getName());
   }
 

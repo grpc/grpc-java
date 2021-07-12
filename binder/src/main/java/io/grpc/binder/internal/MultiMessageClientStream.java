@@ -64,14 +64,16 @@ final class MultiMessageClientStream implements ClientStream {
     }
     if (outbound.isReady()) {
       listener.onReady();
-      try {
-        synchronized (outbound) {
-          outbound.send();
-        }
-      } catch (StatusException se) {
-        synchronized (inbound) {
-          inbound.closeAbnormal(se.getStatus());
-        }
+    }
+    try {
+      synchronized (outbound) {
+        // The ClientStream contract promises no more header changes after start().
+        outbound.onPrefixReady();
+        outbound.send();
+      }
+    } catch (StatusException se) {
+      synchronized (inbound) {
+        inbound.closeAbnormal(se.getStatus());
       }
     }
   }
@@ -123,6 +125,13 @@ final class MultiMessageClientStream implements ClientStream {
   }
 
   @Override
+  public void setDeadline(@Nonnull Deadline deadline) {
+    synchronized (outbound) {
+      outbound.setDeadline(deadline);
+    }
+  }
+
+  @Override
   public Attributes getAttributes() {
     return attributes;
   }
@@ -148,11 +157,6 @@ final class MultiMessageClientStream implements ClientStream {
   @Override
   public final void setMessageCompression(boolean enable) {
     // Ignore.
-  }
-
-  @Override
-  public void setDeadline(@Nonnull Deadline deadline) {
-    // Ignore. (Deadlines should still work at a higher level).
   }
 
   @Override

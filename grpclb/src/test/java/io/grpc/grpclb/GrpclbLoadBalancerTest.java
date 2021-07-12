@@ -929,7 +929,7 @@ public class GrpclbLoadBalancerTest {
     logs.clear();
     lbResponseObserver.onNext(buildInitialResponse());
     assertThat(logs).containsExactly(
-        "DEBUG: [grpclb-<api.google.com>] Got an LB response: " + buildInitialResponse());
+        "INFO: [grpclb-<api.google.com>] Got an LB initial response: " + buildInitialResponse());
     logs.clear();
     lbResponseObserver.onNext(buildLbResponse(backends1));
 
@@ -2522,7 +2522,7 @@ public class GrpclbLoadBalancerTest {
     logs.clear();
     lbResponseObserver.onNext(buildInitialResponse());
     assertThat(logs).containsExactly(
-        "DEBUG: [grpclb-<api.google.com>] Got an LB response: " + buildInitialResponse());
+        "INFO: [grpclb-<api.google.com>] Got an LB initial response: " + buildInitialResponse());
     logs.clear();
     lbResponseObserver.onNext(buildLbResponse(backends1));
 

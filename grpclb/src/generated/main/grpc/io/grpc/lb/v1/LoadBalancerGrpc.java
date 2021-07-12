@@ -7,6 +7,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
 @javax.annotation.Generated(
     value = "by gRPC proto compiler",
     comments = "Source: grpc/lb/v1/load_balancer.proto")
+@io.grpc.stub.annotations.GrpcGenerated
 public final class LoadBalancerGrpc {
 
   private LoadBalancerGrpc() {}

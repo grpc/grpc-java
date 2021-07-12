@@ -7,6 +7,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
 @javax.annotation.Generated(
     value = "by gRPC proto compiler",
     comments = "Source: envoy/api/v2/eds.proto")
+@io.grpc.stub.annotations.GrpcGenerated
 public final class EndpointDiscoveryServiceGrpc {
 
   private EndpointDiscoveryServiceGrpc() {}

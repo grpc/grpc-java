@@ -82,11 +82,8 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    *
    * <p>It's an optional parameter. If it is provided, the {@link #executor(Executor)} would still
    * run necessary tasks before the {@link ServerCallExecutorSupplier} is ready to be called, then
-   * it switches over.
-   *
-   * <p>If it is provided, {@link #directExecutor()} optimization is disabled. But if calling
-   * {@link ServerCallExecutorSupplier} returns null, the server call is still handled by the
-   * default {@link #executor(Executor)} as a fallback.
+   * it switches over. But if calling {@link ServerCallExecutorSupplier} returns null, the server
+   * call is still handled by the default {@link #executor(Executor)} as a fallback.
    *
    * @param executorSupplier the server call executor provider
    * @return this
