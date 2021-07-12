@@ -27,11 +27,13 @@ import io.grpc.CallOptions;
 import io.grpc.InternalConfigSelector;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.MethodDescriptor;
+import io.grpc.Status.Code;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -354,9 +356,22 @@ final class ManagedChannelServiceConfig {
           "backoffMultiplier must be greater than 0: %s",
           backoffMultiplier);
 
+      Long perAttemptRecvTimeout =
+          ServiceConfigUtil.getPerAttemptRecvTimeoutNanosFromRetryPolicy(retryPolicy);
+      checkArgument(
+          perAttemptRecvTimeout == null || perAttemptRecvTimeout >= 0,
+          "perAttemptRecvTimeout cannot be negative: %s",
+          perAttemptRecvTimeout);
+
+      Set<Code> retryableCodes =
+          ServiceConfigUtil.getRetryableStatusCodesFromRetryPolicy(retryPolicy);
+      checkArgument(
+          perAttemptRecvTimeout != null || !retryableCodes.isEmpty(),
+          "retryableStatusCodes cannot be empty without perAttemptRecvTimeout");
+
       return new RetryPolicy(
           maxAttempts, initialBackoffNanos, maxBackoffNanos, backoffMultiplier,
-          ServiceConfigUtil.getRetryableStatusCodesFromRetryPolicy(retryPolicy));
+          perAttemptRecvTimeout, retryableCodes);
     }
 
     private static HedgingPolicy hedgingPolicy(
