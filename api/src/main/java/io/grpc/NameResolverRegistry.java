@@ -22,7 +22,6 @@ import com.google.common.annotations.VisibleForTesting;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -48,11 +47,10 @@ public final class NameResolverRegistry {
 
   @GuardedBy("this")
   private final LinkedHashSet<NameResolverProvider> allProviders = new LinkedHashSet<>();
-  /** Generated from {@code allProviders}. Is mapped from scheme key to its sorted provider list in
-   * decreasing priority order. */
+  /** Generated from {@code allProviders}. Is mapping from scheme key to the highest priority
+   * {@link NameResolverProvider}. */
   @GuardedBy("this")
-  private LinkedHashMap<String, List<NameResolverProvider>> effectiveProviders =
-          new LinkedHashMap<>();
+  private LinkedHashMap<String, NameResolverProvider> effectiveProviders = new LinkedHashMap<>();
 
   /**
    * Register a provider.
@@ -84,25 +82,14 @@ public final class NameResolverRegistry {
   }
 
   private synchronized void refreshProviders() {
-    LinkedHashMap<String, List<NameResolverProvider>> refreshedProviders = new LinkedHashMap<>();
+    LinkedHashMap<String, NameResolverProvider> refreshedProviders = new LinkedHashMap<>();
+    // We prefer first-registered providers
     for (NameResolverProvider provider : allProviders) {
       String scheme = provider.getDefaultScheme();
-      List<NameResolverProvider> providersForScheme = refreshedProviders.get(scheme);
-      if (providersForScheme == null) {
-        providersForScheme = new ArrayList<>();
+      NameResolverProvider existing = refreshedProviders.get(scheme);
+      if (existing == null || existing.priority() < provider.priority()) {
+        refreshedProviders.put(scheme, provider);
       }
-      providersForScheme.add(provider);
-      refreshedProviders.put(scheme, providersForScheme);
-    }
-    for (List<NameResolverProvider> providers : refreshedProviders.values()) {
-      // Sort descending based on priority.
-      // sort() must be stable, as we prefer first-registered providers
-      Collections.sort(providers, Collections.reverseOrder(new Comparator<NameResolverProvider>() {
-        @Override
-        public int compare(NameResolverProvider o1, NameResolverProvider o2) {
-          return o1.priority() - o2.priority();
-        }
-      }));
     }
     effectiveProviders = refreshedProviders;
   }
@@ -134,10 +121,11 @@ public final class NameResolverRegistry {
   }
 
   /**
-   * Returns effective providers map from scheme to the provider list. The list in priority order.
+   * Returns effective providers map from scheme to the highest priority NameResolverProvider of
+   * that scheme.
    */
   @VisibleForTesting
-  synchronized LinkedHashMap<String, List<NameResolverProvider>> providers() {
+  synchronized LinkedHashMap<String, NameResolverProvider> providers() {
     return new LinkedHashMap<>(effectiveProviders);
   }
 
@@ -163,25 +151,17 @@ public final class NameResolverRegistry {
     @Override
     @Nullable
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-      List<NameResolverProvider> providerList = providers().get(targetUri.getScheme());
-      if (providerList == null) {
-        return null;
-      }
-      for (NameResolverProvider provider : providerList) {
-        NameResolver resolver = provider.newNameResolver(targetUri, args);
-        if (resolver != null) {
-          return resolver;
-        }
-      }
-      return null;
+      NameResolverProvider provider = providers().get(targetUri.getScheme());
+      return provider == null ? null : provider.newNameResolver(targetUri, args);
     }
 
     @Override
     public String getDefaultScheme() {
-      if (providers().isEmpty()) {
+      LinkedHashMap<String, NameResolverProvider> providers = providers();
+      if (providers.isEmpty()) {
         return "unknown";
       }
-      return providers().entrySet().iterator().next().getKey();
+      return providers.entrySet().iterator().next().getKey();
     }
   }
 

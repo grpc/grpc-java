@@ -64,9 +64,12 @@ public class NameResolverRegistryTest {
     reg.register(p1);
     reg.register(p2);
     reg.register(p3);
-    assertThat(reg.providers().get(sameScheme)).containsExactly(p1, p2, p3).inOrder();
+    assertThat(reg.providers().get(sameScheme)).isSameInstanceAs(p1);
     reg.deregister(p2);
-    assertThat(reg.providers().get(sameScheme)).containsExactly(p1, p3).inOrder();
+    assertThat(reg.providers().get(sameScheme)).isSameInstanceAs(p1);
+    reg.deregister(p1);
+    assertThat(reg.providers().get(sameScheme)).isSameInstanceAs(p3);
+
   }
 
   @Test
@@ -83,7 +86,7 @@ public class NameResolverRegistryTest {
     reg.register(p3);
     reg.register(p4);
     reg.register(p5);
-    assertThat(reg.providers().get(sameScheme)).containsExactly(p3, p5, p1, p2, p4).inOrder();
+    assertThat(reg.providers().get(sameScheme)).isSameInstanceAs(p3);
   }
 
   @Test
@@ -144,26 +147,60 @@ public class NameResolverRegistryTest {
             throw new AssertionError();
           }
         });
-    assertThat(registry.asFactory().newNameResolver(uri, args)).isSameInstanceAs(nr);
+    assertThat(registry.asFactory().newNameResolver(uri, args)).isNull();
+  }
+
+  @Test
+  public void newNameResolver_multipleScheme() {
+    NameResolverRegistry registry = new NameResolverRegistry();
+    registry.register(new BaseProvider(true, 5, uri.getScheme()) {
+      @Override
+      public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
+        return null;
+      }
+    });
+    final NameResolver nr = new NameResolver() {
+      @Override public String getServiceAuthority() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override public void start(Listener2 listener) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override public void shutdown() {
+        throw new UnsupportedOperationException();
+      }
+    };
+    registry.register(
+        new BaseProvider(true, 4, "other") {
+          @Override
+          public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
+            return nr;
+          }
+        });
+
+    assertThat(registry.asFactory().newNameResolver(uri, args)).isNull();
+    assertThat(registry.asFactory().newNameResolver(URI.create("other:///0.0.0.0:80"), args))
+            .isSameInstanceAs(nr);
+    assertThat(registry.asFactory().getDefaultScheme()).isEqualTo("dns");
   }
 
   @Test
   public void newNameResolver_noProvider() {
     NameResolver.Factory factory = new NameResolverRegistry().asFactory();
     assertThat(factory.newNameResolver(uri, args)).isNull();
+    assertThat(factory.getDefaultScheme()).isEqualTo("unknown");
   }
 
   @Test
   public void baseProviders() {
-    LinkedHashMap<String, List<NameResolverProvider>> providers =
+    LinkedHashMap<String, NameResolverProvider> providers =
             NameResolverRegistry.getDefaultRegistry().providers();
     assertThat(providers).hasSize(1);
-    assertThat(providers.get("dns")).hasSize(2);
-    // 2 name resolvers from grpclb and core, ordered with decreasing priorities.
-    assertThat(providers.get("dns").get(0).getClass().getName())
+    // 2 name resolvers from grpclb and core, higher priority one is returned.
+    assertThat(providers.get("dns").getClass().getName())
         .isEqualTo("io.grpc.grpclb.SecretGrpclbNameResolverProvider$Provider");
-    assertThat(providers.get("dns").get(1).getClass().getName())
-        .isEqualTo("io.grpc.internal.DnsNameResolverProvider");
     assertThat(NameResolverRegistry.getDefaultRegistry().asFactory().getDefaultScheme())
         .isEqualTo("dns");
   }
