@@ -24,6 +24,7 @@ import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.internal.DnsNameResolverProvider;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.URI;
+import java.util.LinkedHashMap;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -59,12 +60,13 @@ public class NameResolverRegistryTest {
     NameResolverProvider p1 = new BaseProvider(true, 5);
     NameResolverProvider p2 = new BaseProvider(true, 5);
     NameResolverProvider p3 = new BaseProvider(true, 5);
+    String sameScheme = p1.getDefaultScheme();
     reg.register(p1);
     reg.register(p2);
     reg.register(p3);
-    assertThat(reg.providers()).containsExactly(p1, p2, p3).inOrder();
+    assertThat(reg.providers().get(sameScheme)).containsExactly(p1, p2, p3).inOrder();
     reg.deregister(p2);
-    assertThat(reg.providers()).containsExactly(p1, p3).inOrder();
+    assertThat(reg.providers().get(sameScheme)).containsExactly(p1, p3).inOrder();
   }
 
   @Test
@@ -75,12 +77,13 @@ public class NameResolverRegistryTest {
     NameResolverProvider p3 = new BaseProvider(true, 8);
     NameResolverProvider p4 = new BaseProvider(true, 3);
     NameResolverProvider p5 = new BaseProvider(true, 8);
+    String sameScheme = p1.getDefaultScheme();
     reg.register(p1);
     reg.register(p2);
     reg.register(p3);
     reg.register(p4);
     reg.register(p5);
-    assertThat(reg.providers()).containsExactly(p3, p5, p1, p2, p4).inOrder();
+    assertThat(reg.providers().get(sameScheme)).containsExactly(p3, p5, p1, p2, p4).inOrder();
   }
 
   @Test
@@ -107,7 +110,7 @@ public class NameResolverRegistryTest {
   @Test
   public void newNameResolver_providerReturnsNonNull() {
     NameResolverRegistry registry = new NameResolverRegistry();
-    registry.register(new BaseProvider(true, 5) {
+    registry.register(new BaseProvider(true, 5, uri.getScheme()) {
       @Override
       public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
         return null;
@@ -127,14 +130,14 @@ public class NameResolverRegistryTest {
       }
     };
     registry.register(
-        new BaseProvider(true, 4) {
+        new BaseProvider(true, 4, uri.getScheme()) {
           @Override
           public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
             return nr;
           }
         });
     registry.register(
-        new BaseProvider(true, 3) {
+        new BaseProvider(true, 3, uri.getScheme()) {
           @Override
           public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
             fail("Should not be called");
@@ -152,12 +155,14 @@ public class NameResolverRegistryTest {
 
   @Test
   public void baseProviders() {
-    List<NameResolverProvider> providers = NameResolverRegistry.getDefaultRegistry().providers();
-    assertThat(providers).hasSize(2);
+    LinkedHashMap<String, List<NameResolverProvider>> providers =
+            NameResolverRegistry.getDefaultRegistry().providers();
+    assertThat(providers).hasSize(1);
+    assertThat(providers.get("dns")).hasSize(2);
     // 2 name resolvers from grpclb and core, ordered with decreasing priorities.
-    assertThat(providers.get(0).getClass().getName())
+    assertThat(providers.get("dns").get(0).getClass().getName())
         .isEqualTo("io.grpc.grpclb.SecretGrpclbNameResolverProvider$Provider");
-    assertThat(providers.get(1).getClass().getName())
+    assertThat(providers.get("dns").get(1).getClass().getName())
         .isEqualTo("io.grpc.internal.DnsNameResolverProvider");
     assertThat(NameResolverRegistry.getDefaultRegistry().asFactory().getDefaultScheme())
         .isEqualTo("dns");
@@ -184,10 +189,18 @@ public class NameResolverRegistryTest {
   private static class BaseProvider extends NameResolverProvider {
     private final boolean isAvailable;
     private final int priority;
+    private final String scheme;
 
     public BaseProvider(boolean isAvailable, int priority) {
       this.isAvailable = isAvailable;
       this.priority = priority;
+      this.scheme = null;
+    }
+
+    public BaseProvider(boolean isAvailable, int priority, String scheme) {
+      this.isAvailable = isAvailable;
+      this.priority = priority;
+      this.scheme = scheme;
     }
 
     @Override
@@ -207,7 +220,7 @@ public class NameResolverRegistryTest {
 
     @Override
     public String getDefaultScheme() {
-      return "scheme" + getClass().getSimpleName();
+      return scheme == null ? "scheme" + getClass().getSimpleName() : scheme;
     }
   }
 }

@@ -23,6 +23,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.logging.Level;
@@ -47,9 +48,11 @@ public final class NameResolverRegistry {
 
   @GuardedBy("this")
   private final LinkedHashSet<NameResolverProvider> allProviders = new LinkedHashSet<>();
-  /** Immutable, sorted version of {@code allProviders}. Is replaced instead of mutating. */
+  /** Generated from {@code allProviders}. Is mapped from scheme key to its sorted provider list in
+   * decreasing priority order. */
   @GuardedBy("this")
-  private List<NameResolverProvider> effectiveProviders = Collections.emptyList();
+  private LinkedHashMap<String, List<NameResolverProvider>> effectiveProviders =
+          new LinkedHashMap<>();
 
   /**
    * Register a provider.
@@ -81,16 +84,27 @@ public final class NameResolverRegistry {
   }
 
   private synchronized void refreshProviders() {
-    List<NameResolverProvider> providers = new ArrayList<>(allProviders);
-    // Sort descending based on priority.
-    // sort() must be stable, as we prefer first-registered providers
-    Collections.sort(providers, Collections.reverseOrder(new Comparator<NameResolverProvider>() {
-      @Override
-      public int compare(NameResolverProvider o1, NameResolverProvider o2) {
-        return o1.priority() - o2.priority();
+    LinkedHashMap<String, List<NameResolverProvider>> refreshedProviders = new LinkedHashMap<>();
+    for (NameResolverProvider provider : allProviders) {
+      String scheme = provider.getDefaultScheme();
+      List<NameResolverProvider> providersForScheme = refreshedProviders.get(scheme);
+      if (providersForScheme == null) {
+        providersForScheme = new ArrayList<>();
       }
-    }));
-    effectiveProviders = Collections.unmodifiableList(providers);
+      providersForScheme.add(provider);
+      refreshedProviders.put(scheme, providersForScheme);
+    }
+    for (List<NameResolverProvider> providers : refreshedProviders.values()) {
+      // Sort descending based on priority.
+      // sort() must be stable, as we prefer first-registered providers
+      Collections.sort(providers, Collections.reverseOrder(new Comparator<NameResolverProvider>() {
+        @Override
+        public int compare(NameResolverProvider o1, NameResolverProvider o2) {
+          return o1.priority() - o2.priority();
+        }
+      }));
+    }
+    effectiveProviders = refreshedProviders;
   }
 
   /**
@@ -120,11 +134,11 @@ public final class NameResolverRegistry {
   }
 
   /**
-   * Returns effective providers, in priority order.
+   * Returns effective providers map from scheme to the provider list. The list in priority order.
    */
   @VisibleForTesting
-  synchronized List<NameResolverProvider> providers() {
-    return effectiveProviders;
+  synchronized LinkedHashMap<String, List<NameResolverProvider>> providers() {
+    return new LinkedHashMap<>(effectiveProviders);
   }
 
   public NameResolver.Factory asFactory() {
@@ -149,8 +163,11 @@ public final class NameResolverRegistry {
     @Override
     @Nullable
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-      List<NameResolverProvider> providers = providers();
-      for (NameResolverProvider provider : providers) {
+      List<NameResolverProvider> providerList = providers().get(targetUri.getScheme());
+      if (providerList == null) {
+        return null;
+      }
+      for (NameResolverProvider provider : providerList) {
         NameResolver resolver = provider.newNameResolver(targetUri, args);
         if (resolver != null) {
           return resolver;
@@ -161,11 +178,10 @@ public final class NameResolverRegistry {
 
     @Override
     public String getDefaultScheme() {
-      List<NameResolverProvider> providers = providers();
-      if (providers.isEmpty()) {
+      if (providers().isEmpty()) {
         return "unknown";
       }
-      return providers.get(0).getDefaultScheme();
+      return providers().entrySet().iterator().next().getKey();
     }
   }
 
