@@ -27,6 +27,7 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
+import io.grpc.InternalRetryTracer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -81,6 +82,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final long channelBufferLimit;
   @Nullable
   private final Throttle throttle;
+  @Nullable
+  private final InternalRetryTracer retryTracer;
   @GuardedBy("lock")
   private final InsightBuilder closedSubstreamsInsight = new InsightBuilder();
 
@@ -110,7 +113,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
       Executor callExecutor, ScheduledExecutorService scheduledExecutorService,
       @Nullable RetryPolicy retryPolicy, @Nullable HedgingPolicy hedgingPolicy,
-      @Nullable Throttle throttle) {
+      @Nullable Throttle throttle, @Nullable InternalRetryTracer retryTracer) {
     this.method = method;
     this.channelBufferUsed = channelBufferUsed;
     this.perRpcBufferLimit = perRpcBufferLimit;
@@ -128,6 +131,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         "Should not provide both retryPolicy and hedgingPolicy");
     this.isHedging = hedgingPolicy != null;
     this.throttle = throttle;
+    this.retryTracer = retryTracer;
   }
 
   @SuppressWarnings("GuardedBy")
@@ -138,6 +142,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     synchronized (lock) {
       if (state.winningSubstream != null) {
         return null;
+      }
+      if (retryTracer != null) {
+        retryTracer.commit();
       }
       final Collection<Substream> savedDrainedSubstreams = state.drainedSubstreams;
 
@@ -920,6 +927,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         } // else no retry
       } // else no retry
 
+      if (shouldRetry && retryTracer != null) {
+        shouldRetry = retryTracer.shouldRetry();
+      }
       return new RetryPlan(shouldRetry, backoffNanos);
     }
 
