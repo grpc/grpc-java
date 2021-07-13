@@ -43,20 +43,29 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
 
   private static final String SCHEME = "xds";
 
-  @Override
-  public XdsNameResolver newNameResolver(URI targetUri, Args args) {
+  /**
+   * Allows injecting bootstrapOverride to the name resolver.
+   * */
+  public XdsNameResolver newNameResolver(URI targetUri, Args args,
+                                         @Nullable Map<String, ?> bootstrapOverride) {
     if (SCHEME.equals(targetUri.getScheme())) {
       String targetPath = checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(
-          targetPath.startsWith("/"),
-          "the path component (%s) of the target (%s) must start with '/'",
-          targetPath,
-          targetUri);
+              targetPath.startsWith("/"),
+              "the path component (%s) of the target (%s) must start with '/'",
+              targetPath,
+              targetUri);
       String name = targetPath.substring(1);
       return new XdsNameResolver(name, args.getServiceConfigParser(),
-          args.getSynchronizationContext(), args.getScheduledExecutorService());
+              args.getSynchronizationContext(), args.getScheduledExecutorService(),
+              bootstrapOverride);
     }
     return null;
+  }
+
+  @Override
+  public XdsNameResolver newNameResolver(URI targetUri, Args args) {
+    return newNameResolver(targetUri, args, null);
   }
 
   @Override

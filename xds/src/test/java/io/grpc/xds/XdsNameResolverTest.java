@@ -36,6 +36,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.re2j.Pattern;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -78,6 +79,7 @@ import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -148,7 +150,7 @@ public class XdsNameResolverTest {
         new FaultFilter(mockRandom, new AtomicLong()),
         RouterFilter.INSTANCE);
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, filterRegistry);
+        xdsClientPoolFactory, mockRandom, filterRegistry, null);
   }
 
   @After
@@ -167,7 +169,6 @@ public class XdsNameResolverTest {
     XdsClientPoolFactory xdsClientPoolFactory = new XdsClientPoolFactory() {
       @Override
       public void setBootstrapOverride(Map<String, ?> bootstrap) {
-        throw new UnsupportedOperationException("Should not be called");
       }
 
       @Override
@@ -181,14 +182,43 @@ public class XdsNameResolverTest {
         throw new XdsInitializationException("Fail to read bootstrap file");
       }
     };
+    Map<String, String> b = new HashMap<>();
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry());
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), b);
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo("Failed to initialize xDS");
     assertThat(error.getCause()).hasMessageThat().isEqualTo("Fail to read bootstrap file");
+  }
+
+  @Test
+  public void overrideBootstrap() throws Exception {
+    final SettableFuture<Map<String, ?>> bootstrapSettable = SettableFuture.create();
+    XdsClientPoolFactory xdsClientPoolFactory = new XdsClientPoolFactory() {
+
+      @Override
+      public void setBootstrapOverride(Map<String, ?> bootstrap) {
+        assertThat(bootstrapSettable.set(bootstrap)).isTrue();
+      }
+
+      @Override
+      @Nullable
+      public ObjectPool<XdsClient> get() {
+        throw new UnsupportedOperationException("Should not be called");
+      }
+
+      @Override
+      public ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
+        assertThat(bootstrapSettable.isDone()).isTrue();
+        return null;
+      }
+    };
+    Map<String, String> b = new HashMap<>();
+    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
+            xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), b);
+    assertThat(bootstrapSettable.get()).isSameInstanceAs(b);
   }
 
   @Test
@@ -583,7 +613,7 @@ public class XdsNameResolverTest {
     resolver.shutdown();
     reset(mockListener);
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry());
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
@@ -1556,10 +1586,8 @@ public class XdsNameResolverTest {
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
-
     @Override
     public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      throw new UnsupportedOperationException("Should not be called");
     }
 
     @Override
