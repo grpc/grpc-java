@@ -205,7 +205,17 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
       return null;
     }
     final Long finalDelayNanos = delayNanos;
-    final Status finalAbortStatus = abortStatus;
+    final Status finalAbortStatus;
+    if (abortStatus != null) {
+      String abortDesc = "RPC terminated due to fault injection";
+      if (abortStatus.getDescription() != null) {
+        abortDesc = abortDesc + ": " + abortStatus.getDescription();
+      }
+      finalAbortStatus = abortStatus.withDescription(abortDesc);
+    } else {
+      finalAbortStatus = null;
+    }
+
     final class FaultInjectionInterceptor implements ClientInterceptor {
       @Override
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(

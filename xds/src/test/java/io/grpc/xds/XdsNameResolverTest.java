@@ -1042,20 +1042,27 @@ public class XdsNameResolverTest {
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
         ImmutableMap.of(HEADER_ABORT_HTTP_STATUS_KEY.name(), "404",
             HEADER_ABORT_PERCENTAGE_KEY.name(), "60"), CallOptions.DEFAULT);
-    verifyRpcFailed(observer, Status.UNIMPLEMENTED.withDescription("HTTP status code 404"));
+    verifyRpcFailed(
+        observer,
+        Status.UNIMPLEMENTED.withDescription(
+            "RPC terminated due to fault injection: HTTP status code 404"));
     // header abort grpc status key provided, rpc should fail
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
         ImmutableMap.of(HEADER_ABORT_GRPC_STATUS_KEY.name(),
             String.valueOf(Status.UNAUTHENTICATED.getCode().value()),
             HEADER_ABORT_PERCENTAGE_KEY.name(), "60"), CallOptions.DEFAULT);
-    verifyRpcFailed(observer, Status.UNAUTHENTICATED);
+    verifyRpcFailed(
+        observer, Status.UNAUTHENTICATED.withDescription("RPC terminated due to fault injection"));
     // header abort, both http and grpc code keys provided, rpc should fail with http code
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
         ImmutableMap.of(HEADER_ABORT_HTTP_STATUS_KEY.name(), "404",
             HEADER_ABORT_GRPC_STATUS_KEY.name(),
             String.valueOf(Status.UNAUTHENTICATED.getCode().value()),
             HEADER_ABORT_PERCENTAGE_KEY.name(), "60"), CallOptions.DEFAULT);
-    verifyRpcFailed(observer, Status.UNIMPLEMENTED.withDescription("HTTP status code 404"));
+    verifyRpcFailed(
+        observer,
+        Status.UNIMPLEMENTED.withDescription(
+            "RPC terminated due to fault injection: HTTP status code 404"));
 
     // header abort, no header rate, fix rate = 60 %
     httpFilterFaultConfig = FaultConfig.create(
@@ -1068,7 +1075,10 @@ public class XdsNameResolverTest {
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
         ImmutableMap.of(HEADER_ABORT_HTTP_STATUS_KEY.name(), "404"), CallOptions.DEFAULT);
-    verifyRpcFailed(observer, Status.UNIMPLEMENTED.withDescription("HTTP status code 404"));
+    verifyRpcFailed(
+        observer,
+        Status.UNIMPLEMENTED.withDescription(
+            "RPC terminated due to fault injection: HTTP status code 404"));
 
     // header abort, no header rate, fix rate = 0
     httpFilterFaultConfig = FaultConfig.create(
@@ -1096,7 +1106,10 @@ public class XdsNameResolverTest {
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
         Collections.<String, String>emptyMap(), CallOptions.DEFAULT);
-    verifyRpcFailed(observer, Status.UNAUTHENTICATED.withDescription("unauthenticated"));
+    verifyRpcFailed(
+        observer,
+        Status.UNAUTHENTICATED.withDescription(
+            "RPC terminated due to fault injection: unauthenticated"));
 
     // fixed abort, fix rate = 40%
     httpFilterFaultConfig = FaultConfig.create(
@@ -1279,7 +1292,9 @@ public class XdsNameResolverTest {
     ClientCall.Listener<Void> observer = startNewCall(TestMethodDescriptors.voidMethod(),
         configSelector, Collections.<String, String>emptyMap(), CallOptions.DEFAULT);
     verifyRpcDelayedThenAborted(
-        observer, 5000L, Status.UNAUTHENTICATED.withDescription("unauthenticated"));
+        observer, 5000L,
+        Status.UNAUTHENTICATED.withDescription(
+            "RPC terminated due to fault injection: unauthenticated"));
   }
 
   @Test
@@ -1305,7 +1320,8 @@ public class XdsNameResolverTest {
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     ClientCall.Listener<Void> observer = startNewCall(TestMethodDescriptors.voidMethod(),
         configSelector, Collections.<String, String>emptyMap(), CallOptions.DEFAULT);
-    verifyRpcFailed(observer, Status.INTERNAL);
+    verifyRpcFailed(
+        observer, Status.INTERNAL.withDescription("RPC terminated due to fault injection"));
 
     // Route fault config override
     FaultConfig routeFaultConfig = FaultConfig.create(
@@ -1319,7 +1335,8 @@ public class XdsNameResolverTest {
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
         Collections.<String, String>emptyMap(), CallOptions.DEFAULT);
-    verifyRpcFailed(observer, Status.UNKNOWN);
+    verifyRpcFailed(
+        observer, Status.UNKNOWN.withDescription("RPC terminated due to fault injection"));
 
     // WeightedCluster fault config override
     FaultConfig weightedClusterFaultConfig = FaultConfig.create(
@@ -1335,7 +1352,8 @@ public class XdsNameResolverTest {
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
         Collections.<String, String>emptyMap(), CallOptions.DEFAULT);
-    verifyRpcFailed(observer, Status.UNAVAILABLE);
+    verifyRpcFailed(
+        observer, Status.UNAVAILABLE.withDescription("RPC terminated due to fault injection"));
   }
 
   @Test
@@ -1363,7 +1381,8 @@ public class XdsNameResolverTest {
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     ClientCall.Listener<Void> observer = startNewCall(TestMethodDescriptors.voidMethod(),
         configSelector, Collections.<String, String>emptyMap(), CallOptions.DEFAULT);;
-    verifyRpcFailed(observer, Status.UNKNOWN);
+    verifyRpcFailed(
+        observer, Status.UNKNOWN.withDescription("RPC terminated due to fault injection"));
   }
 
   private <ReqT, RespT> ClientCall.Listener<RespT> startNewCall(
