@@ -19,12 +19,14 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -44,13 +46,17 @@ public final class NameResolverRegistry {
   private static NameResolverRegistry instance;
 
   private final NameResolver.Factory factory = new NameResolverFactory();
+  private static final String UNKNOWN_SCHEME = "unknown";
+  @GuardedBy("this")
+  private String defaultScheme = UNKNOWN_SCHEME;
 
   @GuardedBy("this")
   private final LinkedHashSet<NameResolverProvider> allProviders = new LinkedHashSet<>();
   /** Generated from {@code allProviders}. Is mapping from scheme key to the highest priority
-   * {@link NameResolverProvider}. */
+   * {@link NameResolverProvider}. Is replaced instead of mutating. */
   @GuardedBy("this")
-  private LinkedHashMap<String, NameResolverProvider> effectiveProviders = new LinkedHashMap<>();
+  private ImmutableMap<String, NameResolverProvider> effectiveProviders = ImmutableMap.of();
+
 
   /**
    * Register a provider.
@@ -82,16 +88,23 @@ public final class NameResolverRegistry {
   }
 
   private synchronized void refreshProviders() {
-    LinkedHashMap<String, NameResolverProvider> refreshedProviders = new LinkedHashMap<>();
+    Map<String, NameResolverProvider> refreshedProviders = new HashMap<>();
+    int maxPriority = Integer.MIN_VALUE;
+    String refreshedDefaultScheme = UNKNOWN_SCHEME;
     // We prefer first-registered providers
     for (NameResolverProvider provider : allProviders) {
-      String scheme = provider.getDefaultScheme();
+      String scheme = provider.getScheme();
       NameResolverProvider existing = refreshedProviders.get(scheme);
       if (existing == null || existing.priority() < provider.priority()) {
         refreshedProviders.put(scheme, provider);
       }
+      if (maxPriority < provider.priority()) {
+        maxPriority = provider.priority();
+        refreshedDefaultScheme = provider.getScheme();
+      }
     }
-    effectiveProviders = refreshedProviders;
+    effectiveProviders = ImmutableMap.copyOf(refreshedProviders);
+    defaultScheme = refreshedDefaultScheme;
   }
 
   /**
@@ -125,8 +138,8 @@ public final class NameResolverRegistry {
    * that scheme.
    */
   @VisibleForTesting
-  synchronized LinkedHashMap<String, NameResolverProvider> providers() {
-    return new LinkedHashMap<>(effectiveProviders);
+  synchronized Map<String, NameResolverProvider> providers() {
+    return effectiveProviders;
   }
 
   public NameResolver.Factory asFactory() {
@@ -157,11 +170,9 @@ public final class NameResolverRegistry {
 
     @Override
     public String getDefaultScheme() {
-      LinkedHashMap<String, NameResolverProvider> providers = providers();
-      if (providers.isEmpty()) {
-        return "unknown";
+      synchronized (NameResolverRegistry.this) {
+        return defaultScheme;
       }
-      return providers.entrySet().iterator().next().getKey();
     }
   }
 

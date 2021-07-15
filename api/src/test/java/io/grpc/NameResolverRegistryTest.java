@@ -24,8 +24,8 @@ import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.internal.DnsNameResolverProvider;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.URI;
-import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -99,7 +99,7 @@ public class NameResolverRegistryTest {
   public void newNameResolver_providerReturnsNull() {
     NameResolverRegistry registry = new NameResolverRegistry();
     registry.register(
-        new BaseProvider(true, 5) {
+        new BaseProvider(true, 5, "noScheme") {
           @Override
           public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
             assertThat(passedUri).isSameInstanceAs(uri);
@@ -108,6 +108,7 @@ public class NameResolverRegistryTest {
           }
         });
     assertThat(registry.asFactory().newNameResolver(uri, args)).isNull();
+    assertThat(registry.asFactory().getDefaultScheme()).isEqualTo("noScheme");
   }
 
   @Test
@@ -148,6 +149,7 @@ public class NameResolverRegistryTest {
           }
         });
     assertThat(registry.asFactory().newNameResolver(uri, args)).isNull();
+    assertThat(registry.asFactory().getDefaultScheme()).isEqualTo(uri.getScheme());
   }
 
   @Test
@@ -195,7 +197,7 @@ public class NameResolverRegistryTest {
 
   @Test
   public void baseProviders() {
-    LinkedHashMap<String, NameResolverProvider> providers =
+    Map<String, NameResolverProvider> providers =
             NameResolverRegistry.getDefaultRegistry().providers();
     assertThat(providers).hasSize(1);
     // 2 name resolvers from grpclb and core, higher priority one is returned.
