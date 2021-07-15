@@ -39,7 +39,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellableContext;
@@ -990,7 +990,7 @@ public abstract class ClientXdsClientTestBase {
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
         RDS_RESOURCE, null, Collections.<Message>emptyList());
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-        "google-sds-config-default", "ROOTCA");
+        "google-sds-config-default", "ROOTCA", false);
     Message filterChain = mf.buildFilterChain(
         Collections.<String>emptyList(), downstreamTlsContext, hcmFilter);
     Any packedListener =
@@ -1302,13 +1302,14 @@ public abstract class ClientXdsClientTestBase {
    */
   @Test
   public void cdsResponseWithUpstreamTlsContext() {
+    Assume.assumeTrue(useProtocolV3());
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
 
     // Management server sends back CDS response with UpstreamTlsContext.
     Any clusterEds =
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
             null, true,
-            mf.buildUpstreamTlsContext("secret1", "unix:/var/uds2"), null));
+            mf.buildUpstreamTlsContext("secret1", "cert1"), null));
     List<Any> clusters = ImmutableList.of(
         Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com",
             "dns-service-bar.googleapis.com", 443, "round_robin", null, false, null, null)),
@@ -1321,20 +1322,37 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(cdsResourceWatcher, times(1)).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    SdsSecretConfig validationContextSdsSecretConfig =
-        cdsUpdate.upstreamTlsContext().getCommonTlsContext().getValidationContextSdsSecretConfig();
-    assertThat(validationContextSdsSecretConfig.getName()).isEqualTo("secret1");
-    assertThat(
-        Iterables.getOnlyElement(
-            validationContextSdsSecretConfig
-                .getSdsConfig()
-                .getApiConfigSource()
-                .getGrpcServicesList())
-            .getGoogleGrpc()
-            .getTargetUri())
-        .isEqualTo("unix:/var/uds2");
+    CommonTlsContext.CertificateProviderInstance certificateProviderInstance =
+        cdsUpdate.upstreamTlsContext().getCommonTlsContext().getCombinedValidationContext()
+            .getValidationContextCertificateProviderInstance();
+    assertThat(certificateProviderInstance.getInstanceName()).isEqualTo("secret1");
+    assertThat(certificateProviderInstance.getCertificateName()).isEqualTo("cert1");
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+  }
+
+  /**
+   * CDS response containing UpstreamTlsContext for a cluster.
+   */
+  @Test
+  public void cdsResponseErrorHandling_badUpstreamTlsContext() {
+    Assume.assumeTrue(useProtocolV3());
+    DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
+
+    // Management server sends back CDS response with UpstreamTlsContext.
+    List<Any> clusters = ImmutableList.of(Any
+        .pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
+            null, true,
+            mf.buildUpstreamTlsContext(null, null), null)));
+    call.sendResponse(CDS, clusters, VERSION_1, "0000");
+
+    // The response NACKed with errors indicating indices of the failed resources.
+    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(
+        "CDS response Cluster 'cluster.googleapis.com' validation error: "
+            + "Cluster cluster.googleapis.com: malformed UpstreamTlsContext: "
+            + "io.grpc.xds.ClientXdsClient$ResourceInvalidException: "
+            + "combined_validation_context is required in upstream-tls-context"));
+    verifyNoInteractions(cdsResourceWatcher);
   }
 
   @Test
@@ -2100,7 +2118,7 @@ public abstract class ClientXdsClientTestBase {
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
         "route-foo.googleapis.com", null, Collections.<Message>emptyList());
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-        "google-sds-config-default", "ROOTCA");
+        "google-sds-config-default", "ROOTCA", false);
     Message filterChain = mf.buildFilterChain(
         Collections.<String>emptyList(), downstreamTlsContext, hcmFilter);
     Message listener =
@@ -2133,7 +2151,7 @@ public abstract class ClientXdsClientTestBase {
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
         "route-foo.googleapis.com", null, Collections.<Message>emptyList());
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-        "google-sds-config-default", "ROOTCA");
+        "google-sds-config-default", "ROOTCA", false);
     Message filterChain = mf.buildFilterChain(
         Collections.singletonList("managed-mtls"), downstreamTlsContext, hcmFilter);
     Message listener = mf.buildListenerWithFilterChain(
@@ -2148,6 +2166,28 @@ public abstract class ClientXdsClientTestBase {
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LISTENER_RESOURCE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+  }
+
+  @Test
+  public void serverSideListenerResponseErrorHandling_badDownstreamTlsContext() {
+    Assume.assumeTrue(useProtocolV3());
+    ClientXdsClientTestBase.DiscoveryRpcCall call =
+            startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
+    Message hcmFilter = mf.buildHttpConnectionManagerFilter(
+            "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+    Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+            null, null,false);
+    Message filterChain = mf.buildFilterChain(
+            Collections.<String>emptyList(), downstreamTlsContext, hcmFilter);
+    Message listener =
+            mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain);
+    List<Any> listeners = ImmutableList.of(Any.pack(listener));
+    call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
+    // The response NACKed with errors indicating indices of the failed resources.
+    call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(
+            "LDS response Listener \'grpc/server?xds.resource.listening_address=0.0.0.0:7000\' "
+                + "validation error: common-tls-context is required in downstream-tls-context"));
+    verifyNoInteractions(ldsResourceWatcher);
   }
 
   private DiscoveryRpcCall startResourceWatcher(
@@ -2280,7 +2320,7 @@ public abstract class ClientXdsClientTestBase {
     protected abstract Message buildRingHashLbConfig(String hashFunction, long minRingSize,
         long maxRingSize);
 
-    protected abstract Message buildUpstreamTlsContext(String secretName, String targetUri);
+    protected abstract Message buildUpstreamTlsContext(String instanceName, String certName);
 
     protected abstract Message buildCircuitBreakers(int highPriorityMaxRequests,
         int defaultPriorityMaxRequests);

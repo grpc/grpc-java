@@ -42,10 +42,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig.HashFunction;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
-import io.envoyproxy.envoy.config.core.v3.ApiConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ConfigSource;
-import io.envoyproxy.envoy.config.core.v3.GrpcService;
-import io.envoyproxy.envoy.config.core.v3.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.config.core.v3.HealthStatus;
 import io.envoyproxy.envoy.config.core.v3.Locality;
 import io.envoyproxy.envoy.config.core.v3.Node;
@@ -81,7 +78,6 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
@@ -537,24 +533,22 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildUpstreamTlsContext(String secretName, String targetUri) {
-      GrpcService grpcService =
-          GrpcService.newBuilder()
-              .setGoogleGrpc(GoogleGrpc.newBuilder().setTargetUri(targetUri))
-              .build();
-      ConfigSource sdsConfig =
-          ConfigSource.newBuilder()
-              .setApiConfigSource(ApiConfigSource.newBuilder().addGrpcServices(grpcService))
-              .build();
-      SdsSecretConfig validationContextSdsSecretConfig =
-          SdsSecretConfig.newBuilder()
-              .setName(secretName)
-              .setSdsConfig(sdsConfig)
-              .build();
+    protected Message buildUpstreamTlsContext(String instanceName, String certName) {
+      CommonTlsContext.Builder commonTlsContextBuilder = CommonTlsContext.newBuilder();
+      if (instanceName != null && certName != null) {
+        CommonTlsContext.CertificateProviderInstance providerInstance =
+                CommonTlsContext.CertificateProviderInstance.newBuilder()
+                        .setInstanceName(instanceName)
+                        .setCertificateName(certName)
+                        .build();
+        CommonTlsContext.CombinedCertificateValidationContext combined =
+                CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
+                        .setValidationContextCertificateProviderInstance(providerInstance)
+                        .build();
+        commonTlsContextBuilder.setCombinedValidationContext(combined);
+      }
       return UpstreamTlsContext.newBuilder()
-          .setCommonTlsContext(
-              CommonTlsContext.newBuilder()
-                  .setValidationContextSdsSecretConfig(validationContextSdsSecretConfig))
+          .setCommonTlsContext(commonTlsContextBuilder)
           .build();
     }
 

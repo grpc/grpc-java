@@ -493,10 +493,10 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildUpstreamTlsContext(String secretName, String targetUri) {
+    protected Message buildUpstreamTlsContext(String instanceName, String certName) {
       GrpcService grpcService =
           GrpcService.newBuilder()
-              .setGoogleGrpc(GoogleGrpc.newBuilder().setTargetUri(targetUri))
+              .setGoogleGrpc(GoogleGrpc.newBuilder().setTargetUri(certName))
               .build();
       ConfigSource sdsConfig =
           ConfigSource.newBuilder()
@@ -504,7 +504,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
               .build();
       SdsSecretConfig validationContextSdsSecretConfig =
           SdsSecretConfig.newBuilder()
-              .setName(secretName)
+              .setName(instanceName)
               .setSdsConfig(sdsConfig)
               .build();
       return UpstreamTlsContext.newBuilder()
