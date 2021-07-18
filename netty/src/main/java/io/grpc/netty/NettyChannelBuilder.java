@@ -585,11 +585,11 @@ public final class NettyChannelBuilder extends
         = checkNotNull(protocolNegotiatorFactory, "protocolNegotiatorFactory");
   }
 
-  void setTracingEnabled(boolean value) {
+  public void setTracingEnabled(boolean value) {
     this.managedChannelImplBuilder.setTracingEnabled(value);
   }
 
-  void setStatsEnabled(boolean value) {
+  public void setStatsEnabled(boolean value) {
     this.managedChannelImplBuilder.setStatsEnabled(value);
   }
 
