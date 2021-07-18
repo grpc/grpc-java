@@ -142,7 +142,7 @@ public final class EnvoyServerProtoData {
     }
   }
 
-  static final class CidrRange {
+  public static final class CidrRange {
     private final InetAddress addressPrefix;
     private final int prefixLen;
 
@@ -186,7 +186,7 @@ public final class EnvoyServerProtoData {
     }
   }
 
-  enum ConnectionSourceType {
+  public enum ConnectionSourceType {
     // Any connection source matches.
     ANY,
 
@@ -201,7 +201,7 @@ public final class EnvoyServerProtoData {
    * Corresponds to Envoy proto message
    * {@link io.envoyproxy.envoy.api.v2.listener.FilterChainMatch}.
    */
-  static final class FilterChainMatch {
+  public static final class FilterChainMatch {
     private final int destinationPort;
     private final List<CidrRange> prefixRanges;
     private final List<String> applicationProtocols;
@@ -211,8 +211,11 @@ public final class EnvoyServerProtoData {
     private final List<String> serverNames;
     private final String transportProtocol;
 
+    /**
+     * Creates an internal filter chain match.
+     * */
     @VisibleForTesting
-    FilterChainMatch(
+    public FilterChainMatch(
         int destinationPort,
         List<CidrRange> prefixRanges,
         List<String> applicationProtocols,
@@ -322,7 +325,10 @@ public final class EnvoyServerProtoData {
     @Nullable
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    FilterChain(
+    /**
+     * Creates an internal filter chain.
+     * */
+    public FilterChain(
         String name,
         FilterChainMatch filterChainMatch,
         HttpConnectionManager httpConnectionManager,

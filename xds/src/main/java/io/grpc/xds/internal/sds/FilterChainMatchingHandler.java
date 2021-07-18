@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.XdsServerWrapper.ATTR_SERVER_ROUTING_CONFIG;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
@@ -32,22 +31,18 @@ import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
-import io.grpc.xds.XdsServerWrapper.ServerRoutingConfig;
 import io.grpc.xds.internal.Matchers.CidrMatcher;
-import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ServerSdsHandler;
-import io.grpc.xds.internal.sds.SslContextProviderSupplier;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.security.cert.CertStoreException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 
@@ -55,20 +50,24 @@ import javax.annotation.Nullable;
  * Handles L4 filter chain match for the connection based on the xds configuration.
  * */
 public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapter {
+  private static final Logger log = Logger.getLogger(FilterChainMatchingHandler.class.getName());
   private final GrpcHttp2ConnectionHandler grpcHandler;
   private final FilterChainSelector selector;
-  @Nullable
-  private final ProtocolNegotiator fallbackProtocolNegotiator;
+  private final ProtocolNegotiator delegate;
+
+  public static final Attributes.Key<SslContextProviderSupplier>
+          ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER =
+          Attributes.Key.create("io.grpc.xds.internal.sds.server.sslContextProviderSupplier");
 
   /**
    * Selects the filter chain using the selector configuration.
    * */
   public FilterChainMatchingHandler(
           GrpcHttp2ConnectionHandler grpcHandler, FilterChainSelector selector,
-          @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
+          ProtocolNegotiator delegate) {
     this.grpcHandler = checkNotNull(grpcHandler, "grpcHandler");
     this.selector = checkNotNull(selector, "selector");
-    this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
+    this.delegate = checkNotNull(delegate, "delegate");
   }
 
   @Override
@@ -81,58 +80,44 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
             (InetSocketAddress) ctx.channel().localAddress(),
             (InetSocketAddress) ctx.channel().remoteAddress());
     if (config == null) {
-      throw new IllegalStateException("not filter chain");
+      log.log(Level.FINER, "No matching filter chain found.");
+      ctx.fireExceptionCaught(new IllegalStateException("No matching filter chain."));
+      return;
     }
-    ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
+    ProtocolNegotiationEvent pne = (ProtocolNegotiationEvent)evt;
     Attributes attr = InternalProtocolNegotiationEvent.getAttributes(pne)
-            .toBuilder().set(ATTR_SERVER_ROUTING_CONFIG, config.routingConfig).build();
+            .toBuilder().set(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                    config.sslContextProviderSupplier).build();
     pne = InternalProtocolNegotiationEvent.withAttributes(pne, attr);
-    SslContextProviderSupplier sslContextProviderSupplier = config.sslContextProviderSupplier;
-
-    ChannelHandler handler;
-    if (sslContextProviderSupplier == null) {
-      if (fallbackProtocolNegotiator == null) {
-        ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
-        return;
-      }
-      handler = fallbackProtocolNegotiator.newHandler(grpcHandler);
-    } else {
-      handler = new ServerSdsHandler(grpcHandler, sslContextProviderSupplier);
-    }
-    ctx.pipeline().replace(this, null, handler);
+    ctx.pipeline().replace(this, null, delegate.newHandler(grpcHandler));
     ctx.fireUserEventTriggered(pne);
   }
 
   public static final class FilterChainSelector {
     public static final FilterChainSelector NO_FILTER_CHAIN = new FilterChainSelector(
-            Collections.<FilterChain, ServerRoutingConfig>emptyMap(), null, null);
+            Collections.<FilterChain>emptyList(), null);
 
-    private final Map<FilterChain, ServerRoutingConfig> routingConfigs;
+    private final List<FilterChain> filterChainList;
     @Nullable
     private final SslContextProviderSupplier defaultSslContextProviderSupplier;
-    @Nullable
-    private final ServerRoutingConfig defaultRoutingConfig;
 
-    FilterChainSelector(Map<FilterChain, ServerRoutingConfig> routingConfigs,
-                        @Nullable SslContextProviderSupplier defaultSslContextProviderSupplier,
-                        @Nullable ServerRoutingConfig defaultRoutingConfig) {
-      this.routingConfigs = checkNotNull(routingConfigs, "routingConfigs");
+    /**
+     * Populated from xds listener update to perform L4 filter chain match.
+     * */
+    public FilterChainSelector(List<FilterChain> filterChainList,
+                        @Nullable SslContextProviderSupplier defaultSslContextProviderSupplier) {
+      checkNotNull(filterChainList, "filterChainList");
+      this.filterChainList = filterChainList;
       this.defaultSslContextProviderSupplier = defaultSslContextProviderSupplier;
-      this.defaultRoutingConfig = defaultRoutingConfig;
     }
 
     @VisibleForTesting
-    Map<FilterChain, ServerRoutingConfig> getRoutingConfigs() {
-      return routingConfigs;
+    public List<FilterChain> getFilterChains() {
+      return filterChainList;
     }
 
     @VisibleForTesting
-    ServerRoutingConfig getDefaultRoutingConfig() {
-      return defaultRoutingConfig;
-    }
-
-    @VisibleForTesting
-    SslContextProviderSupplier getDefaultSslContextProviderSupplier() {
+    public SslContextProviderSupplier getDefaultSslContextProviderSupplier() {
       return defaultSslContextProviderSupplier;
     }
 
@@ -141,7 +126,7 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
      */
     @Nullable
     public FilteredConfig select(InetSocketAddress localAddr, InetSocketAddress remoteAddr) {
-      Collection<FilterChain> filterChains = routingConfigs.keySet();
+      Collection<FilterChain> filterChains = new ArrayList<>(filterChainList);
       filterChains = filterOnDestinationPort(filterChains);
       filterChains = filterOnIpAddress(filterChains, localAddr.getAddress(), true);
       filterChains = filterOnServerNames(filterChains);
@@ -158,11 +143,10 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
       }
       if (filterChains.size() == 1) {
         FilterChain selected = Iterables.getOnlyElement(filterChains);
-        return new FilteredConfig(
-                routingConfigs.get(selected), selected.getSslContextProviderSupplier());
+        return new FilteredConfig(selected.getSslContextProviderSupplier());
       }
-      if (defaultRoutingConfig != null) {
-        return new FilteredConfig(defaultRoutingConfig, defaultSslContextProviderSupplier);
+      if (defaultSslContextProviderSupplier != null) {
+        return new FilteredConfig(defaultSslContextProviderSupplier);
       }
       return null;
     }
@@ -325,13 +309,10 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
    * The FilterChain level configuration.
    */
   public static final class FilteredConfig {
-    private final ServerRoutingConfig routingConfig;
     @Nullable
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    private FilteredConfig(ServerRoutingConfig routingConfig,
-                           @Nullable SslContextProviderSupplier sslContextProviderSupplier) {
-      this.routingConfig = checkNotNull(routingConfig, "routingConfig");
+    private FilteredConfig(@Nullable SslContextProviderSupplier sslContextProviderSupplier) {
       this.sslContextProviderSupplier = sslContextProviderSupplier;
     }
   }

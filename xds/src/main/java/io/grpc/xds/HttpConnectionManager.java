@@ -28,7 +28,7 @@ import javax.annotation.Nullable;
  * HttpConnectionManager is a network filter for proxying HTTP requests.
  */
 @AutoValue
-abstract class HttpConnectionManager {
+public abstract class HttpConnectionManager {
   // Total number of nanoseconds to keep alive an HTTP request/response stream.
   abstract long httpMaxStreamDurationNano();
 
@@ -44,7 +44,7 @@ abstract class HttpConnectionManager {
   @Nullable
   abstract ImmutableList<NamedFilterConfig> httpFilterConfigs();
 
-  static HttpConnectionManager forRdsName(long httpMaxStreamDurationNano, String rdsName,
+  public static HttpConnectionManager forRdsName(long httpMaxStreamDurationNano, String rdsName,
       @Nullable List<NamedFilterConfig> httpFilterConfigs) {
     checkNotNull(rdsName, "rdsName");
     return create(httpMaxStreamDurationNano, rdsName, null, httpFilterConfigs);

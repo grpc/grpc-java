@@ -52,7 +52,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 
-// TODO (zivy@): move XdsServerWrapper related tests to XdsServerWrapperTest.
+// TODO (zivy@): move certain tests down to XdsServerWrapperTest, or up to XdsSdsClientServerTest.
 /**
  * Unit tests for {@link XdsServerBuilder}.
  */
@@ -187,23 +187,25 @@ public class XdsServerBuilderTest {
         mock(XdsServerBuilder.XdsServingStatusListener.class);
     buildServer(mockXdsServingStatusListener);
     Future<Throwable> future = startServerAsync();
+    XdsServerTestHelper.generateListenerUpdate(
+            xdsClient,
+            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
+            tlsContextManager);
+    future.get(5000, TimeUnit.MILLISECONDS);
     xdsClient.ldsWatcher.onError(Status.ABORTED);
     verify(mockXdsServingStatusListener, never()).onNotServing(any(StatusException.class));
-    assertThat(xdsClient.ldsResource.isDone()).isTrue();
-    assertThat(future.isDone()).isFalse();
     reset(mockXdsServingStatusListener);
-    xdsClient.ldsWatcher.onError(Status.NOT_FOUND);
+    xdsClient.ldsWatcher.onError(Status.CANCELLED);
     verify(mockXdsServingStatusListener, never()).onNotServing(any(StatusException.class));
     reset(mockXdsServingStatusListener);
     xdsClient.ldsWatcher.onResourceDoesNotExist("not found error");
-    future.get(5000, TimeUnit.MILLISECONDS);
     verify(mockXdsServingStatusListener).onNotServing(any(StatusException.class));
     reset(mockXdsServingStatusListener);
     XdsServerTestHelper.generateListenerUpdate(
         xdsClient,
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
             tlsContextManager);
-    verifyServer(null, mockXdsServingStatusListener, null);
+    verifyServer(future, mockXdsServingStatusListener, null);
   }
 
   @Test

@@ -118,6 +118,18 @@ public class XdsSdsClientServerTest {
   }
 
   @Test
+  public void plaintextClientServer_noCredential() throws Exception {
+    XdsServerBuilder builder = XdsServerBuilder.forPort(0)
+            .xdsClientPoolFactory(fakePoolFactory)
+            .addService(new SimpleServiceImpl());
+    buildServer(builder, null);
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+            getBlockingStub(/* upstreamTlsContext= */ null,
+                    /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+    assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
+  }
+
+  @Test
   public void nullFallbackCredentials_expectException() throws Exception {
     try {
       buildServerWithTlsContext(/* downstreamTlsContext= */ null, /* fallbackCredentials= */ null);
@@ -346,7 +358,10 @@ public class XdsSdsClientServerTest {
       DownstreamTlsContext downstreamTlsContext)
       throws Exception {
     ServerCredentials xdsCredentials = XdsServerCredentials.create(fallbackCredentials);
-    buildServer(xdsCredentials, downstreamTlsContext);
+    XdsServerBuilder builder = XdsServerBuilder.forPort(0, xdsCredentials)
+            .xdsClientPoolFactory(fakePoolFactory)
+            .addService(new SimpleServiceImpl());
+    buildServer(builder, downstreamTlsContext);
   }
 
   static void generateListenerUpdateToWatcher(
@@ -359,12 +374,9 @@ public class XdsSdsClientServerTest {
   }
 
   private void buildServer(
-      ServerCredentials serverCredentials,
+      XdsServerBuilder builder,
       DownstreamTlsContext downstreamTlsContext)
       throws Exception {
-    XdsServerBuilder builder = XdsServerBuilder.forPort(0, serverCredentials)
-         .xdsClientPoolFactory(fakePoolFactory)
-        .addService(new SimpleServiceImpl());
     tlsContextManagerForServer = new TlsContextManagerImpl(bootstrapInfoForServer);
     XdsServerWrapper xdsServer = builder.build();
     SettableFuture<Throwable> startFuture = startServerAsync(xdsServer);

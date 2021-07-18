@@ -17,24 +17,27 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.internal.sds.FilterChainMatchingHandler.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
+import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
-import io.grpc.xds.FilterChainMatchingHandler;
-import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
+import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.XdsServerBuilder;
+import io.grpc.xds.internal.sds.FilterChainMatchingHandler.FilterChainSelector;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+import java.security.cert.CertStoreException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -250,15 +253,59 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      AtomicReference<FilterChainSelector> filterChainSelectorRef = grpcHandler.getEagAttributes()
-              .get(XdsServerBuilder.ATTR_FILTER_CHAIN_SELECTOR_REF);
-      checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
-      return new FilterChainMatchingHandler(grpcHandler, filterChainSelectorRef.get(),
-              fallbackProtocolNegotiator);
+      return new HandlerPickerHandler(grpcHandler, fallbackProtocolNegotiator);
     }
 
     @Override
     public void close() {}
+  }
+
+  @VisibleForTesting
+  static final class HandlerPickerHandler
+          extends ChannelInboundHandlerAdapter {
+    private final GrpcHttp2ConnectionHandler grpcHandler;
+    @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
+
+    HandlerPickerHandler(
+            GrpcHttp2ConnectionHandler grpcHandler,
+            @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
+      this.grpcHandler = checkNotNull(grpcHandler, "grpcHandler");
+      this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
+    }
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+      if (evt instanceof ProtocolNegotiationEvent) {
+        ProtocolNegotiationEvent pne = (ProtocolNegotiationEvent)evt;
+        SslContextProviderSupplier sslContextProviderSupplier = InternalProtocolNegotiationEvent
+                .getAttributes(pne).get(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER);
+        if (sslContextProviderSupplier == null) {
+          if (fallbackProtocolNegotiator == null) {
+            ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
+            return;
+          }
+          logger.log(Level.INFO, "Using fallback for {0}", ctx.channel().localAddress());
+          ctx.pipeline()
+                  .replace(
+                          this,
+                          null,
+                          fallbackProtocolNegotiator.newHandler(grpcHandler));
+          ctx.fireUserEventTriggered(pne);
+          return;
+        } else {
+          ctx.pipeline()
+                  .replace(
+                          this,
+                          null,
+                          new ServerSdsHandler(
+                                  grpcHandler, sslContextProviderSupplier));
+          ctx.fireUserEventTriggered(pne);
+          return;
+        }
+      } else {
+        super.userEventTriggered(ctx, evt);
+      }
+    }
   }
 
   @VisibleForTesting
@@ -315,6 +362,44 @@ public final class SdsProtocolNegotiators {
             }
           }
       );
+    }
+  }
+
+  public static class FilterChainMatchingNegotiatorServerFactory
+          implements InternalProtocolNegotiator.ServerFactory {
+    private final InternalProtocolNegotiator.ServerFactory delegate;
+
+    public FilterChainMatchingNegotiatorServerFactory(
+            InternalProtocolNegotiator.ServerFactory delegate) {
+      this.delegate = checkNotNull(delegate, "delegate");
+    }
+
+    @Override
+    public ProtocolNegotiator newNegotiator(
+            final ObjectPool<? extends Executor> offloadExecutorPool) {
+
+      class FilterChainMatchingNegotiator implements ProtocolNegotiator {
+
+        @Override
+        public AsciiString scheme() {
+          return SCHEME;
+        }
+
+        @Override
+        public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+          AtomicReference<FilterChainSelector> filterChainSelectorRef =
+              grpcHandler.getEagAttributes().get(XdsServerBuilder.ATTR_FILTER_CHAIN_SELECTOR_REF);
+          checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
+          return new FilterChainMatchingHandler(grpcHandler, filterChainSelectorRef.get(),
+                  delegate.newNegotiator(offloadExecutorPool));
+        }
+
+        @Override
+        public void close() {
+        }
+      }
+
+      return new FilterChainMatchingNegotiator();
     }
   }
 }
