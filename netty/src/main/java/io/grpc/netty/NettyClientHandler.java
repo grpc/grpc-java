@@ -304,7 +304,8 @@ class NettyClientHandler extends AbstractNettyHandler {
           NettyClientHandler.this.keepAliveManager.onTransportActive();
         }
       }
-
+  
+      
       @Override
       public void onStreamClosed(Http2Stream stream) {
         // Although streams with CALL_OPTIONS_RPC_OWNED_BY_BALANCER are not marked as "in-use" in
