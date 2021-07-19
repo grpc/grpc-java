@@ -432,7 +432,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
         .set(InternalStatus.MESSAGE_KEY.name(), "Content-Type 'application/bad' is not supported")
         .status("" + 415)
-        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
 
     verifyWrite()
         .writeHeaders(
@@ -457,7 +457,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
         .set(InternalStatus.MESSAGE_KEY.name(), "Method 'FAKE' is not supported")
         .status("" + 405)
-        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
 
     verifyWrite()
         .writeHeaders(
@@ -481,7 +481,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.UNIMPLEMENTED.value()))
         .set(InternalStatus.MESSAGE_KEY.name(), "Expected path but is missing")
         .status("" + 404)
-        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
 
     verifyWrite()
         .writeHeaders(
@@ -506,7 +506,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.UNIMPLEMENTED.value()))
         .set(InternalStatus.MESSAGE_KEY.name(), "Expected path to start with /: foo/bar")
         .status("" + 404)
-        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
 
     verifyWrite()
         .writeHeaders(
