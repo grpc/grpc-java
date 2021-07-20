@@ -24,8 +24,6 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
@@ -234,13 +232,6 @@ public class CallOptionsTest {
     } catch (UnsupportedOperationException e) {
       // Expected
     }
-  }
-
-  @Test
-  public void getWaitForReady() {
-    assertNull(CallOptions.DEFAULT.getWaitForReady());
-    assertSame(CallOptions.DEFAULT.withWaitForReady().getWaitForReady(), Boolean.TRUE);
-    assertSame(CallOptions.DEFAULT.withoutWaitForReady().getWaitForReady(), Boolean.FALSE);
   }
 
   // Only used in noStrayModifications()
