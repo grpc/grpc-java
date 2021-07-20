@@ -378,7 +378,7 @@ public class XdsSdsClientServerTest {
       DownstreamTlsContext downstreamTlsContext)
       throws Exception {
     tlsContextManagerForServer = new TlsContextManagerImpl(bootstrapInfoForServer);
-    XdsServerWrapper xdsServer = builder.build();
+    XdsServerWrapper xdsServer = (XdsServerWrapper) builder.build();
     SettableFuture<Throwable> startFuture = startServerAsync(xdsServer);
     EnvoyServerProtoData.Listener listener = buildListener("listener1", "10.1.2.3",
             downstreamTlsContext, tlsContextManagerForServer);

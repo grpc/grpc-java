@@ -80,8 +80,9 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
             (InetSocketAddress) ctx.channel().localAddress(),
             (InetSocketAddress) ctx.channel().remoteAddress());
     if (config == null) {
-      log.log(Level.FINER, "No matching filter chain found.");
-      ctx.fireExceptionCaught(new IllegalStateException("No matching filter chain."));
+      log.log(Level.FINER, "No or more than one filter chain matched.");
+      ctx.fireExceptionCaught(
+              new IllegalStateException("No or more than one filter chain matched."));
       return;
     }
     ProtocolNegotiationEvent pne = (ProtocolNegotiationEvent)evt;
@@ -138,6 +139,7 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
       filterChains = filterOnSourcePort(filterChains, remoteAddr.getPort());
 
       if (filterChains.size() > 1) {
+        log.log(Level.FINER, "Found more than one matching filter chains.");
         // TODO(chengyuanzhang): should we just return any matched one?
         return null;
       }

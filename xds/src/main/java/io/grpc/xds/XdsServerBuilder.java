@@ -25,6 +25,7 @@ import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Internal;
+import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.netty.InternalNettyServerBuilder;
@@ -94,7 +95,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   }
 
   @Override
-  public XdsServerWrapper build() {
+  public Server build() {
     checkState(isServerBuilt.compareAndSet(false, true), "Server already built!");
     AtomicReference<FilterChainSelector> filterChainSelectorRef = new AtomicReference<>();
     InternalNettyServerBuilder.eagAttributes(delegate, Attributes.newBuilder()

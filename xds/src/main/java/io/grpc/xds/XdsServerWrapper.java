@@ -53,7 +53,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
-public final class XdsServerWrapper extends Server {
+final class XdsServerWrapper extends Server {
   private static final Logger logger = Logger.getLogger(XdsServerWrapper.class.getName());
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -379,14 +379,15 @@ public final class XdsServerWrapper extends Server {
 
     private List<SslContextProviderSupplier> collectSslContextProviderSuppliers() {
       List<SslContextProviderSupplier> toRelease = new ArrayList<>();
-      if (filterChainSelectorRef.get() != null) {
-        for (FilterChain f: filterChainSelectorRef.get().getFilterChains()) {
+      FilterChainSelector selector = filterChainSelectorRef.get();
+      if (selector != null) {
+        for (FilterChain f: selector.getFilterChains()) {
           if (f.getSslContextProviderSupplier() != null) {
             toRelease.add(f.getSslContextProviderSupplier());
           }
         }
         SslContextProviderSupplier defaultSupplier =
-                filterChainSelectorRef.get().getDefaultSslContextProviderSupplier();
+                selector.getDefaultSslContextProviderSupplier();
         if (defaultSupplier != null) {
           toRelease.add(defaultSupplier);
         }

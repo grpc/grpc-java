@@ -146,7 +146,7 @@ public final class EnvoyServerProtoData {
     private final InetAddress addressPrefix;
     private final int prefixLen;
 
-    CidrRange(String addressPrefix, int prefixLen) throws UnknownHostException {
+    public CidrRange(String addressPrefix, int prefixLen) throws UnknownHostException {
       this.addressPrefix = InetAddress.getByName(addressPrefix);
       this.prefixLen = prefixLen;
     }

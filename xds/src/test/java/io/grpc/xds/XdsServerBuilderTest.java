@@ -69,7 +69,7 @@ public class XdsServerBuilderTest {
   private void buildServer(XdsServerBuilder.XdsServingStatusListener xdsServingStatusListener)
       throws IOException {
     buildBuilder(xdsServingStatusListener);
-    xdsServer = cleanupRule.register(builder.build());
+    xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
   }
 
   private void buildBuilder(XdsServerBuilder.XdsServingStatusListener xdsServingStatusListener)
@@ -273,7 +273,7 @@ public class XdsServerBuilderTest {
         .builder("mock").build();
     when(mockBindableService.bindService()).thenReturn(serverServiceDefinition);
     builder.addService(mockBindableService);
-    xdsServer = cleanupRule.register(builder.build());
+    xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
     try {
       builder.addService(mock(BindableService.class));
       fail("exception expected");
