@@ -85,7 +85,7 @@ REPOID="$(
       <description>Release upload</description>
     </data>
   </promoteRequest>"
-  curl -s -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
+  curl -f -s -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
     "$STAGING_URL/profiles/$PROFILE_ID/start" |
   grep stagedRepositoryId |
   sed 's/.*<stagedRepositoryId>\(.*\)<\/stagedRepositoryId>.*/\1/'
@@ -94,8 +94,12 @@ echo "Repository id: $REPOID"
 
 for X in $(cd "$DIR" && find -type f | cut -b 3-); do
   echo "Uploading $X"
-  curl -T "$DIR/$X" -u "$USERPASS" -H "Content-Type: application/octet-stream" \
-    "$STAGING_URL/deployByRepositoryId/$REPOID/$X"
+  HTTP_CODE=$(curl -w "HTTP Status:\n%{http_code}" -T "$DIR/$X" -u "$USERPASS" -H "Content-Type: application/octet-stream" \
+    "$STAGING_URL/deployByRepositoryId/$REPOID/$X" | tee /dev/tty | tail -n 1)
+  if [ "$HTTP_CODE" -ne 200 ]; then
+    echo "Upload failed"
+    exit 1
+  fi;
 done
 
 echo "Closing staging repo"
@@ -106,5 +110,5 @@ XML="
     <description>Auto-close via upload script</description>
   </data>
 </promoteRequest>"
-curl -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
+curl -f -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
   "$STAGING_URL/profiles/$PROFILE_ID/finish"
