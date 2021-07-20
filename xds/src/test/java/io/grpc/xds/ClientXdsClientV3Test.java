@@ -42,10 +42,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig.HashFunction;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
-import io.envoyproxy.envoy.config.core.v3.ApiConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ConfigSource;
-import io.envoyproxy.envoy.config.core.v3.GrpcService;
-import io.envoyproxy.envoy.config.core.v3.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.config.core.v3.HealthStatus;
 import io.envoyproxy.envoy.config.core.v3.Locality;
 import io.envoyproxy.envoy.config.core.v3.Node;
@@ -81,7 +78,6 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
@@ -437,9 +433,10 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     @Override
     protected Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
         String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
-        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+        @Nullable Message upstreamTlsContext, String transportSocketName,
+        @Nullable Message circuitBreakers) {
       Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
-          enableLrs, upstreamTlsContext, circuitBreakers);
+          enableLrs, upstreamTlsContext, transportSocketName, circuitBreakers);
       builder.setType(DiscoveryType.EDS);
       EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
       edsClusterConfigBuilder.setEdsConfig(
@@ -456,7 +453,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
         int dnsHostPort, String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
       Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
-          enableLrs, upstreamTlsContext, circuitBreakers);
+          enableLrs, upstreamTlsContext, "envoy.transport_sockets.tls", circuitBreakers);
       builder.setType(DiscoveryType.LOGICAL_DNS);
       builder.setLoadAssignment(
           ClusterLoadAssignment.newBuilder().addEndpoints(
@@ -492,7 +489,8 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
 
     private Cluster.Builder initClusterBuilder(String clusterName, String lbPolicy,
         @Nullable Message ringHashLbConfig, boolean enableLrs,
-        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+        @Nullable Message upstreamTlsContext, String transportSocketName,
+        @Nullable Message circuitBreakers) {
       Cluster.Builder builder = Cluster.newBuilder();
       builder.setName(clusterName);
       if (lbPolicy.equals("round_robin")) {
@@ -511,7 +509,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       if (upstreamTlsContext != null) {
         builder.setTransportSocket(
             TransportSocket.newBuilder()
-                .setName("envoy.transport_sockets.tls")
+                .setName(transportSocketName)
                 .setTypedConfig(Any.pack(upstreamTlsContext)));
       }
       if (circuitBreakers != null) {
@@ -537,24 +535,22 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildUpstreamTlsContext(String secretName, String targetUri) {
-      GrpcService grpcService =
-          GrpcService.newBuilder()
-              .setGoogleGrpc(GoogleGrpc.newBuilder().setTargetUri(targetUri))
-              .build();
-      ConfigSource sdsConfig =
-          ConfigSource.newBuilder()
-              .setApiConfigSource(ApiConfigSource.newBuilder().addGrpcServices(grpcService))
-              .build();
-      SdsSecretConfig validationContextSdsSecretConfig =
-          SdsSecretConfig.newBuilder()
-              .setName(secretName)
-              .setSdsConfig(sdsConfig)
-              .build();
+    protected Message buildUpstreamTlsContext(String instanceName, String certName) {
+      CommonTlsContext.Builder commonTlsContextBuilder = CommonTlsContext.newBuilder();
+      if (instanceName != null && certName != null) {
+        CommonTlsContext.CertificateProviderInstance providerInstance =
+            CommonTlsContext.CertificateProviderInstance.newBuilder()
+                .setInstanceName(instanceName)
+                .setCertificateName(certName)
+                .build();
+        CommonTlsContext.CombinedCertificateValidationContext combined =
+            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
+                .setValidationContextCertificateProviderInstance(providerInstance)
+                .build();
+        commonTlsContextBuilder.setCombinedValidationContext(combined);
+      }
       return UpstreamTlsContext.newBuilder()
-          .setCommonTlsContext(
-              CommonTlsContext.newBuilder()
-                  .setValidationContextSdsSecretConfig(validationContextSdsSecretConfig))
+          .setCommonTlsContext(commonTlsContextBuilder)
           .build();
     }
 
@@ -664,7 +660,8 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     @SuppressWarnings("deprecation")
     @Override
     protected FilterChain buildFilterChain(
-        List<String> alpn, Message tlsContext, Message... filters) {
+        List<String> alpn, Message tlsContext, String transportSocketName,
+        Message... filters) {
       FilterChainMatch filterChainMatch =
           FilterChainMatch.newBuilder().addAllApplicationProtocols(alpn).build();
       Filter[] filterArray = new Filter[filters.length];
@@ -677,7 +674,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
               tlsContext == null
                   ? TransportSocket.getDefaultInstance()
                   : TransportSocket.newBuilder()
-                      .setName("envoy.transport_sockets.tls")
+                      .setName(transportSocketName)
                       .setTypedConfig(Any.pack(tlsContext))
                       .build())
           .addAllFilters(Arrays.asList(filterArray))
