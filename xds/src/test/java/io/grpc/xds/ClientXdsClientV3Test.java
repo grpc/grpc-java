@@ -539,14 +539,14 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       CommonTlsContext.Builder commonTlsContextBuilder = CommonTlsContext.newBuilder();
       if (instanceName != null && certName != null) {
         CommonTlsContext.CertificateProviderInstance providerInstance =
-                CommonTlsContext.CertificateProviderInstance.newBuilder()
-                        .setInstanceName(instanceName)
-                        .setCertificateName(certName)
-                        .build();
+            CommonTlsContext.CertificateProviderInstance.newBuilder()
+                .setInstanceName(instanceName)
+                .setCertificateName(certName)
+                .build();
         CommonTlsContext.CombinedCertificateValidationContext combined =
-                CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                        .setValidationContextCertificateProviderInstance(providerInstance)
-                        .build();
+            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
+                .setValidationContextCertificateProviderInstance(providerInstance)
+                .build();
         commonTlsContextBuilder.setCombinedValidationContext(combined);
       }
       return UpstreamTlsContext.newBuilder()

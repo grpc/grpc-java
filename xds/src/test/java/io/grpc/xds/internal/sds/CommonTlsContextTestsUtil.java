@@ -63,10 +63,10 @@ public class CommonTlsContextTestsUtil {
 
   /** takes additional values and creates CombinedCertificateValidationContext as needed. */
   static CommonTlsContext buildCommonTlsContextWithAdditionalValues(
-          String certInstanceName, String certName,
-          String validationContextCertInstanceName, String validationContextCertName,
-          Iterable<StringMatcher> matchSubjectAltNames,
-          Iterable<String> alpnNames) {
+      String certInstanceName, String certName,
+      String validationContextCertInstanceName, String validationContextCertName,
+      Iterable<StringMatcher> matchSubjectAltNames,
+      Iterable<String> alpnNames) {
 
     CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
 
