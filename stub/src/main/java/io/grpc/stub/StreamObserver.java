@@ -31,6 +31,10 @@ package io.grpc.stub;
  * not need to be synchronized together; incoming and outgoing directions are independent.
  * Since individual {@code StreamObserver}s are not thread-safe, if multiple threads will be
  * writing to a {@code StreamObserver} concurrently, the application must synchronize calls.
+ *
+ * <p>Implementations should not throw exceptions, except when called incorrectly. For example, a
+ * call to {@code onNext()} after {@code onCompleted()} may throw. {@link Error}s may also still
+ * occur.
  */
 public interface StreamObserver<V>  {
   /**
@@ -43,9 +47,9 @@ public interface StreamObserver<V>  {
    * server streaming calls, but may receive many onNext callbacks.  Servers may invoke onNext at
    * most once for client streaming calls, but may receive many onNext callbacks.
    *
-   * <p>If an exception is thrown by an implementation the caller is expected to terminate the
-   * stream by calling {@link #onError(Throwable)} with the caught exception prior to
-   * propagating it.
+   * <p>For historical reasons, on server-side {@code onNext()} may throw {@code
+   * StatusRuntimeException} if the call is cancelled. Services are encouraged to use {@link
+   * ServerCallStreamObserver#setOnCancelHandler} which disables this exception-throwing behavior.
    *
    * @param value the value passed to the stream
    */
@@ -54,9 +58,7 @@ public interface StreamObserver<V>  {
   /**
    * Receives a terminating error from the stream.
    *
-   * <p>May only be called once and if called it must be the last method called. In particular if an
-   * exception is thrown by an implementation of {@code onError} no further calls to any method are
-   * allowed.
+   * <p>May only be called once and if called it must be the last method called.
    *
    * <p>{@code t} should be a {@link io.grpc.StatusException} or {@link
    * io.grpc.StatusRuntimeException}, but other {@code Throwable} types are possible. Callers should
@@ -71,9 +73,7 @@ public interface StreamObserver<V>  {
   /**
    * Receives a notification of successful stream completion.
    *
-   * <p>May only be called once and if called it must be the last method called. In particular if an
-   * exception is thrown by an implementation of {@code onCompleted} no further calls to any method
-   * are allowed.
+   * <p>May only be called once and if called it must be the last method called.
    */
   void onCompleted();
 }
