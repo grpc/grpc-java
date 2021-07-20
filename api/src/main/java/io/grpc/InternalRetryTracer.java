@@ -16,8 +16,11 @@
 
 package io.grpc;
 
+import javax.annotation.concurrent.ThreadSafe;
+
 /** API for tracing retry events. */
 @Internal
+@ThreadSafe
 public interface InternalRetryTracer {
   /** A CallOptions Key to populate the InternalRetryTracer. */
   CallOptions.Key<InternalRetryTracer> KEY = CallOptions.Key.create("io.grpc.InternalRetryTracer");
