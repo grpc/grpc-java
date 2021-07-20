@@ -138,22 +138,20 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   @Nullable // null if already committed
   @CheckReturnValue
   private Runnable commit(final Substream winningSubstream) {
+    final Future<?> retryFuture;
+    final Future<?> hedgingFuture;
+    final Collection<Substream> savedDrainedSubstreams;
 
     synchronized (lock) {
       if (state.winningSubstream != null) {
         return null;
       }
-      if (retryTracer != null) {
-        retryTracer.commit();
-      }
-      final Collection<Substream> savedDrainedSubstreams = state.drainedSubstreams;
-
+      savedDrainedSubstreams = state.drainedSubstreams;
       state = state.committed(winningSubstream);
 
       // subtract the share of this RPC from channelBufferUsed.
       channelBufferUsed.addAndGet(-perRpcBufferUsed);
 
-      final Future<?> retryFuture;
       if (scheduledRetry != null) {
         // TODO(b/145386688): This access should be guarded by 'this.scheduledRetry.lock'; instead
         // found: 'this.lock'
@@ -163,7 +161,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         retryFuture = null;
       }
       // cancel the scheduled hedging if it is scheduled prior to the commitment
-      final Future<?> hedgingFuture;
       if (scheduledHedging != null) {
         // TODO(b/145386688): This access should be guarded by 'this.scheduledHedging.lock'; instead
         // found: 'this.lock'
@@ -172,29 +169,32 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       } else {
         hedgingFuture = null;
       }
-
-      class CommitTask implements Runnable {
-        @Override
-        public void run() {
-          // For hedging only, not needed for normal retry
-          for (Substream substream : savedDrainedSubstreams) {
-            if (substream != winningSubstream) {
-              substream.stream.cancel(CANCELLED_BECAUSE_COMMITTED);
-            }
-          }
-          if (retryFuture != null) {
-            retryFuture.cancel(false);
-          }
-          if (hedgingFuture != null) {
-            hedgingFuture.cancel(false);
-          }
-
-          postCommit();
-        }
-      }
-
-      return new CommitTask();
     }
+
+    if (retryTracer != null) {
+      retryTracer.commit();
+    }
+
+    class CommitTask implements Runnable {
+      @Override
+      public void run() {
+        // For hedging only, not needed for normal retry
+        for (Substream substream : savedDrainedSubstreams) {
+          if (substream != winningSubstream) {
+            substream.stream.cancel(CANCELLED_BECAUSE_COMMITTED);
+          }
+        }
+        if (retryFuture != null) {
+          retryFuture.cancel(false);
+        }
+        if (hedgingFuture != null) {
+          hedgingFuture.cancel(false);
+        }
+        postCommit();
+      }
+    }
+
+    return new CommitTask();
   }
 
   abstract void postCommit();
