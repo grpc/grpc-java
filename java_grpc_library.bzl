@@ -106,7 +106,6 @@ def _java_rpc_library_impl(ctx):
     java_info = java_common.compile(
         ctx,
         java_toolchain = toolchain.java_toolchain[java_common.JavaToolchainInfo],
-        host_javabase = toolchain.host_javabase[java_common.JavaRuntimeInfo],
         source_jars = [srcjar],
         output = ctx.outputs.jar,
         output_source_jar = ctx.outputs.srcjar,
