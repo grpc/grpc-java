@@ -349,7 +349,11 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
 
     EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext = null;
-    if (TRANSPORT_SOCKET_NAME_TLS.equals(proto.getTransportSocket().getName())) {
+    if (proto.hasTransportSocket()) {
+      if (!TRANSPORT_SOCKET_NAME_TLS.equals(proto.getTransportSocket().getName())) {
+        throw new ResourceInvalidException("transport-socket with name "
+            + proto.getTransportSocket().getName() + " not supported.");
+      }
       DownstreamTlsContext downstreamTlsContextProto;
       try {
         downstreamTlsContextProto =
@@ -360,7 +364,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       downstreamTlsContext =
           EnvoyServerProtoData.DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
-                  validateDownstreamTlsContext(downstreamTlsContextProto));
+              validateDownstreamTlsContext(downstreamTlsContextProto));
     }
 
     String name = proto.getName();
@@ -1426,8 +1430,11 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
     }
-    if (cluster.hasTransportSocket()
-        && TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
+    if (cluster.hasTransportSocket()) {
+      if (!TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
+        return StructOrError.fromError("transport-socket with name "
+            + cluster.getTransportSocket().getName() + " not supported.");
+      }
       try {
         upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
                 validateUpstreamTlsContext(

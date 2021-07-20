@@ -433,9 +433,10 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     @Override
     protected Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
         String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
-        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+        @Nullable Message upstreamTlsContext, String transportSocketName,
+        @Nullable Message circuitBreakers) {
       Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
-          enableLrs, upstreamTlsContext, circuitBreakers);
+          enableLrs, upstreamTlsContext, transportSocketName, circuitBreakers);
       builder.setType(DiscoveryType.EDS);
       EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
       edsClusterConfigBuilder.setEdsConfig(
@@ -452,7 +453,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
         int dnsHostPort, String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
       Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
-          enableLrs, upstreamTlsContext, circuitBreakers);
+          enableLrs, upstreamTlsContext, "envoy.transport_sockets.tls", circuitBreakers);
       builder.setType(DiscoveryType.LOGICAL_DNS);
       builder.setLoadAssignment(
           ClusterLoadAssignment.newBuilder().addEndpoints(
@@ -488,7 +489,8 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
 
     private Cluster.Builder initClusterBuilder(String clusterName, String lbPolicy,
         @Nullable Message ringHashLbConfig, boolean enableLrs,
-        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+        @Nullable Message upstreamTlsContext, String transportSocketName,
+        @Nullable Message circuitBreakers) {
       Cluster.Builder builder = Cluster.newBuilder();
       builder.setName(clusterName);
       if (lbPolicy.equals("round_robin")) {
@@ -507,7 +509,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       if (upstreamTlsContext != null) {
         builder.setTransportSocket(
             TransportSocket.newBuilder()
-                .setName("envoy.transport_sockets.tls")
+                .setName(transportSocketName)
                 .setTypedConfig(Any.pack(upstreamTlsContext)));
       }
       if (circuitBreakers != null) {
@@ -658,7 +660,8 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     @SuppressWarnings("deprecation")
     @Override
     protected FilterChain buildFilterChain(
-        List<String> alpn, Message tlsContext, Message... filters) {
+        List<String> alpn, Message tlsContext, String transportSocketName,
+        Message... filters) {
       FilterChainMatch filterChainMatch =
           FilterChainMatch.newBuilder().addAllApplicationProtocols(alpn).build();
       Filter[] filterArray = new Filter[filters.length];
@@ -671,7 +674,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
               tlsContext == null
                   ? TransportSocket.getDefaultInstance()
                   : TransportSocket.newBuilder()
-                      .setName("envoy.transport_sockets.tls")
+                      .setName(transportSocketName)
                       .setTypedConfig(Any.pack(tlsContext))
                       .build())
           .addAllFilters(Arrays.asList(filterArray))

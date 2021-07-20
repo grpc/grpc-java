@@ -393,7 +393,8 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     @Override
     protected Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
         String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
-        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+        @Nullable Message upstreamTlsContext, String transportSocketName,
+        @Nullable Message circuitBreakers) {
       Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
           enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.EDS);
@@ -618,7 +619,8 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildFilterChain(List<String> alpn, Message tlsContext, Message... filters) {
+    protected Message buildFilterChain(List<String> alpn, Message tlsContext,
+        String transportSocketName, Message... filters) {
       throw new UnsupportedOperationException();
     }
 

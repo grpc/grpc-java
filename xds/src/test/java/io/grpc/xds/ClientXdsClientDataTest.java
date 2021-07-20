@@ -1067,7 +1067,6 @@ public class ClientXdsClientDataTest {
         FilterChain.newBuilder()
             .setName("filter-chain-1")
             .setFilterChainMatch(filterChainMatch1)
-            .setTransportSocket(TransportSocket.getDefaultInstance())
             .addFilters(filter1)
             .build();
     Filter filter2 = buildHttpConnectionManagerFilter(
@@ -1085,7 +1084,6 @@ public class ClientXdsClientDataTest {
         FilterChain.newBuilder()
             .setName("filter-chain-2")
             .setFilterChainMatch(filterChainMatch2)
-            .setTransportSocket(TransportSocket.getDefaultInstance())
             .addFilters(filter2)
             .build();
     Listener listener =
@@ -1116,7 +1114,6 @@ public class ClientXdsClientDataTest {
         FilterChain.newBuilder()
             .setName("filter-chain-1")
             .setFilterChainMatch(filterChainMatch1)
-            .setTransportSocket(TransportSocket.getDefaultInstance())
             .addFilters(filter1)
             .build();
     Filter filter2 = buildHttpConnectionManagerFilter(
@@ -1134,7 +1131,6 @@ public class ClientXdsClientDataTest {
         FilterChain.newBuilder()
             .setName("filter-chain-2")
             .setFilterChainMatch(filterChainMatch2)
-            .setTransportSocket(TransportSocket.getDefaultInstance())
             .addFilters(filter2)
             .build();
     Listener listener =
@@ -1166,7 +1162,6 @@ public class ClientXdsClientDataTest {
         FilterChain.newBuilder()
             .setName("filter-chain-1")
             .setFilterChainMatch(filterChainMatch1)
-            .setTransportSocket(TransportSocket.getDefaultInstance())
             .addFilters(filter1)
             .build();
     Filter filter2 = buildHttpConnectionManagerFilter(
@@ -1185,7 +1180,6 @@ public class ClientXdsClientDataTest {
         FilterChain.newBuilder()
             .setName("filter-chain-2")
             .setFilterChainMatch(filterChainMatch2)
-            .setTransportSocket(TransportSocket.getDefaultInstance())
             .addFilters(filter2)
             .build();
     Listener listener =
