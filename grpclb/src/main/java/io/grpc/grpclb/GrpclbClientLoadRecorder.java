@@ -73,8 +73,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
   }
 
   @Override
-  public ClientStreamTracer newClientStreamTracer(
-      ClientStreamTracer.StreamInfo info, Metadata headers) {
+  public ClientStreamTracer newClientStreamTracer(ClientStreamTracer.StreamInfo info) {
     callsStartedUpdater.getAndIncrement(this);
     return new StreamTracer();
   }

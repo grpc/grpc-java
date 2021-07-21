@@ -39,7 +39,7 @@ abstract class OrcaPerRequestUtil {
   private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
       new ClientStreamTracer.Factory() {
         @Override
-        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+        public ClientStreamTracer newClientStreamTracer(StreamInfo info) {
           return NOOP_CLIENT_STREAM_TRACER;
         }
       };
@@ -209,7 +209,7 @@ abstract class OrcaPerRequestUtil {
     }
 
     @Override
-    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info) {
       OrcaReportBroker broker = info.getCallOptions().getOption(ORCA_REPORT_BROKER_KEY);
       boolean augmented = false;
       if (broker == null) {
@@ -221,7 +221,7 @@ abstract class OrcaPerRequestUtil {
         augmented = true;
       }
       broker.addListener(listener);
-      ClientStreamTracer tracer = delegate.newClientStreamTracer(info, headers);
+      ClientStreamTracer tracer = delegate.newClientStreamTracer(info);
       if (augmented) {
         final ClientStreamTracer currTracer = tracer;
         final OrcaReportBroker currBroker = broker;
