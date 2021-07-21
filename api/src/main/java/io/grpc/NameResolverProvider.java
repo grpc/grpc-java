@@ -16,6 +16,8 @@
 
 package io.grpc;
 
+import io.grpc.NameResolver.Factory;
+
 /**
  * Provider of name resolvers for name agnostic consumption.
  *
@@ -48,4 +50,16 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
    * @since 1.0.0
    */
   protected abstract int priority();
+
+  /**
+   * Returns the scheme associated with the provider. The provider normally should only create a
+   * {@link NameResolver} when target URI scheme matches the provider scheme. It temporarily
+   * delegates to {@link Factory#getDefaultScheme()} before {@link NameResolver.Factory} is
+   * deprecated in https://github.com/grpc/grpc-java/issues/7133.
+   *
+   * @since 1.40.0
+   * */
+  protected String getScheme() {
+    return getDefaultScheme();
+  }
 }

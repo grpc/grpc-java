@@ -88,8 +88,11 @@ public class XdsSdsClientServerTest {
   private TlsContextManagerImpl tlsContextManagerForServer;
 
   @Before
-  public void setUp() throws IOException {
+  public void setUp() throws Exception {
     port = XdsServerTestHelper.findFreePort();
+    URI expectedUri = new URI("sdstest://localhost:" + port);
+    fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
+    NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverFactory);
   }
 
   @After
@@ -410,9 +413,6 @@ public class XdsSdsClientServerTest {
   private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
       final UpstreamTlsContext upstreamTlsContext, String overrideAuthority)
       throws URISyntaxException {
-    URI expectedUri = new URI("sdstest://localhost:" + port);
-    fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
-    NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverFactory);
     ManagedChannelBuilder<?> channelBuilder =
         Grpc.newChannelBuilder(
             "sdstest://localhost:" + port,
