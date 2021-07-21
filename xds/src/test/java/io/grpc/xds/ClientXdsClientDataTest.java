@@ -120,6 +120,7 @@ public class ClientXdsClientDataTest {
   @Before
   public void setUp() {
     originalEnableRetry = ClientXdsClient.enableRetry;
+    assertThat(originalEnableRetry).isFalse();
   }
 
   @After
