@@ -228,7 +228,7 @@ final class ManagedChannelServiceConfig {
   @Override
   public int hashCode() {
     return Objects.hashCode(
-        defaultMethodConfig,serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
+        defaultMethodConfig, serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
   }
 
   @Override
