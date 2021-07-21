@@ -83,6 +83,7 @@ import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalInstrumented;
+import io.grpc.InternalRetryTracer;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -3703,6 +3704,95 @@ public class ManagedChannelImplTest {
     assertTrue(
         "channel.isTerminated() is expected to be true but was false",
         channel.isTerminated());
+  }
+
+  @Test
+  public void retryWithInternalRetryTracer() {
+    Map<String, Object> retryPolicy = new HashMap<>();
+    retryPolicy.put("maxAttempts", 4D);
+    retryPolicy.put("initialBackoff", "10s");
+    retryPolicy.put("maxBackoff", "30s");
+    retryPolicy.put("backoffMultiplier", 2D);
+    retryPolicy.put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"));
+    Map<String, Object> methodConfig = new HashMap<>();
+    Map<String, Object> name = new HashMap<>();
+    name.put("service", "service");
+    methodConfig.put("name", Arrays.<Object>asList(name));
+    methodConfig.put("retryPolicy", retryPolicy);
+    Map<String, Object> rawServiceConfig = new HashMap<>();
+    rawServiceConfig.put("methodConfig", Arrays.<Object>asList(methodConfig));
+
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build();
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        createManagedChannelServiceConfig(rawServiceConfig, null);
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
+
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.executor(MoreExecutors.directExecutor());
+    channelBuilder.enableRetry();
+    RetriableStream.setRandom(
+        // not random
+        new Random() {
+          @Override
+          public double nextDouble() {
+            return 1D;
+          }
+        });
+
+    requestConnection = false;
+    createChannel();
+
+    InternalRetryTracer retryTracer = mock(InternalRetryTracer.class);
+    // Let InternalRetryTracer allow 1st retry and disallow 2nd retry.
+    when(retryTracer.shouldRetry()).thenReturn(true, false);
+    ClientCall<String, Integer> call = channel.newCall(
+        method, CallOptions.DEFAULT.withOption(InternalRetryTracer.KEY, retryTracer));
+    call.start(mockCallListener, new Metadata());
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+    verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
+    helper = helperCaptor.getValue();
+
+    // simulating request connection and then transport ready after resolved address
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withSubchannel(subchannel));
+    requestConnectionSafely(helper, subchannel);
+    MockClientTransportInfo transportInfo = transports.poll();
+    ConnectionClientTransport mockTransport = transportInfo.transport;
+    ClientStream mockStream = mock(ClientStream.class);
+    ClientStream mockStream2 = mock(ClientStream.class);
+    ClientStream mockStream3 = mock(ClientStream.class);
+    when(mockTransport.newStream(same(method), any(Metadata.class), any(CallOptions.class)))
+        .thenReturn(mockStream, mockStream2, mockStream3);
+    transportInfo.listener.transportReady();
+    updateBalancingStateSafely(helper, READY, mockPicker);
+
+    ArgumentCaptor<ClientStreamListener> streamListenerCaptor =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    verify(mockStream).start(streamListenerCaptor.capture());
+
+
+    // trigger retry
+    streamListenerCaptor.getValue().closed(
+        Status.UNAVAILABLE, PROCESSED, new Metadata());
+    verify(retryTracer).shouldRetry();
+    // backoff ends
+    timer.forwardTime(10, TimeUnit.SECONDS);
+    verify(mockStream2).start(streamListenerCaptor.capture());
+    verify(retryTracer, never()).commit();
+    verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
+
+    // trigger 2nd retry
+    streamListenerCaptor.getValue().closed(
+        Status.UNAVAILABLE, PROCESSED, new Metadata());
+    verify(retryTracer, times(2)).shouldRetry();
+    verify(retryTracer).commit();
+    verify(mockCallListener).onClose(any(Status.class), any(Metadata.class));
   }
 
   @Test

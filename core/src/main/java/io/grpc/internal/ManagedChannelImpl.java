@@ -56,6 +56,7 @@ import io.grpc.InternalChannelz.ChannelTrace;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
+import io.grpc.InternalRetryTracer;
 import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
@@ -539,6 +540,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
       } else {
         final Throttle throttle = lastServiceConfig.getRetryThrottling();
+        final InternalRetryTracer retryTracer = callOptions.getOption(InternalRetryTracer.KEY);
         MethodInfo methodInfo = callOptions.getOption(MethodInfo.KEY);
         final RetryPolicy retryPolicy = methodInfo == null ? null : methodInfo.retryPolicy;
         final HedgingPolicy hedgingPolicy = methodInfo == null ? null : methodInfo.hedgingPolicy;
@@ -555,7 +557,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 transportFactory.getScheduledExecutorService(),
                 retryPolicy,
                 hedgingPolicy,
-                throttle);
+                throttle,
+                retryTracer);
           }
 
           @Override

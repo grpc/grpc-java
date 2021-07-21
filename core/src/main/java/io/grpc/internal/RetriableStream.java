@@ -27,6 +27,7 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
+import io.grpc.InternalRetryTracer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -81,6 +82,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final long channelBufferLimit;
   @Nullable
   private final Throttle throttle;
+  @Nullable
+  private final InternalRetryTracer retryTracer;
   @GuardedBy("lock")
   private final InsightBuilder closedSubstreamsInsight = new InsightBuilder();
 
@@ -110,7 +113,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
       Executor callExecutor, ScheduledExecutorService scheduledExecutorService,
       @Nullable RetryPolicy retryPolicy, @Nullable HedgingPolicy hedgingPolicy,
-      @Nullable Throttle throttle) {
+      @Nullable Throttle throttle, @Nullable InternalRetryTracer retryTracer) {
     this.method = method;
     this.channelBufferUsed = channelBufferUsed;
     this.perRpcBufferLimit = perRpcBufferLimit;
@@ -128,25 +131,27 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         "Should not provide both retryPolicy and hedgingPolicy");
     this.isHedging = hedgingPolicy != null;
     this.throttle = throttle;
+    this.retryTracer = retryTracer;
   }
 
   @SuppressWarnings("GuardedBy")
   @Nullable // null if already committed
   @CheckReturnValue
   private Runnable commit(final Substream winningSubstream) {
+    final Future<?> retryFuture;
+    final Future<?> hedgingFuture;
+    final Collection<Substream> savedDrainedSubstreams;
 
     synchronized (lock) {
       if (state.winningSubstream != null) {
         return null;
       }
-      final Collection<Substream> savedDrainedSubstreams = state.drainedSubstreams;
-
+      savedDrainedSubstreams = state.drainedSubstreams;
       state = state.committed(winningSubstream);
 
       // subtract the share of this RPC from channelBufferUsed.
       channelBufferUsed.addAndGet(-perRpcBufferUsed);
 
-      final Future<?> retryFuture;
       if (scheduledRetry != null) {
         // TODO(b/145386688): This access should be guarded by 'this.scheduledRetry.lock'; instead
         // found: 'this.lock'
@@ -156,7 +161,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         retryFuture = null;
       }
       // cancel the scheduled hedging if it is scheduled prior to the commitment
-      final Future<?> hedgingFuture;
       if (scheduledHedging != null) {
         // TODO(b/145386688): This access should be guarded by 'this.scheduledHedging.lock'; instead
         // found: 'this.lock'
@@ -165,29 +169,32 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       } else {
         hedgingFuture = null;
       }
-
-      class CommitTask implements Runnable {
-        @Override
-        public void run() {
-          // For hedging only, not needed for normal retry
-          for (Substream substream : savedDrainedSubstreams) {
-            if (substream != winningSubstream) {
-              substream.stream.cancel(CANCELLED_BECAUSE_COMMITTED);
-            }
-          }
-          if (retryFuture != null) {
-            retryFuture.cancel(false);
-          }
-          if (hedgingFuture != null) {
-            hedgingFuture.cancel(false);
-          }
-
-          postCommit();
-        }
-      }
-
-      return new CommitTask();
     }
+
+    if (retryTracer != null) {
+      retryTracer.commit();
+    }
+
+    class CommitTask implements Runnable {
+      @Override
+      public void run() {
+        // For hedging only, not needed for normal retry
+        for (Substream substream : savedDrainedSubstreams) {
+          if (substream != winningSubstream) {
+            substream.stream.cancel(CANCELLED_BECAUSE_COMMITTED);
+          }
+        }
+        if (retryFuture != null) {
+          retryFuture.cancel(false);
+        }
+        if (hedgingFuture != null) {
+          hedgingFuture.cancel(false);
+        }
+        postCommit();
+      }
+    }
+
+    return new CommitTask();
   }
 
   abstract void postCommit();
@@ -920,6 +927,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         } // else no retry
       } // else no retry
 
+      if (shouldRetry && retryTracer != null) {
+        shouldRetry = retryTracer.shouldRetry();
+      }
       return new RetryPlan(shouldRetry, backoffNanos);
     }
 

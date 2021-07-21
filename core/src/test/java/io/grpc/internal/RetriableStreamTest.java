@@ -154,7 +154,8 @@ public class RetriableStreamTest {
           scheduledExecutorService,
           retryPolicy,
           hedgingPolicy,
-          throttle);
+          throttle,
+          null);
     }
 
     @Override
