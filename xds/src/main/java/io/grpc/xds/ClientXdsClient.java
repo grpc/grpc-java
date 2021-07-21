@@ -1053,7 +1053,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       if (!retryBackOff.hasBaseInterval()) {
         return StructOrError.fromError("No base_interval specified in retry_backoff");
       }
-      initialBackoff = retryBackOff.getBaseInterval();
+      Duration originalInitialBackoff = initialBackoff = retryBackOff.getBaseInterval();
       if (Durations.compare(initialBackoff, Durations.ZERO) <= 0) {
         return StructOrError.fromError("base_interval in retry_backoff must be positive");
       }
@@ -1062,9 +1062,12 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       if (retryBackOff.hasMaxInterval()) {
         maxBackoff = retryPolicyProto.getRetryBackOff().getMaxInterval();
-        if (Durations.compare(maxBackoff, initialBackoff) < 0) {
+        if (Durations.compare(maxBackoff, originalInitialBackoff) < 0) {
           return StructOrError.fromError(
               "max_interval in retry_backoff cannot be less than base_interval");
+        }
+        if (Durations.compare(maxBackoff, Durations.fromMillis(1)) < 0) {
+          maxBackoff = Durations.fromMillis(1);
         }
       } else {
         maxBackoff = Durations.fromNanos(Durations.toNanos(initialBackoff) * 10);

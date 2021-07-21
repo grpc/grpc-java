@@ -547,7 +547,7 @@ public class ClientXdsClientDataTest {
     assertThat(struct.getErrorDetail())
         .isEqualTo("base_interval in retry_backoff must be positive");
 
-    // base_interval > max_interval
+    // base_interval > max_interval > 1ms
     builder.setRetryBackOff(
         RetryBackOff.newBuilder()
             .setBaseInterval(Durations.fromMillis(200)).setMaxInterval(Durations.fromMillis(100)));
@@ -558,6 +558,32 @@ public class ClientXdsClientDataTest {
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
     assertThat(struct.getErrorDetail())
         .isEqualTo("max_interval in retry_backoff cannot be less than base_interval");
+
+    // 1ms > base_interval > max_interval
+    builder.setRetryBackOff(
+        RetryBackOff.newBuilder()
+            .setBaseInterval(Durations.fromNanos(200)).setMaxInterval(Durations.fromNanos(100)));
+    proto = io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+        .setCluster("cluster-foo")
+        .setRetryPolicy(builder)
+        .build();
+    struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
+    assertThat(struct.getErrorDetail())
+        .isEqualTo("max_interval in retry_backoff cannot be less than base_interval");
+
+    // 1ms > max_interval > base_interval
+    builder.setRetryBackOff(
+        RetryBackOff.newBuilder()
+            .setBaseInterval(Durations.fromNanos(100)).setMaxInterval(Durations.fromNanos(200)));
+    proto = io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+        .setCluster("cluster-foo")
+        .setRetryPolicy(builder)
+        .build();
+    struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
+    assertThat(struct.getStruct().retryPolicy().initialBackoff())
+        .isEqualTo(Durations.fromMillis(1));
+    assertThat(struct.getStruct().retryPolicy().maxBackoff())
+        .isEqualTo(Durations.fromMillis(1));
 
     // retry_backoff unset
     builder = RetryPolicy.newBuilder()
