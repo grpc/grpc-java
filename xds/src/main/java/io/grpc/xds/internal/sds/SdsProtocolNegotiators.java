@@ -262,13 +262,13 @@ public final class SdsProtocolNegotiators {
 
   @VisibleForTesting
   static final class HandlerPickerHandler
-          extends ChannelInboundHandlerAdapter {
+      extends ChannelInboundHandlerAdapter {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
 
     HandlerPickerHandler(
-            GrpcHttp2ConnectionHandler grpcHandler,
-            @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
+        GrpcHttp2ConnectionHandler grpcHandler,
+        @Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
       this.grpcHandler = checkNotNull(grpcHandler, "grpcHandler");
       this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
     }
@@ -286,19 +286,19 @@ public final class SdsProtocolNegotiators {
           }
           logger.log(Level.INFO, "Using fallback for {0}", ctx.channel().localAddress());
           ctx.pipeline()
-                  .replace(
-                          this,
-                          null,
-                          fallbackProtocolNegotiator.newHandler(grpcHandler));
+              .replace(
+                  this,
+                  null,
+                  fallbackProtocolNegotiator.newHandler(grpcHandler));
           ctx.fireUserEventTriggered(pne);
           return;
         } else {
           ctx.pipeline()
-                  .replace(
-                          this,
-                          null,
-                          new ServerSdsHandler(
-                                  grpcHandler, sslContextProviderSupplier));
+              .replace(
+                  this,
+                  null,
+                  new ServerSdsHandler(
+                      grpcHandler, sslContextProviderSupplier));
           ctx.fireUserEventTriggered(pne);
           return;
         }
@@ -309,15 +309,12 @@ public final class SdsProtocolNegotiators {
   }
 
   @VisibleForTesting
-  public static final class ServerSdsHandler
+  static final class ServerSdsHandler
           extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    /**
-     * Consumes server xds credential configuration.
-     * */
-    public ServerSdsHandler(
+    ServerSdsHandler(
             GrpcHttp2ConnectionHandler grpcHandler,
             SslContextProviderSupplier sslContextProviderSupplier) {
       super(
