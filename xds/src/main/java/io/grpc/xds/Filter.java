@@ -32,7 +32,7 @@ import javax.annotation.Nullable;
  * {@link ClientInterceptorBuilder} or {@link ServerInterceptorBuilder} or both, indicating it is
  * capable of working on the client side or server side or both, respectively.
  */
-interface Filter {
+public interface Filter {
 
   /**
    * The proto message types supported by this filter. A filter will be registered by each of its
@@ -104,7 +104,7 @@ interface Filter {
   }
 
   /** Filter config with instance name. */
-  final class NamedFilterConfig {
+  public final class NamedFilterConfig {
     // filter instance name
     final String name;
     final FilterConfig filterConfig;
