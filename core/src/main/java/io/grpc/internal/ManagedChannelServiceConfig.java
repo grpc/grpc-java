@@ -218,7 +218,8 @@ final class ManagedChannelServiceConfig {
       return false;
     }
     ManagedChannelServiceConfig that = (ManagedChannelServiceConfig) o;
-    return Objects.equal(serviceMethodMap, that.serviceMethodMap)
+    return Objects.equal(defaultMethodConfig, that.defaultMethodConfig)
+        && Objects.equal(serviceMethodMap, that.serviceMethodMap)
         && Objects.equal(serviceMap, that.serviceMap)
         && Objects.equal(retryThrottling, that.retryThrottling)
         && Objects.equal(loadBalancingConfig, that.loadBalancingConfig);
@@ -226,12 +227,14 @@ final class ManagedChannelServiceConfig {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
+    return Objects.hashCode(
+        defaultMethodConfig, serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
   }
 
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
+        .add("defaultMethodConfig", defaultMethodConfig)
         .add("serviceMethodMap", serviceMethodMap)
         .add("serviceMap", serviceMap)
         .add("retryThrottling", retryThrottling)
