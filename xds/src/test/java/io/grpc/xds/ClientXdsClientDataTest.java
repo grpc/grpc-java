@@ -512,14 +512,31 @@ public class ClientXdsClientDataTest {
     assertThat(retryPolicy.maxAttempts()).isEqualTo(4);
     assertThat(retryPolicy.initialBackoff()).isEqualTo(Durations.fromMillis(500));
     assertThat(retryPolicy.maxBackoff()).isEqualTo(Durations.fromMillis(600));
-    assertThat(retryPolicy.perAttemptRecvTimeout()).isEqualTo(Durations.fromMillis(300));
+    // Not supporting per_try_timeout yet.
+    assertThat(retryPolicy.perAttemptRecvTimeout()).isEqualTo(null);
     assertThat(retryPolicy.retryableStatusCodes()).containsExactly(
         Code.CANCELLED, Code.DEADLINE_EXCEEDED, Code.INTERNAL, Code.RESOURCE_EXHAUSTED,
         Code.UNAVAILABLE);
 
+    // empty retry_on
+    builder = RetryPolicy.newBuilder()
+        .setNumRetries(UInt32Value.of(3))
+        .setRetryBackOff(
+            RetryBackOff.newBuilder()
+                .setBaseInterval(Durations.fromMillis(500))
+                .setMaxInterval(Durations.fromMillis(600)))
+        .setPerTryTimeout(Durations.fromMillis(300)); // Not supporting per_try_timeout yet.
+    proto = io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+        .setCluster("cluster-foo")
+        .setRetryPolicy(builder.build())
+        .build();
+    struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
+    assertThat(struct.getStruct().retryPolicy()).isNull();
 
     // base_interval unset
-    builder.setRetryBackOff(RetryBackOff.newBuilder().setMaxInterval(Durations.fromMillis(600)));
+    builder
+        .setRetryOn("cancelled")
+        .setRetryBackOff(RetryBackOff.newBuilder().setMaxInterval(Durations.fromMillis(600)));
     proto = io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
         .setCluster("cluster-foo")
         .setRetryPolicy(builder)

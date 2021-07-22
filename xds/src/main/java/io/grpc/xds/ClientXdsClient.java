@@ -1092,15 +1092,11 @@ final class ClientXdsClient extends AbstractXdsClient {
       retryableStatusCodesBuilder.add(code);
     }
     List<Code> retryableStatusCodes = retryableStatusCodesBuilder.build();
-    Duration perAttemptRecvTimeout = null;
-    if (retryPolicyProto.hasPerTryTimeout()) {
-      perAttemptRecvTimeout = retryPolicyProto.getPerTryTimeout();
-    }
-    if (!retryableStatusCodes.isEmpty() || perAttemptRecvTimeout != null) {
+    if (!retryableStatusCodes.isEmpty()) {
       return StructOrError.fromStruct(
           RetryPolicy.create(
               maxAttempts, retryableStatusCodes, initialBackoff, maxBackoff,
-              perAttemptRecvTimeout));
+              /* perAttemptRecvTimeout= */ null));
     }
     return null;
   }
