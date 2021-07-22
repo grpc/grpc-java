@@ -94,6 +94,7 @@ public class RetriableStreamTest {
   private static final long MAX_BACKOFF_IN_SECONDS = 700;
   private static final double BACKOFF_MULTIPLIER = 2D;
   private static final double FAKE_RANDOM = .5D;
+  private static final long PER_ATTEMPT_RECV_TIMEOUT_NANOS = 2000;
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
       ClientStreamTracer.StreamInfo.newBuilder().build();
 
@@ -177,26 +178,49 @@ public class RetriableStreamTest {
     }
   }
 
-  private final RetriableStream<String> retriableStream =
-      newThrottledRetriableStream(null /* throttle */);
-  private final RetriableStream<String> hedgingStream =
-      newThrottledHedgingStream(null /* throttle */);
+  private static final class RetriableStreamBuilder {
+    RetryPolicy retryPolicy;
+    HedgingPolicy hedgingPolicy;
+    Throttle throttle;
 
-  private ClientStreamTracer bufferSizeTracer;
+    static RetriableStreamBuilder forRetry() {
+      RetriableStreamBuilder builder = new RetriableStreamBuilder();
+      builder.retryPolicy = RETRY_POLICY;
+      return builder;
+    }
 
-  private RetriableStream<String> newThrottledRetriableStream(Throttle throttle) {
-    return new RecordedRetriableStream(
-        method, new Metadata(), channelBufferUsed, PER_RPC_BUFFER_LIMIT, CHANNEL_BUFFER_LIMIT,
-        MoreExecutors.directExecutor(), fakeClock.getScheduledExecutorService(), RETRY_POLICY,
-        null, throttle);
+    static RetriableStreamBuilder forHedging() {
+      RetriableStreamBuilder builder = new RetriableStreamBuilder();
+      builder.hedgingPolicy = HEDGING_POLICY;
+      return builder;
+    }
+
+    RetriableStreamBuilder withRetryPolicy(RetryPolicy retryPolicy) {
+      this.retryPolicy = retryPolicy;
+      this.hedgingPolicy = null;
+      return this;
+    }
+
+    RetriableStreamBuilder withThrottle(Throttle throttle) {
+      this.throttle = throttle;
+      return this;
+    }
   }
 
-  private RetriableStream<String> newThrottledHedgingStream(Throttle throttle) {
+  RetriableStream<String> newRetriableStream(RetriableStreamBuilder builder) {
     return new RecordedRetriableStream(
         method, new Metadata(), channelBufferUsed, PER_RPC_BUFFER_LIMIT, CHANNEL_BUFFER_LIMIT,
         MoreExecutors.directExecutor(), fakeClock.getScheduledExecutorService(),
-        null, HEDGING_POLICY, throttle);
+        builder.retryPolicy,
+        builder.hedgingPolicy, builder.throttle);
   }
+
+  private final RetriableStream<String> retriableStream =
+      newRetriableStream(RetriableStreamBuilder.forRetry());
+  private final RetriableStream<String> hedgingStream =
+      newRetriableStream(RetriableStreamBuilder.forHedging());
+
+  private ClientStreamTracer bufferSizeTracer;
 
   @After
   public void tearDown() {
@@ -1285,7 +1309,8 @@ public class RetriableStreamTest {
   @Test
   public void throttledStream_FailWithRetriableStatusCode_WithoutPushback() {
     Throttle throttle = new Throttle(4f, 0.8f);
-    RetriableStream<String> retriableStream = newThrottledRetriableStream(throttle);
+    RetriableStream<String> retriableStream =
+        newRetriableStream(RetriableStreamBuilder.forRetry().withThrottle(throttle));
 
     ClientStream mockStream = mock(ClientStream.class);
     doReturn(mockStream).when(retriableStreamRecorder).newSubstream(anyInt());
@@ -1304,9 +1329,39 @@ public class RetriableStreamTest {
   }
 
   @Test
+  public void throttledStream_AttemptTimeout() {
+    Throttle throttle = new Throttle(4f, 0.8f);
+    RetriableStream<String> retriableStream =
+        newRetriableStream(RetriableStreamBuilder.forRetry()
+            .withRetryPolicy(
+                new RetryPolicy(
+                    /* maxAttempts= */ 2,
+                    TimeUnit.SECONDS.toNanos(INITIAL_BACKOFF_IN_SECONDS),
+                    TimeUnit.SECONDS.toNanos(MAX_BACKOFF_IN_SECONDS),
+                    BACKOFF_MULTIPLIER,
+                    PER_ATTEMPT_RECV_TIMEOUT_NANOS,
+                    ImmutableSet.of(RETRIABLE_STATUS_CODE_1)))
+            .withThrottle(throttle));
+
+    FakeStream mockStream = mock(FakeStream.class);
+    doReturn(mockStream).when(retriableStreamRecorder).newSubstream(anyInt());
+    retriableStream.start(masterListener);
+    assertThat(mockStream.started).isTrue();
+
+    // mimic some other call in the channel triggers a throttle countdown
+    assertTrue(throttle.onQualifiedFailureThenCheckIsAboveThreshold()); // count = 3
+
+    fakeClock.forwardNanos(PER_ATTEMPT_RECV_TIMEOUT_NANOS);
+    verify(retriableStreamRecorder).postCommit();
+    assertFalse(throttle.isAboveThreshold()); // count = 2
+  }
+
+
+  @Test
   public void throttledStream_FailWithNonRetriableStatusCode_WithoutPushback() {
     Throttle throttle = new Throttle(4f, 0.8f);
-    RetriableStream<String> retriableStream = newThrottledRetriableStream(throttle);
+    RetriableStream<String> retriableStream =
+        newRetriableStream(RetriableStreamBuilder.forRetry().withThrottle(throttle));
 
     ClientStream mockStream = mock(ClientStream.class);
     doReturn(mockStream).when(retriableStreamRecorder).newSubstream(anyInt());
@@ -1329,7 +1384,8 @@ public class RetriableStreamTest {
   @Test
   public void throttledStream_FailWithRetriableStatusCode_WithRetriablePushback() {
     Throttle throttle = new Throttle(4f, 0.8f);
-    RetriableStream<String> retriableStream = newThrottledRetriableStream(throttle);
+    RetriableStream<String> retriableStream =
+        newRetriableStream(RetriableStreamBuilder.forRetry().withThrottle(throttle));
 
     ClientStream mockStream = mock(ClientStream.class);
     doReturn(mockStream).when(retriableStreamRecorder).newSubstream(anyInt());
@@ -1353,7 +1409,8 @@ public class RetriableStreamTest {
   @Test
   public void throttledStream_FailWithNonRetriableStatusCode_WithRetriablePushback() {
     Throttle throttle = new Throttle(4f, 0.8f);
-    RetriableStream<String> retriableStream = newThrottledRetriableStream(throttle);
+    RetriableStream<String> retriableStream =
+        newRetriableStream(RetriableStreamBuilder.forRetry().withThrottle(throttle));
 
     ClientStream mockStream = mock(ClientStream.class);
     doReturn(mockStream).when(retriableStreamRecorder).newSubstream(anyInt());
@@ -1383,7 +1440,8 @@ public class RetriableStreamTest {
   @Test
   public void throttledStream_FailWithRetriableStatusCode_WithNonRetriablePushback() {
     Throttle throttle = new Throttle(4f, 0.8f);
-    RetriableStream<String> retriableStream = newThrottledRetriableStream(throttle);
+    RetriableStream<String> retriableStream =
+        newRetriableStream(RetriableStreamBuilder.forRetry().withThrottle(throttle));
 
     ClientStream mockStream = mock(ClientStream.class);
     doReturn(mockStream).when(retriableStreamRecorder).newSubstream(anyInt());
@@ -1406,7 +1464,8 @@ public class RetriableStreamTest {
   @Test
   public void throttledStream_FailWithNonRetriableStatusCode_WithNonRetriablePushback() {
     Throttle throttle = new Throttle(4f, 0.8f);
-    RetriableStream<String> retriableStream = newThrottledRetriableStream(throttle);
+    RetriableStream<String> retriableStream =
+        newRetriableStream(RetriableStreamBuilder.forRetry().withThrottle(throttle));
 
     ClientStream mockStream = mock(ClientStream.class);
     doReturn(mockStream).when(retriableStreamRecorder).newSubstream(anyInt());
@@ -1429,7 +1488,8 @@ public class RetriableStreamTest {
   @Test
   public void throttleStream_Succeed() {
     Throttle throttle = new Throttle(4f, 0.8f);
-    RetriableStream<String> retriableStream = newThrottledRetriableStream(throttle);
+    RetriableStream<String> retriableStream =
+        newRetriableStream(RetriableStreamBuilder.forRetry().withThrottle(throttle));
 
     ClientStream mockStream = mock(ClientStream.class);
     doReturn(mockStream).when(retriableStreamRecorder).newSubstream(anyInt());
@@ -2320,7 +2380,8 @@ public class RetriableStreamTest {
   @Test
   public void hedging_throttledByOtherCall() {
     Throttle throttle = new Throttle(4f, 0.8f);
-    RetriableStream<String> hedgingStream = newThrottledHedgingStream(throttle);
+    RetriableStream<String> hedgingStream =
+        newRetriableStream(RetriableStreamBuilder.forHedging().withThrottle(throttle));
 
     ClientStream mockStream1 = mock(ClientStream.class);
     ClientStream mockStream2 = mock(ClientStream.class);
@@ -2351,7 +2412,8 @@ public class RetriableStreamTest {
   @Test
   public void hedging_throttledByHedgingStreams() {
     Throttle throttle = new Throttle(4f, 0.8f);
-    RetriableStream<String> hedgingStream = newThrottledHedgingStream(throttle);
+    RetriableStream<String> hedgingStream =
+        newRetriableStream(RetriableStreamBuilder.forHedging().withThrottle(throttle));
 
     ClientStream mockStream1 = mock(ClientStream.class);
     ClientStream mockStream2 = mock(ClientStream.class);
@@ -2381,6 +2443,111 @@ public class RetriableStreamTest {
     assertEquals(0, fakeClock.numPendingTasks());
   }
 
+  @Test
+  public void retryOnAttemptTimeout() {
+    RetriableStream<String> retriableStream = newRetriableStream(
+        RetriableStreamBuilder.forRetry().withRetryPolicy(
+            new RetryPolicy(
+                /* maxAttempts= */ 2,
+                TimeUnit.SECONDS.toNanos(INITIAL_BACKOFF_IN_SECONDS),
+                TimeUnit.SECONDS.toNanos(MAX_BACKOFF_IN_SECONDS),
+                BACKOFF_MULTIPLIER,
+                PER_ATTEMPT_RECV_TIMEOUT_NANOS,
+                ImmutableSet.of(RETRIABLE_STATUS_CODE_1))));
+
+    // start
+    FakeStream mockStream1 = mock(FakeStream.class);
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+    retriableStream.start(masterListener);
+    assertThat(mockStream1.started).isTrue();
+    assertThat(mockStream1.cancelled).isFalse();
+
+    // retry
+    FakeStream mockStream2 = mock(FakeStream.class);
+    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
+    fakeClock.forwardNanos(PER_ATTEMPT_RECV_TIMEOUT_NANOS);
+    assertThat(mockStream1.cancelled).isTrue();
+    assertThat(mockStream2.started).isFalse();
+    fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
+    assertThat(mockStream2.started).isTrue();
+    assertThat(mockStream2.cancelled).isFalse();
+    verify(retriableStreamRecorder, never()).postCommit();
+
+    // no more retry
+    fakeClock.forwardNanos(PER_ATTEMPT_RECV_TIMEOUT_NANOS);
+    assertThat(mockStream2.cancelled).isTrue();
+    verify(retriableStreamRecorder).postCommit();
+  }
+
+  @Test
+  public void retryOnFailureBeforeAttemptTimeout() {
+    RetriableStream<String> retriableStream = newRetriableStream(
+        RetriableStreamBuilder.forRetry().withRetryPolicy(
+            new RetryPolicy(
+                /* maxAttempts= */ 2,
+                TimeUnit.SECONDS.toNanos(INITIAL_BACKOFF_IN_SECONDS),
+                TimeUnit.SECONDS.toNanos(MAX_BACKOFF_IN_SECONDS),
+                BACKOFF_MULTIPLIER,
+                PER_ATTEMPT_RECV_TIMEOUT_NANOS,
+                ImmutableSet.of(RETRIABLE_STATUS_CODE_1))));
+
+    // start
+    FakeStream mockStream1 = mock(FakeStream.class);
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+    retriableStream.start(masterListener);
+    assertThat(mockStream1.started).isTrue();
+    assertThat(mockStream1.cancelled).isFalse();
+
+    // retry
+    FakeStream mockStream2 = mock(FakeStream.class);
+    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
+    mockStream1.listener.closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), RpcProgress.PROCESSED, new Metadata());
+    assertThat(mockStream1.cancelled).isFalse();
+    assertThat(mockStream1.closed).isTrue();
+    assertThat(mockStream2.started).isFalse();
+    fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
+    assertThat(mockStream2.started).isTrue();
+    assertThat(mockStream2.cancelled).isFalse();
+    verify(retriableStreamRecorder, never()).postCommit();
+
+    // no more retry
+    fakeClock.forwardNanos(PER_ATTEMPT_RECV_TIMEOUT_NANOS);
+    assertThat(mockStream1.cancelled).isFalse();
+    assertThat(mockStream2.cancelled).isTrue();
+    verify(retriableStreamRecorder).postCommit();
+  }
+
+  @Test
+  public void receveHeadersBeforeAttemptTimeout() {
+    RetriableStream<String> retriableStream = newRetriableStream(
+        RetriableStreamBuilder.forRetry().withRetryPolicy(
+            new RetryPolicy(
+                /* maxAttempts= */ 2,
+                TimeUnit.SECONDS.toNanos(INITIAL_BACKOFF_IN_SECONDS),
+                TimeUnit.SECONDS.toNanos(MAX_BACKOFF_IN_SECONDS),
+                BACKOFF_MULTIPLIER,
+                PER_ATTEMPT_RECV_TIMEOUT_NANOS,
+                ImmutableSet.of(RETRIABLE_STATUS_CODE_1))));
+
+    // start
+    FakeStream mockStream1 = mock(FakeStream.class);
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+    retriableStream.start(masterListener);
+    assertThat(mockStream1.started).isTrue();
+    assertThat(mockStream1.cancelled).isFalse();
+
+    // headers read
+    mockStream1.listener.headersRead(new Metadata());
+    assertThat(mockStream1.cancelled).isFalse();
+    verify(retriableStreamRecorder).postCommit();
+
+    fakeClock.forwardNanos(PER_ATTEMPT_RECV_TIMEOUT_NANOS);
+    assertThat(mockStream1.cancelled).isFalse();
+
+    mockStream1.listener.closed(Status.OK, PROCESSED, new Metadata());
+  }
+
   /**
    * Used to stub a retriable stream as well as to record methods of the retriable stream being
    * called.
@@ -2391,5 +2558,41 @@ public class RetriableStreamTest {
     ClientStream newSubstream(int previousAttempts);
 
     Status prestart();
+  }
+
+  /** A fake ClientStream that guarantees to close the listener if it gets cancelled. */
+  private abstract static class FakeStream implements ClientStream {
+    ClientStreamListener listener;
+    boolean started;
+    boolean closed;
+    boolean cancelled;
+
+    @Override
+    public final void start(final ClientStreamListener streamListener) {
+      started = true;
+      this.listener = new ForwardingClientStreamListener() {
+
+        @Override
+        protected ClientStreamListener delegate() {
+          return streamListener;
+        }
+
+        @Override
+        public void closed(Status status, RpcProgress rpcProgress, Metadata metadata) {
+          assertThat(closed).isFalse();
+          closed = true;
+          streamListener.closed(status,rpcProgress, metadata);
+        }
+      };
+    }
+
+    @Override
+    public final void cancel(Status status) {
+      cancelled = true;
+      if (closed) {
+        return;
+      }
+      listener.closed(status, PROCESSED, new Metadata());
+    }
   }
 }
