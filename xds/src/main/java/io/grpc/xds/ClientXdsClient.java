@@ -22,11 +22,13 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
+import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
@@ -45,6 +47,7 @@ import io.envoyproxy.envoy.config.core.v3.SocketAddress.PortSpecifierCase;
 import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.config.route.v3.RetryPolicy.RetryBackOff;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
@@ -55,6 +58,7 @@ import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
@@ -77,6 +81,7 @@ import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
+import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
@@ -88,10 +93,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -123,6 +130,10 @@ final class ClientXdsClient extends AbstractXdsClient {
   static boolean enableFaultInjection =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"));
+  @VisibleForTesting
+  static boolean enableRetry =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_RETRY"))
+          && Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_RETRY"));
 
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
@@ -142,6 +153,11 @@ final class ClientXdsClient extends AbstractXdsClient {
       "type.googleapis.com/udpa.type.v1.TypedStruct";
   private static final String TYPE_URL_FILTER_CONFIG =
       "type.googleapis.com/envoy.config.route.v3.FilterConfig";
+  // TODO(zdapeng): need to discuss how to handle unsupported values.
+  private static final Set<Code> SUPPORTED_RETRYABLE_CODES =
+      Collections.unmodifiableSet(EnumSet.of(
+          Code.CANCELLED, Code.DEADLINE_EXCEEDED, Code.INTERNAL, Code.RESOURCE_EXHAUSTED,
+          Code.UNAVAILABLE));
 
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private final Map<String, ResourceSubscriber> ldsResourceSubscribers = new HashMap<>();
@@ -948,6 +964,16 @@ final class ClientXdsClient extends AbstractXdsClient {
         timeoutNano = Durations.toNanos(maxStreamDuration.getMaxStreamDuration());
       }
     }
+    RetryPolicy retryPolicy = null;
+    if (enableRetry && proto.hasRetryPolicy()) {
+      StructOrError<RetryPolicy> retryPolicyOrError = parseRetryPolicy(proto.getRetryPolicy());
+      if (retryPolicyOrError != null) {
+        if (retryPolicyOrError.errorDetail != null) {
+          return StructOrError.fromError(retryPolicyOrError.errorDetail);
+        }
+        retryPolicy = retryPolicyOrError.struct;
+      }
+    }
     List<HashPolicy> hashPolicies = new ArrayList<>();
     for (io.envoyproxy.envoy.config.route.v3.RouteAction.HashPolicy config
         : proto.getHashPolicyList()) {
@@ -983,7 +1009,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     switch (proto.getClusterSpecifierCase()) {
       case CLUSTER:
         return StructOrError.fromStruct(RouteAction.forCluster(
-            proto.getCluster(), hashPolicies, timeoutNano));
+            proto.getCluster(), hashPolicies, timeoutNano, retryPolicy));
       case CLUSTER_HEADER:
         return null;
       case WEIGHTED_CLUSTERS:
@@ -1005,12 +1031,74 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
         // TODO(chengyuanzhang): validate if the sum of weights equals to total weight.
         return StructOrError.fromStruct(RouteAction.forWeightedClusters(
-            weightedClusters, hashPolicies, timeoutNano));
+            weightedClusters, hashPolicies, timeoutNano, retryPolicy));
       case CLUSTERSPECIFIER_NOT_SET:
       default:
         return StructOrError.fromError(
             "Unknown cluster specifier: " + proto.getClusterSpecifierCase());
     }
+  }
+
+  @Nullable // Return null if we ignore the given policy.
+  private static StructOrError<RetryPolicy> parseRetryPolicy(
+      io.envoyproxy.envoy.config.route.v3.RetryPolicy retryPolicyProto) {
+    int maxAttempts = 2;
+    if (retryPolicyProto.hasNumRetries()) {
+      maxAttempts = retryPolicyProto.getNumRetries().getValue() + 1;
+    }
+    Duration initialBackoff = Durations.fromMillis(25);
+    Duration maxBackoff = Durations.fromMillis(250);
+    if (retryPolicyProto.hasRetryBackOff()) {
+      RetryBackOff retryBackOff = retryPolicyProto.getRetryBackOff();
+      if (!retryBackOff.hasBaseInterval()) {
+        return StructOrError.fromError("No base_interval specified in retry_backoff");
+      }
+      Duration originalInitialBackoff = initialBackoff = retryBackOff.getBaseInterval();
+      if (Durations.compare(initialBackoff, Durations.ZERO) <= 0) {
+        return StructOrError.fromError("base_interval in retry_backoff must be positive");
+      }
+      if (Durations.compare(initialBackoff, Durations.fromMillis(1)) < 0) {
+        initialBackoff = Durations.fromMillis(1);
+      }
+      if (retryBackOff.hasMaxInterval()) {
+        maxBackoff = retryPolicyProto.getRetryBackOff().getMaxInterval();
+        if (Durations.compare(maxBackoff, originalInitialBackoff) < 0) {
+          return StructOrError.fromError(
+              "max_interval in retry_backoff cannot be less than base_interval");
+        }
+        if (Durations.compare(maxBackoff, Durations.fromMillis(1)) < 0) {
+          maxBackoff = Durations.fromMillis(1);
+        }
+      } else {
+        maxBackoff = Durations.fromNanos(Durations.toNanos(initialBackoff) * 10);
+      }
+    }
+    Iterable<String> retryOns = Splitter.on(',').split(retryPolicyProto.getRetryOn());
+    ImmutableList.Builder<Code> retryableStatusCodesBuilder = ImmutableList.builder();
+    for (String retryOn : retryOns) {
+      Code code;
+      try {
+        code = Code.valueOf(retryOn.toUpperCase(Locale.US).replace('-', '_'));
+      } catch (IllegalArgumentException e) {
+        // TODO(zdapeng): TBD
+        // unsupported value, such as "5xx"
+        return null;
+      }
+      if (!SUPPORTED_RETRYABLE_CODES.contains(code)) {
+        // TODO(zdapeng): TBD
+        // unsupported value
+        return null;
+      }
+      retryableStatusCodesBuilder.add(code);
+    }
+    List<Code> retryableStatusCodes = retryableStatusCodesBuilder.build();
+    if (!retryableStatusCodes.isEmpty()) {
+      return StructOrError.fromStruct(
+          RetryPolicy.create(
+              maxAttempts, retryableStatusCodes, initialBackoff, maxBackoff,
+              /* perAttemptRecvTimeout= */ null));
+    }
+    return null;
   }
 
   @VisibleForTesting
