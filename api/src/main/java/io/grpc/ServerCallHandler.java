@@ -35,10 +35,10 @@ public interface ServerCallHandler<RequestT, ResponseT> {
    * and the implementation loses the right to call methods on these objects (from some other
    * thread, say).
    *
-   * <p>Ownership also includes the responsibility to eventually close {@code call}. If {@link
-   * #startCall} throws an exception, the caller must handle it by closing {@code call} with an
-   * error. Since {@code call} can only be closed once, an implementation can report errors either
-   * to {@link ServerCall#close} for itself or by throwing an exception, but not both.
+   * <p>Ownership also includes the responsibility to eventually close {@code call}. In particular,
+   * if {@link #startCall} throws an exception, the caller must handle it by closing {@code call}
+   * with an error. Since {@code call} can only be closed once, an implementation can report errors
+   * either to {@link ServerCall#close} for itself or by throwing an exception, but not both.
    *
    * <p>Returns a non-{@code null} listener for the incoming call. Callers of this method must
    * arrange for events associated with {@code call} to be delivered there.
