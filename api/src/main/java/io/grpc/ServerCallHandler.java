@@ -25,22 +25,26 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public interface ServerCallHandler<RequestT, ResponseT> {
   /**
-   * Starts the next stage of {@code call} processing.
+   * Passes {@code call} on to the next stage of asynchronous processing.
    *
-   * <p>Returns a non-{@code null} listener for the incoming call. Callers must arrange for events
-   * associated with {@code call} to be delivered there.
+   * <p>Callers of this method transfer their ownership of the non-thread-safe {@link ServerCall}
+   * and {@link Metadata} arguments to the {@link ServerCallHandler} implementation for processing.
+   * Ownership means that the implementation may invoke methods on {@code call} and {@code headers}
+   * while {@link #startCall} runs and at any time after it returns normally. On the other hand, if
+   * {@link #startCall} throws, ownership of {@code call} and {@code headers} reverts to the caller
+   * and the implementation loses the right to call methods on these objects (from some other
+   * thread, say).
    *
-   * <p>Callers of this method transfer their ownership of non-thread-safe {@link ServerCall} and
-   * {@link Metadata} arguments to this {@link ServerCallHandler} for the next stage of asynchronous
-   * processing. Ownership means that an implementation of {@link #startCall} may invoke methods on
-   * {@code call} and {@code headers} while it runs and at any time after it returns normally. On
-   * the other hand, if {@link #startCall} throws, ownership of {@code call} and {@code headers}
-   * reverts to the caller and the {@link ServerCallHandler} implementation must not call any method
-   * on these objects (from some other thread, say).
+   * <p>Ownership also includes the responsibility to eventually close {@code call}. If {@link
+   * #startCall} throws an exception, the caller must handle it by closing {@code call} with an
+   * error. Since {@code call} can only be closed once, an implementation can report errors either
+   * to {@link ServerCall#close} for itself or by throwing an exception, but not both.
    *
-   * <p>If {@link #startCall} throws an exception, the caller must close {@code call} with an error.
+   * <p>Returns a non-{@code null} listener for the incoming call. Callers of this method must
+   * arrange for events associated with {@code call} to be delivered there.
    *
    * @param call object for responding to the remote client.
+   * @param headers request headers received from the client but open to modification by an owner
    * @return listener for processing incoming request messages for {@code call}
    */
   ServerCall.Listener<RequestT> startCall(
