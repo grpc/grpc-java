@@ -61,6 +61,7 @@ final class TokenAttachingTracerFactory extends ClientStreamTracer.Factory {
         if (token != null) {
           headers.put(GrpclbConstants.TOKEN_METADATA_KEY, token);
         }
+        delegate().streamCreated(transportAttrs, headers);
       }
     }
 

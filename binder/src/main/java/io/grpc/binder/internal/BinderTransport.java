@@ -32,6 +32,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.InternalChannelz.SocketStats;
@@ -632,28 +633,28 @@ public abstract class BinderTransport
     public synchronized ClientStream newStream(
         final MethodDescriptor<?, ?> method,
         final Metadata headers,
-        final CallOptions callOptions) {
+        final CallOptions callOptions,
+        ClientStreamTracer[] tracers) {
       if (isShutdown()) {
-        return newFailingClientStream(shutdownStatus, callOptions, attributes, headers);
+        return newFailingClientStream(shutdownStatus, attributes, headers, tracers);
       } else {
         int callId = latestCallId++;
         if (latestCallId == LAST_CALL_ID) {
           latestCallId = FIRST_CALL_ID;
         }
+        StatsTraceContext statsTraceContext =
+            StatsTraceContext.newClientContext(tracers, attributes, headers);
         Inbound.ClientInbound inbound =
             new Inbound.ClientInbound(
                 this, attributes, callId, GrpcUtil.shouldBeCountedForInUse(callOptions));
         if (ongoingCalls.putIfAbsent(callId, inbound) != null) {
           Status failure = Status.INTERNAL.withDescription("Clashing call IDs");
           shutdownInternal(failure, true);
-          return newFailingClientStream(failure, callOptions, attributes, headers);
+          return newFailingClientStream(failure, attributes, headers, tracers);
         } else {
           if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
             clientTransportListener.transportInUse(true);
           }
-          StatsTraceContext statsTraceContext =
-              StatsTraceContext.newClientContext(callOptions, attributes, headers);
-
           Outbound.ClientOutbound outbound =
               new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
           if (method.getType().clientSendsOneMessage()) {
@@ -763,12 +764,12 @@ public abstract class BinderTransport
     }
 
     private static ClientStream newFailingClientStream(
-        Status failure, CallOptions callOptions, Attributes attributes, Metadata headers) {
+        Status failure, Attributes attributes, Metadata headers,
+        ClientStreamTracer[] tracers) {
       StatsTraceContext statsTraceContext =
-          StatsTraceContext.newClientContext(callOptions, attributes, headers);
+          StatsTraceContext.newClientContext(tracers, attributes, headers);
       statsTraceContext.clientOutboundHeaders();
-      statsTraceContext.streamClosed(failure);
-      return new FailingClientStream(failure);
+      return new FailingClientStream(failure, tracers);
     }
 
     private static InternalLogId buildLogId(

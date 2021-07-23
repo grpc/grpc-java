@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.protobuf.util.Timestamps;
 import io.grpc.ClientStreamTracer;
-import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
 import io.grpc.lb.v1.ClientStats;

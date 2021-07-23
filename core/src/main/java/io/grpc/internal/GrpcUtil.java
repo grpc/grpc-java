@@ -699,8 +699,7 @@ public final class GrpcUtil {
    * Returns a transport out of a PickResult, or {@code null} if the result is "buffer".
    */
   @Nullable
-  static ClientTransport getTransportFromPickResult(
-      final PickResult result, boolean isWaitForReady) {
+  static ClientTransport getTransportFromPickResult(PickResult result, boolean isWaitForReady) {
     final ClientTransport transport;
     Subchannel subchannel = result.getSubchannel();
     if (subchannel != null) {
@@ -753,6 +752,7 @@ public final class GrpcUtil {
     return null;
   }
 
+  /** Gets stream tracers based on CallOptions. */
   static ClientStreamTracer[] getClientStreamTracers(
       CallOptions callOptions, boolean isTransparentRetry) {
     List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();

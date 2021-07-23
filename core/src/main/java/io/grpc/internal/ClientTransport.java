@@ -54,6 +54,7 @@ public interface ClientTransport extends InternalInstrumented<SocketStats> {
   // TODO(nmittler): Consider also throwing for stopping.
   ClientStream newStream(
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      // Using array for tracers instead of a list or composition for better performance.
       ClientStreamTracer[] tracers);
 
   /**

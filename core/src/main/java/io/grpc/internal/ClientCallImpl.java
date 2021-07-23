@@ -263,6 +263,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       for (int i = 0; i < factories.size(); i++) {
         tracers[i] = factories.get(i).newClientStreamTracer(streamInfo);
       }
+      tracers[factories.size()] = new ClientStreamTracer() {};
       stream = new FailingClientStream(
           DEADLINE_EXCEEDED.withDescription(
               "ClientCall started after deadline exceeded: " + effectiveDeadline),

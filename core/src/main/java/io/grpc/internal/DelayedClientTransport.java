@@ -391,6 +391,13 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
 
     @Override
+    protected void onEarlyCancellation(Status reason) {
+      for (ClientStreamTracer tracer : tracers) {
+        tracer.streamClosed(reason);
+      }
+    }
+
+    @Override
     public void appendTimeoutInsight(InsightBuilder insight) {
       if (args.getCallOptions().isWaitForReady()) {
         insight.append("wait_for_ready");

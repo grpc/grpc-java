@@ -58,7 +58,8 @@ final class SubchannelChannel extends Channel {
         if (transport == null) {
           transport = notReadyTransport;
         }
-        ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(callOptions, false);
+        ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
+            callOptions, /* isTransparentRetry= */ false);
         Context origContext = context.attach();
         try {
           return transport.newStream(method, headers, callOptions, tracers);

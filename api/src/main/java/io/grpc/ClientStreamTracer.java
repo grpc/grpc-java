@@ -33,6 +33,8 @@ public abstract class ClientStreamTracer extends StreamTracer {
    *
    * @param headers the mutable initial metadata. Modifications to it will be sent to the socket but
    *     not be seen by client interceptors and the application.
+   *
+   * @since 1.40.0
    */
   public void streamCreated(Attributes transportAttrs, Metadata headers) {
   }
@@ -63,13 +65,16 @@ public abstract class ClientStreamTracer extends StreamTracer {
    * Factory class for {@link ClientStreamTracer}.
    */
   public abstract static class Factory {
-
     /**
      * Creates a {@link ClientStreamTracer} for a new client stream.
      *
      * @param info information about the stream
+     *
+     * @since 1.40.0
      */
     public ClientStreamTracer newClientStreamTracer(final StreamInfo info) {
+      // Provide a default implementation of this method for compatibility with old Factory
+      // implementations.
       return new ClientStreamTracer() {
         volatile ClientStreamTracer delegate = new ClientStreamTracer() {};
 
@@ -201,6 +206,11 @@ public abstract class ClientStreamTracer extends StreamTracer {
       return callOptions;
     }
 
+    /**
+     * Whether the stream is a transparent retry.
+     *
+     * @since 1.40.0
+     */
     public boolean isTransparentRetry() {
       return isTransparentRetry;
     }
@@ -211,9 +221,10 @@ public abstract class ClientStreamTracer extends StreamTracer {
      * @since 1.21.0
      */
     public Builder toBuilder() {
-      Builder builder = new Builder();
-      builder.setCallOptions(callOptions);
-      return builder;
+      return new Builder()
+          .setCallOptions(callOptions)
+          .setTransportAttrs(transportAttrs)
+          .setIsTransparentRetry(isTransparentRetry);
     }
 
     /**
@@ -267,6 +278,11 @@ public abstract class ClientStreamTracer extends StreamTracer {
         return this;
       }
 
+      /**
+       * Sets whether the stream is a transparent retry.
+       *
+       * @since 1.40.0
+       */
       public Builder setIsTransparentRetry(boolean isTransparentRetry) {
         this.isTransparentRetry = isTransparentRetry;
         return this;

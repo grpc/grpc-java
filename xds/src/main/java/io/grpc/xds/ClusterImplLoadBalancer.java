@@ -29,7 +29,6 @@ import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
-import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.util.ForwardingClientStreamTracer;

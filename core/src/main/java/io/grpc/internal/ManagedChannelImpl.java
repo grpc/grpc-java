@@ -514,7 +514,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       // stream, which would have reported in-use state to the channel that would have cancelled
       // the idle timer.
       PickResult pickResult = pickerCopy.pickSubchannel(args);
-      // TODO(zdapeng): pass args.isTransparentRetry() in getTransportFromPickResult()
       ClientTransport transport = GrpcUtil.getTransportFromPickResult(
           pickResult, args.getCallOptions().isWaitForReady());
       if (transport != null) {
@@ -533,7 +532,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
         ClientTransport transport =
             getTransport(new PickSubchannelArgsImpl(method, headers, callOptions));
         Context origContext = context.attach();
-        ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(callOptions, false);
+        ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
+            callOptions, /* isTransparentRetry= */ false);
         try {
           return transport.newStream(method, headers, callOptions, tracers);
         } finally {
@@ -577,7 +577,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
             newOptions = newOptions.withStreamTracerFactory(factory);
             ClientStreamTracer[] tracers =
                 GrpcUtil.getClientStreamTracers(callOptions, isTransparentRetry);
-            // TODO(zdapeng): include isTransparentRetry in PickSubchannelArgs
             ClientTransport transport =
                 getTransport(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
             Context origContext = context.attach();
@@ -626,7 +625,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
-    this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
+    this.retryEnabled = builder.retryEnabled;
     this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
     this.offloadExecutorHolder =
         new ExecutorHolder(
