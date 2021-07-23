@@ -25,15 +25,20 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public interface ServerCallHandler<RequestT, ResponseT> {
   /**
-   * Produce a non-{@code null} listener for the incoming call. Implementations are free to call
-   * methods on {@code call} before this method has returned.
+   * Starts the next stage of {@code call} processing.
    *
-   * <p>Since {@link Metadata} is not thread-safe, the caller must not access (read or write) {@code
-   * headers} after this point.
+   * <p>Returns a non-{@code null} listener for the incoming call. Callers must arrange for events
+   * associated with {@code call} to be delivered there.
    *
-   * <p>If the implementation throws an exception, {@code call} will be closed with an error.
-   * Implementations must not throw an exception if they started processing that may use {@code
-   * call} on another thread.
+   * <p>Callers of this method transfer their ownership of non-thread-safe {@link ServerCall} and
+   * {@link Metadata} arguments to this {@link ServerCallHandler} for the next stage of asynchronous
+   * processing. Ownership means that an implementation of {@link #startCall} may invoke methods on
+   * {@code call} and {@code headers} while it runs and at any time after it returns normally. On
+   * the other hand, if {@link #startCall} throws, ownership of {@code call} and {@code headers}
+   * reverts to the caller and the {@link ServerCallHandler} implementation must not call any method
+   * on these objects (from some other thread, say).
+   *
+   * <p>If {@link #startCall} throws an exception, the caller must close {@code call} with an error.
    *
    * @param call object for responding to the remote client.
    * @return listener for processing incoming request messages for {@code call}
