@@ -2321,53 +2321,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  @VisibleForTesting
-  static final class ScParser extends NameResolver.ServiceConfigParser {
-
-    private final boolean retryEnabled;
-    private final int maxRetryAttemptsLimit;
-    private final int maxHedgedAttemptsLimit;
-    private final AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory;
-
-    ScParser(
-        boolean retryEnabled,
-        int maxRetryAttemptsLimit,
-        int maxHedgedAttemptsLimit,
-        AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory) {
-      this.retryEnabled = retryEnabled;
-      this.maxRetryAttemptsLimit = maxRetryAttemptsLimit;
-      this.maxHedgedAttemptsLimit = maxHedgedAttemptsLimit;
-      this.autoLoadBalancerFactory =
-          checkNotNull(autoLoadBalancerFactory, "autoLoadBalancerFactory");
-    }
-
-    @Override
-    public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
-      try {
-        Object loadBalancingPolicySelection;
-        ConfigOrError choiceFromLoadBalancer =
-            autoLoadBalancerFactory.parseLoadBalancerPolicy(rawServiceConfig);
-        if (choiceFromLoadBalancer == null) {
-          loadBalancingPolicySelection = null;
-        } else if (choiceFromLoadBalancer.getError() != null) {
-          return ConfigOrError.fromError(choiceFromLoadBalancer.getError());
-        } else {
-          loadBalancingPolicySelection = choiceFromLoadBalancer.getConfig();
-        }
-        return ConfigOrError.fromConfig(
-            ManagedChannelServiceConfig.fromServiceConfig(
-                rawServiceConfig,
-                retryEnabled,
-                maxRetryAttemptsLimit,
-                maxHedgedAttemptsLimit,
-                loadBalancingPolicySelection));
-      } catch (RuntimeException e) {
-        return ConfigOrError.fromError(
-            Status.UNKNOWN.withDescription("failed to parse service config").withCause(e));
-      }
-    }
-  }
-
   /**
    * A ResolutionState indicates the status of last name resolution.
    */
