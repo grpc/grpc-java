@@ -310,41 +310,32 @@ final class ClientXdsClient extends AbstractXdsClient {
       TlsContextManager tlsContextManager, FilterRegistry filterRegistry,
       Set<FilterChainMatch> uniqueSet, boolean parseHttpFilters)
       throws ResourceInvalidException {
-    io.grpc.xds.HttpConnectionManager httpConnectionManager = null;
-    HashSet<String> uniqueNames = new HashSet<>();
-    for (io.envoyproxy.envoy.config.listener.v3.Filter filter : proto.getFiltersList()) {
-      if (!uniqueNames.add(filter.getName())) {
-        throw new ResourceInvalidException(
-            "FilterChain " + proto.getName() + " with duplicated filter: " + filter.getName());
-      }
-      if (!filter.hasTypedConfig()) {
-        throw new ResourceInvalidException(
-            "FilterChain " + proto.getName() + " contains filter " + filter.getName()
-                + " without typed_config");
-      }
-      Any any = filter.getTypedConfig();
-      // HttpConnectionManager is the only supported network filter at the moment.
-      if (!any.getTypeUrl().equals(TYPE_URL_HTTP_CONNECTION_MANAGER)) {
-        throw new ResourceInvalidException(
-            "FilterChain " + proto.getName() + " contains filter " + filter.getName()
-                + " with unsupported typed_config type " + any.getTypeUrl());
-      }
-      if (httpConnectionManager == null) {
-        HttpConnectionManager hcmProto;
-        try {
-          hcmProto = any.unpack(HttpConnectionManager.class);
-        } catch (InvalidProtocolBufferException e) {
-          throw new ResourceInvalidException("FilterChain " + proto.getName() + " with filter "
-              + filter.getName() + " failed to unpack message", e);
-        }
-        httpConnectionManager = parseHttpConnectionManager(
-            hcmProto, rdsResources, filterRegistry, parseHttpFilters, false /* isForClient */);
-      }
-    }
-    if (httpConnectionManager == null) {
+    if (proto.getFiltersCount() != 1) {
       throw new ResourceInvalidException("FilterChain " + proto.getName()
-          + " missing required HttpConnectionManager filter");
+              + " should contain exact one HttpConnectionManager filter");
     }
+    io.envoyproxy.envoy.config.listener.v3.Filter filter = proto.getFiltersList().get(0);
+    if (!filter.hasTypedConfig()) {
+      throw new ResourceInvalidException(
+          "FilterChain " + proto.getName() + " contains filter " + filter.getName()
+              + " without typed_config");
+    }
+    Any any = filter.getTypedConfig();
+    // HttpConnectionManager is the only supported network filter at the moment.
+    if (!any.getTypeUrl().equals(TYPE_URL_HTTP_CONNECTION_MANAGER)) {
+      throw new ResourceInvalidException(
+          "FilterChain " + proto.getName() + " contains filter " + filter.getName()
+              + " with unsupported typed_config type " + any.getTypeUrl());
+    }
+    HttpConnectionManager hcmProto;
+    try {
+      hcmProto = any.unpack(HttpConnectionManager.class);
+    } catch (InvalidProtocolBufferException e) {
+      throw new ResourceInvalidException("FilterChain " + proto.getName() + " with filter "
+          + filter.getName() + " failed to unpack message", e);
+    }
+    io.grpc.xds.HttpConnectionManager httpConnectionManager = parseHttpConnectionManager(
+            hcmProto, rdsResources, filterRegistry, parseHttpFilters, false /* isForClient */);
 
     EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext = null;
     if (TRANSPORT_SOCKET_NAME_TLS.equals(proto.getTransportSocket().getName())) {
@@ -567,8 +558,10 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (parseHttpFilter) {
       filterConfigs = new ArrayList<>();
       Set<String> names = new HashSet<>();
-      for (io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
-               httpFilter : proto.getHttpFiltersList()) {
+      NamedFilterConfig lastFilter = new NamedFilterConfig(null, null);
+      for (int i = 0; i < proto.getHttpFiltersCount(); i++) {
+        io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
+                httpFilter = proto.getHttpFiltersList().get(i);
         String filterName = httpFilter.getName();
         if (!names.add(filterName)) {
           throw new ResourceInvalidException(
@@ -576,6 +569,9 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
         StructOrError<FilterConfig> filterConfig =
             parseHttpFilter(httpFilter, filterRegistry, isForClient);
+        if (i == proto.getHttpFiltersCount() - 1 && filterConfig != null) {
+          lastFilter = new NamedFilterConfig(filterName, filterConfig.struct);
+        }
         if (filterConfig == null) {
           continue;
         }
@@ -584,7 +580,17 @@ final class ClientXdsClient extends AbstractXdsClient {
               "HttpConnectionManager contains invalid HttpFilter: "
                   + filterConfig.getErrorDetail());
         }
+        if (isForClient) {
+          if ((i < proto.getHttpFiltersCount() - 1) && isTerminalFilter(filterConfig.getStruct())) {
+            throw new ResourceInvalidException("A terminal HttpFilter must be the last filter: "
+                    + filterName);
+          }
+        }
         filterConfigs.add(new NamedFilterConfig(filterName, filterConfig.struct));
+      }
+      if (isForClient && !isTerminalFilter(lastFilter.filterConfig)) {
+        throw new ResourceInvalidException("The last HttpFilter must be a terminal filter: "
+                + lastFilter.name);
       }
     }
 
@@ -622,6 +628,11 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     throw new ResourceInvalidException(
         "HttpConnectionManager neither has inlined route_config nor RDS");
+  }
+
+  // hard-coded: currently router config is the only terminal filter.
+  private static boolean isTerminalFilter(FilterConfig filterConfig) {
+    return RouterFilter.ROUTER_CONFIG.equals(filterConfig);
   }
 
   @VisibleForTesting

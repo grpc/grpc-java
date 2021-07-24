@@ -39,6 +39,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
+import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
 import io.grpc.Context;
@@ -653,7 +654,8 @@ public abstract class ClientXdsClientTestBase {
                     mf.buildHttpFaultTypedConfig(
                         1L, 2, "cluster1", ImmutableList.<String>of(), 3, null, null,
                         null),
-                    false))));
+                    false),
+                mf.buildHttpFilter("terminal", Any.pack(Router.newBuilder().build()), true))));
     call.sendResponse(LDS, listener, VERSION_1, "0000");
 
     // Client sends an ACK LDS request.
@@ -2231,7 +2233,7 @@ public abstract class ClientXdsClientTestBase {
     /** Throws {@link InvalidProtocolBufferException} on {@link Any#unpack(Class)}. */
     protected static final Any FAILING_ANY = Any.newBuilder().setTypeUrl("fake").build();
 
-    protected final Message buildListenerWithApiListener(String name, Message routeConfiguration) {
+    protected Message buildListenerWithApiListener(String name, Message routeConfiguration) {
       return buildListenerWithApiListener(
           name, routeConfiguration, Collections.<Message>emptyList());
     }

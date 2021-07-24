@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import io.grpc.Attributes;
@@ -91,8 +90,6 @@ final class XdsNameResolver extends NameResolver {
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
   static final CallOptions.Key<Long> RPC_HASH_KEY =
       CallOptions.Key.create("io.grpc.xds.RPC_HASH_KEY");
-  private static final NamedFilterConfig LAME_FILTER =
-      new NamedFilterConfig(null, LameFilter.LAME_CONFIG);
   @VisibleForTesting
   static boolean enableTimeout =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"))
@@ -343,10 +340,6 @@ final class XdsNameResolver extends NameResolver {
       do {
         routingCfg = routingConfig;
         selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
-        if (routingCfg.filterChain != null
-            && Iterables.getLast(routingCfg.filterChain).equals(LAME_FILTER)) {
-          break;
-        }
         for (Route route : routingCfg.routes) {
           if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
               headers, random)) {
@@ -408,12 +401,7 @@ final class XdsNameResolver extends NameResolver {
       if (routingCfg.filterChain != null) {
         for (NamedFilterConfig namedFilter : routingCfg.filterChain) {
           FilterConfig filterConfig = namedFilter.filterConfig;
-          Filter filter;
-          if (namedFilter.equals(LAME_FILTER)) {
-            filter = LameFilter.INSTANCE;
-          } else {
-            filter = filterRegistry.get(filterConfig.typeUrl());
-          }
+          Filter filter = filterRegistry.get(filterConfig.typeUrl());
           if (filter instanceof ClientInterceptorBuilder) {
             ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
                 .buildClientInterceptor(
@@ -423,12 +411,6 @@ final class XdsNameResolver extends NameResolver {
               filterInterceptors.add(interceptor);
             }
           }
-        }
-        if (Iterables.getLast(routingCfg.filterChain).equals(LAME_FILTER)) {
-          return Result.newBuilder()
-              .setConfig(config)
-              .setInterceptor(combineInterceptors(filterInterceptors))
-              .build();
         }
       }
       final String finalCluster = cluster;
@@ -720,27 +702,7 @@ final class XdsNameResolver extends NameResolver {
         return;
       }
 
-      // A router filter is required for request routing. For backward compatibility, routing
-      // is always enabled for gRPC clients without HttpFilter support.
       List<Route> routes = virtualHost.routes();
-      List<NamedFilterConfig> filterChain = null;
-      if (filterConfigs != null) {
-        boolean hasRouter = false;
-        filterChain = new ArrayList<>(filterConfigs.size());
-        for (NamedFilterConfig namedFilter : filterConfigs) {
-          filterChain.add(namedFilter);
-          if (namedFilter.filterConfig.equals(RouterFilter.ROUTER_CONFIG)) {
-            hasRouter = true;
-            break;
-          }
-        }
-        if (!hasRouter) {
-          // Fail all RPCs if a router filter is not present. Reference counts for all currently
-          // selectable clusters should be reclaimed.
-          filterChain.add(LAME_FILTER);
-          routes = Collections.emptyList();
-        }
-      }
 
       // Populate all clusters to which requests can be routed to through the virtual host.
       Set<String> clusters = new HashSet<>();
@@ -781,7 +743,7 @@ final class XdsNameResolver extends NameResolver {
       // selectable.
       routingConfig =
           new RoutingConfig(
-              httpMaxStreamDurationNano, routes, filterChain,
+              httpMaxStreamDurationNano, routes, filterConfigs,
               virtualHost.filterConfigOverrides());
       shouldUpdateResult = false;
       for (String cluster : deletedClusters) {

@@ -916,12 +916,79 @@ public class ClientXdsClientDataTest {
                 HttpFilter.newBuilder().setName("envoy.filter.foo").setIsOptional(true))
             .addHttpFilters(
                 HttpFilter.newBuilder().setName("envoy.filter.foo").setIsOptional(true))
+            .addHttpFilters(
+                HttpFilter.newBuilder().setName("terminal").setTypedConfig(
+                        Any.pack(Router.newBuilder().build())).setIsOptional(true))
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("HttpConnectionManager contains duplicate HttpFilter: envoy.filter.foo");
     ClientXdsClient.parseHttpConnectionManager(
         hcm, new HashSet<String>(), filterRegistry, true /* parseHttpFilter */,
         true /* does not matter */);
+  }
+
+  @Test
+  public void parseHttpConnectionManager_lastNotTerminal() throws ResourceInvalidException {
+    filterRegistry.register(FaultFilter.INSTANCE);
+    HttpConnectionManager hcm =
+          HttpConnectionManager.newBuilder()
+              .addHttpFilters(
+                HttpFilter.newBuilder().setName("envoy.filter.foo").setIsOptional(true))
+              .addHttpFilters(
+                HttpFilter.newBuilder().setName("envoy.filter.bar").setIsOptional(true)
+                    .setTypedConfig(Any.pack(HTTPFault.newBuilder().build())))
+                    .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("The last HttpFilter must be a terminal filter: envoy.filter.bar");
+    ClientXdsClient.parseHttpConnectionManager(
+            hcm, new HashSet<String>(), filterRegistry, true /* parseHttpFilter */,
+            true /* does not matter */);
+  }
+
+  @Test
+  public void parseHttpConnectionManager_terminalNotLast() throws ResourceInvalidException {
+    filterRegistry.register(RouterFilter.INSTANCE);
+    HttpConnectionManager hcm =
+            HttpConnectionManager.newBuilder()
+                    .addHttpFilters(
+                            HttpFilter.newBuilder().setName("terminal").setTypedConfig(
+                                    Any.pack(Router.newBuilder().build())).setIsOptional(true))
+                    .addHttpFilters(
+                            HttpFilter.newBuilder().setName("envoy.filter.foo").setIsOptional(true))
+                    .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("A terminal HttpFilter must be the last filter: terminal");
+    ClientXdsClient.parseHttpConnectionManager(
+            hcm, new HashSet<String>(), filterRegistry, true /* parseHttpFilter */,
+            true);
+  }
+
+  @Test
+  public void parseHttpConnectionManager_unknownFilters() throws ResourceInvalidException {
+    HttpConnectionManager hcm =
+            HttpConnectionManager.newBuilder()
+                    .addHttpFilters(
+                            HttpFilter.newBuilder().setName("envoy.filter.foo").setIsOptional(true))
+                    .addHttpFilters(
+                            HttpFilter.newBuilder().setName("envoy.filter.bar").setIsOptional(true))
+                    .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("The last HttpFilter must be a terminal filter: null");
+    ClientXdsClient.parseHttpConnectionManager(
+            hcm, new HashSet<String>(), filterRegistry, true /* parseHttpFilter */,
+            true /* does not matter */);
+  }
+
+  @Test
+  public void parseHttpConnectionManager_emptyFilters() throws ResourceInvalidException {
+    HttpConnectionManager hcm =
+            HttpConnectionManager.newBuilder()
+                    .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("The last HttpFilter must be a terminal filter: null");
+    ClientXdsClient.parseHttpConnectionManager(
+            hcm, new HashSet<String>(), filterRegistry, true /* parseHttpFilter */,
+            true /* does not matter */);
   }
 
   @Test
@@ -1196,7 +1263,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
-        "FilterChain filter-chain-foo missing required HttpConnectionManager filter");
+        "FilterChain filter-chain-foo should contain exact one HttpConnectionManager filter");
     ClientXdsClient.parseFilterChain(
         filterChain, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
@@ -1214,7 +1281,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
-        "FilterChain filter-chain-foo with duplicated filter: envoy.http_connection_manager");
+        "FilterChain filter-chain-foo should contain exact one HttpConnectionManager filter");
     ClientXdsClient.parseFilterChain(
         filterChain, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
