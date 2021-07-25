@@ -31,11 +31,11 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
+import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
-import io.grpc.xds.internal.sds.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import java.io.IOException;
 import java.net.SocketAddress;
@@ -65,10 +65,11 @@ final class XdsServerWrapper extends Server {
         }
       });
 
+  @VisibleForTesting
+  static final long RETRY_DELAY_NANOS = TimeUnit.MINUTES.toNanos(1);
   private final String listenerAddress;
   private final ServerBuilder<?> delegateBuilder;
   private ScheduledExecutorService timeService = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
-  private final long retryDelayNano;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final XdsServingStatusListener listener;
   private final AtomicReference<FilterChainSelector> filterChainSelectorRef;
@@ -87,13 +88,11 @@ final class XdsServerWrapper extends Server {
   XdsServerWrapper(
       String listenerAddress,
       ServerBuilder<?> delegateBuilder,
-      long retryDelayNano,
       XdsServingStatusListener listener,
       AtomicReference<FilterChainSelector> filterChainSelectorRef,
       XdsClientPoolFactory xdsClientPoolFactory) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
     this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
-    this.retryDelayNano = retryDelayNano;
     this.listener = checkNotNull(listener, "listener");
     this.filterChainSelectorRef = checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
@@ -279,7 +278,7 @@ final class XdsServerWrapper extends Server {
         initialStartFuture.set(e);
       }
       restartTimer = syncContext.schedule(
-        new RestartTask(), retryDelayNano, TimeUnit.NANOSECONDS, timeService);
+        new RestartTask(), RETRY_DELAY_NANOS, TimeUnit.NANOSECONDS, timeService);
     }
   }
 

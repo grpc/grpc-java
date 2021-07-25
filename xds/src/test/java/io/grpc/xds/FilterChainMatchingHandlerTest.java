@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds;
+package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.internal.sds.FilterChainMatchingHandler.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
+import static io.grpc.xds.internal.sds.SdsProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -28,15 +28,14 @@ import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiationEvent;
-import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.HttpConnectionManager;
-import io.grpc.xds.TlsContextManager;
-import io.grpc.xds.internal.sds.FilterChainMatchingHandler.FilterChainSelector;
+import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -168,7 +167,7 @@ public class FilterChainMatchingHandlerTest {
       fail("exception expected!");
     } catch (Exception e) {
       assertThat(e).isInstanceOf(IllegalStateException.class);
-      assertThat(e).hasMessageThat().contains("No or more than one filter chain matched.");
+      assertThat(e).hasMessageThat().contains("Did not find exactly one filter chain.");
     }
   }
 
@@ -943,7 +942,7 @@ public class FilterChainMatchingHandlerTest {
       channel.checkException();
       fail("expect exception!");
     } catch (IllegalStateException ise) {
-      assertThat(ise).hasMessageThat().isEqualTo("No or more than one filter chain matched.");
+      assertThat(ise).hasMessageThat().isEqualTo("Did not find exactly one filter chain.");
       assertThat(sslSet.isDone()).isFalse();
       channelHandlerCtx = pipeline.context(filterChainMatchingHandler);
       assertThat(channelHandlerCtx).isNotNull();

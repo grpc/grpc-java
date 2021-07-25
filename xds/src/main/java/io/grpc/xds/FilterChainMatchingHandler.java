@@ -14,17 +14,21 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.sds;
+package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_REF;
+import static io.grpc.xds.internal.sds.SdsProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.UInt32Value;
 import io.grpc.Attributes;
+import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
+import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData.CidrRange;
@@ -32,8 +36,11 @@ import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.internal.Matchers.CidrMatcher;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.util.AsciiString;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -41,6 +48,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -49,20 +58,16 @@ import javax.annotation.Nullable;
 /**
  * Handles L4 filter chain match for the connection based on the xds configuration.
  * */
-public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapter {
+final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapter {
   private static final Logger log = Logger.getLogger(FilterChainMatchingHandler.class.getName());
+
+  private static final AsciiString SCHEME = AsciiString.of("http");
+
   private final GrpcHttp2ConnectionHandler grpcHandler;
   private final FilterChainSelector selector;
   private final ProtocolNegotiator delegate;
 
-  public static final Attributes.Key<SslContextProviderSupplier>
-          ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER =
-          Attributes.Key.create("io.grpc.xds.internal.sds.server.sslContextProviderSupplier");
-
-  /**
-   * Selects the filter chain using the selector configuration.
-   * */
-  public FilterChainMatchingHandler(
+  FilterChainMatchingHandler(
           GrpcHttp2ConnectionHandler grpcHandler, FilterChainSelector selector,
           ProtocolNegotiator delegate) {
     this.grpcHandler = checkNotNull(grpcHandler, "grpcHandler");
@@ -76,13 +81,13 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
       super.userEventTriggered(ctx, evt);
       return;
     }
-    FilteredConfig config = selector.select(
+    SelectedConfig config = selector.select(
             (InetSocketAddress) ctx.channel().localAddress(),
             (InetSocketAddress) ctx.channel().remoteAddress());
     if (config == null) {
-      log.log(Level.FINER, "No or more than one filter chain matched.");
+      log.log(Level.FINER, "Did not find exactly one filter chain.");
       ctx.fireExceptionCaught(
-              new IllegalStateException("No or more than one filter chain matched."));
+              new IllegalStateException("Did not find exactly one filter chain."));
       return;
     }
     ProtocolNegotiationEvent pne = (ProtocolNegotiationEvent)evt;
@@ -94,7 +99,7 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
     ctx.fireUserEventTriggered(pne);
   }
 
-  public static final class FilterChainSelector {
+  static final class FilterChainSelector {
     public static final FilterChainSelector NO_FILTER_CHAIN = new FilterChainSelector(
             Collections.<FilterChain>emptyList(), null);
 
@@ -102,10 +107,7 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
     @Nullable
     private final SslContextProviderSupplier defaultSslContextProviderSupplier;
 
-    /**
-     * Populated from xds listener update to perform L4 filter chain match.
-     * */
-    public FilterChainSelector(List<FilterChain> filterChainList,
+    FilterChainSelector(List<FilterChain> filterChainList,
                         @Nullable SslContextProviderSupplier defaultSslContextProviderSupplier) {
       checkNotNull(filterChainList, "filterChainList");
       this.filterChainList = filterChainList;
@@ -113,12 +115,12 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
     }
 
     @VisibleForTesting
-    public List<FilterChain> getFilterChains() {
+    List<FilterChain> getFilterChains() {
       return filterChainList;
     }
 
     @VisibleForTesting
-    public SslContextProviderSupplier getDefaultSslContextProviderSupplier() {
+    SslContextProviderSupplier getDefaultSslContextProviderSupplier() {
       return defaultSslContextProviderSupplier;
     }
 
@@ -126,7 +128,7 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
      * returns null means we should close the connection.
      */
     @Nullable
-    public FilteredConfig select(InetSocketAddress localAddr, InetSocketAddress remoteAddr) {
+    SelectedConfig select(InetSocketAddress localAddr, InetSocketAddress remoteAddr) {
       Collection<FilterChain> filterChains = new ArrayList<>(filterChainList);
       filterChains = filterOnDestinationPort(filterChains);
       filterChains = filterOnIpAddress(filterChains, localAddr.getAddress(), true);
@@ -145,11 +147,12 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
       }
       if (filterChains.size() == 1) {
         FilterChain selected = Iterables.getOnlyElement(filterChains);
-        return new FilteredConfig(selected.getSslContextProviderSupplier());
+        return new SelectedConfig(selected.getSslContextProviderSupplier());
       }
       if (defaultSslContextProviderSupplier != null) {
-        return new FilteredConfig(defaultSslContextProviderSupplier);
+        return new SelectedConfig(defaultSslContextProviderSupplier);
       }
+      log.log(Level.FINER, "No matching filter chain found.");
       return null;
     }
 
@@ -307,14 +310,52 @@ public final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapt
     }
   }
 
+  static class FilterChainMatchingNegotiatorServerFactory
+          implements InternalProtocolNegotiator.ServerFactory {
+    private final InternalProtocolNegotiator.ServerFactory delegate;
+
+    public FilterChainMatchingNegotiatorServerFactory(
+            InternalProtocolNegotiator.ServerFactory delegate) {
+      this.delegate = checkNotNull(delegate, "delegate");
+    }
+
+    @Override
+    public ProtocolNegotiator newNegotiator(
+            final ObjectPool<? extends Executor> offloadExecutorPool) {
+
+      class FilterChainMatchingNegotiator implements ProtocolNegotiator {
+
+        @Override
+        public AsciiString scheme() {
+          return SCHEME;
+        }
+
+        @Override
+        public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+          AtomicReference<FilterChainSelector> filterChainSelectorRef =
+                  grpcHandler.getEagAttributes().get(ATTR_FILTER_CHAIN_SELECTOR_REF);
+          checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
+          return new FilterChainMatchingHandler(grpcHandler, filterChainSelectorRef.get(),
+                  delegate.newNegotiator(offloadExecutorPool));
+        }
+
+        @Override
+        public void close() {
+        }
+      }
+
+      return new FilterChainMatchingNegotiator();
+    }
+  }
+
   /**
    * The FilterChain level configuration.
    */
-  public static final class FilteredConfig {
+  public static final class SelectedConfig {
     @Nullable
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    private FilteredConfig(@Nullable SslContextProviderSupplier sslContextProviderSupplier) {
+    private SelectedConfig(@Nullable SslContextProviderSupplier sslContextProviderSupplier) {
       this.sslContextProviderSupplier = sslContextProviderSupplier;
     }
   }

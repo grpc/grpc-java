@@ -17,9 +17,9 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.internal.sds.FilterChainMatchingHandler.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Attributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
@@ -29,8 +29,6 @@ import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.InternalXdsAttributes;
-import io.grpc.xds.XdsServerBuilder;
-import io.grpc.xds.internal.sds.FilterChainMatchingHandler.FilterChainSelector;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -41,7 +39,6 @@ import java.security.cert.CertStoreException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -60,6 +57,10 @@ public final class SdsProtocolNegotiators {
   private static final Logger logger = Logger.getLogger(SdsProtocolNegotiators.class.getName());
 
   private static final AsciiString SCHEME = AsciiString.of("http");
+
+  public static final Attributes.Key<SslContextProviderSupplier>
+          ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER =
+          Attributes.Key.create("io.grpc.xds.internal.sds.server.sslContextProviderSupplier");
 
   /**
    * Returns a {@link InternalProtocolNegotiator.ClientFactory}.
@@ -359,44 +360,6 @@ public final class SdsProtocolNegotiators {
             }
           }
       );
-    }
-  }
-
-  public static class FilterChainMatchingNegotiatorServerFactory
-          implements InternalProtocolNegotiator.ServerFactory {
-    private final InternalProtocolNegotiator.ServerFactory delegate;
-
-    public FilterChainMatchingNegotiatorServerFactory(
-            InternalProtocolNegotiator.ServerFactory delegate) {
-      this.delegate = checkNotNull(delegate, "delegate");
-    }
-
-    @Override
-    public ProtocolNegotiator newNegotiator(
-            final ObjectPool<? extends Executor> offloadExecutorPool) {
-
-      class FilterChainMatchingNegotiator implements ProtocolNegotiator {
-
-        @Override
-        public AsciiString scheme() {
-          return SCHEME;
-        }
-
-        @Override
-        public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-          AtomicReference<FilterChainSelector> filterChainSelectorRef =
-              grpcHandler.getEagAttributes().get(XdsServerBuilder.ATTR_FILTER_CHAIN_SELECTOR_REF);
-          checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
-          return new FilterChainMatchingHandler(grpcHandler, filterChainSelectorRef.get(),
-                  delegate.newNegotiator(offloadExecutorPool));
-        }
-
-        @Override
-        public void close() {
-        }
-      }
-
-      return new FilterChainMatchingNegotiator();
     }
   }
 }

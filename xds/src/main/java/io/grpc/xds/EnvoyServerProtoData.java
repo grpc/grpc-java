@@ -142,11 +142,11 @@ public final class EnvoyServerProtoData {
     }
   }
 
-  public static final class CidrRange {
+  static final class CidrRange {
     private final InetAddress addressPrefix;
     private final int prefixLen;
 
-    public CidrRange(String addressPrefix, int prefixLen) throws UnknownHostException {
+    CidrRange(String addressPrefix, int prefixLen) throws UnknownHostException {
       this.addressPrefix = InetAddress.getByName(addressPrefix);
       this.prefixLen = prefixLen;
     }
@@ -186,7 +186,7 @@ public final class EnvoyServerProtoData {
     }
   }
 
-  public enum ConnectionSourceType {
+  enum ConnectionSourceType {
     // Any connection source matches.
     ANY,
 
@@ -201,7 +201,7 @@ public final class EnvoyServerProtoData {
    * Corresponds to Envoy proto message
    * {@link io.envoyproxy.envoy.api.v2.listener.FilterChainMatch}.
    */
-  public static final class FilterChainMatch {
+  static final class FilterChainMatch {
     private final int destinationPort;
     private final List<CidrRange> prefixRanges;
     private final List<String> applicationProtocols;
@@ -211,11 +211,8 @@ public final class EnvoyServerProtoData {
     private final List<String> serverNames;
     private final String transportProtocol;
 
-    /**
-     * Creates an internal filter chain match.
-     * */
     @VisibleForTesting
-    public FilterChainMatch(
+    FilterChainMatch(
         int destinationPort,
         List<CidrRange> prefixRanges,
         List<String> applicationProtocols,
@@ -316,7 +313,7 @@ public final class EnvoyServerProtoData {
   /**
    * Corresponds to Envoy proto message {@link io.envoyproxy.envoy.api.v2.listener.FilterChain}.
    */
-  public static final class FilterChain {
+  static final class FilterChain {
     // Unique name for the FilterChain.
     private final String name;
     // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.
@@ -325,10 +322,7 @@ public final class EnvoyServerProtoData {
     @Nullable
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    /**
-     * Creates an internal filter chain.
-     * */
-    public FilterChain(
+    FilterChain(
         String name,
         FilterChainMatch filterChainMatch,
         HttpConnectionManager httpConnectionManager,

@@ -18,12 +18,13 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_REF;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
-import io.grpc.InsecureServerCredentials;
 import io.grpc.Internal;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -32,10 +33,9 @@ import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.InternalNettyServerCredentials;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.xds.FilterChainMatchingHandler.FilterChainMatchingNegotiatorServerFactory;
+import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
-import io.grpc.xds.internal.sds.FilterChainMatchingHandler.FilterChainSelector;
-import io.grpc.xds.internal.sds.SdsProtocolNegotiators.FilterChainMatchingNegotiatorServerFactory;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
@@ -45,12 +45,6 @@ import java.util.logging.Logger;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
 public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBuilder> {
-
-  public static final Attributes.Key<AtomicReference<FilterChainSelector>>
-          ATTR_FILTER_CHAIN_SELECTOR_REF = Attributes.Key.create(
-          "io.grpc.xds.XdsServerBuilder.filterChainSelectorRef");
-  private static final long RETRY_DELAY_NANOS = TimeUnit.MINUTES.toNanos(1);
-
   private final NettyServerBuilder delegate;
   private final int port;
   private XdsServingStatusListener xdsServingStatusListener;
@@ -79,8 +73,10 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     return this;
   }
 
-  public static XdsServerBuilder forPort(int port) {
-    return forPort(port, InsecureServerCredentials.create());
+  @DoNotCall("Unsupported. Use forPort(int, ServerCredentials) instead")
+  public static ServerBuilder<?> forPort(int port) {
+    throw new UnsupportedOperationException(
+            "Unsupported call - use forPort(int, ServerCredentials)");
   }
 
   /** Creates a gRPC server builder for the given port. */
@@ -101,8 +97,8 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     InternalNettyServerBuilder.eagAttributes(delegate, Attributes.newBuilder()
             .set(ATTR_FILTER_CHAIN_SELECTOR_REF, filterChainSelectorRef)
             .build());
-    return new XdsServerWrapper("0.0.0.0:" + port, delegate, RETRY_DELAY_NANOS,
-            xdsServingStatusListener, filterChainSelectorRef, xdsClientPoolFactory);
+    return new XdsServerWrapper("0.0.0.0:" + port, delegate, xdsServingStatusListener,
+            filterChainSelectorRef, xdsClientPoolFactory);
   }
 
   @VisibleForTesting

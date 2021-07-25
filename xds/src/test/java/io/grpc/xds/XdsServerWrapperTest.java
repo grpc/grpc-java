@@ -18,6 +18,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.XdsServerWrapper.RETRY_DELAY_NANOS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.times;
@@ -34,12 +35,12 @@ import io.grpc.internal.FakeClock;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
+import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
-import io.grpc.xds.internal.sds.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -79,8 +80,7 @@ public class XdsServerWrapperTest {
   @Before
   public void setup() {
     when(mockBuilder.build()).thenReturn(mockServer);
-    xdsServerWrapper = new XdsServerWrapper("0.0.0.0:1", mockBuilder,
-             0, listener,
+    xdsServerWrapper = new XdsServerWrapper("0.0.0.0:1", mockBuilder, listener,
             selectorRef, new FakeXdsClientPoolFactory(xdsClient));
     xdsServerWrapper.setTimeService(executor.getScheduledExecutorService());
   }
@@ -188,7 +188,7 @@ public class XdsServerWrapperTest {
     FilterChain filterChain = createFilterChain("filter-chain-1", createRds("rds"));
     SslContextProviderSupplier sslSupplier = filterChain.getSslContextProviderSupplier();
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
-    assertThat(executor.runDueTasks()).isEqualTo(1);
+    assertThat(executor.forwardNanos(RETRY_DELAY_NANOS)).isEqualTo(1);
     verify(mockBuilder, times(2)).build();
     verify(mockServer, times(2)).start();
     verify(listener, times(1)).onServing();
@@ -249,7 +249,7 @@ public class XdsServerWrapperTest {
     verify(mockServer, times(4)).start();
     verify(listener, times(1)).onServing();
     verify(listener, times(4)).onNotServing(any(StatusException.class));
-    assertThat(executor.runDueTasks()).isEqualTo(1);
+    assertThat(executor.forwardNanos(RETRY_DELAY_NANOS)).isEqualTo(1);
     verify(listener, times(2)).onServing();
     assertThat(selectorRef.get().getFilterChains()).isEqualTo(Collections.singletonList(
             filterChain)

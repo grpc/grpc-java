@@ -17,8 +17,8 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.internal.sds.FilterChainMatchingHandler.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
-import static io.grpc.xds.internal.sds.FilterChainMatchingHandler.FilterChainSelector.NO_FILTER_CHAIN;
+import static io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector.NO_FILTER_CHAIN;
+import static io.grpc.xds.internal.sds.SdsProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
@@ -39,13 +39,12 @@ import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
+import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
-import io.grpc.xds.internal.sds.FilterChainMatchingHandler;
-import io.grpc.xds.internal.sds.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.internal.sds.SslContextProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import io.netty.channel.ChannelHandler;
@@ -113,8 +112,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT3", "VA3");
     when(mockBuilder.build()).thenReturn(mockServer);
     when(mockServer.isShutdown()).thenReturn(false);
-    xdsServerWrapper = new XdsServerWrapper("0.0.0.0:" + PORT, mockBuilder,
-            0, listener,
+    xdsServerWrapper = new XdsServerWrapper("0.0.0.0:" + PORT, mockBuilder, listener,
             selectorRef, new FakeXdsClientPoolFactory(xdsClient));
   }
 
@@ -165,6 +163,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
             null);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.ldsWatcher.onChanged(listenerUpdate);
+    start.get(5, TimeUnit.SECONDS);
     FilterChainSelector selector = selectorRef.get();
     assertThat(getSslContextProviderSupplier(selector)).isNull();
   }
@@ -184,6 +183,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     });
     String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsWatched);
+    start.get(5, TimeUnit.SECONDS);
     assertThat(selectorRef.get()).isSameInstanceAs(NO_FILTER_CHAIN);
   }
 
@@ -202,6 +202,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     });
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onError(Status.INTERNAL);
+    start.get(5, TimeUnit.SECONDS);
     assertThat(selectorRef.get()).isSameInstanceAs(NO_FILTER_CHAIN);
   }
 
@@ -220,6 +221,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     });
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onError(Status.PERMISSION_DENIED);
+    start.get(5, TimeUnit.SECONDS);
     assertThat(selectorRef.get()).isSameInstanceAs(NO_FILTER_CHAIN);
   }
 
@@ -359,6 +361,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     XdsServerTestHelper
             .generateListenerUpdate(xdsClient, Arrays.<Integer>asList(), tlsContext,
                     tlsContextForDefaultFilterChain, tlsContextManager);
+    start.get(5, TimeUnit.SECONDS);
     InetAddress ipRemoteAddress = InetAddress.getByName("10.4.5.6");
     final InetSocketAddress remoteAddress = new InetSocketAddress(ipRemoteAddress, 1234);
     channel = new EmbeddedChannel() {

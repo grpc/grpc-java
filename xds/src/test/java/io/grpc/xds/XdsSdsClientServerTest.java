@@ -118,18 +118,6 @@ public class XdsSdsClientServerTest {
   }
 
   @Test
-  public void plaintextClientServer_noCredential() throws Exception {
-    XdsServerBuilder builder = XdsServerBuilder.forPort(0)
-            .xdsClientPoolFactory(fakePoolFactory)
-            .addService(new SimpleServiceImpl());
-    buildServer(builder, null);
-    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
-            getBlockingStub(/* upstreamTlsContext= */ null,
-                    /* overrideAuthority= */ OVERRIDE_AUTHORITY);
-    assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
-  }
-
-  @Test
   public void nullFallbackCredentials_expectException() throws Exception {
     try {
       buildServerWithTlsContext(/* downstreamTlsContext= */ null, /* fallbackCredentials= */ null);
