@@ -172,7 +172,6 @@ public final class XdsTestServer {
       logger.log(Level.SEVERE, "Failed to get host", e);
       throw new RuntimeException(e);
     }
-    logger.log(Level.SEVERE, "Java server is started");
     health = new HealthStatusManager();
     if (secureMode) {
       server =
