@@ -51,6 +51,8 @@ import io.envoyproxy.envoy.config.route.v3.RetryPolicy.RetryBackOff;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
@@ -363,7 +365,11 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
 
     EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext = null;
-    if (TRANSPORT_SOCKET_NAME_TLS.equals(proto.getTransportSocket().getName())) {
+    if (proto.hasTransportSocket()) {
+      if (!TRANSPORT_SOCKET_NAME_TLS.equals(proto.getTransportSocket().getName())) {
+        throw new ResourceInvalidException("transport-socket with name "
+            + proto.getTransportSocket().getName() + " not supported.");
+      }
       DownstreamTlsContext downstreamTlsContextProto;
       try {
         downstreamTlsContextProto =
@@ -374,7 +380,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       downstreamTlsContext =
           EnvoyServerProtoData.DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
-              downstreamTlsContextProto);
+              validateDownstreamTlsContext(downstreamTlsContextProto));
     }
 
     String name = proto.getName();
@@ -390,6 +396,182 @@ final class ClientXdsClient extends AbstractXdsClient {
         downstreamTlsContext,
         tlsContextManager
     );
+  }
+
+  @VisibleForTesting
+  static io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+      validateDownstreamTlsContext(
+      io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          downstreamTlsContext)
+      throws ResourceInvalidException {
+    if (downstreamTlsContext.hasCommonTlsContext()) {
+      validateCommonTlsContext(downstreamTlsContext.getCommonTlsContext(), true);
+    } else {
+      throw new ResourceInvalidException(
+          "common-tls-context is required in downstream-tls-context");
+    }
+    if (downstreamTlsContext.hasRequireSni()) {
+      throw new ResourceInvalidException(
+          "downstream-tls-context with require-sni is not supported");
+    }
+    if (downstreamTlsContext.hasSessionTicketKeys()) {
+      throw new ResourceInvalidException(
+          "downstream-tls-context with session_ticket_keys is not supported");
+    }
+    if (downstreamTlsContext.hasSessionTicketKeysSdsSecretConfig()) {
+      throw new ResourceInvalidException(
+          "downstream-tls-context with session_ticket_keys_sds_secret_config is not supported");
+    }
+    if (downstreamTlsContext.hasDisableStatelessSessionResumption()) {
+      throw new ResourceInvalidException(
+          "downstream-tls-context with disable_stateless_session_resumption is not supported");
+    }
+    if (downstreamTlsContext.hasSessionTimeout()) {
+      throw new ResourceInvalidException(
+          "downstream-tls-context with session_timeout is not supported");
+    }
+    DownstreamTlsContext.OcspStaplePolicy ocspStaplePolicy = downstreamTlsContext
+        .getOcspStaplePolicy();
+    if (ocspStaplePolicy != null
+        && ocspStaplePolicy != DownstreamTlsContext.OcspStaplePolicy.UNRECOGNIZED
+        && ocspStaplePolicy != DownstreamTlsContext.OcspStaplePolicy.LENIENT_STAPLING) {
+      throw new ResourceInvalidException(
+          "downstream-tls-context with ocsp_staple_policy value " + ocspStaplePolicy.name()
+              + " is not supported");
+    }
+    return downstreamTlsContext;
+  }
+
+  @VisibleForTesting
+  static io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+      validateUpstreamTlsContext(
+      io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext upstreamTlsContext)
+      throws ResourceInvalidException {
+    if (upstreamTlsContext.hasCommonTlsContext()) {
+      validateCommonTlsContext(upstreamTlsContext.getCommonTlsContext(), false);
+    } else {
+      throw new ResourceInvalidException("common-tls-context is required in upstream-tls-context");
+    }
+    if (!Strings.isNullOrEmpty(upstreamTlsContext.getSni())) {
+      throw new ResourceInvalidException("upstream-tls-context with sni is not supported");
+    }
+    if (upstreamTlsContext.getAllowRenegotiation()) {
+      throw new ResourceInvalidException(
+          "upstream-tls-context with allow_renegotiation is not supported");
+    }
+    if (upstreamTlsContext.hasMaxSessionKeys()) {
+      throw new ResourceInvalidException(
+          "upstream-tls-context with max_session_keys is not supported");
+    }
+    return upstreamTlsContext;
+  }
+
+  @VisibleForTesting
+  static void validateCommonTlsContext(
+      CommonTlsContext commonTlsContext, boolean server) throws ResourceInvalidException {
+    if (commonTlsContext.hasCustomHandshaker()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with custom_handshaker is not supported");
+    }
+    if (commonTlsContext.hasTlsParams()) {
+      throw new ResourceInvalidException("common-tls-context with tls_params is not supported");
+    }
+    if (commonTlsContext.hasValidationContext()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with validation_context is not supported");
+    }
+    if (commonTlsContext.hasValidationContextSdsSecretConfig()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with validation_context_sds_secret_config is not supported");
+    }
+    if (commonTlsContext.hasValidationContextCertificateProvider()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with validation_context_certificate_provider is not supported");
+    }
+    if (commonTlsContext.hasValidationContextCertificateProviderInstance()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with validation_context_certificate_provider_instance is not"
+              + " supported");
+    }
+    if (!commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
+      if (server) {
+        throw new ResourceInvalidException(
+            "tls_certificate_certificate_provider_instance is required in downstream-tls-context");
+      }
+      if (commonTlsContext.getTlsCertificatesCount() > 0) {
+        throw new ResourceInvalidException(
+            "common-tls-context with tls_certificates is not supported");
+      }
+      if (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() > 0) {
+        throw new ResourceInvalidException(
+            "common-tls-context with tls_certificate_sds_secret_configs is not supported");
+      }
+      if (commonTlsContext.hasTlsCertificateCertificateProvider()) {
+        throw new ResourceInvalidException(
+            "common-tls-context with tls_certificate_certificate_provider is not supported");
+      }
+    }
+    if (!commonTlsContext.hasCombinedValidationContext()) {
+      if (!server) {
+        throw new ResourceInvalidException(
+            "combined_validation_context is required in upstream-tls-context");
+      }
+    } else {
+      CommonTlsContext.CombinedCertificateValidationContext combinedCertificateValidationContext
+          = commonTlsContext.getCombinedValidationContext();
+      if (!combinedCertificateValidationContext.hasValidationContextCertificateProviderInstance()) {
+        throw new ResourceInvalidException(
+            "validation_context_certificate_provider_instance is required in"
+                + " combined_validation_context");
+      }
+      if (combinedCertificateValidationContext.hasDefaultValidationContext()) {
+        if (server) {
+          throw new ResourceInvalidException(
+              "default_validation_context only allowed in upstream_tls_context");
+        }
+        CertificateValidationContext certificateValidationContext
+            = combinedCertificateValidationContext.getDefaultValidationContext();
+        if (certificateValidationContext.hasTrustedCa()) {
+          throw new ResourceInvalidException(
+              "trusted_ca in default_validation_context is not supported");
+        }
+        if (certificateValidationContext.hasWatchedDirectory()) {
+          throw new ResourceInvalidException(
+              "watched_directory in default_validation_context is not supported");
+        }
+        if (certificateValidationContext.getVerifyCertificateSpkiCount() > 0) {
+          throw new ResourceInvalidException(
+              "verify_certificate_spki in default_validation_context is not supported");
+        }
+        if (certificateValidationContext.getVerifyCertificateHashCount() > 0) {
+          throw new ResourceInvalidException(
+              "verify_certificate_hash in default_validation_context is not supported");
+        }
+        if (certificateValidationContext.hasRequireSignedCertificateTimestamp()) {
+          throw new ResourceInvalidException(
+              "require_signed_certificate_timestamp in default_validation_context is not "
+                  + "supported");
+        }
+        if (certificateValidationContext.hasCrl()) {
+          throw new ResourceInvalidException("crl in default_validation_context is not supported");
+        }
+        if (certificateValidationContext.getAllowExpiredCertificate()) {
+          throw new ResourceInvalidException(
+              "allow_expired_certificate in default_validation_context is not supported");
+        }
+        CertificateValidationContext.TrustChainVerification trustChainVerification
+            = certificateValidationContext.getTrustChainVerification();
+        if (trustChainVerification != null && trustChainVerification
+            != CertificateValidationContext.TrustChainVerification.VERIFY_TRUST_CHAIN) {
+          throw new ResourceInvalidException(
+              "Only VERIFY_TRUST_CHAIN for trust_chain_verification supported");
+        }
+        if (certificateValidationContext.hasCustomValidatorConfig()) {
+          throw new ResourceInvalidException(
+              "custom_validator_config in default_validation_context is not supported");
+        }
+      }
+    }
   }
 
   private static void checkForUniqueness(Set<FilterChainMatch> uniqueSet,
@@ -1336,14 +1518,18 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
     }
-    if (cluster.hasTransportSocket()
-        && TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
+    if (cluster.hasTransportSocket()) {
+      if (!TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
+        return StructOrError.fromError("transport-socket with name "
+            + cluster.getTransportSocket().getName() + " not supported.");
+      }
       try {
         upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+                validateUpstreamTlsContext(
             unpackCompatibleType(cluster.getTransportSocket().getTypedConfig(),
                 io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class,
-                TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2));
-      } catch (InvalidProtocolBufferException e) {
+                TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2)));
+      } catch (InvalidProtocolBufferException | ResourceInvalidException e) {
         return StructOrError.fromError(
             "Cluster " + clusterName + ": malformed UpstreamTlsContext: " + e);
       }

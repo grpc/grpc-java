@@ -39,7 +39,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellableContext;
@@ -193,7 +193,9 @@ public abstract class ClientXdsClientTestBase {
 
   // CDS test resources.
   private final Any testClusterRoundRobin =
-      Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null, false, null, null));
+      Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null, false, null,
+          "envoy.transport_sockets.tls", null
+      ));
 
   // EDS test resources.
   private final Message lbEndpointHealthy =
@@ -990,9 +992,10 @@ public abstract class ClientXdsClientTestBase {
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
         RDS_RESOURCE, null, Collections.<Message>emptyList());
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-        "google-sds-config-default", "ROOTCA");
+        "google-sds-config-default", "ROOTCA", false);
     Message filterChain = mf.buildFilterChain(
-        Collections.<String>emptyList(), downstreamTlsContext, hcmFilter);
+        Collections.<String>emptyList(), downstreamTlsContext, "envoy.transport_sockets.tls",
+        hcmFilter);
     Any packedListener =
         Any.pack(mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain));
 
@@ -1024,7 +1027,8 @@ public abstract class ClientXdsClientTestBase {
             "route-bar.googleapis.com", mf.buildOpaqueVirtualHosts(VHOST_SIZE)),
         Collections.<Message>emptyList());
     filterChain = mf.buildFilterChain(
-        Collections.<String>emptyList(), downstreamTlsContext, hcmFilter);
+        Collections.<String>emptyList(), downstreamTlsContext, "envoy.transport_sockets.tls",
+        hcmFilter);
     packedListener =
         Any.pack(mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain));
     call.sendResponse(LDS, packedListener, VERSION_2, "0001");
@@ -1090,9 +1094,9 @@ public abstract class ClientXdsClientTestBase {
 
     List<Any> clusters = ImmutableList.of(
         Any.pack(mf.buildEdsCluster("cluster-bar.googleapis.com", null, "round_robin", null,
-            false, null, null)),
+            false, null, "envoy.transport_sockets.tls", null)),
         Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null,
-            false, null, null)));
+            false, null, "envoy.transport_sockets.tls", null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
 
     // Client sent an ACK CDS request.
@@ -1165,9 +1169,15 @@ public abstract class ClientXdsClientTestBase {
 
     // CDS -> {A, B, C}, version 1
     ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
-        "A", Any.pack(mf.buildEdsCluster("A", "A.1", "round_robin", null, false, null, null)),
-        "B", Any.pack(mf.buildEdsCluster("B", "B.1", "round_robin", null, false, null, null)),
-        "C", Any.pack(mf.buildEdsCluster("C", "C.1", "round_robin", null, false, null, null)));
+        "A", Any.pack(mf.buildEdsCluster("A", "A.1", "round_robin", null, false, null,
+            "envoy.transport_sockets.tls", null
+        )),
+        "B", Any.pack(mf.buildEdsCluster("B", "B.1", "round_robin", null, false, null,
+            "envoy.transport_sockets.tls", null
+        )),
+        "C", Any.pack(mf.buildEdsCluster("C", "C.1", "round_robin", null, false, null,
+            "envoy.transport_sockets.tls", null
+        )));
     call.sendResponse(CDS, resourcesV1.values().asList(), VERSION_1, "0000");
     // {A, B, C} -> ACK, version 1
     verifyResourceMetadataAcked(CDS, "A", resourcesV1.get("A"), VERSION_1, TIME_INCREMENT);
@@ -1178,7 +1188,9 @@ public abstract class ClientXdsClientTestBase {
     // CDS -> {A, B}, version 2
     // Failed to parse endpoint B
     ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
-        "A", Any.pack(mf.buildEdsCluster("A", "A.2", "round_robin", null, false, null, null)),
+        "A", Any.pack(mf.buildEdsCluster("A", "A.2", "round_robin", null, false, null,
+            "envoy.transport_sockets.tls", null
+        )),
         "B", Any.pack(mf.buildClusterInvalid("B")));
     call.sendResponse(CDS, resourcesV2.values().asList(), VERSION_2, "0001");
     // {A, B} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
@@ -1193,8 +1205,12 @@ public abstract class ClientXdsClientTestBase {
 
     // CDS -> {B, C} version 3
     ImmutableMap<String, Any> resourcesV3 = ImmutableMap.of(
-        "B", Any.pack(mf.buildEdsCluster("B", "B.3", "round_robin", null, false, null, null)),
-        "C", Any.pack(mf.buildEdsCluster("C", "C.3", "round_robin", null, false, null, null)));
+        "B", Any.pack(mf.buildEdsCluster("B", "B.3", "round_robin", null, false, null,
+            "envoy.transport_sockets.tls", null
+        )),
+        "C", Any.pack(mf.buildEdsCluster("C", "C.3", "round_robin", null, false, null,
+            "envoy.transport_sockets.tls", null
+        )));
     call.sendResponse(CDS, resourcesV3.values().asList(), VERSION_3, "0002");
     // {A} -> NACK, version 1, rejected version 2, rejected reason: Failed to parse B
     // {B, C} -> ACK, version 3
@@ -1231,7 +1247,9 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
     Message ringHashConfig = mf.buildRingHashLbConfig("xx_hash", 10L, 100L);
     Any clusterRingHash = Any.pack(
-        mf.buildEdsCluster(CDS_RESOURCE, null, "ring_hash", ringHashConfig, false, null, null));
+        mf.buildEdsCluster(CDS_RESOURCE, null, "ring_hash", ringHashConfig, false, null,
+            "envoy.transport_sockets.tls", null
+        ));
     call.sendResponse(ResourceType.CDS, clusterRingHash, VERSION_1, "0000");
 
     // Client sent an ACK CDS request.
@@ -1278,7 +1296,7 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
     Any clusterCircuitBreakers = Any.pack(
         mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null, false, null,
-            mf.buildCircuitBreakers(50, 200)));
+            "envoy.transport_sockets.tls", mf.buildCircuitBreakers(50, 200)));
     call.sendResponse(CDS, clusterCircuitBreakers, VERSION_1, "0000");
 
     // Client sent an ACK CDS request.
@@ -1302,39 +1320,79 @@ public abstract class ClientXdsClientTestBase {
    */
   @Test
   public void cdsResponseWithUpstreamTlsContext() {
+    Assume.assumeTrue(useProtocolV3());
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
 
     // Management server sends back CDS response with UpstreamTlsContext.
     Any clusterEds =
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
             null, true,
-            mf.buildUpstreamTlsContext("secret1", "unix:/var/uds2"), null));
+            mf.buildUpstreamTlsContext("secret1", "cert1"), "envoy.transport_sockets.tls", null));
     List<Any> clusters = ImmutableList.of(
         Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com",
             "dns-service-bar.googleapis.com", 443, "round_robin", null, false, null, null)),
         clusterEds,
         Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null, false,
-            null, null)));
+            null, "envoy.transport_sockets.tls", null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(cdsResourceWatcher, times(1)).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
-    SdsSecretConfig validationContextSdsSecretConfig =
-        cdsUpdate.upstreamTlsContext().getCommonTlsContext().getValidationContextSdsSecretConfig();
-    assertThat(validationContextSdsSecretConfig.getName()).isEqualTo("secret1");
-    assertThat(
-        Iterables.getOnlyElement(
-            validationContextSdsSecretConfig
-                .getSdsConfig()
-                .getApiConfigSource()
-                .getGrpcServicesList())
-            .getGoogleGrpc()
-            .getTargetUri())
-        .isEqualTo("unix:/var/uds2");
+    CommonTlsContext.CertificateProviderInstance certificateProviderInstance =
+        cdsUpdate.upstreamTlsContext().getCommonTlsContext().getCombinedValidationContext()
+            .getValidationContextCertificateProviderInstance();
+    assertThat(certificateProviderInstance.getInstanceName()).isEqualTo("secret1");
+    assertThat(certificateProviderInstance.getCertificateName()).isEqualTo("cert1");
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+  }
+
+  /**
+   * CDS response containing bad UpstreamTlsContext for a cluster.
+   */
+  @Test
+  public void cdsResponseErrorHandling_badUpstreamTlsContext() {
+    Assume.assumeTrue(useProtocolV3());
+    DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
+
+    // Management server sends back CDS response with UpstreamTlsContext.
+    List<Any> clusters = ImmutableList.of(Any
+        .pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
+            null, true,
+            mf.buildUpstreamTlsContext(null, null), "envoy.transport_sockets.tls", null)));
+    call.sendResponse(CDS, clusters, VERSION_1, "0000");
+
+    // The response NACKed with errors indicating indices of the failed resources.
+    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(
+        "CDS response Cluster 'cluster.googleapis.com' validation error: "
+            + "Cluster cluster.googleapis.com: malformed UpstreamTlsContext: "
+            + "io.grpc.xds.ClientXdsClient$ResourceInvalidException: "
+            + "combined_validation_context is required in upstream-tls-context"));
+    verifyNoInteractions(cdsResourceWatcher);
+  }
+
+  /**
+   * CDS response containing UpstreamTlsContext with bad transportSocketName for a cluster.
+   */
+  @Test
+  public void cdsResponseErrorHandling_badTransportSocketName() {
+    Assume.assumeTrue(useProtocolV3());
+    DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
+
+    // Management server sends back CDS response with UpstreamTlsContext.
+    List<Any> clusters = ImmutableList.of(Any
+        .pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
+            null, true,
+            mf.buildUpstreamTlsContext("secret1", "cert1"), "envoy.transport_sockets.bad", null)));
+    call.sendResponse(CDS, clusters, VERSION_1, "0000");
+
+    // The response NACKed with errors indicating indices of the failed resources.
+    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(
+        "CDS response Cluster 'cluster.googleapis.com' validation error: "
+            + "transport-socket with name envoy.transport_sockets.bad not supported."));
+    verifyNoInteractions(cdsResourceWatcher);
   }
 
   @Test
@@ -1403,7 +1461,9 @@ public abstract class ClientXdsClientTestBase {
     // Updated CDS response.
     String edsService = "eds-service-bar.googleapis.com";
     Any clusterEds = Any.pack(
-        mf.buildEdsCluster(CDS_RESOURCE, edsService, "round_robin", null, true, null, null));
+        mf.buildEdsCluster(CDS_RESOURCE, edsService, "round_robin", null, true, null,
+            "envoy.transport_sockets.tls", null
+        ));
     call.sendResponse(CDS, clusterEds, VERSION_2, "0001");
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_2, "0001", NODE);
     verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
@@ -1477,7 +1537,7 @@ public abstract class ClientXdsClientTestBase {
         Any.pack(mf.buildLogicalDnsCluster(CDS_RESOURCE, dnsHostAddr, dnsHostPort, "round_robin",
             null, false, null, null)),
         Any.pack(mf.buildEdsCluster(cdsResourceTwo, edsService, "round_robin", null, true, null,
-            null)));
+            "envoy.transport_sockets.tls", null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
@@ -1736,9 +1796,11 @@ public abstract class ClientXdsClientTestBase {
 
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildEdsCluster(resource, null, "round_robin", null, true, null, null)),
+        Any.pack(mf.buildEdsCluster(resource, null, "round_robin", null, true, null,
+            "envoy.transport_sockets.tls", null
+        )),
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, EDS_RESOURCE, "round_robin", null, false, null,
-            null)));
+            "envoy.transport_sockets.tls", null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
     verify(cdsWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
@@ -1784,8 +1846,10 @@ public abstract class ClientXdsClientTestBase {
 
     clusters = ImmutableList.of(
         Any.pack(mf.buildEdsCluster(resource, null, "round_robin", null, true, null,
-            null)),  // no change
-        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null, false, null, null)));
+            "envoy.transport_sockets.tls", null)),  // no change
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null, false, null,
+            "envoy.transport_sockets.tls", null
+        )));
     call.sendResponse(CDS, clusters, VERSION_2, "0001");
     verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
     assertThat(cdsUpdateCaptor.getValue().edsServiceName()).isNull();
@@ -2100,9 +2164,10 @@ public abstract class ClientXdsClientTestBase {
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
         "route-foo.googleapis.com", null, Collections.<Message>emptyList());
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-        "google-sds-config-default", "ROOTCA");
+        "google-sds-config-default", "ROOTCA", false);
     Message filterChain = mf.buildFilterChain(
-        Collections.<String>emptyList(), downstreamTlsContext, hcmFilter);
+        Collections.<String>emptyList(), downstreamTlsContext, "envoy.transport_sockets.tls",
+        hcmFilter);
     Message listener =
         mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain);
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
@@ -2133,9 +2198,10 @@ public abstract class ClientXdsClientTestBase {
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
         "route-foo.googleapis.com", null, Collections.<Message>emptyList());
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-        "google-sds-config-default", "ROOTCA");
+        "google-sds-config-default", "ROOTCA", false);
     Message filterChain = mf.buildFilterChain(
-        Collections.singletonList("managed-mtls"), downstreamTlsContext, hcmFilter);
+        Collections.singletonList("managed-mtls"), downstreamTlsContext,
+        "envoy.transport_sockets.tls", hcmFilter);
     Message listener = mf.buildListenerWithFilterChain(
         "grpc/server?xds.resource.listening_address=0.0.0.0:8000", 7000, "0.0.0.0", filterChain);
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
@@ -2148,6 +2214,53 @@ public abstract class ClientXdsClientTestBase {
     fakeClock.forwardTime(ClientXdsClient.INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
     verify(ldsResourceWatcher).onResourceDoesNotExist(LISTENER_RESOURCE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+  }
+
+  @Test
+  public void serverSideListenerResponseErrorHandling_badDownstreamTlsContext() {
+    Assume.assumeTrue(useProtocolV3());
+    ClientXdsClientTestBase.DiscoveryRpcCall call =
+            startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
+    Message hcmFilter = mf.buildHttpConnectionManagerFilter(
+            "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+    Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+            null, null,false);
+    Message filterChain = mf.buildFilterChain(
+            Collections.<String>emptyList(), downstreamTlsContext, "envoy.transport_sockets.tls",
+        hcmFilter);
+    Message listener =
+            mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain);
+    List<Any> listeners = ImmutableList.of(Any.pack(listener));
+    call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
+    // The response NACKed with errors indicating indices of the failed resources.
+    call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(
+            "LDS response Listener \'grpc/server?xds.resource.listening_address=0.0.0.0:7000\' "
+                + "validation error: common-tls-context is required in downstream-tls-context"));
+    verifyNoInteractions(ldsResourceWatcher);
+  }
+
+  @Test
+  public void serverSideListenerResponseErrorHandling_badTransportSocketName() {
+    Assume.assumeTrue(useProtocolV3());
+    ClientXdsClientTestBase.DiscoveryRpcCall call =
+        startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
+    Message hcmFilter = mf.buildHttpConnectionManagerFilter(
+        "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+    Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
+        "cert1", "cert2",false);
+    Message filterChain = mf.buildFilterChain(
+        Collections.<String>emptyList(), downstreamTlsContext, "envoy.transport_sockets.bad1",
+        hcmFilter);
+    Message listener =
+        mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain);
+    List<Any> listeners = ImmutableList.of(Any.pack(listener));
+    call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
+    // The response NACKed with errors indicating indices of the failed resources.
+    call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(
+        "LDS response Listener \'grpc/server?xds.resource.listening_address=0.0.0.0:7000\' "
+            + "validation error: "
+            + "transport-socket with name envoy.transport_sockets.bad1 not supported."));
+    verifyNoInteractions(ldsResourceWatcher);
   }
 
   private DiscoveryRpcCall startResourceWatcher(
@@ -2268,7 +2381,8 @@ public abstract class ClientXdsClientTestBase {
 
     protected abstract Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
         String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
-        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers);
+        @Nullable Message upstreamTlsContext, String transportSocketName,
+        @Nullable Message circuitBreakers);
 
     protected abstract Message buildLogicalDnsCluster(String clusterName, String dnsHostAddr,
         int dnsHostPort, String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
@@ -2280,7 +2394,7 @@ public abstract class ClientXdsClientTestBase {
     protected abstract Message buildRingHashLbConfig(String hashFunction, long minRingSize,
         long maxRingSize);
 
-    protected abstract Message buildUpstreamTlsContext(String secretName, String targetUri);
+    protected abstract Message buildUpstreamTlsContext(String instanceName, String certName);
 
     protected abstract Message buildCircuitBreakers(int highPriorityMaxRequests,
         int defaultPriorityMaxRequests);
@@ -2305,7 +2419,8 @@ public abstract class ClientXdsClientTestBase {
     protected abstract Message buildDropOverload(String category, int dropPerMillion);
 
     protected abstract Message buildFilterChain(
-        List<String> alpn, Message tlsContext, Message... filters);
+        List<String> alpn, Message tlsContext, String transportSocketName,
+        Message... filters);
 
     protected abstract Message buildListenerWithFilterChain(
         String name, int portValue, String address, Message... filterChains);

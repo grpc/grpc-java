@@ -84,12 +84,14 @@ public class CommonTlsContextTestsUtil {
             : CertificateValidationContext.newBuilder()
                 .addAllMatchSubjectAltNames(matchSubjectAltNames)
                 .build();
-    if (validationCertificateProviderInstance != null && certValidationContext != null) {
+    if (validationCertificateProviderInstance != null) {
       CombinedCertificateValidationContext.Builder combinedBuilder =
           CombinedCertificateValidationContext.newBuilder()
-              .setDefaultValidationContext(certValidationContext)
               .setValidationContextCertificateProviderInstance(
                   validationCertificateProviderInstance);
+      if (certValidationContext != null) {
+        combinedBuilder = combinedBuilder.setDefaultValidationContext(certValidationContext);
+      }
       builder.setCombinedValidationContext(combinedBuilder);
     } else if (validationCertificateProviderInstance != null) {
       builder
@@ -106,12 +108,14 @@ public class CommonTlsContextTestsUtil {
   /** Helper method to build DownstreamTlsContext for multiple test classes. */
   static DownstreamTlsContext buildDownstreamTlsContext(
       CommonTlsContext commonTlsContext, boolean requireClientCert) {
-    DownstreamTlsContext downstreamTlsContext =
+    DownstreamTlsContext.Builder downstreamTlsContextBuilder =
         DownstreamTlsContext.newBuilder()
-            .setCommonTlsContext(commonTlsContext)
-            .setRequireClientCertificate(BoolValue.of(requireClientCert))
-            .build();
-    return downstreamTlsContext;
+            .setRequireClientCertificate(BoolValue.of(requireClientCert));
+    if (commonTlsContext != null) {
+      downstreamTlsContextBuilder = downstreamTlsContextBuilder
+          .setCommonTlsContext(commonTlsContext);
+    }
+    return downstreamTlsContextBuilder.build();
   }
 
   /** Helper method to build DownstreamTlsContext for multiple test classes. */
@@ -137,23 +141,25 @@ public class CommonTlsContextTestsUtil {
 
   /** Helper method for creating DownstreamTlsContext values with names. */
   public static DownstreamTlsContext buildTestDownstreamTlsContext(
-      String certName, String validationContextCertName) {
-    return buildDownstreamTlsContext(
-        buildCommonTlsContextWithAdditionalValues(
-            "cert-instance-name", certName,
-            "val-cert-instance-name", validationContextCertName,
-            Arrays.asList(
-                StringMatcher.newBuilder()
-                    .setExact("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob")
-                    .build()),
-            Arrays.asList("managed-tls")),
-        /* requireClientCert= */ false);
+      String certName, String validationContextCertName, boolean useSans) {
+    CommonTlsContext commonTlsContext = null;
+    if (certName != null || validationContextCertName != null || useSans) {
+      commonTlsContext = buildCommonTlsContextWithAdditionalValues(
+          "cert-instance-name", certName,
+          "val-cert-instance-name", validationContextCertName,
+          useSans ? Arrays.asList(
+              StringMatcher.newBuilder()
+                  .setExact("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob")
+                  .build()) : null,
+          Arrays.asList("managed-tls"));
+    }
+    return buildDownstreamTlsContext(commonTlsContext, /* requireClientCert= */ false);
   }
 
   public static EnvoyServerProtoData.DownstreamTlsContext buildTestInternalDownstreamTlsContext(
       String certName, String validationContextName) {
     return EnvoyServerProtoData.DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
-        buildTestDownstreamTlsContext(certName, validationContextName));
+        buildTestDownstreamTlsContext(certName, validationContextName, true));
   }
 
   public static String getTempFileNameForResourcesFile(String resFile) throws IOException {
