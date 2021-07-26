@@ -257,6 +257,7 @@ public final class XdsTestClient {
                     secureMode
                         ? XdsChannelCredentials.create(InsecureChannelCredentials.create())
                         : InsecureChannelCredentials.create())
+                .enableRetry()
                 .build());
       }
       exec = MoreExecutors.listeningDecorator(Executors.newSingleThreadScheduledExecutor());
@@ -448,7 +449,10 @@ public final class XdsTestClient {
         StreamObserver<ClientConfigureResponse> responseObserver) {
       EnumMap<RpcType, Metadata> newMetadata = new EnumMap<>(RpcType.class);
       for (ClientConfigureRequest.Metadata metadata : request.getMetadataList()) {
-        Metadata md = new Metadata();
+        Metadata md = newMetadata.get(metadata.getType());
+        if (md == null) {
+          md = new Metadata();
+        }
         md.put(Metadata.Key.of(metadata.getKey(), Metadata.ASCII_STRING_MARSHALLER),
             metadata.getValue());
         newMetadata.put(metadata.getType(), md);

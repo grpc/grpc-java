@@ -16,8 +16,8 @@
 
 package io.grpc.testing.integration;
 
-import io.grpc.Context;
-import io.grpc.Contexts;
+import com.google.common.base.Splitter;
+import com.google.common.collect.Iterables;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Metadata;
@@ -27,7 +27,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.HealthStatusManager;
@@ -40,6 +39,8 @@ import io.grpc.xds.XdsServerBuilder;
 import io.grpc.xds.XdsServerCredentials;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -50,10 +51,17 @@ public final class XdsTestServer {
       Metadata.Key.of("hostname", Metadata.ASCII_STRING_MARSHALLER);
   private static final Metadata.Key<String> CALL_BEHAVIOR_MD_KEY =
       Metadata.Key.of("rpc-behavior", Metadata.ASCII_STRING_MARSHALLER);
-  private static final Context.Key<String> CALL_BEHAVIOR_KEY =
-      Context.key("rpc-behavior");
+  private static final Metadata.Key<String> ATTEMPT_NUM =
+      Metadata.Key.of("grpc-previous-rpc-attempts", Metadata.ASCII_STRING_MARSHALLER);
   private static final String CALL_BEHAVIOR_KEEP_OPEN_VALUE = "keep-open";
   private static final String CALL_BEHAVIOR_SLEEP_VALUE = "sleep-";
+  private static final String CALL_BEHAVIOR_SUCCEED_ON_RETRY_ATTEMPT_VALUE =
+      "succeed-on-retry-attempt-";
+  private static final String CALL_BEHAVIOR_ERROR_CODE =
+      "error-code-";
+  private static final Splitter HEADER_VALUE_SPLITTER = Splitter.on(',')
+      .trimResults()
+      .omitEmptyStrings();
 
   private static Logger logger = Logger.getLogger(XdsTestServer.class.getName());
 
@@ -234,18 +242,14 @@ public final class XdsTestServer {
     public void emptyCall(
         EmptyProtos.Empty req, StreamObserver<EmptyProtos.Empty> responseObserver) {
       responseObserver.onNext(EmptyProtos.Empty.getDefaultInstance());
-      if (!CALL_BEHAVIOR_KEEP_OPEN_VALUE.equals(CALL_BEHAVIOR_KEY.get())) {
-        responseObserver.onCompleted();
-      }
+      responseObserver.onCompleted();
     }
 
     @Override
     public void unaryCall(SimpleRequest req, StreamObserver<SimpleResponse> responseObserver) {
       responseObserver.onNext(
           SimpleResponse.newBuilder().setServerId(serverId).setHostname(host).build());
-      if (!CALL_BEHAVIOR_KEEP_OPEN_VALUE.equals(CALL_BEHAVIOR_KEY.get())) {
-        responseObserver.onCompleted();
-      }
+      responseObserver.onCompleted();
     }
   }
 
@@ -286,22 +290,7 @@ public final class XdsTestServer {
         ServerCall<ReqT, RespT> call,
         final Metadata requestHeaders,
         ServerCallHandler<ReqT, RespT> next) {
-      String callBehavior = requestHeaders.get(CALL_BEHAVIOR_MD_KEY);
-      Context newContext = Context.current().withValue(CALL_BEHAVIOR_KEY, callBehavior);
-      if (callBehavior != null && callBehavior.startsWith(CALL_BEHAVIOR_SLEEP_VALUE)) {
-        try {
-          int timeout = Integer.parseInt(
-              callBehavior.substring(CALL_BEHAVIOR_SLEEP_VALUE.length()));
-          Thread.sleep(timeout * 1000);
-        } catch (NumberFormatException e) {
-          throw new StatusRuntimeException(
-              Status.INVALID_ARGUMENT.withDescription(
-                  String.format("Invalid format for rpc-behavior header (%s)", callBehavior)));
-        } catch (InterruptedException e) {
-          throw new StatusRuntimeException(
-              Status.ABORTED.withDescription("execution of server interrupted"));
-        }
-      }
+      List<String> callBehaviors = getCallBehaviors(requestHeaders);
       ServerCall<ReqT, RespT> newCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
         @Override
         public void sendHeaders(Metadata responseHeaders) {
@@ -309,7 +298,106 @@ public final class XdsTestServer {
           super.sendHeaders(responseHeaders);
         }
       };
-      return Contexts.interceptCall(newContext, newCall, requestHeaders, next);
+      ServerCall.Listener<ReqT> noopListener = new ServerCall.Listener<ReqT>() {};
+
+      // sleep if instructed by rpc-behavior
+      for (String callBehavior : callBehaviors) {
+        if (callBehavior.startsWith(CALL_BEHAVIOR_SLEEP_VALUE)) {
+          try {
+            int timeout = Integer.parseInt(
+                callBehavior.substring(CALL_BEHAVIOR_SLEEP_VALUE.length()));
+            Thread.sleep(timeout * 1000);
+          } catch (NumberFormatException e) {
+            newCall.close(
+                Status.INVALID_ARGUMENT.withDescription(
+                    String.format("Invalid format for rpc-behavior header (%s)", callBehavior)),
+                new Metadata());
+            return noopListener;
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            newCall.close(
+                Status.ABORTED.withDescription("execution of server interrupted"),
+                new Metadata());
+            return noopListener;
+          }
+        }
+      }
+
+      // succeed the retry attempt if instructed by rpc-behavior
+      int succeedOnAttemptNum = Integer.MAX_VALUE;
+      for (String callBehavior : callBehaviors) {
+        if (callBehavior.startsWith(CALL_BEHAVIOR_SUCCEED_ON_RETRY_ATTEMPT_VALUE)) {
+          try {
+            succeedOnAttemptNum = Integer.parseInt(
+                callBehavior.substring(CALL_BEHAVIOR_SUCCEED_ON_RETRY_ATTEMPT_VALUE.length()));
+          } catch (NumberFormatException e) {
+            newCall.close(
+                Status.INVALID_ARGUMENT.withDescription(
+                    String.format("Invalid format for rpc-behavior header (%s)", callBehavior)),
+                new Metadata());
+            return noopListener;
+          }
+          break;
+        }
+      }
+      int attemptNum = 0;
+      String attemptNumHeader = requestHeaders.get(ATTEMPT_NUM);
+      if (attemptNumHeader != null) {
+        try {
+          attemptNum = Integer.valueOf(attemptNumHeader);
+        } catch (NumberFormatException e) {
+          newCall.close(
+              Status.INVALID_ARGUMENT.withDescription(
+                  String.format(
+                      "Invalid format for grpc-previous-rpc-attempts header (%s)",
+                      attemptNumHeader)),
+              new Metadata());
+          return noopListener;
+        }
+      }
+      if (attemptNum == succeedOnAttemptNum) {
+        return next.startCall(newCall, requestHeaders);
+      }
+
+      // hang if instructed by rpc-behavior
+      if (callBehaviors.contains(CALL_BEHAVIOR_KEEP_OPEN_VALUE)) {
+        return noopListener;
+      }
+
+      // fail if instructed by rpc-behavior
+      for (String callBehavior : callBehaviors) {
+        if (callBehavior.startsWith(CALL_BEHAVIOR_ERROR_CODE)) {
+          try {
+            int codeValue = Integer.valueOf(
+                callBehavior.substring(CALL_BEHAVIOR_ERROR_CODE.length()));
+            newCall.close(
+                Status.fromCodeValue(codeValue).withDescription(
+                    "Rpc failed as per the rpc-behavior header value:" + callBehaviors),
+                new Metadata());
+            return noopListener;
+          } catch (NumberFormatException e) {
+            newCall.close(
+                Status.INVALID_ARGUMENT.withDescription(
+                    String.format("Invalid format for rpc-behavior header (%s)", callBehavior)),
+                new Metadata());
+            return noopListener;
+          }
+        }
+      }
+
+      return next.startCall(newCall, requestHeaders);
     }
+  }
+
+  private static List<String> getCallBehaviors(Metadata requestHeaders) {
+    List<String> callBehaviors = new ArrayList<>();
+    Iterable<String> values = requestHeaders.getAll(CALL_BEHAVIOR_MD_KEY);
+    if (values == null) {
+      return callBehaviors;
+    }
+    for (String value : values) {
+      Iterables.addAll(callBehaviors, HEADER_VALUE_SPLITTER.split(value));
+    }
+    return callBehaviors;
   }
 }
