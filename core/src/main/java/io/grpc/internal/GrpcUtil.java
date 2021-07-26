@@ -28,6 +28,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.InternalMetadata;
@@ -54,6 +55,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -252,6 +254,8 @@ public final class GrpcUtil {
    */
   public static final CallOptions.Key<Boolean> CALL_OPTIONS_RPC_OWNED_BY_BALANCER =
       CallOptions.Key.create("io.grpc.internal.CALL_OPTIONS_RPC_OWNED_BY_BALANCER");
+
+  private static final ClientStreamTracer NOOP_TRACER = new ClientStreamTracer() {};
 
   /**
    * Returns true if an RPC with the given properties should be counted when calculating the
@@ -711,9 +715,14 @@ public final class GrpcUtil {
       return new ClientTransport() {
         @Override
         public ClientStream newStream(
-            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-          return transport.newStream(
-              method, headers, callOptions.withStreamTracerFactory(streamTracerFactory));
+            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+            ClientStreamTracer[] tracers) {
+          ClientStreamTracer streamTracer = streamTracerFactory.newClientStreamTracer(
+              StreamInfo.newBuilder()
+                  .setCallOptions(callOptions)
+                  .build());
+          tracers[tracers.length - 1] = streamTracer;
+          return transport.newStream(method, headers, callOptions, tracers);
         }
 
         @Override
@@ -741,6 +750,22 @@ public final class GrpcUtil {
       }
     }
     return null;
+  }
+
+  /** Gets stream tracers based on CallOptions. */
+  static ClientStreamTracer[] getClientStreamTracers(
+      CallOptions callOptions, boolean isTransparentRetry) {
+    List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
+    ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
+    StreamInfo streamInfo = StreamInfo.newBuilder()
+        .setCallOptions(callOptions)
+        .setIsTransparentRetry(isTransparentRetry)
+        .build();
+    for (int i = 0; i < factories.size(); i++) {
+      tracers[i] = factories.get(i).newClientStreamTracer(streamInfo);
+    }
+    tracers[tracers.length - 1] = NOOP_TRACER;
+    return tracers;
   }
 
   /** Quietly closes all messages in MessageProducer. */

@@ -33,6 +33,8 @@ import com.google.common.base.MoreObjects;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
@@ -52,6 +54,7 @@ import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import java.io.InputStream;
 import java.nio.charset.Charset;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
@@ -254,9 +257,17 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           effectiveDeadline, context.getDeadline(), callOptions.getDeadline());
       stream = clientStreamProvider.newStream(method, callOptions, headers, context);
     } else {
+      StreamInfo streamInfo = StreamInfo.newBuilder().setCallOptions(callOptions).build();
+      List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
+      ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
+      for (int i = 0; i < factories.size(); i++) {
+        tracers[i] = factories.get(i).newClientStreamTracer(streamInfo);
+      }
+      tracers[factories.size()] = new ClientStreamTracer() {};
       stream = new FailingClientStream(
           DEADLINE_EXCEEDED.withDescription(
-              "ClientCall started after deadline exceeded: " + effectiveDeadline));
+              "ClientCall started after deadline exceeded: " + effectiveDeadline),
+          tracers);
     }
 
     if (callExecutorIsDirect) {
