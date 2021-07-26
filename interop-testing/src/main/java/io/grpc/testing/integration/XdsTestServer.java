@@ -393,6 +393,9 @@ public final class XdsTestServer {
   private static List<String> getCallBehaviors(Metadata requestHeaders) {
     List<String> callBehaviors = new ArrayList<>();
     Iterable<String> values = requestHeaders.getAll(CALL_BEHAVIOR_MD_KEY);
+    if (values == null) {
+      return callBehaviors;
+    }
     for (String value : values) {
       Iterables.addAll(callBehaviors, HEADER_VALUE_SPLITTER.split(value));
     }
