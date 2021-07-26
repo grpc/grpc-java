@@ -70,7 +70,7 @@ public class OrcaPerRequestUtilTest {
     ClientStreamTracer fakeTracer = mock(ClientStreamTracer.class);
     doNothing().when(fakeTracer).inboundTrailers(any(Metadata.class));
     when(fakeDelegateFactory.newClientStreamTracer(
-            any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
+            any(ClientStreamTracer.StreamInfo.class)))
         .thenReturn(fakeTracer);
 
     // The OrcaReportingTracerFactory will augment the StreamInfo passed to its
@@ -79,10 +79,10 @@ public class OrcaPerRequestUtilTest {
     ClientStreamTracer.Factory factory =
         OrcaPerRequestUtil.getInstance()
             .newOrcaClientStreamTracerFactory(fakeDelegateFactory, orcaListener1);
-    ClientStreamTracer tracer = factory.newClientStreamTracer(STREAM_INFO, new Metadata());
+    ClientStreamTracer tracer = factory.newClientStreamTracer(STREAM_INFO);
     ArgumentCaptor<ClientStreamTracer.StreamInfo> streamInfoCaptor = ArgumentCaptor.forClass(null);
     verify(fakeDelegateFactory)
-        .newClientStreamTracer(streamInfoCaptor.capture(), any(Metadata.class));
+        .newClientStreamTracer(streamInfoCaptor.capture());
     ClientStreamTracer.StreamInfo capturedInfo = streamInfoCaptor.getValue();
     assertThat(capturedInfo).isNotEqualTo(STREAM_INFO);
 
@@ -117,9 +117,9 @@ public class OrcaPerRequestUtilTest {
             .newOrcaClientStreamTracerFactory(parentFactory, orcaListener2);
     // Child factory will augment the StreamInfo and pass it to the parent factory.
     ClientStreamTracer childTracer =
-        childFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+        childFactory.newClientStreamTracer(STREAM_INFO);
     ArgumentCaptor<ClientStreamTracer.StreamInfo> streamInfoCaptor = ArgumentCaptor.forClass(null);
-    verify(parentFactory).newClientStreamTracer(streamInfoCaptor.capture(), any(Metadata.class));
+    verify(parentFactory).newClientStreamTracer(streamInfoCaptor.capture());
     ClientStreamTracer.StreamInfo parentStreamInfo = streamInfoCaptor.getValue();
     assertThat(parentStreamInfo).isNotEqualTo(STREAM_INFO);
 
@@ -157,7 +157,7 @@ public class OrcaPerRequestUtilTest {
             delegatesTo(OrcaPerRequestUtil.getInstance()
                 .newOrcaClientStreamTracerFactory(parentFactory, orcaListener2)));
     ClientStreamTracer parentTracer =
-        parentFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+        parentFactory.newClientStreamTracer(STREAM_INFO);
     Metadata trailer = new Metadata();
     trailer.put(
         OrcaReportingTracerFactory.ORCA_ENDPOINT_LOAD_METRICS_KEY,

@@ -41,6 +41,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
 import io.grpc.Metadata;
@@ -828,7 +829,9 @@ public class NettyClientTransportTest {
     }
 
     Rpc(NettyClientTransport transport, Metadata headers) {
-      stream = transport.newStream(METHOD, headers, CallOptions.DEFAULT);
+      stream = transport.newStream(
+          METHOD, headers, CallOptions.DEFAULT,
+          new ClientStreamTracer[]{ new ClientStreamTracer() {} });
       stream.start(listener);
       stream.request(1);
       stream.writeMessage(new ByteArrayInputStream(MESSAGE.getBytes(UTF_8)));
