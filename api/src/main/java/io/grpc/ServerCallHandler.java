@@ -25,7 +25,7 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public interface ServerCallHandler<RequestT, ResponseT> {
   /**
-   * Passes {@code call} on to the next stage of asynchronous processing.
+   * Starts asynchronous processing of an incoming call.
    *
    * <p>Callers of this method transfer their ownership of the non-thread-safe {@link ServerCall}
    * and {@link Metadata} arguments to the {@link ServerCallHandler} implementation for processing.
