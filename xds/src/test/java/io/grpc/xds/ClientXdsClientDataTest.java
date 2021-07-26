@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.Duration;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.StringValue;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.UInt64Value;
@@ -79,6 +80,8 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CertificateProviderInstance;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
@@ -88,6 +91,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContex
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatchAndSubstitute;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher.GoogleRE2;
+import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.envoyproxy.envoy.type.v3.Int64Range;
@@ -1615,18 +1619,20 @@ public class ClientXdsClientDataTest {
 
   @Test
   public void validateCommonTlsContext_combinedValContextWithDefaultValContextForServer()
-      throws ResourceInvalidException {
+      throws ResourceInvalidException, InvalidProtocolBufferException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
+            CombinedCertificateValidationContext.newBuilder()
                 .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-                .setDefaultValidationContext(CertificateValidationContext.getDefaultInstance()))
+                    CertificateProviderInstance.getDefaultInstance())
+                .setDefaultValidationContext(CertificateValidationContext.newBuilder()
+                    .addMatchSubjectAltNames(StringMatcher.newBuilder().setExact("foo.com").build())
+                    .build()))
         .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
+            CertificateProviderInstance.getDefaultInstance())
         .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("default_validation_context only allowed in upstream_tls_context");
+    thrown.expectMessage("match_subject_alt_names only allowed in upstream_tls_context");
     ClientXdsClient.validateCommonTlsContext(commonTlsContext, true);
   }
 
