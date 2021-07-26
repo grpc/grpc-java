@@ -25,6 +25,7 @@ import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallOptions;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
 import io.grpc.CompositeCallCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -104,7 +105,8 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     @Override
     @SuppressWarnings("deprecation")
     public ClientStream newStream(
-        final MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions) {
+        final MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions,
+        ClientStreamTracer[] tracers) {
       CallCredentials creds = callOptions.getCredentials();
       if (creds == null) {
         creds = channelCallCredentials;
@@ -113,10 +115,10 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
       }
       if (creds != null) {
         MetadataApplierImpl applier = new MetadataApplierImpl(
-            delegate, method, headers, callOptions, applierListener);
+            delegate, method, headers, callOptions, applierListener, tracers);
         if (pendingApplier.incrementAndGet() > 0) {
           applierListener.onComplete();
-          return new FailingClientStream(shutdownStatus);
+          return new FailingClientStream(shutdownStatus, tracers);
         }
         RequestInfo requestInfo = new RequestInfo() {
             @Override
@@ -152,9 +154,9 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
         return applier.returnStream();
       } else {
         if (pendingApplier.get() >= 0) {
-          return new FailingClientStream(shutdownStatus);
+          return new FailingClientStream(shutdownStatus, tracers);
         }
-        return delegate.newStream(method, headers, callOptions);
+        return delegate.newStream(method, headers, callOptions, tracers);
       }
     }
 

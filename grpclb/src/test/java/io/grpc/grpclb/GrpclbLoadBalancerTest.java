@@ -480,7 +480,8 @@ public class GrpclbLoadBalancerTest {
         ClientStats.newBuilder().build());
 
     ClientStreamTracer tracer1 =
-        pick1.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
+        pick1.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO);
+    tracer1.streamCreated(Attributes.EMPTY, new Metadata());
 
     PickResult pick2 = picker.pickSubchannel(args);
     assertNull(pick2.getSubchannel());
@@ -503,7 +504,8 @@ public class GrpclbLoadBalancerTest {
     assertSame(subchannel2, pick3.getSubchannel());
     assertSame(getLoadRecorder(), pick3.getStreamTracerFactory());
     ClientStreamTracer tracer3 =
-        pick3.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
+        pick3.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO);
+    tracer3.streamCreated(Attributes.EMPTY, new Metadata());
 
     // pick3 has sent out headers
     tracer3.outboundHeaders();
@@ -540,7 +542,8 @@ public class GrpclbLoadBalancerTest {
     assertSame(subchannel1, pick1.getSubchannel());
     assertSame(getLoadRecorder(), pick5.getStreamTracerFactory());
     ClientStreamTracer tracer5 =
-        pick5.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
+        pick5.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO);
+    tracer5.streamCreated(Attributes.EMPTY, new Metadata());
 
     // pick3 ended without receiving response headers
     tracer3.streamClosed(Status.DEADLINE_EXCEEDED);
@@ -615,7 +618,7 @@ public class GrpclbLoadBalancerTest {
     PickResult pick1p = picker.pickSubchannel(args);
     assertSame(subchannel1, pick1p.getSubchannel());
     assertSame(getLoadRecorder(), pick1p.getStreamTracerFactory());
-    pick1p.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
+    pick1p.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO);
 
     // The pick from the new stream will be included in the report
     assertNextReport(

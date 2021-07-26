@@ -28,6 +28,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -43,6 +44,10 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link GrpcUtil}. */
 @RunWith(JUnit4.class)
 public class GrpcUtilTest {
+
+  private final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
+      new ClientStreamTracer() {}
+  };
 
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
@@ -244,8 +249,9 @@ public class GrpcUtilTest {
 
     assertNotNull(transport);
 
-    ClientStream stream = transport
-        .newStream(TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT);
+    ClientStream stream = transport.newStream(
+        TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT,
+        tracers);
     ClientStreamListener listener = mock(ClientStreamListener.class);
     stream.start(listener);
 
@@ -260,8 +266,9 @@ public class GrpcUtilTest {
 
     assertNotNull(transport);
 
-    ClientStream stream = transport
-        .newStream(TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT);
+    ClientStream stream = transport.newStream(
+        TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT,
+        tracers);
     ClientStreamListener listener = mock(ClientStreamListener.class);
     stream.start(listener);
 
@@ -276,8 +283,9 @@ public class GrpcUtilTest {
 
     assertNotNull(transport);
 
-    ClientStream stream = transport
-        .newStream(TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT);
+    ClientStream stream = transport.newStream(
+        TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT,
+        tracers);
     ClientStreamListener listener = mock(ClientStreamListener.class);
     stream.start(listener);
 

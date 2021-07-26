@@ -29,7 +29,6 @@ import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
-import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.util.ForwardingClientStreamTracer;
@@ -344,7 +343,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info) {
       stats.recordCallStarted();
       inFlights.incrementAndGet();
       if (delegate == null) {
@@ -356,7 +355,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           }
         };
       }
-      final ClientStreamTracer delegatedTracer = delegate.newClientStreamTracer(info, headers);
+      final ClientStreamTracer delegatedTracer = delegate.newClientStreamTracer(info);
       return new ForwardingClientStreamTracer() {
         @Override
         protected ClientStreamTracer delegate() {

@@ -27,6 +27,7 @@ import static org.mockito.Mockito.when;
 import android.os.Build;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -60,6 +61,8 @@ public final class CronetClientTransportTest {
   private static final Attributes EAG_ATTRS =
       Attributes.newBuilder().set(EAG_ATTR_KEY, "value").build();
 
+  private final ClientStreamTracer[] tracers =
+      new ClientStreamTracer[]{ new ClientStreamTracer() {} };
   private CronetClientTransport transport;
   @Mock private StreamBuilderFactory streamFactory;
   @Mock private Executor executor;
@@ -101,9 +104,9 @@ public final class CronetClientTransportTest {
   @Test
   public void shutdownTransport() throws Exception {
     CronetClientStream stream1 =
-        transport.newStream(descriptor, new Metadata(), CallOptions.DEFAULT);
+        transport.newStream(descriptor, new Metadata(), CallOptions.DEFAULT, tracers);
     CronetClientStream stream2 =
-        transport.newStream(descriptor, new Metadata(), CallOptions.DEFAULT);
+        transport.newStream(descriptor, new Metadata(), CallOptions.DEFAULT, tracers);
 
     // Create a transport and start two streams on it.
     ArgumentCaptor<BidirectionalStream.Callback> callbackCaptor =
@@ -137,7 +140,7 @@ public final class CronetClientTransportTest {
   @Test
   public void startStreamAfterShutdown() throws Exception {
     CronetClientStream stream =
-        transport.newStream(descriptor, new Metadata(), CallOptions.DEFAULT);
+        transport.newStream(descriptor, new Metadata(), CallOptions.DEFAULT, tracers);
     transport.shutdown();
     BaseClientStreamListener listener = new BaseClientStreamListener();
     stream.start(listener);
