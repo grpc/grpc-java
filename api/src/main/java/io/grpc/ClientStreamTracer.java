@@ -241,6 +241,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("callOptions", callOptions)
+          .add("isTransparentRetry", isTransparentRetry)
           .toString();
     }
 
