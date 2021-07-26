@@ -764,7 +764,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     Http2Headers headers = new DefaultHttp2Headers(true, serialized.length / 2)
         .status("" + code)
-        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
     for (int i = 0; i < serialized.length; i += 2) {
       headers.add(new AsciiString(serialized[i], false), new AsciiString(serialized[i + 1], false));
     }

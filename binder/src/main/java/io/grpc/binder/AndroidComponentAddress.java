@@ -16,6 +16,7 @@
 
 package io.grpc.binder;
 
+import static android.content.Intent.URI_ANDROID_APP_SCHEME;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import android.content.ComponentName;
@@ -112,6 +113,13 @@ public class AndroidComponentAddress extends SocketAddress { // NOTE: Only tempo
    */
   public Intent asBindIntent() {
     return bindIntent.cloneFilter(); // Intent is mutable so return a copy.
+  }
+
+  /**
+   * Returns this address as an "android-app://" uri.
+   */
+  public String asAndroidAppUri() {
+    return bindIntent.toUri(URI_ANDROID_APP_SCHEME);
   }
 
   @Override

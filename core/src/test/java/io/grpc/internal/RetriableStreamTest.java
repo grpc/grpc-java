@@ -120,6 +120,7 @@ public class RetriableStreamTest {
           TimeUnit.SECONDS.toNanos(INITIAL_BACKOFF_IN_SECONDS),
           TimeUnit.SECONDS.toNanos(MAX_BACKOFF_IN_SECONDS),
           BACKOFF_MULTIPLIER,
+          null,
           ImmutableSet.of(RETRIABLE_STATUS_CODE_1, RETRIABLE_STATUS_CODE_2));
   private static final HedgingPolicy HEDGING_POLICY =
       new HedgingPolicy(

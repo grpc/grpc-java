@@ -374,6 +374,9 @@ public class XdsSdsClientServerTest {
     xdsClient.deliverLdsUpdate(listenerUpdate);
     startFuture.get(10, TimeUnit.SECONDS);
     port = xdsServer.getPort();
+    URI expectedUri = new URI("sdstest://localhost:" + port);
+    fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
+    NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverFactory);
   }
 
   static EnvoyServerProtoData.Listener buildListener(
@@ -413,9 +416,6 @@ public class XdsSdsClientServerTest {
   private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
       final UpstreamTlsContext upstreamTlsContext, String overrideAuthority)
       throws URISyntaxException {
-    URI expectedUri = new URI("sdstest://localhost:" + port);
-    fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
-    NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverFactory);
     ManagedChannelBuilder<?> channelBuilder =
         Grpc.newChannelBuilder(
             "sdstest://localhost:" + port,
