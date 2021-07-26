@@ -80,7 +80,8 @@ public abstract class ClientStreamTracer extends StreamTracer {
 
         @Override
         public void streamCreated(Attributes transportAttrs, Metadata headers) {
-          delegate = newClientStreamTracer(info, headers);
+          StreamInfo streamInfo = info.toBuilder().setTransportAttrs(transportAttrs).build();
+          delegate = newClientStreamTracer(streamInfo, headers);
           delegate.streamCreated(transportAttrs, headers);
         }
 
