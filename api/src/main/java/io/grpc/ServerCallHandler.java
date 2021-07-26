@@ -25,17 +25,26 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 public interface ServerCallHandler<RequestT, ResponseT> {
   /**
-   * Produce a non-{@code null} listener for the incoming call. Implementations are free to call
-   * methods on {@code call} before this method has returned.
+   * Starts asynchronous processing of an incoming call.
    *
-   * <p>Since {@link Metadata} is not thread-safe, the caller must not access (read or write) {@code
-   * headers} after this point.
+   * <p>Callers of this method transfer their ownership of the non-thread-safe {@link ServerCall}
+   * and {@link Metadata} arguments to the {@link ServerCallHandler} implementation for processing.
+   * Ownership means that the implementation may invoke methods on {@code call} and {@code headers}
+   * while {@link #startCall} runs and at any time after it returns normally. On the other hand, if
+   * {@link #startCall} throws, ownership of {@code call} and {@code headers} reverts to the caller
+   * and the implementation loses the right to call methods on these objects (from some other
+   * thread, say).
    *
-   * <p>If the implementation throws an exception, {@code call} will be closed with an error.
-   * Implementations must not throw an exception if they started processing that may use {@code
-   * call} on another thread.
+   * <p>Ownership also includes the responsibility to eventually close {@code call}. In particular,
+   * if {@link #startCall} throws an exception, the caller must handle it by closing {@code call}
+   * with an error. Since {@code call} can only be closed once, an implementation can report errors
+   * either to {@link ServerCall#close} for itself or by throwing an exception, but not both.
+   *
+   * <p>Returns a non-{@code null} listener for the incoming call. Callers of this method must
+   * arrange for events associated with {@code call} to be delivered there.
    *
    * @param call object for responding to the remote client.
+   * @param headers request headers received from the client but open to modification by an owner
    * @return listener for processing incoming request messages for {@code call}
    */
   ServerCall.Listener<RequestT> startCall(
