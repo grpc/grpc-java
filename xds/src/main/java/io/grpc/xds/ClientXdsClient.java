@@ -525,12 +525,12 @@ final class ClientXdsClient extends AbstractXdsClient {
                 + " combined_validation_context");
       }
       if (combinedCertificateValidationContext.hasDefaultValidationContext()) {
-        if (server) {
-          throw new ResourceInvalidException(
-              "default_validation_context only allowed in upstream_tls_context");
-        }
         CertificateValidationContext certificateValidationContext
             = combinedCertificateValidationContext.getDefaultValidationContext();
+        if (certificateValidationContext.getMatchSubjectAltNamesCount() > 0 && server) {
+          throw new ResourceInvalidException(
+              "match_subject_alt_names only allowed in upstream_tls_context");
+        }
         if (certificateValidationContext.hasTrustedCa()) {
           throw new ResourceInvalidException(
               "trusted_ca in default_validation_context is not supported");
