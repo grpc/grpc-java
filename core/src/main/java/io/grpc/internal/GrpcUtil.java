@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
@@ -721,6 +722,7 @@ public final class GrpcUtil {
               StreamInfo.newBuilder()
                   .setCallOptions(callOptions)
                   .build());
+          checkState(tracers[tracers.length - 1] == NOOP_TRACER, "lb tracer already assigned");
           tracers[tracers.length - 1] = streamTracer;
           return transport.newStream(method, headers, callOptions, tracers);
         }
