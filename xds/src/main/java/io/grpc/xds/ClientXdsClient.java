@@ -432,8 +432,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     DownstreamTlsContext.OcspStaplePolicy ocspStaplePolicy = downstreamTlsContext
         .getOcspStaplePolicy();
-    if (ocspStaplePolicy != null
-        && ocspStaplePolicy != DownstreamTlsContext.OcspStaplePolicy.UNRECOGNIZED
+    if (ocspStaplePolicy != DownstreamTlsContext.OcspStaplePolicy.UNRECOGNIZED
         && ocspStaplePolicy != DownstreamTlsContext.OcspStaplePolicy.LENIENT_STAPLING) {
       throw new ResourceInvalidException(
           "downstream-tls-context with ocsp_staple_policy value " + ocspStaplePolicy.name()
@@ -561,7 +560,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
         CertificateValidationContext.TrustChainVerification trustChainVerification
             = certificateValidationContext.getTrustChainVerification();
-        if (trustChainVerification != null && trustChainVerification
+        if (trustChainVerification
             != CertificateValidationContext.TrustChainVerification.VERIFY_TRUST_CHAIN) {
           throw new ResourceInvalidException(
               "Only VERIFY_TRUST_CHAIN for trust_chain_verification supported");
