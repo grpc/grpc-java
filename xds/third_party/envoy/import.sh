@@ -18,7 +18,7 @@
 set -e
 BRANCH=main
 # import VERSION from one of the google internal CLs
-VERSION=8b9b87702885beb324dadb349cbcb06d037c956e
+VERSION=62ca8bd2b5960ed1c6ce2be97d3120cee719ecab
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
@@ -82,6 +82,7 @@ envoy/config/core/v3/health_check.proto
 envoy/config/core/v3/http_uri.proto
 envoy/config/core/v3/protocol.proto
 envoy/config/core/v3/proxy_protocol.proto
+envoy/config/core/v3/resolver.proto
 envoy/config/core/v3/socket_option.proto
 envoy/config/core/v3/substitution_format_string.proto
 envoy/config/core/v3/udp_socket_config.proto

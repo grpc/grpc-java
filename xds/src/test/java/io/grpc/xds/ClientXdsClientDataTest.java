@@ -1075,10 +1075,8 @@ public class ClientXdsClientDataTest {
   @Test
   public void parseHttpConnectionManager_xffNumTrustedHopsUnsupported()
       throws ResourceInvalidException {
-    HttpConnectionManager hcm =
-        HttpConnectionManager.newBuilder()
-            .setXffNumTrustedHops(2)
-            .build();
+    @SuppressWarnings("deprecation")
+    HttpConnectionManager hcm = HttpConnectionManager.newBuilder().setXffNumTrustedHops(2).build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("HttpConnectionManager with xff_num_trusted_hops unsupported");
     ClientXdsClient.parseHttpConnectionManager(
