@@ -766,6 +766,8 @@ public final class GrpcUtil {
     for (int i = 0; i < factories.size(); i++) {
       tracers[i] = factories.get(i).newClientStreamTracer(streamInfo);
     }
+    // Reserved to be set later by the lb as per the API contract of ClientTransport.newStream().
+    // See also GrpcUtil.getTransportFromPickResult()
     tracers[tracers.length - 1] = NOOP_TRACER;
     return tracers;
   }
