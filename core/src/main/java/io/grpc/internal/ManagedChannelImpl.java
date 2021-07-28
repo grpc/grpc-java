@@ -573,10 +573,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
           @Override
           ClientStream newSubstream(
               Metadata newHeaders, ClientStreamTracer.Factory factory, boolean isTransparentRetry) {
-            CallOptions newOptions = callOptions;
-            newOptions = newOptions.withStreamTracerFactory(factory);
+            CallOptions newOptions = callOptions.withStreamTracerFactory(factory);
             ClientStreamTracer[] tracers =
-                GrpcUtil.getClientStreamTracers(callOptions, isTransparentRetry);
+                GrpcUtil.getClientStreamTracers(newOptions, isTransparentRetry);
             ClientTransport transport =
                 getTransport(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
             Context origContext = context.attach();
