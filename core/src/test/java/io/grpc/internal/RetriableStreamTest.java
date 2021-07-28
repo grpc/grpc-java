@@ -1011,7 +1011,7 @@ public class RetriableStreamTest {
     String message = "String of length 20.";
     int bufferLimit = message.length() * 2 - 1; // Can buffer no more than 1 message.
 
-    final MethodDescriptor<String, Integer> clientStreamingMethod =
+    MethodDescriptor<String, Integer> clientStreamingMethod =
         MethodDescriptor.<String, Integer>newBuilder()
             .setType(MethodType.CLIENT_STREAMING)
             .setFullMethodName("service/method")
@@ -1058,16 +1058,15 @@ public class RetriableStreamTest {
     methodConfig.put("retryPolicy", retryPolicy);
     Map<String, Object> rawServiceConfig = new HashMap<>();
     rawServiceConfig.put("methodConfig", Arrays.<Object>asList(methodConfig));
-    final NettyChannelBuilder nettyLocalChannelBuilder =
+    ManagedChannel channel = cleanupRule.register(
         NettyChannelBuilder.forAddress(localAddress)
             .channelType(LocalChannel.class)
             .eventLoopGroup(group)
             .usePlaintext()
             .enableRetry()
             .perRpcBufferLimit(bufferLimit)
-            .defaultServiceConfig(rawServiceConfig);
-    ManagedChannel channel = cleanupRule.register(nettyLocalChannelBuilder.build());
-
+            .defaultServiceConfig(rawServiceConfig)
+            .build());
     ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
     call.sendMessage(message);
