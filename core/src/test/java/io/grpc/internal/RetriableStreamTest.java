@@ -1070,12 +1070,14 @@ public class RetriableStreamTest {
     ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
     call.sendMessage(message);
-    Metadata pushBackMetadata = new Metadata();
-    pushBackMetadata.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "0"); // retry immediately
 
     ServerCall<String, Integer> serverCall = serverCalls.poll(5, TimeUnit.SECONDS);
     serverCall.request(2);
     // trigger retry
+    Metadata pushBackMetadata = new Metadata();
+    pushBackMetadata.put(
+        Metadata.Key.of("grpc-retry-pushback-ms", Metadata.ASCII_STRING_MARSHALLER),
+        "0");   // retry immediately
     serverCall.close(
         Status.UNAVAILABLE.withDescription("original attempt failed"),
         pushBackMetadata);
@@ -1088,7 +1090,7 @@ public class RetriableStreamTest {
     // let attempt fail
     serverCall.close(
         Status.UNAVAILABLE.withDescription("2nd attempt failed"),
-        pushBackMetadata);
+        new Metadata());
     // no more retry
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
     verify(mockCallListener, timeout(5000)).onClose(statusCaptor.capture(), any(Metadata.class));
