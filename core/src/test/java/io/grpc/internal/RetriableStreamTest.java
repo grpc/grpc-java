@@ -35,7 +35,6 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -44,23 +43,13 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
-import io.grpc.CallOptions;
-import io.grpc.ClientCall;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.DecompressorRegistry;
-import io.grpc.IntegerMarshaller;
-import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
-import io.grpc.Server;
-import io.grpc.ServerCall;
-import io.grpc.ServerCall.Listener;
-import io.grpc.ServerCallHandler;
-import io.grpc.ServerMethodDefinition;
-import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
@@ -68,48 +57,27 @@ import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
 import io.grpc.internal.StreamListener.MessageProducer;
-import io.grpc.netty.NettyChannelBuilder;
-import io.grpc.netty.NettyServerBuilder;
-import io.grpc.testing.GrpcCleanupRule;
-import io.netty.channel.DefaultEventLoopGroup;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.local.LocalAddress;
-import io.netty.channel.local.LocalChannel;
-import io.netty.channel.local.LocalServerChannel;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 import org.junit.After;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
-import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
-import org.mockito.junit.MockitoJUnit;
-import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /** Unit tests for {@link RetriableStream}. */
 @RunWith(JUnit4.class)
 public class RetriableStreamTest {
-  @Rule
-  public final MockitoRule mocks = MockitoJUnit.rule();
-  @Rule
-  public GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
-
   private static final String CANCELLED_BECAUSE_COMMITTED =
       "Stream thrown away because RetriableStream committed";
   private static final String AUTHORITY = "fakeAuthority";
@@ -172,8 +140,6 @@ public class RetriableStreamTest {
           .build();
   private final ChannelBufferMeter channelBufferUsed = new ChannelBufferMeter();
   private final FakeClock fakeClock = new FakeClock();
-  @Mock
-  private ClientCall.Listener<Integer> mockCallListener;
 
   private final class RecordedRetriableStream extends RetriableStream<String> {
     RecordedRetriableStream(MethodDescriptor<String, ?> method, Metadata headers,
@@ -1004,97 +970,6 @@ public class RetriableStreamTest {
 
     verifyNoMoreInteractions(mockStream1);
     verifyNoMoreInteractions(mockStream2);
-  }
-
-  @Test
-  public void retryUntilBufferLimitExceededWithNettyTransport() throws Exception {
-    String message = "String of length 20.";
-    int bufferLimit = message.length() * 2 - 1; // Can buffer no more than 1 message.
-
-    MethodDescriptor<String, Integer> clientStreamingMethod =
-        MethodDescriptor.<String, Integer>newBuilder()
-            .setType(MethodType.CLIENT_STREAMING)
-            .setFullMethodName("service/method")
-            .setRequestMarshaller(new StringMarshaller())
-            .setResponseMarshaller(new IntegerMarshaller())
-            .build();
-    final LinkedBlockingQueue<ServerCall<String, Integer>> serverCalls =
-        new LinkedBlockingQueue<>();
-    ServerMethodDefinition<String, Integer> methodDefinition = ServerMethodDefinition.create(
-        clientStreamingMethod,
-        new ServerCallHandler<String, Integer>() {
-          @Override
-          public Listener<String> startCall(ServerCall<String, Integer> call, Metadata headers) {
-            serverCalls.offer(call);
-            return new Listener<String>() {};
-          }
-        }
-    );
-    ServerServiceDefinition serviceDefinition =
-        ServerServiceDefinition.builder(clientStreamingMethod.getServiceName())
-            .addMethod(methodDefinition)
-            .build();
-    EventLoopGroup group = new DefaultEventLoopGroup();
-    LocalAddress localAddress =
-        new LocalAddress("RetriableStreamTest.retryUntilBufferLimitExceededWithNettyTransport");
-    Server localServer = cleanupRule.register(NettyServerBuilder.forAddress(localAddress)
-        .channelType(LocalServerChannel.class)
-        .bossEventLoopGroup(group)
-        .workerEventLoopGroup(group)
-        .addService(serviceDefinition)
-        .build());
-    localServer.start();
-
-    Map<String, Object> retryPolicy = new HashMap<>();
-    retryPolicy.put("maxAttempts", 4D);
-    retryPolicy.put("initialBackoff", "10s");
-    retryPolicy.put("maxBackoff", "10s");
-    retryPolicy.put("backoffMultiplier", 1D);
-    retryPolicy.put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"));
-    Map<String, Object> methodConfig = new HashMap<>();
-    Map<String, Object> name = new HashMap<>();
-    name.put("service", "service");
-    methodConfig.put("name", Arrays.<Object>asList(name));
-    methodConfig.put("retryPolicy", retryPolicy);
-    Map<String, Object> rawServiceConfig = new HashMap<>();
-    rawServiceConfig.put("methodConfig", Arrays.<Object>asList(methodConfig));
-    ManagedChannel channel = cleanupRule.register(
-        NettyChannelBuilder.forAddress(localAddress)
-            .channelType(LocalChannel.class)
-            .eventLoopGroup(group)
-            .usePlaintext()
-            .enableRetry()
-            .perRpcBufferLimit(bufferLimit)
-            .defaultServiceConfig(rawServiceConfig)
-            .build());
-    ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, CallOptions.DEFAULT);
-    call.start(mockCallListener, new Metadata());
-    call.sendMessage(message);
-
-    ServerCall<String, Integer> serverCall = serverCalls.poll(5, TimeUnit.SECONDS);
-    serverCall.request(2);
-    // trigger retry
-    Metadata pushBackMetadata = new Metadata();
-    pushBackMetadata.put(
-        Metadata.Key.of("grpc-retry-pushback-ms", Metadata.ASCII_STRING_MARSHALLER),
-        "0");   // retry immediately
-    serverCall.close(
-        Status.UNAVAILABLE.withDescription("original attempt failed"),
-        pushBackMetadata);
-    // 2nd attempt received
-    serverCall = serverCalls.poll(5, TimeUnit.SECONDS);
-    serverCall.request(2);
-    verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
-    // send one more message, should exceed buffer limit
-    call.sendMessage(message);
-    // let attempt fail
-    serverCall.close(
-        Status.UNAVAILABLE.withDescription("2nd attempt failed"),
-        new Metadata());
-    // no more retry
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
-    verify(mockCallListener, timeout(5000)).onClose(statusCaptor.capture(), any(Metadata.class));
-    assertThat(statusCaptor.getValue().getDescription()).contains("2nd attempt failed");
   }
 
   @Test
