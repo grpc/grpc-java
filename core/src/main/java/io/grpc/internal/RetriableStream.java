@@ -215,7 +215,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     };
 
     Metadata newHeaders = updateHeaders(headers, previousAttemptCount);
-    // TODO: pass real substream id and transparentRetry flag
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
     sub.stream = newSubstream(newHeaders, tracerFactory, isTransparentRetry);
     return sub;
