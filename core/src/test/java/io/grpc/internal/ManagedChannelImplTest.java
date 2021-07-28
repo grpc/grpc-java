@@ -3640,13 +3640,7 @@ public class ManagedChannelImplTest {
         .addService(serviceDefinition)
         .build());
     localServer.start();
-    final AbstractManagedChannelImplBuilder<?> nettyLocalChannelBuilder =
-        NettyChannelBuilder.forAddress(localAddress)
-            .channelType(LocalChannel.class)
-            .eventLoopGroup(group)
-            .usePlaintext();
-    channelBuilder = (ManagedChannelImplBuilder) nettyLocalChannelBuilder.delegate();
-    channelBuilder.perRpcBufferLimit(bufferLimit);
+
     Map<String, Object> retryPolicy = new HashMap<>();
     retryPolicy.put("maxAttempts", 4D);
     retryPolicy.put("initialBackoff", "10s");
@@ -3660,16 +3654,15 @@ public class ManagedChannelImplTest {
     methodConfig.put("retryPolicy", retryPolicy);
     Map<String, Object> rawServiceConfig = new HashMap<>();
     rawServiceConfig.put("methodConfig", Arrays.<Object>asList(methodConfig));
-    channelBuilder.defaultServiceConfig(rawServiceConfig);
-    channelBuilder.enableRetry();
-    channel = new ManagedChannelImpl(
-        channelBuilder,
-        channelBuilder.buildClientTransportFactory(),
-        new FakeBackoffPolicyProvider(),
-        balancerRpcExecutorPool,
-        timer.getStopwatchSupplier(),
-        Collections.<ClientInterceptor>emptyList(),
-        timer.getTimeProvider());
+    final NettyChannelBuilder nettyLocalChannelBuilder =
+        NettyChannelBuilder.forAddress(localAddress)
+            .channelType(LocalChannel.class)
+            .eventLoopGroup(group)
+            .usePlaintext()
+            .enableRetry()
+            .perRpcBufferLimit(bufferLimit)
+            .defaultServiceConfig(rawServiceConfig);
+    ManagedChannel channel = cleanupRule.register(nettyLocalChannelBuilder.build());
 
     ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());

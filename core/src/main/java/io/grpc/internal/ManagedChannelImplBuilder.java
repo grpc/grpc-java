@@ -623,16 +623,11 @@ public final class ManagedChannelImplBuilder
     return this;
   }
 
-  @VisibleForTesting
-  ClientTransportFactory buildClientTransportFactory() {
-    return clientTransportFactoryBuilder.buildClientTransportFactory();
-  }
-
   @Override
   public ManagedChannel build() {
     return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
         this,
-        buildClientTransportFactory(),
+        clientTransportFactoryBuilder.buildClientTransportFactory(),
         new ExponentialBackoffPolicy.Provider(),
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
