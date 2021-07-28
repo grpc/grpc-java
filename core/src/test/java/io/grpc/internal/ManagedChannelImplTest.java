@@ -46,7 +46,6 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -106,12 +105,7 @@ import io.grpc.NameResolverRegistry;
 import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
 import io.grpc.SecurityLevel;
-import io.grpc.Server;
-import io.grpc.ServerCall;
-import io.grpc.ServerCall.Listener;
-import io.grpc.ServerCallHandler;
 import io.grpc.ServerMethodDefinition;
-import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
@@ -123,17 +117,9 @@ import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
-import io.grpc.netty.NettyChannelBuilder;
-import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.ClientCalls;
-import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.util.ForwardingSubchannel;
-import io.netty.channel.DefaultEventLoopGroup;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.local.LocalAddress;
-import io.netty.channel.local.LocalChannel;
-import io.netty.channel.local.LocalServerChannel;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -148,7 +134,6 @@ import java.util.Random;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -179,9 +164,6 @@ import org.mockito.stubbing.Answer;
 // TODO(creamsoup) remove backward compatible check when fully migrated
 @SuppressWarnings("deprecation")
 public class ManagedChannelImplTest {
-  @Rule
-  public GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
-
   private static final int DEFAULT_PORT = 447;
 
   private static final MethodDescriptor<String, Integer> method =
@@ -3606,89 +3588,6 @@ public class ManagedChannelImplTest {
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
     assertTrue(intercepted.get());
-  }
-
-  @Test
-  public void retryUntilBufferLimitExceeded() throws Exception {
-    String message = "String of length 20.";
-    int bufferLimit = message.length() * 2 - 1; // Can buffer no more than 1 message.
-
-    final MethodDescriptor<String, Integer> clientStreamingMethod =
-        method.toBuilder().setType(MethodType.CLIENT_STREAMING).build();
-    final LinkedBlockingQueue<ServerCall<String, Integer>> serverCalls =
-        new LinkedBlockingQueue<>();
-    ServerMethodDefinition<String, Integer> methodDefinition = ServerMethodDefinition.create(
-        clientStreamingMethod,
-        new ServerCallHandler<String, Integer>() {
-          @Override
-          public Listener<String> startCall(ServerCall<String, Integer> call, Metadata headers) {
-            serverCalls.offer(call);
-            return new Listener<String>() {};
-          }
-        }
-    );
-    ServerServiceDefinition serviceDefinition =
-        ServerServiceDefinition.builder(clientStreamingMethod.getServiceName())
-            .addMethod(methodDefinition)
-            .build();
-    EventLoopGroup group = new DefaultEventLoopGroup();
-    LocalAddress localAddress = new LocalAddress("ManagedChannelImplTest.retryBufferLimitExceeded");
-    Server localServer = cleanupRule.register(NettyServerBuilder.forAddress(localAddress)
-        .channelType(LocalServerChannel.class)
-        .bossEventLoopGroup(group)
-        .workerEventLoopGroup(group)
-        .addService(serviceDefinition)
-        .build());
-    localServer.start();
-
-    Map<String, Object> retryPolicy = new HashMap<>();
-    retryPolicy.put("maxAttempts", 4D);
-    retryPolicy.put("initialBackoff", "10s");
-    retryPolicy.put("maxBackoff", "10s");
-    retryPolicy.put("backoffMultiplier", 1D);
-    retryPolicy.put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"));
-    Map<String, Object> methodConfig = new HashMap<>();
-    Map<String, Object> name = new HashMap<>();
-    name.put("service", "service");
-    methodConfig.put("name", Arrays.<Object>asList(name));
-    methodConfig.put("retryPolicy", retryPolicy);
-    Map<String, Object> rawServiceConfig = new HashMap<>();
-    rawServiceConfig.put("methodConfig", Arrays.<Object>asList(methodConfig));
-    final NettyChannelBuilder nettyLocalChannelBuilder =
-        NettyChannelBuilder.forAddress(localAddress)
-            .channelType(LocalChannel.class)
-            .eventLoopGroup(group)
-            .usePlaintext()
-            .enableRetry()
-            .perRpcBufferLimit(bufferLimit)
-            .defaultServiceConfig(rawServiceConfig);
-    ManagedChannel channel = cleanupRule.register(nettyLocalChannelBuilder.build());
-
-    ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, CallOptions.DEFAULT);
-    call.start(mockCallListener, new Metadata());
-    call.sendMessage(message);
-    Metadata pushBackMetadata = new Metadata();
-    pushBackMetadata.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "0"); // retry immediately
-
-    ServerCall<String, Integer> serverCall = serverCalls.poll(5, TimeUnit.SECONDS);
-    serverCall.request(2);
-    // trigger retry
-    serverCall.close(
-        Status.UNAVAILABLE.withDescription("original attempt failed"),
-        pushBackMetadata);
-    // 2nd attempt received
-    serverCall = serverCalls.poll(5, TimeUnit.SECONDS);
-    serverCall.request(2);
-    verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
-    // send one more message, should exceed buffer limit
-    call.sendMessage(message);
-    // let attempt fail
-    serverCall.close(
-        Status.UNAVAILABLE.withDescription("2nd attempt failed"),
-        pushBackMetadata);
-    // no more retry
-    verify(mockCallListener, timeout(5000)).onClose(statusCaptor.capture(), any(Metadata.class));
-    assertThat(statusCaptor.getValue().getDescription()).contains("2nd attempt failed");
   }
 
   @Test
