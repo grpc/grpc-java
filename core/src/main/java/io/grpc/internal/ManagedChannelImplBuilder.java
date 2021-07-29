@@ -143,10 +143,6 @@ public final class ManagedChannelImplBuilder
   long retryBufferSize = DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES;
   long perRpcBufferLimit = DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES;
   boolean retryEnabled = false; // TODO(zdapeng): default to true
-  // Temporarily disable retry when stats or tracing is enabled to avoid breakage, until we know
-  // what should be the desired behavior for retry + stats/tracing.
-  // TODO(zdapeng): delete me
-  boolean temporarilyDisableRetry;
 
   InternalChannelz channelz = InternalChannelz.instance();
   int maxTraceEvents;
@@ -460,8 +456,6 @@ public final class ManagedChannelImplBuilder
   @Override
   public ManagedChannelImplBuilder enableRetry() {
     retryEnabled = true;
-    statsEnabled = false;
-    tracingEnabled = false;
     return this;
   }
 
@@ -642,9 +636,7 @@ public final class ManagedChannelImplBuilder
   List<ClientInterceptor> getEffectiveInterceptors() {
     List<ClientInterceptor> effectiveInterceptors =
         new ArrayList<>(this.interceptors);
-    temporarilyDisableRetry = false;
     if (statsEnabled) {
-      temporarilyDisableRetry = true;
       ClientInterceptor statsInterceptor = null;
       try {
         Class<?> censusStatsAccessor =
@@ -654,6 +646,7 @@ public final class ManagedChannelImplBuilder
                 "getClientInterceptor",
                 boolean.class,
                 boolean.class,
+                boolean.class,
                 boolean.class);
         statsInterceptor =
             (ClientInterceptor) getClientInterceptorMethod
@@ -661,7 +654,8 @@ public final class ManagedChannelImplBuilder
                     null,
                     recordStartedRpcs,
                     recordFinishedRpcs,
-                    recordRealTimeMetrics);
+                    recordRealTimeMetrics,
+                    retryEnabled);
       } catch (ClassNotFoundException e) {
         // Replace these separate catch statements with multicatch when Android min-API >= 19
         log.log(Level.FINE, "Unable to apply census stats", e);
@@ -679,7 +673,6 @@ public final class ManagedChannelImplBuilder
       }
     }
     if (tracingEnabled) {
-      temporarilyDisableRetry = true;
       ClientInterceptor tracingInterceptor = null;
       try {
         Class<?> censusTracingAccessor =
