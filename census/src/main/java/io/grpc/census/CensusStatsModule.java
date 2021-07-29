@@ -140,15 +140,6 @@ final class CensusStatsModule {
   }
 
   /**
-   * Creates a {@link CallAttemptsTracerFactory} for a new call.
-   */
-  @VisibleForTesting
-  CallAttemptsTracerFactory newClientCallTracer(
-      TagContext parentCtx, String fullMethodName) {
-    return new CallAttemptsTracerFactory(this, parentCtx, fullMethodName);
-  }
-
-  /**
    * Returns the server tracer factory.
    */
   ServerStreamTracer.Factory getServerTracerFactory() {
@@ -696,8 +687,8 @@ final class CensusStatsModule {
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
       // New RPCs on client-side inherit the tag context from the current Context.
       TagContext parentCtx = tagger.getCurrentTagContext();
-      final CallAttemptsTracerFactory tracerFactory =
-          newClientCallTracer(parentCtx, method.getFullMethodName());
+      final CallAttemptsTracerFactory tracerFactory = new CallAttemptsTracerFactory(
+          CensusStatsModule.this, parentCtx, method.getFullMethodName());
       ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {
