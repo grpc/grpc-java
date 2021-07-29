@@ -31,8 +31,8 @@ For a guided tour, take a look at the [quick start
 guide](https://grpc.io/docs/languages/java/quickstart) or the more explanatory [gRPC
 basics](https://grpc.io/docs/languages/java/basics).
 
-The [examples](https://github.com/grpc/grpc-java/tree/v1.39.0/examples) and the
-[Android example](https://github.com/grpc/grpc-java/tree/v1.39.0/examples/android)
+The [examples](https://github.com/grpc/grpc-java/tree/v1.40.0/examples) and the
+[Android example](https://github.com/grpc/grpc-java/tree/v1.40.0/examples/android)
 are standalone projects that showcase the usage of gRPC.
 
 Download
@@ -43,17 +43,17 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-netty-shaded</artifactId>
-  <version>1.39.0</version>
+  <version>1.40.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-protobuf</artifactId>
-  <version>1.39.0</version>
+  <version>1.40.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-stub</artifactId>
-  <version>1.39.0</version>
+  <version>1.40.0</version>
 </dependency>
 <dependency> <!-- necessary for Java 9+ -->
   <groupId>org.apache.tomcat</groupId>
@@ -65,23 +65,23 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 
 Or for Gradle with non-Android, add to your dependencies:
 ```gradle
-implementation 'io.grpc:grpc-netty-shaded:1.39.0'
-implementation 'io.grpc:grpc-protobuf:1.39.0'
-implementation 'io.grpc:grpc-stub:1.39.0'
+implementation 'io.grpc:grpc-netty-shaded:1.40.0'
+implementation 'io.grpc:grpc-protobuf:1.40.0'
+implementation 'io.grpc:grpc-stub:1.40.0'
 compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
 `grpc-protobuf-lite` instead of `grpc-protobuf`:
 ```gradle
-implementation 'io.grpc:grpc-okhttp:1.39.0'
-implementation 'io.grpc:grpc-protobuf-lite:1.39.0'
-implementation 'io.grpc:grpc-stub:1.39.0'
+implementation 'io.grpc:grpc-okhttp:1.40.0'
+implementation 'io.grpc:grpc-protobuf-lite:1.40.0'
+implementation 'io.grpc:grpc-stub:1.40.0'
 compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 ```
 
 [the JARs]:
-https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.39.0
+https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.40.0
 
 Development snapshots are available in [Sonatypes's snapshot
 repository](https://oss.sonatype.org/content/repositories/snapshots/).
@@ -111,9 +111,9 @@ For protobuf-based codegen integrated with the Maven build system, you can use
       <artifactId>protobuf-maven-plugin</artifactId>
       <version>0.6.1</version>
       <configuration>
-        <protocArtifact>com.google.protobuf:protoc:3.17.2:exe:${os.detected.classifier}</protocArtifact>
+        <protocArtifact>com.google.protobuf:protoc:3.17.3:exe:${os.detected.classifier}</protocArtifact>
         <pluginId>grpc-java</pluginId>
-        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.39.0:exe:${os.detected.classifier}</pluginArtifact>
+        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.40.0:exe:${os.detected.classifier}</pluginArtifact>
       </configuration>
       <executions>
         <execution>
@@ -139,11 +139,11 @@ plugins {
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.17.2"
+    artifact = "com.google.protobuf:protoc:3.17.3"
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.39.0'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.40.0'
     }
   }
   generateProtoTasks {
@@ -172,11 +172,11 @@ plugins {
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.17.2"
+    artifact = "com.google.protobuf:protoc:3.17.3"
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.39.0'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.40.0'
     }
   }
   generateProtoTasks {
