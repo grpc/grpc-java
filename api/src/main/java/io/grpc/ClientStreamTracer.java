@@ -36,6 +36,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
    *
    * @since 1.40.0
    */
+  @Grpc.TransportAttr
   public void streamCreated(Attributes transportAttrs, Metadata headers) {
   }
 
