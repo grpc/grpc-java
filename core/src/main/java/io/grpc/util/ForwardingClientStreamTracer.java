@@ -23,13 +23,7 @@ import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.Status;
 
-/**
- * Delegation class for ClientStreamTracer.
- *
- * @deprecated Use {@link io.grpc.internal.ForwardingClientStreamTracer} instead.
- */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
-@Deprecated
 public abstract class ForwardingClientStreamTracer extends ClientStreamTracer {
   /** Returns the underlying {@code ClientStreamTracer}. */
   protected abstract ClientStreamTracer delegate();

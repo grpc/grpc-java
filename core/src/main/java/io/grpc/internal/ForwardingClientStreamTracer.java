@@ -23,7 +23,6 @@ import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.Status;
 
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
 public abstract class ForwardingClientStreamTracer extends ClientStreamTracer {
 
   /**
