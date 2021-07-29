@@ -36,8 +36,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
    *
    * @since 1.40.0
    */
-  @Grpc.TransportAttr
-  public void streamCreated(Attributes transportAttrs, Metadata headers) {
+  public void streamCreated(@Grpc.TransportAttr Attributes transportAttrs, Metadata headers) {
   }
 
   /**
@@ -185,8 +184,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
        *             the transport Attributes instead.
        */
       @Deprecated
-      @Grpc.TransportAttr
-      public Builder setTransportAttrs(Attributes transportAttrs) {
+      public Builder setTransportAttrs(@Grpc.TransportAttr Attributes transportAttrs) {
         this.transportAttrs = checkNotNull(transportAttrs, "transportAttrs cannot be null");
         return this;
       }
