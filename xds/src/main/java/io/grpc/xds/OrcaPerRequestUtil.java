@@ -25,8 +25,8 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
+import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.protobuf.ProtoUtils;
-import io.grpc.util.ForwardingClientStreamTracer;
 import java.util.ArrayList;
 import java.util.List;
 

@@ -46,7 +46,6 @@ import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
-import io.grpc.util.ForwardingClientStreamTracer;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;

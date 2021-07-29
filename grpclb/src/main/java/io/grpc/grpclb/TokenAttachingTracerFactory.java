@@ -22,8 +22,8 @@ import com.google.common.base.Objects;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
+import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.GrpcAttributes;
-import io.grpc.util.ForwardingClientStreamTracer;
 import javax.annotation.Nullable;
 
 /**
