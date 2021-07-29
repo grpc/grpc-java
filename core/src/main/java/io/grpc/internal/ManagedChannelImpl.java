@@ -624,7 +624,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
-    this.retryEnabled = builder.retryEnabled;
+    this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
     this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
     this.offloadExecutorHolder =
         new ExecutorHolder(

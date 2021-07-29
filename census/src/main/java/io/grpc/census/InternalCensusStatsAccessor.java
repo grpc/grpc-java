@@ -49,16 +49,14 @@ public final class InternalCensusStatsAccessor {
   public static ClientInterceptor getClientInterceptor(
       boolean recordStartedRpcs,
       boolean recordFinishedRpcs,
-      boolean recordRealTimeMetrics,
-      boolean retryEnabled) {
+      boolean recordRealTimeMetrics) {
     CensusStatsModule censusStats =
         new CensusStatsModule(
             STOPWATCH_SUPPLIER,
             true, /* propagateTags */
             recordStartedRpcs,
             recordFinishedRpcs,
-            recordRealTimeMetrics,
-            retryEnabled);
+            recordRealTimeMetrics);
     return censusStats.getClientInterceptor();
   }
 
@@ -73,13 +71,11 @@ public final class InternalCensusStatsAccessor {
       boolean propagateTags,
       boolean recordStartedRpcs,
       boolean recordFinishedRpcs,
-      boolean recordRealTimeMetrics,
-      boolean retryEnabled) {
+      boolean recordRealTimeMetrics) {
     CensusStatsModule censusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, stopwatchSupplier,
-            propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics,
-            retryEnabled);
+            propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
     return censusStats.getClientInterceptor();
   }
 
