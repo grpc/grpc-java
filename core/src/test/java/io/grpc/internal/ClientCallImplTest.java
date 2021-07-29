@@ -145,7 +145,7 @@ public class ClientCallImplTest {
             any(Metadata.class),
             any(Context.class)))
         .thenReturn(stream);
-    when(streamTracerFactory.newClientStreamTracer(any(StreamInfo.class)))
+    when(streamTracerFactory.newClientStreamTracer(any(StreamInfo.class), any(Metadata.class)))
         .thenReturn(new ClientStreamTracer() {});
     doAnswer(new Answer<Void>() {
         @Override
@@ -767,7 +767,7 @@ public class ClientCallImplTest {
         channelCallTracer, configSelector)
             .setDecompressorRegistry(decompressorRegistry);
     call.start(callListener, new Metadata());
-    verify(streamTracerFactory).newClientStreamTracer(any(StreamInfo.class));
+    verify(streamTracerFactory).newClientStreamTracer(any(StreamInfo.class), any(Metadata.class));
     verify(clientStreamProvider, never())
         .newStream(
             (MethodDescriptor<?, ?>) any(MethodDescriptor.class),

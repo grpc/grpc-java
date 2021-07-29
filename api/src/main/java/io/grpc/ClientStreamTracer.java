@@ -66,90 +66,6 @@ public abstract class ClientStreamTracer extends StreamTracer {
    */
   public abstract static class Factory {
     /**
-     * Creates a {@link ClientStreamTracer} for a new client stream.
-     *
-     * @param info information about the stream
-     *
-     * @since 1.40.0
-     */
-    public ClientStreamTracer newClientStreamTracer(final StreamInfo info) {
-      // Provide a default implementation of this method for compatibility with old Factory
-      // implementations.
-      return new ClientStreamTracer() {
-        volatile ClientStreamTracer delegate = new ClientStreamTracer() {};
-
-        @Override
-        public void streamCreated(Attributes transportAttrs, Metadata headers) {
-          StreamInfo streamInfo = info.toBuilder().setTransportAttrs(transportAttrs).build();
-          delegate = newClientStreamTracer(streamInfo, headers);
-          delegate.streamCreated(transportAttrs, headers);
-        }
-
-        @Override
-        public void outboundHeaders() {
-          delegate.outboundHeaders();
-        }
-
-        @Override
-        public void inboundHeaders() {
-          delegate.inboundHeaders();
-        }
-
-        @Override
-        public void inboundTrailers(Metadata trailers) {
-          delegate.inboundTrailers(trailers);
-        }
-
-        @Override
-        public void streamClosed(Status status) {
-          delegate.streamClosed(status);
-        }
-
-        @Override
-        public void outboundMessage(int seqNo) {
-          delegate.outboundMessage(seqNo);
-        }
-
-        @Override
-        public void inboundMessage(int seqNo) {
-          delegate.inboundMessage(seqNo);
-        }
-
-        @Override
-        public void outboundMessageSent(int seqNo, long optionalWireSize,
-            long optionalUncompressedSize) {
-          delegate.outboundMessageSent(seqNo, optionalWireSize, optionalUncompressedSize);
-        }
-
-        @Override
-        public void inboundMessageRead(int seqNo, long optionalWireSize,
-            long optionalUncompressedSize) {
-          delegate.inboundMessageRead(seqNo, optionalWireSize, optionalUncompressedSize);
-        }
-
-        @Override
-        public void outboundWireSize(long bytes) {
-          delegate.outboundWireSize(bytes);
-        }
-
-        @Override
-        public void outboundUncompressedSize(long bytes) {
-          delegate.outboundUncompressedSize(bytes);
-        }
-
-        @Override
-        public void inboundWireSize(long bytes) {
-          delegate.inboundWireSize(bytes);
-        }
-
-        @Override
-        public void inboundUncompressedSize(long bytes) {
-          delegate.inboundUncompressedSize(bytes);
-        }
-      };
-    }
-
-    /**
      * Creates a {@link ClientStreamTracer} for a new client stream.  This is called inside the
      * transport when it's creating the stream.
      *
@@ -159,14 +75,15 @@ public abstract class ClientStreamTracer extends StreamTracer {
      *        because it is not safe for read or write after the method returns.
      *
      * @since 1.20.0
-     * @deprecated Use {@link ClientStreamTracer#streamCreated(Attributes, Metadata)} of the
-     *             returned tracer to handle the headers instead.
      */
-    @Deprecated
     public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
       throw new UnsupportedOperationException("Not implemented");
     }
   }
+
+  /** An abstract class for internal use only. */
+  @Internal
+  public abstract static class InternalLimitedInfoFactory extends Factory {}
 
   /**
    * Information about a stream.
@@ -240,6 +157,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
+          .add("transportAttrs", transportAttrs)
           .add("callOptions", callOptions)
           .add("isTransparentRetry", isTransparentRetry)
           .toString();

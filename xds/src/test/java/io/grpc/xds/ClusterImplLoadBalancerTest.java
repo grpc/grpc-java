@@ -37,6 +37,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -208,11 +209,11 @@ public class ClusterImplLoadBalancerTest {
     PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getStatus().isOk()).isTrue();
     ClientStreamTracer streamTracer1 = result.getStreamTracerFactory().newClientStreamTracer(
-        ClientStreamTracer.StreamInfo.newBuilder().build());  // first RPC call
+        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // first RPC call
     ClientStreamTracer streamTracer2 = result.getStreamTracerFactory().newClientStreamTracer(
-        ClientStreamTracer.StreamInfo.newBuilder().build());  // second RPC call
+        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // second RPC call
     ClientStreamTracer streamTracer3 = result.getStreamTracerFactory().newClientStreamTracer(
-        ClientStreamTracer.StreamInfo.newBuilder().build());  // third RPC call
+        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // third RPC call
     streamTracer1.streamClosed(Status.OK);
     streamTracer2.streamClosed(Status.UNAVAILABLE);
     ClusterStats clusterStats =
@@ -340,7 +341,8 @@ public class ClusterImplLoadBalancerTest {
       PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
       assertThat(result.getStatus().isOk()).isTrue();
       ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
-      streamTracerFactory.newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build());
+      streamTracerFactory.newClientStreamTracer(
+          ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
     }
     ClusterStats clusterStats =
         Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
@@ -371,7 +373,7 @@ public class ClusterImplLoadBalancerTest {
     result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getStatus().isOk()).isTrue();
     result.getStreamTracerFactory().newClientStreamTracer(
-        ClientStreamTracer.StreamInfo.newBuilder().build());  // 101th request
+        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());  // 101th request
     clusterStats = Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
     assertThat(clusterStats.clusterServiceName()).isEqualTo(EDS_SERVICE_NAME);
     assertThat(clusterStats.totalDroppedRequests()).isEqualTo(0L);
@@ -427,7 +429,8 @@ public class ClusterImplLoadBalancerTest {
       PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
       assertThat(result.getStatus().isOk()).isTrue();
       ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
-      streamTracerFactory.newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build());
+      streamTracerFactory.newClientStreamTracer(
+          ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
     }
     ClusterStats clusterStats =
         Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));

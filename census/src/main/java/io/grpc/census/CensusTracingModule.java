@@ -223,7 +223,7 @@ final class CensusTracingModule {
   }
 
   @VisibleForTesting
-  final class ClientCallTracer extends ClientStreamTracer.Factory {
+  final class ClientCallTracer extends ClientStreamTracer.InternalLimitedInfoFactory {
     volatile int callEnded;
 
     private final boolean isSampledToLocalTracing;
@@ -242,7 +242,8 @@ final class CensusTracingModule {
     }
 
     @Override
-    public ClientStreamTracer newClientStreamTracer(ClientStreamTracer.StreamInfo info) {
+    public ClientStreamTracer newClientStreamTracer(
+        ClientStreamTracer.StreamInfo info, Metadata headers) {
       return new ClientTracer(span, tracingHeader);
     }
 

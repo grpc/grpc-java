@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -27,14 +28,17 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.GrpcUtil.Http2Error;
 import io.grpc.testing.TestMethodDescriptors;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -290,5 +294,32 @@ public class GrpcUtilTest {
     stream.start(listener);
 
     verify(listener).closed(eq(status), eq(RpcProgress.DROPPED), any(Metadata.class));
+  }
+
+  @Test
+  public void clientStreamTracerFactoryBackwardCompatibility() {
+    final AtomicReference<Attributes> transportAttrsRef = new AtomicReference<>();
+    final ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    final Metadata.Key<String> key = Metadata.Key.of("fake-key", Metadata.ASCII_STRING_MARSHALLER);
+    ClientStreamTracer.Factory oldFactoryImpl = new ClientStreamTracer.Factory() {
+      @SuppressWarnings("deprecation")
+      @Override
+      public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+        transportAttrsRef.set(info.getTransportAttrs());
+        headers.put(key, "fake-value");
+        return mockTracer;
+      }
+    };
+
+    StreamInfo info =
+        StreamInfo.newBuilder().setCallOptions(CallOptions.DEFAULT.withWaitForReady()).build();
+    Metadata metadata = new Metadata();
+    Attributes transAttrs =
+        Attributes.newBuilder().set(Attributes.Key.<String>create("foo"), "bar").build();
+    ClientStreamTracer tracer = GrpcUtil.newClientStreamTracer(oldFactoryImpl, info, metadata);
+    tracer.streamCreated(transAttrs, metadata);
+
+    assertThat(transportAttrsRef.get()).isEqualTo(transAttrs);
+    assertThat(metadata.get(key)).isEqualTo("fake-value");
   }
 }

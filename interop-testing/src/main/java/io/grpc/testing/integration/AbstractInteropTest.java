@@ -289,10 +289,10 @@ public abstract class AbstractInteropTest {
       new LinkedBlockingQueue<>();
 
   private final ClientStreamTracer.Factory clientStreamTracerFactory =
-      new ClientStreamTracer.Factory() {
+      new ClientStreamTracer.InternalLimitedInfoFactory() {
         @Override
         public ClientStreamTracer newClientStreamTracer(
-            ClientStreamTracer.StreamInfo info) {
+            ClientStreamTracer.StreamInfo info, Metadata headers) {
           TestClientStreamTracer tracer = new TestClientStreamTracer();
           clientStreamTracers.add(tracer);
           return tracer;

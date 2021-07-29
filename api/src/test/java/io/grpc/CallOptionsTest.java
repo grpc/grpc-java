@@ -272,7 +272,7 @@ public class CallOptionsTest {
     }
   }
 
-  private static class FakeTracerFactory extends ClientStreamTracer.Factory {
+  private static class FakeTracerFactory extends ClientStreamTracer.InternalLimitedInfoFactory {
     final String name;
 
     FakeTracerFactory(String name) {
@@ -280,7 +280,7 @@ public class CallOptionsTest {
     }
 
     @Override
-    public ClientStreamTracer newClientStreamTracer(StreamInfo info) {
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
       return new ClientStreamTracer() {};
     }
 

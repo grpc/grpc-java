@@ -166,7 +166,7 @@ public class RetriableStreamTest {
     ClientStream newSubstream(
         Metadata metadata, ClientStreamTracer.Factory tracerFactory, boolean isTransparentRetry) {
       bufferSizeTracer =
-          tracerFactory.newClientStreamTracer(STREAM_INFO);
+          tracerFactory.newClientStreamTracer(STREAM_INFO, metadata);
       int actualPreviousRpcAttemptsInHeader = metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS) == null
           ? 0 : Integer.valueOf(metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
       return retriableStreamRecorder.newSubstream(actualPreviousRpcAttemptsInHeader);

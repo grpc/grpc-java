@@ -27,8 +27,10 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.InternalLimitedInfoFactory;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
@@ -44,6 +46,7 @@ import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
+import io.grpc.util.ForwardingClientStreamTracer;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,6 +66,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -718,10 +722,9 @@ public final class GrpcUtil {
         public ClientStream newStream(
             MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
             ClientStreamTracer[] tracers) {
-          ClientStreamTracer streamTracer = streamTracerFactory.newClientStreamTracer(
-              StreamInfo.newBuilder()
-                  .setCallOptions(callOptions)
-                  .build());
+          StreamInfo info = StreamInfo.newBuilder().setCallOptions(callOptions).build();
+          ClientStreamTracer streamTracer =
+              newClientStreamTracer(streamTracerFactory, info, headers);
           checkState(tracers[tracers.length - 1] == NOOP_TRACER, "lb tracer already assigned");
           tracers[tracers.length - 1] = streamTracer;
           return transport.newStream(method, headers, callOptions, tracers);
@@ -756,7 +759,7 @@ public final class GrpcUtil {
 
   /** Gets stream tracers based on CallOptions. */
   static ClientStreamTracer[] getClientStreamTracers(
-      CallOptions callOptions, boolean isTransparentRetry) {
+      CallOptions callOptions, Metadata headers, boolean isTransparentRetry) {
     List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
     ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
     StreamInfo streamInfo = StreamInfo.newBuilder()
@@ -764,12 +767,52 @@ public final class GrpcUtil {
         .setIsTransparentRetry(isTransparentRetry)
         .build();
     for (int i = 0; i < factories.size(); i++) {
-      tracers[i] = factories.get(i).newClientStreamTracer(streamInfo);
+      tracers[i] = newClientStreamTracer(factories.get(i), streamInfo, headers);
     }
     // Reserved to be set later by the lb as per the API contract of ClientTransport.newStream().
     // See also GrpcUtil.getTransportFromPickResult()
     tracers[tracers.length - 1] = NOOP_TRACER;
     return tracers;
+  }
+
+  // A util function for backward compatibility to support deprecated StreamInfo.getAttributes().
+  @VisibleForTesting
+  static ClientStreamTracer newClientStreamTracer(
+      final ClientStreamTracer.Factory streamTracerFactory, final StreamInfo info,
+      final Metadata headers) {
+    ClientStreamTracer streamTracer;
+    if (streamTracerFactory instanceof InternalLimitedInfoFactory) {
+      streamTracer = streamTracerFactory.newClientStreamTracer(info, headers);
+    } else {
+      streamTracer = new ForwardingClientStreamTracer() {
+        final ClientStreamTracer noop = new ClientStreamTracer() {};
+        AtomicReference<ClientStreamTracer> delegate = new AtomicReference<>(noop);
+
+        void maybeInit(StreamInfo info, Metadata headers) {
+          delegate.compareAndSet(noop, streamTracerFactory.newClientStreamTracer(info, headers));
+        }
+
+        @Override
+        protected ClientStreamTracer delegate() {
+          return delegate.get();
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public void streamCreated(Attributes transportAttrs, Metadata headers) {
+          StreamInfo streamInfo = info.toBuilder().setTransportAttrs(transportAttrs).build();
+          maybeInit(streamInfo, headers);
+          delegate().streamCreated(transportAttrs, headers);
+        }
+
+        @Override
+        public void streamClosed(Status status) {
+          maybeInit(info, headers);
+          delegate().streamClosed(status);
+        }
+      };
+    }
+    return streamTracer;
   }
 
   /** Quietly closes all messages in MessageProducer. */

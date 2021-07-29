@@ -30,7 +30,7 @@ import javax.annotation.Nullable;
  * Wraps a {@link ClientStreamTracer.Factory}, retrieves tokens from transport attributes and
  * attaches them to headers.  This is only used in the PICK_FIRST mode.
  */
-final class TokenAttachingTracerFactory extends ClientStreamTracer.Factory {
+final class TokenAttachingTracerFactory extends ClientStreamTracer.InternalLimitedInfoFactory {
   private static final ClientStreamTracer NOOP_TRACER = new ClientStreamTracer() {};
 
   @Nullable
@@ -41,11 +41,12 @@ final class TokenAttachingTracerFactory extends ClientStreamTracer.Factory {
   }
 
   @Override
-  public ClientStreamTracer newClientStreamTracer(ClientStreamTracer.StreamInfo info) {
+  public ClientStreamTracer newClientStreamTracer(
+      ClientStreamTracer.StreamInfo info, Metadata headers) {
     if (delegate == null) {
       return NOOP_TRACER;
     }
-    final ClientStreamTracer clientStreamTracer = delegate.newClientStreamTracer(info);
+    final ClientStreamTracer clientStreamTracer = delegate.newClientStreamTracer(info, headers);
     class TokenPropagationTracer extends ForwardingClientStreamTracer {
       @Override
       protected ClientStreamTracer delegate() {

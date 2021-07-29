@@ -533,7 +533,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             getTransport(new PickSubchannelArgsImpl(method, headers, callOptions));
         Context origContext = context.attach();
         ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
-            callOptions, /* isTransparentRetry= */ false);
+            callOptions, headers, /* isTransparentRetry= */ false);
         try {
           return transport.newStream(method, headers, callOptions, tracers);
         } finally {
@@ -575,7 +575,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               Metadata newHeaders, ClientStreamTracer.Factory factory, boolean isTransparentRetry) {
             CallOptions newOptions = callOptions.withStreamTracerFactory(factory);
             ClientStreamTracer[] tracers =
-                GrpcUtil.getClientStreamTracers(newOptions, isTransparentRetry);
+                GrpcUtil.getClientStreamTracers(newOptions, newHeaders, isTransparentRetry);
             ClientTransport transport =
                 getTransport(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
             Context origContext = context.attach();

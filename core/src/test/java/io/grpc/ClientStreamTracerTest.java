@@ -18,10 +18,8 @@ package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
 import static java.util.concurrent.TimeUnit.MINUTES;
-import static org.mockito.Mockito.mock;
 
 import io.grpc.ClientStreamTracer.StreamInfo;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -72,35 +70,5 @@ public class ClientStreamTracerTest {
     StreamInfo info2 = info1.toBuilder().build();
     assertThat(info2.getCallOptions()).isSameInstanceAs(callOptions);
     assertThat(info2.getTransportAttrs()).isSameInstanceAs(transportAttrs);
-  }
-
-  @Test
-  public void deprecatedFactoryApiIsCompatible() {
-    final AtomicReference<StreamInfo> infoRef = new AtomicReference<>();
-    final AtomicReference<Attributes> transportAttrsRef = new AtomicReference<>();
-    final ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
-    final Metadata.Key<String> key = Metadata.Key.of("fake-key", Metadata.ASCII_STRING_MARSHALLER);
-    ClientStreamTracer.Factory oldFactoryImpl = new ClientStreamTracer.Factory() {
-      @SuppressWarnings("deprecation")
-      @Override
-      public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-        infoRef.set(info);
-        transportAttrsRef.set(info.getTransportAttrs());
-        headers.put(key, "fake-value");
-        return mockTracer;
-      }
-    };
-
-    StreamInfo info =
-        StreamInfo.newBuilder().setCallOptions(CallOptions.DEFAULT.withWaitForReady()).build();
-    ClientStreamTracer tracer = oldFactoryImpl.newClientStreamTracer(info);
-    Attributes transAttrs =
-        Attributes.newBuilder().set(Attributes.Key.<String>create("foo"), "bar").build();
-    Metadata metadata = new Metadata();
-    tracer.streamCreated(transAttrs, metadata);
-
-    assertThat(infoRef.get().getCallOptions().isWaitForReady()).isTrue();
-    assertThat(transportAttrsRef.get()).isEqualTo(transAttrs);
-    assertThat(metadata.get(key)).isEqualTo("fake-value");
   }
 }

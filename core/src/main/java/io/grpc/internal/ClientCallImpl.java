@@ -255,7 +255,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           effectiveDeadline, context.getDeadline(), callOptions.getDeadline());
       stream = clientStreamProvider.newStream(method, callOptions, headers, context);
     } else {
-      ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(callOptions, false);
+      ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(callOptions, headers, false);
       stream = new FailingClientStream(
           DEADLINE_EXCEEDED.withDescription(
               "ClientCall started after deadline exceeded: " + effectiveDeadline),

@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.protobuf.util.Timestamps;
 import io.grpc.ClientStreamTracer;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
 import io.grpc.lb.v1.ClientStats;
@@ -36,7 +37,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * span of an LB stream with the remote load-balancer.
  */
 @ThreadSafe
-final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
+final class GrpclbClientLoadRecorder extends ClientStreamTracer.InternalLimitedInfoFactory {
 
   private static final AtomicLongFieldUpdater<GrpclbClientLoadRecorder> callsStartedUpdater =
       AtomicLongFieldUpdater.newUpdater(GrpclbClientLoadRecorder.class, "callsStarted");
@@ -72,7 +73,8 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
   }
 
   @Override
-  public ClientStreamTracer newClientStreamTracer(ClientStreamTracer.StreamInfo info) {
+  public ClientStreamTracer newClientStreamTracer(
+      ClientStreamTracer.StreamInfo info, Metadata headers) {
     callsStartedUpdater.getAndIncrement(this);
     return new StreamTracer();
   }

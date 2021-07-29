@@ -328,7 +328,8 @@ final class CensusStatsModule {
   }
 
   @VisibleForTesting
-  static final class CallAttemptsTracerFactory extends ClientStreamTracer.Factory {
+  static final class CallAttemptsTracerFactory extends
+      ClientStreamTracer.InternalLimitedInfoFactory {
     @Nullable
     private static final AtomicReferenceFieldUpdater<CallAttemptsTracerFactory, ClientTracer>
         streamTracerUpdater;
@@ -383,7 +384,8 @@ final class CensusStatsModule {
     }
 
     @Override
-    public ClientStreamTracer newClientStreamTracer(ClientStreamTracer.StreamInfo info) {
+    public ClientStreamTracer newClientStreamTracer(
+        ClientStreamTracer.StreamInfo info, Metadata headers) {
       ClientTracer tracer = new ClientTracer(module, parentCtx, startCtx);
       // TODO(zhangkun83): Once retry or hedging is implemented, a ClientCall may start more than
       // one streams.  We will need to update this file to support them.

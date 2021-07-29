@@ -391,7 +391,9 @@ public class CensusModulesTest {
     CensusStatsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CensusStatsModule.CallAttemptsTracerFactory(
             localCensusStats, tagger.empty(), method.getFullMethodName());
-    ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO);
+    Metadata headers = new Metadata();
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, headers);
 
     if (recordStarts) {
       StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
@@ -519,8 +521,9 @@ public class CensusModulesTest {
   public void clientBasicTracingDefaultSpan() {
     CensusTracingModule.ClientCallTracer callTracer =
         censusTracing.newClientCallTracer(null, method);
-    ClientStreamTracer clientStreamTracer = callTracer.newClientStreamTracer(STREAM_INFO);
-    clientStreamTracer.streamCreated(Attributes.EMPTY, new Metadata());
+    Metadata headers = new Metadata();
+    ClientStreamTracer clientStreamTracer = callTracer.newClientStreamTracer(STREAM_INFO, headers);
+    clientStreamTracer.streamCreated(Attributes.EMPTY, headers);
     verify(tracer).spanBuilderWithExplicitParent(
         eq("Sent.package1.service2.method3"), ArgumentMatchers.<Span>isNull());
     verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
@@ -577,7 +580,8 @@ public class CensusModulesTest {
     CensusStatsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CensusStatsModule.CallAttemptsTracerFactory(
             censusStats, tagger.empty(), method.getFullMethodName());
-    ClientStreamTracer streamTracer = callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO);
+    ClientStreamTracer streamTracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
     fakeClock.forwardTime(3000, MILLISECONDS);
     Status status = Status.DEADLINE_EXCEEDED.withDescription("3 seconds");
     streamTracer.streamClosed(status);
@@ -686,7 +690,8 @@ public class CensusModulesTest {
         new CensusStatsModule.CallAttemptsTracerFactory(
             census, clientCtx, method.getFullMethodName());
     // This propagates clientCtx to headers if propagates==true
-    ClientStreamTracer streamTracer = callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO);
+    ClientStreamTracer streamTracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, headers);
     streamTracer.streamCreated(Attributes.EMPTY, headers);
     if (recordStats) {
       // Client upstart record
@@ -778,7 +783,7 @@ public class CensusModulesTest {
         new CensusStatsModule.CallAttemptsTracerFactory(
             censusStats, tagger.empty(), method.getFullMethodName());
     Metadata headers = new Metadata();
-    callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO)
+    callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, headers)
         .streamCreated(Attributes.EMPTY, headers);
     assertFalse(headers.containsKey(censusStats.statsHeader));
     // Clear recorded stats to satisfy the assertions in wrapUp()
@@ -810,7 +815,7 @@ public class CensusModulesTest {
     CensusTracingModule.ClientCallTracer callTracer =
         censusTracing.newClientCallTracer(fakeClientParentSpan, method);
     Metadata headers = new Metadata();
-    ClientStreamTracer streamTracer = callTracer.newClientStreamTracer(STREAM_INFO);
+    ClientStreamTracer streamTracer = callTracer.newClientStreamTracer(STREAM_INFO, headers);
     streamTracer.streamCreated(Attributes.EMPTY, headers);
 
     verify(mockTracingPropagationHandler).toByteArray(same(fakeClientSpanContext));
@@ -839,7 +844,7 @@ public class CensusModulesTest {
         censusTracing.newClientCallTracer(fakeClientParentSpan, method);
     Metadata headers = new Metadata();
 
-    ClientStreamTracer streamTracer = callTracer.newClientStreamTracer(STREAM_INFO);
+    ClientStreamTracer streamTracer = callTracer.newClientStreamTracer(STREAM_INFO, headers);
     streamTracer.streamCreated(Attributes.EMPTY, headers);
 
     assertThat(headers.keys()).isNotEmpty();
@@ -854,7 +859,7 @@ public class CensusModulesTest {
 
     CensusTracingModule.ClientCallTracer callTracer =
         censusTracing.newClientCallTracer(BlankSpan.INSTANCE, method);
-    callTracer.newClientStreamTracer(STREAM_INFO).streamCreated(Attributes.EMPTY, headers);
+    callTracer.newClientStreamTracer(STREAM_INFO, headers).streamCreated(Attributes.EMPTY, headers);
 
     assertThat(headers.keys()).isEmpty();
   }
@@ -871,7 +876,7 @@ public class CensusModulesTest {
 
     CensusTracingModule.ClientCallTracer callTracer =
         censusTracing.newClientCallTracer(BlankSpan.INSTANCE, method);
-    callTracer.newClientStreamTracer(STREAM_INFO).streamCreated(Attributes.EMPTY, headers);
+    callTracer.newClientStreamTracer(STREAM_INFO, headers).streamCreated(Attributes.EMPTY, headers);
 
     assertThat(headers.keys()).containsExactlyElementsIn(originalHeaderKeys);
   }
@@ -1199,8 +1204,10 @@ public class CensusModulesTest {
         new CensusStatsModule.CallAttemptsTracerFactory(
             localCensusStats, tagger.empty(), method.getFullMethodName());
 
-    ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO);
-    tracer.streamCreated(Attributes.EMPTY, new Metadata());
+    Metadata headers = new Metadata();
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, headers);
+    tracer.streamCreated(Attributes.EMPTY, headers);
     fakeClock.forwardTime(30, MILLISECONDS);
     Status status = Status.PERMISSION_DENIED.withDescription("No you don't");
     tracer.streamClosed(status);
