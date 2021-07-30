@@ -19,7 +19,6 @@ package io.grpc.internal;
 import com.google.common.base.MoreObjects;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
-import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.Status;
 
