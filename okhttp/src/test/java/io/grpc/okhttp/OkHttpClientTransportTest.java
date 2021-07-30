@@ -147,11 +147,11 @@ public class OkHttpClientTransportTest {
   private static final int DEFAULT_MAX_INBOUND_METADATA_SIZE = Integer.MAX_VALUE;
   private static final Attributes EAG_ATTRS = Attributes.EMPTY;
   private static final Logger logger = Logger.getLogger(OkHttpClientTransport.class.getName());
-
-  @Rule public final Timeout globalTimeout = Timeout.seconds(10);
-  private final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
+  private static final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
       new ClientStreamTracer() {}
   };
+
+  @Rule public final Timeout globalTimeout = Timeout.seconds(10);
 
   private FrameWriter frameWriter;
 

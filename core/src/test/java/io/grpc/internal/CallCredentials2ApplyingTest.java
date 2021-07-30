@@ -105,9 +105,11 @@ public class CallCredentials2ApplyingTest {
   private static final Metadata.Key<String> CREDS_KEY =
       Metadata.Key.of("test-creds", Metadata.ASCII_STRING_MARSHALLER);
   private static final String CREDS_VALUE = "some credentials";
+  private static final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
+      new ClientStreamTracer() {}
+  };
 
   private final Metadata origHeaders = new Metadata();
-  private final ClientStreamTracer[] tracers = new ClientStreamTracer[1];
   private ForwardingConnectionClientTransport transport;
   private CallOptions callOptions;
 

@@ -49,7 +49,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class GrpcUtilTest {
 
-  private final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
+  private static final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
       new ClientStreamTracer() {}
   };
 

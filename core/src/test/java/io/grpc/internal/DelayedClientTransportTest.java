@@ -91,6 +91,9 @@ public class DelayedClientTransportTest {
       = CallOptions.Key.createWithDefault("shard-id", -1);
   private static final Status SHUTDOWN_STATUS =
       Status.UNAVAILABLE.withDescription("shutdown called");
+  private static final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
+      new ClientStreamTracer() {}
+  };
 
   private final MethodDescriptor<String, Integer> method =
       MethodDescriptor.<String, Integer>newBuilder()
@@ -118,10 +121,6 @@ public class DelayedClientTransportTest {
               throw new AssertionError(e);
             }
           }));
-
-  private final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
-      new ClientStreamTracer() {}
-  };
 
   @Before public void setUp() {
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
