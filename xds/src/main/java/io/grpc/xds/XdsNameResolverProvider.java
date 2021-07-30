@@ -51,10 +51,10 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
     if (SCHEME.equals(targetUri.getScheme())) {
       String targetPath = checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(
-              targetPath.startsWith("/"),
-              "the path component (%s) of the target (%s) must start with '/'",
-              targetPath,
-              targetUri);
+          targetPath.startsWith("/"),
+          "the path component (%s) of the target (%s) must start with '/'",
+          targetPath,
+          targetUri);
       String name = targetPath.substring(1);
       return new XdsNameResolver(name, args.getServiceConfigParser(),
               args.getSynchronizationContext(), args.getScheduledExecutorService(),
