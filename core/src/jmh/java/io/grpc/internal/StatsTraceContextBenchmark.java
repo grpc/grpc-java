@@ -51,7 +51,7 @@ public class StatsTraceContextBenchmark {
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
   public StatsTraceContext newClientContext() {
     return StatsTraceContext.newClientContext(
-        new ClientStreamTracer[1], Attributes.EMPTY, emptyMetadata);
+        new ClientStreamTracer[] { new ClientStreamTracer() {} }, Attributes.EMPTY, emptyMetadata);
   }
 
   /**
