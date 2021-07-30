@@ -757,7 +757,7 @@ public final class GrpcUtil {
   }
 
   /** Gets stream tracers based on CallOptions. */
-  static ClientStreamTracer[] getClientStreamTracers(
+  public static ClientStreamTracer[] getClientStreamTracers(
       CallOptions callOptions, Metadata headers, boolean isTransparentRetry) {
     List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
     ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
