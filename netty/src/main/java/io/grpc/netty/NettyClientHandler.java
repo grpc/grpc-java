@@ -822,6 +822,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     // UNAVAILABLE. https://github.com/netty/netty/issues/10670
     final Status abruptGoAwayStatusConservative = statusFromH2Error(
         null, "Abrupt GOAWAY closed sent stream", errorCode, debugData);
+    final boolean mayBeHittingNettyBug = errorCode != Http2Error.NO_ERROR.code();
     // Try to allocate as many in-flight streams as possible, to reduce race window of
     // https://github.com/grpc/grpc-java/issues/2562 . To be of any help, the server has to
     // gracefully shut down the connection with two GOAWAYs. gRPC servers generally send a PING
@@ -848,11 +849,12 @@ class NettyClientHandler extends AbstractNettyHandler {
             if (clientStream != null) {
               // RpcProgress _should_ be REFUSED, but are being conservative. See comment for
               // abruptGoAwayStatusConservative. This does reduce our ability to perform transparent
-              // retries, but our main goal of transporent retries is to resolve the local race. We
-              // still hope/expect servers to use the graceful double-GOAWAY when closing
-              // connections.
+              // retries, but only if something else caused a connection failure.
+              RpcProgress progress = mayBeHittingNettyBug
+                  ? RpcProgress.PROCESSED
+                  : RpcProgress.REFUSED;
               clientStream.transportReportStatus(
-                  abruptGoAwayStatusConservative, RpcProgress.PROCESSED, false, new Metadata());
+                  abruptGoAwayStatusConservative, progress, false, new Metadata());
             }
             stream.close();
           }
