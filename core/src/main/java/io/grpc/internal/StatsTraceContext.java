@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
-import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.Metadata;
@@ -48,21 +47,12 @@ public final class StatsTraceContext {
    * Factory method for the client-side.
    */
   public static StatsTraceContext newClientContext(
-      final CallOptions callOptions, final Attributes transportAttrs, Metadata headers) {
-    List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
-    if (factories.isEmpty()) {
-      return NOOP;
+      ClientStreamTracer[] tracers, Attributes transportAtts, Metadata headers) {
+    StatsTraceContext ctx = new StatsTraceContext(tracers);
+    for (ClientStreamTracer tracer : tracers) {
+      tracer.streamCreated(transportAtts, headers);
     }
-    ClientStreamTracer.StreamInfo info =
-        ClientStreamTracer.StreamInfo.newBuilder()
-            .setTransportAttrs(transportAttrs).setCallOptions(callOptions).build();
-    // This array will be iterated multiple times per RPC. Use primitive array instead of Collection
-    // so that for-each doesn't create an Iterator every time.
-    StreamTracer[] tracers = new StreamTracer[factories.size()];
-    for (int i = 0; i < tracers.length; i++) {
-      tracers[i] = factories.get(i).newClientStreamTracer(info, headers);
-    }
-    return new StatsTraceContext(tracers);
+    return ctx;
   }
 
   /**

@@ -26,6 +26,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
@@ -86,12 +87,14 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
     @Override
     public ClientStream newStream(MethodDescriptor<?, ?> method,
         CallOptions callOptions, Metadata headers, Context context) {
+      ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
+          callOptions, headers, /* isTransparentRetry= */ false);
       Context origContext = context.attach();
       // delayed transport's newStream() always acquires a lock, but concurrent performance doesn't
       // matter here because OOB communication should be sparse, and it's not on application RPC's
       // critical path.
       try {
-        return delayedTransport.newStream(method, headers, callOptions);
+        return delayedTransport.newStream(method, headers, callOptions, tracers);
       } finally {
         context.detach(origContext);
       }

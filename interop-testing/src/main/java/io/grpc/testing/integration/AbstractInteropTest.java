@@ -289,7 +289,7 @@ public abstract class AbstractInteropTest {
       new LinkedBlockingQueue<>();
 
   private final ClientStreamTracer.Factory clientStreamTracerFactory =
-      new ClientStreamTracer.Factory() {
+      new ClientStreamTracer.InternalLimitedInfoFactory() {
         @Override
         public ClientStreamTracer newClientStreamTracer(
             ClientStreamTracer.StreamInfo info, Metadata headers) {
@@ -375,7 +375,8 @@ public abstract class AbstractInteropTest {
             .getClientInterceptor(
                 tagger, tagContextBinarySerializer, clientStatsRecorder,
                 GrpcUtil.STOPWATCH_SUPPLIER,
-                true, true, true, false /* real-time metrics */);
+                true, true, true,
+                /* recordRealTimeMetrics= */ false);
   }
 
   protected final ServerStreamTracer.Factory createCustomCensusTracerFactory() {
@@ -1179,6 +1180,7 @@ public abstract class AbstractInteropTest {
   public void deadlineExceededServerStreaming() throws Exception {
     // warm up the channel and JVM
     blockingStub.emptyCall(Empty.getDefaultInstance());
+    assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
     ResponseParameters.Builder responseParameters = ResponseParameters.newBuilder()
         .setSize(1)
         .setIntervalUs(10000);
@@ -1195,7 +1197,6 @@ public abstract class AbstractInteropTest {
     recorder.awaitCompletion();
     assertEquals(Status.DEADLINE_EXCEEDED.getCode(),
         Status.fromThrowable(recorder.getError()).getCode());
-    assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
     if (metricsExpected()) {
       // Stream may not have been created when deadline is exceeded, thus we don't check tracer
       // stats.
@@ -1239,6 +1240,12 @@ public abstract class AbstractInteropTest {
 
     // warm up the channel
     blockingStub.emptyCall(Empty.getDefaultInstance());
+    if (metricsExpected()) {
+      // clientStartRecord
+      clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
+      // clientEndRecord
+      clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
+    }
     try {
       blockingStub
           .withDeadlineAfter(-10, TimeUnit.SECONDS)
@@ -1249,7 +1256,6 @@ public abstract class AbstractInteropTest {
       assertThat(ex.getStatus().getDescription())
         .startsWith("ClientCall started after deadline exceeded");
     }
-    assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
     if (metricsExpected()) {
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
       checkStartTags(clientStartRecord, "grpc.testing.TestService/EmptyCall", true);
