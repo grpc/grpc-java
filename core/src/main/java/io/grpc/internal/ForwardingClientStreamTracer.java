@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2021 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,19 @@
  * limitations under the License.
  */
 
-package io.grpc.util;
+package io.grpc.internal;
 
 import com.google.common.base.MoreObjects;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
-import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.Status;
 
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
 public abstract class ForwardingClientStreamTracer extends ClientStreamTracer {
-  /** Returns the underlying {@code ClientStreamTracer}. */
+
+  /**
+   * Returns the underlying {@code ClientStreamTracer}.
+   */
   protected abstract ClientStreamTracer delegate();
 
   @Override

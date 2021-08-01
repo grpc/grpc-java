@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.Metadata;
@@ -46,10 +47,15 @@ public interface ClientTransport extends InternalInstrumented<SocketStats> {
    * @param method the descriptor of the remote method to be called for this stream.
    * @param headers to send at the beginning of the call
    * @param callOptions runtime options of the call
+   * @param tracers a non-empty array of tracers. The last element in it is reserved to be set by
+   *        the load balancer's pick result and otherwise is a no-op tracer.
    * @return the newly created stream.
    */
   // TODO(nmittler): Consider also throwing for stopping.
-  ClientStream newStream(MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions);
+  ClientStream newStream(
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      // Using array for tracers instead of a list or composition for better performance.
+      ClientStreamTracer[] tracers);
 
   /**
    * Pings a remote endpoint. When an acknowledgement is received, the given callback will be

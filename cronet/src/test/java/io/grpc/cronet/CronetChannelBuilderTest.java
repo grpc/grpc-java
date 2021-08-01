@@ -25,6 +25,7 @@ import static org.mockito.Mockito.mock;
 import android.os.Build;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.cronet.CronetChannelBuilder.CronetTransportFactory;
@@ -50,6 +51,8 @@ public final class CronetChannelBuilderTest {
   @Mock private ExperimentalCronetEngine mockEngine;
   @Mock private ChannelLogger channelLogger;
 
+  private final ClientStreamTracer[] tracers =
+      new ClientStreamTracer[]{ new ClientStreamTracer() {} };
   private MethodDescriptor<?, ?> method = TestMethodDescriptors.voidMethod();
 
   @Before
@@ -69,7 +72,8 @@ public final class CronetChannelBuilderTest {
                 new InetSocketAddress("localhost", 443),
                 new ClientTransportOptions(),
                 channelLogger);
-    CronetClientStream stream = transport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    CronetClientStream stream = transport.newStream(
+        method, new Metadata(), CallOptions.DEFAULT, tracers);
 
     assertTrue(stream.idempotent);
   }
@@ -85,7 +89,8 @@ public final class CronetChannelBuilderTest {
                 new InetSocketAddress("localhost", 443),
                 new ClientTransportOptions(),
                 channelLogger);
-    CronetClientStream stream = transport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    CronetClientStream stream = transport.newStream(
+        method, new Metadata(), CallOptions.DEFAULT, tracers);
 
     assertFalse(stream.idempotent);
   }

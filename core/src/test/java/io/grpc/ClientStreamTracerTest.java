@@ -34,6 +34,7 @@ public class ClientStreamTracerTest {
       Attributes.newBuilder().set(TRANSPORT_ATTR_KEY, "value").build();
 
   @Test
+  @SuppressWarnings("deprecation") // info.getTransportAttrs()
   public void streamInfo_empty() {
     StreamInfo info = StreamInfo.newBuilder().build();
     assertThat(info.getCallOptions()).isSameInstanceAs(CallOptions.DEFAULT);
@@ -41,6 +42,7 @@ public class ClientStreamTracerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation") // info.getTransportAttrs()
   public void streamInfo_withInfo() {
     StreamInfo info = StreamInfo.newBuilder()
         .setCallOptions(callOptions).setTransportAttrs(transportAttrs).build();
@@ -49,6 +51,7 @@ public class ClientStreamTracerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation") // info.setTransportAttrs()
   public void streamInfo_noEquality() {
     StreamInfo info1 = StreamInfo.newBuilder()
         .setCallOptions(callOptions).setTransportAttrs(transportAttrs).build();
@@ -60,6 +63,7 @@ public class ClientStreamTracerTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation") // info.getTransportAttrs()
   public void streamInfo_toBuilder() {
     StreamInfo info1 = StreamInfo.newBuilder()
         .setCallOptions(callOptions).setTransportAttrs(transportAttrs).build();
