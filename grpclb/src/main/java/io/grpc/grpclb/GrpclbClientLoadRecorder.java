@@ -37,7 +37,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * span of an LB stream with the remote load-balancer.
  */
 @ThreadSafe
-final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
+final class GrpclbClientLoadRecorder extends ClientStreamTracer.InternalLimitedInfoFactory {
 
   private static final AtomicLongFieldUpdater<GrpclbClientLoadRecorder> callsStartedUpdater =
       AtomicLongFieldUpdater.newUpdater(GrpclbClientLoadRecorder.class, "callsStarted");
