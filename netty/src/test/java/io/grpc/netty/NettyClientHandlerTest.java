@@ -331,9 +331,18 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
-  public void receivedGoAwayShouldRefuseLaterStreamId() throws Exception {
+  public void receivedGoAwayNoErrorShouldRefuseLaterStreamId() throws Exception {
     ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
     channelRead(goAwayFrame(streamId - 1));
+    verify(streamListener).closed(any(Status.class), eq(REFUSED), any(Metadata.class));
+    assertTrue(future.isDone());
+  }
+
+  @Test
+  public void receivedGoAwayErrorShouldRefuseLaterStreamId() throws Exception {
+    ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
+    channelRead(
+        goAwayFrame(streamId - 1, (int) Http2Error.PROTOCOL_ERROR.code(), Unpooled.EMPTY_BUFFER));
     // This _should_ be REFUSED, but we purposefully use PROCESSED. See comment for
     // abruptGoAwayStatusConservative in NettyClientHandler
     verify(streamListener).closed(any(Status.class), eq(PROCESSED), any(Metadata.class));

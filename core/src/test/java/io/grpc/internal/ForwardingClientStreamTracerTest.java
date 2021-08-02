@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2021 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.util;
+package io.grpc.internal;
 
 import static org.mockito.Mockito.mock;
 
@@ -40,7 +40,6 @@ public class ForwardingClientStreamTracerTest {
         Collections.<Method>emptyList());
   }
 
-  @SuppressWarnings("deprecation")
   private final class TestClientStreamTracer extends ForwardingClientStreamTracer {
     @Override
     protected ClientStreamTracer delegate() {

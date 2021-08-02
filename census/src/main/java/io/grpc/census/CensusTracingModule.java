@@ -19,6 +19,7 @@ package io.grpc.census;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -222,7 +223,7 @@ final class CensusTracingModule {
   }
 
   @VisibleForTesting
-  final class ClientCallTracer extends ClientStreamTracer.Factory {
+  final class ClientCallTracer extends ClientStreamTracer.InternalLimitedInfoFactory {
     volatile int callEnded;
 
     private final boolean isSampledToLocalTracing;
@@ -243,11 +244,7 @@ final class CensusTracingModule {
     @Override
     public ClientStreamTracer newClientStreamTracer(
         ClientStreamTracer.StreamInfo info, Metadata headers) {
-      if (span != BlankSpan.INSTANCE) {
-        headers.discardAll(tracingHeader);
-        headers.put(tracingHeader, span.getContext());
-      }
-      return new ClientTracer(span);
+      return new ClientTracer(span, tracingHeader);
     }
 
     /**
@@ -273,9 +270,19 @@ final class CensusTracingModule {
 
   private static final class ClientTracer extends ClientStreamTracer {
     private final Span span;
+    final Metadata.Key<SpanContext> tracingHeader;
 
-    ClientTracer(Span span) {
+    ClientTracer(Span span, Metadata.Key<SpanContext> tracingHeader) {
       this.span = checkNotNull(span, "span");
+      this.tracingHeader = tracingHeader;
+    }
+
+    @Override
+    public void streamCreated(Attributes transportAtts, Metadata headers) {
+      if (span != BlankSpan.INSTANCE) {
+        headers.discardAll(tracingHeader);
+        headers.put(tracingHeader, span.getContext());
+      }
     }
 
     @Override

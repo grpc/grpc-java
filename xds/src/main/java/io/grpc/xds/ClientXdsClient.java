@@ -432,8 +432,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     DownstreamTlsContext.OcspStaplePolicy ocspStaplePolicy = downstreamTlsContext
         .getOcspStaplePolicy();
-    if (ocspStaplePolicy != null
-        && ocspStaplePolicy != DownstreamTlsContext.OcspStaplePolicy.UNRECOGNIZED
+    if (ocspStaplePolicy != DownstreamTlsContext.OcspStaplePolicy.UNRECOGNIZED
         && ocspStaplePolicy != DownstreamTlsContext.OcspStaplePolicy.LENIENT_STAPLING) {
       throw new ResourceInvalidException(
           "downstream-tls-context with ocsp_staple_policy value " + ocspStaplePolicy.name()
@@ -525,12 +524,12 @@ final class ClientXdsClient extends AbstractXdsClient {
                 + " combined_validation_context");
       }
       if (combinedCertificateValidationContext.hasDefaultValidationContext()) {
-        if (server) {
-          throw new ResourceInvalidException(
-              "default_validation_context only allowed in upstream_tls_context");
-        }
         CertificateValidationContext certificateValidationContext
             = combinedCertificateValidationContext.getDefaultValidationContext();
+        if (certificateValidationContext.getMatchSubjectAltNamesCount() > 0 && server) {
+          throw new ResourceInvalidException(
+              "match_subject_alt_names only allowed in upstream_tls_context");
+        }
         if (certificateValidationContext.hasTrustedCa()) {
           throw new ResourceInvalidException(
               "trusted_ca in default_validation_context is not supported");
@@ -561,7 +560,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
         CertificateValidationContext.TrustChainVerification trustChainVerification
             = certificateValidationContext.getTrustChainVerification();
-        if (trustChainVerification != null && trustChainVerification
+        if (trustChainVerification
             != CertificateValidationContext.TrustChainVerification.VERIFY_TRUST_CHAIN) {
           throw new ResourceInvalidException(
               "Only VERIFY_TRUST_CHAIN for trust_chain_verification supported");

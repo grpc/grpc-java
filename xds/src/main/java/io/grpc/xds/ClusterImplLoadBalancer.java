@@ -31,8 +31,8 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.ObjectPool;
-import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
@@ -329,7 +329,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
   }
 
-  private static final class CountingStreamTracerFactory extends ClientStreamTracer.Factory {
+  private static final class CountingStreamTracerFactory extends
+      ClientStreamTracer.InternalLimitedInfoFactory {
     private ClusterLocalityStats stats;
     private final AtomicLong inFlights;
     @Nullable

@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -139,15 +140,6 @@ final class CensusStatsModule {
   }
 
   /**
-   * Creates a {@link ClientCallTracer} for a new call.
-   */
-  @VisibleForTesting
-  ClientCallTracer newClientCallTracer(
-      TagContext parentCtx, String fullMethodName) {
-    return new ClientCallTracer(this, parentCtx, fullMethodName);
-  }
-
-  /**
    * Returns the server tracer factory.
    */
   ServerStreamTracer.Factory getServerTracerFactory() {
@@ -231,6 +223,7 @@ final class CensusStatsModule {
     }
 
     private final CensusStatsModule module;
+    final TagContext parentCtx;
     private final TagContext startCtx;
 
     volatile long outboundMessageCount;
@@ -240,9 +233,20 @@ final class CensusStatsModule {
     volatile long outboundUncompressedSize;
     volatile long inboundUncompressedSize;
 
-    ClientTracer(CensusStatsModule module, TagContext startCtx) {
+    ClientTracer(CensusStatsModule module, TagContext parentCtx, TagContext startCtx) {
       this.module = checkNotNull(module, "module");
+      this.parentCtx = parentCtx;
       this.startCtx = checkNotNull(startCtx, "startCtx");
+    }
+
+    @Override
+    public void streamCreated(Attributes transportAttrs, Metadata headers) {
+      if (module.propagateTags) {
+        headers.discardAll(module.statsHeader);
+        if (!module.tagger.empty().equals(parentCtx)) {
+          headers.put(module.statsHeader, parentCtx);
+        }
+      }
     }
 
     @Override
@@ -315,12 +319,14 @@ final class CensusStatsModule {
   }
 
   @VisibleForTesting
-  static final class ClientCallTracer extends ClientStreamTracer.Factory {
+  static final class CallAttemptsTracerFactory extends
+      ClientStreamTracer.InternalLimitedInfoFactory {
     @Nullable
-    private static final AtomicReferenceFieldUpdater<ClientCallTracer, ClientTracer>
+    private static final AtomicReferenceFieldUpdater<CallAttemptsTracerFactory, ClientTracer>
         streamTracerUpdater;
 
-    @Nullable private static final AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater;
+    @Nullable
+    private static final AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> callEndedUpdater;
 
     /**
      * When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in their
@@ -328,14 +334,14 @@ final class CensusStatsModule {
      * (potentially racy) direct updates of the volatile variables.
      */
     static {
-      AtomicReferenceFieldUpdater<ClientCallTracer, ClientTracer> tmpStreamTracerUpdater;
-      AtomicIntegerFieldUpdater<ClientCallTracer> tmpCallEndedUpdater;
+      AtomicReferenceFieldUpdater<CallAttemptsTracerFactory, ClientTracer> tmpStreamTracerUpdater;
+      AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> tmpCallEndedUpdater;
       try {
         tmpStreamTracerUpdater =
             AtomicReferenceFieldUpdater.newUpdater(
-                ClientCallTracer.class, ClientTracer.class, "streamTracer");
+                CallAttemptsTracerFactory.class, ClientTracer.class, "streamTracer");
         tmpCallEndedUpdater =
-            AtomicIntegerFieldUpdater.newUpdater(ClientCallTracer.class, "callEnded");
+            AtomicIntegerFieldUpdater.newUpdater(CallAttemptsTracerFactory.class, "callEnded");
       } catch (Throwable t) {
         logger.log(Level.SEVERE, "Creating atomic field updaters failed", t);
         tmpStreamTracerUpdater = null;
@@ -352,7 +358,8 @@ final class CensusStatsModule {
     private final TagContext parentCtx;
     private final TagContext startCtx;
 
-    ClientCallTracer(CensusStatsModule module, TagContext parentCtx, String fullMethodName) {
+    CallAttemptsTracerFactory(
+        CensusStatsModule module, TagContext parentCtx, String fullMethodName) {
       this.module = checkNotNull(module);
       this.parentCtx = checkNotNull(parentCtx);
       TagValue methodTag = TagValue.create(fullMethodName);
@@ -370,7 +377,7 @@ final class CensusStatsModule {
     @Override
     public ClientStreamTracer newClientStreamTracer(
         ClientStreamTracer.StreamInfo info, Metadata headers) {
-      ClientTracer tracer = new ClientTracer(module, startCtx);
+      ClientTracer tracer = new ClientTracer(module, parentCtx, startCtx);
       // TODO(zhangkun83): Once retry or hedging is implemented, a ClientCall may start more than
       // one streams.  We will need to update this file to support them.
       if (streamTracerUpdater != null) {
@@ -382,12 +389,6 @@ final class CensusStatsModule {
             streamTracer == null,
             "Are you creating multiple streams per call? This class doesn't yet support this case");
         streamTracer = tracer;
-      }
-      if (module.propagateTags) {
-        headers.discardAll(module.statsHeader);
-        if (!module.tagger.empty().equals(parentCtx)) {
-          headers.put(module.statsHeader, parentCtx);
-        }
       }
       return tracer;
     }
@@ -416,7 +417,7 @@ final class CensusStatsModule {
       long roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       ClientTracer tracer = streamTracer;
       if (tracer == null) {
-        tracer = new ClientTracer(module, startCtx);
+        tracer = new ClientTracer(module, parentCtx, startCtx);
       }
       MeasureMap measureMap = module.statsRecorder.newMeasureMap()
           // TODO(songya): remove the deprecated measure constants once they are completed removed.
@@ -686,8 +687,8 @@ final class CensusStatsModule {
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
       // New RPCs on client-side inherit the tag context from the current Context.
       TagContext parentCtx = tagger.getCurrentTagContext();
-      final ClientCallTracer tracerFactory =
-          newClientCallTracer(parentCtx, method.getFullMethodName());
+      final CallAttemptsTracerFactory tracerFactory = new CallAttemptsTracerFactory(
+          CensusStatsModule.this, parentCtx, method.getFullMethodName());
       ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {

@@ -21,6 +21,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
@@ -33,13 +34,16 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class FailingClientStreamTest {
+  private static final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
+      new ClientStreamTracer() {}
+  };
 
   @Test
   public void processedRpcProgressPopulatedToListener() {
     ClientStreamListener listener = mock(ClientStreamListener.class);
     Status status = Status.UNAVAILABLE;
 
-    ClientStream stream = new FailingClientStream(status);
+    ClientStream stream = new FailingClientStream(status, RpcProgress.PROCESSED, tracers);
     stream.start(listener);
     verify(listener).closed(eq(status), eq(RpcProgress.PROCESSED), any(Metadata.class));
   }
@@ -49,7 +53,7 @@ public class FailingClientStreamTest {
     ClientStreamListener listener = mock(ClientStreamListener.class);
     Status status = Status.UNAVAILABLE;
 
-    ClientStream stream = new FailingClientStream(status, RpcProgress.DROPPED);
+    ClientStream stream = new FailingClientStream(status, RpcProgress.DROPPED, tracers);
     stream.start(listener);
     verify(listener).closed(eq(status), eq(RpcProgress.DROPPED), any(Metadata.class));
   }

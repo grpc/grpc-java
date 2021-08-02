@@ -22,6 +22,7 @@ import com.google.common.base.Objects;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
+import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.GrpcAttributes;
 import javax.annotation.Nullable;
 
@@ -29,7 +30,7 @@ import javax.annotation.Nullable;
  * Wraps a {@link ClientStreamTracer.Factory}, retrieves tokens from transport attributes and
  * attaches them to headers.  This is only used in the PICK_FIRST mode.
  */
-final class TokenAttachingTracerFactory extends ClientStreamTracer.Factory {
+final class TokenAttachingTracerFactory extends ClientStreamTracer.InternalLimitedInfoFactory {
   private static final ClientStreamTracer NOOP_TRACER = new ClientStreamTracer() {};
 
   @Nullable
@@ -42,19 +43,30 @@ final class TokenAttachingTracerFactory extends ClientStreamTracer.Factory {
   @Override
   public ClientStreamTracer newClientStreamTracer(
       ClientStreamTracer.StreamInfo info, Metadata headers) {
-    Attributes transportAttrs = checkNotNull(info.getTransportAttrs(), "transportAttrs");
-    Attributes eagAttrs =
-        checkNotNull(transportAttrs.get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS), "eagAttrs");
-    String token = eagAttrs.get(GrpclbConstants.TOKEN_ATTRIBUTE_KEY);
-    headers.discardAll(GrpclbConstants.TOKEN_METADATA_KEY);
-    if (token != null) {
-      headers.put(GrpclbConstants.TOKEN_METADATA_KEY, token);
-    }
-    if (delegate != null) {
-      return delegate.newClientStreamTracer(info, headers);
-    } else {
+    if (delegate == null) {
       return NOOP_TRACER;
     }
+    final ClientStreamTracer clientStreamTracer = delegate.newClientStreamTracer(info, headers);
+    class TokenPropagationTracer extends ForwardingClientStreamTracer {
+      @Override
+      protected ClientStreamTracer delegate() {
+        return clientStreamTracer;
+      }
+
+      @Override
+      public void streamCreated(Attributes transportAttrs, Metadata headers) {
+        Attributes eagAttrs =
+            checkNotNull(transportAttrs.get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS), "eagAttrs");
+        String token = eagAttrs.get(GrpclbConstants.TOKEN_ATTRIBUTE_KEY);
+        headers.discardAll(GrpclbConstants.TOKEN_METADATA_KEY);
+        if (token != null) {
+          headers.put(GrpclbConstants.TOKEN_METADATA_KEY, token);
+        }
+        delegate().streamCreated(transportAttrs, headers);
+      }
+    }
+
+    return new TokenPropagationTracer();
   }
 
   @Override
