@@ -91,6 +91,4 @@ tasks.withType(JavaCompile) {
     options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
 }
 
-tasks.build.dependsOn assembleAndroidTest
-
 [publishMavenPublicationToMavenRepository]*.onlyIf { false }
