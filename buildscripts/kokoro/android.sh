@@ -30,7 +30,6 @@ buildscripts/make_dependencies.sh
 ./gradlew \
     :grpc-android-interop-testing:build \
     :grpc-android:build \
-    :grpc-binder:build \
     :grpc-cronet:build \
     publishToMavenLocal
 
