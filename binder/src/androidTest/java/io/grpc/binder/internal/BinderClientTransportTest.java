@@ -30,6 +30,7 @@ import com.google.common.util.concurrent.testing.TestingExecutors;
 import com.google.protobuf.Empty;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -68,6 +69,10 @@ import org.junit.runner.RunWith;
  */
 @RunWith(AndroidJUnit4.class)
 public final class BinderClientTransportTest {
+  private static final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
+      new ClientStreamTracer() {}
+  };
+
   private final Context appContext = ApplicationProvider.getApplicationContext();
 
   MethodDescriptor.Marshaller<Empty> marshaller =
@@ -155,7 +160,8 @@ public final class BinderClientTransportTest {
 
   @Test
   public void testShutdownBeforeStreamStart_b153326034() throws Exception {
-    ClientStream stream = transport.newStream(methodDesc, new Metadata(), CallOptions.DEFAULT);
+    ClientStream stream = transport.newStream(
+        methodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
     transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
 
     // This shouldn't throw an exception.
@@ -165,7 +171,7 @@ public final class BinderClientTransportTest {
   @Test
   public void testRequestWhileStreamIsWaitingOnCall_b154088869() throws Exception {
     ClientStream stream =
-        transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT);
+        transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
 
     stream.start(streamListener);
     stream.writeMessage(marshaller.stream(Empty.getDefaultInstance()));
@@ -183,7 +189,7 @@ public final class BinderClientTransportTest {
   @Test
   public void testTransactionForDiscardedCall_b155244043() throws Exception {
     ClientStream stream =
-        transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT);
+        transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
 
     stream.start(streamListener);
     stream.writeMessage(marshaller.stream(Empty.getDefaultInstance()));
@@ -201,7 +207,7 @@ public final class BinderClientTransportTest {
   @Test
   public void testBadTransactionStreamThroughput_b163053382() throws Exception {
     ClientStream stream =
-        transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT);
+        transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
 
     stream.start(streamListener);
     stream.writeMessage(marshaller.stream(Empty.getDefaultInstance()));
@@ -220,7 +226,7 @@ public final class BinderClientTransportTest {
   @Test
   public void testMessageProducerClosedAfterStream_b169313545() {
     ClientStream stream =
-        transport.newStream(methodDesc, new Metadata(), CallOptions.DEFAULT);
+        transport.newStream(methodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
 
     stream.start(streamListener);
     stream.writeMessage(marshaller.stream(Empty.getDefaultInstance()));
