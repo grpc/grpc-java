@@ -108,7 +108,6 @@ final class XdsServerWrapper extends Server {
         internalStart();
       }
     });
-    syncContext.drain();
     IOException exception;
     try {
       exception = initialStartFuture.get();
@@ -354,8 +353,10 @@ final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
-          logger.log(Level.FINE, "Transient error from XdsClient: {0}", error);
-          if (isPermanentError(error)) {
+          boolean isPermanentError = isPermanentError(error);
+          logger.log(Level.FINE, "{0} error from XdsClient: {1}",
+                  new Object[]{isPermanentError ? "Permanent" : "Transient", error});
+          if (isPermanentError) {
             handleConfigNotFound(null);
           }
           if (!isServing) {
