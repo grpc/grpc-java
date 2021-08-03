@@ -125,14 +125,22 @@ public final class XdsClientWrapperForServerSds {
             }
           }
         };
+    newServerApi = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
+    if (!newServerApi) {
+      reportError(
+          new XdsInitializationException(
+              "requires use of xds_v3 in xds bootstrap"),
+          true);
+      return;
+    }
     grpcServerResourceId = xdsClient.getBootstrapInfo()
         .getServerListenerResourceNameTemplate();
-    newServerApi = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
-    if (newServerApi && grpcServerResourceId == null) {
+    if (grpcServerResourceId == null) {
       reportError(
           new XdsInitializationException(
               "missing server_listener_resource_name_template value in xds bootstrap"),
           true);
+      return;
     }
     grpcServerResourceId = grpcServerResourceId.replaceAll("%s", "0.0.0.0:" + port);
     xdsClient.watchLdsResource(grpcServerResourceId, listenerWatcher);
