@@ -852,24 +852,26 @@ abstract class RetriableStream<ReqT> implements ClientStream {
               synchronized (lock) {
                 scheduledRetry = scheduledRetryCopy = new FutureCanceller(lock);
               }
-              scheduledRetryCopy.setFuture(
-                  scheduledExecutorService.schedule(
+              class RetryBackoffRunnable implements Runnable {
+                @Override
+                public void run() {
+                  callExecutor.execute(
                       new Runnable() {
                         @Override
                         public void run() {
-                          callExecutor.execute(
-                              new Runnable() {
-                                @Override
-                                public void run() {
-                                  // retry
-                                  Substream newSubstream = createSubstream(
-                                      substream.previousAttemptCount + 1,
-                                      false);
-                                  drain(newSubstream);
-                                }
-                              });
+                          // retry
+                          Substream newSubstream = createSubstream(
+                              substream.previousAttemptCount + 1,
+                              false);
+                          drain(newSubstream);
                         }
-                      },
+                      });
+                }
+              }
+
+              scheduledRetryCopy.setFuture(
+                  scheduledExecutorService.schedule(
+                      new RetryBackoffRunnable(),
                       retryPlan.backoffNanos,
                       TimeUnit.NANOSECONDS));
               return;

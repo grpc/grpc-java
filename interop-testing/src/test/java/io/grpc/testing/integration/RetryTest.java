@@ -22,6 +22,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.collect.ImmutableMap;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.IntegerMarshaller;
@@ -37,6 +38,7 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.internal.FakeClock;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.testing.GrpcCleanupRule;
@@ -45,9 +47,11 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
+import io.netty.util.concurrent.ScheduledFuture;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.Rule;
@@ -65,53 +69,79 @@ public class RetryTest {
   public final MockitoRule mocks = MockitoJUnit.rule();
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  private final FakeClock fakeClock = new FakeClock();
   @Mock
   private ClientCall.Listener<Integer> mockCallListener;
+  private CountDownLatch backoffLatch = new CountDownLatch(1);
+  private final EventLoopGroup group = new DefaultEventLoopGroup() {
+    @SuppressWarnings("FutureReturnValueIgnored")
+    @Override
+    public ScheduledFuture<?> schedule(
+        final Runnable command, final long delay, final TimeUnit unit) {
+      if (!command.getClass().getName().contains("RetryBackoffRunnable")) {
+        return super.schedule(command, delay, unit);
+      }
+      fakeClock.getScheduledExecutorService().schedule(
+          new Runnable() {
+            @Override
+            public void run() {
+              group.execute(command);
+            }
+          },
+          delay,
+          unit);
+      backoffLatch.countDown();
+      return super.schedule(
+          new Runnable() {
+            @Override
+            public void run() {} // no-op
+          },
+          0,
+          TimeUnit.NANOSECONDS);
+    }
+  };
 
-  @Test
-  public void retryUntilBufferLimitExceeded() throws Exception {
-    String message = "String of length 20.";
-    int bufferLimit = message.length() * 2 - 1; // Can buffer no more than 1 message.
-
-    MethodDescriptor<String, Integer> clientStreamingMethod =
-        MethodDescriptor.<String, Integer>newBuilder()
-            .setType(MethodType.CLIENT_STREAMING)
-            .setFullMethodName("service/method")
-            .setRequestMarshaller(new StringMarshaller())
-            .setResponseMarshaller(new IntegerMarshaller())
-            .build();
-    final LinkedBlockingQueue<ServerCall<String, Integer>> serverCalls =
-        new LinkedBlockingQueue<>();
-    ServerMethodDefinition<String, Integer> methodDefinition = ServerMethodDefinition.create(
-        clientStreamingMethod,
-        new ServerCallHandler<String, Integer>() {
-          @Override
-          public Listener<String> startCall(ServerCall<String, Integer> call, Metadata headers) {
-            serverCalls.offer(call);
-            return new Listener<String>() {};
+  private final MethodDescriptor<String, Integer> clientStreamingMethod =
+      MethodDescriptor.<String, Integer>newBuilder()
+          .setType(MethodType.CLIENT_STREAMING)
+          .setFullMethodName("service/method")
+          .setRequestMarshaller(new StringMarshaller())
+          .setResponseMarshaller(new IntegerMarshaller())
+          .build();
+  private final LinkedBlockingQueue<ServerCall<String, Integer>> serverCalls =
+      new LinkedBlockingQueue<>();
+  private final ServerMethodDefinition<String, Integer> methodDefinition =
+      ServerMethodDefinition.create(
+          clientStreamingMethod,
+          new ServerCallHandler<String, Integer>() {
+            @Override
+            public Listener<String> startCall(ServerCall<String, Integer> call, Metadata headers) {
+              serverCalls.offer(call);
+              return new Listener<String>() {};
+            }
           }
-        }
-    );
-    ServerServiceDefinition serviceDefinition =
-        ServerServiceDefinition.builder(clientStreamingMethod.getServiceName())
-            .addMethod(methodDefinition)
-            .build();
-    EventLoopGroup group = new DefaultEventLoopGroup();
-    LocalAddress localAddress = new LocalAddress("RetryTest.retryUntilBufferLimitExceeded");
-    Server localServer = cleanupRule.register(NettyServerBuilder.forAddress(localAddress)
+  );
+  private final ServerServiceDefinition serviceDefinition =
+      ServerServiceDefinition.builder(clientStreamingMethod.getServiceName())
+          .addMethod(methodDefinition)
+          .build();
+  private final LocalAddress localAddress = new LocalAddress(this.getClass().getName());
+  private Server localServer;
+  private ManagedChannel channel;
+  private Map<String, Object> retryPolicy = ImmutableMap.of();
+  private long bufferLimit = 1L << 20; // 1M
+
+  private void startNewServer() throws Exception {
+    localServer = cleanupRule.register(NettyServerBuilder.forAddress(localAddress)
         .channelType(LocalServerChannel.class)
         .bossEventLoopGroup(group)
         .workerEventLoopGroup(group)
         .addService(serviceDefinition)
         .build());
     localServer.start();
+  }
 
-    Map<String, Object> retryPolicy = new HashMap<>();
-    retryPolicy.put("maxAttempts", 4D);
-    retryPolicy.put("initialBackoff", "10s");
-    retryPolicy.put("maxBackoff", "10s");
-    retryPolicy.put("backoffMultiplier", 1D);
-    retryPolicy.put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"));
+  private void createNewChannel() {
     Map<String, Object> methodConfig = new HashMap<>();
     Map<String, Object> name = new HashMap<>();
     name.put("service", "service");
@@ -119,7 +149,7 @@ public class RetryTest {
     methodConfig.put("retryPolicy", retryPolicy);
     Map<String, Object> rawServiceConfig = new HashMap<>();
     rawServiceConfig.put("methodConfig", Arrays.<Object>asList(methodConfig));
-    ManagedChannel channel = cleanupRule.register(
+    channel = cleanupRule.register(
         NettyChannelBuilder.forAddress(localAddress)
             .channelType(LocalChannel.class)
             .eventLoopGroup(group)
@@ -128,6 +158,28 @@ public class RetryTest {
             .perRpcBufferLimit(bufferLimit)
             .defaultServiceConfig(rawServiceConfig)
             .build());
+  }
+
+  private void elapseBackoff(long time, TimeUnit unit) throws Exception {
+    assertThat(backoffLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    backoffLatch = new CountDownLatch(1);
+    fakeClock.forwardTime(time, unit);
+  }
+
+  @Test
+  public void retryUntilBufferLimitExceeded() throws Exception {
+    String message = "String of length 20.";
+
+    startNewServer();
+    bufferLimit = message.length() * 2L - 1; // Can buffer no more than 1 message.
+    retryPolicy = ImmutableMap.<String, Object>builder()
+        .put("maxAttempts", 4D)
+        .put("initialBackoff", "10s")
+        .put("maxBackoff", "10s")
+        .put("backoffMultiplier", 1D)
+        .put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"))
+        .build();
+    createNewChannel();
     ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, CallOptions.DEFAULT);
     call.start(mockCallListener, new Metadata());
     call.sendMessage(message);
@@ -135,13 +187,10 @@ public class RetryTest {
     ServerCall<String, Integer> serverCall = serverCalls.poll(5, TimeUnit.SECONDS);
     serverCall.request(2);
     // trigger retry
-    Metadata pushBackMetadata = new Metadata();
-    pushBackMetadata.put(
-        Metadata.Key.of("grpc-retry-pushback-ms", Metadata.ASCII_STRING_MARSHALLER),
-        "0");   // retry immediately
     serverCall.close(
         Status.UNAVAILABLE.withDescription("original attempt failed"),
-        pushBackMetadata);
+        new Metadata());
+    elapseBackoff(10, TimeUnit.SECONDS);
     // 2nd attempt received
     serverCall = serverCalls.poll(5, TimeUnit.SECONDS);
     serverCall.request(2);
