@@ -44,7 +44,7 @@ class XdsServerTestHelper {
   static final Bootstrapper.BootstrapInfo BOOTSTRAP_INFO =
       new Bootstrapper.BootstrapInfo(
           Arrays.asList(
-              new Bootstrapper.ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), false)),
+              new Bootstrapper.ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), true)),
           BOOTSTRAP_NODE,
           null,
           "grpc/server?udpa.resource.listening_address=%s");
