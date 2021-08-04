@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import static com.google.common.truth.Truth.assertThat;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
@@ -25,6 +26,7 @@ import static org.mockito.Mockito.verify;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
 import io.grpc.IntegerMarshaller;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
@@ -38,7 +40,13 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
+import io.grpc.census.InternalCensusStatsAccessor;
+import io.grpc.census.internal.DeprecatedCensusConstants;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
+import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
+import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
+import io.grpc.internal.testing.StatsTestUtils.MetricsRecord;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.testing.GrpcCleanupRule;
@@ -48,6 +56,11 @@ import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.util.concurrent.ScheduledFuture;
+import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
+import io.opencensus.stats.Measure;
+import io.opencensus.stats.Measure.MeasureDouble;
+import io.opencensus.stats.Measure.MeasureLong;
+import io.opencensus.tags.TagValue;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -65,6 +78,19 @@ import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class RetryTest {
+  private static final FakeTagger tagger = new FakeTagger();
+  private static final FakeTagContextBinarySerializer tagContextBinarySerializer =
+      new FakeTagContextBinarySerializer();
+  private static final MeasureLong RETRIES_PER_CALL =
+      Measure.MeasureLong.create(
+          "grpc.io/client/retries_per_call", "Number of retries per call", "1");
+  private static final MeasureLong TRANSPARENT_RETRIES_PER_CALL =
+      Measure.MeasureLong.create(
+          "grpc.io/client/transparent_retries_per_call", "Transparent retries per call", "1");
+  private static final MeasureDouble RETRY_DELAY_PER_CALL =
+      Measure.MeasureDouble.create(
+          "grpc.io/client/retry_delay_per_call", "Retry delay per call", "ms");
+
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
   @Rule
@@ -100,7 +126,13 @@ public class RetryTest {
           TimeUnit.NANOSECONDS);
     }
   };
-
+  private final FakeStatsRecorder clientStatsRecorder = new FakeStatsRecorder();
+  private final ClientInterceptor statsInterceptor =
+      InternalCensusStatsAccessor.getClientInterceptor(
+          tagger, tagContextBinarySerializer, clientStatsRecorder,
+          fakeClock.getStopwatchSupplier(), true, true, true,
+          /* recordRealTimeMetrics= */ true,
+          /* retryEnabled= */ true);
   private final MethodDescriptor<String, Integer> clientStreamingMethod =
       MethodDescriptor.<String, Integer>newBuilder()
           .setType(MethodType.CLIENT_STREAMING)
@@ -157,13 +189,71 @@ public class RetryTest {
             .enableRetry()
             .perRpcBufferLimit(bufferLimit)
             .defaultServiceConfig(rawServiceConfig)
+            .intercept(statsInterceptor)
             .build());
   }
 
   private void elapseBackoff(long time, TimeUnit unit) throws Exception {
-    assertThat(backoffLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(backoffLatch.await(5, SECONDS)).isTrue();
     backoffLatch = new CountDownLatch(1);
     fakeClock.forwardTime(time, unit);
+  }
+
+  private void assertRpcStartedRecorded() throws Exception {
+    MetricsRecord record = clientStatsRecorder.pollRecord(5, SECONDS);
+    assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_STARTED_COUNT))
+        .isEqualTo(1);
+  }
+
+  private void assertOutboundMessageRecorded() throws Exception {
+    MetricsRecord record = clientStatsRecorder.pollRecord(5, SECONDS);
+    assertThat(
+            record.getMetricAsLongOrFail(
+                RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_METHOD))
+        .isEqualTo(1);
+  }
+
+  private void assertInboundMessageRecorded() throws Exception {
+    MetricsRecord record = clientStatsRecorder.pollRecord(5, SECONDS);
+    assertThat(
+            record.getMetricAsLongOrFail(
+                RpcMeasureConstants.GRPC_CLIENT_RECEIVED_MESSAGES_PER_METHOD))
+        .isEqualTo(1);
+  }
+
+  private void assertOutboundWireSizeRecorded(long length) throws Exception {
+    MetricsRecord record = clientStatsRecorder.pollRecord(5, SECONDS);
+    assertThat(record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_METHOD))
+        .isEqualTo(length);
+  }
+
+  private void assertInboundWireSizeRecorded(long length) throws Exception {
+    MetricsRecord record = clientStatsRecorder.pollRecord(5, SECONDS);
+    assertThat(
+            record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_METHOD))
+        .isEqualTo(length);
+  }
+
+  private void assertRpcStatusRecorded(
+      Status.Code code, long roundtripLatencyMs, long outboundMessages) throws Exception {
+    MetricsRecord record = clientStatsRecorder.pollRecord(5, SECONDS);
+    TagValue statusTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_STATUS);
+    assertThat(statusTag.asString()).isEqualTo(code.toString());
+    assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT))
+        .isEqualTo(1);
+    assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_ROUNDTRIP_LATENCY))
+        .isEqualTo(roundtripLatencyMs);
+    assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_COUNT))
+        .isEqualTo(outboundMessages);
+  }
+
+  private void assertRetryStatsRecorded(
+      int numRetries, int numTransparentRetries, long retryDelayMs) throws Exception {
+    MetricsRecord record = clientStatsRecorder.pollRecord(5, SECONDS);
+    assertThat(record.getMetricAsLongOrFail(RETRIES_PER_CALL)).isEqualTo(numRetries);
+    assertThat(record.getMetricAsLongOrFail(TRANSPARENT_RETRIES_PER_CALL))
+        .isEqualTo(numTransparentRetries);
+    assertThat(record.getMetricAsLongOrFail(RETRY_DELAY_PER_CALL)).isEqualTo(retryDelayMs);
   }
 
   @Test
@@ -184,15 +274,15 @@ public class RetryTest {
     call.start(mockCallListener, new Metadata());
     call.sendMessage(message);
 
-    ServerCall<String, Integer> serverCall = serverCalls.poll(5, TimeUnit.SECONDS);
+    ServerCall<String, Integer> serverCall = serverCalls.poll(5, SECONDS);
     serverCall.request(2);
     // trigger retry
     serverCall.close(
         Status.UNAVAILABLE.withDescription("original attempt failed"),
         new Metadata());
-    elapseBackoff(10, TimeUnit.SECONDS);
+    elapseBackoff(10, SECONDS);
     // 2nd attempt received
-    serverCall = serverCalls.poll(5, TimeUnit.SECONDS);
+    serverCall = serverCalls.poll(5, SECONDS);
     serverCall.request(2);
     verify(mockCallListener, never()).onClose(any(Status.class), any(Metadata.class));
     // send one more message, should exceed buffer limit
@@ -205,5 +295,55 @@ public class RetryTest {
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
     verify(mockCallListener, timeout(5000)).onClose(statusCaptor.capture(), any(Metadata.class));
     assertThat(statusCaptor.getValue().getDescription()).contains("2nd attempt failed");
+  }
+
+  @Test
+  public void statsRecorded() throws Exception {
+    startNewServer();
+    retryPolicy = ImmutableMap.<String, Object>builder()
+        .put("maxAttempts", 4D)
+        .put("initialBackoff", "10s")
+        .put("maxBackoff", "10s")
+        .put("backoffMultiplier", 1D)
+        .put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"))
+        .build();
+    createNewChannel();
+
+    ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+    assertRpcStartedRecorded();
+    String message = "String of length 20.";
+    call.sendMessage(message);
+    assertOutboundMessageRecorded();
+    ServerCall<String, Integer> serverCall = serverCalls.poll(5, SECONDS);
+    serverCall.request(2);
+    assertOutboundWireSizeRecorded(message.length());
+    // original attempt latency
+    fakeClock.forwardTime(1, SECONDS);
+    // trigger retry
+    serverCall.close(
+        Status.UNAVAILABLE.withDescription("original attempt failed"),
+        new Metadata());
+    assertRpcStatusRecorded(Status.Code.UNAVAILABLE, 1000, 1);
+    elapseBackoff(10, SECONDS);
+    assertRpcStartedRecorded();
+    assertOutboundMessageRecorded();
+    serverCall = serverCalls.poll(5, SECONDS);
+    serverCall.request(2);
+    assertOutboundWireSizeRecorded(message.length());
+    message = "new message";
+    call.sendMessage(message);
+    assertOutboundMessageRecorded();
+    assertOutboundWireSizeRecorded(message.length());
+    // retry attempt latency
+    fakeClock.forwardTime(2, SECONDS);
+    serverCall.sendHeaders(new Metadata());
+    serverCall.sendMessage(3);
+    call.request(1);
+    assertInboundMessageRecorded();
+    assertInboundWireSizeRecorded(1);
+    serverCall.close(Status.OK, new Metadata());
+    assertRpcStatusRecorded(Status.Code.OK, 2000, 2);
+    assertRetryStatsRecorded(1, 0, 10_000);
   }
 }
