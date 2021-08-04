@@ -27,6 +27,10 @@ import com.google.common.collect.ImmutableMap;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.Deadline;
+import io.grpc.Deadline.Ticker;
 import io.grpc.IntegerMarshaller;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
@@ -39,6 +43,7 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
 import io.grpc.census.InternalCensusStatsAccessor;
 import io.grpc.census.internal.DeprecatedCensusConstants;
@@ -160,7 +165,7 @@ public class RetryTest {
   private final LocalAddress localAddress = new LocalAddress(this.getClass().getName());
   private Server localServer;
   private ManagedChannel channel;
-  private Map<String, Object> retryPolicy = ImmutableMap.of();
+  private Map<String, Object> retryPolicy = null;
   private long bufferLimit = 1L << 20; // 1M
 
   private void startNewServer() throws Exception {
@@ -178,7 +183,9 @@ public class RetryTest {
     Map<String, Object> name = new HashMap<>();
     name.put("service", "service");
     methodConfig.put("name", Arrays.<Object>asList(name));
-    methodConfig.put("retryPolicy", retryPolicy);
+    if (retryPolicy != null) {
+      methodConfig.put("retryPolicy", retryPolicy);
+    }
     Map<String, Object> rawServiceConfig = new HashMap<>();
     rawServiceConfig.put("methodConfig", Arrays.<Object>asList(methodConfig));
     channel = cleanupRule.register(
@@ -345,5 +352,44 @@ public class RetryTest {
     serverCall.close(Status.OK, new Metadata());
     assertRpcStatusRecorded(Status.Code.OK, 2000, 2);
     assertRetryStatsRecorded(1, 0, 10_000);
+  }
+
+  @Test
+  public void serverCancelledAndClientDeadlineExceeded() throws Exception {
+    startNewServer();
+    createNewChannel();
+
+    class CloseDelayedTracer extends ClientStreamTracer {
+      @Override
+      public void streamClosed(Status status) {
+        fakeClock.forwardTime(10, SECONDS);
+      }
+    }
+
+    class CloseDelayedTracerFactory extends ClientStreamTracer.InternalLimitedInfoFactory {
+      @Override
+      public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+        return new CloseDelayedTracer();
+      }
+    }
+
+    CallOptions callOptions = CallOptions.DEFAULT
+        .withDeadline(Deadline.after(
+            10,
+            SECONDS,
+            new Ticker() {
+              @Override
+              public long nanoTime() {
+                return fakeClock.getTicker().read();
+              }
+            }))
+        .withStreamTracerFactory(new CloseDelayedTracerFactory());
+    ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, callOptions);
+    call.start(mockCallListener, new Metadata());
+    assertRpcStartedRecorded();
+    ServerCall<String, Integer> serverCall = serverCalls.poll(5, SECONDS);
+    serverCall.close(Status.CANCELLED, new Metadata());
+    assertRpcStatusRecorded(Code.DEADLINE_EXCEEDED, 10_000, 0);
+    assertRetryStatsRecorded(0, 0, 0);
   }
 }
