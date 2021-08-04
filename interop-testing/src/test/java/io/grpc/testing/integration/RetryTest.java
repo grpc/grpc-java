@@ -24,6 +24,7 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableMap;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
@@ -72,6 +73,8 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -391,5 +394,58 @@ public class RetryTest {
     serverCall.close(Status.CANCELLED, new Metadata());
     assertRpcStatusRecorded(Code.DEADLINE_EXCEEDED, 10_000, 0);
     assertRetryStatsRecorded(0, 0, 0);
+  }
+
+  @Ignore("flaky because old transportReportStatus() is not completely migrated yet")
+  @Test
+  public void transparentRetryStatsRecorded() throws Exception {
+    startNewServer();
+    createNewChannel();
+
+    final AtomicBoolean transparentRetryTriggered = new AtomicBoolean();
+    class TransparentRetryTriggeringTracer extends ClientStreamTracer {
+
+      @Override
+      public void streamCreated(Attributes transportAttrs, Metadata metadata) {
+        if (transparentRetryTriggered.get()) {
+          return;
+        }
+        localServer.shutdownNow();
+      }
+
+      @Override
+      public void streamClosed(Status status) {
+        if (transparentRetryTriggered.get()) {
+          return;
+        }
+        transparentRetryTriggered.set(true);
+        try {
+          startNewServer();
+          channel.resetConnectBackoff();
+          channel.getState(true);
+        } catch (Exception e) {
+          throw new AssertionError("local server can not be restarted", e);
+        }
+      }
+    }
+
+    class TransparentRetryTracerFactory extends ClientStreamTracer.InternalLimitedInfoFactory {
+      @Override
+      public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+        return new TransparentRetryTriggeringTracer();
+      }
+    }
+
+    CallOptions callOptions = CallOptions.DEFAULT
+        .withWaitForReady()
+        .withStreamTracerFactory(new TransparentRetryTracerFactory());
+    ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, callOptions);
+    call.start(mockCallListener, new Metadata());
+    assertRpcStartedRecorded();
+    assertRpcStatusRecorded(Code.UNAVAILABLE, 0, 0);
+    assertRpcStartedRecorded();
+    call.cancel("cancel", null);
+    assertRpcStatusRecorded(Code.CANCELLED, 0, 0);
+    assertRetryStatsRecorded(0, 1, 0);
   }
 }
