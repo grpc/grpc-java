@@ -22,7 +22,7 @@ import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
+import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import java.util.concurrent.atomic.AtomicReference;

@@ -25,13 +25,14 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
-import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
+import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
@@ -77,7 +78,7 @@ final class XdsServerWrapper extends Server {
   private final AtomicBoolean shutdown = new AtomicBoolean(false);
   private boolean isServing;
   private final CountDownLatch internalTerminationLatch = new CountDownLatch(1);
-  private final SettableFuture<IOException> initialStartFuture = SettableFuture.create();
+  private final SettableFuture<Exception> initialStartFuture = SettableFuture.create();
   private boolean initialStarted;
   private ScheduledHandle restartTimer;
   private ObjectPool<XdsClient> xdsClientPool;
@@ -108,14 +109,15 @@ final class XdsServerWrapper extends Server {
         internalStart();
       }
     });
-    IOException exception;
+    Exception exception;
     try {
       exception = initialStartFuture.get();
     } catch (InterruptedException | ExecutionException e) {
       throw new RuntimeException(e);
     }
     if (exception != null) {
-      throw exception;
+      throw (exception instanceof IOException) ? (IOException) exception :
+              new IOException(exception);
     }
     return this;
   }
@@ -124,10 +126,10 @@ final class XdsServerWrapper extends Server {
     try {
       xdsClientPool = xdsClientPoolFactory.getOrCreate();
     } catch (Exception e) {
-      listener.onNotServing(
-          Status.UNAVAILABLE.withDescription(
-              "Failed to initialize xDS").withCause(e).asException());
-      initialStartFuture.set(null);
+      StatusException statusException = Status.UNAVAILABLE.withDescription(
+              "Failed to initialize xDS").withCause(e).asException();
+      listener.onNotServing(statusException);
+      initialStartFuture.set(statusException);
       return;
     }
     xdsClient = xdsClientPool.getObject();
@@ -136,10 +138,11 @@ final class XdsServerWrapper extends Server {
     boolean useProtocolV3 = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
     String listenerTemplate = xdsClient.getBootstrapInfo().getServerListenerResourceNameTemplate();
     if (!useProtocolV3 || listenerTemplate == null) {
-      listener.onNotServing(
+      StatusException statusException =
           Status.UNAVAILABLE.withDescription(
-              "Can only support xDS v3 with listener resource name template").asException());
-      initialStartFuture.set(null);
+              "Can only support xDS v3 with listener resource name template").asException();
+      listener.onNotServing(statusException);
+      initialStartFuture.set(statusException);
       xdsClient = xdsClientPool.returnObject(xdsClient);
       return;
     }
@@ -337,10 +340,9 @@ final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
-          handleConfigNotFound(null);
-          listener.onNotServing(
-              Status.UNAVAILABLE.withDescription(
-                  "Listener " + resourceName + " unavailable").asException());
+          StatusException statusException = Status.UNAVAILABLE.withDescription(
+                  "Listener " + resourceName + " unavailable").asException();
+          handleConfigNotFound(statusException);
         }
       });
     }
@@ -357,9 +359,8 @@ final class XdsServerWrapper extends Server {
           logger.log(Level.FINE, "{0} error from XdsClient: {1}",
                   new Object[]{isPermanentError ? "Permanent" : "Transient", error});
           if (isPermanentError) {
-            handleConfigNotFound(null);
-          }
-          if (!isServing) {
+            handleConfigNotFound(error.asException());
+          } else if (!isServing) {
             listener.onNotServing(error.asException());
           }
         }
@@ -407,7 +408,7 @@ final class XdsServerWrapper extends Server {
       startDelegateServer();
     }
 
-    private void handleConfigNotFound(@Nullable IOException exception) {
+    private void handleConfigNotFound(StatusException exception) {
       List<SslContextProviderSupplier> toRelease = collectSslContextProviderSuppliers();
       filterChainSelectorRef.set(FilterChainSelector.NO_FILTER_CHAIN);
       for (SslContextProviderSupplier s: toRelease) {
@@ -424,6 +425,7 @@ final class XdsServerWrapper extends Server {
         delegate.shutdown();  // let in-progress calls finish
       }
       isServing = false;
+      listener.onNotServing(exception);
     }
   }
 

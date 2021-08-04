@@ -33,7 +33,8 @@ import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
+import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler;
+import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import io.netty.channel.ChannelHandler;
@@ -65,7 +66,7 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
-public class FilterChainMatchingHandlerTest {
+public class FilterChainMatchingProtocolNegotiatorsTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -167,7 +168,7 @@ public class FilterChainMatchingHandlerTest {
       fail("exception expected!");
     } catch (Exception e) {
       assertThat(e).isInstanceOf(IllegalStateException.class);
-      assertThat(e).hasMessageThat().contains("Did not find exactly one filter chain.");
+      assertThat(e).hasMessageThat().contains("No matching filter chain found.");
     }
   }
 
@@ -942,7 +943,7 @@ public class FilterChainMatchingHandlerTest {
       channel.checkException();
       fail("expect exception!");
     } catch (IllegalStateException ise) {
-      assertThat(ise).hasMessageThat().isEqualTo("Did not find exactly one filter chain.");
+      assertThat(ise).hasMessageThat().isEqualTo("Found more than one matching filter chains.");
       assertThat(sslSet.isDone()).isFalse();
       channelHandlerCtx = pipeline.context(filterChainMatchingHandler);
       assertThat(channelHandlerCtx).isNotNull();
