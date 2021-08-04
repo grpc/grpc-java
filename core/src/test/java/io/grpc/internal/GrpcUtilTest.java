@@ -326,6 +326,7 @@ public class GrpcUtilTest {
     assertThat(metadata.get(key)).isEqualTo("fake-value");
 
     tracer.streamClosed(Status.UNAVAILABLE);
+    // verify that newClientStreamTracer() is called no more than once
     assertThat(tracers).isEmpty();
   }
 }
