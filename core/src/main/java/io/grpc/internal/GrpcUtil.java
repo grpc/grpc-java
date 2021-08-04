@@ -65,7 +65,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -784,16 +784,18 @@ public final class GrpcUtil {
       streamTracer = streamTracerFactory.newClientStreamTracer(info, headers);
     } else {
       streamTracer = new ForwardingClientStreamTracer() {
-        final ClientStreamTracer noop = new ClientStreamTracer() {};
-        AtomicReference<ClientStreamTracer> delegate = new AtomicReference<>(noop);
+        final AtomicBoolean initialized = new AtomicBoolean();
+        volatile ClientStreamTracer delegate = new ClientStreamTracer() {};
 
         void maybeInit(StreamInfo info, Metadata headers) {
-          delegate.compareAndSet(noop, streamTracerFactory.newClientStreamTracer(info, headers));
+          if (initialized.compareAndSet(false, true)) {
+            delegate = streamTracerFactory.newClientStreamTracer(info, headers);
+          }
         }
 
         @Override
         protected ClientStreamTracer delegate() {
-          return delegate.get();
+          return delegate;
         }
 
         @SuppressWarnings("deprecation")
