@@ -38,6 +38,7 @@ import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.GrpcUtil.Http2Error;
 import io.grpc.testing.TestMethodDescriptors;
+import java.util.ArrayDeque;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Rule;
 import org.junit.Test;
@@ -301,12 +302,14 @@ public class GrpcUtilTest {
     final AtomicReference<Attributes> transportAttrsRef = new AtomicReference<>();
     final ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
     final Metadata.Key<String> key = Metadata.Key.of("fake-key", Metadata.ASCII_STRING_MARSHALLER);
+    final ArrayDeque<ClientStreamTracer> tracers = new ArrayDeque<>();
     ClientStreamTracer.Factory oldFactoryImpl = new ClientStreamTracer.Factory() {
       @SuppressWarnings("deprecation")
       @Override
       public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
         transportAttrsRef.set(info.getTransportAttrs());
         headers.put(key, "fake-value");
+        tracers.offer(mockTracer);
         return mockTracer;
       }
     };
@@ -318,8 +321,12 @@ public class GrpcUtilTest {
         Attributes.newBuilder().set(Attributes.Key.<String>create("foo"), "bar").build();
     ClientStreamTracer tracer = GrpcUtil.newClientStreamTracer(oldFactoryImpl, info, metadata);
     tracer.streamCreated(transAttrs, metadata);
-
+    assertThat(tracers.poll()).isSameInstanceAs(mockTracer);
     assertThat(transportAttrsRef.get()).isEqualTo(transAttrs);
     assertThat(metadata.get(key)).isEqualTo("fake-value");
+
+    tracer.streamClosed(Status.UNAVAILABLE);
+    // verify that newClientStreamTracer() is called no more than once
+    assertThat(tracers).isEmpty();
   }
 }
