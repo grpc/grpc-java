@@ -22,12 +22,14 @@ import static io.grpc.xds.XdsServerWrapper.RETRY_DELAY_NANOS;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
@@ -86,6 +88,59 @@ public class XdsServerWrapperTest {
             selectorRef, new FakeXdsClientPoolFactory(xdsClient));
     xdsServerWrapper.setTimeService(executor.getScheduledExecutorService());
   }
+
+  @Test
+  public void testBootstrap_notV3() throws Exception {
+    Bootstrapper.BootstrapInfo b =
+        new Bootstrapper.BootstrapInfo(
+          Arrays.asList(
+                  new Bootstrapper.ServerInfo("uri", InsecureChannelCredentials.create(), false)),
+          EnvoyProtoData.Node.newBuilder().setId("id").build(),
+          null,
+                "grpc/server?udpa.resource.listening_address=%s");
+    verifyBootstrapFail(b);
+  }
+
+  @Test
+  public void testBootstrap_noTemplate() throws Exception {
+    Bootstrapper.BootstrapInfo b =
+        new Bootstrapper.BootstrapInfo(
+            Arrays.asList(
+                    new Bootstrapper.ServerInfo("uri", InsecureChannelCredentials.create(), true)),
+            EnvoyProtoData.Node.newBuilder().setId("id").build(),
+            null,
+            null);
+    verifyBootstrapFail(b);
+  }
+
+  private void verifyBootstrapFail(Bootstrapper.BootstrapInfo b) throws Exception {
+    XdsClient xdsClient = mock(XdsClient.class);
+    when(xdsClient.getBootstrapInfo()).thenReturn(b);
+    xdsServerWrapper = new XdsServerWrapper("0.0.0.0:1", mockBuilder, listener,
+            selectorRef, new FakeXdsClientPoolFactory(xdsClient));
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    try {
+      start.get(5000, TimeUnit.MILLISECONDS);
+      fail("Start should throw exception");
+    } catch (ExecutionException ex) {
+      assertThat(ex.getCause()).isInstanceOf(IOException.class);
+      Throwable cause = ex.getCause().getCause();
+      assertThat(cause).isInstanceOf(StatusException.class);
+      assertThat(((StatusException)cause).getStatus().getCode())
+              .isEqualTo(Status.UNAVAILABLE.getCode());
+    }
+  }
+
 
   @Test
   public void shutdown() throws Exception {
