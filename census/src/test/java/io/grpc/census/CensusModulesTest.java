@@ -61,6 +61,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerStreamTracer.ServerCallInfo;
 import io.grpc.Status;
+import io.grpc.census.CensusTracingModule.CallAttemptsTracerFactory;
 import io.grpc.census.internal.DeprecatedCensusConstants;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.StatsTestUtils;
@@ -84,6 +85,7 @@ import io.opencensus.stats.StatsComponent;
 import io.opencensus.stats.View;
 import io.opencensus.tags.TagContext;
 import io.opencensus.tags.TagValue;
+import io.opencensus.trace.AttributeValue;
 import io.opencensus.trace.BlankSpan;
 import io.opencensus.trace.EndSpanOptions;
 import io.opencensus.trace.MessageEvent;
@@ -176,10 +178,12 @@ public class CensusModulesTest {
   private final Random random = new Random(1234);
   private final Span fakeClientParentSpan = MockableSpan.generateRandomSpan(random);
   private final Span spyClientSpan = spy(MockableSpan.generateRandomSpan(random));
-  private final SpanContext fakeClientSpanContext = spyClientSpan.getContext();
+  private final Span spyAttemptSpan = spy(MockableSpan.generateRandomSpan(random));
+  private final SpanContext fakeAttemptSpanContext = spyAttemptSpan.getContext();
   private final Span spyServerSpan = spy(MockableSpan.generateRandomSpan(random));
   private final byte[] binarySpanContext = new byte[]{3, 1, 5};
   private final SpanBuilder spyClientSpanBuilder = spy(new MockableSpan.Builder());
+  private final SpanBuilder spyAttemptSpanBuilder = spy(new MockableSpan.Builder());
   private final SpanBuilder spyServerSpanBuilder = spy(new MockableSpan.Builder());
 
   @Rule
@@ -204,15 +208,20 @@ public class CensusModulesTest {
   @Before
   public void setUp() throws Exception {
     when(spyClientSpanBuilder.startSpan()).thenReturn(spyClientSpan);
-    when(tracer.spanBuilderWithExplicitParent(anyString(), ArgumentMatchers.<Span>any()))
+    when(spyAttemptSpanBuilder.startSpan()).thenReturn(spyAttemptSpan);
+    when(tracer.spanBuilderWithExplicitParent(
+            eq("Sent.package1.service2.method3"), ArgumentMatchers.<Span>any()))
         .thenReturn(spyClientSpanBuilder);
+    when(tracer.spanBuilderWithExplicitParent(
+            eq("Attempt.package1.service2.method3"), ArgumentMatchers.<Span>any()))
+        .thenReturn(spyAttemptSpanBuilder);
     when(spyServerSpanBuilder.startSpan()).thenReturn(spyServerSpan);
     when(tracer.spanBuilderWithRemoteParent(anyString(), ArgumentMatchers.<SpanContext>any()))
         .thenReturn(spyServerSpanBuilder);
     when(mockTracingPropagationHandler.toByteArray(any(SpanContext.class)))
         .thenReturn(binarySpanContext);
     when(mockTracingPropagationHandler.fromByteArray(any(byte[].class)))
-        .thenReturn(fakeClientSpanContext);
+        .thenReturn(fakeAttemptSpanContext);
     censusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, fakeClock.getStopwatchSupplier(),
@@ -295,7 +304,7 @@ public class CensusModulesTest {
     assertEquals(2, capturedCallOptions.get().getStreamTracerFactories().size());
     assertTrue(
         capturedCallOptions.get().getStreamTracerFactories().get(0)
-        instanceof CensusTracingModule.ClientCallTracer);
+        instanceof CallAttemptsTracerFactory);
     assertTrue(
         capturedCallOptions.get().getStreamTracerFactories().get(1)
         instanceof CensusStatsModule.CallAttemptsTracerFactory);
@@ -721,14 +730,17 @@ public class CensusModulesTest {
 
   @Test
   public void clientBasicTracingDefaultSpan() {
-    CensusTracingModule.ClientCallTracer callTracer =
+    CallAttemptsTracerFactory callTracer =
         censusTracing.newClientCallTracer(null, method);
     Metadata headers = new Metadata();
     ClientStreamTracer clientStreamTracer = callTracer.newClientStreamTracer(STREAM_INFO, headers);
     clientStreamTracer.streamCreated(Attributes.EMPTY, headers);
     verify(tracer).spanBuilderWithExplicitParent(
         eq("Sent.package1.service2.method3"), ArgumentMatchers.<Span>isNull());
+    verify(tracer).spanBuilderWithExplicitParent(
+        eq("Attempt.package1.service2.method3"), eq(spyClientSpan));
     verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
+    verify(spyAttemptSpan, never()).end(any(EndSpanOptions.class));
 
     clientStreamTracer.outboundMessage(0);
     clientStreamTracer.outboundMessageSent(0, 882, -1);
@@ -740,8 +752,12 @@ public class CensusModulesTest {
     clientStreamTracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
 
-    InOrder inOrder = inOrder(spyClientSpan);
-    inOrder.verify(spyClientSpan, times(3)).addMessageEvent(messageEventCaptor.capture());
+    InOrder inOrder = inOrder(spyClientSpan, spyAttemptSpan);
+    inOrder.verify(spyAttemptSpan)
+        .putAttribute("previous-rpc-attempts", AttributeValue.longAttributeValue(0));
+    inOrder.verify(spyAttemptSpan)
+        .putAttribute("transparent-retry", AttributeValue.booleanAttributeValue(false));
+    inOrder.verify(spyAttemptSpan, times(3)).addMessageEvent(messageEventCaptor.capture());
     List<MessageEvent> events = messageEventCaptor.getAllValues();
     assertEquals(
         MessageEvent.builder(MessageEvent.Type.SENT, 0).setCompressedMessageSize(882).build(),
@@ -755,18 +771,23 @@ public class CensusModulesTest {
             .setUncompressedMessageSize(90)
             .build(),
         events.get(2));
+    inOrder.verify(spyAttemptSpan).end(
+        EndSpanOptions.builder()
+            .setStatus(io.opencensus.trace.Status.OK)
+            .setSampleToLocalSpanStore(false)
+            .build());
     inOrder.verify(spyClientSpan).end(
         EndSpanOptions.builder()
             .setStatus(io.opencensus.trace.Status.OK)
             .setSampleToLocalSpanStore(false)
             .build());
-    verifyNoMoreInteractions(spyClientSpan);
+    inOrder.verifyNoMoreInteractions();
     verifyNoMoreInteractions(tracer);
   }
 
   @Test
   public void clientTracingSampledToLocalSpanStore() {
-    CensusTracingModule.ClientCallTracer callTracer =
+    CallAttemptsTracerFactory callTracer =
         censusTracing.newClientCallTracer(null, sampledMethod);
     callTracer.callEnded(Status.OK);
 
@@ -838,7 +859,7 @@ public class CensusModulesTest {
 
   @Test
   public void clientStreamNeverCreatedStillRecordTracing() {
-    CensusTracingModule.ClientCallTracer callTracer =
+    CallAttemptsTracerFactory callTracer =
         censusTracing.newClientCallTracer(fakeClientParentSpan, method);
     verify(tracer).spanBuilderWithExplicitParent(
         eq("Sent.package1.service2.method3"), same(fakeClientParentSpan));
@@ -1016,16 +1037,18 @@ public class CensusModulesTest {
 
   @Test
   public void traceHeadersPropagateSpanContext() throws Exception {
-    CensusTracingModule.ClientCallTracer callTracer =
+    CallAttemptsTracerFactory callTracer =
         censusTracing.newClientCallTracer(fakeClientParentSpan, method);
     Metadata headers = new Metadata();
     ClientStreamTracer streamTracer = callTracer.newClientStreamTracer(STREAM_INFO, headers);
     streamTracer.streamCreated(Attributes.EMPTY, headers);
 
-    verify(mockTracingPropagationHandler).toByteArray(same(fakeClientSpanContext));
+    verify(mockTracingPropagationHandler).toByteArray(same(fakeAttemptSpanContext));
     verifyNoMoreInteractions(mockTracingPropagationHandler);
     verify(tracer).spanBuilderWithExplicitParent(
         eq("Sent.package1.service2.method3"), same(fakeClientParentSpan));
+    verify(tracer).spanBuilderWithExplicitParent(
+        eq("Attempt.package1.service2.method3"), same(spyClientSpan));
     verify(spyClientSpanBuilder).setRecordEvents(eq(true));
     verifyNoMoreInteractions(tracer);
     assertTrue(headers.containsKey(censusTracing.tracingHeader));
@@ -1035,7 +1058,7 @@ public class CensusModulesTest {
             method.getFullMethodName(), headers);
     verify(mockTracingPropagationHandler).fromByteArray(same(binarySpanContext));
     verify(tracer).spanBuilderWithRemoteParent(
-        eq("Recv.package1.service2.method3"), same(spyClientSpan.getContext()));
+        eq("Recv.package1.service2.method3"), same(spyAttemptSpan.getContext()));
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
 
     Context filteredContext = serverTracer.filterContext(Context.ROOT);
@@ -1044,7 +1067,7 @@ public class CensusModulesTest {
 
   @Test
   public void traceHeaders_propagateSpanContext() throws Exception {
-    CensusTracingModule.ClientCallTracer callTracer =
+    CallAttemptsTracerFactory callTracer =
         censusTracing.newClientCallTracer(fakeClientParentSpan, method);
     Metadata headers = new Metadata();
 
@@ -1058,10 +1081,12 @@ public class CensusModulesTest {
   public void traceHeaders_missingCensusImpl_notPropagateSpanContext()
       throws Exception {
     reset(spyClientSpanBuilder);
+    reset(spyAttemptSpanBuilder);
     when(spyClientSpanBuilder.startSpan()).thenReturn(BlankSpan.INSTANCE);
+    when(spyAttemptSpanBuilder.startSpan()).thenReturn(BlankSpan.INSTANCE);
     Metadata headers = new Metadata();
 
-    CensusTracingModule.ClientCallTracer callTracer =
+    CallAttemptsTracerFactory callTracer =
         censusTracing.newClientCallTracer(BlankSpan.INSTANCE, method);
     callTracer.newClientStreamTracer(STREAM_INFO, headers).streamCreated(Attributes.EMPTY, headers);
 
@@ -1071,14 +1096,16 @@ public class CensusModulesTest {
   @Test
   public void traceHeaders_clientMissingCensusImpl_preservingHeaders() throws Exception {
     reset(spyClientSpanBuilder);
+    reset(spyAttemptSpanBuilder);
     when(spyClientSpanBuilder.startSpan()).thenReturn(BlankSpan.INSTANCE);
+    when(spyAttemptSpanBuilder.startSpan()).thenReturn(BlankSpan.INSTANCE);
     Metadata headers = new Metadata();
     headers.put(
         Metadata.Key.of("never-used-key-bin", Metadata.BINARY_BYTE_MARSHALLER),
         new byte[] {});
     Set<String> originalHeaderKeys = new HashSet<>(headers.keys());
 
-    CensusTracingModule.ClientCallTracer callTracer =
+    CallAttemptsTracerFactory callTracer =
         censusTracing.newClientCallTracer(BlankSpan.INSTANCE, method);
     callTracer.newClientStreamTracer(STREAM_INFO, headers).streamCreated(Attributes.EMPTY, headers);
 
@@ -1089,9 +1116,9 @@ public class CensusModulesTest {
   public void traceHeaderMalformed() throws Exception {
     // As comparison, normal header parsing
     Metadata headers = new Metadata();
-    headers.put(censusTracing.tracingHeader, fakeClientSpanContext);
+    headers.put(censusTracing.tracingHeader, fakeAttemptSpanContext);
     // mockTracingPropagationHandler was stubbed to always return fakeServerParentSpanContext
-    assertSame(spyClientSpan.getContext(), headers.get(censusTracing.tracingHeader));
+    assertSame(spyAttemptSpan.getContext(), headers.get(censusTracing.tracingHeader));
 
     // Make BinaryPropagationHandler always throw when parsing the header
     when(mockTracingPropagationHandler.fromByteArray(any(byte[].class)))
@@ -1099,7 +1126,7 @@ public class CensusModulesTest {
 
     headers = new Metadata();
     assertNull(headers.get(censusTracing.tracingHeader));
-    headers.put(censusTracing.tracingHeader, fakeClientSpanContext);
+    headers.put(censusTracing.tracingHeader, fakeAttemptSpanContext);
     assertSame(SpanContext.INVALID, headers.get(censusTracing.tracingHeader));
     assertNotSame(spyClientSpan.getContext(), SpanContext.INVALID);
 

@@ -88,7 +88,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
     public ClientStream newStream(MethodDescriptor<?, ?> method,
         CallOptions callOptions, Metadata headers, Context context) {
       ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
-          callOptions, headers, /* isTransparentRetry= */ false);
+          callOptions, headers, 0, /* isTransparentRetry= */ false);
       Context origContext = context.attach();
       // delayed transport's newStream() always acquires a lock, but concurrent performance doesn't
       // matter here because OOB communication should be sparse, and it's not on application RPC's
