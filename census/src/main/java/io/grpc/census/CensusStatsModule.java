@@ -259,9 +259,7 @@ final class CensusStatsModule {
       if (module.propagateTags) {
         headers.discardAll(module.statsHeader);
         if (!module.tagger.empty().equals(parentCtx)) {
-          if (!headers.containsKey(module.statsHeader)) {
-            headers.put(module.statsHeader, parentCtx);
-          }
+          headers.put(module.statsHeader, parentCtx);
         }
       }
     }
