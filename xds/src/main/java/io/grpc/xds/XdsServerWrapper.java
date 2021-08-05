@@ -70,7 +70,8 @@ final class XdsServerWrapper extends Server {
   static final long RETRY_DELAY_NANOS = TimeUnit.MINUTES.toNanos(1);
   private final String listenerAddress;
   private final ServerBuilder<?> delegateBuilder;
-  private ScheduledExecutorService timeService = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
+  private boolean sharedTimeService;
+  private final ScheduledExecutorService timeService;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final XdsServingStatusListener listener;
   private final AtomicReference<FilterChainSelector> filterChainSelectorRef;
@@ -92,11 +93,25 @@ final class XdsServerWrapper extends Server {
       XdsServingStatusListener listener,
       AtomicReference<FilterChainSelector> filterChainSelectorRef,
       XdsClientPoolFactory xdsClientPoolFactory) {
+    this(listenerAddress, delegateBuilder, listener, filterChainSelectorRef, xdsClientPoolFactory,
+            SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
+    sharedTimeService = true;
+  }
+
+  @VisibleForTesting
+  XdsServerWrapper(
+          String listenerAddress,
+          ServerBuilder<?> delegateBuilder,
+          XdsServingStatusListener listener,
+          AtomicReference<FilterChainSelector> filterChainSelectorRef,
+          XdsClientPoolFactory xdsClientPoolFactory,
+          ScheduledExecutorService timeService) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
     this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
     this.listener = checkNotNull(listener, "listener");
     this.filterChainSelectorRef = checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    this.timeService = checkNotNull(timeService, "timeService");
     this.delegate = delegateBuilder.build();
   }
 
@@ -157,11 +172,12 @@ final class XdsServerWrapper extends Server {
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
+        if (!delegate.isShutdown()) {
+          delegate.shutdown();
+        }
         internalShutdown();
-        delegate.shutdown();
       }
     });
-    syncContext.drain();
     return this;
   }
 
@@ -173,11 +189,12 @@ final class XdsServerWrapper extends Server {
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
+        if (!delegate.isShutdown()) {
+          delegate.shutdownNow();
+        }
         internalShutdown();
-        delegate.shutdownNow();
       }
     });
-    syncContext.drain();
     return this;
   }
 
@@ -190,7 +207,7 @@ final class XdsServerWrapper extends Server {
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
-    if (timeService != null) {
+    if (sharedTimeService) {
       SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeService);
     }
     if (restartTimer != null) {
@@ -207,10 +224,7 @@ final class XdsServerWrapper extends Server {
 
   @Override
   public boolean isTerminated() {
-    if (internalTerminationLatch.getCount() != 0) {
-      return false;
-    }
-    return delegate.isTerminated();
+    return internalTerminationLatch.getCount() == 0 && delegate.isTerminated();
   }
 
   @Override
@@ -291,14 +305,6 @@ final class XdsServerWrapper extends Server {
     }
   }
 
-  @VisibleForTesting
-  void setTimeService(@Nullable ScheduledExecutorService scheduledExecutorService) {
-    if (scheduledExecutorService != null) {
-      SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeService);
-    }
-    timeService = scheduledExecutorService;
-  }
-
   private final class DiscoveryState implements LdsResourceWatcher {
     private final String resourceName;
     // Most recently discovered filter chains.
@@ -321,10 +327,7 @@ final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
-          if (update.listener() == null) {
-            // Ignore updates not for servers.
-            return;
-          }
+          checkNotNull(update.listener(), "update");
           filterChains = update.listener().getFilterChains();
           defaultFilterChain = update.listener().getDefaultFilterChain();
           updateSelector();

@@ -113,7 +113,7 @@ public class XdsSdsClientServerTest {
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(/* upstreamTlsContext= */ null,
-                /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+                /* overrideAuthority= */ null);
     assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
@@ -194,7 +194,7 @@ public class XdsSdsClientServerTest {
         BAD_CLIENT_KEY_FILE,
         BAD_CLIENT_PEM_FILE, true);
     try {
-      performMtlsTestAndGetListenerWatcher(upstreamTlsContext, false, null, null, null, null);
+      performMtlsTestAndGetListenerWatcher(upstreamTlsContext, null, null, null, null);
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       if (sre.getCause() instanceof SSLHandshakeException) {
@@ -208,15 +208,6 @@ public class XdsSdsClientServerTest {
     }
   }
 
-  /** mTLS - client auth enabled. */
-  @Test
-  public void mtlsClientServer_withClientAuthentication() throws Exception {
-    UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
-        CLIENT_KEY_FILE,
-        CLIENT_PEM_FILE, true);
-    performMtlsTestAndGetListenerWatcher(upstreamTlsContext, false, null, null, null, null);
-  }
-
   /** mTLS - client auth enabled - using {@link XdsChannelCredentials} API. */
   @Test
   public void mtlsClientServer_withClientAuthentication_withXdsChannelCreds()
@@ -224,7 +215,7 @@ public class XdsSdsClientServerTest {
     UpstreamTlsContext upstreamTlsContext = setBootstrapInfoAndBuildUpstreamTlsContext(
         CLIENT_KEY_FILE,
         CLIENT_PEM_FILE, true);
-    performMtlsTestAndGetListenerWatcher(upstreamTlsContext, true, null, null, null, null);
+    performMtlsTestAndGetListenerWatcher(upstreamTlsContext, null, null, null, null);
   }
 
   @Test
@@ -272,7 +263,7 @@ public class XdsSdsClientServerTest {
         CLIENT_KEY_FILE,
         CLIENT_PEM_FILE, true);
 
-    performMtlsTestAndGetListenerWatcher(upstreamTlsContext, false, "cert-instance-name2",
+    performMtlsTestAndGetListenerWatcher(upstreamTlsContext, "cert-instance-name2",
             BAD_SERVER_KEY_FILE, BAD_SERVER_PEM_FILE, CA_PEM_FILE);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContext(
@@ -293,7 +284,7 @@ public class XdsSdsClientServerTest {
   }
 
   private void performMtlsTestAndGetListenerWatcher(
-      UpstreamTlsContext upstreamTlsContext, boolean newApi, String certInstanceName2,
+      UpstreamTlsContext upstreamTlsContext, String certInstanceName2,
       String privateKey2, String cert2, String trustCa2)
       throws Exception {
     DownstreamTlsContext downstreamTlsContext =
@@ -303,9 +294,8 @@ public class XdsSdsClientServerTest {
     buildServerWithFallbackServerCredentials(
             InsecureServerCredentials.create(), downstreamTlsContext);
 
-    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = newApi
-        ? getBlockingStub(upstreamTlsContext, "foo.test.google.fr") :
-        getBlockingStub(upstreamTlsContext, "foo.test.google.fr");
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+            getBlockingStub(upstreamTlsContext, OVERRIDE_AUTHORITY);
     assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
