@@ -358,64 +358,40 @@ public class CensusModulesTest {
             .setSampleToLocalSpanStore(false)
             .build());
     verify(spyClientSpan, never()).end();
+    assertZeroRetryRecorded();
   }
 
   @Test
   public void clientBasicStatsDefaultContext_starts_finishes_noRealTime() {
-    subtestClientBasicStatsDefaultContext(true, true, false, false);
-  }
-
-  @Test
-  public void clientBasicStatsDefaultContext_starts_finishes_noRealTime_retryEnabled() {
-    subtestClientBasicStatsDefaultContext(true, true, false, true);
+    subtestClientBasicStatsDefaultContext(true, true, false);
   }
 
   @Test
   public void clientBasicStatsDefaultContext_starts_noFinishes_noRealTime() {
-    subtestClientBasicStatsDefaultContext(true, false, false, false);
-  }
-
-  @Test
-  public void clientBasicStatsDefaultContext_starts_noFinishes_noRealTime_retryEnabled() {
-    subtestClientBasicStatsDefaultContext(true, false, false, true);
+    subtestClientBasicStatsDefaultContext(true, false, false);
   }
 
   @Test
   public void clientBasicStatsDefaultContext_noStarts_finishes_noRealTime() {
-    subtestClientBasicStatsDefaultContext(false, true, false, false);
-  }
-
-  @Test
-  public void clientBasicStatsDefaultContext_noStarts_finishes_noRealTime_retryEnabled() {
-    subtestClientBasicStatsDefaultContext(false, true, false, true);
+    subtestClientBasicStatsDefaultContext(false, true, false);
   }
 
   @Test
   public void clientBasicStatsDefaultContext_noStarts_noFinishes_noRealTime() {
-    subtestClientBasicStatsDefaultContext(false, false, false, false);
-  }
-
-  @Test
-  public void clientBasicStatsDefaultContext_noStarts_noFinishes_noRealTime_retryEnabled() {
-    subtestClientBasicStatsDefaultContext(false, false, false, true);
+    subtestClientBasicStatsDefaultContext(false, false, false);
   }
 
   @Test
   public void clientBasicStatsDefaultContext_starts_finishes_realTime() {
-    subtestClientBasicStatsDefaultContext(true, true, true, false);
-  }
-
-  @Test
-  public void clientBasicStatsDefaultContext_starts_finishes_realTime_retryEnabled() {
-    subtestClientBasicStatsDefaultContext(true, true, true, true);
+    subtestClientBasicStatsDefaultContext(true, true, true);
   }
 
   private void subtestClientBasicStatsDefaultContext(
-      boolean recordStarts, boolean recordFinishes, boolean recordRealTime, boolean retryEnabled) {
+      boolean recordStarts, boolean recordFinishes, boolean recordRealTime) {
     CensusStatsModule localCensusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, fakeClock.getStopwatchSupplier(),
-            true, recordStarts, recordFinishes, recordRealTime, retryEnabled);
+            true, recordStarts, recordFinishes, recordRealTime);
     CensusStatsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CensusStatsModule.CallAttemptsTracerFactory(
             localCensusStats, tagger.empty(), method.getFullMethodName());
@@ -517,17 +493,7 @@ public class CensusModulesTest {
               DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
       assertEquals(30 + 100 + 16 + 24,
           record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
-
-      if (retryEnabled) {
-        record = statsRecorder.pollRecord();
-        methodTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD);
-        assertEquals(method.getFullMethodName(), methodTag.asString());
-        statusTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_STATUS);
-        assertEquals(Status.Code.OK.toString(), statusTag.asString());
-        assertThat(record.getMetric(RETRIES_PER_CALL)).isEqualTo(0);
-        assertThat(record.getMetric(TRANSPARENT_RETRIES_PER_CALL)).isEqualTo(0);
-        assertThat(record.getMetric(RETRY_DELAY_PER_CALL)).isEqualTo(0D);
-      }
+      assertZeroRetryRecorded();
     } else {
       assertNull(statsRecorder.pollRecord());
     }
@@ -539,7 +505,7 @@ public class CensusModulesTest {
     CensusStatsModule localCensusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, fakeClock.getStopwatchSupplier(),
-            true, true, true, true, true);
+            true, true, true, true);
     CensusStatsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CensusStatsModule.CallAttemptsTracerFactory(
             localCensusStats, tagger.empty(), method.getFullMethodName());
@@ -744,6 +710,15 @@ public class CensusModulesTest {
     assertEquals(expectedValue, record.getMetricAsLongOrFail(measure));
   }
 
+  private void assertZeroRetryRecorded() {
+    StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
+    TagValue methodTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD);
+    assertEquals(method.getFullMethodName(), methodTag.asString());
+    assertThat(record.getMetric(RETRIES_PER_CALL)).isEqualTo(0);
+    assertThat(record.getMetric(TRANSPARENT_RETRIES_PER_CALL)).isEqualTo(0);
+    assertThat(record.getMetric(RETRY_DELAY_PER_CALL)).isEqualTo(0D);
+  }
+
   @Test
   public void clientBasicTracingDefaultSpan() {
     CensusTracingModule.ClientCallTracer callTracer =
@@ -858,6 +833,7 @@ public class CensusModulesTest {
         3000,
         record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
     assertNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_SERVER_ELAPSED_TIME));
+    assertZeroRetryRecorded();
   }
 
   @Test
@@ -997,6 +973,7 @@ public class CensusModulesTest {
       assertNull(clientRecord.getMetric(DeprecatedCensusConstants.RPC_CLIENT_ERROR_COUNT));
       TagValue clientPropagatedTag = clientRecord.tags.get(StatsTestUtils.EXTRA_TAG);
       assertEquals("extra-tag-value-897", clientPropagatedTag.asString());
+      assertZeroRetryRecorded();
     }
 
     if (!recordStats) {

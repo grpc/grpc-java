@@ -646,7 +646,6 @@ public final class ManagedChannelImplBuilder
                 "getClientInterceptor",
                 boolean.class,
                 boolean.class,
-                boolean.class,
                 boolean.class);
         statsInterceptor =
             (ClientInterceptor) getClientInterceptorMethod
@@ -654,8 +653,7 @@ public final class ManagedChannelImplBuilder
                     null,
                     recordStartedRpcs,
                     recordFinishedRpcs,
-                    recordRealTimeMetrics,
-                    retryEnabled);
+                    recordRealTimeMetrics);
       } catch (ClassNotFoundException e) {
         // Replace these separate catch statements with multicatch when Android min-API >= 19
         log.log(Level.FINE, "Unable to apply census stats", e);

@@ -87,7 +87,6 @@ final class CensusStatsModule {
   private final boolean recordStartedRpcs;
   private final boolean recordFinishedRpcs;
   private final boolean recordRealTimeMetrics;
-  private final boolean retryEnabled;
 
   /**
    * Creates a {@link CensusStatsModule} with the default OpenCensus implementation.
@@ -95,24 +94,12 @@ final class CensusStatsModule {
   CensusStatsModule(Supplier<Stopwatch> stopwatchSupplier,
       boolean propagateTags, boolean recordStartedRpcs, boolean recordFinishedRpcs,
       boolean recordRealTimeMetrics) {
-    this(
-        stopwatchSupplier, propagateTags, recordStartedRpcs, recordFinishedRpcs,
-        recordRealTimeMetrics, /* retryEnabled= */ false);
-  }
-
-  /**
-   * Creates a {@link CensusStatsModule} with the default OpenCensus implementation.
-   */
-  CensusStatsModule(Supplier<Stopwatch> stopwatchSupplier,
-      boolean propagateTags, boolean recordStartedRpcs, boolean recordFinishedRpcs,
-      boolean recordRealTimeMetrics, boolean retryEnabled) {
     this(
         Tags.getTagger(),
         Tags.getTagPropagationComponent().getBinarySerializer(),
         Stats.getStatsRecorder(),
         stopwatchSupplier,
-        propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics,
-        retryEnabled);
+        propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
   }
 
   /**
@@ -124,21 +111,6 @@ final class CensusStatsModule {
       StatsRecorder statsRecorder, Supplier<Stopwatch> stopwatchSupplier,
       boolean propagateTags, boolean recordStartedRpcs, boolean recordFinishedRpcs,
       boolean recordRealTimeMetrics) {
-    this(
-        tagger, tagCtxSerializer, statsRecorder, stopwatchSupplier, propagateTags,
-        recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics,
-        /* retryEnabled= */ false);
-  }
-
-  /**
-   * Creates a {@link CensusStatsModule} with the given OpenCensus implementation.
-   */
-  CensusStatsModule(
-      final Tagger tagger,
-      final TagContextBinarySerializer tagCtxSerializer,
-      StatsRecorder statsRecorder, Supplier<Stopwatch> stopwatchSupplier,
-      boolean propagateTags, boolean recordStartedRpcs, boolean recordFinishedRpcs,
-      boolean recordRealTimeMetrics, boolean retryEnabled) {
     this.tagger = checkNotNull(tagger, "tagger");
     this.statsRecorder = checkNotNull(statsRecorder, "statsRecorder");
     checkNotNull(tagCtxSerializer, "tagCtxSerializer");
@@ -147,7 +119,6 @@ final class CensusStatsModule {
     this.recordStartedRpcs = recordStartedRpcs;
     this.recordFinishedRpcs = recordFinishedRpcs;
     this.recordRealTimeMetrics = recordRealTimeMetrics;
-    this.retryEnabled = retryEnabled;
     this.statsHeader =
         Metadata.Key.of("grpc-tags-bin", new Metadata.BinaryMarshaller<TagContext>() {
             @Override
@@ -752,10 +723,6 @@ final class CensusStatsModule {
     @Override
     public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata metadata) {
       ClientTracer tracer = new ClientTracer(this, module, parentCtx, startCtx, info);
-      if (!module.retryEnabled) {
-        attemptsPerCall.incrementAndGet();
-        return tracer;
-      }
       if (activeStreams.incrementAndGet() == 1) {
         if (!activated.compareAndSet(false, true)) {
           retryDelayNanos.addAndGet(stopwatch.elapsed(TimeUnit.NANOSECONDS));
@@ -776,7 +743,7 @@ final class CensusStatsModule {
 
     // Called whenever each attempt is ended.
     void attemptEnded() {
-      if (module.retryEnabled && activeStreams.decrementAndGet() == 0) {
+      if (activeStreams.decrementAndGet() == 0) {
         // Race condition between two extremely close events does not matter because the difference
         // in the result would be very small.
         long lastInactiveTimeStamp =
@@ -808,26 +775,24 @@ final class CensusStatsModule {
       } else if (inboundMetricTracer != null) {
         inboundMetricTracer.recordFinishedRpc();
       }
-      if (module.retryEnabled) {
-        long retriesPerCall = 0;
-        long attempts = attemptsPerCall.get();
-        if (attempts > 0) {
-          retriesPerCall = attempts - 1;
-        }
-        MeasureMap measureMap = module.statsRecorder.newMeasureMap()
-            .put(RETRIES_PER_CALL, retriesPerCall)
-            .put(TRANSPARENT_RETRIES_PER_CALL, transparentRetriesPerCall.get())
-            .put(RETRY_DELAY_PER_CALL, retryDelayNanos.get() / NANOS_PER_MILLI);
-        TagValue methodTag = TagValue.create(fullMethodName);
-        TagValue statusTag = TagValue.create(status.getCode().toString());
-        measureMap.record(
-            module
-                .tagger
-                .toBuilder(parentCtx)
-                .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
-                .putLocal(RpcMeasureConstants.GRPC_CLIENT_STATUS, statusTag)
-                .build());
+
+      long retriesPerCall = 0;
+      long attempts = attemptsPerCall.get();
+      if (attempts > 0) {
+        retriesPerCall = attempts - 1;
       }
+      MeasureMap measureMap = module.statsRecorder.newMeasureMap()
+          .put(RETRIES_PER_CALL, retriesPerCall)
+          .put(TRANSPARENT_RETRIES_PER_CALL, transparentRetriesPerCall.get())
+          .put(RETRY_DELAY_PER_CALL, retryDelayNanos.get() / NANOS_PER_MILLI);
+      TagValue methodTag = TagValue.create(fullMethodName);
+      TagValue statusTag = TagValue.create(status.getCode().toString());
+      measureMap.record(
+          module.tagger
+              .toBuilder(parentCtx)
+              .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
+              .putLocal(RpcMeasureConstants.GRPC_CLIENT_STATUS, statusTag)
+              .build());
     }
   }
 }

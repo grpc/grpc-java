@@ -139,8 +139,7 @@ public class RetryTest {
       InternalCensusStatsAccessor.getClientInterceptor(
           tagger, tagContextBinarySerializer, clientStatsRecorder,
           fakeClock.getStopwatchSupplier(), true, true, true,
-          /* recordRealTimeMetrics= */ true,
-          /* retryEnabled= */ true);
+          /* recordRealTimeMetrics= */ true);
   private final MethodDescriptor<String, Integer> clientStreamingMethod =
       MethodDescriptor.<String, Integer>newBuilder()
           .setType(MethodType.CLIENT_STREAMING)
