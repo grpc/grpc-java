@@ -157,11 +157,10 @@ final class XdsServerWrapper extends Server {
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        internalShutdown();
         delegate.shutdown();
+        internalShutdown();
       }
     });
-    syncContext.drain();
     return this;
   }
 
@@ -173,11 +172,10 @@ final class XdsServerWrapper extends Server {
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        internalShutdown();
         delegate.shutdownNow();
+        internalShutdown();
       }
     });
-    syncContext.drain();
     return this;
   }
 
@@ -207,10 +205,7 @@ final class XdsServerWrapper extends Server {
 
   @Override
   public boolean isTerminated() {
-    if (internalTerminationLatch.getCount() != 0) {
-      return false;
-    }
-    return delegate.isTerminated();
+    return internalTerminationLatch.getCount() == 0 && delegate.isTerminated();
   }
 
   @Override
