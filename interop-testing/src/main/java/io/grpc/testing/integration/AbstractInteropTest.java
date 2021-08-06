@@ -1043,19 +1043,18 @@ public abstract class AbstractInteropTest {
 
   @Test
   public void exchangeMetadataUnaryCall() throws Exception {
-    TestServiceGrpc.TestServiceBlockingStub stub = blockingStub;
-
     // Capture the metadata exchange
     Metadata fixedHeaders = new Metadata();
     // Send a context proto (as it's in the default extension registry)
     Messages.SimpleContext contextValue =
         Messages.SimpleContext.newBuilder().setValue("dog").build();
     fixedHeaders.put(Util.METADATA_KEY, contextValue);
-    stub = MetadataUtils.attachHeaders(stub, fixedHeaders);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
-    stub = MetadataUtils.captureMetadata(stub, headersCapture, trailersCapture);
+    TestServiceGrpc.TestServiceBlockingStub stub = blockingStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(fixedHeaders),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
 
     assertNotNull(stub.emptyCall(EMPTY));
 
@@ -1066,19 +1065,18 @@ public abstract class AbstractInteropTest {
 
   @Test
   public void exchangeMetadataStreamingCall() throws Exception {
-    TestServiceGrpc.TestServiceStub stub = asyncStub;
-
     // Capture the metadata exchange
     Metadata fixedHeaders = new Metadata();
     // Send a context proto (as it's in the default extension registry)
     Messages.SimpleContext contextValue =
         Messages.SimpleContext.newBuilder().setValue("dog").build();
     fixedHeaders.put(Util.METADATA_KEY, contextValue);
-    stub = MetadataUtils.attachHeaders(stub, fixedHeaders);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
-    stub = MetadataUtils.captureMetadata(stub, headersCapture, trailersCapture);
+    TestServiceGrpc.TestServiceStub stub = asyncStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(fixedHeaders),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
 
     List<Integer> responseSizes = Arrays.asList(50, 100, 150, 200);
     Messages.StreamingOutputCallRequest.Builder streamingOutputBuilder =
@@ -1490,11 +1488,11 @@ public abstract class AbstractInteropTest {
     Metadata metadata = new Metadata();
     metadata.put(Util.ECHO_INITIAL_METADATA_KEY, "test_initial_metadata_value");
     metadata.put(Util.ECHO_TRAILING_METADATA_KEY, trailingBytes);
-    TestServiceGrpc.TestServiceBlockingStub blockingStub = this.blockingStub;
-    blockingStub = MetadataUtils.attachHeaders(blockingStub, metadata);
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
-    blockingStub = MetadataUtils.captureMetadata(blockingStub, headersCapture, trailersCapture);
+    TestServiceGrpc.TestServiceBlockingStub blockingStub = this.blockingStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(metadata),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
     SimpleResponse response = blockingStub.unaryCall(request);
 
     assertResponse(goldenResponse, response);
@@ -1509,11 +1507,11 @@ public abstract class AbstractInteropTest {
     metadata = new Metadata();
     metadata.put(Util.ECHO_INITIAL_METADATA_KEY, "test_initial_metadata_value");
     metadata.put(Util.ECHO_TRAILING_METADATA_KEY, trailingBytes);
-    TestServiceGrpc.TestServiceStub stub = asyncStub;
-    stub = MetadataUtils.attachHeaders(stub, metadata);
     headersCapture = new AtomicReference<>();
     trailersCapture = new AtomicReference<>();
-    stub = MetadataUtils.captureMetadata(stub, headersCapture, trailersCapture);
+    TestServiceGrpc.TestServiceStub stub = asyncStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(metadata),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
 
     StreamRecorder<Messages.StreamingOutputCallResponse> recorder = StreamRecorder.create();
     StreamObserver<Messages.StreamingOutputCallRequest> requestStream =
