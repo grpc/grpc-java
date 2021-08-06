@@ -43,8 +43,10 @@ public final class MetadataUtils {
    * @param stub to bind the headers to.
    * @param extraHeaders the headers to be passed by each call on the returned stub.
    * @return an implementation of the stub with {@code extraHeaders} bound to each call.
+   * @deprecated Use {@code stub.withInterceptors(newAttachHeadersInterceptor(...))} instead.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1789")
+  @Deprecated
   public static <T extends AbstractStub<T>> T attachHeaders(T stub, Metadata extraHeaders) {
     return stub.withInterceptors(newAttachHeadersInterceptor(extraHeaders));
   }
@@ -98,8 +100,10 @@ public final class MetadataUtils {
    * @param trailersCapture to record the last received trailers
    * @return an implementation of the stub that allows to access the last received call's
    *         headers and trailers via {@code headersCapture} and {@code trailersCapture}.
+   * @deprecated Use {@code stub.withInterceptors(newCaptureMetadataInterceptor())} instead.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1789")
+  @Deprecated
   public static <T extends AbstractStub<T>> T captureMetadata(
       T stub,
       AtomicReference<Metadata> headersCapture,
