@@ -83,7 +83,6 @@ import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -186,9 +185,8 @@ public class XdsNameResolverTest {
         throw new XdsInitializationException("Fail to read bootstrap file");
       }
     };
-    Map<String, String> b = new HashMap<>();
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), b);
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();

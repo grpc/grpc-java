@@ -121,13 +121,15 @@ public class XdsNameResolverProviderTest {
   }
 
   @Test
-  public void newProvider_createForTest() {
-    NameResolverRegistry registry = new NameResolverRegistry();
-    XdsNameResolverProvider provider0 = XdsNameResolverProvider.createForTest("no-scheme", null);
+  public void newProvider_multipleScheme() {
+    NameResolverRegistry registry = NameResolverRegistry.getDefaultRegistry();
+    XdsNameResolverProvider provider0 = new XdsNameResolverProvider("no-scheme", null);
     registry.register(provider0);
-    XdsNameResolverProvider provider1 = XdsNameResolverProvider.createForTest("new-xds-scheme",
+    XdsNameResolverProvider provider1 = new XdsNameResolverProvider("new-xds-scheme",
             new HashMap<String, String>());
     registry.register(provider1);
+    assertThat(registry.asFactory()
+            .newNameResolver(URI.create("xds:///localhost"), args)).isNotNull();
     assertThat(registry.asFactory()
             .newNameResolver(URI.create("new-xds-scheme:///localhost"), args)).isNotNull();
     assertThat(registry.asFactory()
@@ -136,10 +138,12 @@ public class XdsNameResolverProviderTest {
     assertThat(registry.asFactory()
             .newNameResolver(URI.create("new-xds-scheme:///localhost"), args)).isNull();
     registry.deregister(provider0);
+    assertThat(registry.asFactory()
+            .newNameResolver(URI.create("xds:///localhost"), args)).isNotNull();
   }
 
   @Test
-  public void newProvider_createForTest_overrideBootstrap() {
+  public void newProvider_overrideBootstrap() {
     Map<String, ?> b = ImmutableMap.of(
             "node", ImmutableMap.of(
                     "id", "ENVOY_NODE_ID",
@@ -154,7 +158,7 @@ public class XdsNameResolverProviderTest {
             )
     );
     NameResolverRegistry registry = new NameResolverRegistry();
-    XdsNameResolverProvider provider = XdsNameResolverProvider.createForTest("no-scheme", b);
+    XdsNameResolverProvider provider = new XdsNameResolverProvider("no-scheme", b);
     registry.register(provider);
     NameResolver resolver = registry.asFactory()
             .newNameResolver(URI.create("no-scheme:///localhost"), args);
@@ -162,6 +166,7 @@ public class XdsNameResolverProviderTest {
     assertThat(resolver).isInstanceOf(XdsNameResolver.class);
     assertThat(((XdsNameResolver)resolver).getXdsClient().getBootstrapInfo().getNode().getId())
             .isEqualTo("ENVOY_NODE_ID");
+    resolver.shutdown();
     registry.deregister(provider);
   }
 }

@@ -41,19 +41,22 @@ import javax.annotation.Nullable;
 @Internal
 public final class XdsNameResolverProvider extends NameResolverProvider {
 
-  private String scheme = "xds";
-  private Map<String, ?> bootstrapOverride;
+  private static final String SCHEME = "xds";
+  private final String scheme;
+  private final Map<String, ?> bootstrapOverride;
+
+  public XdsNameResolverProvider() {
+    this(SCHEME, null);
+  }
 
   /**
-   * A convenient method to create a {@link XdsNameResolverProvider} with custom scheme and
-   * bootstrap.
+   * A convenient constructor to allow creating a {@link XdsNameResolverProvider} with custom scheme
+   * and bootstrap.
    */
-  public static XdsNameResolverProvider createForTest(String scheme,
-                                               @Nullable Map<String, ?> bootstrapOverride) {
-    XdsNameResolverProvider provider = new XdsNameResolverProvider();
-    provider.scheme = checkNotNull(scheme, "scheme");
-    provider.bootstrapOverride = bootstrapOverride;
-    return provider;
+  public XdsNameResolverProvider(String scheme,
+                                 @Nullable Map<String, ?> bootstrapOverride) {
+    this.scheme = checkNotNull(scheme, "scheme");
+    this.bootstrapOverride = bootstrapOverride;
   }
 
   @Override
