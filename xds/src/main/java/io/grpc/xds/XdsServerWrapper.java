@@ -207,11 +207,11 @@ final class XdsServerWrapper extends Server {
     if (xdsClient != null) {
       xdsClient = xdsClientPool.returnObject(xdsClient);
     }
-    if (sharedTimeService) {
-      SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeService);
-    }
     if (restartTimer != null) {
       restartTimer.cancel();
+    }
+    if (sharedTimeService) {
+      SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeService);
     }
     isServing = false;
     internalTerminationLatch.countDown();

@@ -95,7 +95,7 @@ final class FilterChainMatchingProtocolNegotiators {
                 (InetSocketAddress) ctx.channel().localAddress(),
                 (InetSocketAddress) ctx.channel().remoteAddress());
       } catch (IllegalStateException ex) {
-        log.log(Level.FINE, "Did not find exactly one filter chain.");
+        log.log(Level.FINE, "Did not find exactly one filter chain: " + ex.getMessage());
         ctx.fireExceptionCaught(ex);
         return;
       }
