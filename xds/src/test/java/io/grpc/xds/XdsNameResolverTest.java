@@ -37,7 +37,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
-import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import io.grpc.CallOptions;
@@ -196,34 +195,6 @@ public class XdsNameResolverTest {
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo("Failed to initialize xDS");
     assertThat(error.getCause()).hasMessageThat().isEqualTo("Fail to read bootstrap file");
-  }
-
-  @Test
-  public void overrideBootstrap() throws Exception {
-    final SettableFuture<Map<String, ?>> bootstrapSettable = SettableFuture.create();
-    XdsClientPoolFactory xdsClientPoolFactory = new XdsClientPoolFactory() {
-
-      @Override
-      public void setBootstrapOverride(Map<String, ?> bootstrap) {
-        assertThat(bootstrapSettable.set(bootstrap)).isTrue();
-      }
-
-      @Override
-      @Nullable
-      public ObjectPool<XdsClient> get() {
-        throw new UnsupportedOperationException("Should not be called");
-      }
-
-      @Override
-      public ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
-        assertThat(bootstrapSettable.isDone()).isTrue();
-        return null;
-      }
-    };
-    Map<String, String> b = new HashMap<>();
-    resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-            xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), b);
-    assertThat(bootstrapSettable.get()).isSameInstanceAs(b);
   }
 
   @Test

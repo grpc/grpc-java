@@ -20,15 +20,20 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
+import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelLogger;
 import io.grpc.InternalServiceProviders;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import java.net.URI;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -113,5 +118,50 @@ public class XdsNameResolverProviderTest {
     } catch (IllegalArgumentException e) {
       // Expected
     }
+  }
+
+  @Test
+  public void newProvider_createForTest() {
+    NameResolverRegistry registry = new NameResolverRegistry();
+    XdsNameResolverProvider provider0 = XdsNameResolverProvider.createForTest("no-scheme", null);
+    registry.register(provider0);
+    XdsNameResolverProvider provider1 = XdsNameResolverProvider.createForTest("new-xds-scheme",
+            new HashMap<String, String>());
+    registry.register(provider1);
+    assertThat(registry.asFactory()
+            .newNameResolver(URI.create("new-xds-scheme:///localhost"), args)).isNotNull();
+    assertThat(registry.asFactory()
+            .newNameResolver(URI.create("no-scheme:///localhost"), args)).isNotNull();
+    registry.deregister(provider1);
+    assertThat(registry.asFactory()
+            .newNameResolver(URI.create("new-xds-scheme:///localhost"), args)).isNull();
+    registry.deregister(provider0);
+  }
+
+  @Test
+  public void newProvider_createForTest_overrideBootstrap() {
+    Map<String, ?> b = ImmutableMap.of(
+            "node", ImmutableMap.of(
+                    "id", "ENVOY_NODE_ID",
+                    "cluster", "ENVOY_CLUSTER"),
+            "xds_servers", Collections.singletonList(
+                    ImmutableMap.of(
+                            "server_uri", "trafficdirector.googleapis.com:443",
+                            "channel_creds", Collections.singletonList(
+                                    ImmutableMap.of("type", "insecure")
+                            )
+                    )
+            )
+    );
+    NameResolverRegistry registry = new NameResolverRegistry();
+    XdsNameResolverProvider provider = XdsNameResolverProvider.createForTest("no-scheme", b);
+    registry.register(provider);
+    NameResolver resolver = registry.asFactory()
+            .newNameResolver(URI.create("no-scheme:///localhost"), args);
+    resolver.start(mock(NameResolver.Listener2.class));
+    assertThat(resolver).isInstanceOf(XdsNameResolver.class);
+    assertThat(((XdsNameResolver)resolver).getXdsClient().getBootstrapInfo().getNode().getId())
+            .isEqualTo("ENVOY_NODE_ID");
+    registry.deregister(provider);
   }
 }
