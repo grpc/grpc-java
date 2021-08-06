@@ -123,9 +123,9 @@ public class XdsNameResolverProviderTest {
   @Test
   public void newProvider_multipleScheme() {
     NameResolverRegistry registry = NameResolverRegistry.getDefaultRegistry();
-    XdsNameResolverProvider provider0 = new XdsNameResolverProvider("no-scheme", null);
+    XdsNameResolverProvider provider0 = XdsNameResolverProvider.createForTest("no-scheme", null);
     registry.register(provider0);
-    XdsNameResolverProvider provider1 = new XdsNameResolverProvider("new-xds-scheme",
+    XdsNameResolverProvider provider1 = XdsNameResolverProvider.createForTest("new-xds-scheme",
             new HashMap<String, String>());
     registry.register(provider1);
     assertThat(registry.asFactory()
@@ -158,7 +158,7 @@ public class XdsNameResolverProviderTest {
             )
     );
     NameResolverRegistry registry = new NameResolverRegistry();
-    XdsNameResolverProvider provider = new XdsNameResolverProvider("no-scheme", b);
+    XdsNameResolverProvider provider = XdsNameResolverProvider.createForTest("no-scheme", b);
     registry.register(provider);
     NameResolver resolver = registry.asFactory()
             .newNameResolver(URI.create("no-scheme:///localhost"), args);

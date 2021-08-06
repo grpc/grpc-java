@@ -49,14 +49,19 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
     this(SCHEME, null);
   }
 
-  /**
-   * A convenient constructor to allow creating a {@link XdsNameResolverProvider} with custom scheme
-   * and bootstrap.
-   */
-  public XdsNameResolverProvider(String scheme,
+  private XdsNameResolverProvider(String scheme,
                                  @Nullable Map<String, ?> bootstrapOverride) {
     this.scheme = checkNotNull(scheme, "scheme");
     this.bootstrapOverride = bootstrapOverride;
+  }
+
+  /**
+   * A convenient method to allow creating a {@link XdsNameResolverProvider} with custom scheme
+   * and bootstrap.
+   */
+  public static XdsNameResolverProvider createForTest(String scheme,
+                                                      @Nullable Map<String, ?> bootstrapOverride) {
+    return new XdsNameResolverProvider(scheme, bootstrapOverride);
   }
 
   @Override
