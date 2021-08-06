@@ -448,7 +448,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public final void cancel(Status reason) {
-    cancellationStatus = reason;
     Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here */);
     noopSubstream.stream = new NoopClientStream();
     Runnable runnable = commit(noopSubstream);
@@ -463,7 +462,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     synchronized (lock) {
       if (state.drainedSubstreams.contains(state.winningSubstream)) {
         winningSubstreamToCancel = state.winningSubstream;
-      } // otherwise the winningSubstream will be cancelled while draining
+      } else { // the winningSubstream will be cancelled while draining
+        cancellationStatus = reason;
+      }
       state = state.cancelled();
     }
     if (winningSubstreamToCancel != null) {
