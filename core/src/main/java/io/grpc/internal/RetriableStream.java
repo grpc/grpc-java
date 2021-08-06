@@ -104,6 +104,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   @GuardedBy("lock")
   private FutureCanceller scheduledHedging;
   private long nextBackoffIntervalNanos;
+  private Status cancellationStatus;
 
   RetriableStream(
       MethodDescriptor<ReqT, ?> method, Metadata headers,
@@ -245,14 +246,16 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     int index = 0;
     int chunk = 0x80;
     List<BufferEntry> list = null;
+    boolean streamStarted = false;
 
     while (true) {
       State savedState;
 
       synchronized (lock) {
         savedState = state;
-        if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
-          // committed but not me
+        if (savedState.winningSubstream != null && savedState.winningSubstream != substream
+            && streamStarted) {
+          // committed but not me, to be cancelled
           break;
         }
         if (index == savedState.buffer.size()) { // I'm drained
@@ -276,17 +279,22 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       for (BufferEntry bufferEntry : list) {
         savedState = state;
-        if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
-          // committed but not me
+        if (savedState.winningSubstream != null && savedState.winningSubstream != substream
+            && streamStarted) {
+          // committed but not me, to be cancelled
           break;
         }
-        if (savedState.cancelled) {
+        if (savedState.cancelled && streamStarted) {
           checkState(
               savedState.winningSubstream == substream,
               "substream should be CANCELLED_BECAUSE_COMMITTED already");
+          substream.stream.cancel(cancellationStatus);
           return;
         }
         bufferEntry.runWith(substream);
+        if (bufferEntry instanceof RetriableStream.StartEntry) {
+          streamStarted = true;
+        }
       }
     }
 
@@ -300,6 +308,13 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   @Nullable
   abstract Status prestart();
 
+  class StartEntry implements BufferEntry {
+    @Override
+    public void runWith(Substream substream) {
+      substream.stream.start(new Sublistener(substream));
+    }
+  }
+
   /** Starts the first PRC attempt. */
   @Override
   public final void start(ClientStreamListener listener) {
@@ -310,13 +325,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     if (shutdownStatus != null) {
       cancel(shutdownStatus);
       return;
-    }
-
-    class StartEntry implements BufferEntry {
-      @Override
-      public void runWith(Substream substream) {
-        substream.stream.start(new Sublistener(substream));
-      }
     }
 
     synchronized (lock) {
@@ -451,10 +459,17 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       return;
     }
 
-    state.winningSubstream.stream.cancel(reason);
+    Substream winningSubstreamToCancel = null;
     synchronized (lock) {
-      // This is not required, but causes a short-circuit in the draining process.
+      if (state.drainedSubstreams.contains(state.winningSubstream)) {
+        winningSubstreamToCancel = state.winningSubstream;
+      } else { // the winningSubstream will be cancelled while draining
+        cancellationStatus = reason;
+      }
       state = state.cancelled();
+    }
+    if (winningSubstreamToCancel != null) {
+      winningSubstreamToCancel.stream.cancel(reason);
     }
   }
 
