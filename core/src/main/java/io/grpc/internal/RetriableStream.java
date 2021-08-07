@@ -252,10 +252,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       synchronized (lock) {
         savedState = state;
-        if (savedState.winningSubstream != null && savedState.winningSubstream != substream
-            && streamStarted) {
-          // committed but not me, to be cancelled
-          break;
+        if (streamStarted) {
+          if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
+            // committed but not me, to be cancelled
+            break;
+          }
+          if (savedState.cancelled) {
+            break;
+          }
         }
         if (index == savedState.buffer.size()) { // I'm drained
           state = savedState.substreamDrained(substream);
@@ -277,27 +281,25 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
 
       for (BufferEntry bufferEntry : list) {
-        savedState = state;
-        if (savedState.winningSubstream != null && savedState.winningSubstream != substream
-            && streamStarted) {
-          // committed but not me, to be cancelled
-          break;
-        }
-        if (savedState.cancelled && streamStarted) {
-          checkState(
-              savedState.winningSubstream == substream,
-              "substream should be CANCELLED_BECAUSE_COMMITTED already");
-          substream.stream.cancel(cancellationStatus);
-          return;
-        }
         bufferEntry.runWith(substream);
         if (bufferEntry instanceof RetriableStream.StartEntry) {
           streamStarted = true;
         }
+        if (streamStarted) {
+          savedState = state;
+          if (savedState.winningSubstream != null && savedState.winningSubstream != substream) {
+            // committed but not me, to be cancelled
+            break;
+          }
+          if (savedState.cancelled) {
+            break;
+          }
+        }
       }
     }
 
-    substream.stream.cancel(CANCELLED_BECAUSE_COMMITTED);
+    substream.stream.cancel(
+        state.winningSubstream == substream ? cancellationStatus : CANCELLED_BECAUSE_COMMITTED);
   }
 
   /**
