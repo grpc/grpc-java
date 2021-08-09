@@ -173,14 +173,6 @@ final class CensusStatsModule {
   }
 
   private static final class ClientTracer extends ClientStreamTracer {
-    final Stopwatch stopwatch;
-    final CallAttemptsTracerFactory attemptsState;
-    final AtomicBoolean inboundReceivedOrClosed = new AtomicBoolean();
-    final CensusStatsModule module;
-    final TagContext parentCtx;
-    final TagContext startCtx;
-    final StreamInfo info;
-
     @Nullable private static final AtomicLongFieldUpdater<ClientTracer> outboundMessageCountUpdater;
     @Nullable private static final AtomicLongFieldUpdater<ClientTracer> inboundMessageCountUpdater;
     @Nullable private static final AtomicLongFieldUpdater<ClientTracer> outboundWireSizeUpdater;
@@ -234,6 +226,13 @@ final class CensusStatsModule {
       inboundUncompressedSizeUpdater = tmpInboundUncompressedSizeUpdater;
     }
 
+    final Stopwatch stopwatch;
+    final CallAttemptsTracerFactory attemptsState;
+    final AtomicBoolean inboundReceivedOrClosed = new AtomicBoolean();
+    final CensusStatsModule module;
+    final TagContext parentCtx;
+    final TagContext startCtx;
+    final StreamInfo info;
     volatile long outboundMessageCount;
     volatile long inboundMessageCount;
     volatile long outboundWireSize;
