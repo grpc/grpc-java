@@ -23,6 +23,7 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -35,6 +36,7 @@ import java.net.SocketAddress;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import javax.annotation.Nullable;
+import org.mockito.ArgumentMatchers;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
@@ -118,7 +120,8 @@ public final class TestUtils {
         when(mockTransport.getLogId())
             .thenReturn(InternalLogId.allocate("mocktransport", /*details=*/ null));
         when(mockTransport.newStream(
-                any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class)))
+                any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class),
+                ArgumentMatchers.<ClientStreamTracer[]>any()))
             .thenReturn(mock(ClientStream.class));
         // Save the listener
         doAnswer(new Answer<Runnable>() {

@@ -728,7 +728,9 @@ public class CsdsServiceTest {
 
       // Minimal verification to confirm that the data/metadata XdsClient provides,
       // is propagated to the correct resource types.
-      assertThat(clientConfig.getXdsConfigCount()).isEqualTo(4);
+      @SuppressWarnings("deprecation")
+      int xdsConfigCount = clientConfig.getXdsConfigCount();
+      assertThat(xdsConfigCount).isEqualTo(4);
       EnumMap<ResourceType, PerXdsConfig> configDumps = mapConfigDumps(clientConfig);
       assertThat(configDumps.keySet()).containsExactly(LDS, RDS, CDS, EDS);
 
@@ -803,7 +805,9 @@ public class CsdsServiceTest {
    */
   private static void verifyClientConfigNoResources(ClientConfig clientConfig) {
     // Expect PerXdsConfig for all resource types to be present, but empty.
-    assertThat(clientConfig.getXdsConfigCount()).isEqualTo(4);
+    @SuppressWarnings("deprecation")
+    int xdsConfigCount = clientConfig.getXdsConfigCount();
+    assertThat(xdsConfigCount).isEqualTo(4);
     EnumMap<ResourceType, PerXdsConfig> configDumps = mapConfigDumps(clientConfig);
     assertThat(configDumps.keySet()).containsExactly(LDS, RDS, CDS, EDS);
 
@@ -842,7 +846,9 @@ public class CsdsServiceTest {
 
   private static EnumMap<ResourceType, PerXdsConfig> mapConfigDumps(ClientConfig config) {
     EnumMap<ResourceType, PerXdsConfig> xdsConfigMap = new EnumMap<>(ResourceType.class);
-    for (PerXdsConfig perXdsConfig : config.getXdsConfigList()) {
+    @SuppressWarnings("deprecation")
+    List<PerXdsConfig> xdsConfigList = config.getXdsConfigList();
+    for (PerXdsConfig perXdsConfig : xdsConfigList) {
       ResourceType type = perXdsConfigToResourceType(perXdsConfig);
       assertThat(type).isNotEqualTo(ResourceType.UNKNOWN);
       assertThat(xdsConfigMap).doesNotContainKey(type);

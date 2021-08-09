@@ -31,6 +31,8 @@ buildscripts/make_dependencies.sh
     :grpc-android-interop-testing:build \
     :grpc-android:build \
     :grpc-cronet:build \
+    :grpc-binder:build \
+    assembleAndroidTest \
     publishToMavenLocal
 
 if [[ ! -z $(git status --porcelain) ]]; then

@@ -341,8 +341,8 @@ public class ClusterImplLoadBalancerTest {
       PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
       assertThat(result.getStatus().isOk()).isTrue();
       ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
-      streamTracerFactory.newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(),
-          new Metadata());
+      streamTracerFactory.newClientStreamTracer(
+          ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
     }
     ClusterStats clusterStats =
         Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
@@ -429,8 +429,8 @@ public class ClusterImplLoadBalancerTest {
       PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
       assertThat(result.getStatus().isOk()).isTrue();
       ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
-      streamTracerFactory.newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(),
-          new Metadata());
+      streamTracerFactory.newClientStreamTracer(
+          ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
     }
     ClusterStats clusterStats =
         Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));

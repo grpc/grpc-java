@@ -78,6 +78,7 @@ public class RetryPolicyTest {
               TimeUnit.MILLISECONDS.toNanos(2100),
               TimeUnit.MILLISECONDS.toNanos(2200),
               parseDouble("3"),
+              null,
               ImmutableSet.of(Code.UNAVAILABLE, Code.RESOURCE_EXHAUSTED)));
 
       method = builder.setFullMethodName("SimpleService1/Foo1").build();
@@ -87,6 +88,7 @@ public class RetryPolicyTest {
               TimeUnit.MILLISECONDS.toNanos(100),
               TimeUnit.MILLISECONDS.toNanos(1000),
               parseDouble("2"),
+              null,
               ImmutableSet.of(Code.UNAVAILABLE)));
 
       method = builder.setFullMethodName("SimpleService2/not_exist").build();
@@ -99,6 +101,7 @@ public class RetryPolicyTest {
               TimeUnit.MILLISECONDS.toNanos(100),
               TimeUnit.MILLISECONDS.toNanos(1000),
               parseDouble("2"),
+              null,
               ImmutableSet.of(Code.UNAVAILABLE)));
     } finally {
       if (reader != null) {

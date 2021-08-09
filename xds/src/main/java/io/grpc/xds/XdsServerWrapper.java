@@ -36,14 +36,17 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
-import io.grpc.xds.FilterChainMatchingHandler.FilterChainSelector;
+import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
@@ -56,7 +59,7 @@ import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -73,7 +76,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
-public final class XdsServerWrapper extends Server {
+final class XdsServerWrapper extends Server {
   private static final Logger logger = Logger.getLogger(XdsServerWrapper.class.getName());
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -88,21 +91,22 @@ public final class XdsServerWrapper extends Server {
   public static final Attributes.Key<ServerRoutingConfig> ATTR_SERVER_ROUTING_CONFIG =
           Attributes.Key.create("io.grpc.xds.ServerWrapper.serverRoutingConfig");
 
+  @VisibleForTesting
+  static final long RETRY_DELAY_NANOS = TimeUnit.MINUTES.toNanos(1);
   private final String listenerAddress;
   private final ServerBuilder<?> delegateBuilder;
+  private boolean sharedTimeService;
   private final ScheduledExecutorService timeService;
-  private final long retryDelayNano;
   private final FilterRegistry filterRegistry;
   private final ThreadSafeRandom random;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final XdsServingStatusListener listener;
   private final AtomicReference<FilterChainSelector> filterChainSelectorRef;
-  private final ServerInterceptor configApplyingInterceptor = new ConfigApplyingInterceptor();
   private final AtomicBoolean started = new AtomicBoolean(false);
   private final AtomicBoolean shutdown = new AtomicBoolean(false);
   private boolean isServing;
   private final CountDownLatch internalTerminationLatch = new CountDownLatch(1);
-  private final SettableFuture<IOException> initialStartFuture = SettableFuture.create();
+  private final SettableFuture<Exception> initialStartFuture = SettableFuture.create();
   private boolean initialStarted;
   private ScheduledHandle restartTimer;
   private ObjectPool<XdsClient> xdsClientPool;
@@ -113,21 +117,34 @@ public final class XdsServerWrapper extends Server {
   XdsServerWrapper(
       String listenerAddress,
       ServerBuilder<?> delegateBuilder,
-      ScheduledExecutorService timeService,
-      long retryDelayNano,
       XdsServingStatusListener listener,
       AtomicReference<FilterChainSelector> filterChainSelectorRef,
       XdsClientPoolFactory xdsClientPoolFactory,
       FilterRegistry filterRegistry) {
+    this(listenerAddress, delegateBuilder, listener, filterChainSelectorRef, xdsClientPoolFactory,
+            filterRegistry, SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
+    sharedTimeService = true;
+  }
+
+  @VisibleForTesting
+  XdsServerWrapper(
+          String listenerAddress,
+          ServerBuilder<?> delegateBuilder,
+          XdsServingStatusListener listener,
+          AtomicReference<FilterChainSelector> filterChainSelectorRef,
+          XdsClientPoolFactory xdsClientPoolFactory,
+          FilterRegistry filterRegistry,
+          ScheduledExecutorService timeService) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
     this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
-    this.timeService = checkNotNull(timeService, "timeService");
-    this.retryDelayNano = retryDelayNano;
+    this.delegateBuilder.intercept(new ConfigApplyingInterceptor());
     this.listener = checkNotNull(listener, "listener");
     this.filterChainSelectorRef = checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
+    this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    this.timeService = checkNotNull(timeService, "timeService");
     this.filterRegistry = checkNotNull(filterRegistry,"filterRegistry");
     this.random = ThreadSafeRandomImpl.instance;
-    this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    this.delegate = delegateBuilder.build();
   }
 
   @Override
@@ -139,15 +156,15 @@ public final class XdsServerWrapper extends Server {
         internalStart();
       }
     });
-    syncContext.drain();
-    IOException exception;
+    Exception exception;
     try {
       exception = initialStartFuture.get();
     } catch (InterruptedException | ExecutionException e) {
       throw new RuntimeException(e);
     }
     if (exception != null) {
-      throw exception;
+      throw (exception instanceof IOException) ? (IOException) exception :
+              new IOException(exception);
     }
     return this;
   }
@@ -156,10 +173,10 @@ public final class XdsServerWrapper extends Server {
     try {
       xdsClientPool = xdsClientPoolFactory.getOrCreate();
     } catch (Exception e) {
-      listener.onNotServing(
-          Status.UNAVAILABLE.withDescription(
-              "Failed to initialize xDS").withCause(e).asException());
-      initialStartFuture.set(null);
+      StatusException statusException = Status.UNAVAILABLE.withDescription(
+              "Failed to initialize xDS").withCause(e).asException();
+      listener.onNotServing(statusException);
+      initialStartFuture.set(statusException);
       return;
     }
     xdsClient = xdsClientPool.getObject();
@@ -168,14 +185,14 @@ public final class XdsServerWrapper extends Server {
     boolean useProtocolV3 = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
     String listenerTemplate = xdsClient.getBootstrapInfo().getServerListenerResourceNameTemplate();
     if (!useProtocolV3 || listenerTemplate == null) {
-      listener.onNotServing(
+      StatusException statusException =
           Status.UNAVAILABLE.withDescription(
-              "Can only support xDS v3 with listener resource name template").asException());
-      initialStartFuture.set(null);
+              "Can only support xDS v3 with listener resource name template").asException();
+      listener.onNotServing(statusException);
+      initialStartFuture.set(statusException);
       xdsClient = xdsClientPool.returnObject(xdsClient);
       return;
     }
-    delegateBuilder.intercept(configApplyingInterceptor);
     discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", listenerAddress));
   }
 
@@ -187,13 +204,12 @@ public final class XdsServerWrapper extends Server {
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        internalShutdown();
-        if (delegate != null) {
+        if (!delegate.isShutdown()) {
           delegate.shutdown();
         }
+        internalShutdown();
       }
     });
-    syncContext.drain();
     return this;
   }
 
@@ -205,13 +221,12 @@ public final class XdsServerWrapper extends Server {
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        internalShutdown();
-        if (delegate != null) {
+        if (!delegate.isShutdown()) {
           delegate.shutdownNow();
         }
+        internalShutdown();
       }
     });
-    syncContext.drain();
     return this;
   }
 
@@ -227,6 +242,9 @@ public final class XdsServerWrapper extends Server {
     if (restartTimer != null) {
       restartTimer.cancel();
     }
+    if (sharedTimeService) {
+      SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeService);
+    }
     isServing = false;
     internalTerminationLatch.countDown();
   }
@@ -238,72 +256,48 @@ public final class XdsServerWrapper extends Server {
 
   @Override
   public boolean isTerminated() {
-    if (internalTerminationLatch.getCount() != 0) {
-      return false;
-    }
-    if (delegate != null) {
-      return delegate.isTerminated();
-    }
-    return true;
+    return internalTerminationLatch.getCount() == 0 && delegate.isTerminated();
   }
 
   @Override
   public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+    long startTime = System.nanoTime();
     if (!internalTerminationLatch.await(timeout, unit)) {
       return false;
     }
-    if (delegate != null) {
-      delegate.awaitTermination();
-    }
-    return true;
+    long remainingTime = unit.toNanos(timeout) - (System.nanoTime() - startTime);
+    return delegate.awaitTermination(remainingTime, TimeUnit.NANOSECONDS);
   }
 
   @Override
   public void awaitTermination() throws InterruptedException {
     internalTerminationLatch.await();
-    if (delegate != null) {
-      delegate.awaitTermination();
-    }
+    delegate.awaitTermination();
   }
 
   @Override
   public int getPort() {
-    if (delegate != null) {
-      return delegate.getPort();
-    }
-    return -1;
+    return delegate.getPort();
   }
 
   @Override
   public List<? extends SocketAddress> getListenSockets() {
-    if (delegate != null) {
-      return delegate.getListenSockets();
-    }
-    return Collections.emptyList();
+    return delegate.getListenSockets();
   }
 
   @Override
   public List<ServerServiceDefinition> getServices() {
-    if (delegate != null) {
-      return delegate.getServices();
-    }
-    return Collections.emptyList();
+    return delegate.getServices();
   }
 
   @Override
   public List<ServerServiceDefinition> getImmutableServices() {
-    if (delegate != null) {
-      return delegate.getImmutableServices();
-    }
-    return Collections.emptyList();
+    return delegate.getImmutableServices();
   }
 
   @Override
   public List<ServerServiceDefinition> getMutableServices() {
-    if (delegate != null) {
-      return delegate.getMutableServices();
-    }
-    return Collections.emptyList();
+    return delegate.getMutableServices();
   }
 
   // Must run in SynchronizationContext
@@ -314,7 +308,7 @@ public final class XdsServerWrapper extends Server {
     if (isServing) {
       return;
     }
-    if (delegate == null || delegate.isShutdown()) {
+    if (delegate.isShutdown()) {
       delegate = delegateBuilder.build();
     }
     try {
@@ -332,7 +326,7 @@ public final class XdsServerWrapper extends Server {
         initialStartFuture.set(e);
       }
       restartTimer = syncContext.schedule(
-        new RestartTask(), retryDelayNano, TimeUnit.NANOSECONDS, timeService);
+        new RestartTask(), RETRY_DELAY_NANOS, TimeUnit.NANOSECONDS, timeService);
     }
   }
 
@@ -371,12 +365,13 @@ public final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
-          if (update.listener() == null) {
-            // Ignore updates not for servers.
-            return;
+          checkNotNull(update.listener(), "update");
+          if (inflight) {
+            releaseSuppliersInFlight();
+          } else {
+            inflight = true;
           }
-          inflight = true;
-          filterChains = new HashMap<>();
+          filterChains.clear();
           for (FilterChain filterChain: update.listener().getFilterChains()) {
             filterChains.put(filterChain.getName(), filterChain);
           }
@@ -429,10 +424,9 @@ public final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
-          handleConfigNotFound(null);
-          listener.onNotServing(
-              Status.UNAVAILABLE.withDescription(
-                  "Listener " + resourceName + " unavailable").asException());
+          StatusException statusException = Status.UNAVAILABLE.withDescription(
+                  "Listener " + resourceName + " unavailable").asException();
+          handleConfigNotFound(statusException);
         }
       });
     }
@@ -445,9 +439,14 @@ public final class XdsServerWrapper extends Server {
           if (stopped) {
             return;
           }
-          logger.log(Level.FINE, "Transient error from XdsClient: {0}", error);
-          // TODO(zivy@): notify error.
-          // TODO(zivy@): maybe handle config not found for permanent error.
+          boolean isPermanentError = isPermanentError(error);
+          logger.log(Level.FINE, "{0} error from XdsClient: {1}",
+                  new Object[]{isPermanentError ? "Permanent" : "Transient", error});
+          if (isPermanentError) {
+            handleConfigNotFound(error.asException());
+          } else if (!isServing) {
+            listener.onNotServing(error.asException());
+          }
         }
       });
     }
@@ -457,13 +456,12 @@ public final class XdsServerWrapper extends Server {
       cleanUpRouteDiscoveryStates();
       logger.log(Level.FINE, "Stop watching LDS resource {0}", resourceName);
       xdsClient.cancelLdsResourceWatch(resourceName, this);
-      for (FilterChain filterChain : filterChains.values()) {
-        SslContextProviderSupplier sslContextProviderSupplier =
-            filterChain.getSslContextProviderSupplier();
-        if (sslContextProviderSupplier != null) {
-          sslContextProviderSupplier.close();
-        }
+      List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
+      filterChainSelectorRef.set(FilterChainSelector.NO_FILTER_CHAIN);
+      for (SslContextProviderSupplier s: toRelease) {
+        s.close();
       }
+      releaseSuppliersInFlight();
     }
 
     private void handleConfigDiscovered(
@@ -490,6 +488,9 @@ public final class XdsServerWrapper extends Server {
             defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
             defaultRoutingConfig);
         Set<SslContextProviderSupplier> toRelease = new HashSet<>();
+        // release sslContextProviderSuppliers only once per each LDS. RDS update may update routing
+        // config in filterChainSelectorRef without updating filter chains, thus should not release
+        // sslContextProviderSuppliers.
         if (filterChainSelectorRef.get() != null && inflight) {
           for (FilterChain previous : filterChainSelectorRef.get().getRoutingConfigs().keySet()) {
             if (previous.getSslContextProviderSupplier() != null) {
@@ -511,9 +512,13 @@ public final class XdsServerWrapper extends Server {
       }
     }
 
-    private void handleConfigNotFound(@Nullable IOException exception) {
+    private void handleConfigNotFound(StatusException exception) {
       cleanUpRouteDiscoveryStates();
+      List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
       filterChainSelectorRef.set(FilterChainSelector.NO_FILTER_CHAIN);
+      for (SslContextProviderSupplier s: toRelease) {
+        s.close();
+      }
       if (!initialStarted) {
         initialStarted = true;
         initialStartFuture.set(exception);
@@ -521,10 +526,11 @@ public final class XdsServerWrapper extends Server {
       if (restartTimer != null) {
         restartTimer.cancel();
       }
-      if (delegate != null && !delegate.isShutdown()) {
+      if (!delegate.isShutdown()) {
         delegate.shutdown();  // let in-progress calls finish
       }
       isServing = false;
+      listener.onNotServing(exception);
     }
 
     private void cleanUpRouteDiscoveryStates() {
@@ -532,12 +538,40 @@ public final class XdsServerWrapper extends Server {
         String rdsName = rdsState.resourceName;
         logger.log(Level.FINE, "Stop watching RDS resource {0}", rdsName);
         xdsClient.cancelRdsResourceWatch(rdsName, rdsState);
-        SslContextProviderSupplier supplier;
-        if ((supplier = rdsState.filterChain.getSslContextProviderSupplier()) != null) {
+      }
+      routeDiscoveryStates.clear();
+    }
+
+    private List<SslContextProviderSupplier> getSuppliersInUse() {
+      List<SslContextProviderSupplier> toRelease = new ArrayList<>();
+      FilterChainSelector selector = filterChainSelectorRef.get();
+      if (selector != null) {
+        for (FilterChain f: selector.getRoutingConfigs().keySet()) {
+          if (f.getSslContextProviderSupplier() != null) {
+            toRelease.add(f.getSslContextProviderSupplier());
+          }
+        }
+        SslContextProviderSupplier defaultSupplier =
+                selector.getDefaultSslContextProviderSupplier();
+        if (defaultSupplier != null) {
+          toRelease.add(defaultSupplier);
+        }
+      }
+      return toRelease;
+    }
+
+    private void releaseSuppliersInFlight() {
+      SslContextProviderSupplier supplier;
+      for (FilterChain filterChain : filterChains.values()) {
+        supplier = filterChain.getSslContextProviderSupplier();
+        if (supplier != null) {
           supplier.close();
         }
       }
-      routeDiscoveryStates.clear();
+      if (defaultFilterChain != null
+              && (supplier = defaultFilterChain.getSslContextProviderSupplier()) != null) {
+        supplier.close();
+      }
     }
 
     private final class RouteDiscoveryState implements RdsResourceWatcher {
@@ -596,6 +630,16 @@ public final class XdsServerWrapper extends Server {
           }
         });
       }
+    }
+
+    private boolean isPermanentError(Status error) {
+      return EnumSet.of(
+              Status.Code.INTERNAL,
+              Status.Code.INVALID_ARGUMENT,
+              Status.Code.FAILED_PRECONDITION,
+              Status.Code.PERMISSION_DENIED,
+              Status.Code.UNAUTHENTICATED)
+              .contains(error.getCode());
     }
   }
 
@@ -688,7 +732,7 @@ public final class XdsServerWrapper extends Server {
    * The HttpConnectionManager level configuration.
    */
   @AutoValue
-  public abstract static class ServerRoutingConfig {
+  abstract static class ServerRoutingConfig {
     // Top level http filter configs.
     abstract ImmutableList<NamedFilterConfig> httpFilterConfigs();
 

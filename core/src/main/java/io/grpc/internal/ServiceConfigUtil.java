@@ -140,6 +140,11 @@ public final class ServiceConfigUtil {
     return JsonUtil.getNumber(retryPolicy, "backoffMultiplier");
   }
 
+  @Nullable
+  static Long getPerAttemptRecvTimeoutNanosFromRetryPolicy(Map<String, ?> retryPolicy) {
+    return JsonUtil.getStringAsDuration(retryPolicy, "perAttemptRecvTimeout");
+  }
+
   private static Set<Status.Code> getListOfStatusCodesAsSet(Map<String, ?> obj, String key) {
     List<?> statuses = JsonUtil.getList(obj, key);
     if (statuses == null) {
@@ -178,7 +183,6 @@ public final class ServiceConfigUtil {
     String retryableStatusCodesKey = "retryableStatusCodes";
     Set<Status.Code> codes = getListOfStatusCodesAsSet(retryPolicy, retryableStatusCodesKey);
     verify(codes != null, "%s is required in retry policy", retryableStatusCodesKey);
-    verify(!codes.isEmpty(), "%s must not be empty", retryableStatusCodesKey);
     verify(!codes.contains(Status.Code.OK), "%s must not contain OK", retryableStatusCodesKey);
     return codes;
   }

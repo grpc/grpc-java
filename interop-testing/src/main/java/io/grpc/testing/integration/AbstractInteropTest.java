@@ -289,7 +289,7 @@ public abstract class AbstractInteropTest {
       new LinkedBlockingQueue<>();
 
   private final ClientStreamTracer.Factory clientStreamTracerFactory =
-      new ClientStreamTracer.Factory() {
+      new ClientStreamTracer.InternalLimitedInfoFactory() {
         @Override
         public ClientStreamTracer newClientStreamTracer(
             ClientStreamTracer.StreamInfo info, Metadata headers) {
@@ -375,7 +375,8 @@ public abstract class AbstractInteropTest {
             .getClientInterceptor(
                 tagger, tagContextBinarySerializer, clientStatsRecorder,
                 GrpcUtil.STOPWATCH_SUPPLIER,
-                true, true, true, false /* real-time metrics */);
+                true, true, true,
+                /* recordRealTimeMetrics= */ false);
   }
 
   protected final ServerStreamTracer.Factory createCustomCensusTracerFactory() {
@@ -1042,19 +1043,18 @@ public abstract class AbstractInteropTest {
 
   @Test
   public void exchangeMetadataUnaryCall() throws Exception {
-    TestServiceGrpc.TestServiceBlockingStub stub = blockingStub;
-
     // Capture the metadata exchange
     Metadata fixedHeaders = new Metadata();
     // Send a context proto (as it's in the default extension registry)
     Messages.SimpleContext contextValue =
         Messages.SimpleContext.newBuilder().setValue("dog").build();
     fixedHeaders.put(Util.METADATA_KEY, contextValue);
-    stub = MetadataUtils.attachHeaders(stub, fixedHeaders);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
-    stub = MetadataUtils.captureMetadata(stub, headersCapture, trailersCapture);
+    TestServiceGrpc.TestServiceBlockingStub stub = blockingStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(fixedHeaders),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
 
     assertNotNull(stub.emptyCall(EMPTY));
 
@@ -1065,19 +1065,18 @@ public abstract class AbstractInteropTest {
 
   @Test
   public void exchangeMetadataStreamingCall() throws Exception {
-    TestServiceGrpc.TestServiceStub stub = asyncStub;
-
     // Capture the metadata exchange
     Metadata fixedHeaders = new Metadata();
     // Send a context proto (as it's in the default extension registry)
     Messages.SimpleContext contextValue =
         Messages.SimpleContext.newBuilder().setValue("dog").build();
     fixedHeaders.put(Util.METADATA_KEY, contextValue);
-    stub = MetadataUtils.attachHeaders(stub, fixedHeaders);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
-    stub = MetadataUtils.captureMetadata(stub, headersCapture, trailersCapture);
+    TestServiceGrpc.TestServiceStub stub = asyncStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(fixedHeaders),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
 
     List<Integer> responseSizes = Arrays.asList(50, 100, 150, 200);
     Messages.StreamingOutputCallRequest.Builder streamingOutputBuilder =
@@ -1179,6 +1178,7 @@ public abstract class AbstractInteropTest {
   public void deadlineExceededServerStreaming() throws Exception {
     // warm up the channel and JVM
     blockingStub.emptyCall(Empty.getDefaultInstance());
+    assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
     ResponseParameters.Builder responseParameters = ResponseParameters.newBuilder()
         .setSize(1)
         .setIntervalUs(10000);
@@ -1195,7 +1195,6 @@ public abstract class AbstractInteropTest {
     recorder.awaitCompletion();
     assertEquals(Status.DEADLINE_EXCEEDED.getCode(),
         Status.fromThrowable(recorder.getError()).getCode());
-    assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
     if (metricsExpected()) {
       // Stream may not have been created when deadline is exceeded, thus we don't check tracer
       // stats.
@@ -1239,6 +1238,12 @@ public abstract class AbstractInteropTest {
 
     // warm up the channel
     blockingStub.emptyCall(Empty.getDefaultInstance());
+    if (metricsExpected()) {
+      // clientStartRecord
+      clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
+      // clientEndRecord
+      clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
+    }
     try {
       blockingStub
           .withDeadlineAfter(-10, TimeUnit.SECONDS)
@@ -1249,7 +1254,6 @@ public abstract class AbstractInteropTest {
       assertThat(ex.getStatus().getDescription())
         .startsWith("ClientCall started after deadline exceeded");
     }
-    assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
     if (metricsExpected()) {
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
       checkStartTags(clientStartRecord, "grpc.testing.TestService/EmptyCall", true);
@@ -1484,11 +1488,11 @@ public abstract class AbstractInteropTest {
     Metadata metadata = new Metadata();
     metadata.put(Util.ECHO_INITIAL_METADATA_KEY, "test_initial_metadata_value");
     metadata.put(Util.ECHO_TRAILING_METADATA_KEY, trailingBytes);
-    TestServiceGrpc.TestServiceBlockingStub blockingStub = this.blockingStub;
-    blockingStub = MetadataUtils.attachHeaders(blockingStub, metadata);
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
-    blockingStub = MetadataUtils.captureMetadata(blockingStub, headersCapture, trailersCapture);
+    TestServiceGrpc.TestServiceBlockingStub blockingStub = this.blockingStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(metadata),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
     SimpleResponse response = blockingStub.unaryCall(request);
 
     assertResponse(goldenResponse, response);
@@ -1503,11 +1507,11 @@ public abstract class AbstractInteropTest {
     metadata = new Metadata();
     metadata.put(Util.ECHO_INITIAL_METADATA_KEY, "test_initial_metadata_value");
     metadata.put(Util.ECHO_TRAILING_METADATA_KEY, trailingBytes);
-    TestServiceGrpc.TestServiceStub stub = asyncStub;
-    stub = MetadataUtils.attachHeaders(stub, metadata);
     headersCapture = new AtomicReference<>();
     trailersCapture = new AtomicReference<>();
-    stub = MetadataUtils.captureMetadata(stub, headersCapture, trailersCapture);
+    TestServiceGrpc.TestServiceStub stub = asyncStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(metadata),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
 
     StreamRecorder<Messages.StreamingOutputCallResponse> recorder = StreamRecorder.create();
     StreamObserver<Messages.StreamingOutputCallRequest> requestStream =

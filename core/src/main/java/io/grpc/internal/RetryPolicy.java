@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableSet;
 import io.grpc.Status.Code;
 import java.util.Set;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
@@ -33,6 +34,8 @@ final class RetryPolicy {
   final long initialBackoffNanos;
   final long maxBackoffNanos;
   final double backoffMultiplier;
+  @Nullable
+  final Long perAttemptRecvTimeoutNanos;
   final Set<Code> retryableStatusCodes;
 
   /**
@@ -44,11 +47,13 @@ final class RetryPolicy {
       long initialBackoffNanos,
       long maxBackoffNanos,
       double backoffMultiplier,
+      @Nullable Long perAttemptRecvTimeoutNanos,
       @Nonnull Set<Code> retryableStatusCodes) {
     this.maxAttempts = maxAttempts;
     this.initialBackoffNanos = initialBackoffNanos;
     this.maxBackoffNanos = maxBackoffNanos;
     this.backoffMultiplier = backoffMultiplier;
+    this.perAttemptRecvTimeoutNanos = perAttemptRecvTimeoutNanos;
     this.retryableStatusCodes = ImmutableSet.copyOf(retryableStatusCodes);
   }
 
@@ -59,6 +64,7 @@ final class RetryPolicy {
         initialBackoffNanos,
         maxBackoffNanos,
         backoffMultiplier,
+        perAttemptRecvTimeoutNanos,
         retryableStatusCodes);
   }
 
@@ -72,6 +78,7 @@ final class RetryPolicy {
         && this.initialBackoffNanos == that.initialBackoffNanos
         && this.maxBackoffNanos == that.maxBackoffNanos
         && Double.compare(this.backoffMultiplier, that.backoffMultiplier) == 0
+        && Objects.equal(this.perAttemptRecvTimeoutNanos, that.perAttemptRecvTimeoutNanos)
         && Objects.equal(this.retryableStatusCodes, that.retryableStatusCodes);
   }
 
@@ -82,6 +89,7 @@ final class RetryPolicy {
         .add("initialBackoffNanos", initialBackoffNanos)
         .add("maxBackoffNanos", maxBackoffNanos)
         .add("backoffMultiplier", backoffMultiplier)
+        .add("perAttemptRecvTimeoutNanos", perAttemptRecvTimeoutNanos)
         .add("retryableStatusCodes", retryableStatusCodes)
         .toString();
   }

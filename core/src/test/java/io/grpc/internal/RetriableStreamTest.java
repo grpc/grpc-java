@@ -120,6 +120,7 @@ public class RetriableStreamTest {
           TimeUnit.SECONDS.toNanos(INITIAL_BACKOFF_IN_SECONDS),
           TimeUnit.SECONDS.toNanos(MAX_BACKOFF_IN_SECONDS),
           BACKOFF_MULTIPLIER,
+          null,
           ImmutableSet.of(RETRIABLE_STATUS_CODE_1, RETRIABLE_STATUS_CODE_2));
   private static final HedgingPolicy HEDGING_POLICY =
       new HedgingPolicy(
@@ -162,9 +163,10 @@ public class RetriableStreamTest {
     }
 
     @Override
-    ClientStream newSubstream(ClientStreamTracer.Factory tracerFactory, Metadata metadata) {
+    ClientStream newSubstream(
+        Metadata metadata, ClientStreamTracer.Factory tracerFactory, boolean isTransparentRetry) {
       bufferSizeTracer =
-          tracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+          tracerFactory.newClientStreamTracer(STREAM_INFO, metadata);
       int actualPreviousRpcAttemptsInHeader = metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS) == null
           ? 0 : Integer.valueOf(metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
       return retriableStreamRecorder.newSubstream(actualPreviousRpcAttemptsInHeader);
@@ -748,6 +750,91 @@ public class RetriableStreamTest {
   }
 
   @Test
+  public void cancelWhileDraining() {
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    ClientStream mockStream1 = mock(ClientStream.class);
+    ClientStream mockStream2 =
+        mock(
+            ClientStream.class,
+            delegatesTo(
+                new NoopClientStream() {
+                  @Override
+                  public void request(int numMessages) {
+                    retriableStream.cancel(
+                        Status.CANCELLED.withDescription("cancelled while requesting"));
+                  }
+                }));
+
+    InOrder inOrder = inOrder(retriableStreamRecorder, mockStream1, mockStream2);
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+    retriableStream.start(masterListener);
+    inOrder.verify(mockStream1).start(sublistenerCaptor1.capture());
+    retriableStream.request(3);
+    inOrder.verify(mockStream1).request(3);
+
+    // retry
+    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
+    fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
+
+    inOrder.verify(mockStream2).start(any(ClientStreamListener.class));
+    inOrder.verify(mockStream2).request(3);
+    inOrder.verify(retriableStreamRecorder).postCommit();
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    inOrder.verify(mockStream2).cancel(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.CANCELLED);
+    assertThat(statusCaptor.getValue().getDescription())
+        .isEqualTo("Stream thrown away because RetriableStream committed");
+    verify(masterListener).closed(
+        statusCaptor.capture(), any(RpcProgress.class), any(Metadata.class));
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.CANCELLED);
+    assertThat(statusCaptor.getValue().getDescription()).isEqualTo("cancelled while requesting");
+  }
+
+  @Test
+  public void cancelWhileRetryStart() {
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    ClientStream mockStream1 = mock(ClientStream.class);
+    ClientStream mockStream2 =
+        mock(
+            ClientStream.class,
+            delegatesTo(
+                new NoopClientStream() {
+                  @Override
+                  public void start(ClientStreamListener listener) {
+                    retriableStream.cancel(
+                        Status.CANCELLED.withDescription("cancelled while retry start"));
+                  }
+                }));
+
+    InOrder inOrder = inOrder(retriableStreamRecorder, mockStream1, mockStream2);
+    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+    retriableStream.start(masterListener);
+    inOrder.verify(mockStream1).start(sublistenerCaptor1.capture());
+
+    // retry
+    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
+    sublistenerCaptor1.getValue().closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
+    fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
+
+    inOrder.verify(mockStream2).start(any(ClientStreamListener.class));
+    inOrder.verify(retriableStreamRecorder).postCommit();
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    inOrder.verify(mockStream2).cancel(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.CANCELLED);
+    assertThat(statusCaptor.getValue().getDescription())
+        .isEqualTo("Stream thrown away because RetriableStream committed");
+    verify(masterListener).closed(
+        statusCaptor.capture(), any(RpcProgress.class), any(Metadata.class));
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.CANCELLED);
+    assertThat(statusCaptor.getValue().getDescription()).isEqualTo("cancelled while retry start");
+  }
+
+  @Test
   public void operationsAfterImmediateCommit() {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
@@ -914,6 +1001,47 @@ public class RetriableStreamTest {
     verify(mockStream3).request(1);
   }
 
+  @Test
+  public void commitAndCancelWhileDraining() {
+    ClientStream mockStream1 = mock(ClientStream.class);
+    ClientStream mockStream2 =
+        mock(
+            ClientStream.class,
+            delegatesTo(
+                new NoopClientStream() {
+                  @Override
+                  public void start(ClientStreamListener listener) {
+                    // commit while draining
+                    listener.headersRead(new Metadata());
+                    // cancel while draining
+                    retriableStream.cancel(
+                        Status.CANCELLED.withDescription("cancelled while drained"));
+                  }
+                }));
+
+    when(retriableStreamRecorder.newSubstream(anyInt()))
+        .thenReturn(mockStream1, mockStream2);
+
+    retriableStream.start(masterListener);
+
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
+        ArgumentCaptor.forClass(ClientStreamListener.class);
+    verify(mockStream1).start(sublistenerCaptor1.capture());
+
+    ClientStreamListener listener1 = sublistenerCaptor1.getValue();
+
+    // retry
+    listener1.closed(
+        Status.fromCode(RETRIABLE_STATUS_CODE_1), PROCESSED, new Metadata());
+    fakeClock.forwardTime((long) (INITIAL_BACKOFF_IN_SECONDS * FAKE_RANDOM), TimeUnit.SECONDS);
+
+    verify(mockStream2).start(any(ClientStreamListener.class));
+    verify(retriableStreamRecorder).postCommit();
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(mockStream2).cancel(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.CANCELLED);
+    assertThat(statusCaptor.getValue().getDescription()).isEqualTo("cancelled while drained");
+  }
 
   @Test
   public void perRpcBufferLimitExceeded() {

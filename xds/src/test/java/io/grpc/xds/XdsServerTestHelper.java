@@ -17,10 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
@@ -33,8 +29,6 @@ import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.XdsClient.LdsUpdate;
-import java.io.IOException;
-import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -43,7 +37,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import javax.annotation.Nullable;
-import org.mockito.ArgumentCaptor;
 
 /**
  * Helper methods related to {@link XdsServerBuilder} and related classes.
@@ -63,47 +56,6 @@ public class XdsServerTestHelper {
           null,
           "grpc/server?udpa.resource.listening_address=%s");
 
-  /** Create an XdsClientWrapperForServerSds with a mock XdsClient. */
-  public static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port,
-      TlsContextManager tlsContextManager) {
-    FakeXdsClientPoolFactory fakeXdsClientPoolFactory = new FakeXdsClientPoolFactory(
-        buildMockXdsClient(tlsContextManager));
-    return new XdsClientWrapperForServerSds(port, fakeXdsClientPoolFactory);
-  }
-
-  private static XdsClient buildMockXdsClient(TlsContextManager tlsContextManager) {
-    XdsClient xdsClient = mock(XdsClient.class);
-    when(xdsClient.getBootstrapInfo()).thenReturn(BOOTSTRAP_INFO);
-    when(xdsClient.getTlsContextManager()).thenReturn(tlsContextManager);
-    return xdsClient;
-  }
-
-  static XdsClient.LdsResourceWatcher startAndGetWatcher(
-      XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
-    xdsClientWrapperForServerSds.start();
-    XdsClient mockXdsClient = xdsClientWrapperForServerSds.getXdsClient();
-    ArgumentCaptor<XdsClient.LdsResourceWatcher> listenerWatcherCaptor =
-        ArgumentCaptor.forClass(null);
-    verify(mockXdsClient).watchLdsResource(any(String.class), listenerWatcherCaptor.capture());
-    return listenerWatcherCaptor.getValue();
-  }
-
-  /**
-   * Creates a {@link XdsClient.LdsUpdate} with {@link
-   * io.grpc.xds.EnvoyServerProtoData.FilterChain} with a destination port and an optional {@link
-   * EnvoyServerProtoData.DownstreamTlsContext}.
-   * @param registeredWatcher the watcher on which to generate the update
-   * @param tlsContext if non-null, used to populate filterChain
-   */
-  static void generateListenerUpdate(
-      XdsClient.LdsResourceWatcher registeredWatcher,
-      EnvoyServerProtoData.DownstreamTlsContext tlsContext, TlsContextManager tlsContextManager) {
-    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3",
-        Arrays.<Integer>asList(), tlsContext, null, tlsContextManager);
-    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
-    registeredWatcher.onChanged(listenerUpdate);
-  }
-
   static void generateListenerUpdate(FakeXdsClient xdsClient,
                                      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
                                      TlsContextManager tlsContextManager) {
@@ -114,21 +66,14 @@ public class XdsServerTestHelper {
   }
 
   static void generateListenerUpdate(
-      XdsClient.LdsResourceWatcher registeredWatcher, List<Integer> sourcePorts,
+      FakeXdsClient xdsClient, List<Integer> sourcePorts,
       EnvoyServerProtoData.DownstreamTlsContext tlsContext,
       EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain,
       TlsContextManager tlsContextManager) {
     EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3", sourcePorts,
         tlsContext, tlsContextForDefaultFilterChain, tlsContextManager);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
-    registeredWatcher.onChanged(listenerUpdate);
-  }
-
-  static int findFreePort() throws IOException {
-    try (ServerSocket socket = new ServerSocket(0)) {
-      socket.setReuseAddress(true);
-      return socket.getLocalPort();
-    }
+    xdsClient.deliverLdsUpdate(listenerUpdate);
   }
 
   static EnvoyServerProtoData.Listener buildTestListener(

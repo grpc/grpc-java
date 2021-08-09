@@ -20,6 +20,9 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
+import static io.grpc.xds.internal.sds.SdsProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -40,8 +43,10 @@ import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
+import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.CommonBootstrapperTestUtils;
+import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.TlsContextManager;
@@ -63,6 +68,10 @@ import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.security.cert.CertStoreException;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -177,6 +186,161 @@ public class SdsProtocolNegotiatorsTest {
     // ProtocolNegotiators.ClientTlsHandler.class not accessible, get canonical name
     assertThat(iterator.next().getValue().getClass().getCanonicalName())
         .contains("ProtocolNegotiators.ClientTlsHandler");
+  }
+
+  @Test
+  public void serverSdsHandler_addLast()
+      throws InterruptedException, TimeoutException, ExecutionException {
+    // we need InetSocketAddress instead of EmbeddedSocketAddress as localAddress for this test
+    channel =
+        new EmbeddedChannel() {
+          @Override
+          public SocketAddress localAddress() {
+            return new InetSocketAddress("172.168.1.1", 80);
+          }
+
+          @Override
+          public SocketAddress remoteAddress() {
+            return new InetSocketAddress("172.168.2.2", 90);
+          }
+        };
+    pipeline = channel.pipeline();
+    Bootstrapper.BootstrapInfo bootstrapInfoForServer = CommonBootstrapperTestUtils
+        .buildBootstrapInfo("google_cloud_private_spiffe-server", SERVER_1_KEY_FILE,
+            SERVER_1_PEM_FILE, CA_PEM_FILE, null, null, null, null);
+    DownstreamTlsContext downstreamTlsContext =
+        CommonTlsContextTestsUtil.buildDownstreamTlsContext(
+            "google_cloud_private_spiffe-server", true, true);
+
+    TlsContextManagerImpl tlsContextManager = new TlsContextManagerImpl(bootstrapInfoForServer);
+    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+        new SdsProtocolNegotiators.HandlerPickerHandler(grpcHandler,
+                InternalProtocolNegotiators.serverPlaintext());
+    pipeline.addLast(handlerPickerHandler);
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
+
+    // kick off protocol negotiation: should replace HandlerPickerHandler with ServerSdsHandler
+    ProtocolNegotiationEvent event = InternalProtocolNegotiationEvent.getDefault();
+    Attributes attr = InternalProtocolNegotiationEvent.getAttributes(event)
+            .toBuilder().set(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER,
+            new SslContextProviderSupplier(downstreamTlsContext, tlsContextManager)).build();
+    pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.withAttributes(event, attr));
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNull();
+    channelHandlerCtx = pipeline.context(SdsProtocolNegotiators.ServerSdsHandler.class);
+    assertThat(channelHandlerCtx).isNotNull();
+
+    SslContextProviderSupplier sslContextProviderSupplier =
+        new SslContextProviderSupplier(downstreamTlsContext, tlsContextManager);
+    final SettableFuture<Object> future = SettableFuture.create();
+    sslContextProviderSupplier
+        .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
+          @Override
+          public void updateSecret(SslContext sslContext) {
+            future.set(sslContext);
+          }
+
+          @Override
+          protected void onException(Throwable throwable) {
+            future.set(throwable);
+          }
+        });
+    channel.runPendingTasks(); // need this for tasks to execute on eventLoop
+    Object fromFuture = future.get(2, TimeUnit.SECONDS);
+    assertThat(fromFuture).isInstanceOf(SslContext.class);
+    channel.runPendingTasks();
+    channelHandlerCtx = pipeline.context(SdsProtocolNegotiators.ServerSdsHandler.class);
+    assertThat(channelHandlerCtx).isNull();
+
+    // pipeline should only have SslHandler and ServerTlsHandler
+    Iterator<Map.Entry<String, ChannelHandler>> iterator = pipeline.iterator();
+    assertThat(iterator.next().getValue()).isInstanceOf(SslHandler.class);
+    // ProtocolNegotiators.ServerTlsHandler.class is not accessible, get canonical name
+    assertThat(iterator.next().getValue().getClass().getCanonicalName())
+        .contains("ProtocolNegotiators.ServerTlsHandler");
+  }
+
+  @Test
+  public void serverSdsHandler_defaultDownstreamTlsContext_expectFallbackProtocolNegotiator()
+      throws IOException {
+    ChannelHandler mockChannelHandler = mock(ChannelHandler.class);
+    ProtocolNegotiator mockProtocolNegotiator = mock(ProtocolNegotiator.class);
+    when(mockProtocolNegotiator.newHandler(grpcHandler)).thenReturn(mockChannelHandler);
+    // we need InetSocketAddress instead of EmbeddedSocketAddress as localAddress for this test
+    channel =
+        new EmbeddedChannel() {
+          @Override
+          public SocketAddress localAddress() {
+            return new InetSocketAddress("172.168.1.1", 80);
+          }
+        };
+    pipeline = channel.pipeline();
+
+    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+        new SdsProtocolNegotiators.HandlerPickerHandler(
+            grpcHandler, mockProtocolNegotiator);
+    pipeline.addLast(handlerPickerHandler);
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
+
+    // kick off protocol negotiation: should replace HandlerPickerHandler with ServerSdsHandler
+    ProtocolNegotiationEvent event = InternalProtocolNegotiationEvent.getDefault();
+    Attributes attr = InternalProtocolNegotiationEvent.getAttributes(event)
+            .toBuilder().set(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER, null).build();
+    pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.withAttributes(event, attr));
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNull();
+    channel.runPendingTasks(); // need this for tasks to execute on eventLoop
+    Iterator<Map.Entry<String, ChannelHandler>> iterator = pipeline.iterator();
+    assertThat(iterator.next().getValue()).isSameInstanceAs(mockChannelHandler);
+    // no more handlers in the pipeline
+    assertThat(iterator.hasNext()).isFalse();
+  }
+
+  @Test
+  public void serverSdsHandler_nullTlsContext_expectFallbackProtocolNegotiator() {
+    ChannelHandler mockChannelHandler = mock(ChannelHandler.class);
+    ProtocolNegotiator mockProtocolNegotiator = mock(ProtocolNegotiator.class);
+    when(mockProtocolNegotiator.newHandler(grpcHandler)).thenReturn(mockChannelHandler);
+    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+        new SdsProtocolNegotiators.HandlerPickerHandler(
+            grpcHandler, mockProtocolNegotiator);
+    pipeline.addLast(handlerPickerHandler);
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
+
+    // kick off protocol negotiation
+    pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNull();
+    channel.runPendingTasks(); // need this for tasks to execute on eventLoop
+    Iterator<Map.Entry<String, ChannelHandler>> iterator = pipeline.iterator();
+    assertThat(iterator.next().getValue()).isSameInstanceAs(mockChannelHandler);
+    // no more handlers in the pipeline
+    assertThat(iterator.hasNext()).isFalse();
+  }
+
+  @Test
+  public void nullTlsContext_nullFallbackProtocolNegotiator_expectException() {
+    SdsProtocolNegotiators.HandlerPickerHandler handlerPickerHandler =
+        new SdsProtocolNegotiators.HandlerPickerHandler(
+            grpcHandler, null);
+    pipeline.addLast(handlerPickerHandler);
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNotNull(); // should find HandlerPickerHandler
+
+    // kick off protocol negotiation
+    pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+    channelHandlerCtx = pipeline.context(handlerPickerHandler);
+    assertThat(channelHandlerCtx).isNotNull(); // HandlerPickerHandler still there
+    try {
+      channel.checkException();
+      fail("exception expected!");
+    } catch (Exception e) {
+      assertThat(e).isInstanceOf(CertStoreException.class);
+      assertThat(e).hasMessageThat().contains("No certificate source found!");
+    }
   }
 
   @Test

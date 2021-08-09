@@ -52,7 +52,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 
-// TODO (zivy@): move XdsServerWrapper related tests to XdsServerWrapperTest.
+// TODO (zivy@): move certain tests down to XdsServerWrapperTest, or up to XdsSdsClientServerTest.
 /**
  * Unit tests for {@link XdsServerBuilder}.
  */
@@ -69,7 +69,7 @@ public class XdsServerBuilderTest {
   private void buildServer(XdsServerBuilder.XdsServingStatusListener xdsServingStatusListener)
       throws IOException {
     buildBuilder(xdsServingStatusListener);
-    xdsServer = cleanupRule.register(builder.build());
+    xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
   }
 
   private void buildBuilder(XdsServerBuilder.XdsServingStatusListener xdsServingStatusListener)
@@ -187,16 +187,18 @@ public class XdsServerBuilderTest {
         mock(XdsServerBuilder.XdsServingStatusListener.class);
     buildServer(mockXdsServingStatusListener);
     Future<Throwable> future = startServerAsync();
+    XdsServerTestHelper.generateListenerUpdate(
+            xdsClient,
+            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
+            tlsContextManager);
+    future.get(5000, TimeUnit.MILLISECONDS);
     xdsClient.ldsWatcher.onError(Status.ABORTED);
     verify(mockXdsServingStatusListener, never()).onNotServing(any(StatusException.class));
-    assertThat(xdsClient.ldsResource.isDone()).isTrue();
-    assertThat(future.isDone()).isFalse();
     reset(mockXdsServingStatusListener);
-    xdsClient.ldsWatcher.onError(Status.NOT_FOUND);
+    xdsClient.ldsWatcher.onError(Status.CANCELLED);
     verify(mockXdsServingStatusListener, never()).onNotServing(any(StatusException.class));
     reset(mockXdsServingStatusListener);
     xdsClient.ldsWatcher.onResourceDoesNotExist("not found error");
-    future.get(5000, TimeUnit.MILLISECONDS);
     verify(mockXdsServingStatusListener).onNotServing(any(StatusException.class));
     reset(mockXdsServingStatusListener);
     XdsServerTestHelper.generateListenerUpdate(
@@ -271,7 +273,7 @@ public class XdsServerBuilderTest {
         .builder("mock").build();
     when(mockBindableService.bindService()).thenReturn(serverServiceDefinition);
     builder.addService(mockBindableService);
-    xdsServer = cleanupRule.register(builder.build());
+    xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
     try {
       builder.addService(mock(BindableService.class));
       fail("exception expected");
