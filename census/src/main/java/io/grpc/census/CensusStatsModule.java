@@ -425,21 +425,21 @@ final class CensusStatsModule {
       callEndedUpdater = tmpCallEndedUpdater;
     }
 
-    final CensusStatsModule module;
-    final Stopwatch stopwatch;
+    ClientTracer inboundMetricTracer;
+    private final CensusStatsModule module;
+    private final Stopwatch stopwatch;
     private volatile int callEnded;
-    final TagContext parentCtx;
-    final TagContext startCtx;
-    final String fullMethodName;
+    private final TagContext parentCtx;
+    private final TagContext startCtx;
+    private final String fullMethodName;
 
     // TODO(zdapeng): optimize memory allocation using AtomicFieldUpdater.
-    final AtomicLong attemptsPerCall = new AtomicLong();
-    final AtomicLong transparentRetriesPerCall = new AtomicLong();
-    final AtomicLong retryDelayNanos = new AtomicLong();
-    final AtomicLong lastInactiveTimeStamp = new AtomicLong();
-    final AtomicInteger activeStreams = new AtomicInteger();
-    final AtomicBoolean activated = new AtomicBoolean();
-    ClientTracer inboundMetricTracer;
+    private final AtomicLong attemptsPerCall = new AtomicLong();
+    private final AtomicLong transparentRetriesPerCall = new AtomicLong();
+    private final AtomicLong retryDelayNanos = new AtomicLong();
+    private final AtomicLong lastInactiveTimeStamp = new AtomicLong();
+    private final AtomicInteger activeStreams = new AtomicInteger();
+    private final AtomicBoolean activated = new AtomicBoolean();
 
     CallAttemptsTracerFactory(
         CensusStatsModule module, TagContext parentCtx, String fullMethodName) {
