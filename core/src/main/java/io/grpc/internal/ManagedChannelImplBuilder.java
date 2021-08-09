@@ -586,9 +586,6 @@ public final class ManagedChannelImplBuilder
 
   /**
    * Disable or enable tracing features.  Enabled by default.
-   *
-   * <p>For the current release, calling {@code setTracingEnabled(true)} may have a side effect that
-   * disables retry.
    */
   public void setTracingEnabled(boolean value) {
     tracingEnabled = value;
