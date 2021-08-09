@@ -22,8 +22,10 @@ import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Internal attributes used for xDS implementation. Do not use.
@@ -74,6 +76,14 @@ public final class InternalXdsAttributes {
   @EquivalentAddressGroup.Attr
   static final Attributes.Key<Long> ATTR_SERVER_WEIGHT =
       Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.serverWeight");
+
+  /**
+   * Filter chain match for network filters.
+   */
+  @Grpc.TransportAttr
+  static final Attributes.Key<AtomicReference<FilterChainSelector>>
+          ATTR_FILTER_CHAIN_SELECTOR_REF = Attributes.Key.create(
+          "io.grpc.xds.InternalXdsAttributes.filterChainSelectorRef");
 
   private InternalXdsAttributes() {}
 }

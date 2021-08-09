@@ -16,23 +16,27 @@
 
 package io.grpc.xds;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.EnvoyServerProtoData.FilterChain;
+import io.grpc.xds.EnvoyServerProtoData.Listener;
+import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
+import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.XdsClient.LdsUpdate;
-import java.io.IOException;
-import java.net.ServerSocket;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import javax.annotation.Nullable;
-import org.mockito.ArgumentCaptor;
 
 /**
  * Helper methods related to {@link XdsServerBuilder} and related classes.
@@ -52,8 +56,61 @@ public class XdsServerTestHelper {
           null,
           "grpc/server?udpa.resource.listening_address=%s");
 
+  static void generateListenerUpdate(FakeXdsClient xdsClient,
+                                     EnvoyServerProtoData.DownstreamTlsContext tlsContext,
+                                     TlsContextManager tlsContextManager) {
+    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3",
+            Arrays.<Integer>asList(), tlsContext, null, tlsContextManager);
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
+    xdsClient.deliverLdsUpdate(listenerUpdate);
+  }
+
+  static void generateListenerUpdate(
+      FakeXdsClient xdsClient, List<Integer> sourcePorts,
+      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
+      EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain,
+      TlsContextManager tlsContextManager) {
+    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3", sourcePorts,
+        tlsContext, tlsContextForDefaultFilterChain, tlsContextManager);
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
+    xdsClient.deliverLdsUpdate(listenerUpdate);
+  }
+
+  static EnvoyServerProtoData.Listener buildTestListener(
+      String name, String address, List<Integer> sourcePorts,
+      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
+      EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain,
+      TlsContextManager tlsContextManager) {
+    EnvoyServerProtoData.FilterChainMatch filterChainMatch1 =
+        new EnvoyServerProtoData.FilterChainMatch(
+            0,
+            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            Arrays.<String>asList(),
+            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            null,
+            sourcePorts,
+            Arrays.<String>asList(),
+            null);
+    VirtualHost virtualHost =
+            VirtualHost.create(
+                    "virtual-host", Collections.singletonList("auth"), new ArrayList<Route>(),
+                    ImmutableMap.<String, FilterConfig>of());
+    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
+    EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
+        "filter-chain-foo", filterChainMatch1, httpConnectionManager, tlsContext,
+        tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
+        "filter-chain-bar", null, httpConnectionManager, tlsContextForDefaultFilterChain,
+        tlsContextManager);
+    EnvoyServerProtoData.Listener listener =
+        new EnvoyServerProtoData.Listener(
+            name, address, Arrays.asList(filterChain1), defaultFilterChain);
+    return listener;
+  }
+
   static final class FakeXdsClientPoolFactory
-      implements XdsNameResolverProvider.XdsClientPoolFactory {
+        implements XdsNameResolverProvider.XdsClientPoolFactory {
 
     private XdsClient xdsClient;
 
@@ -82,103 +139,77 @@ public class XdsServerTestHelper {
 
         @Override
         public XdsClient returnObject(Object object) {
+          xdsClient.shutdown();
           return null;
         }
       };
     }
   }
 
-  /** Create an XdsClientWrapperForServerSds with a mock XdsClient. */
-  public static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port,
-      TlsContextManager tlsContextManager) {
-    FakeXdsClientPoolFactory fakeXdsClientPoolFactory = new FakeXdsClientPoolFactory(
-        buildMockXdsClient(tlsContextManager));
-    return new XdsClientWrapperForServerSds(port, fakeXdsClientPoolFactory);
-  }
+  static final class FakeXdsClient extends XdsClient {
+    boolean shutdown;
+    SettableFuture<String> ldsResource = SettableFuture.create();
+    LdsResourceWatcher ldsWatcher;
+    CountDownLatch rdsCount = new CountDownLatch(1);
+    final Map<String, RdsResourceWatcher> rdsWatchers = new HashMap<>();
 
-  private static XdsClient buildMockXdsClient(TlsContextManager tlsContextManager) {
-    XdsClient xdsClient = mock(XdsClient.class);
-    when(xdsClient.getBootstrapInfo()).thenReturn(BOOTSTRAP_INFO);
-    when(xdsClient.getTlsContextManager()).thenReturn(tlsContextManager);
-    return xdsClient;
-  }
-
-  static XdsClient.LdsResourceWatcher startAndGetWatcher(
-      XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
-    xdsClientWrapperForServerSds.start();
-    XdsClient mockXdsClient = xdsClientWrapperForServerSds.getXdsClient();
-    ArgumentCaptor<XdsClient.LdsResourceWatcher> listenerWatcherCaptor =
-        ArgumentCaptor.forClass(null);
-    verify(mockXdsClient).watchLdsResource(any(String.class), listenerWatcherCaptor.capture());
-    return listenerWatcherCaptor.getValue();
-  }
-
-  /**
-   * Creates a {@link XdsClient.LdsUpdate} with {@link
-   * io.grpc.xds.EnvoyServerProtoData.FilterChain} with a destination port and an optional {@link
-   * EnvoyServerProtoData.DownstreamTlsContext}.
-   * @param registeredWatcher the watcher on which to generate the update
-   * @param tlsContext if non-null, used to populate filterChain
-   */
-  static void generateListenerUpdate(
-      XdsClient.LdsResourceWatcher registeredWatcher,
-      EnvoyServerProtoData.DownstreamTlsContext tlsContext, TlsContextManager tlsContextManager) {
-    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3",
-        Arrays.<Integer>asList(), tlsContext, null, tlsContextManager);
-    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
-    registeredWatcher.onChanged(listenerUpdate);
-  }
-
-  static void generateListenerUpdate(
-      XdsClient.LdsResourceWatcher registeredWatcher, List<Integer> sourcePorts,
-      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
-      EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain,
-      TlsContextManager tlsContextManager) {
-    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3", sourcePorts,
-        tlsContext, tlsContextForDefaultFilterChain, tlsContextManager);
-    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
-    registeredWatcher.onChanged(listenerUpdate);
-  }
-
-  public static void generateListenerUpdate(
-      XdsClient.LdsResourceWatcher registeredWatcher, EnvoyServerProtoData.Listener listener) {
-    registeredWatcher.onChanged(LdsUpdate.forTcpListener(listener));
-  }
-
-  static int findFreePort() throws IOException {
-    try (ServerSocket socket = new ServerSocket(0)) {
-      socket.setReuseAddress(true);
-      return socket.getLocalPort();
+    @Override
+    public TlsContextManager getTlsContextManager() {
+      return null;
     }
-  }
 
-  static EnvoyServerProtoData.Listener buildTestListener(
-      String name, String address, List<Integer> sourcePorts,
-      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
-      EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain,
-      TlsContextManager tlsContextManager) {
-    EnvoyServerProtoData.FilterChainMatch filterChainMatch1 =
-        new EnvoyServerProtoData.FilterChainMatch(
-            0,
-            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-            Arrays.<String>asList(),
-            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-            null,
-            sourcePorts,
-            Arrays.<String>asList(),
-            null);
-    // HttpConnectionManager currently not used for server side.
-    HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
-        0L, "does not matter", Collections.<NamedFilterConfig>emptyList());
-    EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
-        "filter-chain-foo", filterChainMatch1, httpConnectionManager, tlsContext,
-        tlsContextManager);
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        "filter-chain-bar", null, httpConnectionManager, tlsContextForDefaultFilterChain,
-        tlsContextManager);
-    EnvoyServerProtoData.Listener listener =
-        new EnvoyServerProtoData.Listener(
-            name, address, Arrays.asList(filterChain1), defaultFilterChain);
-    return listener;
+    @Override
+    public BootstrapInfo getBootstrapInfo() {
+      return BOOTSTRAP_INFO;
+    }
+
+    @Override
+    void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
+      assertThat(ldsWatcher).isNull();
+      ldsWatcher = watcher;
+      ldsResource.set(resourceName);
+    }
+
+    @Override
+    void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
+      assertThat(ldsWatcher).isNotNull();
+      ldsResource = null;
+      ldsWatcher = null;
+    }
+
+    @Override
+    void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
+      rdsWatchers.put(resourceName, watcher);
+      rdsCount.countDown();
+    }
+
+    @Override
+    void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
+      rdsWatchers.remove(resourceName);
+    }
+
+    @Override
+    void shutdown() {
+      shutdown = true;
+    }
+
+    @Override
+    boolean isShutDown() {
+      return shutdown;
+    }
+
+    void deliverLdsUpdate(List<FilterChain> filterChains,
+                                       FilterChain defaultFilterChain) {
+      ldsWatcher.onChanged(LdsUpdate.forTcpListener(new Listener(
+              "listener", "0.0.0.0:1", filterChains, defaultFilterChain)));
+    }
+
+    void deliverLdsUpdate(LdsUpdate ldsUpdate) {
+      ldsWatcher.onChanged(ldsUpdate);
+    }
+
+    void deliverRdsUpdate(String rdsName, List<VirtualHost> virtualHosts) {
+      rdsWatchers.get(rdsName).onChanged(new RdsUpdate(virtualHosts));
+    }
   }
 }
