@@ -66,9 +66,10 @@ import javax.annotation.Nullable;
 /**
  * Provides factories for {@link StreamTracer} that records stats to Census.
  *
- * <p>On the client-side, a factory is created for each call, because ClientCall starts earlier than
- * the ClientStream, and in some cases may even not create a ClientStream at all.  Therefore, it's
- * the factory that reports the summary to Census.
+ * <p>On the client-side, a factory is created for each call, and the factory creates a stream
+ * tracer for each attempt. If there is no stream created when the call is ended, we still create a
+ * tracer. It's the tracer that reports per-attempt stats, and the factory that reports the stats
+ * of the overall RPC, such as RETRIES_PER_CALL, to Census.
  *
  * <p>On the server-side, there is only one ServerStream per each ServerCall, and ServerStream
  * starts earlier than the ServerCall.  Therefore, only one tracer is created per stream/call and
