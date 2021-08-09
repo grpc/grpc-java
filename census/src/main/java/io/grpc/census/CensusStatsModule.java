@@ -392,6 +392,149 @@ final class CensusStatsModule {
     }
   }
 
+  @VisibleForTesting
+  static final class CallAttemptsTracerFactory extends
+      ClientStreamTracer.InternalLimitedInfoFactory {
+    static final MeasureLong RETRIES_PER_CALL =
+        Measure.MeasureLong.create(
+            "grpc.io/client/retries_per_call", "Number of retries per call", "1");
+    static final MeasureLong TRANSPARENT_RETRIES_PER_CALL =
+        Measure.MeasureLong.create(
+            "grpc.io/client/transparent_retries_per_call", "Transparent retries per call", "1");
+    static final MeasureDouble RETRY_DELAY_PER_CALL =
+        Measure.MeasureDouble.create(
+            "grpc.io/client/retry_delay_per_call", "Retry delay per call", "ms");
+
+    @Nullable
+    private static final AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> callEndedUpdater;
+
+    /**
+     * When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in their
+     * JDK reflection API that triggers a NoSuchFieldException. When this occurs, we fallback to
+     * (potentially racy) direct updates of the volatile variables.
+     */
+    static {
+      AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> tmpCallEndedUpdater;
+      try {
+        tmpCallEndedUpdater =
+            AtomicIntegerFieldUpdater.newUpdater(CallAttemptsTracerFactory.class, "callEnded");
+      } catch (Throwable t) {
+        logger.log(Level.SEVERE, "Creating atomic field updaters failed", t);
+        tmpCallEndedUpdater = null;
+      }
+      callEndedUpdater = tmpCallEndedUpdater;
+    }
+
+    final CensusStatsModule module;
+    final Stopwatch stopwatch;
+    private volatile int callEnded;
+    final TagContext parentCtx;
+    final TagContext startCtx;
+    final String fullMethodName;
+
+    // TODO(zdapeng): optimize memory allocation using AtomicFieldUpdater.
+    final AtomicLong attemptsPerCall = new AtomicLong();
+    final AtomicLong transparentRetriesPerCall = new AtomicLong();
+    final AtomicLong retryDelayNanos = new AtomicLong();
+    final AtomicLong lastInactiveTimeStamp = new AtomicLong();
+    final AtomicInteger activeStreams = new AtomicInteger();
+    final AtomicBoolean activated = new AtomicBoolean();
+    ClientTracer inboundMetricTracer;
+
+    CallAttemptsTracerFactory(
+        CensusStatsModule module, TagContext parentCtx, String fullMethodName) {
+      this.module = checkNotNull(module, "module");
+      this.parentCtx = checkNotNull(parentCtx, "parentCtx");
+      this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
+      this.stopwatch = module.stopwatchSupplier.get().start();
+      TagValue methodTag = TagValue.create(fullMethodName);
+      startCtx = module.tagger.toBuilder(parentCtx)
+          .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
+          .build();
+      if (module.recordStartedRpcs) {
+        // Record here in case newClientStreamTracer() would never be called.
+        module.statsRecorder.newMeasureMap()
+            .put(DeprecatedCensusConstants.RPC_CLIENT_STARTED_COUNT, 1)
+            .record(startCtx);
+      }
+    }
+
+    @Override
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata metadata) {
+      ClientTracer tracer = new ClientTracer(this, module, parentCtx, startCtx, info);
+      if (activeStreams.incrementAndGet() == 1) {
+        if (!activated.compareAndSet(false, true)) {
+          retryDelayNanos.addAndGet(stopwatch.elapsed(TimeUnit.NANOSECONDS));
+        }
+      }
+      if (module.recordStartedRpcs && attemptsPerCall.get() > 0) {
+        module.statsRecorder.newMeasureMap()
+            .put(DeprecatedCensusConstants.RPC_CLIENT_STARTED_COUNT, 1)
+            .record(startCtx);
+      }
+      if (info.isTransparentRetry()) {
+        transparentRetriesPerCall.incrementAndGet();
+      } else {
+        attemptsPerCall.incrementAndGet();
+      }
+      return tracer;
+    }
+
+    // Called whenever each attempt is ended.
+    void attemptEnded() {
+      if (activeStreams.decrementAndGet() == 0) {
+        // Race condition between two extremely close events does not matter because the difference
+        // in the result would be very small.
+        long lastInactiveTimeStamp =
+            this.lastInactiveTimeStamp.getAndSet(stopwatch.elapsed(TimeUnit.NANOSECONDS));
+        retryDelayNanos.addAndGet(-lastInactiveTimeStamp);
+      }
+    }
+
+    void callEnded(Status status) {
+      if (callEndedUpdater != null) {
+        if (callEndedUpdater.getAndSet(this, 1) != 0) {
+          return;
+        }
+      } else {
+        if (callEnded != 0) {
+          return;
+        }
+        callEnded = 1;
+      }
+      if (!module.recordFinishedRpcs) {
+        return;
+      }
+      stopwatch.stop();
+      if (attemptsPerCall.get() == 0) {
+        ClientTracer tracer = new ClientTracer(this, module, parentCtx, startCtx, null);
+        tracer.roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
+        tracer.statusCode = status.getCode();
+        tracer.recordFinishedRpc();
+      } else if (inboundMetricTracer != null) {
+        inboundMetricTracer.recordFinishedRpc();
+      }
+
+      long retriesPerCall = 0;
+      long attempts = attemptsPerCall.get();
+      if (attempts > 0) {
+        retriesPerCall = attempts - 1;
+      }
+      MeasureMap measureMap = module.statsRecorder.newMeasureMap()
+          .put(RETRIES_PER_CALL, retriesPerCall)
+          .put(TRANSPARENT_RETRIES_PER_CALL, transparentRetriesPerCall.get())
+          .put(RETRY_DELAY_PER_CALL, retryDelayNanos.get() / NANOS_PER_MILLI);
+      TagValue methodTag = TagValue.create(fullMethodName);
+      TagValue statusTag = TagValue.create(status.getCode().toString());
+      measureMap.record(
+          module.tagger
+              .toBuilder(parentCtx)
+              .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
+              .putLocal(RpcMeasureConstants.GRPC_CLIENT_STATUS, statusTag)
+              .build());
+    }
+  }
+
   private static final class ServerTracer extends ServerStreamTracer {
     @Nullable private static final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater;
     @Nullable private static final AtomicLongFieldUpdater<ServerTracer> outboundMessageCountUpdater;
@@ -648,149 +791,6 @@ final class CensusStatsModule {
               headers);
         }
       };
-    }
-  }
-
-  @VisibleForTesting
-  static final class CallAttemptsTracerFactory extends
-      ClientStreamTracer.InternalLimitedInfoFactory {
-    static final MeasureLong RETRIES_PER_CALL =
-        Measure.MeasureLong.create(
-            "grpc.io/client/retries_per_call", "Number of retries per call", "1");
-    static final MeasureLong TRANSPARENT_RETRIES_PER_CALL =
-        Measure.MeasureLong.create(
-            "grpc.io/client/transparent_retries_per_call", "Transparent retries per call", "1");
-    static final MeasureDouble RETRY_DELAY_PER_CALL =
-        Measure.MeasureDouble.create(
-            "grpc.io/client/retry_delay_per_call", "Retry delay per call", "ms");
-
-    @Nullable
-    private static final AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> callEndedUpdater;
-
-    /**
-     * When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in their
-     * JDK reflection API that triggers a NoSuchFieldException. When this occurs, we fallback to
-     * (potentially racy) direct updates of the volatile variables.
-     */
-    static {
-      AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> tmpCallEndedUpdater;
-      try {
-        tmpCallEndedUpdater =
-            AtomicIntegerFieldUpdater.newUpdater(CallAttemptsTracerFactory.class, "callEnded");
-      } catch (Throwable t) {
-        logger.log(Level.SEVERE, "Creating atomic field updaters failed", t);
-        tmpCallEndedUpdater = null;
-      }
-      callEndedUpdater = tmpCallEndedUpdater;
-    }
-
-    final CensusStatsModule module;
-    final Stopwatch stopwatch;
-    private volatile int callEnded;
-    final TagContext parentCtx;
-    final TagContext startCtx;
-    final String fullMethodName;
-
-    // TODO(zdapeng): optimize memory allocation using AtomicFieldUpdater.
-    final AtomicLong attemptsPerCall = new AtomicLong();
-    final AtomicLong transparentRetriesPerCall = new AtomicLong();
-    final AtomicLong retryDelayNanos = new AtomicLong();
-    final AtomicLong lastInactiveTimeStamp = new AtomicLong();
-    final AtomicInteger activeStreams = new AtomicInteger();
-    final AtomicBoolean activated = new AtomicBoolean();
-    ClientTracer inboundMetricTracer;
-
-    CallAttemptsTracerFactory(
-        CensusStatsModule module, TagContext parentCtx, String fullMethodName) {
-      this.module = checkNotNull(module, "module");
-      this.parentCtx = checkNotNull(parentCtx, "parentCtx");
-      this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
-      this.stopwatch = module.stopwatchSupplier.get().start();
-      TagValue methodTag = TagValue.create(fullMethodName);
-      startCtx = module.tagger.toBuilder(parentCtx)
-          .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
-          .build();
-      if (module.recordStartedRpcs) {
-        // Record here in case newClientStreamTracer() would never be called.
-        module.statsRecorder.newMeasureMap()
-            .put(DeprecatedCensusConstants.RPC_CLIENT_STARTED_COUNT, 1)
-            .record(startCtx);
-      }
-    }
-
-    @Override
-    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata metadata) {
-      ClientTracer tracer = new ClientTracer(this, module, parentCtx, startCtx, info);
-      if (activeStreams.incrementAndGet() == 1) {
-        if (!activated.compareAndSet(false, true)) {
-          retryDelayNanos.addAndGet(stopwatch.elapsed(TimeUnit.NANOSECONDS));
-        }
-      }
-      if (module.recordStartedRpcs && attemptsPerCall.get() > 0) {
-        module.statsRecorder.newMeasureMap()
-            .put(DeprecatedCensusConstants.RPC_CLIENT_STARTED_COUNT, 1)
-            .record(startCtx);
-      }
-      if (info.isTransparentRetry()) {
-        transparentRetriesPerCall.incrementAndGet();
-      } else {
-        attemptsPerCall.incrementAndGet();
-      }
-      return tracer;
-    }
-
-    // Called whenever each attempt is ended.
-    void attemptEnded() {
-      if (activeStreams.decrementAndGet() == 0) {
-        // Race condition between two extremely close events does not matter because the difference
-        // in the result would be very small.
-        long lastInactiveTimeStamp =
-            this.lastInactiveTimeStamp.getAndSet(stopwatch.elapsed(TimeUnit.NANOSECONDS));
-        retryDelayNanos.addAndGet(-lastInactiveTimeStamp);
-      }
-    }
-
-    void callEnded(Status status) {
-      if (callEndedUpdater != null) {
-        if (callEndedUpdater.getAndSet(this, 1) != 0) {
-          return;
-        }
-      } else {
-        if (callEnded != 0) {
-          return;
-        }
-        callEnded = 1;
-      }
-      if (!module.recordFinishedRpcs) {
-        return;
-      }
-      stopwatch.stop();
-      if (attemptsPerCall.get() == 0) {
-        ClientTracer tracer = new ClientTracer(this, module, parentCtx, startCtx, null);
-        tracer.roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-        tracer.statusCode = status.getCode();
-        tracer.recordFinishedRpc();
-      } else if (inboundMetricTracer != null) {
-        inboundMetricTracer.recordFinishedRpc();
-      }
-
-      long retriesPerCall = 0;
-      long attempts = attemptsPerCall.get();
-      if (attempts > 0) {
-        retriesPerCall = attempts - 1;
-      }
-      MeasureMap measureMap = module.statsRecorder.newMeasureMap()
-          .put(RETRIES_PER_CALL, retriesPerCall)
-          .put(TRANSPARENT_RETRIES_PER_CALL, transparentRetriesPerCall.get())
-          .put(RETRY_DELAY_PER_CALL, retryDelayNanos.get() / NANOS_PER_MILLI);
-      TagValue methodTag = TagValue.create(fullMethodName);
-      TagValue statusTag = TagValue.create(status.getCode().toString());
-      measureMap.record(
-          module.tagger
-              .toBuilder(parentCtx)
-              .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
-              .putLocal(RpcMeasureConstants.GRPC_CLIENT_STATUS, statusTag)
-              .build());
     }
   }
 }
