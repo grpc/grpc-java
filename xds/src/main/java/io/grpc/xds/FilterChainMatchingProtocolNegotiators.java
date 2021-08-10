@@ -103,6 +103,7 @@ final class FilterChainMatchingProtocolNegotiators {
         return;
       }
       ProtocolNegotiationEvent pne = (ProtocolNegotiationEvent) evt;
+      // TODO(zivy): merge into one key and take care of this outer class visibility.
       Attributes attr = InternalProtocolNegotiationEvent.getAttributes(pne).toBuilder()
               .set(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER, config.sslContextProviderSupplier)
               .set(ATTR_SERVER_ROUTING_CONFIG, config.routingConfig)

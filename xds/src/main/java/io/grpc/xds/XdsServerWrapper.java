@@ -61,11 +61,9 @@ import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -350,6 +348,14 @@ final class XdsServerWrapper extends Server {
     @Nullable
     private ServerRoutingConfig defaultRoutingConfig;
     private boolean stopped;
+    // This flag helps to manage sslContextProviderSuppliers release. It happens when:
+    // 1. Upon LdsUpdate when its rds configs not fully arrived, release old suppliers cached in
+    //    filterChains.
+    // 2. Upon successful selector update for the newest LDS for the first time, release suppliers
+    //    from the previous selectorRef content.
+    // 3. Upon permanent errors, replace old selector with a noop selector, release suppliers
+    //    from the previous selectorRef content.
+    // 4. This State shutdown.
     private boolean inflight = false;
 
     private DiscoveryState(String resourceName) {
@@ -487,21 +493,9 @@ final class XdsServerWrapper extends Server {
             ImmutableMap.copyOf(filterChainRouting),
             defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
             defaultRoutingConfig);
-        Set<SslContextProviderSupplier> toRelease = new HashSet<>();
-        // release sslContextProviderSuppliers only once per each LDS. RDS update may update routing
-        // config in filterChainSelectorRef without updating filter chains, thus should not release
-        // sslContextProviderSuppliers.
-        if (filterChainSelectorRef.get() != null && inflight) {
-          for (FilterChain previous : filterChainSelectorRef.get().getRoutingConfigs().keySet()) {
-            if (previous.getSslContextProviderSupplier() != null) {
-              toRelease.add(previous.getSslContextProviderSupplier());
-            }
-          }
-          SslContextProviderSupplier previousDefault =
-                  filterChainSelectorRef.get().getDefaultSslContextProviderSupplier();
-          if (previousDefault != null) {
-            toRelease.add(previousDefault);
-          }
+        List<SslContextProviderSupplier> toRelease = new ArrayList<>();
+        if (inflight) {
+          toRelease = getSuppliersInUse();
           inflight = false;
         }
         filterChainSelectorRef.set(selector);
@@ -609,9 +603,9 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            handleConfigNotFound(null);
-            listener.onNotServing(Status.UNAVAILABLE.withDescription(
-                    "Rds " + resourceName + " unavailable").asException());
+            StatusException statusException = Status.UNAVAILABLE.withDescription(
+                    "Rds " + resourceName + " unavailable").asException();
+            handleConfigNotFound(statusException);
           }
         });
       }
@@ -624,9 +618,14 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            logger.log(Level.FINE, "Transient error from XdsClient: {0}", error);
-            // TODO(zivy@): notify error.
-            // TODO(zivy@): handle config not found for permanent error.
+            boolean isPermanentError = isPermanentError(error);
+            logger.log(Level.FINE, "{0} error from XdsClient: {1}",
+                    new Object[]{isPermanentError ? "Permanent" : "Transient", error});
+            if (isPermanentError) {
+              handleConfigNotFound(error.asException());
+            } else if (!isServing) {
+              listener.onNotServing(error.asException());
+            }
           }
         });
       }
