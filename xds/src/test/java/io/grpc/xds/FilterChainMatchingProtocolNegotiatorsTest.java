@@ -160,16 +160,10 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     channelHandlerCtx = pipeline.context(filterChainMatchingHandler);
     assertThat(channelHandlerCtx).isNotNull();
 
+    assertThat(channel.closeFuture().isDone()).isFalse();
     pipeline.fireUserEventTriggered(event);
-    channelHandlerCtx = pipeline.context(filterChainMatchingHandler);
-    assertThat(channelHandlerCtx).isNotNull();
-    try {
-      channel.checkException();
-      fail("exception expected!");
-    } catch (Exception e) {
-      assertThat(e).isInstanceOf(IllegalStateException.class);
-      assertThat(e).hasMessageThat().contains("No matching filter chain found.");
-    }
+    channel.runPendingTasks();
+    assertThat(channel.closeFuture().isDone()).isTrue();
   }
 
   @Test
@@ -943,7 +937,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
       channel.checkException();
       fail("expect exception!");
     } catch (IllegalStateException ise) {
-      assertThat(ise).hasMessageThat().isEqualTo("Found more than one matching filter chains.");
+      assertThat(ise).hasMessageThat().isEqualTo("Found more than one matching filter chains. This "
+          + "should not be possible as ClientXdsClient validated the chains for uniqueness.");
       assertThat(sslSet.isDone()).isFalse();
       channelHandlerCtx = pipeline.context(filterChainMatchingHandler);
       assertThat(channelHandlerCtx).isNotNull();
