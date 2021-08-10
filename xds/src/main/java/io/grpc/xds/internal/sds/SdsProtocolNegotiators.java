@@ -315,10 +315,7 @@ public final class SdsProtocolNegotiators {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    /**
-     * Consumes server xds credential configuration.
-     * */
-    public ServerSdsHandler(
+    ServerSdsHandler(
             GrpcHttp2ConnectionHandler grpcHandler,
             SslContextProviderSupplier sslContextProviderSupplier) {
       super(

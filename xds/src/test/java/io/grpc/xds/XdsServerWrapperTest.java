@@ -164,7 +164,6 @@ public class XdsServerWrapperTest {
     }
   }
 
-
   @Test
   public void shutdown() throws Exception {
     final SettableFuture<Server> start = SettableFuture.create();
@@ -186,6 +185,7 @@ public class XdsServerWrapperTest {
     FilterChain f0 = createFilterChain("filter-chain-0", hcm_virtual);
     FilterChain f1 = createFilterChain("filter-chain-1", createRds("rds"));
     xdsClient.deliverLdsUpdate(Collections.singletonList(f0), f1);
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
     start.get(5000, TimeUnit.MILLISECONDS);
@@ -227,6 +227,11 @@ public class XdsServerWrapperTest {
     FilterChain f1 = createFilterChain("filter-chain-1", hcm_virtual);
     xdsClient.deliverLdsUpdate(Collections.singletonList(f0), f1);
     xdsServerWrapper.shutdown();
+    when(mockServer.isTerminated()).thenReturn(true);
+    when(mockServer.awaitTermination(anyLong(), any(TimeUnit.class))).thenReturn(true);
+    assertThat(xdsServerWrapper.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+    xdsServerWrapper.awaitTermination();
+    assertThat(xdsServerWrapper.isTerminated()).isTrue();
     verify(mockServer, never()).start();
     assertThat(xdsServerWrapper.isShutdown()).isTrue();
     assertThat(xdsClient.ldsResource).isNull();
@@ -234,11 +239,6 @@ public class XdsServerWrapperTest {
     verify(mockServer).shutdown();
     assertThat(f0.getSslContextProviderSupplier().isShutdown()).isTrue();
     assertThat(f1.getSslContextProviderSupplier().isShutdown()).isTrue();
-    when(mockServer.isTerminated()).thenReturn(true);
-    when(mockServer.awaitTermination(anyLong(), any(TimeUnit.class))).thenReturn(true);
-    assertThat(xdsServerWrapper.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
-    xdsServerWrapper.awaitTermination();
-    assertThat(xdsServerWrapper.isTerminated()).isTrue();
     assertThat(start.isDone()).isFalse(); //shall we set initialStatus when shutdown?
   }
 
@@ -297,6 +297,7 @@ public class XdsServerWrapperTest {
     FilterChain filterChain = createFilterChain("filter-chain-1", createRds("rds"));
     SslContextProviderSupplier sslSupplier = filterChain.getSslContextProviderSupplier();
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
     try {
@@ -337,6 +338,7 @@ public class XdsServerWrapperTest {
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     FilterChain filterChain = createFilterChain("filter-chain-1", createRds("rds"));
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
     try {
