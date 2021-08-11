@@ -30,8 +30,10 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.io.InputStream;
+import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -64,7 +66,16 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   private final MethodDescriptor<ReqT, ?> method;
   private final Executor callExecutor;
-  private final Executor listenerSerializeExecutor = new SerializeReentrantCallsDirectExecutor();
+  private final Executor listenerSerializeExecutor = new SynchronizationContext(
+      new UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw Status.fromThrowable(e)
+              .withDescription("Uncaught exception in the SynchronizationContext. Re-thrown.")
+              .asRuntimeException();
+        }
+      }
+  );
   private final ScheduledExecutorService scheduledExecutorService;
   // Must not modify it.
   private final Metadata headers;
@@ -106,6 +117,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private FutureCanceller scheduledHedging;
   private long nextBackoffIntervalNanos;
   private Status cancellationStatus;
+  private boolean isClosed;
 
   RetriableStream(
       MethodDescriptor<ReqT, ?> method, Metadata headers,
@@ -268,7 +280,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           onReadyRunnable = new Runnable() {
             @Override
             public void run() {
-              if (isReady()) {
+              if (isReady() && !isClosed) {
                 masterListener.onReady();
               }
             }
@@ -475,6 +487,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           new Runnable() {
             @Override
             public void run() {
+              isClosed = true;
               masterListener.closed(reason, RpcProgress.PROCESSED, new Metadata());
 
             }
@@ -825,6 +838,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
               new Runnable() {
                 @Override
                 public void run() {
+                  isClosed = true;
                   masterListener.closed(status, rpcProgress, trailers);
                 }
               });
@@ -936,6 +950,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             new Runnable() {
               @Override
               public void run() {
+                isClosed = true;
                 masterListener.closed(status, rpcProgress, trailers);
               }
             });
