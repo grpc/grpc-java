@@ -37,11 +37,13 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -152,6 +154,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
@@ -227,6 +230,8 @@ public class ManagedChannelImplTest {
   private ArgumentCaptor<Status> statusCaptor;
   @Captor
   private ArgumentCaptor<CallOptions> callOptionsCaptor;
+  @Captor
+  private ArgumentCaptor<Metadata> headersCaptor;
   @Captor
   private ArgumentCaptor<ClientStreamTracer[]> tracersCaptor;
   @Mock
@@ -530,7 +535,7 @@ public class ManagedChannelImplTest {
     ConnectionClientTransport mockTransport = transportInfo.transport;
     ManagedClientTransport.Listener transportListener = transportInfo.listener;
     when(mockTransport.newStream(
-            same(method), same(headers), any(CallOptions.class),
+            same(method), any(Metadata.class), any(CallOptions.class),
             ArgumentMatchers.<ClientStreamTracer[]>any()))
         .thenReturn(mockStream);
     transportListener.transportReady();
@@ -541,7 +546,7 @@ public class ManagedChannelImplTest {
 
     ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
     verify(mockTransport).newStream(
-        same(method), same(headers), callOptionsCaptor.capture(),
+        same(method), any(Metadata.class), callOptionsCaptor.capture(),
         ArgumentMatchers.<ClientStreamTracer[]>any());
     assertThat(callOptionsCaptor.getValue().isWaitForReady()).isTrue();
     verify(mockStream).start(streamListenerCaptor.capture());
@@ -608,8 +613,14 @@ public class ManagedChannelImplTest {
     MockClientTransportInfo transportInfo = transports.poll();
     ConnectionClientTransport mockTransport = transportInfo.transport;
     ManagedClientTransport.Listener transportListener = transportInfo.listener;
+    ArgumentMatcher<Metadata> headersMatcher = new ArgumentMatcher<Metadata>() {
+      @Override
+      public boolean matches(Metadata argument) {
+        return argument.get(metadataKey).equals("fooValue");
+      }
+    };
     when(mockTransport.newStream(
-            same(method), same(headers), any(CallOptions.class),
+            same(method), argThat(headersMatcher), any(CallOptions.class),
             ArgumentMatchers.<ClientStreamTracer[]>any()))
         .thenReturn(mockStream);
     transportListener.transportReady();
@@ -620,7 +631,7 @@ public class ManagedChannelImplTest {
 
     ArgumentCaptor<CallOptions> callOptionsCaptor = ArgumentCaptor.forClass(null);
     verify(mockTransport).newStream(
-        same(method), same(headers), callOptionsCaptor.capture(),
+        same(method), argThat(headersMatcher), callOptionsCaptor.capture(),
         ArgumentMatchers.<ClientStreamTracer[]>any());
     assertThat(callOptionsCaptor.getValue().getOption(callOptionsKey)).isEqualTo("fooValue");
     verify(mockStream).start(streamListenerCaptor.capture());
@@ -779,6 +790,12 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void callsAndShutdown_disableRetry() {
+    channelBuilder.disableRetry();
+    subtestCallsAndShutdown(false, false);
+  }
+
+  @Test
   public void callsAndShutdownNow() {
     subtestCallsAndShutdown(true, false);
   }
@@ -797,8 +814,24 @@ public class ManagedChannelImplTest {
     verify(executorPool).getObject();
     ClientStream mockStream = mock(ClientStream.class);
     ClientStream mockStream2 = mock(ClientStream.class);
+    final Metadata.Key<String> key1 = Metadata.Key.of("key1", Metadata.ASCII_STRING_MARSHALLER);
+    final Metadata.Key<String> key2 = Metadata.Key.of("key2", Metadata.ASCII_STRING_MARSHALLER);
     Metadata headers = new Metadata();
+    headers.put(key1, "value1");
     Metadata headers2 = new Metadata();
+    headers2.put(key2, "value2");
+    ArgumentMatcher<Metadata> headerMatcher1 = new ArgumentMatcher<Metadata>() {
+      @Override
+      public boolean matches(Metadata argument) {
+        return argument.containsKey(key1);
+      }
+    };
+    ArgumentMatcher<Metadata> headerMatcher2 = new ArgumentMatcher<Metadata>() {
+      @Override
+      public boolean matches(Metadata argument) {
+        return argument.containsKey(key2);
+      }
+    };
 
     // Configure the picker so that first RPC goes to delayed transport, and second RPC goes to
     // real transport.
@@ -812,21 +845,32 @@ public class ManagedChannelImplTest {
     ConnectionClientTransport mockTransport = transportInfo.transport;
     verify(mockTransport).start(any(ManagedClientTransport.Listener.class));
     ManagedClientTransport.Listener transportListener = transportInfo.listener;
-    when(mockTransport.newStream(
-            same(method), same(headers), same(CallOptions.DEFAULT),
-            ArgumentMatchers.<ClientStreamTracer[]>any()))
-        .thenReturn(mockStream);
-    when(mockTransport.newStream(
-            same(method), same(headers2), same(CallOptions.DEFAULT),
-            ArgumentMatchers.<ClientStreamTracer[]>any()))
-        .thenReturn(mockStream2);
+    doReturn(mockStream).when(mockTransport).newStream(
+            same(method), argThat(headerMatcher1), any(CallOptions.class),
+            ArgumentMatchers.<ClientStreamTracer[]>any());
+    doReturn(mockStream2).when(mockTransport).newStream(
+            same(method), argThat(headerMatcher2), any(CallOptions.class),
+            ArgumentMatchers.<ClientStreamTracer[]>any());
     transportListener.transportReady();
-    when(mockPicker.pickSubchannel(
-        new PickSubchannelArgsImpl(method, headers, CallOptions.DEFAULT))).thenReturn(
-        PickResult.withNoResult());
-    when(mockPicker.pickSubchannel(
-        new PickSubchannelArgsImpl(method, headers2, CallOptions.DEFAULT))).thenReturn(
-        PickResult.withSubchannel(subchannel));
+    ArgumentMatcher<PickSubchannelArgs> pickArgsMatcher1 =
+        new ArgumentMatcher<PickSubchannelArgs>() {
+          @Override
+          public boolean matches(PickSubchannelArgs argument) {
+            return argument.getMethodDescriptor().equals(method)
+                && argument.getHeaders().containsKey(key1);
+          }
+        };
+    ArgumentMatcher<PickSubchannelArgs> pickArgsMatcher2 =
+        new ArgumentMatcher<PickSubchannelArgs>() {
+          @Override
+          public boolean matches(PickSubchannelArgs argument) {
+            return argument.getMethodDescriptor().equals(method)
+                && argument.getHeaders().containsKey(key2);
+          }
+        };
+    doReturn(PickResult.withNoResult()).when(mockPicker).pickSubchannel(argThat(pickArgsMatcher1));
+    doReturn(PickResult.withSubchannel(subchannel))
+        .when(mockPicker).pickSubchannel(argThat(pickArgsMatcher2));
     updateBalancingStateSafely(helper, READY, mockPicker);
 
     // First RPC, will be pending
@@ -837,19 +881,21 @@ public class ManagedChannelImplTest {
     call.start(mockCallListener, headers);
 
     verify(mockTransport, never()).newStream(
-        same(method), same(headers), same(CallOptions.DEFAULT),
+        same(method), argThat(headerMatcher1), any(CallOptions.class),
         ArgumentMatchers.<ClientStreamTracer[]>any());
 
     // Second RPC, will be assigned to the real transport
     ClientCall<String, Integer> call2 = channel.newCall(method, CallOptions.DEFAULT);
     call2.start(mockCallListener2, headers2);
     verify(mockTransport).newStream(
-        same(method), same(headers2), same(CallOptions.DEFAULT),
+        same(method), argThat(headerMatcher2), any(CallOptions.class),
         ArgumentMatchers.<ClientStreamTracer[]>any());
-    verify(mockTransport).newStream(
-        same(method), same(headers2), same(CallOptions.DEFAULT),
-        ArgumentMatchers.<ClientStreamTracer[]>any());
-    verify(mockStream2).start(any(ClientStreamListener.class));
+    verify(mockStream2).start(streamListenerCaptor.capture());
+    if (channelBuilder.retryEnabled) {
+      // commit call2
+      streamListenerCaptor.getValue().headersRead(new Metadata());
+      executor.runDueTasks();
+    }
 
     // Shutdown
     if (shutdownNow) {
@@ -889,14 +935,19 @@ public class ManagedChannelImplTest {
       assertFalse(nameResolverFactory.resolvers.get(0).shutdown);
       // call and call2 are still alive, and can still be assigned to a real transport
       SubchannelPicker picker2 = mock(SubchannelPicker.class);
-      when(picker2.pickSubchannel(new PickSubchannelArgsImpl(method, headers, CallOptions.DEFAULT)))
-          .thenReturn(PickResult.withSubchannel(subchannel));
+      doReturn(PickResult.withSubchannel(subchannel))
+          .when(picker2).pickSubchannel(argThat(pickArgsMatcher1));
       updateBalancingStateSafely(helper, READY, picker2);
       executor.runDueTasks();
       verify(mockTransport).newStream(
-          same(method), same(headers), same(CallOptions.DEFAULT),
+          same(method), argThat(headerMatcher1), any(CallOptions.class),
           ArgumentMatchers.<ClientStreamTracer[]>any());
-      verify(mockStream).start(any(ClientStreamListener.class));
+      verify(mockStream).start(streamListenerCaptor.capture());
+      if (channelBuilder.retryEnabled) {
+        // commit call
+        streamListenerCaptor.getValue().headersRead(new Metadata());
+        executor.runDueTasks();
+      }
     }
 
     // After call is moved out of delayed transport, LoadBalancer, NameResolver and the transports
@@ -1045,7 +1096,7 @@ public class ManagedChannelImplTest {
     ConnectionClientTransport mockTransport = transportInfo.transport;
     ManagedClientTransport.Listener transportListener = transportInfo.listener;
     when(mockTransport.newStream(
-            same(method), same(headers), any(CallOptions.class),
+            same(method), any(Metadata.class), any(CallOptions.class),
             ArgumentMatchers.<ClientStreamTracer[]>any()))
         .thenReturn(mockStream);
     transportListener.transportReady();
@@ -1057,7 +1108,9 @@ public class ManagedChannelImplTest {
     // Real streams are started in the call executor if they were previously buffered.
     assertEquals(1, callExecutor.runDueTasks());
     verify(mockTransport).newStream(
-        same(method), same(headers), same(options), ArgumentMatchers.<ClientStreamTracer[]>any());
+        same(method), any(Metadata.class), callOptionsCaptor.capture(),
+        ArgumentMatchers.<ClientStreamTracer[]>any());
+    assertThat(callOptionsCaptor.getValue().getExecutor()).isSameInstanceAs(options.getExecutor());
     verify(mockStream).start(streamListenerCaptor.capture());
 
     // Call listener callbacks are also run in the call executor
@@ -1338,7 +1391,7 @@ public class ManagedChannelImplTest {
     executor.runDueTasks();
 
     verify(goodTransportInfo.transport).newStream(
-        same(method), same(headers), same(CallOptions.DEFAULT),
+        same(method), any(Metadata.class), any(CallOptions.class),
         ArgumentMatchers.<ClientStreamTracer[]>any());
     // The bad transport was never used.
     verify(badTransportInfo.transport, times(0)).newStream(
@@ -1896,17 +1949,19 @@ public class ManagedChannelImplTest {
     updateBalancingStateSafely(helper, READY, mockPicker);
 
     String callCredValue = "per-RPC call cred";
+    CallCredentials callCredentials = new FakeCallCredentials(metadataKey, callCredValue);
     CallOptions callOptions = CallOptions.DEFAULT
-        .withCallCredentials(new FakeCallCredentials(metadataKey, callCredValue));
+        .withCallCredentials(callCredentials);
     Metadata headers = new Metadata();
     ClientCall<String, Integer> call = channel.newCall(method, callOptions);
     call.start(mockCallListener, headers);
 
     verify(transportInfo.transport).newStream(
-        same(method), same(headers), same(callOptions),
+        same(method), headersCaptor.capture(), callOptionsCaptor.capture(),
         ArgumentMatchers.<ClientStreamTracer[]>any());
-    assertThat(headers.getAll(metadataKey))
+    assertThat(headersCaptor.getValue().getAll(metadataKey))
         .containsExactly(channelCredValue, callCredValue).inOrder();
+    assertThat(callOptionsCaptor.getValue().getCredentials()).isSameInstanceAs(callCredentials);
 
     // Verify that the oob channel does not
     ManagedChannel oob = helper.createOobChannel(
@@ -1922,9 +1977,9 @@ public class ManagedChannelImplTest {
     balancerRpcExecutor.runDueTasks();
 
     verify(transportInfo.transport).newStream(
-        same(method), same(headers), same(callOptions),
+        same(method), headersCaptor.capture(), any(CallOptions.class),
         ArgumentMatchers.<ClientStreamTracer[]>any());
-    assertThat(headers.getAll(metadataKey)).containsExactly(callCredValue);
+    assertThat(headersCaptor.getValue().getAll(metadataKey)).containsExactly(callCredValue);
     oob.shutdownNow();
 
     // Verify that resolving oob channel does not
@@ -1956,10 +2011,11 @@ public class ManagedChannelImplTest {
 
     // CallOptions may contain StreamTracerFactory for census that is added by default.
     verify(transportInfo.transport).newStream(
-        same(method), same(headers), any(CallOptions.class),
+        same(method), headersCaptor.capture(), any(CallOptions.class),
         ArgumentMatchers.<ClientStreamTracer[]>any());
-    assertThat(headers.getAll(metadataKey)).containsExactly(callCredValue);
+    assertThat(headersCaptor.getValue().getAll(metadataKey)).containsExactly(callCredValue);
     oob.shutdownNow();
+    executor.runDueTasks();
   }
 
   @Test
@@ -1994,17 +2050,18 @@ public class ManagedChannelImplTest {
     updateBalancingStateSafely(helper, READY, mockPicker);
 
     String callCredValue = "per-RPC call cred";
-    CallOptions callOptions = CallOptions.DEFAULT
-        .withCallCredentials(new FakeCallCredentials(metadataKey, callCredValue));
+    CallCredentials callCredentials = new FakeCallCredentials(metadataKey, callCredValue);
+    CallOptions callOptions = CallOptions.DEFAULT.withCallCredentials(callCredentials);
     Metadata headers = new Metadata();
     ClientCall<String, Integer> call = channel.newCall(method, callOptions);
     call.start(mockCallListener, headers);
 
     verify(transportInfo.transport).newStream(
-        same(method), same(headers), same(callOptions),
+        same(method), headersCaptor.capture(), callOptionsCaptor.capture(),
         ArgumentMatchers.<ClientStreamTracer[]>any());
-    assertThat(headers.getAll(metadataKey))
+    assertThat(headersCaptor.getValue().getAll(metadataKey))
         .containsExactly(channelCredValue, callCredValue).inOrder();
+    assertThat(callOptionsCaptor.getValue().getCredentials()).isSameInstanceAs(callCredentials);
 
     // Verify that resolving oob channel with oob channel creds provides call creds
     String oobChannelCredValue = "oob-channel-provided call cred";
@@ -2039,11 +2096,12 @@ public class ManagedChannelImplTest {
 
     // CallOptions may contain StreamTracerFactory for census that is added by default.
     verify(transportInfo.transport).newStream(
-        same(method), same(headers), any(CallOptions.class),
+        same(method), headersCaptor.capture(), any(CallOptions.class),
         ArgumentMatchers.<ClientStreamTracer[]>any());
-    assertThat(headers.getAll(metadataKey))
+    assertThat(headersCaptor.getValue().getAll(metadataKey))
         .containsExactly(oobChannelCredValue, callCredValue).inOrder();
     oob.shutdownNow();
+    executor.runDueTasks();
   }
 
   @Test
@@ -2404,8 +2462,9 @@ public class ManagedChannelImplTest {
     // newStream() is called after apply() is called
     applierCaptor.getValue().apply(new Metadata());
     verify(transport).newStream(
-        same(method), any(Metadata.class), same(callOptions),
+        same(method), any(Metadata.class), callOptionsCaptor.capture(),
         ArgumentMatchers.<ClientStreamTracer[]>any());
+    assertThat(callOptionsCaptor.getValue().getCredentials()).isSameInstanceAs(creds);
     assertEquals("testValue", testKey.get(newStreamContexts.poll()));
     // The context should not live beyond the scope of newStream() and applyRequestMetadata()
     assertNull(testKey.get());
@@ -2430,7 +2489,7 @@ public class ManagedChannelImplTest {
     // Still, newStream() is called after apply() is called
     applierCaptor.getValue().apply(new Metadata());
     verify(transport, times(2)).newStream(
-        same(method), any(Metadata.class), same(callOptions),
+        same(method), any(Metadata.class), any(CallOptions.class),
         ArgumentMatchers.<ClientStreamTracer[]>any());
     assertEquals("testValue", testKey.get(newStreamContexts.poll()));
 
@@ -2478,7 +2537,7 @@ public class ManagedChannelImplTest {
     verify(mockTransport).newStream(
         same(method), any(Metadata.class), callOptionsCaptor.capture(),
         tracersCaptor.capture());
-    assertThat(tracersCaptor.getValue()).isEqualTo(new ClientStreamTracer[] {tracer1, tracer2});
+    assertThat(tracersCaptor.getValue()).asList().containsAtLeast(tracer1, tracer2);
   }
 
   @Test
@@ -2524,7 +2583,7 @@ public class ManagedChannelImplTest {
     verify(mockTransport).newStream(
         same(method), any(Metadata.class), callOptionsCaptor.capture(),
         tracersCaptor.capture());
-    assertThat(tracersCaptor.getValue()).isEqualTo(new ClientStreamTracer[] {tracer1, tracer2});
+    assertThat(tracersCaptor.getValue()).asList().containsAtLeast(tracer1, tracer2);
   }
 
   @Test

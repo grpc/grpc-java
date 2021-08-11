@@ -142,7 +142,7 @@ public final class ManagedChannelImplBuilder
   int maxHedgedAttempts = 5;
   long retryBufferSize = DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES;
   long perRpcBufferLimit = DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES;
-  boolean retryEnabled = false; // TODO(zdapeng): default to true
+  boolean retryEnabled = true;
 
   InternalChannelz channelz = InternalChannelz.instance();
   int maxTraceEvents;
