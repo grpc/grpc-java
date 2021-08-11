@@ -279,7 +279,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           new Context.CancellationListener() {
             @Override
             public void cancelled(Context context) {
-              ServerStreamListenerImpl.this.call.cancelled = true;
+              // If the context has a cancellation cause then something exceptional happened
+              // and we should also mark the call as cancelled.
+              ServerStreamListenerImpl.this.call.cancelled = context.cancellationCause() != null;
             }
           },
           MoreExecutors.directExecutor());
@@ -355,7 +357,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       } finally {
         // Cancel context after delivering RPC closure notification to allow the application to
         // clean up and update any state based on whether onComplete or onCancel was called.
-        context.cancel(null);
+        // Include an exception on any non-OK status to indicate that the context cancellation
+        // was done under exceptional circumstances.
+        context.cancel(status.isOk() ? null : status.asRuntimeException());
       }
     }
 
