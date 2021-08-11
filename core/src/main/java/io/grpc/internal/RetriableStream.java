@@ -30,8 +30,10 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.io.InputStream;
+import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -64,6 +66,16 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   private final MethodDescriptor<ReqT, ?> method;
   private final Executor callExecutor;
+  private final Executor listenerSerializeExecutor = new SynchronizationContext(
+      new UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw Status.fromThrowable(e)
+              .withDescription("Uncaught exception in the SynchronizationContext. Re-thrown.")
+              .asRuntimeException();
+        }
+      }
+  );
   private final ScheduledExecutorService scheduledExecutorService;
   // Must not modify it.
   private final Metadata headers;
@@ -105,6 +117,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private FutureCanceller scheduledHedging;
   private long nextBackoffIntervalNanos;
   private Status cancellationStatus;
+  private boolean isClosed;
 
   RetriableStream(
       MethodDescriptor<ReqT, ?> method, Metadata headers,
@@ -247,6 +260,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     int chunk = 0x80;
     List<BufferEntry> list = null;
     boolean streamStarted = false;
+    Runnable onReadyRunnable = null;
 
     while (true) {
       State savedState;
@@ -264,7 +278,18 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         }
         if (index == savedState.buffer.size()) { // I'm drained
           state = savedState.substreamDrained(substream);
-          return;
+          if (!isReady()) {
+            return;
+          }
+          onReadyRunnable = new Runnable() {
+            @Override
+            public void run() {
+              if (!isClosed) {
+                masterListener.onReady();
+              }
+            }
+          };
+          break;
         }
 
         if (substream.closed) {
@@ -297,6 +322,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           }
         }
       }
+    }
+
+    if (onReadyRunnable != null) {
+      listenerSerializeExecutor.execute(onReadyRunnable);
+      return;
     }
 
     substream.stream.cancel(
@@ -450,14 +480,22 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public final void cancel(Status reason) {
+  public final void cancel(final Status reason) {
     Substream noopSubstream = new Substream(0 /* previousAttempts doesn't matter here */);
     noopSubstream.stream = new NoopClientStream();
     Runnable runnable = commit(noopSubstream);
 
     if (runnable != null) {
-      masterListener.closed(reason, RpcProgress.PROCESSED, new Metadata());
       runnable.run();
+      listenerSerializeExecutor.execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              isClosed = true;
+              masterListener.closed(reason, RpcProgress.PROCESSED, new Metadata());
+
+            }
+          });
       return;
     }
 
@@ -771,18 +809,25 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
 
     @Override
-    public void headersRead(Metadata headers) {
+    public void headersRead(final Metadata headers) {
       commitAndRun(substream);
       if (state.winningSubstream == substream) {
-        masterListener.headersRead(headers);
         if (throttle != null) {
           throttle.onSuccess();
         }
+        listenerSerializeExecutor.execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                masterListener.headersRead(headers);
+              }
+            });
       }
     }
 
     @Override
-    public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
+    public void closed(
+        final Status status, final RpcProgress rpcProgress, final Metadata trailers) {
       synchronized (lock) {
         state = state.substreamClosed(substream);
         closedSubstreamsInsight.append(status.getCode());
@@ -793,7 +838,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       if (substream.bufferLimitExceeded) {
         commitAndRun(substream);
         if (state.winningSubstream == substream) {
-          masterListener.closed(status, rpcProgress, trailers);
+          listenerSerializeExecutor.execute(
+              new Runnable() {
+                @Override
+                public void run() {
+                  isClosed = true;
+                  masterListener.closed(status, rpcProgress, trailers);
+                }
+              });
         }
         return;
       }
@@ -900,7 +952,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       commitAndRun(substream);
       if (state.winningSubstream == substream) {
-        masterListener.closed(status, rpcProgress, trailers);
+        listenerSerializeExecutor.execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                isClosed = true;
+                masterListener.closed(status, rpcProgress, trailers);
+              }
+            });
       }
     }
 
@@ -970,22 +1029,37 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
 
     @Override
-    public void messagesAvailable(MessageProducer producer) {
+    public void messagesAvailable(final MessageProducer producer) {
       State savedState = state;
       checkState(
           savedState.winningSubstream != null, "Headers should be received prior to messages.");
       if (savedState.winningSubstream != substream) {
         return;
       }
-      masterListener.messagesAvailable(producer);
+      listenerSerializeExecutor.execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              masterListener.messagesAvailable(producer);
+            }
+          });
     }
 
     @Override
     public void onReady() {
       // FIXME(#7089): hedging case is broken.
-      // TODO(zdapeng): optimization: if the substream is not drained yet, delay onReady() once
-      // drained and if is still ready.
-      masterListener.onReady();
+      if (!isReady()) {
+        return;
+      }
+      listenerSerializeExecutor.execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              if (!isClosed) {
+                masterListener.onReady();
+              }
+            }
+          });
     }
   }
 
