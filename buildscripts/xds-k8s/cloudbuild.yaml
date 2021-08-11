@@ -3,6 +3,7 @@ steps:
   args:
     - 'build'
     - '--tag=${_SERVER_IMAGE_NAME}:${COMMIT_SHA}'
+    - '--tag=${_SERVER_IMAGE_NAME}:${BRANCH_NAME}'
     - '--file=test-server.Dockerfile'
     - '.'
 
@@ -10,6 +11,7 @@ steps:
   args:
     - 'build'
     - '--tag=${_CLIENT_IMAGE_NAME}:${COMMIT_SHA}'
+    - '--tag=${_CLIENT_IMAGE_NAME}:${BRANCH_NAME}'
     - '--file=test-client.Dockerfile'
     - '.'
 
@@ -19,4 +21,6 @@ substitutions:
 
 images:
   - '${_SERVER_IMAGE_NAME}:${COMMIT_SHA}'
+  - '${_SERVER_IMAGE_NAME}:${BRANCH_NAME}'
   - '${_CLIENT_IMAGE_NAME}:${COMMIT_SHA}'
+  - '${_CLIENT_IMAGE_NAME}:${BRANCH_NAME}'
