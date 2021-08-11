@@ -97,11 +97,15 @@ public abstract class ClientStreamTracer extends StreamTracer {
   public static final class StreamInfo {
     private final Attributes transportAttrs;
     private final CallOptions callOptions;
+    private final int previousAttempts;
     private final boolean isTransparentRetry;
 
-    StreamInfo(Attributes transportAttrs, CallOptions callOptions, boolean isTransparentRetry) {
+    StreamInfo(
+        Attributes transportAttrs, CallOptions callOptions, int previousAttempts,
+        boolean isTransparentRetry) {
       this.transportAttrs = checkNotNull(transportAttrs, "transportAttrs");
       this.callOptions = checkNotNull(callOptions, "callOptions");
+      this.previousAttempts = previousAttempts;
       this.isTransparentRetry = isTransparentRetry;
     }
 
@@ -125,6 +129,15 @@ public abstract class ClientStreamTracer extends StreamTracer {
     }
 
     /**
+     * Returns the number of preceding attempts for the RPC.
+     *
+     * @since 1.40.0
+     */
+    public int getPreviousAttempts() {
+      return previousAttempts;
+    }
+
+    /**
      * Whether the stream is a transparent retry.
      *
      * @since 1.40.0
@@ -142,6 +155,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
       return new Builder()
           .setCallOptions(callOptions)
           .setTransportAttrs(transportAttrs)
+          .setPreviousAttempts(previousAttempts)
           .setIsTransparentRetry(isTransparentRetry);
     }
 
@@ -159,6 +173,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
       return MoreObjects.toStringHelper(this)
           .add("transportAttrs", transportAttrs)
           .add("callOptions", callOptions)
+          .add("previousAttempts", previousAttempts)
           .add("isTransparentRetry", isTransparentRetry)
           .toString();
     }
@@ -171,6 +186,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
     public static final class Builder {
       private Attributes transportAttrs = Attributes.EMPTY;
       private CallOptions callOptions = CallOptions.DEFAULT;
+      private int previousAttempts;
       private boolean isTransparentRetry;
 
       Builder() {
@@ -198,6 +214,16 @@ public abstract class ClientStreamTracer extends StreamTracer {
       }
 
       /**
+       * Set the number of preceding attempts of the RPC.
+       *
+       * @since 1.40.0
+       */
+      public Builder setPreviousAttempts(int previousAttempts) {
+        this.previousAttempts = previousAttempts;
+        return this;
+      }
+
+      /**
        * Sets whether the stream is a transparent retry.
        *
        * @since 1.40.0
@@ -211,7 +237,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
        * Builds a new StreamInfo.
        */
       public StreamInfo build() {
-        return new StreamInfo(transportAttrs, callOptions, isTransparentRetry);
+        return new StreamInfo(transportAttrs, callOptions, previousAttempts, isTransparentRetry);
       }
     }
   }

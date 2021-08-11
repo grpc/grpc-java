@@ -533,7 +533,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             getTransport(new PickSubchannelArgsImpl(method, headers, callOptions));
         Context origContext = context.attach();
         ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
-            callOptions, headers, /* isTransparentRetry= */ false);
+            callOptions, headers, 0, /* isTransparentRetry= */ false);
         try {
           return transport.newStream(method, headers, callOptions, tracers);
         } finally {
@@ -572,10 +572,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
           @Override
           ClientStream newSubstream(
-              Metadata newHeaders, ClientStreamTracer.Factory factory, boolean isTransparentRetry) {
+              Metadata newHeaders, ClientStreamTracer.Factory factory, int previousAttempts,
+              boolean isTransparentRetry) {
             CallOptions newOptions = callOptions.withStreamTracerFactory(factory);
-            ClientStreamTracer[] tracers =
-                GrpcUtil.getClientStreamTracers(newOptions, newHeaders, isTransparentRetry);
+            ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
+                newOptions, newHeaders, previousAttempts, isTransparentRetry);
             ClientTransport transport =
                 getTransport(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
             Context origContext = context.attach();
@@ -624,7 +625,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
-    this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
+    this.retryEnabled = builder.retryEnabled;
     this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
     this.offloadExecutorHolder =
         new ExecutorHolder(
