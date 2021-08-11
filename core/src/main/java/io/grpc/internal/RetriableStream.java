@@ -1052,7 +1052,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           new Runnable() {
             @Override
             public void run() {
-              masterListener.onReady();
+              if (!isClosed) {
+                masterListener.onReady();
+              }
             }
           });
     }
