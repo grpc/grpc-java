@@ -460,8 +460,8 @@ public class XdsServerWrapperTest {
             0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
     EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", hcm_virtual);
     EnvoyServerProtoData.FilterChain f1 = createFilterChain("filter-chain-1", createRds("r0"));
-    xdsClient.rdsCount = new CountDownLatch(3);
     xdsClient.deliverLdsUpdate(Arrays.asList(f0, f1), null);
+    xdsClient.rdsCount.await();
     xdsClient.rdsWatchers.get("r0").onError(Status.CANCELLED);
     start.get(5000, TimeUnit.MILLISECONDS);
     assertThat(selectorRef.get().getRoutingConfigs().get(f1)).isEqualTo(ServerRoutingConfig.create(
@@ -479,35 +479,6 @@ public class XdsServerWrapperTest {
     );
   }
 
-  @Test
-  public void discoverState_rds_error() throws Exception {
-    final SettableFuture<Server> start = SettableFuture.create();
-    Executors.newSingleThreadExecutor().execute(new Runnable() {
-      @Override
-      public void run() {
-        try {
-          start.set(xdsServerWrapper.start());
-        } catch (Exception ex) {
-          start.setException(ex);
-        }
-      }
-    });
-    String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
-    assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
-    VirtualHost virtualHost = createVirtualHost("virtual-host-0");
-    HttpConnectionManager hcm_virtual = HttpConnectionManager.forVirtualHosts(
-            0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
-    EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", hcm_virtual);
-    EnvoyServerProtoData.FilterChain f1 = createFilterChain("filter-chain-1", createRds("r0"));
-    xdsClient.rdsCount = new CountDownLatch(3);
-    xdsClient.deliverLdsUpdate(Arrays.asList(f0, f1), null);
-    xdsClient.rdsWatchers.get("r0").onError(Status.CANCELLED);
-    start.get(5000, TimeUnit.MILLISECONDS);
-    FilterChainSelector selector = selectorRef.get();
-    assertThat(selector.getRoutingConfigs().get(f1)).isEqualTo(ServerRoutingConfig.create(
-            ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of())
-    );
-  }
 
   @Test
   public void error() throws Exception {
