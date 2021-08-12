@@ -54,7 +54,7 @@ build_test_app_docker_images() {
   # Run Google Cloud Build
   gcloud builds submit "${build_dir}" \
     --config "${docker_dir}/cloudbuild.yaml" \
-    --substitutions "_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT}"
+    --substitutions "_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT},BRANCH_NAME=experimental"
   # TODO(sergiitk): extra "cosmetic" tags for versioned branches, e.g. v1.34.x
   # TODO(sergiitk): do this when adding support for custom configs per version
 }
