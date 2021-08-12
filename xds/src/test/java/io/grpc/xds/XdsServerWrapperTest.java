@@ -31,6 +31,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.withSettings;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -311,7 +312,6 @@ public class XdsServerWrapperTest {
     verify(mockServer, never()).shutdown();
     xdsServerWrapper.shutdown();
     verify(mockServer).shutdown();
-    when(mockServer.isShutdown()).thenReturn(true);
     when(mockServer.isTerminated()).thenReturn(true);
     assertThat(sslSupplier.isShutdown()).isTrue();
     assertThat(executor.getPendingTasks().size()).isEqualTo(0);
@@ -441,6 +441,75 @@ public class XdsServerWrapperTest {
   }
 
   @Test
+  public void discoverState_rds_onError_and_resourceNotExist() throws Exception {
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
+    VirtualHost virtualHost = createVirtualHost("virtual-host-0");
+    HttpConnectionManager hcm_virtual = HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
+    EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", hcm_virtual);
+    EnvoyServerProtoData.FilterChain f1 = createFilterChain("filter-chain-1", createRds("r0"));
+    xdsClient.rdsCount = new CountDownLatch(3);
+    xdsClient.deliverLdsUpdate(Arrays.asList(f0, f1), null);
+    xdsClient.rdsWatchers.get("r0").onError(Status.CANCELLED);
+    start.get(5000, TimeUnit.MILLISECONDS);
+    assertThat(selectorRef.get().getRoutingConfigs().get(f1)).isEqualTo(ServerRoutingConfig.create(
+            ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of())
+    );
+    xdsClient.deliverRdsUpdate("r0",
+            Collections.singletonList(createVirtualHost("virtual-host-1")));
+    assertThat(selectorRef.get().getRoutingConfigs().get(f1)).isEqualTo(
+            ServerRoutingConfig.create(f1.getHttpConnectionManager().httpFilterConfigs(),
+            Collections.singletonList(createVirtualHost("virtual-host-1"))));
+
+    xdsClient.rdsWatchers.get("r0").onResourceDoesNotExist("r0");
+    assertThat(selectorRef.get().getRoutingConfigs().get(f1)).isEqualTo(ServerRoutingConfig.create(
+            ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of())
+    );
+  }
+
+  @Test
+  public void discoverState_rds_error() throws Exception {
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
+    VirtualHost virtualHost = createVirtualHost("virtual-host-0");
+    HttpConnectionManager hcm_virtual = HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
+    EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", hcm_virtual);
+    EnvoyServerProtoData.FilterChain f1 = createFilterChain("filter-chain-1", createRds("r0"));
+    xdsClient.rdsCount = new CountDownLatch(3);
+    xdsClient.deliverLdsUpdate(Arrays.asList(f0, f1), null);
+    xdsClient.rdsWatchers.get("r0").onError(Status.CANCELLED);
+    start.get(5000, TimeUnit.MILLISECONDS);
+    FilterChainSelector selector = selectorRef.get();
+    assertThat(selector.getRoutingConfigs().get(f1)).isEqualTo(ServerRoutingConfig.create(
+            ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of())
+    );
+  }
+
+  @Test
   public void error() throws Exception {
     final SettableFuture<Server> start = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
@@ -466,7 +535,7 @@ public class XdsServerWrapperTest {
     FilterChain filterChain0 = createFilterChain("filter-chain-0", createRds("rds"));
     SslContextProviderSupplier sslSupplier0 = filterChain0.getSslContextProviderSupplier();
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain0), null);
-    xdsClient.rdsWatchers.get("rds").onResourceDoesNotExist("rds");
+    xdsClient.ldsWatcher.onError(Status.INTERNAL);
     assertThat(selectorRef.get()).isSameInstanceAs(FilterChainSelector.NO_FILTER_CHAIN);
     assertThat(xdsClient.rdsWatchers).isEmpty();
     verify(mockBuilder, times(1)).build();
@@ -564,9 +633,164 @@ public class XdsServerWrapperTest {
     xdsServerWrapper.shutdown();
     verify(mockServer, times(5)).shutdown();
     assertThat(sslSupplier3.isShutdown()).isTrue();
-    when(mockServer.isTerminated()).thenReturn(true);
     when(mockServer.awaitTermination(anyLong(), any(TimeUnit.class))).thenReturn(true);
     assertThat(xdsServerWrapper.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void interceptor_notServerInterceptor() throws Exception {
+    ArgumentCaptor<ConfigApplyingInterceptor> interceptorCaptor =
+            ArgumentCaptor.forClass(ConfigApplyingInterceptor.class);
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    verify(mockBuilder).intercept(interceptorCaptor.capture());
+    ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
+    ServerRoutingConfig routingConfig = createRoutingConfig("/FooService/barMethod",
+            "foo.google.com", "filter-type-url");
+    ServerCall<Void, Void> serverCall = mock(ServerCall.class);
+    when(serverCall.getAttributes()).thenReturn(
+            Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, routingConfig).build());
+    when(serverCall.getMethodDescriptor()).thenReturn(createMethod("FooService/barMethod"));
+    when(serverCall.getAuthority()).thenReturn("foo.google.com");
+
+    Filter filter = mock(Filter.class);
+    when(filter.typeUrls()).thenReturn(new String[]{"filter-type-url"});
+    filterRegistry.register(filter);
+    ServerCallHandler<Void, Void> next = mock(ServerCallHandler.class);
+    interceptor.interceptCall(serverCall, new Metadata(), next);
+    verify(next, never()).startCall(any(ServerCall.class), any(Metadata.class));
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(serverCall).close(statusCaptor.capture(), any(Metadata.class));
+    Status status = statusCaptor.getValue();
+    assertThat(status.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(status.getDescription()).isEqualTo(
+            "HttpFilterConfig(type URL: filter-type-url) is not a ServerInterceptorBuilder");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void interceptor_virtualHostNotMatch() throws Exception {
+    ArgumentCaptor<ConfigApplyingInterceptor> interceptorCaptor =
+            ArgumentCaptor.forClass(ConfigApplyingInterceptor.class);
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    verify(mockBuilder).intercept(interceptorCaptor.capture());
+    ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
+    ServerRoutingConfig routingConfig = createRoutingConfig("/FooService/barMethod",
+            "foo.google.com", "filter-type-url");
+    ServerCall<Void, Void> serverCall = mock(ServerCall.class);
+    when(serverCall.getAttributes()).thenReturn(
+            Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, routingConfig).build());
+    when(serverCall.getAuthority()).thenReturn("not-match.google.com");
+
+    Filter filter = mock(Filter.class);
+    when(filter.typeUrls()).thenReturn(new String[]{"filter-type-url"});
+    filterRegistry.register(filter);
+    ServerCallHandler<Void, Void> next = mock(ServerCallHandler.class);
+    interceptor.interceptCall(serverCall, new Metadata(), next);
+    verify(next, never()).startCall(any(ServerCall.class), any(Metadata.class));
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(serverCall).close(statusCaptor.capture(), any(Metadata.class));
+    Status status = statusCaptor.getValue();
+    assertThat(status.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(status.getDescription()).isEqualTo("Could not find xDS virtual host matching RPC");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void interceptor_routeNotMatch() throws Exception {
+    ArgumentCaptor<ConfigApplyingInterceptor> interceptorCaptor =
+            ArgumentCaptor.forClass(ConfigApplyingInterceptor.class);
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    verify(mockBuilder).intercept(interceptorCaptor.capture());
+    ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
+    ServerRoutingConfig routingConfig = createRoutingConfig("/FooService/barMethod",
+            "foo.google.com", "filter-type-url");
+    ServerCall<Void, Void> serverCall = mock(ServerCall.class);
+    when(serverCall.getAttributes()).thenReturn(
+            Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, routingConfig).build());
+    when(serverCall.getMethodDescriptor()).thenReturn(createMethod("NotMatchMethod"));
+    when(serverCall.getAuthority()).thenReturn("foo.google.com");
+
+    Filter filter = mock(Filter.class);
+    when(filter.typeUrls()).thenReturn(new String[]{"filter-type-url"});
+    filterRegistry.register(filter);
+    ServerCallHandler<Void, Void> next = mock(ServerCallHandler.class);
+    interceptor.interceptCall(serverCall, new Metadata(), next);
+    verify(next, never()).startCall(any(ServerCall.class), any(Metadata.class));
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(serverCall).close(statusCaptor.capture(), any(Metadata.class));
+    Status status = statusCaptor.getValue();
+    assertThat(status.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(status.getDescription()).isEqualTo("Could not find xDS route matching RPC");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void interceptor_failingRouterConfig() throws Exception {
+    ArgumentCaptor<ConfigApplyingInterceptor> interceptorCaptor =
+            ArgumentCaptor.forClass(ConfigApplyingInterceptor.class);
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    verify(mockBuilder).intercept(interceptorCaptor.capture());
+    ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
+    ServerRoutingConfig failingConfig = ServerRoutingConfig.create(
+            ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of());
+    ServerCall<Void, Void> serverCall = mock(ServerCall.class);
+    when(serverCall.getAttributes()).thenReturn(
+            Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, failingConfig).build());
+
+    ServerCallHandler<Void, Void> next = mock(ServerCallHandler.class);
+    interceptor.interceptCall(serverCall, new Metadata(), next);
+    verify(next, never()).startCall(any(ServerCall.class), any(Metadata.class));
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(serverCall).close(statusCaptor.capture(), any(Metadata.class));
+    Status status = statusCaptor.getValue();
+    assertThat(status.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(status.getDescription()).isEqualTo(
+            "Missing xDS routing config. RDS config unavailable.");
   }
 
   @Test
@@ -633,14 +857,7 @@ public class XdsServerWrapperTest {
     when(mockNext.startCall(any(ServerCall.class), any(Metadata.class))).thenReturn(listener);
     when(serverCall.getAttributes()).thenReturn(
             Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, routingConfig).build());
-    when(serverCall.getMethodDescriptor()).thenReturn(
-            MethodDescriptor.<Void, Void>newBuilder()
-                    .setType(MethodDescriptor.MethodType.UNKNOWN)
-                    .setFullMethodName("FooService/barMethod")
-                    .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
-                    .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
-                    .build()
-    );
+    when(serverCall.getMethodDescriptor()).thenReturn(createMethod("FooService/barMethod"));
     when(serverCall.getAuthority()).thenReturn("foo.google.com");
 
     when(((ServerInterceptorBuilder)filter).buildServerInterceptor(f0, f0Override))
@@ -700,6 +917,34 @@ public class XdsServerWrapperTest {
             Arrays.<Integer>asList(),
             Arrays.<String>asList(),
             null);
+  }
+
+  private static ServerRoutingConfig createRoutingConfig(String path, String domain,
+                                                         String filterType) {
+    RouteMatch routeMatch =
+            RouteMatch.create(
+                    PathMatcher.fromPath(path, true),
+                    Collections.<HeaderMatcher>emptyList(), null);
+    VirtualHost virtualHost  = VirtualHost.create(
+            "v1", Collections.singletonList(domain),
+            Arrays.asList(Route.forAction(routeMatch, null,
+                    ImmutableMap.<String, FilterConfig>of())),
+            Collections.<String, FilterConfig>emptyMap());
+    FilterConfig f0 = mock(FilterConfig.class);
+    when(f0.typeUrl()).thenReturn(filterType);
+    return ServerRoutingConfig.create(
+            Arrays.asList(new NamedFilterConfig("filter-config-name-0", f0)),
+            Collections.singletonList(virtualHost)
+    );
+  }
+
+  private static MethodDescriptor<Void, Void> createMethod(String path) {
+    return MethodDescriptor.<Void, Void>newBuilder()
+            .setType(MethodDescriptor.MethodType.UNKNOWN)
+            .setFullMethodName(path)
+            .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
+            .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
+            .build();
   }
 
   private static EnvoyServerProtoData.DownstreamTlsContext createTls() {

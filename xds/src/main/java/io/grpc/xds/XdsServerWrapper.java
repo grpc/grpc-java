@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.InternalServerInterceptors;
@@ -59,6 +58,7 @@ import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -337,6 +337,7 @@ final class XdsServerWrapper extends Server {
 
   private final class DiscoveryState implements LdsResourceWatcher {
     private final String resourceName;
+    // Unique FilterChain name is the key.
     private final Map<String, RouteDiscoveryState> routeDiscoveryStates = new HashMap<>();
     private final Map<String, ServerRoutingConfig> routingConfigs = new HashMap<>();
     // Most recently discovered filter chains.
@@ -348,13 +349,13 @@ final class XdsServerWrapper extends Server {
     @Nullable
     private ServerRoutingConfig defaultRoutingConfig;
     private boolean stopped;
-    // This flag helps to manage sslContextProviderSuppliers release. It happens when:
-    // 1. Upon LdsUpdate when its rds configs not fully arrived, release old suppliers cached in
-    //    filterChains.
-    // 2. Upon successful selector update for the newest LDS for the first time, release suppliers
-    //    from the previous selectorRef content.
-    // 3. Upon permanent errors, replace old selector with a noop selector, release suppliers
-    //    from the previous selectorRef content.
+    // This flag helps to manage sslContextProviderSuppliers release. True when an update is
+    // pending, so filter chain state has not yet been applied to filterChainSelectorRef and there
+    // are two sets of sslContextProviderSuppliers. Release them when:
+    // 1. inflight == true, release old suppliers in filterChains.
+    // 2. inflight == false, set the newest update to filterChainSelectorRef for the first time,
+    //    release old suppliers in filterChainSelectorRef. Toggle the flag.
+    // 3. Permanent errors.
     // 4. This State shutdown.
     private boolean inflight = false;
 
@@ -401,8 +402,8 @@ final class XdsServerWrapper extends Server {
                 rdsState = new RouteDiscoveryState(hcm.rdsName(), filterChain,
                         hcm.httpFilterConfigs());
                 routeDiscoveryStates.put(hcm.rdsName(), rdsState);
+                xdsClient.watchRdsResource(hcm.rdsName(), rdsState);
               }
-              xdsClient.watchRdsResource(hcm.rdsName(), rdsState);
             }
           }
           for (String rdsName : routeDiscoveryStates.keySet()) {
@@ -483,27 +484,28 @@ final class XdsServerWrapper extends Server {
     // Update the selector to use the most recently updated configs only after all
     // RouteConfigurations (including default) have been discovered.
     private void maybeUpdateSelector() {
-      if (routingConfigs.size() == filterChains.size()
-              && (defaultFilterChain == null) == (defaultRoutingConfig == null)) {
-        Map<FilterChain, ServerRoutingConfig> filterChainRouting = new HashMap<>();
-        for (String name : filterChains.keySet()) {
-          filterChainRouting.put(filterChains.get(name), routingConfigs.get(name));
-        }
-        FilterChainSelector selector = new FilterChainSelector(
-            ImmutableMap.copyOf(filterChainRouting),
-            defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
-            defaultRoutingConfig);
-        List<SslContextProviderSupplier> toRelease = new ArrayList<>();
-        if (inflight) {
-          toRelease = getSuppliersInUse();
-          inflight = false;
-        }
-        filterChainSelectorRef.set(selector);
-        for (SslContextProviderSupplier e: toRelease) {
-          e.close();
-        }
-        startDelegateServer();
+      if (routingConfigs.size() != filterChains.size()
+              || (defaultFilterChain == null) != (defaultRoutingConfig == null)) {
+        return;
       }
+      Map<FilterChain, ServerRoutingConfig> filterChainRouting = new HashMap<>();
+      for (Map.Entry<String, FilterChain> e : filterChains.entrySet()) {
+        filterChainRouting.put(e.getValue(), routingConfigs.get(e.getKey()));
+      }
+      FilterChainSelector selector = new FilterChainSelector(
+          Collections.unmodifiableMap(filterChainRouting),
+          defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
+          defaultRoutingConfig);
+      List<SslContextProviderSupplier> toRelease = Collections.emptyList();
+      if (inflight) {
+        toRelease = getSuppliersInUse();
+        inflight = false;
+      }
+      filterChainSelectorRef.set(selector);
+      for (SslContextProviderSupplier e: toRelease) {
+        e.close();
+      }
+      startDelegateServer();
     }
 
     private void handleConfigNotFound(StatusException exception) {
@@ -603,9 +605,8 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            StatusException statusException = Status.UNAVAILABLE.withDescription(
-                    "Rds " + resourceName + " unavailable").asException();
-            handleConfigNotFound(statusException);
+            logger.log(Level.WARNING, "Rds {0} unavailable", resourceName);
+            handleConfigDiscovered(filterChain, ServerRoutingConfig.FAILING_ROUTING_CONFIG);
           }
         });
       }
@@ -618,14 +619,8 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            boolean isPermanentError = isPermanentError(error);
-            logger.log(Level.FINE, "{0} error from XdsClient: {1}",
-                    new Object[]{isPermanentError ? "Permanent" : "Transient", error});
-            if (isPermanentError) {
-              handleConfigNotFound(error.asException());
-            } else if (!isServing) {
-              listener.onNotServing(error.asException());
-            }
+            logger.log(Level.WARNING, "Error from XdsClient: {0}.", error);
+            handleConfigDiscovered(filterChain, ServerRoutingConfig.FAILING_ROUTING_CONFIG);
           }
         });
       }
@@ -656,10 +651,11 @@ final class XdsServerWrapper extends Server {
     public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
         Metadata headers, ServerCallHandler<ReqT, RespT> next) {
       ServerRoutingConfig routingConfig = call.getAttributes().get(ATTR_SERVER_ROUTING_CONFIG);
-      if (routingConfig == null) {
-        call.close(
-                Status.UNAVAILABLE.withDescription("Missing xDS routing config"),
-                new Metadata());
+      if (routingConfig == null
+              || routingConfig.equals(ServerRoutingConfig.FAILING_ROUTING_CONFIG)) {
+        String errorMsg = "Missing xDS routing config. " + (routingConfig == null ? "" :
+                "RDS config unavailable.");
+        call.close(Status.UNAVAILABLE.withDescription(errorMsg), new Metadata());
         return new Listener<ReqT>() {};
       }
       VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(
@@ -699,6 +695,12 @@ final class XdsServerWrapper extends Server {
           if (interceptor != null) {
             filterInterceptors.add(interceptor);
           }
+        } else {
+          call.close(
+              Status.UNAVAILABLE.withDescription("HttpFilterConfig(type URL: "
+                      + filterConfig.typeUrl() + ") is not a ServerInterceptorBuilder"),
+              new Metadata());
+          return new Listener<ReqT>() {};
         }
       }
       ServerInterceptor interceptor = combineInterceptors(filterInterceptors);
@@ -732,6 +734,10 @@ final class XdsServerWrapper extends Server {
    */
   @AutoValue
   abstract static class ServerRoutingConfig {
+    private static final ServerRoutingConfig FAILING_ROUTING_CONFIG =
+            new AutoValue_XdsServerWrapper_ServerRoutingConfig(
+                    ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of());
+
     // Top level http filter configs.
     abstract ImmutableList<NamedFilterConfig> httpFilterConfigs();
 
