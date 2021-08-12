@@ -86,6 +86,10 @@ public class TestServiceClient {
   private boolean fullStreamDecompression;
   private int localHandshakerPort = -1;
   private Map<String, ?> serviceConfig = null;
+  private int soakIterations = 0;
+  private int soakMaxFailures = 0;
+  private int soakPerIterationMaxAcceptableLatencyMs = 0;
+  private int soakOverallTimeoutSeconds = 0;
 
   private Tester tester = new Tester();
 
@@ -150,6 +154,14 @@ public class TestServiceClient {
         @SuppressWarnings("unchecked")
         Map<String, ?> map = (Map<String, ?>) JsonParser.parse(value);
         serviceConfig = map;
+      } else if ("soak_iterations".equals(key)) {
+        soakIterations = Integer.parseInt(value);
+      } else if ("soak_max_failures".equals(key)) {
+        soakMaxFailures = Integer.parseInt(value);
+      } else if ("soak_per_iteration_max_acceptable_latency_ms".equals(key)) {
+        soakPerIterationMaxAcceptableLatencyMs = Integer.parseInt(value);
+      } else if ("soak_overall_timeout_seconds".equals(key)) {
+        soakOverallTimeoutSeconds = Integer.parseInt(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -411,6 +423,28 @@ public class TestServiceClient {
         tester.pickFirstUnary();
         break;
       }
+
+      case RPC_SOAK:
+        {
+          tester.performSoakTest(
+              false /* resetChannelPerIteration */,
+              soakIterations,
+              soakMaxFailures,
+              soakPerIterationMaxAcceptableLatencyMs,
+              soakOverallTimeoutSeconds);
+          break;
+        }
+
+      case CHANNEL_SOAK:
+        {
+          tester.performSoakTest(
+              true /* resetChannelPerIteration */,
+              soakIterations,
+              soakMaxFailures,
+              soakPerIterationMaxAcceptableLatencyMs,
+              soakOverallTimeoutSeconds);
+          break;
+        }
 
       default:
         throw new IllegalArgumentException("Unknown test case: " + testCase);

@@ -127,6 +127,7 @@ import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
+import org.HdrHistogram.Histogram;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
@@ -1884,6 +1885,151 @@ public abstract class AbstractInteropTest {
             .setBody(ByteString.copyFrom(new byte[314159])))
         .build();
     assertResponse(goldenResponse, response);
+  }
+
+  class SoakIterationResult {
+    public SoakIterationResult(long latencyMs, Status status) {
+      this.latencyMs = latencyMs;
+      this.status = status;
+    }
+
+    public long getLatencyMs() {
+      return latencyMs;
+    }
+
+    public Status getStatus() {
+      return status;
+    }
+
+    private long latencyMs = -1;
+    private Status status = Status.OK;
+  }
+
+  private SoakIterationResult performOneSoakIteration(
+      boolean resetChannel, int maxAcceptablePerIterationLatencyMs) throws Exception {
+    long startMs = System.currentTimeMillis();
+    Status status = Status.OK;
+    ManagedChannel soakChannel = channel;
+    TestServiceGrpc.TestServiceBlockingStub soakStub = blockingStub;
+    if (resetChannel) {
+      soakChannel = createChannel();
+      soakStub = TestServiceGrpc.newBlockingStub(soakChannel);
+    }
+    try {
+      final SimpleRequest request =
+          SimpleRequest.newBuilder()
+              .setResponseSize(314159)
+              .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[271828])))
+              .build();
+      final SimpleResponse goldenResponse =
+          SimpleResponse.newBuilder()
+              .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[314159])))
+              .build();
+      assertResponse(goldenResponse, soakStub.unaryCall(request));
+    } catch (StatusRuntimeException e) {
+      status = e.getStatus();
+    }
+    if (resetChannel) {
+      soakChannel.shutdownNow();
+      soakChannel.awaitTermination(10, TimeUnit.SECONDS);
+    }
+    long elapsedMs = System.currentTimeMillis() - startMs;
+    return new SoakIterationResult(elapsedMs, status);
+  }
+
+  public void performSoakTest(
+      boolean resetChannelPerIteration,
+      int soakIterations,
+      int maxFailures,
+      int maxAcceptablePerIterationLatencyMs,
+      int overallTimeoutSeconds)
+      throws Exception {
+    ArrayList<SoakIterationResult> results = new ArrayList<SoakIterationResult>();
+    long startMs = System.currentTimeMillis();
+    for (int i = 0; i < soakIterations; i++) {
+      if (System.currentTimeMillis() - startMs >= overallTimeoutSeconds * 1e3) {
+        break;
+      }
+      results.add(
+          performOneSoakIteration(resetChannelPerIteration, maxAcceptablePerIterationLatencyMs));
+    }
+    int totalFailures = 0;
+    Histogram latencies = new Histogram(4 /* number of significant value digits */);
+    for (int i = 0; i < results.size(); i++) {
+      SoakIterationResult result = results.get(i);
+      if (result.getStatus() != Status.OK) {
+        totalFailures++;
+        System.err.println(
+            String.format(
+                "soak iteration: %d elapsedMs: %d failed: %s",
+                i, result.getLatencyMs(), result.getStatus()));
+      } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
+        totalFailures++;
+        System.err.println(
+            String.format(
+                "soak iteration: %d elapsedMs: %d ms exceeds max acceptable latency: %d ",
+                i, result.getLatencyMs(), maxAcceptablePerIterationLatencyMs));
+      } else {
+        System.err.println(
+            String.format("soak iteration: %d elapsedMs: %d succeeded", i, result.getLatencyMs()));
+      }
+      latencies.recordValue(result.getLatencyMs());
+    }
+    // check if we timed out
+    String timeoutErrorMessage =
+        String.format(
+            "soak test consumed all %d seconds of time and quit early, only "
+                + "having ran %d out of desired %d iterations. "
+                + "total failures: %d. "
+                + "max failures threshold: %d. "
+                + "median soak iteration latency: %d ms. "
+                + "90th soak iteration latency: %d ms. "
+                + "worst soak iteration latency: %d ms. "
+                + "Some or all of the iterations that did run were unexpectedly slow. "
+                + "See breakdown above for which iterations succeeded, failed, and "
+                + "why for more info.",
+            overallTimeoutSeconds,
+            results.size(),
+            soakIterations,
+            totalFailures,
+            maxFailures,
+            latencies.getValueAtPercentile(50),
+            latencies.getValueAtPercentile(90),
+            latencies.getValueAtPercentile(100));
+    assertEquals(timeoutErrorMessage, results.size(), soakIterations);
+    // check if we had too many failures
+    String tooManyFailuresErrorMessage =
+        String.format(
+            "soak test ran: %d iterations. total failures: %d exceeds "
+                + "max failures threshold: %d. "
+                + "median soak iteration_latency: %d ms. "
+                + "90th soak iteration_latency: %d ms. "
+                + "worst soak iteration latency: %d ms. "
+                + "See breakdown above for which iterations succeeded, failed, and "
+                + "why for more info.",
+            soakIterations,
+            totalFailures,
+            maxFailures,
+            latencies.getValueAtPercentile(50),
+            latencies.getValueAtPercentile(90),
+            latencies.getValueAtPercentile(100));
+    assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
+    // still log debug info in case of success
+    System.err.println(
+        String.format(
+            "soak test ran: %d iterations. total failures: %d is within "
+                + "max failures threshold: %d. "
+                + "median soak iteration latency: %d ms. "
+                + "90th soak iteration latency: %d ms. "
+                + "worst soak iteration latency: %d ms. "
+                + "See breakdown above for which iterations succeeded, failed, and "
+                + "why for more info.",
+            soakIterations,
+            totalFailures,
+            maxFailures,
+            latencies.getValueAtPercentile(50),
+            latencies.getValueAtPercentile(90),
+            latencies.getValueAtPercentile(100)));
   }
 
   protected static void assertSuccess(StreamRecorder<?> recorder) {
