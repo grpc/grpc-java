@@ -359,8 +359,8 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       } finally {
         // Cancel context after delivering RPC closure notification to allow the application to
         // clean up and update any state based on whether onComplete or onCancel was called.
-        // Note that in failure situations JumpToApplicationThreadServerStreamListener has already closed the context.
-        // In these situations this cancel() call will be a no-op.
+        // Note that in failure situations JumpToApplicationThreadServerStreamListener has already
+        // closed the context. In these situations this cancel() call will be a no-op.
         context.cancel(null);
       }
     }
