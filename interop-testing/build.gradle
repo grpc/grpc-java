@@ -27,6 +27,7 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-testing'),
             project(path: ':grpc-xds', configuration: 'shadow'),
+            libraries.hdrhistogram,
             libraries.junit,
             libraries.truth,
             libraries.opencensus_contrib_grpc_metrics,
