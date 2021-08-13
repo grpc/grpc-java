@@ -1936,6 +1936,10 @@ public abstract class AbstractInteropTest {
     return new SoakIterationResult(elapsedMs, status);
   }
 
+  /**
+    * Runs large unary RPCs in a loop with configurable failure thresholds
+    * and channel creation behavior.
+   */
   public void performSoakTest(
       boolean resetChannelPerIteration,
       int soakIterations,
