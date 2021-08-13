@@ -1887,7 +1887,7 @@ public abstract class AbstractInteropTest {
     assertResponse(goldenResponse, response);
   }
 
-  class SoakIterationResult {
+  private static class SoakIterationResult {
     public SoakIterationResult(long latencyMs, Status status) {
       this.latencyMs = latencyMs;
       this.status = status;
@@ -1905,8 +1905,7 @@ public abstract class AbstractInteropTest {
     private Status status = Status.OK;
   }
 
-  private SoakIterationResult performOneSoakIteration(
-      boolean resetChannel, int maxAcceptablePerIterationLatencyMs) throws Exception {
+  private SoakIterationResult performOneSoakIteration(boolean resetChannel) throws Exception {
     long startMs = System.currentTimeMillis();
     Status status = Status.OK;
     ManagedChannel soakChannel = channel;
@@ -1951,13 +1950,13 @@ public abstract class AbstractInteropTest {
         break;
       }
       results.add(
-          performOneSoakIteration(resetChannelPerIteration, maxAcceptablePerIterationLatencyMs));
+          performOneSoakIteration(resetChannelPerIteration));
     }
     int totalFailures = 0;
     Histogram latencies = new Histogram(4 /* number of significant value digits */);
     for (int i = 0; i < results.size(); i++) {
       SoakIterationResult result = results.get(i);
-      if (result.getStatus() != Status.OK) {
+      if (!result.getStatus().equals(Status.OK)) {
         totalFailures++;
         System.err.println(
             String.format(
