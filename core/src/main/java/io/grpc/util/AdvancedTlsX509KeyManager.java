@@ -21,13 +21,19 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.security.KeyStore;
+import java.security.KeyStore.PrivateKeyEntry;
+import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.Principal;
 import java.security.PrivateKey;
+import java.security.UnrecoverableEntryException;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.security.spec.InvalidKeySpecException;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -44,21 +50,64 @@ import javax.net.ssl.X509ExtendedKeyManager;
 public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509KeyManager.class.getName());
 
-  // The private key and the cert chain we will use to send to peers to prove our identity.
-  private volatile PrivateKey key;
-  private volatile X509Certificate[] certs;
+  // The key store that is used to hold the private key and the certificate chain.
+  private volatile  KeyStore ks;
+  // The password associated with the private key.
+  private volatile String password = null;
 
-  public AdvancedTlsX509KeyManager() { }
+  /**
+   * Constructs an AdvancedTlsX509KeyManager.
+   */
+  public AdvancedTlsX509KeyManager() throws CertificateException {
+    try {
+      ks = KeyStore.getInstance(KeyStore.getDefaultType());
+      ks.load(null, null);
+    } catch (KeyStoreException | IOException | NoSuchAlgorithmException | CertificateException e) {
+      throw new CertificateException("Failed to create KeyStore", e);
+    }
+  }
 
   @Override
   public PrivateKey getPrivateKey(String alias) {
-    // Same question as the trust manager: is it really thread-safe to do this?
-    return this.key;
+    KeyStore.Entry entry = null;
+    try {
+      entry = ks.getEntry(alias, new KeyStore.PasswordProtection(this.password.toCharArray()));
+    } catch (NoSuchAlgorithmException | UnrecoverableEntryException | KeyStoreException e) {
+      log.log(Level.SEVERE, "Unable to get the key entry from the key store", e);
+      return null;
+    }
+    if (entry == null || !(entry instanceof PrivateKeyEntry)) {
+      log.log(Level.SEVERE, "Failed to get the actual entry");
+      return null;
+    }
+    PrivateKeyEntry privateKeyEntry = (PrivateKeyEntry) entry;
+    return privateKeyEntry.getPrivateKey();
   }
 
   @Override
   public X509Certificate[] getCertificateChain(String alias) {
-    return Arrays.copyOf(this.certs, this.certs.length);
+    KeyStore.Entry entry = null;
+    try {
+      entry = ks.getEntry(alias, new KeyStore.PasswordProtection(this.password.toCharArray()));
+    } catch (NoSuchAlgorithmException | UnrecoverableEntryException | KeyStoreException e) {
+      log.log(Level.SEVERE, "Unable to get the key entry from the key store", e);
+      return null;
+    }
+    if (entry == null || !(entry instanceof PrivateKeyEntry)) {
+      log.log(Level.SEVERE, "Failed to get the actual entry");
+      return null;
+    }
+    PrivateKeyEntry privateKeyEntry = (PrivateKeyEntry) entry;
+    Certificate[] certs = privateKeyEntry.getCertificateChain();
+    List<X509Certificate> returnedCerts = new ArrayList<>();
+    for (int i = 0; i < certs.length; ++i) {
+      if (certs[i] instanceof X509Certificate) {
+        returnedCerts.add((X509Certificate) certs[i]);
+      } else {
+        log.log(Level.SEVERE, "The certificate is not type of X509Certificate. Skip it");
+      }
+    }
+    return returnedCerts.toArray(new X509Certificate[0]);
   }
 
   @Override
@@ -97,14 +146,32 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    *
    * @param key  the private key that is going to be used
    * @param certs  the certificate chain that is going to be used
+   * @param password  the password associated with the key
    */
-  public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs) {
-    // Same question as the trust manager: what to do if copy is not feasible here?
-    // Right now, callers should make sure {@code key} matches the public key on the leaf
-    // certificate of {@code certs}.
+  public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs, String password)
+      throws CertificateException {
     // TODO(ZhenLian): explore possibilities to do a crypto check here.
-    this.key = key;
-    this.certs = Arrays.copyOf(certs, certs.length);
+    // Clear the key store by re-creating it.
+    KeyStore newKeyStore = null;
+    try {
+      newKeyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+      newKeyStore.load(null, null);
+    } catch (KeyStoreException | IOException | NoSuchAlgorithmException | CertificateException e) {
+      throw new CertificateException("Failed to create KeyStore", e);
+    }
+    if (newKeyStore != null) {
+      this.ks = newKeyStore;
+    }
+    this.password = password;
+    // Update the ks with the new credential contents.
+    try {
+      PrivateKeyEntry privateKeyEntry = new PrivateKeyEntry(key, certs);
+      ks.setEntry("default", privateKeyEntry, new KeyStore.PasswordProtection(
+          this.password.toCharArray()));
+    } catch (KeyStoreException e) {
+      throw new CertificateException(
+          "Failed to load private key and certificates into KeyStore", e);
+    }
   }
 
   /**
@@ -114,13 +181,15 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    *
    * @param keyFile  the file on disk holding the private key
    * @param certFile  the file on disk holding the certificate chain
+   * @param password the password associated with the key
    * @param period the period between successive read-and-update executions
    * @param unit the time unit of the initialDelay and period parameters
    * @param executor the execute service we use to read and update the credentials
    * @return an object that caller should close when the file refreshes are not needed
    */
   public Closeable updateIdentityCredentialsFromFile(File keyFile, File certFile,
-      long period, TimeUnit unit, ScheduledExecutorService executor) {
+      String password, long period, TimeUnit unit, ScheduledExecutorService executor) {
+    this.password = password;
     final ScheduledFuture<?> future =
         executor.scheduleWithFixedDelay(
             new LoadFilePathExecution(keyFile, certFile), 0, period, unit);
@@ -155,7 +224,8 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
         }
       } catch (CertificateException | IOException | NoSuchAlgorithmException
           | InvalidKeySpecException e) {
-        log.log(Level.SEVERE, "readAndUpdate() execution thread failed", e);
+        log.log(Level.SEVERE, "Failed refreshing private key and certificate chain from files. "
+            + "Using previous ones", e);
       }
     }
   }
@@ -188,16 +258,28 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
     long newCertTime = certFile.lastModified();
     // We only update when both the key and the certs are updated.
     if (newKeyTime != oldKeyTime && newCertTime != oldCertTime) {
-      FileInputStream keyInputStream = new FileInputStream(keyFile);
-      FileInputStream certInputStream = new FileInputStream(certFile);
-      PrivateKey key = CertificateUtils.getPrivateKey(keyInputStream);
-      X509Certificate[] certs = CertificateUtils.getX509Certificates(certInputStream);
-      keyInputStream.close();
-      certInputStream.close();
-      updateIdentityCredentials(key, certs);
-      return new UpdateResult(true, newKeyTime, newCertTime);
+      FileInputStream keyInputStream = null;
+      try {
+        keyInputStream = new FileInputStream(keyFile);
+        PrivateKey key = CertificateUtils.getPrivateKey(keyInputStream);
+        FileInputStream certInputStream = null;
+        try {
+          certInputStream = new FileInputStream(certFile);
+          X509Certificate[] certs = CertificateUtils.getX509Certificates(certInputStream);
+          updateIdentityCredentials(key, certs, this.password);
+          return new UpdateResult(true, newKeyTime, newCertTime);
+        } finally {
+          if (certInputStream != null) {
+            certInputStream.close();
+          }
+        }
+      } finally {
+        if (keyInputStream != null) {
+          keyInputStream.close();
+        }
+      }
     }
-    return new UpdateResult(false, -1, -1);
+    return new UpdateResult(false, oldKeyTime, oldCertTime);
   }
 
   /**

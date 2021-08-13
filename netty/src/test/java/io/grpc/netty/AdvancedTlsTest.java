@@ -149,7 +149,7 @@ public class AdvancedTlsTest {
   public void advancedTlsKeyManagerTrustManagerMutualTlsTest() throws Exception {
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
+    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0, "");
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
         .build();
@@ -162,7 +162,7 @@ public class AdvancedTlsTest {
     TimeUnit.SECONDS.sleep(5);
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
+    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0, "");
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateAndHostNameVerification)
         .build();
@@ -188,7 +188,7 @@ public class AdvancedTlsTest {
   public void trustManagerCustomVerifierMutualTlsTest() throws Exception {
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
+    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0, "");
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
         .setSslSocketAndEnginePeerVerifier(
@@ -240,7 +240,7 @@ public class AdvancedTlsTest {
     TimeUnit.SECONDS.sleep(5);
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
+    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0, "");
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
         .setSslSocketAndEnginePeerVerifier(
@@ -306,7 +306,7 @@ public class AdvancedTlsTest {
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     Closeable serverKeyShutdown = serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File,
-        serverCert0File,  100, TimeUnit.MILLISECONDS, executor);
+        serverCert0File, "", 100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
         .build();
@@ -321,7 +321,7 @@ public class AdvancedTlsTest {
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File,
-        clientCert0File, 100, TimeUnit.MILLISECONDS, executor);
+        clientCert0File, "",100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateAndHostNameVerification)
         .build();

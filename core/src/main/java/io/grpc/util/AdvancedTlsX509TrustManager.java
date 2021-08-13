@@ -24,9 +24,11 @@ import java.net.Socket;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -52,14 +54,15 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   private final Verification verification;
   private final PeerVerifier peerVerifier;
   private final SslSocketAndEnginePeerVerifier socketAndEnginePeerVerifier;
-  // The trust certs we will use to verify peer certificate chain.
-  private volatile X509Certificate[] trustCerts;
+  // The aliases we use in the key store to keep track of all the trust certificates.
+  private volatile List<String> aliases;
   // The key store that is used to hold the trust certificates. It will always keep synced with
   // trustCerts.
-  private volatile  KeyStore ks;
+  private volatile KeyStore ks;
 
   private AdvancedTlsX509TrustManager(Verification verification,  PeerVerifier peerVerifier,
       SslSocketAndEnginePeerVerifier socketAndEnginePeerVerifier) throws CertificateException {
+    this.aliases = new ArrayList<>();
     this.verification = verification;
     this.peerVerifier = peerVerifier;
     this.socketAndEnginePeerVerifier = socketAndEnginePeerVerifier;
@@ -109,42 +112,53 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
 
   @Override
   public X509Certificate[] getAcceptedIssuers() {
-    return trustCerts;
+    List<X509Certificate> trustCerts = new ArrayList<>();
+    for (String alias : this.aliases) {
+      try {
+        Certificate cert = this.ks.getCertificate(alias);
+        if (cert instanceof X509Certificate) {
+          trustCerts.add((X509Certificate) cert);
+        } else {
+          log.log(Level.SEVERE, "The certificate is not type of X509Certificate. Skip it");
+        }
+      } catch (KeyStoreException e) {
+        log.log(Level.SEVERE, "Failed to get the certificate from the key store", e);
+      }
+    }
+    return trustCerts.toArray(new X509Certificate[0]);
+
   }
 
   // If this is set, we will use the default trust certificates stored on user's local system.
-  // After this is used, functions that will update this.trustCerts(e.g. updateTrustCredentials(),
+  // After this is used, functions that will update this.ks(e.g. updateTrustCredentials(),
   // updateTrustCredentialsFromFile()) should not be called.
   public void useSystemDefaultTrustCerts() {
-    this.trustCerts = new X509Certificate[0];
     this.ks = null;
   }
 
   /**
    * Updates the current cached trust certificates as well as the key store.
    *
-   * @param trustCerts  the trust certificates that are going to be used
+   * @param trustCerts the trust certificates that are going to be used
    */
-  public void updateTrustCredentials(X509Certificate[] trustCerts) throws KeyStoreException,
-      CertificateException {
-    this.trustCerts = Arrays.copyOf(trustCerts, trustCerts.length);
+  public void updateTrustCredentials(X509Certificate[] trustCerts) throws CertificateException {
     // Clear the key store by re-creating it.
+    KeyStore newKeyStore = null;
     try {
-      ks = KeyStore.getInstance(KeyStore.getDefaultType());
-      ks.load(null, null);
+      newKeyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+      newKeyStore.load(null, null);
     } catch (KeyStoreException | IOException | NoSuchAlgorithmException | CertificateException e) {
       throw new CertificateException("Failed to create KeyStore", e);
     }
+    if (newKeyStore != null) {
+      this.ks = newKeyStore;
+    }
+    this.aliases.clear();
     // Update the ks with the new credential contents.
     int i = 1;
-    // Question: I know we've already made this.trustCerts volatile, but shouldn't we require a
-    // lock around it as well? Otherwise, while we are reading here, the updating thread might
-    // change it as well?
-    // I could be wrong, but my current understanding about "volatile" is that it guarantees we
-    // store value in memory instead of cache, so there wouldn't be problems like dirty read,
-    // etc, but it doesn't eliminate race conditions.
-    for (X509Certificate cert: this.trustCerts) {
+    for (X509Certificate cert: trustCerts) {
       String alias = Integer.toString(i);
+      this.aliases.add(alias);
       try {
         ks.setCertificateEntry(alias, cert);
       } catch (KeyStoreException e) {
@@ -207,14 +221,11 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     // Perform the additional peer cert check.
     if (sslEngine != null && socketAndEnginePeerVerifier != null) {
       socketAndEnginePeerVerifier.verifyPeerCertificate(chain, authType, sslEngine);
-    }
-    if (socket != null && socketAndEnginePeerVerifier != null) {
+    } else if (socket != null && socketAndEnginePeerVerifier != null) {
       socketAndEnginePeerVerifier.verifyPeerCertificate(chain, authType, socket);
-    }
-    if (peerVerifier != null) {
+    } else if (peerVerifier != null) {
       peerVerifier.verifyPeerCertificate(chain, authType);
-    }
-    if (socketAndEnginePeerVerifier == null && peerVerifier == null) {
+    } else {
       log.log(Level.INFO, "No peer verifier is specified");
     }
   }
@@ -254,35 +265,41 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     public void run() {
       try {
         long newUpdateTime = readAndUpdate(this.file, this.currentTime);
-        if (newUpdateTime != 0) {
+        if (this.currentTime != newUpdateTime) {
           this.currentTime = newUpdateTime;
         }
       } catch (CertificateException | IOException | KeyStoreException e) {
-        log.log(Level.SEVERE, "readAndUpdate() execution thread failed", e);
+        log.log(Level.SEVERE, "Failed refreshing trust CAs from file. Using previous CAs", e);
 
       }
     }
   }
 
   /**
-   * reads the trust certificates specified in the path location, and update |trustCerts| if the
+   * Reads the trust certificates specified in the path location, and update the key store if the
    * modified time has changed since last read.
    *
    * @param trustCertFile  the file on disk holding the trust certificates
    * @param oldTime the time when the trust file is modified during last execution
-   * @return 0 if failed or the modified time is not changed, otherwise the new modified time
+   * @return oldTime if failed or the modified time is not changed, otherwise the new modified time
    */
   private long readAndUpdate(File trustCertFile, long oldTime)
       throws CertificateException, IOException, KeyStoreException {
     long newTime = trustCertFile.lastModified();
     if (newTime != oldTime) {
-      FileInputStream inputStream = new FileInputStream(trustCertFile);
-      X509Certificate[] certificates = CertificateUtils.getX509Certificates(inputStream);
-      inputStream.close();
-      updateTrustCredentials(certificates);
-      return newTime;
+      FileInputStream inputStream = null;
+      try {
+        inputStream = new FileInputStream(trustCertFile);
+        X509Certificate[] certificates = CertificateUtils.getX509Certificates(inputStream);
+        updateTrustCredentials(certificates);
+        return newTime;
+      } finally {
+        if (inputStream != null) {
+          inputStream.close();
+        }
+      }
     }
-    return 0;
+    return oldTime;
   }
 
   // Mainly used to avoid throwing IO Exceptions in java.io.Closeable.
@@ -291,7 +308,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   }
 
   public static Builder newBuilder() {
-    return new Builder().setVerification(Verification.CertificateAndHostNameVerification);
+    return new Builder();
   }
 
   // The verification mode when authenticating the peer certificate.
@@ -385,8 +402,6 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       return this;
     }
 
-    // Question: shall we do some sanity checks here, to make sure all three verifiers are set, to
-    // be more secure?
     public AdvancedTlsX509TrustManager build() throws CertificateException {
       return new AdvancedTlsX509TrustManager(this.verification, this.peerVerifier,
           this.socketAndEnginePeerVerifier);
