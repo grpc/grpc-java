@@ -215,7 +215,7 @@ public class TestServiceClient {
           + "\n                              exceeding the per-iteration max acceptable latency)."
           + "\n --soak_per_iteration_max_acceptable_latency_ms "
           + "\n                              The number of milliseconds a single iteration in the "
-          + "\n                              two soak tests (rpc_soak and channel_soak) should take.
+          + "\n                              two soak tests (rpc_soak and channel_soak) should take."
           + "\n --soak_overall_timeout_seconds "
           + "\n                              The overall number of seconds after which a soak test "
           + "\n                              should stop and fail, if the desired number of "
