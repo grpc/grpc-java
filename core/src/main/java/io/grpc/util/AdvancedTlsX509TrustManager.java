@@ -24,11 +24,8 @@ import java.net.Socket;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
-import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -54,24 +51,15 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   private final Verification verification;
   private final PeerVerifier peerVerifier;
   private final SslSocketAndEnginePeerVerifier socketAndEnginePeerVerifier;
-  // The aliases we use in the key store to keep track of all the trust certificates.
-  private volatile List<String> aliases;
-  // The key store that is used to hold the trust certificates. It will always keep synced with
-  // trustCerts.
-  private volatile KeyStore ks;
+
+  // The delegated trust manager used to perform traditional certificate verification.
+  private volatile X509ExtendedTrustManager delegateManager = null;
 
   private AdvancedTlsX509TrustManager(Verification verification,  PeerVerifier peerVerifier,
       SslSocketAndEnginePeerVerifier socketAndEnginePeerVerifier) throws CertificateException {
-    this.aliases = new ArrayList<>();
     this.verification = verification;
     this.peerVerifier = peerVerifier;
     this.socketAndEnginePeerVerifier = socketAndEnginePeerVerifier;
-    try {
-      ks = KeyStore.getInstance(KeyStore.getDefaultType());
-      ks.load(null, null);
-    } catch (KeyStoreException | IOException | NoSuchAlgorithmException | CertificateException e) {
-      throw new CertificateException("Failed to create KeyStore", e);
-    }
   }
 
   @Override
@@ -112,28 +100,24 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
 
   @Override
   public X509Certificate[] getAcceptedIssuers() {
-    List<X509Certificate> trustCerts = new ArrayList<>();
-    for (String alias : this.aliases) {
-      try {
-        Certificate cert = this.ks.getCertificate(alias);
-        if (cert instanceof X509Certificate) {
-          trustCerts.add((X509Certificate) cert);
-        } else {
-          log.log(Level.SEVERE, "The certificate is not type of X509Certificate. Skip it");
-        }
-      } catch (KeyStoreException e) {
-        log.log(Level.SEVERE, "Failed to get the certificate from the key store", e);
-      }
+    if (this.delegateManager == null) {
+      log.log(Level.SEVERE, "Credential hasn't been provided yet");
+      return new X509Certificate[0];
     }
-    return trustCerts.toArray(new X509Certificate[0]);
-
+    return this.delegateManager.getAcceptedIssuers();
   }
 
-  // If this is set, we will use the default trust certificates stored on user's local system.
-  // After this is used, functions that will update this.ks(e.g. updateTrustCredentials(),
-  // updateTrustCredentialsFromFile()) should not be called.
-  public void useSystemDefaultTrustCerts() {
-    this.ks = null;
+  /**
+   * Uses the default trust certificates stored on user's local system.
+   * After this is used, functions that will provide new credential
+   * data(e.g. updateTrustCredentials(), updateTrustCredentialsFromFile()) should not be called.
+   */
+  public void useSystemDefaultTrustCerts() throws CertificateException, KeyStoreException,
+      NoSuchAlgorithmException {
+    // Passing a null value of KeyStore would make {@code TrustManagerFactory} attempt to use
+    // system-default trust CA certs.
+    X509ExtendedTrustManager newDelegateManager = createDelegateTrustManager(null);
+    this.delegateManager = newDelegateManager;
   }
 
   /**
@@ -141,78 +125,63 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    *
    * @param trustCerts the trust certificates that are going to be used
    */
-  public void updateTrustCredentials(X509Certificate[] trustCerts) throws CertificateException {
-    // Clear the key store by re-creating it.
-    KeyStore newKeyStore = null;
-    try {
-      newKeyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-      newKeyStore.load(null, null);
-    } catch (KeyStoreException | IOException | NoSuchAlgorithmException | CertificateException e) {
-      throw new CertificateException("Failed to create KeyStore", e);
-    }
-    if (newKeyStore != null) {
-      this.ks = newKeyStore;
-    }
-    this.aliases.clear();
-    // Update the ks with the new credential contents.
+  public void updateTrustCredentials(X509Certificate[] trustCerts) throws CertificateException,
+      KeyStoreException, NoSuchAlgorithmException, IOException {
+    KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+    keyStore.load(null, null);
     int i = 1;
     for (X509Certificate cert: trustCerts) {
       String alias = Integer.toString(i);
-      this.aliases.add(alias);
-      try {
-        ks.setCertificateEntry(alias, cert);
-      } catch (KeyStoreException e) {
-        throw new CertificateException("Failed to load trust certificate into KeyStore", e);
-      }
+      keyStore.setCertificateEntry(alias, cert);
       i++;
     }
+    X509ExtendedTrustManager newDelegateManager = createDelegateTrustManager(keyStore);
+    this.delegateManager = newDelegateManager;
+  }
+
+  private static X509ExtendedTrustManager createDelegateTrustManager(KeyStore keyStore)
+      throws CertificateException, KeyStoreException, NoSuchAlgorithmException {
+    TrustManagerFactory tmf = TrustManagerFactory.getInstance(
+        TrustManagerFactory.getDefaultAlgorithm());
+    tmf.init(keyStore);
+    X509ExtendedTrustManager delegateManager = null;
+    TrustManager[] tms = tmf.getTrustManagers();
+    // Iterate over the returned trust managers, looking for an instance of X509TrustManager.
+    // If found, use that as the delegate trust manager.
+    for (int j = 0; j < tms.length; j++) {
+      if (tms[j] instanceof X509ExtendedTrustManager) {
+        delegateManager = (X509ExtendedTrustManager) tms[j];
+        break;
+      }
+    }
+    if (delegateManager == null) {
+      throw new CertificateException(
+          "Instance delegateX509TrustManager is null. Failed to initialize");
+    }
+    return delegateManager;
   }
 
   private void checkTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine,
       Socket socket, boolean checkingServer) throws CertificateException {
-    if (this.verification == Verification.CertificateAndHostNameVerification
-        || this.verification == Verification.CertificateOnlyVerification) {
+    if (this.verification != Verification.InsecurelySkipAllVerification) {
       if (chain == null || chain.length == 0) {
         throw new CertificateException(
             "Want certificate verification but got null or empty certificates");
       }
-      // Use the key store to create a delegated trust manager.
-      X509ExtendedTrustManager delegateManager = null;
-      TrustManagerFactory tmf;
-      try {
-        tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        tmf.init(ks);
-      } catch (KeyStoreException | NoSuchAlgorithmException e) {
-        throw new CertificateException("Failed to create delegate TrustManagerFactory", e);
+      if (this.delegateManager == null) {
+        throw new CertificateException("Credential hasn't been provided yet");
       }
-      TrustManager[] tms = tmf.getTrustManagers();
-      // Iterate over the returned trust managers, looking for an instance of X509TrustManager.
-      // If found, use that as the delegate trust manager.
-      for (int i = 0; i < tms.length; i++) {
-        if (tms[i] instanceof X509ExtendedTrustManager) {
-          delegateManager = (X509ExtendedTrustManager) tms[i];
-          break;
-        }
-      }
-      if (delegateManager == null) {
-        throw new CertificateException(
-            "Instance delegateX509TrustManager is null. Failed to initialize");
-      }
-      // Configure the delegated trust manager based on users' input.
       if (checkingServer) {
         if (this.verification == Verification.CertificateAndHostNameVerification
-            || this.verification == Verification.CertificateOnlyVerification) {
-          if (this.verification == Verification.CertificateAndHostNameVerification
-              && sslEngine == null) {
-            throw new CertificateException(
-                "SSLEngine is null. Couldn't check host name");
-          }
-          String algorithm = this.verification == Verification.CertificateAndHostNameVerification
-              ? "HTTPS" : "";
-          SSLParameters sslParams = sslEngine.getSSLParameters();
-          sslParams.setEndpointIdentificationAlgorithm(algorithm);
-          sslEngine.setSSLParameters(sslParams);
+            && sslEngine == null) {
+          throw new CertificateException(
+              "SSLEngine is null. Couldn't check host name");
         }
+        String algorithm = this.verification == Verification.CertificateAndHostNameVerification
+            ? "HTTPS" : "";
+        SSLParameters sslParams = sslEngine.getSSLParameters();
+        sslParams.setEndpointIdentificationAlgorithm(algorithm);
+        sslEngine.setSSLParameters(sslParams);
         delegateManager.checkServerTrusted(chain, authType, sslEngine);
       } else {
         delegateManager.checkClientTrusted(chain, authType, sslEngine);
@@ -268,9 +237,9 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
         if (this.currentTime != newUpdateTime) {
           this.currentTime = newUpdateTime;
         }
-      } catch (CertificateException | IOException | KeyStoreException e) {
+      } catch (CertificateException | IOException | KeyStoreException
+          | NoSuchAlgorithmException e) {
         log.log(Level.SEVERE, "Failed refreshing trust CAs from file. Using previous CAs", e);
-
       }
     }
   }
@@ -284,19 +253,16 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    * @return oldTime if failed or the modified time is not changed, otherwise the new modified time
    */
   private long readAndUpdate(File trustCertFile, long oldTime)
-      throws CertificateException, IOException, KeyStoreException {
+      throws CertificateException, IOException, KeyStoreException, NoSuchAlgorithmException {
     long newTime = trustCertFile.lastModified();
     if (newTime != oldTime) {
-      FileInputStream inputStream = null;
+      FileInputStream inputStream = new FileInputStream(trustCertFile);
       try {
-        inputStream = new FileInputStream(trustCertFile);
         X509Certificate[] certificates = CertificateUtils.getX509Certificates(inputStream);
         updateTrustCredentials(certificates);
         return newTime;
       } finally {
-        if (inputStream != null) {
-          inputStream.close();
-        }
+        inputStream.close();
       }
     }
     return oldTime;

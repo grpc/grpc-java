@@ -67,6 +67,8 @@ public class AdvancedTlsTest {
   public static final String CLIENT_0_KEY_FILE = "client.key";
   public static final String CLIENT_0_PEM_FILE = "client.pem";
   public static final String CA_PEM_FILE = "ca.pem";
+  public static final String SERVER_BAD_KEY_FILE = "badserver.key";
+  public static final String SERVER_BAD_PEM_FILE = "badserver.pem";
 
   private ScheduledExecutorService executor;
   private Server server;
@@ -82,6 +84,8 @@ public class AdvancedTlsTest {
   private X509Certificate[] serverCert0;
   private PrivateKey clientKey0;
   private X509Certificate[] clientCert0;
+  private PrivateKey serverKeyBad;
+  private X509Certificate[] serverCertBad;
 
   @Rule
   public ExpectedException exceptionRule = ExpectedException.none();
@@ -105,6 +109,10 @@ public class AdvancedTlsTest {
         TestUtils.class.getResourceAsStream("/certs/" + CLIENT_0_KEY_FILE));
     clientCert0 = CertificateUtils.getX509Certificates(
         TestUtils.class.getResourceAsStream("/certs/" + CLIENT_0_PEM_FILE));
+    serverKeyBad = CertificateUtils.getPrivateKey(
+        TestUtils.class.getResourceAsStream("/certs/" + SERVER_BAD_KEY_FILE));
+    serverCertBad = CertificateUtils.getX509Certificates(
+        TestUtils.class.getResourceAsStream("/certs/" + SERVER_BAD_PEM_FILE));
   }
 
   @After
@@ -147,9 +155,9 @@ public class AdvancedTlsTest {
 
   @Test
   public void advancedTlsKeyManagerTrustManagerMutualTlsTest() throws Exception {
-    // Create & start a server.
+    // Create a server with the key manager and trust manager.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0, "");
+    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
         .build();
@@ -160,9 +168,9 @@ public class AdvancedTlsTest {
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
     TimeUnit.SECONDS.sleep(5);
-    // Create a client to connect.
+    // Create a client with the key manager and trust manager.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0, "");
+    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateAndHostNameVerification)
         .build();
@@ -175,8 +183,6 @@ public class AdvancedTlsTest {
     try {
       SimpleServiceGrpc.SimpleServiceBlockingStub client =
           SimpleServiceGrpc.newBlockingStub(channel);
-      // Send an actual request, via the full GRPC & network stack, and check that a proper
-      // response comes back.
       client.unaryRpc(SimpleRequest.getDefaultInstance());
     } catch (StatusRuntimeException e) {
       fail("Failed to make a connection");
@@ -186,9 +192,9 @@ public class AdvancedTlsTest {
 
   @Test
   public void trustManagerCustomVerifierMutualTlsTest() throws Exception {
-    // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
-    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0, "");
+    serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
+    // Set server's custom verification based on the information of clientCert0.
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
         .setSslSocketAndEnginePeerVerifier(
@@ -217,19 +223,6 @@ public class AdvancedTlsTest {
                 }
               }
             })
-        .setPeerVerifier(new PeerVerifier() {
-          @Override
-          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
-              throws CertificateException {
-            if (peerCertChain == null || peerCertChain.length == 0) {
-              throw new CertificateException("peerCertChain is empty");
-            }
-            X509Certificate leafCert = peerCertChain[0];
-            if (!leafCert.getSubjectDN().getName().contains("testclient")) {
-              throw new CertificateException("PeerVerifier failed");
-            }
-          }
-        })
         .build();
     serverTrustManager.updateTrustCredentials(caCert);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
@@ -238,9 +231,10 @@ public class AdvancedTlsTest {
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
     TimeUnit.SECONDS.sleep(5);
-    // Create a client to connect.
+
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
-    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0, "");
+    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
+    // Set client's custom verification based on the information of serverCert0.
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
         .setSslSocketAndEnginePeerVerifier(
@@ -269,18 +263,56 @@ public class AdvancedTlsTest {
                 }
               }
             })
+        .build();
+    clientTrustManager.updateTrustCredentials(caCert);
+    ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
+        .keyManager(clientKeyManager).trustManager(clientTrustManager).build();
+    channel = Grpc.newChannelBuilderForAddress(
+        "localhost", server.getPort(), channelCredentials).build();
+    // Start the connection.
+    try {
+      SimpleServiceGrpc.SimpleServiceBlockingStub client =
+          SimpleServiceGrpc.newBlockingStub(channel);
+      client.unaryRpc(SimpleRequest.getDefaultInstance());
+    } catch (StatusRuntimeException e) {
+      fail("Failed to make a connection");
+      e.printStackTrace();
+    }
+  }
+
+  @Test
+  public void trustManagerInsecurelySkipAllTest() throws Exception {
+    AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
+    // Even if we provide bad credentials for the server, the test should still pass, because we
+    // will configure the client to skip all checks later.
+    serverKeyManager.updateIdentityCredentials(serverKeyBad, serverCertBad);
+    AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.CertificateOnlyVerification)
         .setPeerVerifier(new PeerVerifier() {
           @Override
           public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
-              throws CertificateException {
-            if (peerCertChain == null || peerCertChain.length == 0) {
-              throw new CertificateException("peerCertChain is empty");
-            }
-            X509Certificate leafCert = peerCertChain[0];
-            if (!leafCert.getSubjectDN().getName().contains("*.test.google.com.au")) {
-              throw new CertificateException("PeerVerifier failed");
-            }
-          }
+              throws CertificateException { }
+        })
+        .build();
+    serverTrustManager.updateTrustCredentials(caCert);
+    ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
+        .keyManager(serverKeyManager).trustManager(serverTrustManager)
+        .clientAuth(ClientAuth.REQUIRE).build();
+    server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
+        new SimpleServiceImpl()).build().start();
+    TimeUnit.SECONDS.sleep(5);
+
+    AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
+    clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
+    // Set the client to skip all checks, including traditional certificate verification.
+    // Note this is very dangerous in production environment - only do so if you are confident on
+    // what you are doing!
+    AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.InsecurelySkipAllVerification)
+        .setPeerVerifier(new PeerVerifier() {
+          @Override
+          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
+              throws CertificateException { }
         })
         .build();
     clientTrustManager.updateTrustCredentials(caCert);
@@ -292,8 +324,6 @@ public class AdvancedTlsTest {
     try {
       SimpleServiceGrpc.SimpleServiceBlockingStub client =
           SimpleServiceGrpc.newBlockingStub(channel);
-      // Send an actual request, via the full GRPC & network stack, and check that a proper
-      // response comes back.
       client.unaryRpc(SimpleRequest.getDefaultInstance());
     } catch (StatusRuntimeException e) {
       fail("Failed to make a connection");
@@ -306,7 +336,7 @@ public class AdvancedTlsTest {
     // Create & start a server.
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     Closeable serverKeyShutdown = serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File,
-        serverCert0File, "", 100, TimeUnit.MILLISECONDS, executor);
+        serverCert0File, 100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
         .build();
@@ -321,7 +351,7 @@ public class AdvancedTlsTest {
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File,
-        clientCert0File, "",100, TimeUnit.MILLISECONDS, executor);
+        clientCert0File,100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateAndHostNameVerification)
         .build();

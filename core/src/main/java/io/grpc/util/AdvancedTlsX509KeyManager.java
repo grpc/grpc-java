@@ -21,19 +21,13 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.Socket;
-import java.security.KeyStore;
-import java.security.KeyStore.PrivateKeyEntry;
-import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.Principal;
 import java.security.PrivateKey;
-import java.security.UnrecoverableEntryException;
-import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.security.spec.InvalidKeySpecException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Arrays;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -50,64 +44,22 @@ import javax.net.ssl.X509ExtendedKeyManager;
 public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509KeyManager.class.getName());
 
-  // The key store that is used to hold the private key and the certificate chain.
-  private volatile  KeyStore ks;
-  // The password associated with the private key.
-  private volatile String password = null;
+  // The credential information sent to peers to prove our identity.
+  private volatile KeyInfo keyInfo;
 
   /**
    * Constructs an AdvancedTlsX509KeyManager.
    */
-  public AdvancedTlsX509KeyManager() throws CertificateException {
-    try {
-      ks = KeyStore.getInstance(KeyStore.getDefaultType());
-      ks.load(null, null);
-    } catch (KeyStoreException | IOException | NoSuchAlgorithmException | CertificateException e) {
-      throw new CertificateException("Failed to create KeyStore", e);
-    }
-  }
+  public AdvancedTlsX509KeyManager() throws CertificateException { }
 
   @Override
   public PrivateKey getPrivateKey(String alias) {
-    KeyStore.Entry entry = null;
-    try {
-      entry = ks.getEntry(alias, new KeyStore.PasswordProtection(this.password.toCharArray()));
-    } catch (NoSuchAlgorithmException | UnrecoverableEntryException | KeyStoreException e) {
-      log.log(Level.SEVERE, "Unable to get the key entry from the key store", e);
-      return null;
-    }
-    if (entry == null || !(entry instanceof PrivateKeyEntry)) {
-      log.log(Level.SEVERE, "Failed to get the actual entry");
-      return null;
-    }
-    PrivateKeyEntry privateKeyEntry = (PrivateKeyEntry) entry;
-    return privateKeyEntry.getPrivateKey();
+    return this.keyInfo.key;
   }
 
   @Override
   public X509Certificate[] getCertificateChain(String alias) {
-    KeyStore.Entry entry = null;
-    try {
-      entry = ks.getEntry(alias, new KeyStore.PasswordProtection(this.password.toCharArray()));
-    } catch (NoSuchAlgorithmException | UnrecoverableEntryException | KeyStoreException e) {
-      log.log(Level.SEVERE, "Unable to get the key entry from the key store", e);
-      return null;
-    }
-    if (entry == null || !(entry instanceof PrivateKeyEntry)) {
-      log.log(Level.SEVERE, "Failed to get the actual entry");
-      return null;
-    }
-    PrivateKeyEntry privateKeyEntry = (PrivateKeyEntry) entry;
-    Certificate[] certs = privateKeyEntry.getCertificateChain();
-    List<X509Certificate> returnedCerts = new ArrayList<>();
-    for (int i = 0; i < certs.length; ++i) {
-      if (certs[i] instanceof X509Certificate) {
-        returnedCerts.add((X509Certificate) certs[i]);
-      } else {
-        log.log(Level.SEVERE, "The certificate is not type of X509Certificate. Skip it");
-      }
-    }
-    return returnedCerts.toArray(new X509Certificate[0]);
+    return Arrays.copyOf(this.keyInfo.certs, this.keyInfo.certs.length);
   }
 
   @Override
@@ -146,32 +98,11 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    *
    * @param key  the private key that is going to be used
    * @param certs  the certificate chain that is going to be used
-   * @param password  the password associated with the key
    */
-  public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs, String password)
+  public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs)
       throws CertificateException {
     // TODO(ZhenLian): explore possibilities to do a crypto check here.
-    // Clear the key store by re-creating it.
-    KeyStore newKeyStore = null;
-    try {
-      newKeyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-      newKeyStore.load(null, null);
-    } catch (KeyStoreException | IOException | NoSuchAlgorithmException | CertificateException e) {
-      throw new CertificateException("Failed to create KeyStore", e);
-    }
-    if (newKeyStore != null) {
-      this.ks = newKeyStore;
-    }
-    this.password = password;
-    // Update the ks with the new credential contents.
-    try {
-      PrivateKeyEntry privateKeyEntry = new PrivateKeyEntry(key, certs);
-      ks.setEntry("default", privateKeyEntry, new KeyStore.PasswordProtection(
-          this.password.toCharArray()));
-    } catch (KeyStoreException e) {
-      throw new CertificateException(
-          "Failed to load private key and certificates into KeyStore", e);
-    }
+    this.keyInfo = new KeyInfo(key, certs);
   }
 
   /**
@@ -181,15 +112,13 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    *
    * @param keyFile  the file on disk holding the private key
    * @param certFile  the file on disk holding the certificate chain
-   * @param password the password associated with the key
    * @param period the period between successive read-and-update executions
    * @param unit the time unit of the initialDelay and period parameters
    * @param executor the execute service we use to read and update the credentials
    * @return an object that caller should close when the file refreshes are not needed
    */
   public Closeable updateIdentityCredentialsFromFile(File keyFile, File certFile,
-      String password, long period, TimeUnit unit, ScheduledExecutorService executor) {
-    this.password = password;
+      long period, TimeUnit unit, ScheduledExecutorService executor) {
     final ScheduledFuture<?> future =
         executor.scheduleWithFixedDelay(
             new LoadFilePathExecution(keyFile, certFile), 0, period, unit);
@@ -198,6 +127,17 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
         future.cancel(false);
       }
     };
+  }
+
+  private static class KeyInfo {
+    // The private key and the cert chain we will use to send to peers to prove our identity.
+    final PrivateKey key;
+    final X509Certificate[] certs;
+
+    public KeyInfo(PrivateKey key, X509Certificate[] certs) {
+      this.key = key;
+      this.certs = certs;
+    }
   }
 
   private class LoadFilePathExecution implements Runnable {
@@ -258,25 +198,19 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
     long newCertTime = certFile.lastModified();
     // We only update when both the key and the certs are updated.
     if (newKeyTime != oldKeyTime && newCertTime != oldCertTime) {
-      FileInputStream keyInputStream = null;
+      FileInputStream keyInputStream = new FileInputStream(keyFile);
       try {
-        keyInputStream = new FileInputStream(keyFile);
         PrivateKey key = CertificateUtils.getPrivateKey(keyInputStream);
-        FileInputStream certInputStream = null;
+        FileInputStream certInputStream = new FileInputStream(certFile);
         try {
-          certInputStream = new FileInputStream(certFile);
           X509Certificate[] certs = CertificateUtils.getX509Certificates(certInputStream);
-          updateIdentityCredentials(key, certs, this.password);
+          updateIdentityCredentials(key, certs);
           return new UpdateResult(true, newKeyTime, newCertTime);
         } finally {
-          if (certInputStream != null) {
-            certInputStream.close();
-          }
+          certInputStream.close();
         }
       } finally {
-        if (keyInputStream != null) {
-          keyInputStream.close();
-        }
+        keyInputStream.close();
       }
     }
     return new UpdateResult(false, oldKeyTime, oldCertTime);
