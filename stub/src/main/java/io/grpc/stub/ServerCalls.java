@@ -193,9 +193,6 @@ public final class ServerCalls {
       public void onCancel() {
         if (responseObserver.onCancelHandler != null) {
           responseObserver.onCancelHandler.run();
-        } else {
-          // Only trigger exceptions if unable to provide notification via a callback
-          responseObserver.cancelled = true;
         }
       }
 
@@ -270,12 +267,6 @@ public final class ServerCalls {
       public void onCancel() {
         if (responseObserver.onCancelHandler != null) {
           responseObserver.onCancelHandler.run();
-        } else {
-          // Only trigger exceptions if unable to provide notification via a callback. Even though
-          // onError would provide notification to the server, we still throw an error since there
-          // isn't a guaranteed callback available. If the cancellation happened in a different
-          // order the service could be surprised to see the exception.
-          responseObserver.cancelled = true;
         }
         if (!halfClosed) {
           requestObserver.onError(
@@ -312,7 +303,6 @@ public final class ServerCalls {
       extends ServerCallStreamObserver<RespT> {
     final ServerCall<ReqT, RespT> call;
     private final boolean serverStreamingOrBidi;
-    volatile boolean cancelled;
     private boolean frozen;
     private boolean autoRequestEnabled = true;
     private boolean sentHeaders;
@@ -343,7 +333,7 @@ public final class ServerCalls {
 
     @Override
     public void onNext(RespT response) {
-      if (cancelled) {
+      if (call.isCancelled() && onCancelHandler == null) {
         if (serverStreamingOrBidi) {
           throw Status.CANCELLED
               .withDescription("call already cancelled. "
