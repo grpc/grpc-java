@@ -54,7 +54,9 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    * service returns its {@code StreamObserver}.
    *
    * <p>Setting the onCancelHandler will suppress the on-cancel exception thrown by
-   * {@link #onNext}.
+   * {@link #onNext}. If the caller is already handling cancellation via polling or cannot
+   * substantially benefit from observing cancellation, using a no-op {@code onCancelHandler} is
+   * useful just to suppress the {@code onNext()} exception.
    *
    * @param onCancelHandler to call when client has cancelled the call.
    */
