@@ -162,7 +162,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   }
 
   private void checkTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine,
-      Socket socket, boolean checkingServer) throws CertificateException, IllegalArgumentException {
+      Socket socket, boolean checkingServer) throws CertificateException {
     if (chain == null || chain.length == 0) {
       throw new IllegalArgumentException(
           "Want certificate verification but got null or empty certificates");
