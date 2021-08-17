@@ -65,7 +65,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   public void checkClientTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
     throw new CertificateException(
-        "Either SSLEngine or Socket should be available. Consider upgrading your java version");
+        "Not enough information to validate peer. SSLEngine or Socket required.");
   }
 
   @Override
@@ -90,7 +90,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   public void checkServerTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
     throw new CertificateException(
-        "Either SSLEngine or Socket should be available. Consider upgrading your java version");
+        "Not enough information to validate peer. SSLEngine or Socket required.");
   }
 
   @Override
@@ -162,13 +162,14 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   }
 
   private void checkTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine,
-      Socket socket, boolean checkingServer) throws CertificateException {
+      Socket socket, boolean checkingServer) throws CertificateException, IllegalArgumentException {
     if (chain == null || chain.length == 0) {
-      throw new CertificateException(
+      throw new IllegalArgumentException(
           "Want certificate verification but got null or empty certificates");
     }
     if (sslEngine == null && socket == null) {
-      throw new CertificateException("Either SSLEngine or socket should be available");
+      throw new CertificateException(
+          "Not enough information to validate peer. SSLEngine or Socket required.");
     }
     if (this.verification != Verification.InsecurelySkipAllVerification) {
       X509ExtendedTrustManager currentDelegateManager = this.delegateManager;

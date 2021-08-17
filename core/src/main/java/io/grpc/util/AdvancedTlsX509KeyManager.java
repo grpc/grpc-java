@@ -110,7 +110,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs)
       throws CertificateException {
     // TODO(ZhenLian): explore possibilities to do a crypto check here.
-    this.keyInfo = new KeyInfo(checkNotNull(key), checkNotNull(certs));
+    this.keyInfo = new KeyInfo(checkNotNull(key, "key"), checkNotNull(certs, "certs"));
   }
 
   /**

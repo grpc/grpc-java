@@ -414,8 +414,8 @@ public class AdvancedTlsTest {
   @Test
   public void trustManagerCheckClientTrustedWithoutParameterTest() throws Exception {
     exceptionRule.expect(CertificateException.class);
-    exceptionRule.expectMessage("Either SSLEngine or Socket should be available. "
-            + "Consider upgrading your java version");
+    exceptionRule.expectMessage(
+        "Not enough information to validate peer. SSLEngine or Socket required.");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.InsecurelySkipAllVerification).build();
     tm.checkClientTrusted(serverCert0, "RSA");
@@ -424,8 +424,8 @@ public class AdvancedTlsTest {
   @Test
   public void trustManagerCheckServerTrustedWithoutParameterTest() throws Exception {
     exceptionRule.expect(CertificateException.class);
-    exceptionRule.expectMessage("Either SSLEngine or Socket should be available. "
-        + "Consider upgrading your java version");
+    exceptionRule.expectMessage(
+        "Not enough information to validate peer. SSLEngine or Socket required.");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.InsecurelySkipAllVerification).build();
     tm.checkServerTrusted(serverCert0, "RSA");
@@ -433,7 +433,7 @@ public class AdvancedTlsTest {
 
   @Test
   public void trustManagerEmptyChainTest() throws Exception {
-    exceptionRule.expect(CertificateException.class);
+    exceptionRule.expect(IllegalArgumentException.class);
     exceptionRule.expectMessage(
         "Want certificate verification but got null or empty certificates");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
