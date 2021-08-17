@@ -33,6 +33,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
@@ -49,23 +50,22 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   private static final Logger log = Logger.getLogger(AdvancedTlsX509TrustManager.class.getName());
 
   private final Verification verification;
-  private final PeerVerifier peerVerifier;
   private final SslSocketAndEnginePeerVerifier socketAndEnginePeerVerifier;
 
   // The delegated trust manager used to perform traditional certificate verification.
   private volatile X509ExtendedTrustManager delegateManager = null;
 
-  private AdvancedTlsX509TrustManager(Verification verification,  PeerVerifier peerVerifier,
+  private AdvancedTlsX509TrustManager(Verification verification,
       SslSocketAndEnginePeerVerifier socketAndEnginePeerVerifier) throws CertificateException {
     this.verification = verification;
-    this.peerVerifier = peerVerifier;
     this.socketAndEnginePeerVerifier = socketAndEnginePeerVerifier;
   }
 
   @Override
   public void checkClientTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
-    checkTrusted(chain, authType, null, null, false);
+    throw new CertificateException(
+        "Either SSLEngine or Socket should be available. Consider upgrading your java version");
   }
 
   @Override
@@ -89,7 +89,8 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   @Override
   public void checkServerTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
-    checkTrusted(chain, authType, null, null, true);
+    throw new CertificateException(
+        "Either SSLEngine or Socket should be available. Consider upgrading your java version");
   }
 
   @Override
@@ -101,7 +102,6 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   @Override
   public X509Certificate[] getAcceptedIssuers() {
     if (this.delegateManager == null) {
-      log.log(Level.SEVERE, "Credential hasn't been provided yet");
       return new X509Certificate[0];
     }
     return this.delegateManager.getAcceptedIssuers();
@@ -116,8 +116,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       NoSuchAlgorithmException {
     // Passing a null value of KeyStore would make {@code TrustManagerFactory} attempt to use
     // system-default trust CA certs.
-    X509ExtendedTrustManager newDelegateManager = createDelegateTrustManager(null);
-    this.delegateManager = newDelegateManager;
+    this.delegateManager = createDelegateTrustManager(null);
   }
 
   /**
@@ -156,46 +155,55 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     }
     if (delegateManager == null) {
       throw new CertificateException(
-          "Instance delegateX509TrustManager is null. Failed to initialize");
+          "Failed to find X509ExtendedTrustManager with default TrustManager algorithm "
+              + TrustManagerFactory.getDefaultAlgorithm());
     }
     return delegateManager;
   }
 
   private void checkTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine,
       Socket socket, boolean checkingServer) throws CertificateException {
+    if (chain == null || chain.length == 0) {
+      throw new CertificateException(
+          "Want certificate verification but got null or empty certificates");
+    }
+    if (sslEngine == null && socket == null) {
+      throw new CertificateException("Either SSLEngine or socket should be available");
+    }
     if (this.verification != Verification.InsecurelySkipAllVerification) {
-      if (chain == null || chain.length == 0) {
-        throw new CertificateException(
-            "Want certificate verification but got null or empty certificates");
-      }
-      if (this.delegateManager == null) {
-        throw new CertificateException("Credential hasn't been provided yet");
+      X509ExtendedTrustManager currentDelegateManager = this.delegateManager;
+      if (currentDelegateManager == null) {
+        throw new CertificateException("No trust roots configured");
       }
       if (checkingServer) {
-        if (this.verification == Verification.CertificateAndHostNameVerification
-            && sslEngine == null) {
-          throw new CertificateException(
-              "SSLEngine is null. Couldn't check host name");
-        }
         String algorithm = this.verification == Verification.CertificateAndHostNameVerification
             ? "HTTPS" : "";
-        SSLParameters sslParams = sslEngine.getSSLParameters();
-        sslParams.setEndpointIdentificationAlgorithm(algorithm);
-        sslEngine.setSSLParameters(sslParams);
-        delegateManager.checkServerTrusted(chain, authType, sslEngine);
+        if (sslEngine != null) {
+          SSLParameters sslParams = sslEngine.getSSLParameters();
+          sslParams.setEndpointIdentificationAlgorithm(algorithm);
+          sslEngine.setSSLParameters(sslParams);
+          currentDelegateManager.checkServerTrusted(chain, authType, sslEngine);
+        } else {
+          if (!(socket instanceof SSLSocket)) {
+            throw new CertificateException("socket is not a type of SSLSocket");
+          }
+          SSLSocket sslSocket = (SSLSocket)socket;
+          SSLParameters sslParams = sslSocket.getSSLParameters();
+          sslParams.setEndpointIdentificationAlgorithm(algorithm);
+          sslSocket.setSSLParameters(sslParams);
+          currentDelegateManager.checkServerTrusted(chain, authType, sslSocket);
+        }
       } else {
-        delegateManager.checkClientTrusted(chain, authType, sslEngine);
+        currentDelegateManager.checkClientTrusted(chain, authType, sslEngine);
       }
     }
     // Perform the additional peer cert check.
-    if (sslEngine != null && socketAndEnginePeerVerifier != null) {
-      socketAndEnginePeerVerifier.verifyPeerCertificate(chain, authType, sslEngine);
-    } else if (socket != null && socketAndEnginePeerVerifier != null) {
-      socketAndEnginePeerVerifier.verifyPeerCertificate(chain, authType, socket);
-    } else if (peerVerifier != null) {
-      peerVerifier.verifyPeerCertificate(chain, authType);
-    } else {
-      log.log(Level.INFO, "No peer verifier is specified");
+    if (socketAndEnginePeerVerifier != null) {
+      if (sslEngine != null) {
+        socketAndEnginePeerVerifier.verifyPeerCertificate(chain, authType, sslEngine);
+      } else {
+        socketAndEnginePeerVerifier.verifyPeerCertificate(chain, authType, socket);
+      }
     }
   }
 
@@ -233,10 +241,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     @Override
     public void run() {
       try {
-        long newUpdateTime = readAndUpdate(this.file, this.currentTime);
-        if (this.currentTime != newUpdateTime) {
-          this.currentTime = newUpdateTime;
-        }
+        this.currentTime = readAndUpdate(this.file, this.currentTime);
       } catch (CertificateException | IOException | KeyStoreException
           | NoSuchAlgorithmException e) {
         log.log(Level.SEVERE, "Failed refreshing trust CAs from file. Using previous CAs", e);
@@ -255,17 +260,17 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   private long readAndUpdate(File trustCertFile, long oldTime)
       throws CertificateException, IOException, KeyStoreException, NoSuchAlgorithmException {
     long newTime = trustCertFile.lastModified();
-    if (newTime != oldTime) {
-      FileInputStream inputStream = new FileInputStream(trustCertFile);
-      try {
-        X509Certificate[] certificates = CertificateUtils.getX509Certificates(inputStream);
-        updateTrustCredentials(certificates);
-        return newTime;
-      } finally {
-        inputStream.close();
-      }
+    if (newTime == oldTime) {
+      return oldTime;
     }
-    return oldTime;
+    FileInputStream inputStream = new FileInputStream(trustCertFile);
+    try {
+      X509Certificate[] certificates = CertificateUtils.getX509Certificates(inputStream);
+      updateTrustCredentials(certificates);
+      return newTime;
+    } finally {
+      inputStream.close();
+    }
   }
 
   // Mainly used to avoid throwing IO Exceptions in java.io.Closeable.
@@ -302,21 +307,6 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   }
 
   // Additional custom peer verification check.
-  // It will be used when checkClientTrusted/checkServerTrusted is called without
-  // {@code Socket}/{@code SSLEngine} parameter.
-  public interface PeerVerifier {
-    /**
-     * Verifies the peer certificate chain. For more information, please refer to
-     * {@code X509ExtendedTrustManager}.
-     *
-     * @param  peerCertChain  the certificate chain sent from the peer
-     * @param  authType the key exchange algorithm used, e.g. "RSA", "DHE_DSS", etc
-     */
-    void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
-        throws CertificateException;
-  }
-
-  // Additional custom peer verification check.
   // It will be used when checkClientTrusted/checkServerTrusted is called with the {@code Socket} or
   // the {@code SSLEngine} parameter.
   public interface SslSocketAndEnginePeerVerifier {
@@ -348,7 +338,6 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   public static final class Builder {
 
     private Verification verification = Verification.CertificateAndHostNameVerification;
-    private PeerVerifier peerVerifier;
     private SslSocketAndEnginePeerVerifier socketAndEnginePeerVerifier;
 
     private Builder() {}
@@ -358,19 +347,13 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       return this;
     }
 
-    public Builder setPeerVerifier(PeerVerifier verifier) {
-      this.peerVerifier = verifier;
-      return this;
-    }
-
     public Builder setSslSocketAndEnginePeerVerifier(SslSocketAndEnginePeerVerifier verifier) {
       this.socketAndEnginePeerVerifier = verifier;
       return this;
     }
 
     public AdvancedTlsX509TrustManager build() throws CertificateException {
-      return new AdvancedTlsX509TrustManager(this.verification, this.peerVerifier,
-          this.socketAndEnginePeerVerifier);
+      return new AdvancedTlsX509TrustManager(this.verification, this.socketAndEnginePeerVerifier);
     }
   }
 }

@@ -16,6 +16,8 @@
 
 package io.grpc.util;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.grpc.ExperimentalApi;
 import java.io.File;
 import java.io.FileInputStream;
@@ -54,12 +56,18 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
 
   @Override
   public PrivateKey getPrivateKey(String alias) {
-    return this.keyInfo.key;
+    if (alias.equals("default")) {
+      return this.keyInfo.key;
+    }
+    return null;
   }
 
   @Override
   public X509Certificate[] getCertificateChain(String alias) {
-    return Arrays.copyOf(this.keyInfo.certs, this.keyInfo.certs.length);
+    if (alias.equals("default")) {
+      return Arrays.copyOf(this.keyInfo.certs, this.keyInfo.certs.length);
+    }
+    return null;
   }
 
   @Override
@@ -102,7 +110,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs)
       throws CertificateException {
     // TODO(ZhenLian): explore possibilities to do a crypto check here.
-    this.keyInfo = new KeyInfo(key, certs);
+    this.keyInfo = new KeyInfo(checkNotNull(key), checkNotNull(certs));
   }
 
   /**

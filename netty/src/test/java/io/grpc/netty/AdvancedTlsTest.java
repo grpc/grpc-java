@@ -37,7 +37,6 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.grpc.util.AdvancedTlsX509KeyManager;
 import io.grpc.util.AdvancedTlsX509TrustManager;
-import io.grpc.util.AdvancedTlsX509TrustManager.PeerVerifier;
 import io.grpc.util.AdvancedTlsX509TrustManager.SslSocketAndEnginePeerVerifier;
 import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import io.grpc.util.CertificateUtils;
@@ -288,11 +287,16 @@ public class AdvancedTlsTest {
     serverKeyManager.updateIdentityCredentials(serverKeyBad, serverCertBad);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
-        .setPeerVerifier(new PeerVerifier() {
-          @Override
-          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
-              throws CertificateException { }
-        })
+        .setSslSocketAndEnginePeerVerifier(
+            new SslSocketAndEnginePeerVerifier() {
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  Socket socket) throws CertificateException { }
+
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  SSLEngine engine) throws CertificateException { }
+            })
         .build();
     serverTrustManager.updateTrustCredentials(caCert);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
@@ -309,11 +313,16 @@ public class AdvancedTlsTest {
     // what you are doing!
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.InsecurelySkipAllVerification)
-        .setPeerVerifier(new PeerVerifier() {
-          @Override
-          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
-              throws CertificateException { }
-        })
+        .setSslSocketAndEnginePeerVerifier(
+            new SslSocketAndEnginePeerVerifier() {
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  Socket socket) throws CertificateException { }
+
+              @Override
+              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
+                  SSLEngine engine) throws CertificateException { }
+            })
         .build();
     clientTrustManager.updateTrustCredentials(caCert);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
@@ -393,31 +402,33 @@ public class AdvancedTlsTest {
   }
 
   @Test
-  public void trustManagerCheckTrustTest() throws Exception {
+  public void trustManagerCheckTrustedWithSocketTest() throws Exception {
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.InsecurelySkipAllVerification)
-        .setSslSocketAndEnginePeerVerifier(
-            new SslSocketAndEnginePeerVerifier() {
-              @Override
-              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  Socket socket) throws CertificateException { }
-
-              @Override
-              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  SSLEngine engine) throws CertificateException { }
-            })
-        .setPeerVerifier(new PeerVerifier() {
-          @Override
-          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
-              throws CertificateException { }
-        })
-        .build();
+        .setVerification(Verification.InsecurelySkipAllVerification).build();
     tm.updateTrustCredentials(caCert);
     tm.checkClientTrusted(serverCert0, "RSA", new Socket());
-    tm.checkClientTrusted(serverCert0, "RSA");
     tm.useSystemDefaultTrustCerts();
     tm.checkServerTrusted(clientCert0, "RSA", new Socket());
-    tm.checkServerTrusted(clientCert0, "RSA");
+  }
+
+  @Test
+  public void trustManagerCheckClientTrustedWithoutParameterTest() throws Exception {
+    exceptionRule.expect(CertificateException.class);
+    exceptionRule.expectMessage("Either SSLEngine or Socket should be available. "
+            + "Consider upgrading your java version");
+    AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.InsecurelySkipAllVerification).build();
+    tm.checkClientTrusted(serverCert0, "RSA");
+  }
+
+  @Test
+  public void trustManagerCheckServerTrustedWithoutParameterTest() throws Exception {
+    exceptionRule.expect(CertificateException.class);
+    exceptionRule.expectMessage("Either SSLEngine or Socket should be available. "
+        + "Consider upgrading your java version");
+    AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.InsecurelySkipAllVerification).build();
+    tm.checkServerTrusted(serverCert0, "RSA");
   }
 
   @Test
@@ -427,24 +438,9 @@ public class AdvancedTlsTest {
         "Want certificate verification but got null or empty certificates");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CertificateOnlyVerification)
-        .setSslSocketAndEnginePeerVerifier(
-            new SslSocketAndEnginePeerVerifier() {
-              @Override
-              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  Socket socket) throws CertificateException { }
-
-              @Override
-              public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType,
-                  SSLEngine engine) throws CertificateException { }
-            })
-        .setPeerVerifier(new PeerVerifier() {
-          @Override
-          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
-              throws CertificateException { }
-        })
         .build();
     tm.updateTrustCredentials(caCert);
-    tm.checkClientTrusted(null, "RSA");
+    tm.checkClientTrusted(null, "RSA", (SSLEngine) null);
   }
 
   @Test
@@ -466,15 +462,7 @@ public class AdvancedTlsTest {
                   SSLEngine engine) throws CertificateException {
                 throw new CertificateException("Bad Custom Verification");
               }
-            })
-        .setPeerVerifier(new PeerVerifier() {
-          @Override
-          public void verifyPeerCertificate(X509Certificate[] peerCertChain, String authType)
-              throws CertificateException {
-            throw new CertificateException("Bad Custom Verification");
-          }
-        })
-        .build();
+            }).build();
     tm.updateTrustCredentials(caCert);
     tm.checkClientTrusted(serverCert0, "RSA", new Socket());
   }
