@@ -467,9 +467,8 @@ public class XdsServerWrapperTest {
     xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("r0",
             Collections.singletonList(createVirtualHost("virtual-host-0")));
-    verify(mockServer, times(1)).start();
     start.get(5000, TimeUnit.MILLISECONDS);
-    verify(mockServer).start();
+    verify(mockServer, times(1)).start();
     assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
             f0, ServerRoutingConfig.create(
                     f0.getHttpConnectionManager().httpFilterConfigs(),
