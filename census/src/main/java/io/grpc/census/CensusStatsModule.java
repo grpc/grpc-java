@@ -356,12 +356,12 @@ final class CensusStatsModule {
         if (module.recordFinishedRpcs) {
           // Stream is closed early. So no need to record metrics for any inbound events after this
           // point.
-          recordFinishedRpc();
+          recordFinishedAttempt();
         }
       } // Otherwise will report stats in callEnded() to guarantee all inbound metrics are recorded.
     }
 
-    void recordFinishedRpc() {
+    void recordFinishedAttempt() {
       MeasureMap measureMap = module.statsRecorder.newMeasureMap()
           // TODO(songya): remove the deprecated measure constants once they are completed removed.
           .put(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT, 1)
@@ -439,7 +439,10 @@ final class CensusStatsModule {
     private final AtomicLong retryDelayNanos = new AtomicLong();
     private final AtomicLong lastInactiveTimeStamp = new AtomicLong();
     private final AtomicInteger activeStreams = new AtomicInteger();
+    private final AtomicInteger activeStreams2 = new AtomicInteger();
     private final AtomicBoolean activated = new AtomicBoolean();
+    private AtomicBoolean finishedRpcRecorded = new AtomicBoolean();
+    private Status status;
 
     CallAttemptsTracerFactory(
         CensusStatsModule module, TagContext parentCtx, String fullMethodName) {
@@ -462,6 +465,7 @@ final class CensusStatsModule {
     @Override
     public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata metadata) {
       ClientTracer tracer = new ClientTracer(this, module, parentCtx, startCtx, info);
+      activeStreams2.incrementAndGet();
       if (activeStreams.incrementAndGet() == 1) {
         if (!activated.compareAndSet(false, true)) {
           retryDelayNanos.addAndGet(stopwatch.elapsed(TimeUnit.NANOSECONDS));
@@ -489,9 +493,15 @@ final class CensusStatsModule {
             this.lastInactiveTimeStamp.getAndSet(stopwatch.elapsed(TimeUnit.NANOSECONDS));
         retryDelayNanos.addAndGet(-lastInactiveTimeStamp);
       }
+      if (activeStreams2.decrementAndGet() == 0) {
+        if (callEnded == 1) {
+          recordFinishedCall();
+        }
+      }
     }
 
     void callEnded(Status status) {
+      this.status = status;
       if (callEndedUpdater != null) {
         if (callEndedUpdater.getAndSet(this, 1) != 0) {
           return;
@@ -502,6 +512,15 @@ final class CensusStatsModule {
         }
         callEnded = 1;
       }
+      if (activeStreams2.get() == 0) {
+        recordFinishedCall();
+      }
+    }
+
+    void recordFinishedCall() {
+      if (!finishedRpcRecorded.compareAndSet(false, true)) {
+        return;
+      }
       if (!module.recordFinishedRpcs) {
         return;
       }
@@ -510,9 +529,9 @@ final class CensusStatsModule {
         ClientTracer tracer = new ClientTracer(this, module, parentCtx, startCtx, null);
         tracer.roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
         tracer.statusCode = status.getCode();
-        tracer.recordFinishedRpc();
+        tracer.recordFinishedAttempt();
       } else if (inboundMetricTracer != null) {
-        inboundMetricTracer.recordFinishedRpc();
+        inboundMetricTracer.recordFinishedAttempt();
       }
 
       long retriesPerCall = 0;
