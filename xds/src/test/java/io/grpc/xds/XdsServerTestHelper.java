@@ -179,7 +179,7 @@ public class XdsServerTestHelper {
 
     @Override
     void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
-      rdsWatchers.put(resourceName, watcher);
+      assertThat(rdsWatchers.put(resourceName, watcher)).isNull(); //re-register is not allowed.
       rdsCount.countDown();
     }
 

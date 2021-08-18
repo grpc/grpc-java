@@ -441,6 +441,79 @@ public class XdsServerWrapperTest {
   }
 
   @Test
+  public void discoverState_oneRdsToMultipleFilterChain() throws Exception {
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
+    EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", createRds("r0"));
+    EnvoyServerProtoData.FilterChain f1 = createFilterChain("filter-chain-1", createRds("r0"));
+    EnvoyServerProtoData.FilterChain f2 = createFilterChain("filter-chain-2", createRds("r0"));
+
+    xdsClient.rdsCount = new CountDownLatch(1);
+    xdsClient.deliverLdsUpdate(Arrays.asList(f0, f1), f2);
+    assertThat(start.isDone()).isFalse();
+    assertThat(selectorRef.get()).isNull();
+
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
+    xdsClient.deliverRdsUpdate("r0",
+            Collections.singletonList(createVirtualHost("virtual-host-0")));
+    verify(mockServer, times(1)).start();
+    start.get(5000, TimeUnit.MILLISECONDS);
+    verify(mockServer).start();
+    assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
+            f0, ServerRoutingConfig.create(
+                    f0.getHttpConnectionManager().httpFilterConfigs(),
+                    Collections.singletonList(createVirtualHost("virtual-host-0"))),
+            f1, ServerRoutingConfig.create(f1.getHttpConnectionManager().httpFilterConfigs(),
+                    Collections.singletonList(createVirtualHost("virtual-host-0")))
+    ));
+    assertThat(selectorRef.get().getDefaultRoutingConfig()).isEqualTo(
+            ServerRoutingConfig.create(f2.getHttpConnectionManager().httpFilterConfigs(),
+                    Collections.singletonList(createVirtualHost("virtual-host-0"))));
+    assertThat(selectorRef.get().getDefaultSslContextProviderSupplier()).isSameInstanceAs(
+            f2.getSslContextProviderSupplier());
+
+
+    EnvoyServerProtoData.FilterChain f3 = createFilterChain("filter-chain-3", createRds("r0"));
+    EnvoyServerProtoData.FilterChain f4 = createFilterChain("filter-chain-4", createRds("r1"));
+    xdsClient.rdsCount = new CountDownLatch(1);
+    xdsClient.deliverLdsUpdate(Arrays.asList(f1, f3), f4);
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
+    xdsClient.deliverRdsUpdate("r1",
+            Collections.singletonList(createVirtualHost("virtual-host-1")));
+    xdsClient.deliverRdsUpdate("r0",
+            Collections.singletonList(createVirtualHost("virtual-host-0")));
+    assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
+            f1, ServerRoutingConfig.create(
+                    f1.getHttpConnectionManager().httpFilterConfigs(),
+                    Collections.singletonList(createVirtualHost("virtual-host-0"))),
+            f3, ServerRoutingConfig.create(f3.getHttpConnectionManager().httpFilterConfigs(),
+                    Collections.singletonList(createVirtualHost("virtual-host-0")))
+    ));
+    assertThat(selectorRef.get().getDefaultRoutingConfig()).isEqualTo(
+            ServerRoutingConfig.create(f4.getHttpConnectionManager().httpFilterConfigs(),
+                    Collections.singletonList(createVirtualHost("virtual-host-1"))));
+    assertThat(selectorRef.get().getDefaultSslContextProviderSupplier()).isSameInstanceAs(
+            f4.getSslContextProviderSupplier());
+    verify(mockServer, times(1)).start();
+    xdsServerWrapper.shutdown();
+    verify(mockServer, times(1)).shutdown();
+    when(mockServer.isTerminated()).thenReturn(true);
+    xdsServerWrapper.awaitTermination();
+    assertThat(xdsServerWrapper.isTerminated()).isTrue();
+  }
+
+  @Test
   public void discoverState_rds_onError_and_resourceNotExist() throws Exception {
     final SettableFuture<Server> start = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
@@ -527,7 +600,8 @@ public class XdsServerWrapperTest {
     verify(mockServer, times(2)).start();
     verify(listener, times(1)).onServing();
     assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
-            filterChain1, ServerRoutingConfig.create(new ArrayList<NamedFilterConfig>(),
+            filterChain1, ServerRoutingConfig.create(
+                    filterChain1.getHttpConnectionManager().httpFilterConfigs(),
                     Collections.singletonList(createVirtualHost("virtual-host-1")))
     ));
     // xds update after start
@@ -539,7 +613,8 @@ public class XdsServerWrapperTest {
     verify(mockServer, times(2)).start();
     verify(listener, times(2)).onNotServing(any(StatusException.class));
     assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
-            filterChain1, ServerRoutingConfig.create(new ArrayList<NamedFilterConfig>(),
+            filterChain1, ServerRoutingConfig.create(
+                    filterChain1.getHttpConnectionManager().httpFilterConfigs(),
                     Collections.singletonList(createVirtualHost("virtual-host-2")))
     ));
     assertThat(sslSupplier1.isShutdown()).isFalse();
@@ -575,7 +650,8 @@ public class XdsServerWrapperTest {
     verify(listener, times(1)).onServing();
     verify(listener, times(3)).onNotServing(any(StatusException.class));
     assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
-            filterChain2, ServerRoutingConfig.create(new ArrayList<NamedFilterConfig>(),
+            filterChain2, ServerRoutingConfig.create(
+                    filterChain2.getHttpConnectionManager().httpFilterConfigs(),
                     Collections.singletonList(createVirtualHost("virtual-host-1")))
     ));
     assertThat(executor.numPendingTasks()).isEqualTo(1);
@@ -598,7 +674,8 @@ public class XdsServerWrapperTest {
     when(mockServer.isShutdown()).thenReturn(false);
     verify(listener, times(4)).onNotServing(any(StatusException.class));
     assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
-            filterChain3, ServerRoutingConfig.create(new ArrayList<NamedFilterConfig>(),
+            filterChain3, ServerRoutingConfig.create(
+                    filterChain3.getHttpConnectionManager().httpFilterConfigs(),
                     Collections.singletonList(createVirtualHost("virtual-host-1")))
     ));
     xdsServerWrapper.shutdown();
@@ -646,7 +723,7 @@ public class XdsServerWrapperTest {
     Status status = statusCaptor.getValue();
     assertThat(status.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
     assertThat(status.getDescription()).isEqualTo(
-            "HttpFilterConfig(type URL: filter-type-url) is not a ServerInterceptorBuilder");
+            "HttpFilterConfig(type URL: filter-type-url) is not supported on server-side.");
   }
 
   @Test
@@ -875,7 +952,7 @@ public class XdsServerWrapperTest {
 
   private static HttpConnectionManager createRds(String name) {
     return HttpConnectionManager.forRdsName(0L, name,
-            new ArrayList<NamedFilterConfig>());
+            Arrays.asList(new NamedFilterConfig("named-config-" + name, null)));
   }
 
   private static EnvoyServerProtoData.FilterChainMatch createMatch() {

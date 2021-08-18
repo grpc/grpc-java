@@ -61,9 +61,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -337,8 +339,9 @@ final class XdsServerWrapper extends Server {
 
   private final class DiscoveryState implements LdsResourceWatcher {
     private final String resourceName;
-    // Unique FilterChain name is the key.
+    // RDS resource name is the key.
     private final Map<String, RouteDiscoveryState> routeDiscoveryStates = new HashMap<>();
+    // Unique FilterChain name is the key.
     private final Map<String, ServerRoutingConfig> routingConfigs = new HashMap<>();
     // Most recently discovered filter chains.
     private Map<String, FilterChain> filterChains = new HashMap<>();
@@ -349,14 +352,15 @@ final class XdsServerWrapper extends Server {
     @Nullable
     private ServerRoutingConfig defaultRoutingConfig;
     private boolean stopped;
-    // This flag helps to manage sslContextProviderSuppliers release. True when an update is
-    // pending, so filter chain state has not yet been applied to filterChainSelectorRef and there
-    // are two sets of sslContextProviderSuppliers. Release them when:
-    // 1. inflight == true, release old suppliers in filterChains.
-    // 2. inflight == false, set the newest update to filterChainSelectorRef for the first time,
-    //    release old suppliers in filterChainSelectorRef. Toggle the flag.
-    // 3. Permanent errors.
-    // 4. This State shutdown.
+    // This flag helps to guarantee each outdated sslContextProviderSupplier is released properly:
+    // no accidental release of the ones already updated to filterChainSelectorRef, and no resource
+    // leakage when pending updates are discarded.
+    // True when an update is pending, so filter chain state has not yet been applied to
+    // filterChainSelectorRef and there are two sets of sslContextProviderSuppliers, so we release
+    // the old ones. False when the newest filter chain update is for the first time applied to
+    // filterChainSelectorRef, so we release the previously in-use suppliers in
+    // filterChainSelectorRef, and further rds updates to the filterChainSelectorRef will not
+    // trigger release.
     private boolean inflight = false;
 
     private DiscoveryState(String resourceName) {
@@ -399,16 +403,20 @@ final class XdsServerWrapper extends Server {
               currentRdsResources.add(hcm.rdsName());
               RouteDiscoveryState rdsState = routeDiscoveryStates.get(hcm.rdsName());
               if (rdsState == null) {
-                rdsState = new RouteDiscoveryState(hcm.rdsName(), filterChain,
-                        hcm.httpFilterConfigs());
+                rdsState = new RouteDiscoveryState(hcm.rdsName(), filterChain);
                 routeDiscoveryStates.put(hcm.rdsName(), rdsState);
-                xdsClient.watchRdsResource(hcm.rdsName(), rdsState);
+              } else {
+                xdsClient.cancelRdsResourceWatch(hcm.rdsName(), rdsState);
+                rdsState.addFilterChain(filterChain);
               }
+              xdsClient.watchRdsResource(hcm.rdsName(), rdsState);
             }
           }
-          for (String rdsName : routeDiscoveryStates.keySet()) {
-            if (!currentRdsResources.contains(rdsName)) {
-              xdsClient.cancelRdsResourceWatch(rdsName, routeDiscoveryStates.get(rdsName));
+          for (Map.Entry<String, RouteDiscoveryState> entry: routeDiscoveryStates.entrySet()) {
+            if (!currentRdsResources.contains(entry.getKey())) {
+              xdsClient.cancelRdsResourceWatch(entry.getKey(), entry.getValue());
+            } else {
+              entry.getValue().rdsFilterChains.retainAll(allFilterChains);
             }
           }
           routeDiscoveryStates.keySet().retainAll(currentRdsResources);
@@ -471,14 +479,12 @@ final class XdsServerWrapper extends Server {
       releaseSuppliersInFlight();
     }
 
-    private void handleConfigDiscovered(
-        FilterChain filterChain, ServerRoutingConfig routingConfig) {
+    private void updateRoutingConfig(FilterChain filterChain, ServerRoutingConfig routingConfig) {
       if (Objects.equals(filterChain, defaultFilterChain)) {
         defaultRoutingConfig = routingConfig;
       } else {
         routingConfigs.put(filterChain.getName(), routingConfig);
       }
-      maybeUpdateSelector();
     }
 
     // Update the selector to use the most recently updated configs only after all
@@ -572,14 +578,17 @@ final class XdsServerWrapper extends Server {
 
     private final class RouteDiscoveryState implements RdsResourceWatcher {
       private final String resourceName;
-      private final FilterChain filterChain;
-      private final List<NamedFilterConfig> httpFilterConfigs;
+      // One rds config can be used by multiple filter chains.
+      private final Set<FilterChain> rdsFilterChains = new HashSet<>();
 
-      private RouteDiscoveryState(String resourceName, FilterChain filterChain,
-          List<NamedFilterConfig> httpFilterConfigs) {
+      private RouteDiscoveryState(String resourceName, FilterChain filterChain) {
         this.resourceName = checkNotNull(resourceName, "resourceName");
-        this.filterChain = checkNotNull(filterChain, "filterChain");
-        this.httpFilterConfigs = checkNotNull(httpFilterConfigs, "httpFilterConfigs");
+        rdsFilterChains.add(checkNotNull(filterChain, "filterChain"));
+      }
+
+      // must run in syncContext
+      private void addFilterChain(FilterChain filterChain) {
+        rdsFilterChains.add(filterChain);
       }
 
       @Override
@@ -590,9 +599,13 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            ServerRoutingConfig routingConfig =
-                    ServerRoutingConfig.create(httpFilterConfigs, update.virtualHosts);
-            handleConfigDiscovered(filterChain, routingConfig);
+            for (FilterChain filterChain : rdsFilterChains) {
+              ServerRoutingConfig routingConfig = ServerRoutingConfig.create(
+                      filterChain.getHttpConnectionManager().httpFilterConfigs(),
+                      update.virtualHosts);
+              updateRoutingConfig(filterChain, routingConfig);
+            }
+            maybeUpdateSelector();
           }
         });
       }
@@ -606,7 +619,7 @@ final class XdsServerWrapper extends Server {
               return;
             }
             logger.log(Level.WARNING, "Rds {0} unavailable", resourceName);
-            handleConfigDiscovered(filterChain, ServerRoutingConfig.FAILING_ROUTING_CONFIG);
+            handleRdsFailure();
           }
         });
       }
@@ -619,10 +632,18 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            logger.log(Level.WARNING, "Error from XdsClient: {0}.", error);
-            handleConfigDiscovered(filterChain, ServerRoutingConfig.FAILING_ROUTING_CONFIG);
+            logger.log(Level.WARNING, "Error loading RDS resource {0} from XdsClient: {1}.",
+                    new Object[]{resourceName, error});
+            handleRdsFailure();
           }
         });
+      }
+
+      private void handleRdsFailure() {
+        for (FilterChain filterChain : rdsFilterChains) {
+          updateRoutingConfig(filterChain, ServerRoutingConfig.FAILING_ROUTING_CONFIG);
+        }
+        maybeUpdateSelector();
       }
     }
 
@@ -698,7 +719,7 @@ final class XdsServerWrapper extends Server {
         } else {
           call.close(
               Status.UNAVAILABLE.withDescription("HttpFilterConfig(type URL: "
-                      + filterConfig.typeUrl() + ") is not a ServerInterceptorBuilder"),
+                      + filterConfig.typeUrl() + ") is not supported on server-side."),
               new Metadata());
           return new Listener<ReqT>() {};
         }
