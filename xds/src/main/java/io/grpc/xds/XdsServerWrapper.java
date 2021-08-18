@@ -405,18 +405,19 @@ final class XdsServerWrapper extends Server {
               if (rdsState == null) {
                 rdsState = new RouteDiscoveryState(hcm.rdsName(), filterChain);
                 routeDiscoveryStates.put(hcm.rdsName(), rdsState);
+                xdsClient.watchRdsResource(hcm.rdsName(), rdsState);
               } else {
-                xdsClient.cancelRdsResourceWatch(hcm.rdsName(), rdsState);
                 rdsState.addFilterChain(filterChain);
               }
-              xdsClient.watchRdsResource(hcm.rdsName(), rdsState);
             }
           }
           for (Map.Entry<String, RouteDiscoveryState> entry: routeDiscoveryStates.entrySet()) {
+            RouteDiscoveryState rdsState = entry.getValue();
             if (!currentRdsResources.contains(entry.getKey())) {
-              xdsClient.cancelRdsResourceWatch(entry.getKey(), entry.getValue());
+              xdsClient.cancelRdsResourceWatch(entry.getKey(), rdsState);
             } else {
-              entry.getValue().rdsFilterChains.retainAll(allFilterChains);
+              rdsState.rdsFilterChains.retainAll(allFilterChains);
+              rdsState.handleRdsDiscovered();
             }
           }
           routeDiscoveryStates.keySet().retainAll(currentRdsResources);
@@ -580,6 +581,7 @@ final class XdsServerWrapper extends Server {
       private final String resourceName;
       // One rds config can be used by multiple filter chains.
       private final Set<FilterChain> rdsFilterChains = new HashSet<>();
+      private List<VirtualHost> savedVirtualHosts;
 
       private RouteDiscoveryState(String resourceName, FilterChain filterChain) {
         this.resourceName = checkNotNull(resourceName, "resourceName");
@@ -599,12 +601,8 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            for (FilterChain filterChain : rdsFilterChains) {
-              ServerRoutingConfig routingConfig = ServerRoutingConfig.create(
-                      filterChain.getHttpConnectionManager().httpFilterConfigs(),
-                      update.virtualHosts);
-              updateRoutingConfig(filterChain, routingConfig);
-            }
+            savedVirtualHosts = update.virtualHosts;
+            handleRdsDiscovered();
             maybeUpdateSelector();
           }
         });
@@ -639,7 +637,19 @@ final class XdsServerWrapper extends Server {
         });
       }
 
+      private void handleRdsDiscovered() {
+        if (savedVirtualHosts == null) {
+          return;
+        }
+        for (FilterChain filterChain : rdsFilterChains) {
+          ServerRoutingConfig routingConfig = ServerRoutingConfig.create(
+                  filterChain.getHttpConnectionManager().httpFilterConfigs(), savedVirtualHosts);
+          updateRoutingConfig(filterChain, routingConfig);
+        }
+      }
+
       private void handleRdsFailure() {
+        savedVirtualHosts = null;
         for (FilterChain filterChain : rdsFilterChains) {
           updateRoutingConfig(filterChain, ServerRoutingConfig.FAILING_ROUTING_CONFIG);
         }
