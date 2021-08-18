@@ -40,6 +40,7 @@ import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHan
 import io.grpc.xds.XdsServerWrapper.ServerRoutingConfig;
 import io.grpc.xds.internal.Matchers.CidrMatcher;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -62,6 +63,7 @@ import javax.annotation.Nullable;
 /**
  * Handles L4 filter chain match for the connection based on the xds configuration.
  * */
+@SuppressWarnings("FutureReturnValueIgnored") // Netty doesn't follow this pattern
 final class FilterChainMatchingProtocolNegotiators {
   private static final Logger log = Logger.getLogger(
           FilterChainMatchingProtocolNegotiators.class.getName());
@@ -92,14 +94,13 @@ final class FilterChainMatchingProtocolNegotiators {
         super.userEventTriggered(ctx, evt);
         return;
       }
-      SelectedConfig config;
-      try {
-        config = selector.select(
-                (InetSocketAddress) ctx.channel().localAddress(),
-                (InetSocketAddress) ctx.channel().remoteAddress());
-      } catch (IllegalStateException ex) {
-        log.log(Level.FINE, "Did not find exactly one filter chain: " + ex.getMessage());
-        ctx.fireExceptionCaught(ex);
+      SelectedConfig config = selector.select(
+          (InetSocketAddress) ctx.channel().localAddress(),
+          (InetSocketAddress) ctx.channel().remoteAddress());
+      if (config == null) {
+        log.log(Level.WARNING, "Connection from {0} to {1} has no matching filter chain. Closing",
+            new Object[] {ctx.channel().remoteAddress(), ctx.channel().localAddress()});
+        ctx.close().addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
         return;
       }
       ProtocolNegotiationEvent pne = (ProtocolNegotiationEvent) evt;
@@ -161,9 +162,8 @@ final class FilterChainMatchingProtocolNegotiators {
         filterChains = filterOnSourcePort(filterChains, remoteAddr.getPort());
 
         if (filterChains.size() > 1) {
-          log.log(Level.FINE, "Found more than one matching filter chains: {0}", filterChains);
-          throw new IllegalStateException("Found more than one matching filter chains.");
-          // TODO(chengyuanzhang): should we just return any matched one?
+          throw new IllegalStateException("Found more than one matching filter chains. This should "
+              + "not be possible as ClientXdsClient validated the chains for uniqueness.");
         }
         if (filterChains.size() == 1) {
           FilterChain selected = Iterables.getOnlyElement(filterChains);
@@ -173,8 +173,7 @@ final class FilterChainMatchingProtocolNegotiators {
         if (defaultRoutingConfig != null) {
           return new SelectedConfig(defaultRoutingConfig, defaultSslContextProviderSupplier);
         }
-        log.log(Level.FINE, "No matching filter chain found.");
-        throw new IllegalStateException("No matching filter chain found.");
+        return null;
       }
 
       // reject if filer-chain-match has non-empty application_protocols

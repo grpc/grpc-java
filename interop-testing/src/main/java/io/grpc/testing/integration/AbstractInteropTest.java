@@ -92,6 +92,9 @@ import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
+import io.opencensus.stats.Measure;
+import io.opencensus.stats.Measure.MeasureDouble;
+import io.opencensus.stats.Measure.MeasureLong;
 import io.opencensus.tags.TagKey;
 import io.opencensus.tags.TagValue;
 import io.opencensus.trace.Span;
@@ -152,6 +155,15 @@ public abstract class AbstractInteropTest {
    * SETTINGS/WINDOW_UPDATE exchange.
    */
   public static final int TEST_FLOW_CONTROL_WINDOW = 65 * 1024;
+  private static final MeasureLong RETRIES_PER_CALL =
+      Measure.MeasureLong.create(
+          "grpc.io/client/retries_per_call", "Number of retries per call", "1");
+  private static final MeasureLong TRANSPARENT_RETRIES_PER_CALL =
+      Measure.MeasureLong.create(
+          "grpc.io/client/transparent_retries_per_call", "Transparent retries per call", "1");
+  private static final MeasureDouble RETRY_DELAY_PER_CALL =
+      Measure.MeasureDouble.create(
+          "grpc.io/client/retry_delay_per_call", "Retry delay per call", "ms");
 
   private static final FakeTagger tagger = new FakeTagger();
   private static final FakeTagContextBinarySerializer tagContextBinarySerializer =
@@ -1234,6 +1246,7 @@ public abstract class AbstractInteropTest {
       checkEndTags(
           clientEndRecord, "grpc.testing.TestService/EmptyCall",
           Status.DEADLINE_EXCEEDED.getCode(), true);
+      assertZeroRetryRecorded();
     }
 
     // warm up the channel
@@ -1243,6 +1256,7 @@ public abstract class AbstractInteropTest {
       clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
       // clientEndRecord
       clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
+      assertZeroRetryRecorded();
     }
     try {
       blockingStub
@@ -1261,6 +1275,7 @@ public abstract class AbstractInteropTest {
       checkEndTags(
           clientEndRecord, "grpc.testing.TestService/EmptyCall",
           Status.DEADLINE_EXCEEDED.getCode(), true);
+      assertZeroRetryRecorded();
     }
   }
 
@@ -1978,6 +1993,13 @@ public abstract class AbstractInteropTest {
     assertStatsTrace(method, status, null, null);
   }
 
+  private void assertZeroRetryRecorded() {
+    MetricsRecord retryRecord = clientStatsRecorder.pollRecord();
+    assertThat(retryRecord.getMetric(RETRIES_PER_CALL)).isEqualTo(0);
+    assertThat(retryRecord.getMetric(TRANSPARENT_RETRIES_PER_CALL)).isEqualTo(0);
+    assertThat(retryRecord.getMetric(RETRY_DELAY_PER_CALL)).isEqualTo(0D);
+  }
+
   private void assertClientStatsTrace(String method, Status.Code code,
       Collection<? extends MessageLite> requests, Collection<? extends MessageLite> responses) {
     // Tracer-based stats
@@ -2007,6 +2029,7 @@ public abstract class AbstractInteropTest {
       if (requests != null && responses != null) {
         checkCensus(clientEndRecord, false, requests, responses);
       }
+      assertZeroRetryRecorded();
     }
   }
 

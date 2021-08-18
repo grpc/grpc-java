@@ -50,7 +50,9 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>Implementations <strong>don't need to be thread-safe</strong>.  All methods are guaranteed to
  * be called sequentially.  Additionally, all methods that have side-effects, i.e.,
  * {@link #start(Listener2)}, {@link #shutdown} and {@link #refresh} are called from the same
- * {@link SynchronizationContext} as returned by {@link Args#getSynchronizationContext}.
+ * {@link SynchronizationContext} as returned by {@link Args#getSynchronizationContext}. <strong>Do
+ * not block</strong> within the synchronization context; blocking I/O and time-consuming tasks
+ * should be offloaded to a separate thread, generally {@link Args#getOffloadExecutor}.
  *
  * @since 1.0.0
  */
