@@ -4,16 +4,6 @@ import org.gradle.api.file.FileTreeElement
 import shadow.org.apache.tools.zip.ZipOutputStream
 import shadow.org.apache.tools.zip.ZipEntry
 
-
-buildscript {
-    repositories {
-        jcenter()
-    }
-    dependencies {
-        classpath "com.github.jengelman.gradle.plugins:shadow:6.1.0"
-    }
-}
-
 plugins {
     id "java"
     id "maven-publish"
