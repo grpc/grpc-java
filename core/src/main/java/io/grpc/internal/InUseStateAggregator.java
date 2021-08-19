@@ -54,6 +54,21 @@ public abstract class InUseStateAggregator<T> {
   }
 
   /**
+   * Returns {@code true} if any of the given objects are in use.
+   *
+   * @param objects The objects to consider.
+   * @return {@code true} if any of the given objects are in use.
+   */
+  public final boolean anyObjectInUse(Object... objects) {
+    for (Object object : objects) {
+      if (inUseObjects.contains(object)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Called when the aggregated in-use state has changed to true, which means at least one object is
    * in use.
    */
