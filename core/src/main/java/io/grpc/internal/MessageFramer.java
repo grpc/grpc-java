@@ -267,7 +267,7 @@ public class MessageFramer implements Framer {
       return ((Drainable) message).drainTo(outputStream);
     } else {
       // This makes an unnecessary copy of the bytes when bytebuf supports array(). However, we
-      // expect performance-critical code to support flushTo().
+      // expect performance-critical code to support drainTo().
       @SuppressWarnings("BetaApi") // ByteStreams is not Beta in v27
       long written = ByteStreams.copy(message, outputStream);
       checkArgument(written <= Integer.MAX_VALUE, "Message size overflow: %s", written);
