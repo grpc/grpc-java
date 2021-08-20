@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -378,6 +379,9 @@ public class ServerCallImplTest {
     verify(callListener).onComplete();
     assertTrue(context.isCancelled());
     assertNull(context.cancellationCause());
+    // The call considers cancellation to be an exceptional situation so it should
+    // not be cancelled with an OK status.
+    assertFalse(call.isCancelled());
   }
 
   @Test
