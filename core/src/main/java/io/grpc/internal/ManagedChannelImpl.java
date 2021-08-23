@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
+import static io.grpc.ConnectivityState.TERMINATED;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE;
 
@@ -1276,6 +1277,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       transportFactory.close();
 
       terminated = true;
+      channelStateManager.gotoState(TERMINATED);
       terminatedLatch.countDown();
     }
   }

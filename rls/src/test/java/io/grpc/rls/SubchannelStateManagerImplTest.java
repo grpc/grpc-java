@@ -62,7 +62,7 @@ public class SubchannelStateManagerImplTest {
   @Test
   public void getAggregatedStatus_single() {
     for (ConnectivityState value : ConnectivityState.values()) {
-      if (value == ConnectivityState.SHUTDOWN) {
+      if (value == ConnectivityState.SHUTDOWN || value == ConnectivityState.TERMINATED) {
         continue;
       }
       SubchannelStateManager stateManager = new SubchannelStateManagerImpl();

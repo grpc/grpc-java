@@ -90,6 +90,7 @@ message ChannelConnectivityState {
     READY = 3;
     TRANSIENT_FAILURE = 4;
     SHUTDOWN = 5;
+    TERMINATED = 6;
   }
   State state = 1;
 }

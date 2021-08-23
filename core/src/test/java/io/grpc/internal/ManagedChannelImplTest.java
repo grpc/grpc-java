@@ -23,6 +23,7 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
+import static io.grpc.ConnectivityState.TERMINATED;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
@@ -922,9 +923,21 @@ public class ManagedChannelImplTest {
     // Killing the remaining real transport will terminate the channel
     transportListener.transportShutdown(Status.UNAVAILABLE);
     assertFalse(channel.isTerminated());
+    assertNotEquals(TERMINATED, channel.getState(false));
+    final AtomicBoolean resourcesReleased = new AtomicBoolean();
+    channel.notifyWhenStateChanged(SHUTDOWN, new Runnable() {
+      @Override
+      public void run() {
+        resourcesReleased.set(true);
+      }
+    });
+    assertFalse(resourcesReleased.get());
     verify(executorPool, never()).returnObject(any());
     transportListener.transportTerminated();
     assertTrue(channel.isTerminated());
+    assertEquals(TERMINATED, channel.getState(false));
+    executor.runDueTasks();
+    assertTrue(resourcesReleased.get());
     verify(executorPool).returnObject(executor.getScheduledExecutorService());
     verifyNoMoreInteractions(balancerRpcExecutorPool);
 
@@ -2615,7 +2628,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void channelStateWhenChannelShutdown() {
+  public void channelStateWhenChannelTerminated() {
     final AtomicBoolean stateChanged = new AtomicBoolean();
     Runnable onStateChanged = new Runnable() {
       @Override
@@ -2633,15 +2646,15 @@ public class ManagedChannelImplTest {
     assertFalse(stateChanged.get());
 
     channel.shutdown();
-    assertEquals(SHUTDOWN, channel.getState(false));
+    assertEquals(TERMINATED, channel.getState(false));
     executor.runDueTasks();
     assertTrue(stateChanged.get());
 
     stateChanged.set(false);
-    channel.notifyWhenStateChanged(SHUTDOWN, onStateChanged);
+    channel.notifyWhenStateChanged(TERMINATED, onStateChanged);
     updateBalancingStateSafely(helper, CONNECTING, mockPicker);
 
-    assertEquals(SHUTDOWN, channel.getState(false));
+    assertEquals(TERMINATED, channel.getState(false));
     executor.runDueTasks();
     assertFalse(stateChanged.get());
   }
@@ -2756,7 +2769,7 @@ public class ManagedChannelImplTest {
     channel.shutdown();
     assertTrue(channel.isShutdown());
     assertTrue(channel.isTerminated());
-    assertEquals(SHUTDOWN, channel.getState(false));
+    assertEquals(TERMINATED, channel.getState(false));
 
     // We didn't stub mockPicker, because it should have never been called in this test.
     verifyNoInteractions(mockPicker);

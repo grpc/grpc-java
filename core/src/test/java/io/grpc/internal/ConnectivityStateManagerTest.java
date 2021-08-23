@@ -19,7 +19,7 @@ package io.grpc.internal;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
-import static io.grpc.ConnectivityState.SHUTDOWN;
+import static io.grpc.ConnectivityState.TERMINATED;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.junit.Assert.assertEquals;
 
@@ -235,11 +235,11 @@ public class ConnectivityStateManagerTest {
   }
 
   @Test
-  public void shutdownThenReady() {
-    state.gotoState(SHUTDOWN);
-    assertEquals(SHUTDOWN, state.getState());
+  public void terminatedThenReady() {
+    state.gotoState(TERMINATED);
+    assertEquals(TERMINATED, state.getState());
 
     state.gotoState(READY);
-    assertEquals(SHUTDOWN, state.getState());
+    assertEquals(TERMINATED, state.getState());
   }
 }

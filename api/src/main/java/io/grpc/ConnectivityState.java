@@ -67,6 +67,17 @@ public enum ConnectivityState {
    * happened during attempts to connect communicate . (As of 6/12/2015, there are no known errors
    * (while connecting or communicating) that are classified as non-recoverable) Channels that
    * enter this state never leave this state.
+   *
+   * @see ManagedChannel#isShutdown()
    */
-  SHUTDOWN
+  SHUTDOWN,
+
+  /**
+   * This channel has terminated. All pending RPCs have been completed and any new RPCs will fail
+   * immediately. The channel's resources (like TCP connections) have all been released and there
+   * will be no further network activity issued by this channel.
+   *
+   * @see ManagedChannel#isTerminated()
+   */
+  TERMINATED,
 }

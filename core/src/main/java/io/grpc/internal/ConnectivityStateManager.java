@@ -61,7 +61,8 @@ final class ConnectivityStateManager {
    */
   void gotoState(@Nonnull ConnectivityState newState) {
     checkNotNull(newState, "newState");
-    if (state != newState && state != ConnectivityState.SHUTDOWN) {
+    ConnectivityState currentState = state;
+    if (currentState != newState && currentState != ConnectivityState.TERMINATED) {
       state = newState;
       if (listeners.isEmpty()) {
         return;
