@@ -64,7 +64,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -341,27 +340,14 @@ final class XdsServerWrapper extends Server {
     private final String resourceName;
     // RDS resource name is the key.
     private final Map<String, RouteDiscoveryState> routeDiscoveryStates = new HashMap<>();
-    // Unique FilterChain name is the key.
-    private final Map<String, ServerRoutingConfig> routingConfigs = new HashMap<>();
+    // Track pending RDS resource name.
+    private final Set<String> pendingRds = new HashSet<>();
     // Most recently discovered filter chains.
-    private Map<String, FilterChain> filterChains = new HashMap<>();
+    private List<FilterChain> filterChains = new ArrayList<>();
     // Most recently discovered default filter chain.
     @Nullable
     private FilterChain defaultFilterChain;
-    // Config for the most recently discovered default filter chain.
-    @Nullable
-    private ServerRoutingConfig defaultRoutingConfig;
     private boolean stopped;
-    // This flag helps to guarantee each outdated sslContextProviderSupplier is released properly:
-    // no accidental release of the ones already updated to filterChainSelectorRef, and no resource
-    // leakage when pending updates are discarded.
-    // True when an update is pending, so filter chain state has not yet been applied to
-    // filterChainSelectorRef and there are two sets of sslContextProviderSuppliers, so we release
-    // the old ones. False when the newest filter chain update is for the first time applied to
-    // filterChainSelectorRef, so we release the previously in-use suppliers in
-    // filterChainSelectorRef, and further rds updates to the filterChainSelectorRef will not
-    // trigger release.
-    private boolean inflight = false;
 
     private DiscoveryState(String resourceName) {
       this.resourceName = checkNotNull(resourceName, "resourceName");
@@ -377,57 +363,38 @@ final class XdsServerWrapper extends Server {
             return;
           }
           checkNotNull(update.listener(), "update");
-          if (inflight) {
+          if (!pendingRds.isEmpty()) {
             releaseSuppliersInFlight();
-          } else {
-            inflight = true;
+            pendingRds.clear();
           }
-          filterChains.clear();
-          for (FilterChain filterChain: update.listener().getFilterChains()) {
-            filterChains.put(filterChain.getName(), filterChain);
-          }
+          filterChains = update.listener().getFilterChains();
           defaultFilterChain = update.listener().getDefaultFilterChain();
-          List<FilterChain> allFilterChains = update.listener().getFilterChains();
+          List<FilterChain> allFilterChains = filterChains;
           if (defaultFilterChain != null) {
-            allFilterChains = new ArrayList<>(update.listener().getFilterChains());
+            allFilterChains = new ArrayList<>(filterChains);
             allFilterChains.add(defaultFilterChain);
           }
-          routingConfigs.clear();
-          List<String> currentRdsResources = new ArrayList<>();
           for (FilterChain filterChain : allFilterChains) {
             HttpConnectionManager hcm = filterChain.getHttpConnectionManager();
-            if (hcm.virtualHosts() != null) {
-                routingConfigs.put(filterChain.getName(),
-                        ServerRoutingConfig.create(hcm.httpFilterConfigs(), hcm.virtualHosts()));
-            } else {
-              currentRdsResources.add(hcm.rdsName());
+            if (hcm.virtualHosts() == null) {
+              pendingRds.add(hcm.rdsName());
               RouteDiscoveryState rdsState = routeDiscoveryStates.get(hcm.rdsName());
               if (rdsState == null) {
-                rdsState = new RouteDiscoveryState(hcm.rdsName(), filterChain);
+                rdsState = new RouteDiscoveryState(hcm.rdsName());
                 routeDiscoveryStates.put(hcm.rdsName(), rdsState);
                 xdsClient.watchRdsResource(hcm.rdsName(), rdsState);
-              } else {
-                rdsState.addFilterChain(filterChain);
               }
             }
           }
           for (Map.Entry<String, RouteDiscoveryState> entry: routeDiscoveryStates.entrySet()) {
-            RouteDiscoveryState rdsState = entry.getValue();
-            if (!currentRdsResources.contains(entry.getKey())) {
-              xdsClient.cancelRdsResourceWatch(entry.getKey(), rdsState);
-            } else {
-              rdsState.rdsFilterChains.retainAll(allFilterChains);
-              rdsState.handleRdsDiscovered();
+            if (!pendingRds.contains(entry.getKey())) {
+              xdsClient.cancelRdsResourceWatch(entry.getKey(), entry.getValue());
             }
           }
-          routeDiscoveryStates.keySet().retainAll(currentRdsResources);
-          if (defaultFilterChain != null) {
-            defaultRoutingConfig = routingConfigs.get(defaultFilterChain.getName());
-          } else {
-            defaultRoutingConfig = null;
+          routeDiscoveryStates.keySet().retainAll(pendingRds);
+          if (pendingRds.isEmpty()) {
+            updateSelector(true);
           }
-          routingConfigs.keySet().retainAll(filterChains.keySet());
-          maybeUpdateSelector();
         }
       });
     }
@@ -480,39 +447,39 @@ final class XdsServerWrapper extends Server {
       releaseSuppliersInFlight();
     }
 
-    private void updateRoutingConfig(FilterChain filterChain, ServerRoutingConfig routingConfig) {
-      if (Objects.equals(filterChain, defaultFilterChain)) {
-        defaultRoutingConfig = routingConfig;
-      } else {
-        routingConfigs.put(filterChain.getName(), routingConfig);
-      }
-    }
 
-    // Update the selector to use the most recently updated configs only after all
-    // RouteConfigurations (including default) have been discovered.
-    private void maybeUpdateSelector() {
-      if (routingConfigs.size() != filterChains.size()
-              || (defaultFilterChain == null) != (defaultRoutingConfig == null)) {
-        return;
-      }
+    private void updateSelector(boolean releaseSuppliersInUse) {
       Map<FilterChain, ServerRoutingConfig> filterChainRouting = new HashMap<>();
-      for (Map.Entry<String, FilterChain> e : filterChains.entrySet()) {
-        filterChainRouting.put(e.getValue(), routingConfigs.get(e.getKey()));
+      for (FilterChain filterChain: filterChains) {
+        filterChainRouting.put(filterChain, generateRoutingConfig(filterChain));
       }
       FilterChainSelector selector = new FilterChainSelector(
           Collections.unmodifiableMap(filterChainRouting),
           defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
-          defaultRoutingConfig);
+          defaultFilterChain == null ? null : generateRoutingConfig(defaultFilterChain));
       List<SslContextProviderSupplier> toRelease = Collections.emptyList();
-      if (inflight) {
+      if (releaseSuppliersInUse) {
         toRelease = getSuppliersInUse();
-        inflight = false;
       }
       filterChainSelectorRef.set(selector);
       for (SslContextProviderSupplier e: toRelease) {
         e.close();
       }
       startDelegateServer();
+    }
+
+    private ServerRoutingConfig generateRoutingConfig(FilterChain filterChain) {
+      HttpConnectionManager hcm = filterChain.getHttpConnectionManager();
+      if (hcm.virtualHosts() != null) {
+        return ServerRoutingConfig.create(hcm.httpFilterConfigs(), hcm.virtualHosts());
+      } else {
+        RouteDiscoveryState rds = routeDiscoveryStates.get(hcm.rdsName());
+        if (rds != null && rds.savedVirtualHosts != null) {
+          return ServerRoutingConfig.create(hcm.httpFilterConfigs(), rds.savedVirtualHosts);
+        } else {
+          return ServerRoutingConfig.FAILING_ROUTING_CONFIG;
+        }
+      }
     }
 
     private void handleConfigNotFound(StatusException exception) {
@@ -565,7 +532,7 @@ final class XdsServerWrapper extends Server {
 
     private void releaseSuppliersInFlight() {
       SslContextProviderSupplier supplier;
-      for (FilterChain filterChain : filterChains.values()) {
+      for (FilterChain filterChain : filterChains) {
         supplier = filterChain.getSslContextProviderSupplier();
         if (supplier != null) {
           supplier.close();
@@ -579,18 +546,11 @@ final class XdsServerWrapper extends Server {
 
     private final class RouteDiscoveryState implements RdsResourceWatcher {
       private final String resourceName;
-      // One rds config can be used by multiple filter chains.
-      private final Set<FilterChain> rdsFilterChains = new HashSet<>();
+      @Nullable
       private List<VirtualHost> savedVirtualHosts;
 
-      private RouteDiscoveryState(String resourceName, FilterChain filterChain) {
+      private RouteDiscoveryState(String resourceName) {
         this.resourceName = checkNotNull(resourceName, "resourceName");
-        rdsFilterChains.add(checkNotNull(filterChain, "filterChain"));
-      }
-
-      // must run in syncContext
-      private void addFilterChain(FilterChain filterChain) {
-        rdsFilterChains.add(filterChain);
       }
 
       @Override
@@ -602,7 +562,6 @@ final class XdsServerWrapper extends Server {
               return;
             }
             savedVirtualHosts = update.virtualHosts;
-            handleRdsDiscovered();
             maybeUpdateSelector();
           }
         });
@@ -617,7 +576,8 @@ final class XdsServerWrapper extends Server {
               return;
             }
             logger.log(Level.WARNING, "Rds {0} unavailable", resourceName);
-            handleRdsFailure();
+            savedVirtualHosts = null;
+            maybeUpdateSelector();
           }
         });
       }
@@ -632,28 +592,20 @@ final class XdsServerWrapper extends Server {
             }
             logger.log(Level.WARNING, "Error loading RDS resource {0} from XdsClient: {1}.",
                     new Object[]{resourceName, error});
-            handleRdsFailure();
+            savedVirtualHosts = null;
+            maybeUpdateSelector();
           }
         });
       }
 
-      private void handleRdsDiscovered() {
-        if (savedVirtualHosts == null) {
-          return;
+      // Update the selector to use the most recently updated configs only after all rds have been
+      // discovered, do so even if rds are fully discovered already. Release suppliers only for the
+      // first time rds are fully discovered.
+      private void maybeUpdateSelector() {
+        boolean isLastPending = pendingRds.remove(resourceName);
+        if (pendingRds.isEmpty()) {
+          updateSelector(isLastPending);
         }
-        for (FilterChain filterChain : rdsFilterChains) {
-          ServerRoutingConfig routingConfig = ServerRoutingConfig.create(
-                  filterChain.getHttpConnectionManager().httpFilterConfigs(), savedVirtualHosts);
-          updateRoutingConfig(filterChain, routingConfig);
-        }
-      }
-
-      private void handleRdsFailure() {
-        savedVirtualHosts = null;
-        for (FilterChain filterChain : rdsFilterChains) {
-          updateRoutingConfig(filterChain, ServerRoutingConfig.FAILING_ROUTING_CONFIG);
-        }
-        maybeUpdateSelector();
       }
     }
 
