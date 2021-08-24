@@ -158,7 +158,7 @@ public class AdvancedTlsTest {
     AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
     serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.CertificateOnlyVerification)
+        .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
     serverTrustManager.updateTrustCredentials(caCert);
     ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
@@ -171,7 +171,7 @@ public class AdvancedTlsTest {
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.CertificateAndHostNameVerification)
+        .setVerification(Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION)
         .build();
     clientTrustManager.updateTrustCredentials(caCert);
     ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
@@ -195,7 +195,7 @@ public class AdvancedTlsTest {
     serverKeyManager.updateIdentityCredentials(serverKey0, serverCert0);
     // Set server's custom verification based on the information of clientCert0.
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.CertificateOnlyVerification)
+        .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .setSslSocketAndEnginePeerVerifier(
             new SslSocketAndEnginePeerVerifier() {
               @Override
@@ -235,7 +235,7 @@ public class AdvancedTlsTest {
     clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
     // Set client's custom verification based on the information of serverCert0.
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.CertificateOnlyVerification)
+        .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .setSslSocketAndEnginePeerVerifier(
             new SslSocketAndEnginePeerVerifier() {
               @Override
@@ -286,7 +286,7 @@ public class AdvancedTlsTest {
     // will configure the client to skip all checks later.
     serverKeyManager.updateIdentityCredentials(serverKeyBad, serverCertBad);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.CertificateOnlyVerification)
+        .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .setSslSocketAndEnginePeerVerifier(
             new SslSocketAndEnginePeerVerifier() {
               @Override
@@ -312,7 +312,7 @@ public class AdvancedTlsTest {
     // Note this is very dangerous in production environment - only do so if you are confident on
     // what you are doing!
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.InsecurelySkipAllVerification)
+        .setVerification(Verification.INSECURELY_SKIP_ALL_VERIFICATION)
         .setSslSocketAndEnginePeerVerifier(
             new SslSocketAndEnginePeerVerifier() {
               @Override
@@ -347,7 +347,7 @@ public class AdvancedTlsTest {
     Closeable serverKeyShutdown = serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File,
         serverCert0File, 100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.CertificateOnlyVerification)
+        .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
     Closeable serverTrustShutdown = serverTrustManager.updateTrustCredentialsFromFile(caCertFile,
         100, TimeUnit.MILLISECONDS, executor);
@@ -362,7 +362,7 @@ public class AdvancedTlsTest {
     Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File,
         clientCert0File,100, TimeUnit.MILLISECONDS, executor);
     AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.CertificateAndHostNameVerification)
+        .setVerification(Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION)
         .build();
     Closeable clientTrustShutdown = clientTrustManager.updateTrustCredentialsFromFile(caCertFile,
         100, TimeUnit.MILLISECONDS, executor);
@@ -404,7 +404,7 @@ public class AdvancedTlsTest {
   @Test
   public void trustManagerCheckTrustedWithSocketTest() throws Exception {
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.InsecurelySkipAllVerification).build();
+        .setVerification(Verification.INSECURELY_SKIP_ALL_VERIFICATION).build();
     tm.updateTrustCredentials(caCert);
     tm.checkClientTrusted(serverCert0, "RSA", new Socket());
     tm.useSystemDefaultTrustCerts();
@@ -417,7 +417,7 @@ public class AdvancedTlsTest {
     exceptionRule.expectMessage(
         "Not enough information to validate peer. SSLEngine or Socket required.");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.InsecurelySkipAllVerification).build();
+        .setVerification(Verification.INSECURELY_SKIP_ALL_VERIFICATION).build();
     tm.checkClientTrusted(serverCert0, "RSA");
   }
 
@@ -427,7 +427,7 @@ public class AdvancedTlsTest {
     exceptionRule.expectMessage(
         "Not enough information to validate peer. SSLEngine or Socket required.");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.InsecurelySkipAllVerification).build();
+        .setVerification(Verification.INSECURELY_SKIP_ALL_VERIFICATION).build();
     tm.checkServerTrusted(serverCert0, "RSA");
   }
 
@@ -437,7 +437,7 @@ public class AdvancedTlsTest {
     exceptionRule.expectMessage(
         "Want certificate verification but got null or empty certificates");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.CertificateOnlyVerification)
+        .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .build();
     tm.updateTrustCredentials(caCert);
     tm.checkClientTrusted(null, "RSA", (SSLEngine) null);
@@ -448,7 +448,7 @@ public class AdvancedTlsTest {
     exceptionRule.expect(CertificateException.class);
     exceptionRule.expectMessage("Bad Custom Verification");
     AdvancedTlsX509TrustManager tm = AdvancedTlsX509TrustManager.newBuilder()
-        .setVerification(Verification.CertificateOnlyVerification)
+        .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
         .setSslSocketAndEnginePeerVerifier(
             new SslSocketAndEnginePeerVerifier() {
               @Override

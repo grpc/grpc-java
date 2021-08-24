@@ -171,13 +171,13 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       throw new CertificateException(
           "Not enough information to validate peer. SSLEngine or Socket required.");
     }
-    if (this.verification != Verification.InsecurelySkipAllVerification) {
+    if (this.verification != Verification.INSECURELY_SKIP_ALL_VERIFICATION) {
       X509ExtendedTrustManager currentDelegateManager = this.delegateManager;
       if (currentDelegateManager == null) {
         throw new CertificateException("No trust roots configured");
       }
       if (checkingServer) {
-        String algorithm = this.verification == Verification.CertificateAndHostNameVerification
+        String algorithm = this.verification == Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION
             ? "HTTPS" : "";
         if (sslEngine != null) {
           SSLParameters sslParams = sslEngine.getSSLParameters();
@@ -288,7 +288,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     // This is the DEFAULT and RECOMMENDED mode for most applications.
     // Setting this on the client side will do the certificate and hostname verification, while
     // setting this on the server side will only do the certificate verification.
-    CertificateAndHostNameVerification,
+    CERTIFICATE_AND_HOST_NAME_VERIFICATION,
     // This SHOULD be chosen only when you know what the implication this will bring, and have a
     // basic understanding about TLS.
     // It SHOULD be accompanied with proper additional peer identity checks set through
@@ -298,13 +298,13 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     // checkClientTrusted/checkServerTrusted with the {@code SSLEngine} parameter while doing
     // verification.
     // Setting this on either side will only do the certificate verification.
-    CertificateOnlyVerification,
+    CERTIFICATE_ONLY_VERIFICATION,
     // Setting is very DANGEROUS. Please try to avoid this in a real production environment, unless
     // you are a super advanced user intended to re-implement the whole verification logic on your
     // own. A secure verification might include:
     // 1. proper verification on the peer certificate chain
     // 2. proper checks on the identity of the peer certificate
-    InsecurelySkipAllVerification,
+    INSECURELY_SKIP_ALL_VERIFICATION,
   }
 
   // Additional custom peer verification check.
@@ -338,7 +338,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
 
   public static final class Builder {
 
-    private Verification verification = Verification.CertificateAndHostNameVerification;
+    private Verification verification = Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION;
     private SslSocketAndEnginePeerVerifier socketAndEnginePeerVerifier;
 
     private Builder() {}
