@@ -191,6 +191,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
       if (lbProvider == null) {
         lbProvider = lbRegistry.getProvider("round_robin");
+        lbConfig = null;
       }
       ClusterResolverConfig config = new ClusterResolverConfig(
           Collections.unmodifiableList(instances), new PolicySelection(lbProvider, lbConfig));
