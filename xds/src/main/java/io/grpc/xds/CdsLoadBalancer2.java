@@ -188,8 +188,10 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       if (root.result.lbPolicy() == LbPolicy.RING_HASH) {
         lbProvider = lbRegistry.getProvider("ring_hash");
         lbConfig = new RingHashConfig(root.result.minRingSize(), root.result.maxRingSize());
-      } else {
+      }
+      if (lbProvider == null) {
         lbProvider = lbRegistry.getProvider("round_robin");
+        lbConfig = null;
       }
       ClusterResolverConfig config = new ClusterResolverConfig(
           Collections.unmodifiableList(instances), new PolicySelection(lbProvider, lbConfig));
