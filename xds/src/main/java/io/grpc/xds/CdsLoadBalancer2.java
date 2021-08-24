@@ -186,6 +186,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           lbRegistry.getProvider(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);  // hardcoded
       LoadBalancerProvider endpointPickingLbProvider =
           lbRegistry.getProvider(endpointPickingPolicy);
+      if (endpointPickingLbProvider == null) {
+        endpointPickingLbProvider = lbRegistry.getProvider("round_robin");
+      }
       ClusterResolverConfig config = new ClusterResolverConfig(
           Collections.unmodifiableList(instances),
           new PolicySelection(localityPickingLbProvider, null /* by cluster_resolver LB policy */),
