@@ -59,7 +59,10 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+@RunWith(JUnit4.class)
 public class AdvancedTlsTest {
   public static final String SERVER_0_KEY_FILE = "server0.key";
   public static final String SERVER_0_PEM_FILE = "server0.pem";

@@ -118,7 +118,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void nofilterChainMatch_defaultSslContext() throws Exception {
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     ChannelHandler next = new ChannelInboundHandlerAdapter() {
@@ -132,7 +131,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     when(mockDelegate.newHandler(grpcHandler)).thenReturn(next);
 
     SslContextProviderSupplier ssl = new SslContextProviderSupplier(createTls(), tlsContextManager);
-    FilterChainSelector selector = new FilterChainSelector(Collections.EMPTY_LIST, ssl);
+    FilterChainSelector selector = new FilterChainSelector(new ArrayList<FilterChain>(), ssl);
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
     setupChannel("172.168.1.1", "172.168.1.2", 80, filterChainMatchingHandler);
@@ -151,9 +150,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void noFilterChainMatch_noDefaultSslContext() {
-    FilterChainSelector selector = new FilterChainSelector(Collections.EMPTY_LIST, null);
+    FilterChainSelector selector = new FilterChainSelector(new ArrayList<FilterChain>(), null);
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
     setupChannel("172.168.1.1", "172.168.2.2", 90, filterChainMatchingHandler);
