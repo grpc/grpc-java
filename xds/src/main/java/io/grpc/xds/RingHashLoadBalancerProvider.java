@@ -44,9 +44,6 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
   // Same as ClientXdsClient.MAX_RING_HASH_LB_POLICY_RING_SIZE
   static final long MAX_RING_SIZE = 8 * 1024 * 1024L;
 
-  private static final boolean enableRingHash =
-      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH"));
-
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
     return new RingHashLoadBalancer(helper);
@@ -54,7 +51,7 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public boolean isAvailable() {
-    return enableRingHash;
+    return true;
   }
 
   @Override
