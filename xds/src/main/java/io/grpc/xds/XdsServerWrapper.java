@@ -179,8 +179,6 @@ final class XdsServerWrapper extends Server {
       return;
     }
     xdsClient = xdsClientPool.getObject();
-    // TODO(chengyuanzhang): add an API on XdsClient indicating if it is using v3, don't get
-    //  from bootstrap.
     boolean useProtocolV3 = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
     String listenerTemplate = xdsClient.getBootstrapInfo().getServerListenerResourceNameTemplate();
     if (!useProtocolV3 || listenerTemplate == null) {
@@ -340,7 +338,7 @@ final class XdsServerWrapper extends Server {
     private final String resourceName;
     // RDS resource name is the key.
     private final Map<String, RouteDiscoveryState> routeDiscoveryStates = new HashMap<>();
-    // Track pending RDS resource name.
+    // Track pending RDS resources using rds name.
     private final Set<String> pendingRds = new HashSet<>();
     // Most recently discovered filter chains.
     private List<FilterChain> filterChains = new ArrayList<>();
@@ -364,6 +362,8 @@ final class XdsServerWrapper extends Server {
           }
           checkNotNull(update.listener(), "update");
           if (!pendingRds.isEmpty()) {
+            // filter chain state has not yet been applied to filterChainSelectorRef and there are
+            // two sets of sslContextProviderSuppliers, so we release the old ones.
             releaseSuppliersInFlight();
             pendingRds.clear();
           }
@@ -447,8 +447,12 @@ final class XdsServerWrapper extends Server {
       releaseSuppliersInFlight();
     }
 
-
-    private void updateSelector(boolean releaseSuppliersInUse) {
+    // Use firstTimeNoPendingRds to indicate that the previous SslContextProviderSuppliers in
+    // filterChainSelectorRef should be released. Call updateSelector(true) when all routing are
+    // just complete and the newest filter chain is ready to be applied to the
+    // filterChainSelectorRef. Call updateSelector(false) for subsequent routing updates
+    // corresponding to the same filter chain list.
+    private void updateSelector(boolean firstTimeNoPendingRds) {
       Map<FilterChain, ServerRoutingConfig> filterChainRouting = new HashMap<>();
       for (FilterChain filterChain: filterChains) {
         filterChainRouting.put(filterChain, generateRoutingConfig(filterChain));
@@ -458,7 +462,7 @@ final class XdsServerWrapper extends Server {
           defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
           defaultFilterChain == null ? null : generateRoutingConfig(defaultFilterChain));
       List<SslContextProviderSupplier> toRelease = Collections.emptyList();
-      if (releaseSuppliersInUse) {
+      if (firstTimeNoPendingRds) {
         toRelease = getSuppliersInUse();
       }
       filterChainSelectorRef.set(selector);
@@ -599,8 +603,8 @@ final class XdsServerWrapper extends Server {
       }
 
       // Update the selector to use the most recently updated configs only after all rds have been
-      // discovered, do so even if rds are fully discovered already. Release suppliers only for the
-      // first time rds are fully discovered.
+      // discovered, i.e. pendingRds is empty. Do the updateSelector even after rds are already
+      // fully discovered and new change comes.
       private void maybeUpdateSelector() {
         boolean isLastPending = pendingRds.remove(resourceName);
         if (pendingRds.isEmpty()) {
