@@ -20,7 +20,8 @@ import javax.annotation.Nullable;
 
 /**
  * A refinement of {@link CallStreamObserver} that allows for lower-level interaction with
- * client calls.
+ * client calls. An instance of this class is obtained via {@link ClientResponseObserver}, or by
+ * manually casting the {@code StreamObserver} returned by a stub.
  *
  * <p>Like {@code StreamObserver}, implementations are not required to be thread-safe; if multiple
  * threads will be writing to an instance concurrently, the application must synchronize its calls.
