@@ -423,7 +423,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
     delayedTransport.reprocess(null);
     channelLogger.log(ChannelLogLevel.INFO, "Entering IDLE state");
     channelStateManager.gotoState(IDLE);
-    if (inUseStateAggregator.isInUse()) {
+    // If the inUseStateAggregator still considers pending calls to be queued up or the delayed
+    // transport to be holding some we need to exit idle mode to give these calls a chance to
+    // be processed.
+    if (inUseStateAggregator.anyObjectInUse(pendingCallsInUseObject, delayedTransport)) {
       exitIdleMode();
     }
   }
