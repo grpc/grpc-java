@@ -482,7 +482,6 @@ public class XdsServerWrapperTest {
     assertThat(selectorRef.get().getDefaultSslContextProviderSupplier()).isSameInstanceAs(
             f2.getSslContextProviderSupplier());
 
-
     EnvoyServerProtoData.FilterChain f3 = createFilterChain("filter-chain-3", createRds("r0"));
     EnvoyServerProtoData.FilterChain f4 = createFilterChain("filter-chain-4", createRds("r1"));
     xdsClient.rdsCount = new CountDownLatch(1);
@@ -544,6 +543,11 @@ public class XdsServerWrapperTest {
     assertThat(selectorRef.get().getRoutingConfigs().get(f1)).isEqualTo(
             ServerRoutingConfig.create(f1.getHttpConnectionManager().httpFilterConfigs(),
             Collections.singletonList(createVirtualHost("virtual-host-1"))));
+
+    xdsClient.rdsWatchers.get("r0").onError(Status.CANCELLED);
+    assertThat(selectorRef.get().getRoutingConfigs().get(f1)).isEqualTo(
+            ServerRoutingConfig.create(f1.getHttpConnectionManager().httpFilterConfigs(),
+                    Collections.singletonList(createVirtualHost("virtual-host-1"))));
 
     xdsClient.rdsWatchers.get("r0").onResourceDoesNotExist("r0");
     assertThat(selectorRef.get().getRoutingConfigs().get(f1)).isEqualTo(ServerRoutingConfig.create(

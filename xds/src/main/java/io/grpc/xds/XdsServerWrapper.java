@@ -373,24 +373,28 @@ final class XdsServerWrapper extends Server {
             allFilterChains = new ArrayList<>(filterChains);
             allFilterChains.add(defaultFilterChain);
           }
+          Set<String> allRds = new HashSet<>();
           for (FilterChain filterChain : allFilterChains) {
             HttpConnectionManager hcm = filterChain.getHttpConnectionManager();
             if (hcm.virtualHosts() == null) {
-              pendingRds.add(hcm.rdsName());
               RouteDiscoveryState rdsState = routeDiscoveryStates.get(hcm.rdsName());
               if (rdsState == null) {
                 rdsState = new RouteDiscoveryState(hcm.rdsName());
                 routeDiscoveryStates.put(hcm.rdsName(), rdsState);
                 xdsClient.watchRdsResource(hcm.rdsName(), rdsState);
               }
+              if (rdsState.isPending) {
+                pendingRds.add(hcm.rdsName());
+              }
+              allRds.add(hcm.rdsName());
             }
           }
           for (Map.Entry<String, RouteDiscoveryState> entry: routeDiscoveryStates.entrySet()) {
-            if (!pendingRds.contains(entry.getKey())) {
+            if (!allRds.contains(entry.getKey())) {
               xdsClient.cancelRdsResourceWatch(entry.getKey(), entry.getValue());
             }
           }
-          routeDiscoveryStates.keySet().retainAll(pendingRds);
+          routeDiscoveryStates.keySet().retainAll(allRds);
           if (pendingRds.isEmpty()) {
             updateSelector(true);
           }
@@ -553,6 +557,7 @@ final class XdsServerWrapper extends Server {
       private final String resourceName;
       @Nullable
       private List<VirtualHost> savedVirtualHosts;
+      private boolean isPending = true;
 
       private RouteDiscoveryState(String resourceName) {
         this.resourceName = checkNotNull(resourceName, "resourceName");
@@ -597,7 +602,6 @@ final class XdsServerWrapper extends Server {
             }
             logger.log(Level.WARNING, "Error loading RDS resource {0} from XdsClient: {1}.",
                     new Object[]{resourceName, error});
-            savedVirtualHosts = null;
             maybeUpdateSelector();
           }
         });
@@ -607,6 +611,7 @@ final class XdsServerWrapper extends Server {
       // discovered, i.e. pendingRds is empty. Do the updateSelector even after rds are already
       // fully discovered and new change comes.
       private void maybeUpdateSelector() {
+        isPending = false;
         boolean isLastPending = pendingRds.remove(resourceName);
         if (pendingRds.isEmpty()) {
           updateSelector(isLastPending);
