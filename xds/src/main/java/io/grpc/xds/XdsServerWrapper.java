@@ -118,9 +118,10 @@ final class XdsServerWrapper extends Server {
       ServerBuilder<?> delegateBuilder,
       XdsServingStatusListener listener,
       AtomicReference<FilterChainSelector> filterChainSelectorRef,
-      XdsClientPoolFactory xdsClientPoolFactory) {
+      XdsClientPoolFactory xdsClientPoolFactory,
+      FilterRegistry filterRegistry) {
     this(listenerAddress, delegateBuilder, listener, filterChainSelectorRef, xdsClientPoolFactory,
-            FilterRegistry.getDefaultRegistry(), SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
+            filterRegistry, SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
     sharedTimeService = true;
   }
 

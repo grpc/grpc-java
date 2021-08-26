@@ -117,7 +117,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     when(mockBuilder.build()).thenReturn(mockServer);
     when(mockServer.isShutdown()).thenReturn(false);
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:" + PORT, mockBuilder, listener,
-            selectorRef, new FakeXdsClientPoolFactory(xdsClient));
+            selectorRef, new FakeXdsClientPoolFactory(xdsClient), FilterRegistry.newRegistry());
   }
 
   @Test

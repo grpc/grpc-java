@@ -141,7 +141,7 @@ public class XdsServerWrapperTest {
     XdsClient xdsClient = mock(XdsClient.class);
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:1", mockBuilder, listener,
-            selectorRef, new FakeXdsClientPoolFactory(xdsClient));
+            selectorRef, new FakeXdsClientPoolFactory(xdsClient), filterRegistry);
     final SettableFuture<Server> start = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
