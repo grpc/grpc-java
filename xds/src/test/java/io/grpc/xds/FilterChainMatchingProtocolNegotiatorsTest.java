@@ -90,7 +90,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   private static final int PORT = 7000;
 
   @Test
-  @SuppressWarnings("unchecked")
   public void nofilterChainMatch_defaultSslContext() throws Exception {
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
@@ -101,8 +100,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             tlsContextManager);
     ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
             new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
-    FilterChainSelector selector = new FilterChainSelector(Collections.EMPTY_MAP,
-            defaultSsl, noopConfig);
+    FilterChainSelector selector = new FilterChainSelector(
+            new HashMap<FilterChain, ServerRoutingConfig>(), defaultSsl, noopConfig);
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
     setupChannel("172.168.1.1", "172.168.1.2", 80, filterChainMatchingHandler);
@@ -122,9 +121,9 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void noFilterChainMatch_noDefaultSslContext() {
-    FilterChainSelector selector = new FilterChainSelector(Collections.EMPTY_MAP, null, null);
+    FilterChainSelector selector = new FilterChainSelector(
+            new HashMap<FilterChain, ServerRoutingConfig>(), null, null);
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
     setupChannel("172.168.1.1", "172.168.2.2", 90, filterChainMatchingHandler);

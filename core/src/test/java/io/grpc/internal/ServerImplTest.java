@@ -1196,7 +1196,9 @@ public class ServerImplTest {
         context, contextCancelled, null);
 
     // For close status OK:
-    // isCancelled is expected to be true after all pending work is done
+    // The context isCancelled is expected to be true after all pending work is done,
+    // but for the call it should be false as it gets set cancelled only if the call
+    // fails with a non-OK status.
     assertFalse(callReference.get().isCancelled());
     assertFalse(context.get().isCancelled());
     streamListener.closed(Status.OK);
@@ -1204,7 +1206,7 @@ public class ServerImplTest {
     assertFalse(context.get().isCancelled());
 
     assertEquals(1, executor.runDueTasks());
-    assertTrue(callReference.get().isCancelled());
+    assertFalse(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
     assertTrue(contextCancelled.get());
   }
