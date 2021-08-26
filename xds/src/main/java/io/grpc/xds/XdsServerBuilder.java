@@ -49,7 +49,6 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private final int port;
   private XdsServingStatusListener xdsServingStatusListener;
   private AtomicBoolean isServerBuilt = new AtomicBoolean(false);
-  private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private XdsClientPoolFactory xdsClientPoolFactory =
           SharedXdsClientPoolProvider.getDefaultProvider();
 
@@ -99,7 +98,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
             .set(ATTR_FILTER_CHAIN_SELECTOR_REF, filterChainSelectorRef)
             .build());
     return new XdsServerWrapper("0.0.0.0:" + port, delegate, xdsServingStatusListener,
-            filterChainSelectorRef, xdsClientPoolFactory, filterRegistry);
+            filterChainSelectorRef, xdsClientPoolFactory);
   }
 
   @VisibleForTesting
