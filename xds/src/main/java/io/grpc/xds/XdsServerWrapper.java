@@ -97,7 +97,7 @@ final class XdsServerWrapper extends Server {
   private boolean sharedTimeService;
   private final ScheduledExecutorService timeService;
   private final FilterRegistry filterRegistry;
-  private final ThreadSafeRandom random;
+  private final ThreadSafeRandom random = ThreadSafeRandomImpl.instance;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final XdsServingStatusListener listener;
   private final AtomicReference<FilterChainSelector> filterChainSelectorRef;
@@ -142,7 +142,6 @@ final class XdsServerWrapper extends Server {
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
     this.timeService = checkNotNull(timeService, "timeService");
     this.filterRegistry = checkNotNull(filterRegistry,"filterRegistry");
-    this.random = ThreadSafeRandomImpl.instance;
     this.delegate = delegateBuilder.build();
   }
 
@@ -447,11 +446,13 @@ final class XdsServerWrapper extends Server {
       releaseSuppliersInFlight();
     }
 
-    // Use firstTimeNoPendingRds to indicate that the previous SslContextProviderSuppliers in
-    // filterChainSelectorRef should be released. Call updateSelector(true) when all routing are
-    // just complete and the newest filter chain is ready to be applied to the
-    // filterChainSelectorRef. Call updateSelector(false) for subsequent routing updates
-    // corresponding to the same filter chain list.
+    /**
+     * Use firstTimeNoPendingRds to indicate that the previous SslContextProviderSuppliers in
+     * filterChainSelectorRef should be released. Call updateSelector(true) when all routing are
+     * just complete and the newest filter chain is ready to be applied to the
+     * filterChainSelectorRef. Call updateSelector(false) for subsequent routing update
+     * corresponding to the same filter chain list.
+     */
     private void updateSelector(boolean firstTimeNoPendingRds) {
       Map<FilterChain, ServerRoutingConfig> filterChainRouting = new HashMap<>();
       for (FilterChain filterChain: filterChains) {
