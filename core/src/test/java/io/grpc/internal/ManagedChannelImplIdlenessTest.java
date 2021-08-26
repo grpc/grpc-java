@@ -289,7 +289,7 @@ public class ManagedChannelImplIdlenessTest {
   @Test
   public void pendingCallExitsIdleAfterEnter() throws Exception {
     // Create a pending call without starting it.
-    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    channel.newCall(method, CallOptions.DEFAULT);
 
     channel.enterIdle();
 
