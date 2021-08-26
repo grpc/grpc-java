@@ -89,7 +89,8 @@ public class TestServiceClient {
   private int soakIterations = 10;
   private int soakMaxFailures = 0;
   private int soakPerIterationMaxAcceptableLatencyMs = 1000;
-  private int soakOverallTimeoutSeconds = soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1e3;
+  private int soakOverallTimeoutSeconds =
+      soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
 
   private Tester tester = new Tester();
 

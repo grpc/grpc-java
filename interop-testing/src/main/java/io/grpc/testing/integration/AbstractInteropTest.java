@@ -1998,7 +1998,7 @@ public abstract class AbstractInteropTest {
     String timeoutErrorMessage =
         String.format(
             "soak test consumed all %d seconds of time and quit early, only "
-                + "having ran %d out of desired %d iterations."
+                + "having ran %d out of desired %d iterations.",
             overallTimeoutSeconds,
             iterationsDone,
             soakIterations);
@@ -2006,7 +2006,7 @@ public abstract class AbstractInteropTest {
     // check if we had too many failures
     String tooManyFailuresErrorMessage =
         String.format(
-            "soak test total failures: %d exceeds max failures threshold: %d."
+            "soak test total failures: %d exceeds max failures threshold: %d.",
             totalFailures, maxFailures);
     assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
   }
