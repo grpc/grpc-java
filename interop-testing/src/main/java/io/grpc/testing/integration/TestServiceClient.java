@@ -86,10 +86,10 @@ public class TestServiceClient {
   private boolean fullStreamDecompression;
   private int localHandshakerPort = -1;
   private Map<String, ?> serviceConfig = null;
-  private int soakIterations = 0;
+  private int soakIterations = 10;
   private int soakMaxFailures = 0;
-  private int soakPerIterationMaxAcceptableLatencyMs = 0;
-  private int soakOverallTimeoutSeconds = 0;
+  private int soakPerIterationMaxAcceptableLatencyMs = 1000;
+  private int soakOverallTimeoutSeconds = soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1e3;
 
   private Tester tester = new Tester();
 
@@ -209,18 +209,22 @@ public class TestServiceClient {
           + "\n                              Disables service config lookups and sets the provided "
           + "\n                              string as the default service config."
           + "\n --soak_iterations            The number of iterations to use for the two soak "
-          + "\n                              tests: rpc_soak and channel_soak."
+          + "\n                              tests: rpc_soak and channel_soak. Default "
+            + c.soakIterations
           + "\n --soak_max_failures          The number of iterations in soak tests that are "
           + "\n                              allowed to fail (either due to non-OK status code or "
-          + "\n                              exceeding the per-iteration max acceptable latency)."
+          + "\n                              exceeding the per-iteration max acceptable latency). "
+          + "\n                              Default " + c.soakMaxFailures
           + "\n --soak_per_iteration_max_acceptable_latency_ms "
           + "\n                              The number of milliseconds a single iteration in the "
           + "\n                              two soak tests (rpc_soak and channel_soak) should "
-          + "\n                              take."
+          + "\n                              take. Default "
+            + c.soakPerIterationMaxAcceptableLatencyMs
           + "\n --soak_overall_timeout_seconds "
           + "\n                              The overall number of seconds after which a soak test "
           + "\n                              should stop and fail, if the desired number of "
-          + "\n                              iterations have not yet completed."
+          + "\n                              iterations have not yet completed. Default "
+            + c.soakOverallTimeoutSeconds
       );
       System.exit(1);
     }
