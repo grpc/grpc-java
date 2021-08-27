@@ -18,6 +18,7 @@ package io.grpc.stub;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.errorprone.annotations.InlineMe;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -47,6 +48,10 @@ public final class MetadataUtils {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1789")
   @Deprecated
+  @InlineMe(
+      replacement =
+          "stub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(extraHeaders))",
+      imports = "io.grpc.stub.MetadataUtils")
   public static <T extends AbstractStub<T>> T attachHeaders(T stub, Metadata extraHeaders) {
     return stub.withInterceptors(newAttachHeadersInterceptor(extraHeaders));
   }
@@ -104,6 +109,11 @@ public final class MetadataUtils {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1789")
   @Deprecated
+  @InlineMe(
+      replacement =
+          "stub.withInterceptors(MetadataUtils.newCaptureMetadataInterceptor(headersCapture,"
+              + " trailersCapture))",
+      imports = "io.grpc.stub.MetadataUtils")
   public static <T extends AbstractStub<T>> T captureMetadata(
       T stub,
       AtomicReference<Metadata> headersCapture,
