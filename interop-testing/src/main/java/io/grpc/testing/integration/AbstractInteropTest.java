@@ -1956,21 +1956,19 @@ public abstract class AbstractInteropTest {
         break;
       }
       SoakIterationResult result = performOneSoakIteration(resetChannelPerIteration);
+      System.err.print(
+          String.format(
+              "soak iteration: %d elapsed: %d ms", i, result.getLatencyMs()));
       if (!result.getStatus().equals(Status.OK)) {
         totalFailures++;
-        System.err.println(
-            String.format(
-                "soak iteration: %d elapsed: %d ms failed: %s",
-                i, result.getLatencyMs(), result.getStatus()));
+        System.err.println(String.format(" failed: %s", result.getStatus()));
       } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
         totalFailures++;
         System.err.println(
             String.format(
-                "soak iteration: %d elapsed %d ms exceeds max acceptable latency: %d ",
-                i, result.getLatencyMs(), maxAcceptablePerIterationLatencyMs));
+                " ms exceeds max acceptable latency: %d ", maxAcceptablePerIterationLatencyMs));
       } else {
-        System.err.println(
-            String.format("soak iteration: %d elapsed: %d ms succeeded", i, result.getLatencyMs()));
+        System.err.println(String.format(" succeeded", result.getLatencyMs()));
       }
       iterationsDone++;
       latencies.recordValue(result.getLatencyMs());
