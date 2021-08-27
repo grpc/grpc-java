@@ -19,10 +19,20 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.Attributes;
+import io.grpc.InternalServerInterceptors;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -32,9 +42,16 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
+import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.NamedFilterConfig;
+import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
+import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
+import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.LdsUpdate;
+import io.grpc.xds.XdsClient.RdsResourceWatcher;
+import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
@@ -43,7 +60,11 @@ import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -66,12 +87,17 @@ final class XdsServerWrapper extends Server {
         }
       });
 
+  public static final Attributes.Key<ServerRoutingConfig> ATTR_SERVER_ROUTING_CONFIG =
+          Attributes.Key.create("io.grpc.xds.ServerWrapper.serverRoutingConfig");
+
   @VisibleForTesting
   static final long RETRY_DELAY_NANOS = TimeUnit.MINUTES.toNanos(1);
   private final String listenerAddress;
   private final ServerBuilder<?> delegateBuilder;
   private boolean sharedTimeService;
   private final ScheduledExecutorService timeService;
+  private final FilterRegistry filterRegistry;
+  private final ThreadSafeRandom random = ThreadSafeRandomImpl.instance;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final XdsServingStatusListener listener;
   private final AtomicReference<FilterChainSelector> filterChainSelectorRef;
@@ -92,9 +118,10 @@ final class XdsServerWrapper extends Server {
       ServerBuilder<?> delegateBuilder,
       XdsServingStatusListener listener,
       AtomicReference<FilterChainSelector> filterChainSelectorRef,
-      XdsClientPoolFactory xdsClientPoolFactory) {
+      XdsClientPoolFactory xdsClientPoolFactory,
+      FilterRegistry filterRegistry) {
     this(listenerAddress, delegateBuilder, listener, filterChainSelectorRef, xdsClientPoolFactory,
-            SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
+            filterRegistry, SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
     sharedTimeService = true;
   }
 
@@ -105,13 +132,16 @@ final class XdsServerWrapper extends Server {
           XdsServingStatusListener listener,
           AtomicReference<FilterChainSelector> filterChainSelectorRef,
           XdsClientPoolFactory xdsClientPoolFactory,
+          FilterRegistry filterRegistry,
           ScheduledExecutorService timeService) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
     this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
+    this.delegateBuilder.intercept(new ConfigApplyingInterceptor());
     this.listener = checkNotNull(listener, "listener");
     this.filterChainSelectorRef = checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
     this.timeService = checkNotNull(timeService, "timeService");
+    this.filterRegistry = checkNotNull(filterRegistry,"filterRegistry");
     this.delegate = delegateBuilder.build();
   }
 
@@ -148,8 +178,6 @@ final class XdsServerWrapper extends Server {
       return;
     }
     xdsClient = xdsClientPool.getObject();
-    // TODO(chengyuanzhang): add an API on XdsClient indicating if it is using v3, don't get
-    //  from bootstrap.
     boolean useProtocolV3 = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
     String listenerTemplate = xdsClient.getBootstrapInfo().getServerListenerResourceNameTemplate();
     if (!useProtocolV3 || listenerTemplate == null) {
@@ -307,6 +335,10 @@ final class XdsServerWrapper extends Server {
 
   private final class DiscoveryState implements LdsResourceWatcher {
     private final String resourceName;
+    // RDS resource name is the key.
+    private final Map<String, RouteDiscoveryState> routeDiscoveryStates = new HashMap<>();
+    // Track pending RDS resources using rds name.
+    private final Set<String> pendingRds = new HashSet<>();
     // Most recently discovered filter chains.
     private List<FilterChain> filterChains = new ArrayList<>();
     // Most recently discovered default filter chain.
@@ -328,9 +360,44 @@ final class XdsServerWrapper extends Server {
             return;
           }
           checkNotNull(update.listener(), "update");
+          if (!pendingRds.isEmpty()) {
+            // filter chain state has not yet been applied to filterChainSelectorRef and there are
+            // two sets of sslContextProviderSuppliers, so we release the old ones.
+            releaseSuppliersInFlight();
+            pendingRds.clear();
+          }
           filterChains = update.listener().getFilterChains();
           defaultFilterChain = update.listener().getDefaultFilterChain();
-          updateSelector();
+          List<FilterChain> allFilterChains = filterChains;
+          if (defaultFilterChain != null) {
+            allFilterChains = new ArrayList<>(filterChains);
+            allFilterChains.add(defaultFilterChain);
+          }
+          Set<String> allRds = new HashSet<>();
+          for (FilterChain filterChain : allFilterChains) {
+            HttpConnectionManager hcm = filterChain.getHttpConnectionManager();
+            if (hcm.virtualHosts() == null) {
+              RouteDiscoveryState rdsState = routeDiscoveryStates.get(hcm.rdsName());
+              if (rdsState == null) {
+                rdsState = new RouteDiscoveryState(hcm.rdsName());
+                routeDiscoveryStates.put(hcm.rdsName(), rdsState);
+                xdsClient.watchRdsResource(hcm.rdsName(), rdsState);
+              }
+              if (rdsState.isPending) {
+                pendingRds.add(hcm.rdsName());
+              }
+              allRds.add(hcm.rdsName());
+            }
+          }
+          for (Map.Entry<String, RouteDiscoveryState> entry: routeDiscoveryStates.entrySet()) {
+            if (!allRds.contains(entry.getKey())) {
+              xdsClient.cancelRdsResourceWatch(entry.getKey(), entry.getValue());
+            }
+          }
+          routeDiscoveryStates.keySet().retainAll(allRds);
+          if (pendingRds.isEmpty()) {
+            updateSelector(true);
+          }
         }
       });
     }
@@ -372,47 +439,61 @@ final class XdsServerWrapper extends Server {
 
     private void shutdown() {
       stopped = true;
+      cleanUpRouteDiscoveryStates();
       logger.log(Level.FINE, "Stop watching LDS resource {0}", resourceName);
       xdsClient.cancelLdsResourceWatch(resourceName, this);
-      List<SslContextProviderSupplier> toRelease = collectSslContextProviderSuppliers();
+      List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
       filterChainSelectorRef.set(FilterChainSelector.NO_FILTER_CHAIN);
       for (SslContextProviderSupplier s: toRelease) {
         s.close();
       }
+      releaseSuppliersInFlight();
     }
 
-    private List<SslContextProviderSupplier> collectSslContextProviderSuppliers() {
-      List<SslContextProviderSupplier> toRelease = new ArrayList<>();
-      FilterChainSelector selector = filterChainSelectorRef.get();
-      if (selector != null) {
-        for (FilterChain f: selector.getFilterChains()) {
-          if (f.getSslContextProviderSupplier() != null) {
-            toRelease.add(f.getSslContextProviderSupplier());
-          }
-        }
-        SslContextProviderSupplier defaultSupplier =
-                selector.getDefaultSslContextProviderSupplier();
-        if (defaultSupplier != null) {
-          toRelease.add(defaultSupplier);
-        }
+    /**
+     * Use firstTimeNoPendingRds to indicate that the previous SslContextProviderSuppliers in
+     * filterChainSelectorRef should be released. Call updateSelector(true) when all routing are
+     * just complete and the newest filter chain is ready to be applied to the
+     * filterChainSelectorRef. Call updateSelector(false) for subsequent routing update
+     * corresponding to the same filter chain list.
+     */
+    private void updateSelector(boolean firstTimeNoPendingRds) {
+      Map<FilterChain, ServerRoutingConfig> filterChainRouting = new HashMap<>();
+      for (FilterChain filterChain: filterChains) {
+        filterChainRouting.put(filterChain, generateRoutingConfig(filterChain));
       }
-      return toRelease;
-    }
-
-    private void updateSelector() {
-      List<SslContextProviderSupplier> toRelease = collectSslContextProviderSuppliers();
       FilterChainSelector selector = new FilterChainSelector(
-          Collections.unmodifiableList(filterChains),
-          defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier());
+          Collections.unmodifiableMap(filterChainRouting),
+          defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
+          defaultFilterChain == null ? null : generateRoutingConfig(defaultFilterChain));
+      List<SslContextProviderSupplier> toRelease = Collections.emptyList();
+      if (firstTimeNoPendingRds) {
+        toRelease = getSuppliersInUse();
+      }
       filterChainSelectorRef.set(selector);
-      for (SslContextProviderSupplier s: toRelease) {
-        s.close();
+      for (SslContextProviderSupplier e: toRelease) {
+        e.close();
       }
       startDelegateServer();
     }
 
+    private ServerRoutingConfig generateRoutingConfig(FilterChain filterChain) {
+      HttpConnectionManager hcm = filterChain.getHttpConnectionManager();
+      if (hcm.virtualHosts() != null) {
+        return ServerRoutingConfig.create(hcm.httpFilterConfigs(), hcm.virtualHosts());
+      } else {
+        RouteDiscoveryState rds = routeDiscoveryStates.get(hcm.rdsName());
+        if (rds != null && rds.savedVirtualHosts != null) {
+          return ServerRoutingConfig.create(hcm.httpFilterConfigs(), rds.savedVirtualHosts);
+        } else {
+          return ServerRoutingConfig.FAILING_ROUTING_CONFIG;
+        }
+      }
+    }
+
     private void handleConfigNotFound(StatusException exception) {
-      List<SslContextProviderSupplier> toRelease = collectSslContextProviderSuppliers();
+      cleanUpRouteDiscoveryStates();
+      List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
       filterChainSelectorRef.set(FilterChainSelector.NO_FILTER_CHAIN);
       for (SslContextProviderSupplier s: toRelease) {
         s.close();
@@ -430,15 +511,240 @@ final class XdsServerWrapper extends Server {
       isServing = false;
       listener.onNotServing(exception);
     }
+
+    private void cleanUpRouteDiscoveryStates() {
+      for (RouteDiscoveryState rdsState : routeDiscoveryStates.values()) {
+        String rdsName = rdsState.resourceName;
+        logger.log(Level.FINE, "Stop watching RDS resource {0}", rdsName);
+        xdsClient.cancelRdsResourceWatch(rdsName, rdsState);
+      }
+      routeDiscoveryStates.clear();
+    }
+
+    private List<SslContextProviderSupplier> getSuppliersInUse() {
+      List<SslContextProviderSupplier> toRelease = new ArrayList<>();
+      FilterChainSelector selector = filterChainSelectorRef.get();
+      if (selector != null) {
+        for (FilterChain f: selector.getRoutingConfigs().keySet()) {
+          if (f.getSslContextProviderSupplier() != null) {
+            toRelease.add(f.getSslContextProviderSupplier());
+          }
+        }
+        SslContextProviderSupplier defaultSupplier =
+                selector.getDefaultSslContextProviderSupplier();
+        if (defaultSupplier != null) {
+          toRelease.add(defaultSupplier);
+        }
+      }
+      return toRelease;
+    }
+
+    private void releaseSuppliersInFlight() {
+      SslContextProviderSupplier supplier;
+      for (FilterChain filterChain : filterChains) {
+        supplier = filterChain.getSslContextProviderSupplier();
+        if (supplier != null) {
+          supplier.close();
+        }
+      }
+      if (defaultFilterChain != null
+              && (supplier = defaultFilterChain.getSslContextProviderSupplier()) != null) {
+        supplier.close();
+      }
+    }
+
+    private final class RouteDiscoveryState implements RdsResourceWatcher {
+      private final String resourceName;
+      @Nullable
+      private List<VirtualHost> savedVirtualHosts;
+      private boolean isPending = true;
+
+      private RouteDiscoveryState(String resourceName) {
+        this.resourceName = checkNotNull(resourceName, "resourceName");
+      }
+
+      @Override
+      public void onChanged(final RdsUpdate update) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (!routeDiscoveryStates.containsKey(resourceName)) {
+              return;
+            }
+            savedVirtualHosts = update.virtualHosts;
+            maybeUpdateSelector();
+          }
+        });
+      }
+
+      @Override
+      public void onResourceDoesNotExist(final String resourceName) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (!routeDiscoveryStates.containsKey(resourceName)) {
+              return;
+            }
+            logger.log(Level.WARNING, "Rds {0} unavailable", resourceName);
+            savedVirtualHosts = null;
+            maybeUpdateSelector();
+          }
+        });
+      }
+
+      @Override
+      public void onError(final Status error) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            if (!routeDiscoveryStates.containsKey(resourceName)) {
+              return;
+            }
+            logger.log(Level.WARNING, "Error loading RDS resource {0} from XdsClient: {1}.",
+                    new Object[]{resourceName, error});
+            maybeUpdateSelector();
+          }
+        });
+      }
+
+      // Update the selector to use the most recently updated configs only after all rds have been
+      // discovered, i.e. pendingRds is empty. Do the updateSelector even after rds are already
+      // fully discovered and new change comes.
+      private void maybeUpdateSelector() {
+        isPending = false;
+        boolean isLastPending = pendingRds.remove(resourceName);
+        if (pendingRds.isEmpty()) {
+          updateSelector(isLastPending);
+        }
+      }
+    }
+
+    private boolean isPermanentError(Status error) {
+      return EnumSet.of(
+              Status.Code.INTERNAL,
+              Status.Code.INVALID_ARGUMENT,
+              Status.Code.FAILED_PRECONDITION,
+              Status.Code.PERMISSION_DENIED,
+              Status.Code.UNAUTHENTICATED)
+              .contains(error.getCode());
+    }
   }
 
-  private static boolean isPermanentError(Status error) {
-    return EnumSet.of(
-            Status.Code.INTERNAL,
-            Status.Code.INVALID_ARGUMENT,
-            Status.Code.FAILED_PRECONDITION,
-            Status.Code.PERMISSION_DENIED,
-            Status.Code.UNAUTHENTICATED)
-            .contains(error.getCode());
+  @VisibleForTesting
+  final class ConfigApplyingInterceptor implements ServerInterceptor {
+    private final ServerInterceptor noopInterceptor = new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+          Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+        return next.startCall(call, headers);
+      }
+    };
+
+    @Override
+    public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+        Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      ServerRoutingConfig routingConfig = call.getAttributes().get(ATTR_SERVER_ROUTING_CONFIG);
+      if (routingConfig == null
+              || routingConfig.equals(ServerRoutingConfig.FAILING_ROUTING_CONFIG)) {
+        String errorMsg = "Missing xDS routing config. " + (routingConfig == null ? "" :
+                "RDS config unavailable.");
+        call.close(Status.UNAVAILABLE.withDescription(errorMsg), new Metadata());
+        return new Listener<ReqT>() {};
+      }
+      VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(
+          routingConfig.virtualHosts(), call.getAuthority());
+      if (virtualHost == null) {
+        call.close(
+                Status.UNAVAILABLE.withDescription("Could not find xDS virtual host matching RPC"),
+                new Metadata());
+        return new Listener<ReqT>() {};
+      }
+      Route selectedRoute = null;
+      Map<String, FilterConfig> selectedOverrideConfigs =
+              new HashMap<>(virtualHost.filterConfigOverrides());
+      MethodDescriptor<ReqT, RespT> method = call.getMethodDescriptor();
+      for (Route route : virtualHost.routes()) {
+        if (RoutingUtils.matchRoute(
+            route.routeMatch(), "/" + method.getFullMethodName(), headers, random)) {
+          selectedRoute = route;
+          selectedOverrideConfigs.putAll(route.filterConfigOverrides());
+          break;
+        }
+      }
+      if (selectedRoute == null) {
+        call.close(
+            Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"),
+            new Metadata());
+        return new ServerCall.Listener<ReqT>() {};
+      }
+      List<ServerInterceptor> filterInterceptors = new ArrayList<>();
+      for (NamedFilterConfig namedFilterConfig : routingConfig.httpFilterConfigs()) {
+        FilterConfig filterConfig = namedFilterConfig.filterConfig;
+        Filter filter = filterRegistry.get(filterConfig.typeUrl());
+        if (filter instanceof ServerInterceptorBuilder) {
+          ServerInterceptor interceptor =
+              ((ServerInterceptorBuilder) filter).buildServerInterceptor(
+                  filterConfig, selectedOverrideConfigs.get(namedFilterConfig.name));
+          if (interceptor != null) {
+            filterInterceptors.add(interceptor);
+          }
+        } else {
+          call.close(
+              Status.UNAVAILABLE.withDescription("HttpFilterConfig(type URL: "
+                      + filterConfig.typeUrl() + ") is not supported on server-side."),
+              new Metadata());
+          return new Listener<ReqT>() {};
+        }
+      }
+      ServerInterceptor interceptor = combineInterceptors(filterInterceptors);
+      return interceptor.interceptCall(call, headers, next);
+    }
+
+    private ServerInterceptor combineInterceptors(final List<ServerInterceptor> interceptors) {
+      if (interceptors.isEmpty()) {
+        return noopInterceptor;
+      }
+      if (interceptors.size() == 1) {
+        return interceptors.get(0);
+      }
+      return new ServerInterceptor() {
+        @Override
+        public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+            Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+          // intercept forward
+          for (int i = interceptors.size() - 1; i >= 0; i--) {
+            next = InternalServerInterceptors.interceptCallHandlerCreate(
+                interceptors.get(i), next);
+          }
+          return next.startCall(call, headers);
+        }
+      };
+    }
+  }
+
+  /**
+   * The HttpConnectionManager level configuration.
+   */
+  @AutoValue
+  abstract static class ServerRoutingConfig {
+    private static final ServerRoutingConfig FAILING_ROUTING_CONFIG =
+            new AutoValue_XdsServerWrapper_ServerRoutingConfig(
+                    ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of());
+
+    // Top level http filter configs.
+    abstract ImmutableList<NamedFilterConfig> httpFilterConfigs();
+
+    abstract ImmutableList<VirtualHost> virtualHosts();
+
+    /**
+     * Server routing configuration.
+     * */
+    public static ServerRoutingConfig create(List<NamedFilterConfig> httpFilterConfigs,
+                                             List<VirtualHost> virtualHosts) {
+      checkNotNull(httpFilterConfigs, "httpFilterConfigs");
+      checkNotNull(virtualHosts, "virtualHosts");
+      return new AutoValue_XdsServerWrapper_ServerRoutingConfig(
+              ImmutableList.copyOf(httpFilterConfigs), ImmutableList.copyOf(virtualHosts));
+    }
   }
 }

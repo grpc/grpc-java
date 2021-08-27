@@ -113,7 +113,7 @@ public class XdsSdsClientServerTest {
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
         getBlockingStub(/* upstreamTlsContext= */ null,
-                /* overrideAuthority= */ null);
+                /* overrideAuthority= */ OVERRIDE_AUTHORITY);
     assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
@@ -157,7 +157,7 @@ public class XdsSdsClientServerTest {
         CLIENT_PEM_FILE, false);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
-        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ "foo.test.google.fr");
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
     try {
       unaryRpc(/* requestMessage= */ "buddy", blockingStub);
       fail("exception expected");
@@ -184,7 +184,7 @@ public class XdsSdsClientServerTest {
         BAD_CLIENT_PEM_FILE, true);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
-        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ "foo.test.google.fr");
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
     assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
   }
 
@@ -245,7 +245,7 @@ public class XdsSdsClientServerTest {
         CLIENT_PEM_FILE, false);
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
-        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ "foo.test.google.fr");
+        getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
     try {
       unaryRpc("buddy", blockingStub);
       fail("exception expected");
@@ -274,7 +274,7 @@ public class XdsSdsClientServerTest {
     xdsClient.deliverLdsUpdate(LdsUpdate.forTcpListener(listener));
     try {
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
-          getBlockingStub(upstreamTlsContext, "foo.test.google.fr");
+          getBlockingStub(upstreamTlsContext, OVERRIDE_AUTHORITY);
       assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
@@ -340,15 +340,6 @@ public class XdsSdsClientServerTest {
             .xdsClientPoolFactory(fakePoolFactory)
             .addService(new SimpleServiceImpl());
     buildServer(builder, downstreamTlsContext);
-  }
-
-  static void generateListenerUpdateToWatcher(
-      DownstreamTlsContext tlsContext, XdsClient.LdsResourceWatcher registeredWatcher,
-      TlsContextManager tlsContextManager) {
-    EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0", tlsContext,
-        tlsContextManager);
-    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
-    registeredWatcher.onChanged(listenerUpdate);
   }
 
   private void buildServer(

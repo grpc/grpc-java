@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_REF;
+import static io.grpc.xds.XdsServerWrapper.ATTR_SERVER_ROUTING_CONFIG;
 import static io.grpc.xds.internal.sds.SdsProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -36,6 +37,7 @@ import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
+import io.grpc.xds.XdsServerWrapper.ServerRoutingConfig;
 import io.grpc.xds.internal.Matchers.CidrMatcher;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import io.netty.channel.ChannelFutureListener;
@@ -50,6 +52,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
@@ -101,9 +104,11 @@ final class FilterChainMatchingProtocolNegotiators {
         return;
       }
       ProtocolNegotiationEvent pne = (ProtocolNegotiationEvent) evt;
-      Attributes attr = InternalProtocolNegotiationEvent.getAttributes(pne)
-              .toBuilder().set(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER,
-                      config.sslContextProviderSupplier).build();
+      // TODO(zivy): merge into one key and take care of this outer class visibility.
+      Attributes attr = InternalProtocolNegotiationEvent.getAttributes(pne).toBuilder()
+              .set(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER, config.sslContextProviderSupplier)
+              .set(ATTR_SERVER_ROUTING_CONFIG, config.routingConfig)
+              .build();
       pne = InternalProtocolNegotiationEvent.withAttributes(pne, attr);
       ctx.pipeline().replace(this, null, delegate.newHandler(grpcHandler));
       ctx.fireUserEventTriggered(pne);
@@ -111,22 +116,29 @@ final class FilterChainMatchingProtocolNegotiators {
 
     static final class FilterChainSelector {
       public static final FilterChainSelector NO_FILTER_CHAIN = new FilterChainSelector(
-              Collections.<FilterChain>emptyList(), null);
-
-      private final List<FilterChain> filterChainList;
+              Collections.<FilterChain, ServerRoutingConfig>emptyMap(), null, null);
+      private final Map<FilterChain, ServerRoutingConfig> routingConfigs;
       @Nullable
       private final SslContextProviderSupplier defaultSslContextProviderSupplier;
+      @Nullable
+      private final ServerRoutingConfig defaultRoutingConfig;
 
-      FilterChainSelector(List<FilterChain> filterChainList,
-                          @Nullable SslContextProviderSupplier defaultSslContextProviderSupplier) {
-        checkNotNull(filterChainList, "filterChainList");
-        this.filterChainList = filterChainList;
+      FilterChainSelector(Map<FilterChain, ServerRoutingConfig> routingConfigs,
+                          @Nullable SslContextProviderSupplier defaultSslContextProviderSupplier,
+                          @Nullable ServerRoutingConfig defaultRoutingConfig) {
+        this.routingConfigs = checkNotNull(routingConfigs, "routingConfigs");
         this.defaultSslContextProviderSupplier = defaultSslContextProviderSupplier;
+        this.defaultRoutingConfig = defaultRoutingConfig;
       }
 
       @VisibleForTesting
-      List<FilterChain> getFilterChains() {
-        return filterChainList;
+      Map<FilterChain, ServerRoutingConfig> getRoutingConfigs() {
+        return routingConfigs;
+      }
+
+      @VisibleForTesting
+      ServerRoutingConfig getDefaultRoutingConfig() {
+        return defaultRoutingConfig;
       }
 
       @VisibleForTesting
@@ -138,7 +150,7 @@ final class FilterChainMatchingProtocolNegotiators {
        * Throws IllegalStateException when no exact one match, and we should close the connection.
        */
       SelectedConfig select(InetSocketAddress localAddr, InetSocketAddress remoteAddr) {
-        Collection<FilterChain> filterChains = new ArrayList<>(filterChainList);
+        Collection<FilterChain> filterChains = routingConfigs.keySet();
         filterChains = filterOnDestinationPort(filterChains);
         filterChains = filterOnIpAddress(filterChains, localAddr.getAddress(), true);
         filterChains = filterOnServerNames(filterChains);
@@ -155,10 +167,11 @@ final class FilterChainMatchingProtocolNegotiators {
         }
         if (filterChains.size() == 1) {
           FilterChain selected = Iterables.getOnlyElement(filterChains);
-          return new SelectedConfig(selected.getSslContextProviderSupplier());
+          return new SelectedConfig(
+                  routingConfigs.get(selected), selected.getSslContextProviderSupplier());
         }
-        if (defaultSslContextProviderSupplier != null) {
-          return new SelectedConfig(defaultSslContextProviderSupplier);
+        if (defaultRoutingConfig != null) {
+          return new SelectedConfig(defaultRoutingConfig, defaultSslContextProviderSupplier);
         }
         return null;
       }
@@ -361,10 +374,13 @@ final class FilterChainMatchingProtocolNegotiators {
    * The FilterChain level configuration.
    */
   private static final class SelectedConfig {
+    private final ServerRoutingConfig routingConfig;
     @Nullable
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    private SelectedConfig(@Nullable SslContextProviderSupplier sslContextProviderSupplier) {
+    private SelectedConfig(ServerRoutingConfig routingConfig,
+                           @Nullable SslContextProviderSupplier sslContextProviderSupplier) {
+      this.routingConfig = checkNotNull(routingConfig, "routingConfig");
       this.sslContextProviderSupplier = sslContextProviderSupplier;
     }
   }

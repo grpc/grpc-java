@@ -205,7 +205,7 @@ public class XdsServerBuilderTest {
         xdsClient,
         CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
             tlsContextManager);
-    verifyServer(future, mockXdsServingStatusListener, null);
+    verifyServer(null, mockXdsServingStatusListener, null);
   }
 
   @Test
