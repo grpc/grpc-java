@@ -1906,7 +1906,7 @@ public abstract class AbstractInteropTest {
   }
 
   private SoakIterationResult performOneSoakIteration(boolean resetChannel) throws Exception {
-    long startMs = System.currentTimeMillis();
+    long startNs = System.nanoTime();
     Status status = Status.OK;
     ManagedChannel soakChannel = channel;
     TestServiceGrpc.TestServiceBlockingStub soakStub = blockingStub;
@@ -1928,12 +1928,12 @@ public abstract class AbstractInteropTest {
     } catch (StatusRuntimeException e) {
       status = e.getStatus();
     }
-    long elapsedMs = System.currentTimeMillis() - startMs;
+    long elapsedNs = System.nanoTime() - startNs;
     if (resetChannel) {
       soakChannel.shutdownNow();
       soakChannel.awaitTermination(10, TimeUnit.SECONDS);
     }
-    return new SoakIterationResult(elapsedMs, status);
+    return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
   }
 
   /**
@@ -1950,9 +1950,9 @@ public abstract class AbstractInteropTest {
     int iterationsDone = 0;
     int totalFailures = 0;
     Histogram latencies = new Histogram(4 /* number of significant value digits */);
-    long startMs = System.currentTimeMillis();
+    long startNs = System.nanoTime();
     for (int i = 0; i < soakIterations; i++) {
-      if (System.currentTimeMillis() - startMs >= overallTimeoutSeconds * 1e3) {
+      if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
         break;
       }
       SoakIterationResult result = performOneSoakIteration(resetChannelPerIteration);
@@ -1960,17 +1960,17 @@ public abstract class AbstractInteropTest {
         totalFailures++;
         System.err.println(
             String.format(
-                "soak iteration: %d elapsedMs: %d failed: %s",
+                "soak iteration: %d elapsed: %d ms failed: %s",
                 i, result.getLatencyMs(), result.getStatus()));
       } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
         totalFailures++;
         System.err.println(
             String.format(
-                "soak iteration: %d elapsedMs: %d ms exceeds max acceptable latency: %d ",
+                "soak iteration: %d elapsed %d ms exceeds max acceptable latency: %d ",
                 i, result.getLatencyMs(), maxAcceptablePerIterationLatencyMs));
       } else {
         System.err.println(
-            String.format("soak iteration: %d elapsedMs: %d succeeded", i, result.getLatencyMs()));
+            String.format("soak iteration: %d elapsed: %d ms succeeded", i, result.getLatencyMs()));
       }
       iterationsDone++;
       latencies.recordValue(result.getLatencyMs());
@@ -1983,7 +1983,7 @@ public abstract class AbstractInteropTest {
                 + "max acceptable per iteration latency ms: %d\n"
                 + " p50 soak iteration latency: %d ms\n"
                 + " p90 soak iteration latency: %d ms\n"
-                + " p100 soak iteration latency: %d ms\n"
+                + "p100 soak iteration latency: %d ms\n"
                 + "See breakdown above for which iterations succeeded, failed, and "
                 + "why for more info.",
             iterationsDone,
