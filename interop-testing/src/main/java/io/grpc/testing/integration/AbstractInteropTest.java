@@ -1966,9 +1966,9 @@ public abstract class AbstractInteropTest {
         totalFailures++;
         System.err.println(
             String.format(
-                " ms exceeds max acceptable latency: %d ", maxAcceptablePerIterationLatencyMs));
+                " exceeds max acceptable latency: %d", maxAcceptablePerIterationLatencyMs));
       } else {
-        System.err.println(String.format(" succeeded", result.getLatencyMs()));
+        System.err.println(" succeeded");
       }
       iterationsDone++;
       latencies.recordValue(result.getLatencyMs());
