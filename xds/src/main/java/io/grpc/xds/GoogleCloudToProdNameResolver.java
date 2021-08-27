@@ -184,11 +184,11 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
           ImmutableMap.of("TRAFFICDIRECTOR_DIRECTPATH_C2P_IPV6_CAPABLE", true));
     }
     ImmutableMap.Builder<String, Object> serverBuilder = ImmutableMap.builder();
-    String server_uri = "directpath-pa.googleapis.com";
+    String serverUri = "directpath-pa.googleapis.com";
     if (serverUriOverride != null && serverUriOverride.length() > 0) {
-      server_uri = serverUriOverride;
+      serverUri = serverUriOverride;
     }
-    serverBuilder.put("server_uri", server_uri);
+    serverBuilder.put("server_uri", serverUri);
     serverBuilder.put("channel_creds",
         ImmutableList.of(ImmutableMap.of("type", "google_default")));
     serverBuilder.put("server_features", ImmutableList.of("xds_v3"));
