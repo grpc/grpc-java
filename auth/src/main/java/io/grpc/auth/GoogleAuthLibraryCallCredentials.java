@@ -42,11 +42,9 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * Wraps {@link Credentials} as a {@link CallCredentials}.
+ * Wraps {@link Credentials} as a {@link io.grpc.CallCredentials}.
  */
-// TODO(zhangkun83): remove the suppression after we change the base class to CallCredential
-@SuppressWarnings("deprecation")
-final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials2 {
+final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials {
   private static final Logger log
       = Logger.getLogger(GoogleAuthLibraryCallCredentials.class.getName());
   private static final JwtHelper jwtHelper
