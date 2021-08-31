@@ -55,7 +55,6 @@ import io.opencensus.tags.propagation.TagContextSerializationException;
 import io.opencensus.tags.unsafe.ContextUtils;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -356,12 +355,12 @@ final class CensusStatsModule {
         if (module.recordFinishedRpcs) {
           // Stream is closed early. So no need to record metrics for any inbound events after this
           // point.
-          recordFinishedRpc();
+          recordFinishedAttempt();
         }
       } // Otherwise will report stats in callEnded() to guarantee all inbound metrics are recorded.
     }
 
-    void recordFinishedRpc() {
+    void recordFinishedAttempt() {
       MeasureMap measureMap = module.statsRecorder.newMeasureMap()
           // TODO(songya): remove the deprecated measure constants once they are completed removed.
           .put(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT, 1)
@@ -405,30 +404,10 @@ final class CensusStatsModule {
         Measure.MeasureDouble.create(
             "grpc.io/client/retry_delay_per_call", "Retry delay per call", "ms");
 
-    @Nullable
-    private static final AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> callEndedUpdater;
-
-    /**
-     * When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in their
-     * JDK reflection API that triggers a NoSuchFieldException. When this occurs, we fallback to
-     * (potentially racy) direct updates of the volatile variables.
-     */
-    static {
-      AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> tmpCallEndedUpdater;
-      try {
-        tmpCallEndedUpdater =
-            AtomicIntegerFieldUpdater.newUpdater(CallAttemptsTracerFactory.class, "callEnded");
-      } catch (Throwable t) {
-        logger.log(Level.SEVERE, "Creating atomic field updaters failed", t);
-        tmpCallEndedUpdater = null;
-      }
-      callEndedUpdater = tmpCallEndedUpdater;
-    }
-
     ClientTracer inboundMetricTracer;
     private final CensusStatsModule module;
     private final Stopwatch stopwatch;
-    private volatile int callEnded;
+    private boolean callEnded;
     private final TagContext parentCtx;
     private final TagContext startCtx;
     private final String fullMethodName;
@@ -436,17 +415,18 @@ final class CensusStatsModule {
     // TODO(zdapeng): optimize memory allocation using AtomicFieldUpdater.
     private final AtomicLong attemptsPerCall = new AtomicLong();
     private final AtomicLong transparentRetriesPerCall = new AtomicLong();
-    private final AtomicLong retryDelayNanos = new AtomicLong();
-    private final AtomicLong lastInactiveTimeStamp = new AtomicLong();
-    private final AtomicInteger activeStreams = new AtomicInteger();
-    private final AtomicBoolean activated = new AtomicBoolean();
+    private Status status;
+    private final Object lock = new Object();
+    private long retryDelayNanos;
+    private int activeStreams;
+    private boolean finishedCallToBeRecorded;
 
     CallAttemptsTracerFactory(
         CensusStatsModule module, TagContext parentCtx, String fullMethodName) {
       this.module = checkNotNull(module, "module");
       this.parentCtx = checkNotNull(parentCtx, "parentCtx");
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
-      this.stopwatch = module.stopwatchSupplier.get().start();
+      this.stopwatch = module.stopwatchSupplier.get();
       TagValue methodTag = TagValue.create(fullMethodName);
       startCtx = module.tagger.toBuilder(parentCtx)
           .putLocal(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
@@ -461,10 +441,14 @@ final class CensusStatsModule {
 
     @Override
     public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata metadata) {
-      ClientTracer tracer = new ClientTracer(this, module, parentCtx, startCtx, info);
-      if (activeStreams.incrementAndGet() == 1) {
-        if (!activated.compareAndSet(false, true)) {
-          retryDelayNanos.addAndGet(stopwatch.elapsed(TimeUnit.NANOSECONDS));
+      synchronized (lock) {
+        if (finishedCallToBeRecorded) {
+          // This can be the case when the called is cancelled but a retry attempt is created.
+          return new ClientStreamTracer() {};
+        }
+        if (++activeStreams == 1 && stopwatch.isRunning()) {
+          stopwatch.stop();
+          retryDelayNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
         }
       }
       if (module.recordStartedRpcs && attemptsPerCall.get() > 0) {
@@ -477,42 +461,58 @@ final class CensusStatsModule {
       } else {
         attemptsPerCall.incrementAndGet();
       }
-      return tracer;
+      return new ClientTracer(this, module, parentCtx, startCtx, info);
     }
 
     // Called whenever each attempt is ended.
     void attemptEnded() {
-      if (activeStreams.decrementAndGet() == 0) {
-        // Race condition between two extremely close events does not matter because the difference
-        // in the result would be very small.
-        long lastInactiveTimeStamp =
-            this.lastInactiveTimeStamp.getAndSet(stopwatch.elapsed(TimeUnit.NANOSECONDS));
-        retryDelayNanos.addAndGet(-lastInactiveTimeStamp);
+      if (!module.recordFinishedRpcs) {
+        return;
+      }
+      boolean shouldRecordFinishedCall = false;
+      synchronized (lock) {
+        if (--activeStreams == 0) {
+          stopwatch.start();
+          if (callEnded && !finishedCallToBeRecorded) {
+            shouldRecordFinishedCall = true;
+            finishedCallToBeRecorded = true;
+          }
+        }
+      }
+      if (shouldRecordFinishedCall) {
+        recordFinishedCall();
       }
     }
 
     void callEnded(Status status) {
-      if (callEndedUpdater != null) {
-        if (callEndedUpdater.getAndSet(this, 1) != 0) {
-          return;
-        }
-      } else {
-        if (callEnded != 0) {
-          return;
-        }
-        callEnded = 1;
-      }
       if (!module.recordFinishedRpcs) {
         return;
       }
-      stopwatch.stop();
+      this.status = status;
+      boolean shouldRecordFinishedCall = false;
+      synchronized (lock) {
+        if (callEnded) {
+          return;
+        }
+        callEnded = true;
+        if (activeStreams == 0 && !finishedCallToBeRecorded) {
+          shouldRecordFinishedCall = true;
+          finishedCallToBeRecorded = true;
+        }
+      }
+      if (shouldRecordFinishedCall) {
+        recordFinishedCall();
+      }
+    }
+
+    void recordFinishedCall() {
       if (attemptsPerCall.get() == 0) {
         ClientTracer tracer = new ClientTracer(this, module, parentCtx, startCtx, null);
         tracer.roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
         tracer.statusCode = status.getCode();
-        tracer.recordFinishedRpc();
+        tracer.recordFinishedAttempt();
       } else if (inboundMetricTracer != null) {
-        inboundMetricTracer.recordFinishedRpc();
+        inboundMetricTracer.recordFinishedAttempt();
       }
 
       long retriesPerCall = 0;
@@ -523,7 +523,7 @@ final class CensusStatsModule {
       MeasureMap measureMap = module.statsRecorder.newMeasureMap()
           .put(RETRIES_PER_CALL, retriesPerCall)
           .put(TRANSPARENT_RETRIES_PER_CALL, transparentRetriesPerCall.get())
-          .put(RETRY_DELAY_PER_CALL, retryDelayNanos.get() / NANOS_PER_MILLI);
+          .put(RETRY_DELAY_PER_CALL, retryDelayNanos / NANOS_PER_MILLI);
       TagValue methodTag = TagValue.create(fullMethodName);
       TagValue statusTag = TagValue.create(status.getCode().toString());
       measureMap.record(
