@@ -56,6 +56,7 @@ import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.internal.TimeProvider;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -273,7 +274,8 @@ public abstract class ClientXdsClientTestBase {
                 new Bootstrapper.ServerInfo(
                     SERVER_URI, InsecureChannelCredentials.create(), useProtocolV3())),
             EnvoyProtoData.Node.newBuilder().build(),
-            null,
+            ImmutableMap.of("cert-instance-name",
+                new CertificateProviderInfo("file-watcher", ImmutableMap.<String, Object>of())),
             null);
     xdsClient =
         new ClientXdsClient(
@@ -1327,7 +1329,8 @@ public abstract class ClientXdsClientTestBase {
     Any clusterEds =
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
             null, true,
-            mf.buildUpstreamTlsContext("secret1", "cert1"), "envoy.transport_sockets.tls", null));
+            mf.buildUpstreamTlsContext("cert-instance-name", "cert1"),
+            "envoy.transport_sockets.tls", null));
     List<Any> clusters = ImmutableList.of(
         Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com",
             "dns-service-bar.googleapis.com", 443, "round_robin", null, false, null, null)),
@@ -1343,7 +1346,7 @@ public abstract class ClientXdsClientTestBase {
     CommonTlsContext.CertificateProviderInstance certificateProviderInstance =
         cdsUpdate.upstreamTlsContext().getCommonTlsContext().getCombinedValidationContext()
             .getValidationContextCertificateProviderInstance();
-    assertThat(certificateProviderInstance.getInstanceName()).isEqualTo("secret1");
+    assertThat(certificateProviderInstance.getInstanceName()).isEqualTo("cert-instance-name");
     assertThat(certificateProviderInstance.getCertificateName()).isEqualTo("cert1");
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);

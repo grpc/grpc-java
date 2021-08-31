@@ -84,7 +84,8 @@ public abstract class Bootstrapper {
     private final String pluginName;
     private final Map<String, ?> config;
 
-    CertificateProviderInfo(String pluginName, Map<String, ?> config) {
+    @VisibleForTesting
+    public CertificateProviderInfo(String pluginName, Map<String, ?> config) {
       this.pluginName = checkNotNull(pluginName, "pluginName");
       this.config = checkNotNull(config, "config");
     }
@@ -136,7 +137,7 @@ public abstract class Bootstrapper {
 
     /** Returns the cert-providers config map. */
     public Map<String, CertificateProviderInfo> getCertProviders() {
-      return Collections.unmodifiableMap(certProviders);
+      return certProviders == null ? null : Collections.unmodifiableMap(certProviders);
     }
 
     @Nullable
