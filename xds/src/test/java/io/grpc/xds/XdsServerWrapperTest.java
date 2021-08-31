@@ -221,11 +221,11 @@ public class XdsServerWrapperTest {
     });
     String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
-    HttpConnectionManager hcm_virtual = HttpConnectionManager.forVirtualHosts(
+    HttpConnectionManager hcmVirtual = HttpConnectionManager.forVirtualHosts(
             0L, Collections.singletonList(createVirtualHost("virtual-host-0")),
             new ArrayList<NamedFilterConfig>());
     FilterChain f0 = createFilterChain("filter-chain-0", createRds("rds"));
-    FilterChain f1 = createFilterChain("filter-chain-1", hcm_virtual);
+    FilterChain f1 = createFilterChain("filter-chain-1", hcmVirtual);
     xdsClient.deliverLdsUpdate(Collections.singletonList(f0), f1);
     xdsServerWrapper.shutdown();
     when(mockServer.isTerminated()).thenReturn(true);
@@ -402,9 +402,9 @@ public class XdsServerWrapperTest {
     String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
     VirtualHost virtualHost = createVirtualHost("virtual-host-0");
-    HttpConnectionManager hcm_virtual = HttpConnectionManager.forVirtualHosts(
+    HttpConnectionManager hcmVirtual = HttpConnectionManager.forVirtualHosts(
             0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
-    EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", hcm_virtual);
+    EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", hcmVirtual);
     EnvoyServerProtoData.FilterChain f1 = createFilterChain("filter-chain-1", createRds("r0"));
     xdsClient.rdsCount = new CountDownLatch(3);
     xdsClient.deliverLdsUpdate(Arrays.asList(f0, f1), null);
@@ -429,7 +429,7 @@ public class XdsServerWrapperTest {
     verify(mockServer).start();
     assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
             f0, ServerRoutingConfig.create(
-                    hcm_virtual.httpFilterConfigs(), hcm_virtual.virtualHosts()),
+                    hcmVirtual.httpFilterConfigs(), hcmVirtual.virtualHosts()),
             f2, ServerRoutingConfig.create(f2.getHttpConnectionManager().httpFilterConfigs(),
                     Collections.singletonList(createVirtualHost("virtual-host-1")))
     ));
@@ -527,9 +527,9 @@ public class XdsServerWrapperTest {
     String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
     VirtualHost virtualHost = createVirtualHost("virtual-host-0");
-    HttpConnectionManager hcm_virtual = HttpConnectionManager.forVirtualHosts(
+    HttpConnectionManager hcmVirtual = HttpConnectionManager.forVirtualHosts(
             0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
-    EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", hcm_virtual);
+    EnvoyServerProtoData.FilterChain f0 = createFilterChain("filter-chain-0", hcmVirtual);
     EnvoyServerProtoData.FilterChain f1 = createFilterChain("filter-chain-1", createRds("r0"));
     xdsClient.deliverLdsUpdate(Arrays.asList(f0, f1), null);
     xdsClient.rdsCount.await();
