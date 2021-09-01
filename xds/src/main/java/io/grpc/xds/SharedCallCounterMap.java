@@ -52,6 +52,7 @@ final class SharedCallCounterMap implements CallCounterProvider {
 
   @Override
   public synchronized AtomicLong getOrCreate(String cluster, @Nullable String edsServiceName) {
+    cleanQueue();
     Map<String, CounterReference> clusterCounters = counters.get(cluster);
     if (clusterCounters == null) {
       clusterCounters = new HashMap<>();
@@ -64,7 +65,6 @@ final class SharedCallCounterMap implements CallCounterProvider {
       ref = new CounterReference(counter, refQueue, cluster, edsServiceName);
       clusterCounters.put(edsServiceName, ref);
     }
-    cleanQueue();
     return counter;
   }
 
