@@ -16,6 +16,8 @@
 
 package io.grpc.stub;
 
+import io.grpc.ExperimentalApi;
+
 /**
  * A refinement of {@link CallStreamObserver} to allows for interaction with call
  * cancellation events on the server side.
@@ -166,5 +168,6 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    *
    * @param onFinishHandler to call when the call has been correctly finished.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8467")
   public abstract void setOnFinishHandler(Runnable onFinishHandler);
 }
