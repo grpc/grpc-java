@@ -145,10 +145,17 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
   public abstract void setMessageCompression(boolean enable);
 
   /**
-   * Sets a {@link Runnable} to be called when the call is successfully completed from the server's
-   * point of view: all the messages have been put on the wire and the stream has been closed.
+   * Sets a {@link Runnable} to be executed when the call is correctly finished from the server's
+   * point of view: either {@link #onCompleted()} or {@link #onError(Throwable)} has been called,
+   * all the messages and trailing metadata have been put on the wire and the stream has been
+   * closed.
    * Note however that the client still may have not received all the messages due to race
    * conditions or crashes.
+   *
+   * <p>
+   * Unless server exits abruptly, if both {@code onFinishHandler} and {@code onCancelHandler} are
+   * set, then after a call to either {@link #onCompleted()} or {@link #onError(Throwable)} exactly
+   * 1 of {@code onFinishHandler} and {@code onCancelHandler} will be called eventually.</p>
    *
    * <p>It is guaranteed that execution of the {@link Runnable} is serialized with calls to the
    * 'inbound' {@link StreamObserver}. That also means that the callback will be delayed if other
@@ -157,7 +164,7 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    * <p>This method may only be called during the initial call to the application, before the
    * service returns its {@code StreamObserver}.</p>
    *
-   * @param onSuccessHandler to call when the call has been successfully completed
+   * @param onFinishHandler to call when the call has been correctly finished.
    */
-  public abstract void setOnSuccessHandler(Runnable onSuccessHandler);
+  public abstract void setOnFinishHandler(Runnable onFinishHandler);
 }

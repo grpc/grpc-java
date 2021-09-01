@@ -209,8 +209,8 @@ public final class ServerCalls {
 
       @Override
       public void onComplete() {
-        if (responseObserver.onSuccessHandler != null) {
-          responseObserver.onSuccessHandler.run();
+        if (responseObserver.onFinishHandler != null) {
+          responseObserver.onFinishHandler.run();
         }
       }
     }
@@ -301,8 +301,8 @@ public final class ServerCalls {
 
       @Override
       public void onComplete() {
-        if (responseObserver.onSuccessHandler != null) {
-          responseObserver.onSuccessHandler.run();
+        if (responseObserver.onFinishHandler != null) {
+          responseObserver.onFinishHandler.run();
         }
       }
     }
@@ -334,7 +334,7 @@ public final class ServerCalls {
     private Runnable onCancelHandler;
     private boolean aborted = false;
     private boolean completed = false;
-    private Runnable onSuccessHandler;
+    private Runnable onFinishHandler;
 
     // Non private to avoid synthetic class
     ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call, boolean serverStreamingOrBidi) {
@@ -440,11 +440,11 @@ public final class ServerCalls {
     }
 
     @Override
-    public void setOnSuccessHandler(Runnable onSuccessHandler) {
-      checkState(!frozen, "Cannot alter onSuccessHandler after initialization. May only be called "
+    public void setOnFinishHandler(Runnable onFinishHandler) {
+      checkState(!frozen, "Cannot alter onFinishHandler after initialization. May only be called "
           + "during the initial call to the application, before the service returns its "
           + "StreamObserver");
-      this.onSuccessHandler = onSuccessHandler;
+      this.onFinishHandler = onFinishHandler;
     }
   }
 

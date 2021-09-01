@@ -200,8 +200,8 @@ public class ServerCallsTest {
   }
 
   @Test
-  public void onSuccessHandlerCalledIfSet() throws Exception {
-    final AtomicBoolean onSuccess = new AtomicBoolean();
+  public void onFinishHandlerCalledIfSet() throws Exception {
+    final AtomicBoolean onFinish = new AtomicBoolean();
     final AtomicReference<ServerCallStreamObserver<Integer>> callObserver =
         new AtomicReference<>();
     ServerCallHandler<Integer, Integer> callHandler =
@@ -212,10 +212,10 @@ public class ServerCallsTest {
                 ServerCallStreamObserver<Integer> serverCallObserver =
                     (ServerCallStreamObserver<Integer>) responseObserver;
                 callObserver.set(serverCallObserver);
-                serverCallObserver.setOnSuccessHandler(new Runnable() {
+                serverCallObserver.setOnFinishHandler(new Runnable() {
                   @Override
                   public void run() {
-                    onSuccess.set(true);
+                    onFinish.set(true);
                   }
                 });
                 return new ServerCalls.NoopStreamObserver<>();
@@ -224,7 +224,7 @@ public class ServerCallsTest {
     ServerCall.Listener<Integer> callListener =
         callHandler.startCall(serverCall, new Metadata());
     callListener.onComplete();
-    assertTrue(onSuccess.get());
+    assertTrue(onFinish.get());
   }
 
   @Test
@@ -284,7 +284,7 @@ public class ServerCallsTest {
   }
 
   @Test
-  public void cannotSetOnSuccessHandlerAfterServiceInvocation() throws Exception {
+  public void cannotSetOnFinishHandlerAfterServiceInvocation() throws Exception {
     final AtomicReference<ServerCallStreamObserver<Integer>> callObserver =
         new AtomicReference<>();
     ServerCallHandler<Integer, Integer> callHandler =
@@ -300,7 +300,7 @@ public class ServerCallsTest {
         callHandler.startCall(serverCall, new Metadata());
     callListener.onMessage(1);
     try {
-      callObserver.get().setOnSuccessHandler(new Runnable() {
+      callObserver.get().setOnFinishHandler(new Runnable() {
         @Override
         public void run() {
         }
