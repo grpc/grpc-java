@@ -19,9 +19,9 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
-import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.StringValue;
 import com.google.protobuf.UInt32Value;
@@ -46,7 +46,6 @@ import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.core.v3.TransportSocket;
 import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
-import io.envoyproxy.envoy.config.core.v3.WatchedDirectory;
 import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.config.listener.v3.Filter;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
@@ -86,7 +85,6 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsCont
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsParameters;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsSessionTicketKeys;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatchAndSubstitute;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
@@ -1130,12 +1128,34 @@ public class ClientXdsClientDataTest {
         .setLbPolicy(LbPolicy.RING_HASH)
         .build();
 
-    CdsUpdate update = ClientXdsClient.parseCluster(cluster, new HashSet<String>());
+    CdsUpdate update = ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null);
     assertThat(update.lbPolicy()).isEqualTo(CdsUpdate.LbPolicy.RING_HASH);
     assertThat(update.minRingSize())
         .isEqualTo(ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE);
     assertThat(update.maxRingSize())
         .isEqualTo(ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE);
+  }
+
+  @Test
+  public void parseCluster_transportSocketMatches_exception() throws ResourceInvalidException {
+    Cluster cluster = Cluster.newBuilder()
+        .setName("cluster-foo.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder()
+                        .setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-foo.googleapis.com"))
+        .setLbPolicy(LbPolicy.ROUND_ROBIN)
+        .addTransportSocketMatches(
+            Cluster.TransportSocketMatch.newBuilder().setName("match1").build())
+        .build();
+
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage(
+        "Cluster cluster-foo.googleapis.com: transport-socket-matches not supported.");
+    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null);
   }
 
   @Test
@@ -1160,7 +1180,7 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
-    ClientXdsClient.parseCluster(cluster, new HashSet<String>());
+    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null);
   }
 
   @Test
@@ -1187,7 +1207,7 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
-    ClientXdsClient.parseCluster(cluster, new HashSet<String>());
+    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null);
   }
 
   @Test
@@ -1200,7 +1220,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Listener listener1 with invalid traffic direction: OUTBOUND");
     ClientXdsClient.parseServerSideListener(
-        listener, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+        listener, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
 
   @Test
@@ -1214,7 +1234,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Listener listener1 cannot have listener_filters");
     ClientXdsClient.parseServerSideListener(
-        listener, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+        listener, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
 
   @Test
@@ -1228,7 +1248,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Listener listener1 cannot have use_original_dst set to true");
     ClientXdsClient.parseServerSideListener(
-        listener, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+        listener, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
 
   @Test
@@ -1275,7 +1295,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Found duplicate matcher:");
     ClientXdsClient.parseServerSideListener(
-        listener, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+        listener, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
 
   @Test
@@ -1322,7 +1342,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Found duplicate matcher:");
     ClientXdsClient.parseServerSideListener(
-        listener, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+        listener, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
 
   @Test
@@ -1369,7 +1389,7 @@ public class ClientXdsClientDataTest {
             .addAllFilterChains(Arrays.asList(filterChain1, filterChain2))
             .build();
     ClientXdsClient.parseServerSideListener(
-        listener, new HashSet<String>(), null, filterRegistry, true /* does not matter */);
+        listener, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
 
   @Test
@@ -1384,7 +1404,8 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "FilterChain filter-chain-foo missing required HttpConnectionManager filter");
     ClientXdsClient.parseFilterChain(
-        filterChain, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
+        filterChain, new HashSet<String>(), null, filterRegistry, null, null,
+        true /* does not matter */);
   }
 
   @Test
@@ -1402,7 +1423,8 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "FilterChain filter-chain-foo with duplicated filter: envoy.http_connection_manager");
     ClientXdsClient.parseFilterChain(
-        filterChain, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
+        filterChain, new HashSet<String>(), null, filterRegistry, null, null,
+        true /* does not matter */);
   }
 
   @Test
@@ -1420,7 +1442,8 @@ public class ClientXdsClientDataTest {
         "FilterChain filter-chain-foo contains filter envoy.http_connection_manager "
             + "without typed_config");
     ClientXdsClient.parseFilterChain(
-        filterChain, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
+        filterChain, new HashSet<String>(), null, filterRegistry, null, null,
+        true /* does not matter */);
   }
 
   @Test
@@ -1442,7 +1465,8 @@ public class ClientXdsClientDataTest {
         "FilterChain filter-chain-foo contains filter unsupported with unsupported "
             + "typed_config type unsupported-type-url");
     ClientXdsClient.parseFilterChain(
-        filterChain, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
+        filterChain, new HashSet<String>(), null, filterRegistry, null, null,
+        true /* does not matter */);
   }
 
   @Test
@@ -1468,10 +1492,10 @@ public class ClientXdsClientDataTest {
 
     EnvoyServerProtoData.FilterChain parsedFilterChain1 = ClientXdsClient.parseFilterChain(
         filterChain1, new HashSet<String>(), null, filterRegistry, null,
-        true /* does not matter */);
+        null, true /* does not matter */);
     EnvoyServerProtoData.FilterChain parsedFilterChain2 = ClientXdsClient.parseFilterChain(
         filterChain2, new HashSet<String>(), null, filterRegistry, null,
-        true /* does not matter */);
+        null, true /* does not matter */);
     assertThat(parsedFilterChain1.getName()).isNotEqualTo(parsedFilterChain2.getName());
   }
 
@@ -1483,7 +1507,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("common-tls-context with tls_params is not supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -1493,7 +1517,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("common-tls-context with custom_handshaker is not supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -1503,7 +1527,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("common-tls-context with validation_context is not supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -1515,7 +1539,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "common-tls-context with validation_context_sds_secret_config is not supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -1528,7 +1552,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "common-tls-context with validation_context_certificate_provider is not supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -1542,7 +1566,7 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "common-tls-context with validation_context_certificate_provider_instance is not "
             + "supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -1553,8 +1577,65 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "tls_certificate_certificate_provider_instance is required in downstream-tls-context");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, true);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, true);
   }
+
+  @Test
+  public void validateCommonTlsContext_tlsCertificateProviderInstance()
+          throws ResourceInvalidException {
+    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
+        .setTlsCertificateCertificateProviderInstance(
+            CertificateProviderInstance.newBuilder().setInstanceName("name1").build())
+        .build();
+    ClientXdsClient
+        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), true);
+  }
+
+  @Test
+  public void validateCommonTlsContext_tlsCertificateProviderInstance_absentInBootstrapFile()
+          throws ResourceInvalidException {
+    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
+        .setTlsCertificateCertificateProviderInstance(
+            CertificateProviderInstance.newBuilder().setInstanceName("bad-name").build())
+        .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage(
+        "CertificateProvider instance name 'bad-name' not defined in the bootstrap file.");
+    ClientXdsClient
+        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), true);
+  }
+
+  @Test
+  public void validateCommonTlsContext_validationContextProviderInstance()
+          throws ResourceInvalidException {
+    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
+        .setCombinedValidationContext(
+            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
+                .setValidationContextCertificateProviderInstance(
+                    CertificateProviderInstance.newBuilder().setInstanceName("name1").build())
+                .build())
+        .build();
+    ClientXdsClient
+        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), false);
+  }
+
+  @Test
+  public void validateCommonTlsContext_validationContextProviderInstance_absentInBootstrapFile()
+          throws ResourceInvalidException {
+    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
+        .setCombinedValidationContext(
+            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
+                .setValidationContextCertificateProviderInstance(
+                    CertificateProviderInstance.newBuilder().setInstanceName("bad-name").build())
+                .build())
+        .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage(
+        "ValidationContextProvider instance name 'bad-name' not defined in the bootstrap file.");
+    ClientXdsClient
+        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), false);
+  }
+
 
   @Test
   public void validateCommonTlsContext_tlsCertificatesCount() throws ResourceInvalidException {
@@ -1563,7 +1644,7 @@ public class ClientXdsClientDataTest {
             .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("common-tls-context with tls_certificates is not supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -1575,7 +1656,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "common-tls-context with tls_certificate_sds_secret_configs is not supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -1588,7 +1669,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "common-tls-context with tls_certificate_certificate_provider is not supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -1598,7 +1679,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("combined_validation_context is required in upstream-tls-context");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -1612,7 +1693,7 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "validation_context_certificate_provider_instance is required in "
             + "combined_validation_context");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -1631,43 +1712,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("match_subject_alt_names only allowed in upstream_tls_context");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, true);
-  }
-
-  @Test
-  public void validateCommonTlsContext_combinedValContextWithDefaultValidationContextTrustedCa()
-      throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-                .setDefaultValidationContext(CertificateValidationContext.newBuilder()
-                    .setTrustedCa(DataSource.getDefaultInstance())))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("trusted_ca in default_validation_context is not supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
-  }
-
-  @Test
-  public void validateCommonTlsContext_combinedValContextWithDefaultValContextWatchedDirectory()
-      throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-                .setDefaultValidationContext(CertificateValidationContext.newBuilder()
-                    .setWatchedDirectory(WatchedDirectory.getDefaultInstance())))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("watched_directory in default_validation_context is not supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), true);
   }
 
   @Test
@@ -1686,7 +1731,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("verify_certificate_spki in default_validation_context is not "
         + "supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
   }
 
   @Test
@@ -1705,7 +1750,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("verify_certificate_hash in default_validation_context is not "
         + "supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
   }
 
   @Test
@@ -1725,7 +1770,7 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "require_signed_certificate_timestamp in default_validation_context is not "
             + "supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
   }
 
   @Test
@@ -1743,46 +1788,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("crl in default_validation_context is not supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
-  }
-
-  @Test
-  public void validateCommonTlsContext_combinedValContextWithDefaultValContextAllowExpiredCert()
-      throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-                .setDefaultValidationContext(
-                    CertificateValidationContext.newBuilder().setAllowExpiredCertificate(true)))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown
-        .expectMessage("allow_expired_certificate in default_validation_context is not "
-            + "supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
-  }
-
-  @Test
-  public void validateCommonTlsContext_combinedValContextWithDfltValContextTrustChainVerification()
-      throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-                .setDefaultValidationContext(CertificateValidationContext.newBuilder()
-                    .setTrustChainVerification(
-                        CertificateValidationContext.TrustChainVerification.ACCEPT_UNTRUSTED)))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Only VERIFY_TRUST_CHAIN for trust_chain_verification supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
   }
 
   @Test
@@ -1801,7 +1807,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("custom_validator_config in default_validation_context is not "
         + "supported");
-    ClientXdsClient.validateCommonTlsContext(commonTlsContext, false);
+    ClientXdsClient.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
   }
 
   @Test
@@ -1809,7 +1815,7 @@ public class ClientXdsClientDataTest {
     DownstreamTlsContext downstreamTlsContext = DownstreamTlsContext.getDefaultInstance();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("common-tls-context is required in downstream-tls-context");
-    ClientXdsClient.validateDownstreamTlsContext(downstreamTlsContext);
+    ClientXdsClient.validateDownstreamTlsContext(downstreamTlsContext, null);
   }
 
   @Test
@@ -1828,87 +1834,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("downstream-tls-context with require-sni is not supported");
-    ClientXdsClient.validateDownstreamTlsContext(downstreamTlsContext);
-  }
-
-  @Test
-  public void validateDownstreamTlsContext_hasSessionTikcetKeys() throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance()))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-        .build();
-    DownstreamTlsContext downstreamTlsContext = DownstreamTlsContext.newBuilder()
-        .setCommonTlsContext(commonTlsContext)
-        .setSessionTicketKeys(TlsSessionTicketKeys.getDefaultInstance())
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("downstream-tls-context with session_ticket_keys is not supported");
-    ClientXdsClient.validateDownstreamTlsContext(downstreamTlsContext);
-  }
-
-  @Test
-  public void validateDownstreamTlsContext_hasSessionTikcetKeysSdsSecretConfig()
-      throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance()))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-        .build();
-    DownstreamTlsContext downstreamTlsContext = DownstreamTlsContext.newBuilder()
-        .setCommonTlsContext(commonTlsContext)
-        .setSessionTicketKeysSdsSecretConfig(SdsSecretConfig.getDefaultInstance())
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
-        "downstream-tls-context with session_ticket_keys_sds_secret_config is not supported");
-    ClientXdsClient.validateDownstreamTlsContext(downstreamTlsContext);
-  }
-
-  @Test
-  public void validateDownstreamTlsContext_hasDisableStatelessSessionResumption()
-      throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance()))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-        .build();
-    DownstreamTlsContext downstreamTlsContext = DownstreamTlsContext.newBuilder()
-        .setCommonTlsContext(commonTlsContext)
-        .setDisableStatelessSessionResumption(true)
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
-        "downstream-tls-context with disable_stateless_session_resumption is not supported");
-    ClientXdsClient.validateDownstreamTlsContext(downstreamTlsContext);
-  }
-
-  @Test
-  public void validateDownstreamTlsContext_hasSessionTimeout() throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance()))
-        .setTlsCertificateCertificateProviderInstance(
-            CommonTlsContext.CertificateProviderInstance.getDefaultInstance())
-        .build();
-    DownstreamTlsContext downstreamTlsContext = DownstreamTlsContext.newBuilder()
-        .setCommonTlsContext(commonTlsContext)
-        .setSessionTimeout(Duration.getDefaultInstance())
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("downstream-tls-context with session_timeout is not supported");
-    ClientXdsClient.validateDownstreamTlsContext(downstreamTlsContext);
+    ClientXdsClient.validateDownstreamTlsContext(downstreamTlsContext, ImmutableSet.of(""));
   }
 
   @Test
@@ -1928,7 +1854,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "downstream-tls-context with ocsp_staple_policy value STRICT_STAPLING is not supported");
-    ClientXdsClient.validateDownstreamTlsContext(downstreamTlsContext);
+    ClientXdsClient.validateDownstreamTlsContext(downstreamTlsContext, ImmutableSet.of(""));
   }
 
   @Test
@@ -1936,58 +1862,7 @@ public class ClientXdsClientDataTest {
     UpstreamTlsContext upstreamTlsContext = UpstreamTlsContext.getDefaultInstance();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("common-tls-context is required in upstream-tls-context");
-    ClientXdsClient.validateUpstreamTlsContext(upstreamTlsContext);
-  }
-
-  @Test
-  public void validateUpstreamTlsContext_sni() throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance()))
-        .build();
-    UpstreamTlsContext upstreamTlsContext = UpstreamTlsContext.newBuilder()
-        .setCommonTlsContext(commonTlsContext)
-        .setSni("foo")
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("upstream-tls-context with sni is not supported");
-    ClientXdsClient.validateUpstreamTlsContext(upstreamTlsContext);
-  }
-
-  @Test
-  public void validateUpstreamTlsContext_allowRenegotiation() throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance()))
-        .build();
-    UpstreamTlsContext upstreamTlsContext = UpstreamTlsContext.newBuilder()
-        .setCommonTlsContext(commonTlsContext)
-        .setAllowRenegotiation(true)
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("upstream-tls-context with allow_renegotiation is not supported");
-    ClientXdsClient.validateUpstreamTlsContext(upstreamTlsContext);
-  }
-
-  @Test
-  public void validateUpstreamTlsContext_maxSessionKeys() throws ResourceInvalidException {
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setValidationContextCertificateProviderInstance(
-                    CommonTlsContext.CertificateProviderInstance.getDefaultInstance()))
-        .build();
-    UpstreamTlsContext upstreamTlsContext = UpstreamTlsContext.newBuilder()
-        .setCommonTlsContext(commonTlsContext)
-        .setMaxSessionKeys(UInt32Value.getDefaultInstance())
-        .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("upstream-tls-context with max_session_keys is not supported");
-    ClientXdsClient.validateUpstreamTlsContext(upstreamTlsContext);
+    ClientXdsClient.validateUpstreamTlsContext(upstreamTlsContext, null);
   }
 
   private static Filter buildHttpConnectionManagerFilter(HttpFilter... httpFilters) {

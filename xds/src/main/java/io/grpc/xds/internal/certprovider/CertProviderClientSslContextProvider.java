@@ -32,6 +32,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import java.security.cert.CertStoreException;
 import java.security.cert.X509Certificate;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 /** A client SslContext provider using CertificateProviderInstance to fetch secrets. */
 @Internal
@@ -39,7 +40,7 @@ public final class CertProviderClientSslContextProvider extends CertProviderSslC
 
   private CertProviderClientSslContextProvider(
       Node node,
-      Map<String, CertificateProviderInfo> certProviders,
+      @Nullable Map<String, CertificateProviderInfo> certProviders,
       CommonTlsContext.CertificateProviderInstance certInstance,
       CommonTlsContext.CertificateProviderInstance rootCertInstance,
       CertificateValidationContext staticCertValidationContext,
@@ -90,7 +91,7 @@ public final class CertProviderClientSslContextProvider extends CertProviderSslC
     public CertProviderClientSslContextProvider getProvider(
         UpstreamTlsContext upstreamTlsContext,
         Node node,
-        Map<String, CertificateProviderInfo> certProviders) {
+        @Nullable Map<String, CertificateProviderInfo> certProviders) {
       checkNotNull(upstreamTlsContext, "upstreamTlsContext");
       CommonTlsContext commonTlsContext = upstreamTlsContext.getCommonTlsContext();
       CommonTlsContext.CertificateProviderInstance rootCertInstance = null;

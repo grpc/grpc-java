@@ -42,7 +42,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
 
   protected CertProviderSslContextProvider(
       Node node,
-      Map<String, CertificateProviderInfo> certProviders,
+      @Nullable Map<String, CertificateProviderInfo> certProviders,
       CertificateProviderInstance certInstance,
       CertificateProviderInstance rootCertInstance,
       CertificateValidationContext staticCertValidationContext,
@@ -56,8 +56,8 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
       certInstanceName = certInstance.getInstanceName();
       CertificateProviderInfo certProviderInstanceConfig =
           getCertProviderConfig(certProviders, certInstanceName);
-      certHandle =
-          certificateProviderStore.createOrGetProvider(
+      certHandle = certProviderInstanceConfig == null ? null
+          : certificateProviderStore.createOrGetProvider(
               certInstance.getCertificateName(),
               certProviderInstanceConfig.getPluginName(),
               certProviderInstanceConfig.getConfig(),
@@ -71,8 +71,8 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
         && !rootCertInstance.getInstanceName().equals(certInstanceName)) {
       CertificateProviderInfo certProviderInstanceConfig =
           getCertProviderConfig(certProviders, rootCertInstance.getInstanceName());
-      rootCertHandle =
-          certificateProviderStore.createOrGetProvider(
+      rootCertHandle = certProviderInstanceConfig == null ? null
+          : certificateProviderStore.createOrGetProvider(
               rootCertInstance.getCertificateName(),
               certProviderInstanceConfig.getPluginName(),
               certProviderInstanceConfig.getConfig(),
@@ -84,8 +84,8 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   }
 
   private static CertificateProviderInfo getCertProviderConfig(
-      Map<String, CertificateProviderInfo> certProviders, String pluginInstanceName) {
-    return certProviders.get(pluginInstanceName);
+      @Nullable Map<String, CertificateProviderInfo> certProviders, String pluginInstanceName) {
+    return certProviders != null ? certProviders.get(pluginInstanceName) : null;
   }
 
   @Override

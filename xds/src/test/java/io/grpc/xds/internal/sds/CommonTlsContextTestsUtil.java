@@ -146,7 +146,7 @@ public class CommonTlsContextTestsUtil {
     if (certName != null || validationContextCertName != null || useSans) {
       commonTlsContext = buildCommonTlsContextWithAdditionalValues(
           "cert-instance-name", certName,
-          "val-cert-instance-name", validationContextCertName,
+          "cert-instance-name", validationContextCertName,
           useSans ? Arrays.asList(
               StringMatcher.newBuilder()
                   .setExact("spiffe://grpc-sds-testing.svc.id.goog/ns/default/sa/bob")
