@@ -136,6 +136,7 @@ public abstract class Bootstrapper {
     }
 
     /** Returns the cert-providers config map. */
+    @Nullable
     public Map<String, CertificateProviderInfo> getCertProviders() {
       return certProviders == null ? null : Collections.unmodifiableMap(certProviders);
     }
