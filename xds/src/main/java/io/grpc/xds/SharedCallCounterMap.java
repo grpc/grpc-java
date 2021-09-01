@@ -52,28 +52,19 @@ final class SharedCallCounterMap implements CallCounterProvider {
 
   @Override
   public synchronized AtomicLong getOrCreate(String cluster, @Nullable String edsServiceName) {
-    AtomicLong counter = null;
     Map<String, CounterReference> clusterCounters = counters.get(cluster);
-    if (clusterCounters != null) {
-      CounterReference ref = clusterCounters.get(edsServiceName);
-      if (ref != null) {
-        counter = ref.get();
-      }
-    }
-    // In the case of ref.get() == null, must call cleanQueue() prior to creating a new map entry,
-    // otherwise the new entry will be deleted by any later cleanQueue().
-    cleanQueue();
-    if (counter != null) {
-      return counter;
-    }
-    clusterCounters = counters.get(cluster);
     if (clusterCounters == null) {
       clusterCounters = new HashMap<>();
       counters.put(cluster, clusterCounters);
     }
-    counter = new AtomicLong();
-    CounterReference ref = new CounterReference(counter, refQueue, cluster, edsServiceName);
-    clusterCounters.put(edsServiceName, ref);
+    CounterReference ref = clusterCounters.get(edsServiceName);
+    AtomicLong counter;
+    if (ref == null || (counter = ref.get()) == null) {
+      counter = new AtomicLong();
+      ref = new CounterReference(counter, refQueue, cluster, edsServiceName);
+      clusterCounters.put(edsServiceName, ref);
+    }
+    cleanQueue();
     return counter;
   }
 
@@ -82,6 +73,9 @@ final class SharedCallCounterMap implements CallCounterProvider {
     CounterReference ref;
     while ((ref = (CounterReference) refQueue.poll()) != null) {
       Map<String, CounterReference> clusterCounter = counters.get(ref.cluster);
+      if (clusterCounter.get(ref.edsServiceName) != ref) {
+        continue;
+      }
       clusterCounter.remove(ref.edsServiceName);
       if (clusterCounter.isEmpty()) {
         counters.remove(ref.cluster);
