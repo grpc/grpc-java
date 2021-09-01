@@ -61,6 +61,7 @@ import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Provides factories for {@link StreamTracer} that records stats to Census.
@@ -407,6 +408,7 @@ final class CensusStatsModule {
     ClientTracer inboundMetricTracer;
     private final CensusStatsModule module;
     private final Stopwatch stopwatch;
+    @GuardedBy("lock")
     private boolean callEnded;
     private final TagContext parentCtx;
     private final TagContext startCtx;
@@ -415,10 +417,14 @@ final class CensusStatsModule {
     // TODO(zdapeng): optimize memory allocation using AtomicFieldUpdater.
     private final AtomicLong attemptsPerCall = new AtomicLong();
     private final AtomicLong transparentRetriesPerCall = new AtomicLong();
+    // write happens before read
     private Status status;
     private final Object lock = new Object();
+    // write @GuardedBy("lock") and happens before read
     private long retryDelayNanos;
+    @GuardedBy("lock")
     private int activeStreams;
+    @GuardedBy("lock")
     private boolean finishedCallToBeRecorded;
 
     CallAttemptsTracerFactory(
