@@ -61,7 +61,7 @@ final class SharedCallCounterMap implements CallCounterProvider {
       }
     }
     // In the case of ref.get() == null, must call cleanQueue() prior to creating a new map entry,
-    // otherwise the new entry will be deleted be any cleanQueue().
+    // otherwise the new entry will be deleted by any later cleanQueue().
     cleanQueue();
     if (counter != null) {
       return counter;
