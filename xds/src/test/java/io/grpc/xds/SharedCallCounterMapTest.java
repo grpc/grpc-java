@@ -62,4 +62,22 @@ public class SharedCallCounterMapTest {
     map.cleanQueue();
     assertThat(counters).isEmpty();
   }
+
+  @Test
+  public void gcAndRecreate() {
+    @SuppressWarnings("UnusedVariable") // assign to null for GC only
+    AtomicLong counter = map.getOrCreate(CLUSTER, EDS_SERVICE_NAME);
+    final CounterReference ref = counters.get(CLUSTER).get(EDS_SERVICE_NAME);
+    assertThat(counter.get()).isEqualTo(0);
+    counter = null;
+    GcFinalization.awaitDone(new FinalizationPredicate() {
+      @Override
+      public boolean isDone() {
+        return ref.isEnqueued();
+      }
+    });
+    map.getOrCreate(CLUSTER, EDS_SERVICE_NAME);
+    assertThat(counters.get(CLUSTER)).isNotNull();
+    assertThat(counters.get(CLUSTER).get(EDS_SERVICE_NAME)).isNotNull();
+  }
 }
