@@ -308,19 +308,16 @@ public class ServerCallsTest {
 
   @Test
   public void cannotSetOnFinishHandlerAfterServiceInvocation() throws Exception {
-    final AtomicReference<ServerCallStreamObserver<Integer>> callObserver =
-        new AtomicReference<>();
-    ServerCallHandler<Integer, Integer> callHandler =
-        ServerCalls.asyncBidiStreamingCall(
-            new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
-              @Override
-              public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
-                callObserver.set((ServerCallStreamObserver<Integer>) responseObserver);
-                return new ServerCalls.NoopStreamObserver<>();
-              }
-            });
-    ServerCall.Listener<Integer> callListener =
-        callHandler.startCall(serverCall, new Metadata());
+    final AtomicReference<ServerCallStreamObserver<Integer>> callObserver = new AtomicReference<>();
+    ServerCallHandler<Integer, Integer> callHandler = ServerCalls.asyncBidiStreamingCall(
+        new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
+          @Override
+          public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
+            callObserver.set((ServerCallStreamObserver<Integer>) responseObserver);
+            return new ServerCalls.NoopStreamObserver<>();
+          }
+        });
+    ServerCall.Listener<Integer> callListener = callHandler.startCall(serverCall, new Metadata());
     callListener.onMessage(1);
     try {
       callObserver.get().setOnFinishHandler(new Runnable() {
