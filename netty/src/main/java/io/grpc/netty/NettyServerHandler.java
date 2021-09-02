@@ -69,7 +69,6 @@ import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Exception.StreamException;
-import io.netty.handler.codec.http2.Http2FlowController;
 import io.netty.handler.codec.http2.Http2FrameAdapter;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2FrameReader;
@@ -367,23 +366,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       keepAliveManager.onTransportStarted();
     }
 
-
-    if (transportTracer != null) {
-      assert encoder().connection().equals(decoder().connection());
-      final Http2Connection connection = encoder().connection();
-      transportTracer.setFlowControlWindowReader(new TransportTracer.FlowControlReader() {
-        private final Http2FlowController local = connection.local().flowController();
-        private final Http2FlowController remote = connection.remote().flowController();
-
-        @Override
-        public TransportTracer.FlowControlWindows read() {
-          assert ctx.executor().inEventLoop();
-          return new TransportTracer.FlowControlWindows(
-              local.windowSize(connection.connectionStream()),
-              remote.windowSize(connection.connectionStream()));
-        }
-      });
-    }
+    assert encoder().connection().equals(decoder().connection());
+    transportTracer.setFlowControlWindowReader(new Utils.FlowControlReader(encoder().connection()));
 
     super.handlerAdded(ctx);
   }
@@ -895,16 +879,14 @@ class NettyServerHandler extends AbstractNettyHandler {
       ChannelFuture pingFuture = encoder().writePing(
           ctx, false /* isAck */, KEEPALIVE_PING, ctx.newPromise());
       ctx.flush();
-      if (transportTracer != null) {
-        pingFuture.addListener(new ChannelFutureListener() {
-          @Override
-          public void operationComplete(ChannelFuture future) throws Exception {
-            if (future.isSuccess()) {
-              transportTracer.reportKeepAliveSent();
-            }
+      pingFuture.addListener(new ChannelFutureListener() {
+        @Override
+        public void operationComplete(ChannelFuture future) throws Exception {
+          if (future.isSuccess()) {
+            transportTracer.reportKeepAliveSent();
           }
-        });
-      }
+        }
+      });
     }
 
     @Override
