@@ -16,6 +16,8 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.auth:google-auth-library-oauth2-http:0.22.0",
     "com.google.code.findbugs:jsr305:3.0.2",
     "com.google.code.gson:gson:jar:2.8.6",
+    "com.google.auto.value:auto-value:1.7.4",
+    "com.google.auto.value:auto-value-annotations:1.7.4",
     "com.google.errorprone:error_prone_annotations:2.9.0",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:30.1-android",
