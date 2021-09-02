@@ -357,6 +357,70 @@ public class RetryTest {
   }
 
   @Test
+  public void statsRecorde_callCancelledBeforeCommit() throws Exception {
+    startNewServer();
+    retryPolicy = ImmutableMap.<String, Object>builder()
+        .put("maxAttempts", 4D)
+        .put("initialBackoff", "10s")
+        .put("maxBackoff", "10s")
+        .put("backoffMultiplier", 1D)
+        .put("retryableStatusCodes", Arrays.<Object>asList("UNAVAILABLE"))
+        .build();
+    createNewChannel();
+
+    // We will have streamClosed return at a particular moment that we want.
+    final CountDownLatch streamClosedLatch = new CountDownLatch(1);
+    ClientStreamTracer.Factory streamTracerFactory = new ClientStreamTracer.Factory() {
+      @Override
+      public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+        return new ClientStreamTracer() {
+          @Override
+          public void streamClosed(Status status) {
+            if (status.getCode().equals(Code.CANCELLED)) {
+              try {
+                streamClosedLatch.await();
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("streamClosedLatch interrupted", e);
+              }
+            }
+          }
+        };
+      }
+    };
+    ClientCall<String, Integer> call = channel.newCall(
+        clientStreamingMethod, CallOptions.DEFAULT.withStreamTracerFactory(streamTracerFactory));
+    call.start(mockCallListener, new Metadata());
+    assertRpcStartedRecorded();
+    fakeClock.forwardTime(5, SECONDS);
+    String message = "String of length 20.";
+    call.sendMessage(message);
+    assertOutboundMessageRecorded();
+    ServerCall<String, Integer> serverCall = serverCalls.poll(5, SECONDS);
+    serverCall.request(2);
+    assertOutboundWireSizeRecorded(message.length());
+    // trigger retry
+    serverCall.close(
+        Status.UNAVAILABLE.withDescription("original attempt failed"),
+        new Metadata());
+    assertRpcStatusRecorded(Code.UNAVAILABLE, 5000, 1);
+    elapseBackoff(10, SECONDS);
+    assertRpcStartedRecorded();
+    assertOutboundMessageRecorded();
+    serverCall = serverCalls.poll(5, SECONDS);
+    serverCall.request(2);
+    assertOutboundWireSizeRecorded(message.length());
+    fakeClock.forwardTime(7, SECONDS);
+    call.cancel("Cancelled before commit", null); // A noop substream will commit.
+    // The call listener is closed, but the netty substream listener is not yet closed.
+    verify(mockCallListener, timeout(5000)).onClose(any(Status.class), any(Metadata.class));
+    // Let the netty substream listener be closed.
+    streamClosedLatch.countDown();
+    assertRetryStatsRecorded(1, 0, 10_000);
+    assertRpcStatusRecorded(Code.CANCELLED, 7_000, 1);
+  }
+
+  @Test
   public void serverCancelledAndClientDeadlineExceeded() throws Exception {
     startNewServer();
     createNewChannel();
