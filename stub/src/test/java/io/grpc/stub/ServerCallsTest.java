@@ -202,14 +202,12 @@ public class ServerCallsTest {
   @Test
   public void onFinishHandlerCalledIfSetInStreamingClientCall() throws Exception {
     final AtomicBoolean onFinish = new AtomicBoolean();
-    final AtomicReference<ServerCallStreamObserver<Integer>> callObserver = new AtomicReference<>();
     ServerCallHandler<Integer, Integer> callHandler = ServerCalls.asyncBidiStreamingCall(
         new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
           @Override
           public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
             ServerCallStreamObserver<Integer> serverCallObserver =
                 (ServerCallStreamObserver<Integer>) responseObserver;
-            callObserver.set(serverCallObserver);
             serverCallObserver.setOnFinishHandler(new Runnable() {
               @Override
               public void run() {
@@ -227,14 +225,12 @@ public class ServerCallsTest {
   @Test
   public void onFinishHandlerCalledIfSetInUnaryClientCall() throws Exception {
     final AtomicBoolean onFinish = new AtomicBoolean();
-    final AtomicReference<ServerCallStreamObserver<Integer>> callObserver = new AtomicReference<>();
     ServerCallHandler<Integer, Integer> callHandler = ServerCalls.asyncServerStreamingCall(
         new ServerCalls.ServerStreamingMethod<Integer, Integer>() {
           @Override
           public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
             ServerCallStreamObserver<Integer> serverCallObserver =
                 (ServerCallStreamObserver<Integer>) responseObserver;
-            callObserver.set(serverCallObserver);
             serverCallObserver.setOnFinishHandler(new Runnable() {
               @Override
               public void run() {
