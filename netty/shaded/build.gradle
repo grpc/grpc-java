@@ -110,8 +110,9 @@ class NettyResourceTransformer implements Transformer {
 
     @Override
     void transform(TransformerContext context) {
+        String updatedPath = context.path.replace("io.netty", "io.grpc.netty.shaded.io.netty")
         String updatedContent = context.is.getText().replace("io.netty", "io.grpc.netty.shaded.io.netty")
-        resources.put(context.path, updatedContent)
+        resources.put(updatedPath, updatedContent)
     }
 
     @Override
