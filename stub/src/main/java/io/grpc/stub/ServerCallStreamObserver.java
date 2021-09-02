@@ -154,14 +154,13 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    * Note however that the client still may have not received all the messages due to race
    * conditions or crashes.
    *
-   * <p>
-   * Unless server exits abruptly, if both {@code onFinishHandler} and {@code onCancelHandler} are
-   * set, then after a call to either {@link #onCompleted()} or {@link #onError(Throwable)} exactly
-   * 1 of {@code onFinishHandler} and {@code onCancelHandler} will be called eventually.</p>
+   * <p>Unless server exits abruptly, if both {@code onFinishHandler} and {@code onCancelHandler}
+   * are set, then after a call to either {@link #onCompleted()} or {@link #onError(Throwable)}
+   * exactly 1 of {@code onFinishHandler} and {@code onCancelHandler} will be called eventually.</p>
    *
-   * <p>It is guaranteed that execution of the {@link Runnable} is serialized with calls to the
-   * 'inbound' {@link StreamObserver}. That also means that the callback will be delayed if other
-   * callbacks are running.</p>
+   * <p>It is guaranteed that execution of the {@code onFinishHandler} is serialized with calls to
+   * the 'inbound' {@link StreamObserver}. That also means that the callback will be delayed if
+   * other callbacks are running.</p>
    *
    * <p>This method may only be called during the initial call to the application, before the
    * service returns its {@code StreamObserver}.</p>
