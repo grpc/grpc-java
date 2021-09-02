@@ -498,8 +498,7 @@ final class CensusStatsModule {
       boolean shouldRecordFinishedCall = false;
       synchronized (lock) {
         if (callEnded) {
-          // FIXME(https://github.com/grpc/grpc-java/issues/7921)
-          logger.warning("callEnded() already called. This is a bug.");
+          // FIXME(https://github.com/grpc/grpc-java/issues/7921): this shouldn't happen
           return;
         }
         callEnded = true;
