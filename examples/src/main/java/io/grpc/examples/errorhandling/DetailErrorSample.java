@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -83,7 +83,7 @@ public class DetailErrorSample {
       }
     }).build().start();
     channel =
-        ManagedChannelBuilder.forAddress("localhost", server.getPort()).usePlaintext(true).build();
+        ManagedChannelBuilder.forAddress("localhost", server.getPort()).usePlaintext().build();
 
     blockingCall();
     futureCallDirect();

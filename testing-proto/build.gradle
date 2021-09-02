@@ -1,27 +1,18 @@
-description = "gRPC: Testing Protos"
+plugins {
+    id "java-library"
+    id "maven-publish"
 
-// Add dependency on the protobuf plugin
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath libraries.protobuf_plugin
-    }
+    id "com.google.protobuf"
 }
 
+description = "gRPC: Testing Protos"
+
 dependencies {
-    compile project(':grpc-protobuf'),
+    api project(':grpc-protobuf'),
             project(':grpc-stub')
-    testCompile libraries.truth
+    compileOnly libraries.javax_annotation
+    testImplementation libraries.truth
+    testRuntimeOnly libraries.javax_annotation
 }
 
 configureProtoCompilation()
-
-// Let intellij projects refer to generated code
-idea {
-    module {
-        sourceDirs += file("${projectDir}/src/generated/main/java")
-        sourceDirs += file("${projectDir}/src/generated/main/grpc")
-    }
-}

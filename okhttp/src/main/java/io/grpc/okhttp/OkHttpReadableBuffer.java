@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,8 +40,15 @@ class OkHttpReadableBuffer extends AbstractReadableBuffer {
 
   @Override
   public int readUnsignedByte() {
-    return buffer.readByte() & 0x000000FF;
+    try {
+      fakeEofExceptionMethod(); // Okio 2.x can throw EOFException from readByte()
+      return buffer.readByte() & 0x000000FF;
+    } catch (EOFException e) {
+      throw new IndexOutOfBoundsException(e.getMessage());
+    }
   }
+
+  private void fakeEofExceptionMethod() throws EOFException {}
 
   @Override
   public void skipBytes(int length) {

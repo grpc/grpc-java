@@ -1,0 +1,104 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "com.github.johnrengelman.shadow"
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: ALTS"
+
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
+
+evaluationDependsOn(project(':grpc-core').path)
+
+dependencies {
+    api project(':grpc-core')
+    implementation project(':grpc-auth'),
+            project(':grpc-grpclb'),
+            project(':grpc-protobuf'),
+            project(':grpc-stub'),
+            libraries.protobuf,
+            libraries.conscrypt,
+            libraries.guava,
+            libraries.google_auth_oauth2_http
+    def nettyDependency = implementation project(':grpc-netty')
+    compileOnly libraries.javax_annotation
+
+    shadow configurations.implementation.getDependencies().minus(nettyDependency)
+    shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
+
+    testImplementation project(':grpc-testing'),
+            project(':grpc-core').sourceSets.test.output,
+            project(':grpc-testing-proto'),
+            libraries.guava,
+            libraries.junit,
+            libraries.mockito,
+            libraries.truth
+
+    testImplementation (libraries.guava_testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
+    testRuntimeOnly libraries.netty_tcnative,
+            libraries.netty_epoll
+    signature 'org.codehaus.mojo.signature:java17:1.0@signature'
+}
+
+configureProtoCompilation()
+
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+[compileJava, compileTestJava].each() {
+    // protobuf calls valueof. Will be fixed in next release (google/protobuf#4046)
+    it.options.compilerArgs += [
+        "-Xlint:-deprecation"
+    ]
+    // ALTS returns a lot of futures that we mostly don't care about.
+    it.options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
+}
+
+javadoc {
+    exclude 'io/grpc/alts/internal/**'
+    exclude 'io/grpc/alts/Internal*'
+}
+
+jar {
+    // Must use a different classifier to avoid conflicting with shadowJar
+    classifier = 'original'
+}
+
+// We want to use grpc-netty-shaded instead of grpc-netty. But we also want our
+// source to work with Bazel, so we rewrite the code as part of the build.
+shadowJar {
+    classifier = null
+    dependencies {
+        exclude(dependency {true})
+    }
+    relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
+    relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            // We want this to throw an exception if it isn't working
+            def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
+            artifacts.remove(originalJar)
+
+            pom.withXml {
+                def dependenciesNode = new Node(null, 'dependencies')
+                project.configurations.shadow.allDependencies.each { dep ->
+                    def dependencyNode = dependenciesNode.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', dep.group)
+                    dependencyNode.appendNode('artifactId', dep.name)
+                    def version = (dep.name == 'grpc-netty-shaded') ? '[' + dep.version + ']' : dep.version
+                    dependencyNode.appendNode('version', version)
+                    dependencyNode.appendNode('scope', 'compile')
+                }
+                asNode().dependencies[0].replaceNode(dependenciesNode)
+            }
+        }
+    }
+}

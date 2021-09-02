@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,25 +16,31 @@
 
 package io.grpc.internal;
 
-import com.google.gson.JsonObject;
 import io.grpc.Attributes;
+import io.grpc.EquivalentAddressGroup;
+import io.grpc.Grpc;
+import io.grpc.SecurityLevel;
 
 /**
  * Special attributes that are only useful to gRPC.
  */
 public final class GrpcAttributes {
   /**
-   * Attribute key TXT DNS records.
+   * The security level of the transport.  If it's not present, {@link SecurityLevel#NONE} should be
+   * assumed.
    */
-  public static final Attributes.Key<JsonObject> NAME_RESOLVER_ATTR_SERVICE_CONFIG =
-      Attributes.Key.of("service-config");
+  @Grpc.TransportAttr
+  public static final Attributes.Key<SecurityLevel> ATTR_SECURITY_LEVEL =
+      Attributes.Key.create("io.grpc.internal.GrpcAttributes.securityLevel");
 
   /**
-   * The naming authority of a gRPC LB server address.  It is an address-group-level attribute,
-   * present when the address group is a LoadBalancer.
+   * Attribute key for the attributes of the {@link EquivalentAddressGroup} ({@link
+   * EquivalentAddressGroup#getAttributes}) that the transport's server address is from.  This is a
+   * client-side-only transport attribute, and available right after the transport is started.
    */
-  public static final Attributes.Key<String> ATTR_LB_ADDR_AUTHORITY =
-      Attributes.Key.of("io.grpc.grpclb.lbAddrAuthority");
+  @Grpc.TransportAttr
+  public static final Attributes.Key<Attributes> ATTR_CLIENT_EAG_ATTRS =
+      Attributes.Key.create("io.grpc.internal.GrpcAttributes.clientEagAttrs");
 
   private GrpcAttributes() {}
 }

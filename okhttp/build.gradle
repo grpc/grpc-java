@@ -1,25 +1,48 @@
-description = "gRPC: OkHttp"
-dependencies {
-    compile project(':grpc-core'),
-            libraries.okhttp,
-            libraries.okio
+plugins {
+    id "java-library"
+    id "maven-publish"
 
+    id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: OkHttp"
+
+evaluationDependsOn(project(':grpc-core').path)
+
+dependencies {
+    api project(':grpc-core'),
+            libraries.okhttp
+    implementation libraries.okio,
+            libraries.guava,
+            libraries.perfmark
     // Tests depend on base class defined by core module.
-    testCompile project(':grpc-core').sourceSets.test.output,
-                project(':grpc-testing'),
-                project(':grpc-netty')
-    signature "org.codehaus.mojo.signature:java16:1.1@signature"
+    testImplementation project(':grpc-core').sourceSets.test.output,
+            project(':grpc-api').sourceSets.test.output,
+            project(':grpc-testing'),
+            project(':grpc-netty')
+    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
 
 project.sourceSets {
-    main {
-        java {
-            srcDir "${projectDir}/third_party/okhttp/java"
-        }
-    }
+    main { java { srcDir "${projectDir}/third_party/okhttp/main/java" } }
+    test { java { srcDir "${projectDir}/third_party/okhttp/test/java" } }
 }
 
 checkstyleMain.exclude '**/io/grpc/okhttp/internal/**'
 
-javadoc.exclude 'io/grpc/okhttp/internal/**'
-javadoc.options.links 'http://square.github.io/okhttp/2.x/okhttp/'
+javadoc {
+    options.links 'http://square.github.io/okhttp/2.x/okhttp/'
+    exclude 'io/grpc/okhttp/Internal*'
+    exclude 'io/grpc/okhttp/internal/**'
+}
+
+jacocoTestReport {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it,
+        exclude: [
+                '**/io/grpc/okhttp/internal/**',
+        ])
+    }
+}

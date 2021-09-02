@@ -1,33 +1,31 @@
-description = 'gRPC: Protobuf'
+plugins {
+    id "java-library"
+    id "maven-publish"
 
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath libraries.protobuf_plugin
-    }
+    id "com.google.protobuf"
+    id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
 }
 
-dependencies {
-    compile project(':grpc-core'),
-            libraries.protobuf,
-            libraries.guava,
-            libraries.protobuf_util
+description = 'gRPC: Protobuf'
 
-    compile (libraries.google_api_protos) {
+dependencies {
+    api project(':grpc-api'),
+            libraries.jsr305,
+            libraries.protobuf
+    implementation libraries.guava
+
+    api (libraries.google_api_protos) {
         // 'com.google.api:api-common' transitively depends on auto-value, which breaks our
         // annotations.
         exclude group: 'com.google.api', module: 'api-common'
-        // Prefer our more up-to-date protobuf over 3.2.0
-        exclude group: 'com.google.protobuf', module: 'protobuf-java'
     }
 
-    compile (project(':grpc-protobuf-lite')) {
-        exclude group: 'com.google.protobuf', module: 'protobuf-lite'
+    api (project(':grpc-protobuf-lite')) {
+        exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
     }
 
-    signature "org.codehaus.mojo.signature:java16:1.1@signature"
+    signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 
 javadoc.options.links 'https://developers.google.com/protocol-buffers/docs/reference/java/'

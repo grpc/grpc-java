@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,13 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.netty.NettyServerTransport.getLogLevel;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 import java.io.IOException;
+import java.net.SocketException;
 import java.util.logging.Level;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -34,21 +36,39 @@ public class NettyServerTransportTest {
   }
 
   @Test
-  public void quiet() {
+  public void socketException() {
+    assertEquals(Level.FINE, getLogLevel(new SocketException("Connection reset")));
+  }
+
+  @Test
+  public void ioException() {
     assertEquals(Level.FINE, getLogLevel(new IOException("Connection reset by peer")));
     assertEquals(Level.FINE, getLogLevel(new IOException(
         "An existing connection was forcibly closed by the remote host")));
   }
 
   @Test
-  public void nonquiet() {
-    assertEquals(Level.INFO, getLogLevel(new IOException("foo")));
+  public void ioException_nullMessage() {
+    IOException e = new IOException();
+    assertNull(e.getMessage());
+    assertEquals(Level.FINE, getLogLevel(e));
   }
 
   @Test
-  public void nullMessage() {
-    IOException e = new IOException();
-    assertNull(e.getMessage());
-    assertEquals(Level.INFO, getLogLevel(e));
+  public void extendedIoException() {
+    class ExtendedIoException extends IOException {}
+
+    ExtendedIoException e = new ExtendedIoException();
+    assertThat(e.getMessage()).isNull();
+    assertThat(getLogLevel(e)).isEqualTo(Level.INFO);
+  }
+
+  @Test
+  public void fakeNettyNativeIoException() {
+    class NativeIoException extends IOException {}
+
+    NativeIoException fakeNativeIoException = new NativeIoException();
+
+    assertThat(getLogLevel(fakeNativeIoException)).isEqualTo(Level.FINE);
   }
 }

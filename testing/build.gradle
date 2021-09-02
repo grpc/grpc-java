@@ -1,24 +1,37 @@
-description = "gRPC: Testing"
+plugins {
+    id "java-library"
+    id "maven-publish"
 
-dependencies {
-    compile project(':grpc-core'),
-            project(':grpc-stub'),
-            libraries.junit
-    compile (libraries.mockito) {
-        // prefer 1.3 from JUnit instead of 1.1
-        exclude group: 'org.hamcrest', module: 'hamcrest-core'
-    }
-    // Use compileOnly to avoid dependencyConvergence problem with the Guava
-    // pulled in via Truth, for users that don't use Truth. Truth requires a
-    // more up-to-date Guava than we support elsewhere, which would trigger
-    // convergence failures in tests that only our users could resolve. Using
-    // compileOnly means only users using Truth would have the problem and
-    // they'd have to resolve it like normal anyway.
-    compileOnly libraries.truth
-
-    testCompile project(':grpc-testing-proto')
+    id "me.champeau.gradle.japicmp"
 }
 
-javadoc {
-  exclude 'io/grpc/internal/**'
+description = "gRPC: Testing"
+
+evaluationDependsOn(project(':grpc-core').path)
+
+dependencies {
+    api project(':grpc-core'),
+            project(':grpc-stub'),
+            libraries.junit
+    implementation libraries.opencensus_api
+    runtimeOnly project(":grpc-context") // Pull in newer version than census-api
+
+    testImplementation (libraries.mockito) {
+        // prefer our own versions instead of mockito's dependency
+        exclude group: 'org.hamcrest', module: 'hamcrest-core'
+    }
+
+    testImplementation project(':grpc-testing-proto'),
+            project(':grpc-core').sourceSets.test.output
+}
+
+javadoc { exclude 'io/grpc/internal/**' }
+
+jacocoTestReport {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it,
+        exclude: [
+                '**/io/grpc/internal/testing/**',
+        ])
+    }
 }

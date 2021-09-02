@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,6 +51,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ProtoLiteUtilsTest {
 
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private Marshaller<Type> marshaller = ProtoLiteUtils.marshaller(Type.getDefaultInstance());

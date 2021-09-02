@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +16,23 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertEquals;
+
+import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.ChannelLogger;
 import io.grpc.ServerStreamTracer;
+import io.grpc.Status;
+import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
-import io.grpc.internal.TransportTracer;
-import io.grpc.internal.testing.AbstractTransportTest;
 import java.net.InetSocketAddress;
+import java.nio.channels.UnresolvedAddressException;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -36,20 +41,13 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class NettyTransportTest extends AbstractTransportTest {
   private final FakeClock fakeClock = new FakeClock();
-  private final TransportTracer.Factory fakeClockTransportTracer = new TransportTracer.Factory(
-      new TransportTracer.TimeProvider() {
-        @Override
-        public long currentTimeMillis() {
-          return fakeClock.currentTimeMillis();
-        }
-      });
   // Avoid LocalChannel for testing because LocalChannel can fail with
   // io.netty.channel.ChannelException instead of java.net.ConnectException which breaks
   // serverNotListening test.
   private final ClientTransportFactory clientFactory = NettyChannelBuilder
       // Although specified here, address is ignored because we never call build.
       .forAddress("localhost", 0)
-      .flowControlWindow(65 * 1024)
+      .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
       .negotiationType(NegotiationType.PLAINTEXT)
       .setTransportTracerFactory(fakeClockTransportTracer)
       .buildTransportFactory();
@@ -65,28 +63,28 @@ public class NettyTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
+  protected InternalServer newServer(
+      List<ServerStreamTracer.Factory> streamTracerFactories) {
     return NettyServerBuilder
-        .forPort(0)
-        .flowControlWindow(65 * 1024)
+        .forAddress(new InetSocketAddress("localhost", 0))
+        .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
         .setTransportTracerFactory(fakeClockTransportTracer)
-        .buildTransportServer(streamTracerFactories);
+        .buildTransportServers(streamTracerFactories);
   }
 
   @Override
   protected InternalServer newServer(
-      InternalServer server, List<ServerStreamTracer.Factory> streamTracerFactories) {
-    int port = server.getPort();
+      int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
     return NettyServerBuilder
-        .forPort(port)
-        .flowControlWindow(65 * 1024)
+        .forAddress(new InetSocketAddress("localhost", port))
+        .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
         .setTransportTracerFactory(fakeClockTransportTracer)
-        .buildTransportServer(streamTracerFactories);
+        .buildTransportServers(streamTracerFactories);
   }
 
   @Override
   protected String testAuthority(InternalServer server) {
-    return "localhost:" + server.getPort();
+    return "localhost:" + server.getListenSocketAddress();
   }
 
   @Override
@@ -95,22 +93,68 @@ public class NettyTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected long currentTimeMillis() {
-    return fakeClock.currentTimeMillis();
+  protected long fakeCurrentTimeNanos() {
+    return fakeClock.getTicker().read();
   }
 
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
-    int port = server.getPort();
+
     return clientFactory.newClientTransport(
-        new InetSocketAddress("localhost", port),
-        testAuthority(server),
-        null /* agent */,
-        null /* proxy */);
+        server.getListenSocketAddress(),
+        new ClientTransportFactory.ClientTransportOptions()
+            .setAuthority(testAuthority(server))
+            .setEagAttributes(eagAttrs()),
+        transportLogger());
+  }
+
+  @org.junit.Ignore
+  @org.junit.Test
+  @Override
+  public void clientChecksInboundMetadataSize_trailer() throws Exception {
+    // Server-side is flaky due to https://github.com/netty/netty/pull/8332
   }
 
   @Test
-  @Ignore("flaky")
-  @Override
-  public void flowControlPushBack() {}
+  public void channelHasUnresolvedHostname() throws Exception {
+    server = null;
+    final SettableFuture<Status> future = SettableFuture.create();
+    ChannelLogger logger = transportLogger();
+    ManagedClientTransport transport = clientFactory.newClientTransport(
+        InetSocketAddress.createUnresolved("invalid", 1234),
+        new ClientTransportFactory.ClientTransportOptions()
+            .setChannelLogger(logger), logger);
+    Runnable runnable = transport.start(new ManagedClientTransport.Listener() {
+      @Override
+      public void transportShutdown(Status s) {
+        future.set(s);
+      }
+
+      @Override
+      public void transportTerminated() {}
+
+      @Override
+      public void transportReady() {
+        Throwable t = new Throwable("transport should have failed and shutdown but didnt");
+        future.setException(t);
+      }
+
+      @Override
+      public void transportInUse(boolean inUse) {
+        Throwable t = new Throwable("transport should have failed and shutdown but didnt");
+        future.setException(t);
+      }
+    });
+    if (runnable != null) {
+      runnable.run();
+    }
+    try {
+      Status status = future.get();
+      assertEquals(Status.Code.UNAVAILABLE, status.getCode());
+      assertThat(status.getCause()).isInstanceOf(UnresolvedAddressException.class);
+      assertEquals("unresolved address", status.getDescription());
+    } finally {
+      transport.shutdown(Status.UNAVAILABLE.withDescription("test shutdown"));
+    }
+  }
 }

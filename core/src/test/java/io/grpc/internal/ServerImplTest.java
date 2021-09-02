@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,10 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.InternalChannelz.id;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
+import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -26,15 +29,14 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Matchers.isNotNull;
-import static org.mockito.Matchers.notNull;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -42,19 +44,28 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.BinaryLog;
+import io.grpc.Channel;
 import io.grpc.Compressor;
 import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.HandlerRegistry;
 import io.grpc.IntegerMarshaller;
+import io.grpc.InternalChannelz;
+import io.grpc.InternalChannelz.ServerSocketsList;
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalInstrumented;
+import io.grpc.InternalLogId;
+import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
+import io.grpc.ServerCallExecutorSupplier;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
@@ -63,18 +74,21 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
-import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
+import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
 import io.grpc.internal.testing.SingleMessageProducer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.util.MutableHandlerRegistry;
+import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CyclicBarrier;
@@ -94,8 +108,9 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
-import org.mockito.Matchers;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -124,6 +139,7 @@ public class ServerImplTest {
       };
   private static final String AUTHORITY = "some_authority";
 
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   @BeforeClass
@@ -135,6 +151,8 @@ public class ServerImplTest {
 
   private final FakeClock executor = new FakeClock();
   private final FakeClock timer = new FakeClock();
+  private final InternalChannelz channelz = new InternalChannelz();
+
   @Mock
   private ServerStreamTracer.Factory streamTracerFactory;
   private List<ServerStreamTracer.Factory> streamTracerFactories;
@@ -147,7 +165,7 @@ public class ServerImplTest {
     };
   @Mock
   private ObjectPool<Executor> executorPool;
-  private Builder builder = new Builder();
+  private ServerImplBuilder builder;
   private MutableHandlerRegistry mutableFallbackRegistry = new MutableHandlerRegistry();
   private HandlerRegistry fallbackRegistry = mock(
       HandlerRegistry.class,
@@ -184,6 +202,16 @@ public class ServerImplTest {
   @Before
   public void startUp() throws IOException {
     MockitoAnnotations.initMocks(this);
+    builder = new ServerImplBuilder(
+        new ClientTransportServersBuilder() {
+          @Override
+          public InternalServer buildClientTransportServers(
+              List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+            throw new UnsupportedOperationException();
+          }
+        });
+    builder.channelz = channelz;
+    builder.ticker = timer.getDeadlineTicker();
     streamTracerFactories = Arrays.asList(streamTracerFactory);
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
@@ -195,6 +223,22 @@ public class ServerImplTest {
   public void noPendingTasks() {
     assertEquals(0, executor.numPendingTasks());
     assertEquals(0, timer.numPendingTasks());
+  }
+
+  @Test
+  public void getListenSockets() throws Exception {
+    int port = 800;
+    final List<InetSocketAddress> addresses =
+        Collections.singletonList(new InetSocketAddress(800));
+    transportServer = new SimpleServer() {
+      @Override
+      public List<InetSocketAddress> getListenSocketAddresses() {
+        return addresses;
+      }
+    };
+    createAndStartServer();
+    assertEquals(port, server.getPort());
+    assertThat(server.getListenSockets()).isEqualTo(addresses);
   }
 
   @Test
@@ -382,8 +426,7 @@ public class ServerImplTest {
     builder.handshakeTimeout(60, TimeUnit.SECONDS);
     createAndStartServer();
     ShutdownRecordingTransport serverTransport = new ShutdownRecordingTransport();
-    ServerTransportListener transportListener
-        = transportServer.registerNewServerTransport(serverTransport);
+    transportServer.registerNewServerTransport(serverTransport);
     timer.forwardTime(59, TimeUnit.SECONDS);
     assertNull("shutdownNow status", serverTransport.shutdownNowStatus);
     // Don't call transportReady() in time
@@ -417,6 +460,127 @@ public class ServerImplTest {
     assertEquals(Status.Code.UNIMPLEMENTED, statusCaptor.getValue().getCode());
   }
 
+
+  @Test
+  public void executorSupplierSameExecutorBasic() throws Exception {
+    builder.executorSupplier = new ServerCallExecutorSupplier() {
+      @Override
+      public <ReqT, RespT> Executor getExecutor(ServerCall<ReqT, RespT> call, Metadata metadata) {
+        return executor.getScheduledExecutorService();
+      }
+    };
+    basicExchangeSuccessful();
+  }
+
+  @Test
+  public void executorSupplierNullBasic() throws Exception {
+    builder.executorSupplier = new ServerCallExecutorSupplier() {
+      @Override
+      public <ReqT, RespT> Executor getExecutor(ServerCall<ReqT, RespT> call, Metadata metadata) {
+        return null;
+      }
+    };
+    basicExchangeSuccessful();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void executorSupplierSwitchExecutor() throws Exception {
+    SingleExecutor switchingExecutor = new SingleExecutor();
+    ServerCallExecutorSupplier mockSupplier = mock(ServerCallExecutorSupplier.class);
+    when(mockSupplier.getExecutor(any(ServerCall.class), any(Metadata.class)))
+            .thenReturn(switchingExecutor);
+    builder.executorSupplier = mockSupplier;
+    final AtomicReference<ServerCall<String, Integer>> callReference
+            = new AtomicReference<>();
+    mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
+            new ServiceDescriptor("Waiter", METHOD))
+            .addMethod(METHOD,
+                new ServerCallHandler<String, Integer>() {
+                  @Override
+                  public ServerCall.Listener<String> startCall(
+                          ServerCall<String, Integer> call,
+                          Metadata headers) {
+                    callReference.set(call);
+                    return callListener;
+                  }
+                }).build());
+
+    createAndStartServer();
+    ServerTransportListener transportListener
+            = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
+    Metadata requestHeaders = new Metadata();
+    StatsTraceContext statsTraceCtx =
+            StatsTraceContext.newServerContext(
+                    streamTracerFactories, "Waiter/serve", requestHeaders);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
+    transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    verify(stream).setListener(isA(ServerStreamListener.class));
+    verify(stream, atLeast(1)).statsTraceContext();
+
+    assertEquals(1, executor.runDueTasks());
+    verify(fallbackRegistry).lookupMethod("Waiter/serve", AUTHORITY);
+    verify(streamTracerFactory).newServerStreamTracer(eq("Waiter/serve"), same(requestHeaders));
+    ArgumentCaptor<ServerCall<?,?>> callCapture = ArgumentCaptor.forClass(ServerCall.class);
+    verify(mockSupplier).getExecutor(callCapture.capture(), eq(requestHeaders));
+
+    assertThat(switchingExecutor.runnable).isNotNull();
+    assertEquals(0, executor.numPendingTasks());
+    switchingExecutor.drain();
+    ServerCall<String, Integer> call = callReference.get();
+    assertNotNull(call);
+    assertThat(call).isEqualTo(callCapture.getValue());
+  }
+
+  @Test
+  @SuppressWarnings("CheckReturnValue")
+  public void executorSupplierFutureNotSet() throws Exception {
+    builder.executorSupplier = new ServerCallExecutorSupplier() {
+      @Override
+      public <ReqT, RespT> Executor getExecutor(ServerCall<ReqT, RespT> call, Metadata metadata) {
+        throw new IllegalStateException("Yeah!");
+      }
+    };
+    doThrow(new IllegalStateException("Yeah")).doNothing()
+            .when(stream).close(any(Status.class), any(Metadata.class));
+    final AtomicReference<ServerCall<String, Integer>> callReference
+            = new AtomicReference<>();
+    mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
+        new ServiceDescriptor("Waiter", METHOD))
+        .addMethod(METHOD,
+            new ServerCallHandler<String, Integer>() {
+                @Override
+                public ServerCall.Listener<String> startCall(
+                        ServerCall<String, Integer> call,
+                        Metadata headers) {
+                  callReference.set(call);
+                  return callListener;
+                }
+            }).build());
+
+    createAndStartServer();
+    ServerTransportListener transportListener
+            = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
+    Metadata requestHeaders = new Metadata();
+    StatsTraceContext statsTraceCtx =
+            StatsTraceContext.newServerContext(
+                    streamTracerFactories, "Waiter/serve", requestHeaders);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
+    transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    verify(stream).setListener(isA(ServerStreamListener.class));
+    verify(stream, atLeast(1)).statsTraceContext();
+
+    assertEquals(1, executor.runDueTasks());
+    verify(fallbackRegistry).lookupMethod("Waiter/serve", AUTHORITY);
+    assertThat(callReference.get()).isNull();
+    verify(stream, times(2)).close(statusCaptor.capture(), any(Metadata.class));
+    Status status = statusCaptor.getAllValues().get(1);
+    assertEquals(Code.UNKNOWN, status.getCode());
+    assertThat(status.getCause() instanceof IllegalStateException);
+  }
+
   @Test
   public void decompressorNotFound() throws Exception {
     String decompressorName = "NON_EXISTENT_DECOMPRESSOR";
@@ -433,25 +597,36 @@ public class ServerImplTest {
 
     transportListener.streamCreated(stream, "Waiter/nonexist", requestHeaders);
 
+    verify(stream).setListener(isA(ServerStreamListener.class));
+    verify(stream).streamId();
     verify(stream).close(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
     assertEquals(Status.Code.UNIMPLEMENTED, status.getCode());
     assertEquals("Can't find decompressor for " + decompressorName, status.getDescription());
+
     verifyNoMoreInteractions(stream);
   }
 
   @Test
   public void basicExchangeSuccessful() throws Exception {
     createAndStartServer();
+    basicExchangeHelper(METHOD, "Lots of pizza, please", 314, 50);
+  }
+
+  private void basicExchangeHelper(
+      MethodDescriptor<String, Integer> method,
+      String request,
+      int firstResponse,
+      Integer extraResponse) throws Exception {
     final Metadata.Key<String> metadataKey
         = Metadata.Key.of("inception", Metadata.ASCII_STRING_MARSHALLER);
     final AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<ServerCall<String, Integer>>();
-    final AtomicReference<Context> callContextReference = new AtomicReference<Context>();
+        = new AtomicReference<>();
+    final AtomicReference<Context> callContextReference = new AtomicReference<>();
     mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
-        new ServiceDescriptor("Waiter", METHOD))
+        new ServiceDescriptor("Waiter", method))
         .addMethod(
-            METHOD,
+            method,
             new ServerCallHandler<String, Integer>() {
               @Override
               public ServerCall.Listener<String> startCall(
@@ -487,7 +662,7 @@ public class ServerImplTest {
     ServerCall<String, Integer> call = callReference.get();
     assertNotNull(call);
     assertEquals(
-        new ServerCallInfoImpl<String, Integer>(
+        new ServerCallInfoImpl<>(
             call.getMethodDescriptor(),
             call.getAttributes(),
             call.getAuthority()),
@@ -496,11 +671,11 @@ public class ServerImplTest {
     Context callContext = callContextReference.get();
     assertNotNull(callContext);
     assertEquals("context added by tracer", SERVER_TRACER_ADDED_KEY.get(callContext));
+    assertEquals(server, io.grpc.InternalServer.SERVER_CONTEXT_KEY.get(callContext));
 
-    String order = "Lots of pizza, please";
-    streamListener.messagesAvailable(new SingleMessageProducer(STRING_MARSHALLER.stream(order)));
+    streamListener.messagesAvailable(new SingleMessageProducer(STRING_MARSHALLER.stream(request)));
     assertEquals(1, executor.runDueTasks());
-    verify(callListener).onMessage(order);
+    verify(callListener).onMessage(request);
 
     Metadata responseHeaders = new Metadata();
     responseHeaders.put(metadataKey, "response value");
@@ -508,20 +683,23 @@ public class ServerImplTest {
     verify(stream).writeHeaders(responseHeaders);
     verify(stream).setCompressor(isA(Compressor.class));
 
-    call.sendMessage(314);
+    call.sendMessage(firstResponse);
     ArgumentCaptor<InputStream> inputCaptor = ArgumentCaptor.forClass(InputStream.class);
     verify(stream).writeMessage(inputCaptor.capture());
     verify(stream).flush();
-    assertEquals(314, INTEGER_MARSHALLER.parse(inputCaptor.getValue()).intValue());
+    assertEquals(firstResponse, INTEGER_MARSHALLER.parse(inputCaptor.getValue()).intValue());
 
     streamListener.halfClosed(); // All full; no dessert.
     assertEquals(1, executor.runDueTasks());
     verify(callListener).onHalfClose();
 
-    call.sendMessage(50);
-    verify(stream, times(2)).writeMessage(inputCaptor.capture());
-    verify(stream, times(2)).flush();
-    assertEquals(50, INTEGER_MARSHALLER.parse(inputCaptor.getValue()).intValue());
+    if (extraResponse != null) {
+      call.sendMessage(extraResponse);
+      verify(stream, times(2)).writeMessage(inputCaptor.capture());
+      verify(stream, times(2)).flush();
+      assertEquals(
+          (int) extraResponse, INTEGER_MARSHALLER.parse(inputCaptor.getValue()).intValue());
+    }
 
     Metadata trailers = new Metadata();
     trailers.put(metadataKey, "another value");
@@ -542,13 +720,13 @@ public class ServerImplTest {
   @Test
   public void transportFilters() throws Exception {
     final SocketAddress remoteAddr = mock(SocketAddress.class);
-    final Attributes.Key<String> key1 = Attributes.Key.of("test-key1");
-    final Attributes.Key<String> key2 = Attributes.Key.of("test-key2");
-    final Attributes.Key<String> key3 = Attributes.Key.of("test-key3");
+    final Attributes.Key<String> key1 = Attributes.Key.create("test-key1");
+    final Attributes.Key<String> key2 = Attributes.Key.create("test-key2");
+    final Attributes.Key<String> key3 = Attributes.Key.create("test-key3");
     final AtomicReference<Attributes> filter1TerminationCallbackArgument =
-        new AtomicReference<Attributes>();
+        new AtomicReference<>();
     final AtomicReference<Attributes> filter2TerminationCallbackArgument =
-        new AtomicReference<Attributes>();
+        new AtomicReference<>();
     final AtomicInteger readyCallbackCalled = new AtomicInteger(0);
     final AtomicInteger terminationCallbackCalled = new AtomicInteger(0);
     builder.addTransportFilter(new ServerTransportFilter() {
@@ -558,7 +736,7 @@ public class ServerImplTest {
               .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddr)
               .build(), attrs);
           readyCallbackCalled.incrementAndGet();
-          return Attributes.newBuilder(attrs)
+          return attrs.toBuilder()
               .set(key1, "yalayala")
               .set(key2, "blabla")
               .build();
@@ -579,7 +757,7 @@ public class ServerImplTest {
               .set(key2, "blabla")
               .build(), attrs);
           readyCallbackCalled.incrementAndGet();
-          return Attributes.newBuilder(attrs)
+          return attrs.toBuilder()
               .set(key1, "ouch")
               .set(key3, "puff")
               .build();
@@ -617,11 +795,11 @@ public class ServerImplTest {
 
   @Test
   public void interceptors() throws Exception {
-    final LinkedList<Context> capturedContexts = new LinkedList<Context>();
+    final LinkedList<Context> capturedContexts = new LinkedList<>();
     final Context.Key<String> key1 = Context.key("key1");
     final Context.Key<String> key2 = Context.key("key2");
     final Context.Key<String> key3 = Context.key("key3");
-    ServerInterceptor intercepter1 = new ServerInterceptor() {
+    ServerInterceptor interceptor1 = new ServerInterceptor() {
         @Override
         public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
             ServerCall<ReqT, RespT> call,
@@ -637,7 +815,7 @@ public class ServerImplTest {
           }
         }
       };
-    ServerInterceptor intercepter2 = new ServerInterceptor() {
+    ServerInterceptor interceptor2 = new ServerInterceptor() {
         @Override
         public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
             ServerCall<ReqT, RespT> call,
@@ -666,8 +844,8 @@ public class ServerImplTest {
     mutableFallbackRegistry.addService(
         ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", METHOD))
             .addMethod(METHOD, callHandler).build());
-    builder.intercept(intercepter2);
-    builder.intercept(intercepter1);
+    builder.intercept(interceptor2);
+    builder.intercept(interceptor1);
     createServer();
     server.start();
 
@@ -726,6 +904,7 @@ public class ServerImplTest {
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    verify(stream).streamId();
     verify(stream).setListener(streamListenerCaptor.capture());
     ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
@@ -735,7 +914,7 @@ public class ServerImplTest {
 
     assertEquals(1, executor.runDueTasks());
     verify(fallbackRegistry).lookupMethod("Waiter/serve", AUTHORITY);
-    verify(stream).close(same(status), notNull(Metadata.class));
+    verify(stream).close(same(status), ArgumentMatchers.<Metadata>notNull());
     verify(stream, atLeast(1)).statsTraceContext();
   }
 
@@ -906,18 +1085,19 @@ public class ServerImplTest {
     assertTrue(onHalfCloseCalled.get());
 
     streamListener.closed(Status.CANCELLED);
-    assertEquals(1, executor.runDueTasks(CONTEXT_CLOSER_TASK_FITLER));
-    assertEquals(1, executor.runDueTasks());
+    assertEquals(1, executor.numPendingTasks(CONTEXT_CLOSER_TASK_FITLER));
+    assertEquals(2, executor.runDueTasks());
     assertTrue(onCancelCalled.get());
 
     // Close should never be called if asserts in listener pass.
-    verify(stream, times(0)).close(isA(Status.class), isNotNull(Metadata.class));
+    verify(stream, times(0)).close(isA(Status.class), ArgumentMatchers.<Metadata>isNotNull());
   }
 
-  private ServerStreamListener testClientClose_setup(
+  private ServerStreamListener testStreamClose_setup(
       final AtomicReference<ServerCall<String, Integer>> callReference,
       final AtomicReference<Context> context,
-      final AtomicBoolean contextCancelled) throws Exception {
+      final AtomicBoolean contextCancelled,
+      @Nullable Long timeoutNanos) throws Exception {
     createAndStartServer();
     callListener = new ServerCall.Listener<String>() {
       @Override
@@ -948,6 +1128,9 @@ public class ServerImplTest {
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
     transportListener.transportReady(Attributes.EMPTY);
     Metadata requestHeaders = new Metadata();
+    if (timeoutNanos != null) {
+      requestHeaders.put(TIMEOUT_KEY, timeoutNanos);
+    }
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(streamTracerFactories, "Waitier/serve", requestHeaders);
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
@@ -962,14 +1145,33 @@ public class ServerImplTest {
   }
 
   @Test
-  public void testClientClose_cancelTriggersImmediateCancellation() throws Exception {
+  public void testContextExpiredBeforeStreamCreate_StreamCancelNotCalledBeforeSetListener()
+      throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
-    AtomicReference<Context> context = new AtomicReference<Context>();
-    AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<ServerCall<String, Integer>>();
+    AtomicReference<Context> context = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
-    ServerStreamListener streamListener = testClientClose_setup(callReference,
-        context, contextCancelled);
+    testStreamClose_setup(callReference, context, contextCancelled, 0L);
+
+    // This assert that stream.setListener(jumpListener) is called before stream.cancel(), which
+    // prevents extremely short deadlines causing NPEs.
+    InOrder inOrder = inOrder(stream);
+    inOrder.verify(stream).setListener(any(ServerStreamListener.class));
+    inOrder.verify(stream).cancel(statusCaptor.capture());
+
+    assertThat(statusCaptor.getValue().asException())
+        .hasMessageThat().contains("context timed out");
+    assertTrue(callReference.get().isCancelled());
+  }
+
+  @Test
+  public void testStreamClose_clientCancelTriggersImmediateCancellation() throws Exception {
+    AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    AtomicReference<Context> context = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
+
+    ServerStreamListener streamListener = testStreamClose_setup(callReference,
+        context, contextCancelled, null);
 
     // For close status being non OK:
     // isCancelled is expected to be true immediately after calling closed(), without needing
@@ -977,26 +1179,26 @@ public class ServerImplTest {
     assertFalse(callReference.get().isCancelled());
     assertFalse(context.get().isCancelled());
     streamListener.closed(Status.CANCELLED);
-    assertEquals(1, executor.runDueTasks(CONTEXT_CLOSER_TASK_FITLER));
+    assertEquals(1, executor.numPendingTasks(CONTEXT_CLOSER_TASK_FITLER));
+    assertEquals(2, executor.runDueTasks());
     assertTrue(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
-
-    assertEquals(1, executor.runDueTasks());
     assertTrue(contextCancelled.get());
   }
 
   @Test
-  public void testClientClose_OkTriggersDelayedCancellation() throws Exception {
+  public void testStreamClose_clientOkTriggersDelayedCancellation() throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
-    AtomicReference<Context> context = new AtomicReference<Context>();
-    AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<ServerCall<String, Integer>>();
+    AtomicReference<Context> context = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
-    ServerStreamListener streamListener = testClientClose_setup(callReference,
-        context, contextCancelled);
+    ServerStreamListener streamListener = testStreamClose_setup(callReference,
+        context, contextCancelled, null);
 
     // For close status OK:
-    // isCancelled is expected to be true after all pending work is done
+    // The context isCancelled is expected to be true after all pending work is done,
+    // but for the call it should be false as it gets set cancelled only if the call
+    // fails with a non-OK status.
     assertFalse(callReference.get().isCancelled());
     assertFalse(context.get().isCancelled());
     streamListener.closed(Status.OK);
@@ -1004,6 +1206,26 @@ public class ServerImplTest {
     assertFalse(context.get().isCancelled());
 
     assertEquals(1, executor.runDueTasks());
+    assertFalse(callReference.get().isCancelled());
+    assertTrue(context.get().isCancelled());
+    assertTrue(contextCancelled.get());
+  }
+
+  @Test
+  public void testStreamClose_deadlineExceededTriggersImmediateCancellation() throws Exception {
+    AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    AtomicReference<Context> context = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
+
+    testStreamClose_setup(callReference, context, contextCancelled, 50L);
+
+    timer.forwardNanos(49);
+
+    assertFalse(callReference.get().isCancelled());
+    assertFalse(context.get().isCancelled());
+
+    assertEquals(1, timer.forwardNanos(1));
+    
     assertTrue(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
     assertTrue(contextCancelled.get());
@@ -1011,15 +1233,23 @@ public class ServerImplTest {
 
   @Test
   public void getPort() throws Exception {
+    final InetSocketAddress addr = new InetSocketAddress(65535);
+    final List<InetSocketAddress> addrs = Collections.singletonList(addr);
     transportServer = new SimpleServer() {
       @Override
-      public int getPort() {
-        return 65535;
+      public InetSocketAddress getListenSocketAddress() {
+        return addr;
+      }
+
+      @Override
+      public List<InetSocketAddress> getListenSocketAddresses() {
+        return addrs;
       }
     };
     createAndStartServer();
 
-    Truth.assertThat(server.getPort()).isEqualTo(65535);
+    assertThat(server.getPort()).isEqualTo(addr.getPort());
+    assertThat(server.getListenSockets()).isEqualTo(addrs);
   }
 
   @Test
@@ -1062,8 +1292,8 @@ public class ServerImplTest {
     // This call will be handled by callHandler from the internal registry
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
     assertEquals(1, executor.runDueTasks());
-    verify(callHandler).startCall(Matchers.<ServerCall<String, Integer>>anyObject(),
-        Matchers.<Metadata>anyObject());
+    verify(callHandler).startCall(ArgumentMatchers.<ServerCall<String, Integer>>any(),
+        ArgumentMatchers.<Metadata>any());
     // This call will be handled by the fallbackRegistry because it's not registred in the internal
     // registry.
     transportListener.streamCreated(stream, "Service1/Method2", requestHeaders);
@@ -1081,7 +1311,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1106,7 +1337,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1131,7 +1363,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1154,7 +1387,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1177,7 +1411,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1200,7 +1435,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1214,6 +1450,85 @@ public class ServerImplTest {
       assertSame(expectedT, t);
       ensureServerStateNotLeaked();
     }
+  }
+
+  @Test
+  public void binaryLogInstalled() throws Exception {
+    final SettableFuture<Boolean> intercepted = SettableFuture.create();
+    final ServerInterceptor interceptor = new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+          Metadata headers,
+          ServerCallHandler<ReqT, RespT> next) {
+        intercepted.set(true);
+        return next.startCall(call, headers);
+      }
+    };
+
+    builder.binlog = new BinaryLog() {
+      @Override
+      public void close() throws IOException {
+        // noop
+      }
+
+      @Override
+      public <ReqT, RespT> ServerMethodDefinition<?, ?> wrapMethodDefinition(
+          ServerMethodDefinition<ReqT, RespT> oMethodDef) {
+        return ServerMethodDefinition.create(
+            oMethodDef.getMethodDescriptor(),
+            InternalServerInterceptors.interceptCallHandlerCreate(
+                interceptor,
+                oMethodDef.getServerCallHandler()));
+      }
+
+      @Override
+      public Channel wrapChannel(Channel channel) {
+        return channel;
+      }
+    };
+    createAndStartServer();
+    basicExchangeHelper(METHOD, "Lots of pizza, please", 314, 50);
+    assertTrue(intercepted.get());
+  }
+
+  @Test
+  public void channelz_membership() throws Exception {
+    createServer();
+    assertTrue(builder.channelz.containsServer(server.getLogId()));
+    server.shutdownNow().awaitTermination();
+    assertFalse(builder.channelz.containsServer(server.getLogId()));
+  }
+
+  @Test
+  public void channelz_serverStats() throws Exception {
+    createAndStartServer();
+    assertEquals(0, server.getStats().get().callsSucceeded);
+    basicExchangeHelper(METHOD, "Lots of pizza, please", 314, null);
+    assertEquals(1, server.getStats().get().callsSucceeded);
+  }
+
+  @Test
+  public void channelz_transport_membershp() throws Exception {
+    createAndStartServer();
+    SimpleServerTransport transport = new SimpleServerTransport();
+
+    ServerSocketsList before = builder.channelz
+        .getServerSockets(id(server), id(transport), /*maxPageSize=*/ 1);
+    assertThat(before.sockets).isEmpty();
+    assertTrue(before.end);
+
+    ServerTransportListener listener
+        = transportServer.registerNewServerTransport(transport);
+    ServerSocketsList added = builder.channelz
+        .getServerSockets(id(server), id(transport), /*maxPageSize=*/ 1);
+    assertThat(added.sockets).containsExactly(transport);
+    assertTrue(before.end);
+
+    listener.transportTerminated();
+    ServerSocketsList after = builder.channelz
+        .getServerSockets(id(server), id(transport), /*maxPageSize=*/ 1);
+    assertThat(after.sockets).isEmpty();
+    assertTrue(after.end);
   }
 
   private void createAndStartServer() throws IOException {
@@ -1245,8 +1560,9 @@ public class ServerImplTest {
 
   private void ensureServerStateNotLeaked() {
     verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
-    assertEquals(Status.UNKNOWN, statusCaptor.getValue());
-    assertNull(statusCaptor.getValue().getCause());
+    assertEquals(Status.UNKNOWN.getCode(), statusCaptor.getValue().getCode());
+    // Used in InProcessTransport when set to include the cause with the status
+    assertNotNull(statusCaptor.getValue().getCause());
     assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }
 
@@ -1259,8 +1575,23 @@ public class ServerImplTest {
     }
 
     @Override
-    public int getPort() {
-      return -1;
+    public SocketAddress getListenSocketAddress() {
+      return new InetSocketAddress(12345);
+    }
+
+    @Override
+    public List<InetSocketAddress> getListenSocketAddresses() {
+      return Collections.singletonList(new InetSocketAddress(12345));
+    }
+
+    @Override
+    public InternalInstrumented<SocketStats> getListenSocketStats() {
+      return null;
+    }
+
+    @Override
+    public List<InternalInstrumented<SocketStats>> getListenSocketStatsList() {
+      return null;
     }
 
     @Override
@@ -1275,6 +1606,7 @@ public class ServerImplTest {
 
   private class SimpleServerTransport implements ServerTransport {
     ServerTransportListener listener;
+    InternalLogId id = InternalLogId.allocate(getClass(), /*details=*/ null);
 
     @Override
     public void shutdown() {
@@ -1287,8 +1619,8 @@ public class ServerImplTest {
     }
 
     @Override
-    public LogId getLogId() {
-      throw new UnsupportedOperationException();
+    public InternalLogId getLogId() {
+      return id;
     }
 
     @Override
@@ -1297,24 +1629,33 @@ public class ServerImplTest {
     }
 
     @Override
-    public ListenableFuture<TransportStats> getStats() {
-      SettableFuture<TransportStats> ret = SettableFuture.create();
+    public ListenableFuture<SocketStats> getStats() {
+      SettableFuture<SocketStats> ret = SettableFuture.create();
       ret.set(null);
       return ret;
     }
   }
 
-  private static class Builder extends AbstractServerImplBuilder<Builder> {
-    @Override protected InternalServer buildTransportServer(
-        List<ServerStreamTracer.Factory> streamTracerFactories) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override public Builder useTransportSecurity(File f1, File f2)  {
-      throw new UnsupportedOperationException();
-    }
-  }
-
   /** Allows more precise catch blocks than plain Error to avoid catching AssertionError. */
   private static final class TestError extends Error {}
+
+  private static class SingleExecutor implements Executor {
+    private Runnable runnable;
+
+    @Override
+    public void execute(Runnable r) {
+      if (runnable != null) {
+        fail("Already have runnable scheduled");
+      }
+      runnable = r;
+    }
+
+    public void drain() {
+      if (runnable != null) {
+        Runnable r = runnable;
+        runnable = null;
+        r.run();
+      }
+    }
+  }
 }

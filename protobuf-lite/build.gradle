@@ -1,65 +1,46 @@
-buildscript {
-    repositories {
-        mavenCentral()
-        mavenLocal()
-    }
-    dependencies {
-        classpath libraries.protobuf_plugin
-    }
-}
+plugins {
+    id "java-library"
+    id "maven-publish"
 
-apply plugin: 'com.google.protobuf'
+    id "com.google.protobuf"
+    id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
+}
 
 description = 'gRPC: Protobuf Lite'
 
 dependencies {
-    compile project(':grpc-core'),
-            libraries.protobuf_lite,
+    api project(':grpc-api'),
+            libraries.protobuf_lite
+    implementation libraries.jsr305,
             libraries.guava
 
-    testProtobuf libraries.protobuf
+    testImplementation project(':grpc-core')
 
-    signature "org.codehaus.mojo.signature:java16:1.1@signature"
+    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
 
 compileTestJava {
-  // Protobuf-generated Lite produces quite a few warnings.
-  options.compilerArgs += ["-Xlint:-rawtypes", "-Xlint:-unchecked", "-Xlint:-fallthrough",
-        "-Xep:MissingOverride:OFF", "-Xep:ReferenceEquality:OFF", "-Xep:FallThrough:OFF",
-        "-Xep:JavaLangClash:OFF" /* The Enum protobuf clashes */]
+    options.compilerArgs += [
+        "-Xlint:-cast"
+    ]
+    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
 protobuf {
-  protoc {
-    if (project.hasProperty('protoc')) {
-      path = project.protoc
-    } else {
-      artifact = "com.google.protobuf:protoc:${protocVersion}"
+    protoc {
+        if (project.hasProperty('protoc')) {
+            path = project.protoc
+        } else {
+            artifact = "com.google.protobuf:protoc:${protocVersion}"
+        }
     }
-  }
-  plugins {
-    javalite {
-      if (project.hasProperty('protoc-gen-javalite')) {
-        path = project['protoc-gen-javalite']
-      } else {
-        artifact = libraries.protoc_lite
-      }
-    }
-  }
-  generateProtoTasks {
-    ofSourceSet('test')*.each { task ->
-      task.builtins {
-        remove java
-      }
-      task.plugins {
-        javalite {}
-      }
-    }
-  }
-}
-
-idea {
-    module {
-        testSourceDirs += file("${projectDir}/build/generated/source/proto/test/javalite/")
+    generateProtoTasks {
+        ofSourceSet('test')*.each { task ->
+            task.builtins {
+                java { option 'lite' }
+            }
+        }
     }
 }

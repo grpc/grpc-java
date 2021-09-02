@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ public class SerializeReentrantCallsDirectExecutorTest {
   }
 
   @Test public void reentrantCallsShouldBeSerialized() {
-    final List<Integer> callOrder = new ArrayList<Integer>(4);
+    final List<Integer> callOrder = new ArrayList<>(4);
     executor.execute(new Runnable() {
       @Override
       public void run() {
@@ -105,7 +105,7 @@ public class SerializeReentrantCallsDirectExecutorTest {
 
   @Test
   public void executeCanBeRepeated() {
-    final List<Integer> executes = new ArrayList<Integer>();
+    final List<Integer> executes = new ArrayList<>();
     executor.execute(new Runnable() {
       @Override
       public void run() {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
-import static org.mockito.Matchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
@@ -35,9 +35,9 @@ import com.google.common.base.Charsets;
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
 import io.grpc.Codec;
+import io.grpc.InternalChannelz.TransportStats;
 import io.grpc.StatusRuntimeException;
 import io.grpc.StreamTracer;
-import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.MessageDeframer.Listener;
 import io.grpc.internal.MessageDeframer.SizeEnforcingInputStream;
 import io.grpc.internal.testing.TestStreamTracer.TestBaseStreamTracer;
@@ -62,7 +62,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
@@ -85,16 +85,19 @@ public class MessageDeframerTest {
       });
     }
 
+    private final FakeClock fakeClock = new FakeClock();
+
     @Parameter // Automatically set by test runner, must be public
     public boolean useGzipInflatingBuffer;
 
     private Listener listener = mock(Listener.class);
     private TestBaseStreamTracer tracer = new TestBaseStreamTracer();
     private StatsTraceContext statsTraceCtx = new StatsTraceContext(new StreamTracer[]{tracer});
-    private TransportTracer transportTracer = new TransportTracer();
+    private TransportTracer transportTracer =
+        new TransportTracer.Factory(fakeClock.getTimeProvider()).create();
 
     private MessageDeframer deframer = new MessageDeframer(listener, Codec.Identity.NONE,
-            DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx, transportTracer, "test");
+            DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx, transportTracer);
 
     private ArgumentCaptor<StreamListener.MessageProducer> producer =
             ArgumentCaptor.forClass(StreamListener.MessageProducer.class);
@@ -123,17 +126,19 @@ public class MessageDeframerTest {
     @Test
     public void simplePayload() {
       deframer.request(1);
+      fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
       deframer.deframe(buffer(new byte[]{0, 0, 0, 0, 2, 3, 14}));
       verify(listener).messagesAvailable(producer.capture());
       assertEquals(Bytes.asList(new byte[]{3, 14}), bytes(producer.getValue().next()));
       verify(listener, atLeastOnce()).bytesRead(anyInt());
       verifyNoMoreInteractions(listener);
-      checkStats(tracer, transportTracer.getStats(), 2, 2);
+      checkStats(tracer, transportTracer.getStats(), fakeClock, 2, 2);
     }
 
     @Test
     public void smallCombinedPayloads() {
       deframer.request(2);
+      fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
       deframer.deframe(buffer(new byte[]{0, 0, 0, 0, 1, 3, 0, 0, 0, 0, 2, 14, 15}));
       verify(listener, times(2)).messagesAvailable(producer.capture());
       List<StreamListener.MessageProducer> streams = producer.getAllValues();
@@ -142,12 +147,13 @@ public class MessageDeframerTest {
       verify(listener, atLeastOnce()).bytesRead(anyInt());
       assertEquals(Bytes.asList(new byte[]{14, 15}), bytes(streams.get(1).next()));
       verifyNoMoreInteractions(listener);
-      checkStats(tracer, transportTracer.getStats(), 1, 1, 2, 2);
+      checkStats(tracer, transportTracer.getStats(), fakeClock, 1, 1, 2, 2);
     }
 
     @Test
     public void endOfStreamWithPayloadShouldNotifyEndOfStream() {
       deframer.request(1);
+      fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
       deframer.deframe(buffer(new byte[]{0, 0, 0, 0, 1, 3}));
       deframer.closeWhenComplete();
       verify(listener).messagesAvailable(producer.capture());
@@ -155,11 +161,12 @@ public class MessageDeframerTest {
       verify(listener).deframerClosed(false);
       verify(listener, atLeastOnce()).bytesRead(anyInt());
       verifyNoMoreInteractions(listener);
-      checkStats(tracer, transportTracer.getStats(), 1, 1);
+      checkStats(tracer, transportTracer.getStats(), fakeClock, 1, 1);
     }
 
     @Test
     public void endOfStreamShouldNotifyEndOfStream() {
+      fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
       deframer.deframe(buffer(new byte[0]));
       deframer.closeWhenComplete();
       deframer.request(1);
@@ -169,18 +176,19 @@ public class MessageDeframerTest {
       }
       verify(listener).deframerClosed(false);
       verifyNoMoreInteractions(listener);
-      checkStats(tracer, transportTracer.getStats());
+      checkStats(tracer, transportTracer.getStats(), fakeClock);
     }
 
     @Test
     public void endOfStreamWithPartialMessageShouldNotifyDeframerClosedWithPartialMessage() {
       deframer.request(1);
+      fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
       deframer.deframe(buffer(new byte[1]));
       deframer.closeWhenComplete();
       verify(listener, atLeastOnce()).bytesRead(anyInt());
       verify(listener).deframerClosed(true);
       verifyNoMoreInteractions(listener);
-      checkStats(tracer, transportTracer.getStats());
+      checkStats(tracer, transportTracer.getStats(), fakeClock);
     }
 
     @Test
@@ -189,19 +197,21 @@ public class MessageDeframerTest {
 
       // Create new deframer to allow writing bytes directly to the GzipInflatingBuffer
       MessageDeframer deframer = new MessageDeframer(listener, Codec.Identity.NONE,
-              DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx, transportTracer, "test");
+              DEFAULT_MAX_MESSAGE_SIZE, statsTraceCtx, transportTracer);
       deframer.setFullStreamDecompressor(new GzipInflatingBuffer());
       deframer.request(1);
+      fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
       deframer.deframe(buffer(new byte[1]));
       deframer.closeWhenComplete();
       verify(listener).deframerClosed(true);
       verifyNoMoreInteractions(listener);
-      checkStats(tracer, transportTracer.getStats());
+      checkStats(tracer, transportTracer.getStats(), fakeClock);
     }
 
     @Test
     public void payloadSplitBetweenBuffers() {
       deframer.request(1);
+      fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
       deframer.deframe(buffer(new byte[]{0, 0, 0, 0, 7, 3, 14, 1, 5, 9}));
       verify(listener, atLeastOnce()).bytesRead(anyInt());
       verifyNoMoreInteractions(listener);
@@ -215,27 +225,29 @@ public class MessageDeframerTest {
       if (useGzipInflatingBuffer) {
         checkStats(
             tracer,
-            transportTracer.getStats(), 
+            transportTracer.getStats(),
+            fakeClock,
             7 /* msg size */ + 2 /* second buffer adds two bytes of overhead in deflate block */,
             7);
       } else {
-        checkStats(tracer, transportTracer.getStats(), 7, 7);
+        checkStats(tracer, transportTracer.getStats(), fakeClock, 7, 7);
       }
     }
 
     @Test
     public void frameHeaderSplitBetweenBuffers() {
       deframer.request(1);
-
+      fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
       deframer.deframe(buffer(new byte[]{0, 0}));
       verify(listener, atLeastOnce()).bytesRead(anyInt());
       verifyNoMoreInteractions(listener);
+      fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
       deframer.deframe(buffer(new byte[]{0, 0, 1, 3}));
       verify(listener).messagesAvailable(producer.capture());
       assertEquals(Bytes.asList(new byte[]{3}), bytes(producer.getValue().next()));
       verify(listener, atLeastOnce()).bytesRead(anyInt());
       verifyNoMoreInteractions(listener);
-      checkStats(tracer, transportTracer.getStats(), 1, 1);
+      checkStats(tracer, transportTracer.getStats(), fakeClock, 1, 1);
     }
 
     @Test
@@ -246,12 +258,13 @@ public class MessageDeframerTest {
       assertEquals(Bytes.asList(), bytes(producer.getValue().next()));
       verify(listener, atLeastOnce()).bytesRead(anyInt());
       verifyNoMoreInteractions(listener);
-      checkStats(tracer, transportTracer.getStats(), 0, 0);
+      checkStats(tracer, transportTracer.getStats(), fakeClock, 0, 0);
     }
 
     @Test
     public void largerFrameSize() {
       deframer.request(1);
+      fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
       deframer.deframe(ReadableBuffers.wrap(
               Bytes.concat(new byte[]{0, 0, 0, 3, (byte) 232}, new byte[1000])));
       verify(listener).messagesAvailable(producer.capture());
@@ -259,14 +272,15 @@ public class MessageDeframerTest {
       verify(listener, atLeastOnce()).bytesRead(anyInt());
       verifyNoMoreInteractions(listener);
       if (useGzipInflatingBuffer) {
-        checkStats(tracer, transportTracer.getStats(), 8 /* compressed size */, 1000);
+        checkStats(tracer, transportTracer.getStats(), fakeClock, 8 /* compressed size */, 1000);
       } else {
-        checkStats(tracer, transportTracer.getStats(), 1000, 1000);
+        checkStats(tracer, transportTracer.getStats(), fakeClock, 1000, 1000);
       }
     }
 
     @Test
     public void endOfStreamCallbackShouldWaitForMessageDelivery() {
+      fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
       deframer.deframe(buffer(new byte[]{0, 0, 0, 0, 1, 3}));
       deframer.closeWhenComplete();
       verifyNoMoreInteractions(listener);
@@ -277,13 +291,13 @@ public class MessageDeframerTest {
       verify(listener).deframerClosed(false);
       verify(listener, atLeastOnce()).bytesRead(anyInt());
       verifyNoMoreInteractions(listener);
-      checkStats(tracer, transportTracer.getStats(), 1, 1);
+      checkStats(tracer, transportTracer.getStats(), fakeClock, 1, 1);
     }
 
     @Test
     public void compressed() {
       deframer = new MessageDeframer(listener, new Codec.Gzip(), DEFAULT_MAX_MESSAGE_SIZE,
-              statsTraceCtx, transportTracer, "test");
+              statsTraceCtx, transportTracer);
       deframer.request(1);
 
       byte[] payload = compress(new byte[1000]);
@@ -307,7 +321,7 @@ public class MessageDeframerTest {
             }
           })
           .when(listener)
-          .messagesAvailable(Matchers.<StreamListener.MessageProducer>any());
+          .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
       deframer.deframe(buffer(new byte[]{0, 0, 0, 0, 1, 3}));
       deframer.closeWhenComplete();
       verifyNoMoreInteractions(listener);
@@ -323,6 +337,7 @@ public class MessageDeframerTest {
 
   @RunWith(JUnit4.class)
   public static class SizeEnforcingInputStreamTests {
+    @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
     @Rule
     public final ExpectedException thrown = ExpectedException.none();
 
@@ -333,7 +348,7 @@ public class MessageDeframerTest {
     public void sizeEnforcingInputStream_readByteBelowLimit() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
       SizeEnforcingInputStream stream =
-              new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceCtx, "test");
+              new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceCtx);
 
       while (stream.read() != -1) {
       }
@@ -346,7 +361,7 @@ public class MessageDeframerTest {
     public void sizeEnforcingInputStream_readByteAtLimit() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
       SizeEnforcingInputStream stream =
-              new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx, "test");
+              new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx);
 
       while (stream.read() != -1) {
       }
@@ -359,11 +374,11 @@ public class MessageDeframerTest {
     public void sizeEnforcingInputStream_readByteAboveLimit() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
       SizeEnforcingInputStream stream =
-              new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx, "test");
+              new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
 
       try {
         thrown.expect(StatusRuntimeException.class);
-        thrown.expectMessage("RESOURCE_EXHAUSTED: test: Compressed frame exceeds");
+        thrown.expectMessage("RESOURCE_EXHAUSTED: Compressed gRPC message exceeds");
 
         while (stream.read() != -1) {
         }
@@ -376,7 +391,7 @@ public class MessageDeframerTest {
     public void sizeEnforcingInputStream_readBelowLimit() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
       SizeEnforcingInputStream stream =
-              new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceCtx, "test");
+              new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceCtx);
       byte[] buf = new byte[10];
 
       int read = stream.read(buf, 0, buf.length);
@@ -390,7 +405,7 @@ public class MessageDeframerTest {
     public void sizeEnforcingInputStream_readAtLimit() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
       SizeEnforcingInputStream stream =
-              new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx, "test");
+              new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx);
       byte[] buf = new byte[10];
 
       int read = stream.read(buf, 0, buf.length);
@@ -404,12 +419,12 @@ public class MessageDeframerTest {
     public void sizeEnforcingInputStream_readAboveLimit() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
       SizeEnforcingInputStream stream =
-              new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx, "test");
+              new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
       byte[] buf = new byte[10];
 
       try {
         thrown.expect(StatusRuntimeException.class);
-        thrown.expectMessage("RESOURCE_EXHAUSTED: test: Compressed frame exceeds");
+        thrown.expectMessage("RESOURCE_EXHAUSTED: Compressed gRPC message exceeds");
 
         stream.read(buf, 0, buf.length);
       } finally {
@@ -421,7 +436,7 @@ public class MessageDeframerTest {
     public void sizeEnforcingInputStream_skipBelowLimit() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
       SizeEnforcingInputStream stream =
-              new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceCtx, "test");
+              new MessageDeframer.SizeEnforcingInputStream(in, 4, statsTraceCtx);
 
       long skipped = stream.skip(4);
 
@@ -435,7 +450,7 @@ public class MessageDeframerTest {
     public void sizeEnforcingInputStream_skipAtLimit() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
       SizeEnforcingInputStream stream =
-              new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx, "test");
+              new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx);
 
       long skipped = stream.skip(4);
 
@@ -448,11 +463,11 @@ public class MessageDeframerTest {
     public void sizeEnforcingInputStream_skipAboveLimit() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
       SizeEnforcingInputStream stream =
-              new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx, "test");
+              new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
 
       try {
         thrown.expect(StatusRuntimeException.class);
-        thrown.expectMessage("RESOURCE_EXHAUSTED: test: Compressed frame exceeds");
+        thrown.expectMessage("RESOURCE_EXHAUSTED: Compressed gRPC message exceeds");
 
         stream.skip(4);
       } finally {
@@ -464,7 +479,7 @@ public class MessageDeframerTest {
     public void sizeEnforcingInputStream_markReset() throws IOException {
       ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(Charsets.UTF_8));
       SizeEnforcingInputStream stream =
-              new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx, "test");
+              new MessageDeframer.SizeEnforcingInputStream(in, 3, statsTraceCtx);
       // stream currently looks like: |foo
       stream.skip(1); // f|oo
       stream.mark(10); // any large number will work.
@@ -480,10 +495,11 @@ public class MessageDeframerTest {
 
   /**
    * @param transportStats the transport level stats counters
+   * @param clock the fakeClock to verify timestamp
    * @param sizes in the format {wire0, uncompressed0, wire1, uncompressed1, ...}
    */
   private static void checkStats(
-      TestBaseStreamTracer tracer, TransportStats transportStats, long... sizes) {
+      TestBaseStreamTracer tracer, TransportStats transportStats, FakeClock clock, long... sizes) {
     assertEquals(0, sizes.length % 2);
     int count = sizes.length / 2;
     long expectedWireSize = 0;
@@ -502,12 +518,11 @@ public class MessageDeframerTest {
     assertEquals(expectedUncompressedSize, tracer.getInboundUncompressedSize());
 
     assertEquals(count, transportStats.messagesReceived);
-    long transportReceiveMsgMs = TimeUnit.NANOSECONDS.toMillis(
-        transportStats.lastMessageReceivedTimeNanos);
     if (count > 0) {
-      assertThat(System.currentTimeMillis() - transportReceiveMsgMs).isAtMost(50L);
+      assertThat(transportStats.lastMessageReceivedTimeNanos)
+          .isEqualTo(clock.getTimeProvider().currentTimeNanos());
     } else {
-      assertEquals(0, transportReceiveMsgMs);
+      assertEquals(0L, transportStats.lastMessageReceivedTimeNanos);
     }
   }
 

@@ -2,66 +2,64 @@ apply plugin: 'com.android.application'
 apply plugin: 'com.google.protobuf'
 
 android {
-    compileSdkVersion 25
-    buildToolsVersion "25.0.2"
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    compileSdkVersion 27
 
     defaultConfig {
-        applicationId "io.grpc.android.clientcacheexample"
+        applicationId "io.grpc.clientcacheexample"
         minSdkVersion 19
-        targetSdkVersion 25
+        targetSdkVersion 27
         multiDexEnabled true
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
+        debug { minifyEnabled false }
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
     lintOptions {
-        disable 'InvalidPackage', 'HardcodedText'
+        disable 'GoogleAppIndexingWarning', 'HardcodedText', 'InvalidPackage'
         textReport true
         textOutput "stdout"
     }
 }
 
 protobuf {
-    protoc {
-        artifact = 'com.google.protobuf:protoc:3.4.0'
-    }
+    protoc { artifact = 'com.google.protobuf:protoc:3.17.2' }
     plugins {
-        javalite {
-            artifact = "com.google.protobuf:protoc-gen-javalite:3.0.0"
-        }
-        grpc {
-            artifact = 'io.grpc:protoc-gen-grpc-java:1.9.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.41.0-SNAPSHOT' // CURRENT_GRPC_VERSION
         }
     }
     generateProtoTasks {
         all().each { task ->
+            task.builtins {
+                java { option 'lite' }
+            }
             task.plugins {
-                javalite {}
-                grpc {
-                    // Options added to --grpc_out
-                    option 'lite'
-                }
+                grpc { // Options added to --grpc_out
+                    option 'lite' }
             }
         }
     }
 }
 
 dependencies {
-    compile 'com.android.support:appcompat-v7:25.0.0'
+    implementation 'com.android.support:appcompat-v7:27.0.2'
 
     // You need to build grpc-java to obtain these libraries below.
-    compile 'io.grpc:grpc-okhttp:1.9.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    compile 'io.grpc:grpc-protobuf-lite:1.9.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    compile 'io.grpc:grpc-stub:1.9.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    compile 'javax.annotation:javax.annotation-api:1.2'
+    implementation 'io.grpc:grpc-okhttp:1.41.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-protobuf-lite:1.41.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-stub:1.41.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'org.apache.tomcat:annotations-api:6.0.53'
 
-    testCompile 'junit:junit:4.12'
-    testCompile 'com.google.truth:truth:0.28'
-    testCompile 'io.grpc:grpc-testing:1.9.0-SNAPSHOT'
+    testImplementation 'junit:junit:4.12'
+    testImplementation 'com.google.truth:truth:1.0.1'
+    testImplementation 'io.grpc:grpc-testing:1.41.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 }

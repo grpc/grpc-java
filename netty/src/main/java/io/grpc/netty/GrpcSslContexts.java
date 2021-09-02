@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
+import io.grpc.internal.ConscryptLoader;
 import io.netty.handler.codec.http2.Http2SecurityUtil;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.ApplicationProtocolConfig.Protocol;
@@ -30,9 +31,14 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import java.io.File;
+import java.io.InputStream;
+import java.security.Provider;
+import java.security.Security;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Utility for configuring SslContext for gRPC.
@@ -40,27 +46,18 @@ import java.util.List;
 @SuppressWarnings("deprecation")
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
 public class GrpcSslContexts {
-  private GrpcSslContexts() {}
+  private static final Logger logger = Logger.getLogger(GrpcSslContexts.class.getName());
 
-  /*
-   * The experimental "grpc-exp" string identifies gRPC (and by implication
-   * HTTP/2) when used over TLS. This indicates to the server that the client
-   * will only send gRPC traffic on the h2 connection and is negotiated in
-   * preference to h2 when the client and server support it, but is not
-   * standardized. Support for this may be removed at any time.
-   */
-  private static final String GRPC_EXP_VERSION = "grpc-exp";
+  private GrpcSslContexts() {}
 
   // The "h2" string identifies HTTP/2 when used over TLS
   private static final String HTTP2_VERSION = "h2";
 
   /*
-   * List of ALPN/NPN protocols in order of preference. GRPC_EXP_VERSION
-   * requires that HTTP2_VERSION be present and that GRPC_EXP_VERSION should be
-   * preferenced over HTTP2_VERSION.
+   * List of ALPN/NPN protocols in order of preference.
    */
-  static final List<String> NEXT_PROTOCOL_VERSIONS =
-      Collections.unmodifiableList(Arrays.asList(GRPC_EXP_VERSION, HTTP2_VERSION));
+  private static final List<String> NEXT_PROTOCOL_VERSIONS =
+      Collections.unmodifiableList(Arrays.asList(HTTP2_VERSION));
 
   /*
    * These configs use ACCEPT due to limited support in OpenSSL.  Actual protocol enforcement is
@@ -84,8 +81,12 @@ public class GrpcSslContexts {
       SelectedListenerFailureBehavior.ACCEPT,
       NEXT_PROTOCOL_VERSIONS);
 
+  private static final String SUN_PROVIDER_NAME = "SunJSSE";
+  private static final String IBM_PROVIDER_NAME = "IBMJSSE2";
+  private static final String OPENJSSE_PROVIDER_NAME = "OpenJSSE";
+
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forClient()
    * @see #configure(SslContextBuilder)
@@ -95,7 +96,7 @@ public class GrpcSslContexts {
   }
 
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forServer(File, File)
    * @see #configure(SslContextBuilder)
@@ -105,7 +106,7 @@ public class GrpcSslContexts {
   }
 
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forServer(File, File, String)
    * @see #configure(SslContextBuilder)
@@ -113,6 +114,27 @@ public class GrpcSslContexts {
   public static SslContextBuilder forServer(
       File keyCertChainFile, File keyFile, String keyPassword) {
     return configure(SslContextBuilder.forServer(keyCertChainFile, keyFile, keyPassword));
+  }
+
+  /**
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
+   *
+   * @see SslContextBuilder#forServer(InputStream, InputStream)
+   * @see #configure(SslContextBuilder)
+   */
+  public static SslContextBuilder forServer(InputStream keyCertChain, InputStream key) {
+    return configure(SslContextBuilder.forServer(keyCertChain, key));
+  }
+
+  /**
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
+   *
+   * @see SslContextBuilder#forServer(InputStream, InputStream, String)
+   * @see #configure(SslContextBuilder)
+   */
+  public static SslContextBuilder forServer(
+      InputStream keyCertChain, InputStream key, String keyPassword) {
+    return configure(SslContextBuilder.forServer(keyCertChain, key, keyPassword));
   }
 
   /**
@@ -131,50 +153,122 @@ public class GrpcSslContexts {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
   @CanIgnoreReturnValue
   public static SslContextBuilder configure(SslContextBuilder builder, SslProvider provider) {
-    return builder.sslProvider(provider)
-                  .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
-                  .applicationProtocolConfig(selectApplicationProtocolConfig(provider));
+    switch (provider) {
+      case JDK:
+      {
+        Provider jdkProvider = findJdkProvider();
+        if (jdkProvider == null) {
+          throw new IllegalArgumentException(
+              "Could not find Jetty NPN/ALPN or Conscrypt as installed JDK providers");
+        }
+        return configure(builder, jdkProvider);
+      }
+      case OPENSSL:
+      {
+        ApplicationProtocolConfig apc;
+        if (OpenSsl.isAlpnSupported()) {
+          apc = NPN_AND_ALPN;
+        } else {
+          apc = NPN;
+        }
+        return builder
+            .sslProvider(SslProvider.OPENSSL)
+            .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
+            .applicationProtocolConfig(apc);
+      }
+      default:
+        throw new IllegalArgumentException("Unsupported provider: " + provider);
+    }
+  }
+
+  /**
+   * Set ciphers and APN appropriate for gRPC. Precisely what is set is permitted to change, so if
+   * an application requires particular settings it should override the options set here.
+   */
+  @CanIgnoreReturnValue
+  public static SslContextBuilder configure(SslContextBuilder builder, Provider jdkProvider) {
+    ApplicationProtocolConfig apc;
+    if (SUN_PROVIDER_NAME.equals(jdkProvider.getName())) {
+      // Jetty ALPN/NPN only supports one of NPN or ALPN
+      if (JettyTlsUtil.isJettyAlpnConfigured()) {
+        apc = ALPN;
+      } else if (JettyTlsUtil.isJettyNpnConfigured()) {
+        apc = NPN;
+      } else if (JettyTlsUtil.isJava9AlpnAvailable()) {
+        apc = ALPN;
+      } else {
+        throw new IllegalArgumentException(
+            jdkProvider.getName() + " selected, but Java 9+ and Jetty NPN/ALPN unavailable");
+      }
+    } else if (IBM_PROVIDER_NAME.equals(jdkProvider.getName())
+        || OPENJSSE_PROVIDER_NAME.equals(jdkProvider.getName())) {
+      if (JettyTlsUtil.isJava9AlpnAvailable()) {
+        apc = ALPN;
+      } else {
+        throw new IllegalArgumentException(
+            jdkProvider.getName() + " selected, but Java 9+ ALPN unavailable");
+      }
+    } else if (ConscryptLoader.isConscrypt(jdkProvider)) {
+      apc = ALPN;
+      // TODO: Conscrypt triggers failures in the TrustManager.
+      // https://github.com/grpc/grpc-java/issues/7765
+      builder.protocols("TLSv1.2");
+    } else {
+      throw new IllegalArgumentException("Unknown provider; can't configure: " + jdkProvider);
+    }
+    return builder
+        .sslProvider(SslProvider.JDK)
+        .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
+        .applicationProtocolConfig(apc)
+        .sslContextProvider(jdkProvider);
   }
 
   /**
    * Returns OpenSSL if available, otherwise returns the JDK provider.
    */
   private static SslProvider defaultSslProvider() {
-    return OpenSsl.isAvailable() ? SslProvider.OPENSSL : SslProvider.JDK;
+    if (OpenSsl.isAvailable()) {
+      logger.log(Level.FINE, "Selecting OPENSSL");
+      return SslProvider.OPENSSL;
+    }
+    Provider provider = findJdkProvider();
+    if (provider != null) {
+      logger.log(Level.FINE, "Selecting JDK with provider {0}", provider);
+      return SslProvider.JDK;
+    }
+    logger.log(Level.INFO, "Java 9 ALPN API unavailable (this may be normal)");
+    logger.log(Level.INFO, "netty-tcnative unavailable (this may be normal)",
+        OpenSsl.unavailabilityCause());
+    logger.log(Level.INFO, "Conscrypt not found (this may be normal)",
+        ConscryptHolder.UNAVAILABILITY_CAUSE);
+    logger.log(Level.INFO, "Jetty ALPN unavailable (this may be normal)",
+        JettyTlsUtil.getJettyAlpnUnavailabilityCause());
+    throw new IllegalStateException(
+        "Could not find TLS ALPN provider; "
+        + "no working netty-tcnative, Conscrypt, or Jetty NPN/ALPN available");
   }
 
-  /**
-   * Attempts to select the best {@link ApplicationProtocolConfig} for the given
-   * {@link SslProvider}.
-   */
-  private static ApplicationProtocolConfig selectApplicationProtocolConfig(SslProvider provider) {
-    switch (provider) {
-      case JDK: {
-        if (JettyTlsUtil.isJettyAlpnConfigured()) {
-          return ALPN;
+  private static Provider findJdkProvider() {
+    for (Provider provider : Security.getProviders("SSLContext.TLS")) {
+      if (SUN_PROVIDER_NAME.equals(provider.getName())) {
+        if (JettyTlsUtil.isJettyAlpnConfigured()
+            || JettyTlsUtil.isJettyNpnConfigured()
+            || JettyTlsUtil.isJava9AlpnAvailable()) {
+          return provider;
         }
-        if (JettyTlsUtil.isJettyNpnConfigured()) {
-          return NPN;
-        }
+      } else if (IBM_PROVIDER_NAME.equals(provider.getName())
+          || OPENJSSE_PROVIDER_NAME.equals(provider.getName())) {
         if (JettyTlsUtil.isJava9AlpnAvailable()) {
-          return ALPN;
+          return provider;
         }
-        // Use the ALPN cause since it is prefered.
-        throw new IllegalArgumentException(
-            "ALPN is not configured properly. See https://github.com/grpc/grpc-java/blob/master/SECURITY.md#troubleshooting"
-                + " for more information.",
-            JettyTlsUtil.getJettyAlpnUnavailabilityCause());
+      } else if (ConscryptLoader.isConscrypt(provider)) {
+        return provider;
       }
-      case OPENSSL: {
-        if (!OpenSsl.isAvailable()) {
-          throw new IllegalArgumentException(
-              "OpenSSL is not installed on the system.", OpenSsl.unavailabilityCause());
-        }
-        return OpenSsl.isAlpnSupported() ? NPN_AND_ALPN : NPN;
-      }
-      default:
-        throw new IllegalArgumentException("Unsupported provider: " + provider);
     }
+    if (ConscryptHolder.PROVIDER != null) {
+      return ConscryptHolder.PROVIDER;
+    }
+    return null;
   }
 
   @SuppressWarnings("deprecation")
@@ -188,5 +282,24 @@ public class GrpcSslContexts {
         "This ALPN config does not support HTTP/2. Expected %s, but got %s'.",
         HTTP2_VERSION,
         alpnNegotiator.protocols());
+  }
+
+  private static class ConscryptHolder {
+    static final Provider PROVIDER;
+    static final Throwable UNAVAILABILITY_CAUSE;
+
+    static {
+      Provider provider;
+      Throwable cause;
+      try {
+        provider = ConscryptLoader.newProvider();
+        cause = null;
+      } catch (Throwable t) {
+        provider = null;
+        cause = t;
+      }
+      PROVIDER = provider;
+      UNAVAILABILITY_CAUSE = cause;
+    }
   }
 }

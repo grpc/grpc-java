@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ public class CustomHeaderClient {
    */
   private CustomHeaderClient(String host, int port) {
     originChannel = ManagedChannelBuilder.forAddress(host, port)
-        .usePlaintext(true)
+        .usePlaintext()
         .build();
     ClientInterceptor interceptor = new HeaderClientInterceptor();
     Channel channel = ClientInterceptors.intercept(originChannel, interceptor);
@@ -75,12 +75,13 @@ public class CustomHeaderClient {
    * Main start the client from the command line.
    */
   public static void main(String[] args) throws Exception {
+    // Access a service running on the local machine on port 50051
     CustomHeaderClient client = new CustomHeaderClient("localhost", 50051);
     try {
-      /* Access a service running on the local machine on port 50051 */
       String user = "world";
+      // Use the arg as the name to greet if provided
       if (args.length > 0) {
-        user = args[0]; /* Use the arg as the name to greet if provided */
+        user = args[0]; 
       }
       client.greet(user);
     } finally {

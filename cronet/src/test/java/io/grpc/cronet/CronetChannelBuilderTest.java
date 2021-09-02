@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,28 +16,43 @@
 
 package io.grpc.cronet;
 
+import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
 
+import android.os.Build;
 import io.grpc.CallOptions;
+import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.cronet.CronetChannelBuilder.CronetTransportFactory;
+import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
+import io.grpc.internal.SharedResourceHolder;
 import io.grpc.testing.TestMethodDescriptors;
 import java.net.InetSocketAddress;
-import org.chromium.net.CronetEngine;
+import java.util.concurrent.ScheduledExecutorService;
+import org.chromium.net.ExperimentalCronetEngine;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(sdk = Build.VERSION_CODES.P)
 public final class CronetChannelBuilderTest {
 
-  @Mock private CronetEngine mockEngine;
+  @Mock private ExperimentalCronetEngine mockEngine;
+  @Mock private ChannelLogger channelLogger;
 
+  private final ClientStreamTracer[] tracers =
+      new ClientStreamTracer[]{ new ClientStreamTracer() {} };
   private MethodDescriptor<?, ?> method = TestMethodDescriptors.voidMethod();
 
   @Before
@@ -54,8 +69,11 @@ public final class CronetChannelBuilderTest {
     CronetClientTransport transport =
         (CronetClientTransport)
             transportFactory.newClientTransport(
-                new InetSocketAddress("localhost", 443), "", null, null);
-    CronetClientStream stream = transport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+                new InetSocketAddress("localhost", 443),
+                new ClientTransportOptions(),
+                channelLogger);
+    CronetClientStream stream = transport.newStream(
+        method, new Metadata(), CallOptions.DEFAULT, tracers);
 
     assertTrue(stream.idempotent);
   }
@@ -68,9 +86,39 @@ public final class CronetChannelBuilderTest {
     CronetClientTransport transport =
         (CronetClientTransport)
             transportFactory.newClientTransport(
-                new InetSocketAddress("localhost", 443), "", null, null);
-    CronetClientStream stream = transport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+                new InetSocketAddress("localhost", 443),
+                new ClientTransportOptions(),
+                channelLogger);
+    CronetClientStream stream = transport.newStream(
+        method, new Metadata(), CallOptions.DEFAULT, tracers);
 
     assertFalse(stream.idempotent);
+  }
+
+  @Test
+  public void scheduledExecutorService_default() {
+    CronetChannelBuilder builder = CronetChannelBuilder.forAddress("address", 1234, mockEngine);
+    ClientTransportFactory clientTransportFactory = builder.buildTransportFactory();
+    assertSame(
+        SharedResourceHolder.get(TIMER_SERVICE),
+        clientTransportFactory.getScheduledExecutorService());
+
+    SharedResourceHolder.release(
+        TIMER_SERVICE, clientTransportFactory.getScheduledExecutorService());
+    clientTransportFactory.close();
+  }
+
+  @Test
+  public void scheduledExecutorService_custom() {
+    CronetChannelBuilder builder = CronetChannelBuilder.forAddress("address", 1234, mockEngine);
+    ScheduledExecutorService scheduledExecutorService = mock(ScheduledExecutorService.class);
+
+    CronetChannelBuilder builder1 = builder.scheduledExecutorService(scheduledExecutorService);
+    assertSame(builder, builder1);
+
+    ClientTransportFactory clientTransportFactory = builder1.buildTransportFactory();
+    assertSame(scheduledExecutorService, clientTransportFactory.getScheduledExecutorService());
+
+    clientTransportFactory.close();
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,14 @@
 package io.grpc.testing.integration;
 
 import com.google.protobuf.ByteString;
+import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -39,7 +41,16 @@ import javax.servlet.http.HttpServletResponse;
 public final class LongLivedChannel extends HttpServlet {
   private static final String INTEROP_TEST_ADDRESS = "grpc-test.sandbox.googleapis.com:443";
   private final ManagedChannel channel =
-      ManagedChannelBuilder.forTarget(INTEROP_TEST_ADDRESS).build();
+      Grpc.newChannelBuilder(INTEROP_TEST_ADDRESS, TlsChannelCredentials.create()).build();
+
+  @Override
+  public void destroy() {
+    try {
+      channel.shutdownNow().awaitTermination(1, TimeUnit.SECONDS);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
 
   @Override
   public void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
@@ -47,7 +58,6 @@ public final class LongLivedChannel extends HttpServlet {
     int responseSize = 5678;
     SimpleRequest request = SimpleRequest.newBuilder()
         .setResponseSize(responseSize)
-        .setResponseType(Messages.PayloadType.COMPRESSABLE)
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[requestSize])))
         .build();

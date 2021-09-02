@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 public class ManualFlowControlServer {
@@ -39,24 +39,26 @@ public class ManualFlowControlServer {
         // stream's flow control using the response stream's observer, but this is the way it is.
         final ServerCallStreamObserver<HelloReply> serverCallStreamObserver =
             (ServerCallStreamObserver<HelloReply>) responseObserver;
-        serverCallStreamObserver.disableAutoInboundFlowControl();
-
-        // Guard against spurious onReady() calls caused by a race between onNext() and onReady(). If the transport
-        // toggles isReady() from false to true while onNext() is executing, but before onNext() checks isReady(),
-        // request(1) would be called twice - once by onNext() and once by the onReady() scheduled during onNext()'s
-        // execution.
-        final AtomicBoolean wasReady = new AtomicBoolean(false);
+        serverCallStreamObserver.disableAutoRequest();
 
         // Set up a back-pressure-aware consumer for the request stream. The onReadyHandler will be invoked
         // when the consuming side has enough buffer space to receive more messages.
         //
         // Note: the onReadyHandler's invocation is serialized on the same thread pool as the incoming StreamObserver's
         // onNext(), onError(), and onComplete() handlers. Blocking the onReadyHandler will prevent additional messages
-        // from being processed by the incoming StreamObserver. The onReadyHandler must return in a timely manor or else
-        // message processing throughput will suffer.
-        serverCallStreamObserver.setOnReadyHandler(new Runnable() {
+        // from being processed by the incoming StreamObserver. The onReadyHandler must return in a timely manner or
+        // else message processing throughput will suffer.
+        class OnReadyHandler implements Runnable {
+          // Guard against spurious onReady() calls caused by a race between onNext() and onReady(). If the transport
+          // toggles isReady() from false to true while onNext() is executing, but before onNext() checks isReady(),
+          // request(1) would be called twice - once by onNext() and once by the onReady() scheduled during onNext()'s
+          // execution.
+          private boolean wasReady = false;
+
+          @Override
           public void run() {
-            if (serverCallStreamObserver.isReady() && wasReady.compareAndSet(false, true)) {
+            if (serverCallStreamObserver.isReady() && !wasReady) {
+              wasReady = true;
               logger.info("READY");
               // Signal the request sender to send one message. This happens when isReady() turns true, signaling that
               // the receive buffer has enough free space to receive more messages. Calling request() serves to prime
@@ -64,7 +66,9 @@ public class ManualFlowControlServer {
               serverCallStreamObserver.request(1);
             }
           }
-        });
+        }
+        final OnReadyHandler onReadyHandler = new OnReadyHandler();
+        serverCallStreamObserver.setOnReadyHandler(onReadyHandler);
 
         // Give gRPC a StreamObserver that can observe and process incoming requests.
         return new StreamObserver<HelloRequest>() {
@@ -88,16 +92,17 @@ public class ManualFlowControlServer {
               // Check the provided ServerCallStreamObserver to see if it is still ready to accept more messages.
               if (serverCallStreamObserver.isReady()) {
                 // Signal the sender to send another request. As long as isReady() stays true, the server will keep
-                // cycling through the loop of onNext() -> request()...onNext() -> request()... until either the client
-                // runs out of messages and ends the loop or the server runs out of receive buffer space.
+                // cycling through the loop of onNext() -> request(1)...onNext() -> request(1)... until the client runs
+                // out of messages and ends the loop (via onCompleted()).
                 //
-                // If the server runs out of buffer space, isReady() will turn false. When the receive buffer has
-                // sufficiently drained, isReady() will turn true, and the serverCallStreamObserver's onReadyHandler
-                // will be called to restart the message pump.
+                // If request() was called here with the argument of more than 1, the server might runs out of receive
+                // buffer space, and isReady() will turn false. When the receive buffer has sufficiently drained,
+                // isReady() will turn true, and the serverCallStreamObserver's onReadyHandler will be called to restart
+                // the message pump.
                 serverCallStreamObserver.request(1);
               } else {
                 // If not, note that back-pressure has begun.
-                wasReady.set(false);
+                onReadyHandler.wasReady = false;
               }
             } catch (Throwable throwable) {
               throwable.printStackTrace();
@@ -134,8 +139,13 @@ public class ManualFlowControlServer {
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
       public void run() {
-        logger.info("Shutting down");
-        server.shutdown();
+        // Use stderr here since the logger may have been reset by its JVM shutdown hook.
+        System.err.println("Shutting down");
+        try {
+          server.shutdown().awaitTermination(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+          e.printStackTrace(System.err);
+        }
       }
     });
     server.awaitTermination();

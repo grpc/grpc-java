@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,15 +19,16 @@ package io.grpc.cronet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.os.Build;
 import com.google.common.io.BaseEncoding;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
@@ -35,6 +36,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.cronet.CronetChannelBuilder.StreamBuilderFactory;
 import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener.MessageProducer;
@@ -42,6 +44,7 @@ import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
 import io.grpc.testing.TestMethodDescriptors;
 import java.io.ByteArrayInputStream;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -61,8 +64,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(sdk = Build.VERSION_CODES.P)
 public final class CronetClientStreamTest {
 
   @Mock private CronetClientTransport transport;
@@ -93,6 +98,7 @@ public final class CronetClientStreamTest {
     }
 
     @Override
+    @SuppressWarnings("GuardedBy")
     public void run() {
       assertTrue(stream != null);
       stream.transportState().start(factory);
@@ -118,7 +124,9 @@ public final class CronetClientStreamTest {
             method,
             StatsTraceContext.NOOP,
             CallOptions.DEFAULT,
-            transportTracer);
+            transportTracer,
+            false,
+            false);
     callback.setStream(clientStream);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
@@ -172,7 +180,7 @@ public final class CronetClientStreamTest {
     // 5 writes are called.
     verify(cronetStream, times(5)).write(isA(ByteBuffer.class), eq(false));
     ByteBuffer fakeBuffer = ByteBuffer.allocateDirect(8);
-    fakeBuffer.position(8);
+    ((Buffer) fakeBuffer).position(8);
     verify(cronetStream, times(2)).flush();
 
     // 5 onWriteCompleted callbacks for previous writes.
@@ -253,7 +261,7 @@ public final class CronetClientStreamTest {
     callback.onReadCompleted(
         cronetStream,
         info,
-        (ByteBuffer) createMessageFrame(new String("response1").getBytes(Charset.forName("UTF-8"))),
+        createMessageFrame(new String("response1").getBytes(Charset.forName("UTF-8"))),
         false);
     // Haven't request any message, so no callback is called here.
     verify(clientListener, times(0)).messagesAvailable(isA(MessageProducer.class));
@@ -290,7 +298,7 @@ public final class CronetClientStreamTest {
     ArgumentCaptor<ByteBuffer> bufferCaptor = ArgumentCaptor.forClass(ByteBuffer.class);
     verify(cronetStream, times(1)).write(bufferCaptor.capture(), isA(Boolean.class));
     ByteBuffer buffer = bufferCaptor.getValue();
-    buffer.position(request.length());
+    ((Buffer) buffer).position(request.length());
     verify(cronetStream, times(1)).flush();
 
     // Receive response header
@@ -304,7 +312,7 @@ public final class CronetClientStreamTest {
     callback.onReadCompleted(
         cronetStream,
         info,
-        (ByteBuffer) createMessageFrame(new String("response").getBytes(Charset.forName("UTF-8"))),
+        createMessageFrame(new String("response").getBytes(Charset.forName("UTF-8"))),
         false);
     verify(clientListener, times(1)).messagesAvailable(isA(MessageProducer.class));
     verify(cronetStream, times(2)).read(isA(ByteBuffer.class));
@@ -322,7 +330,8 @@ public final class CronetClientStreamTest {
     // Verify trailer
     ArgumentCaptor<Metadata> trailerCaptor = ArgumentCaptor.forClass(Metadata.class);
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(clientListener).closed(statusCaptor.capture(), trailerCaptor.capture());
+    verify(clientListener)
+        .closed(statusCaptor.capture(), isA(RpcProgress.class), trailerCaptor.capture());
     // Verify recevied headers.
     Metadata trailers = trailerCaptor.getValue();
     Status status = statusCaptor.getValue();
@@ -365,7 +374,8 @@ public final class CronetClientStreamTest {
     callback.onSucceeded(cronetStream, info);
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(clientListener).closed(statusCaptor.capture(), isA(Metadata.class));
+    verify(clientListener)
+        .closed(statusCaptor.capture(), isA(RpcProgress.class), isA(Metadata.class));
     // Verify error status.
     Status status = statusCaptor.getValue();
     assertFalse(status.isOk());
@@ -390,7 +400,8 @@ public final class CronetClientStreamTest {
     clientStream.transportState().transportReportStatus(Status.UNAVAILABLE, false, new Metadata());
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(clientListener).closed(statusCaptor.capture(), isA(Metadata.class));
+    verify(clientListener)
+        .closed(statusCaptor.capture(), isA(RpcProgress.class), isA(Metadata.class));
     Status status = statusCaptor.getValue();
     assertEquals(Status.UNAVAILABLE.getCode(), status.getCode());
   }
@@ -417,7 +428,8 @@ public final class CronetClientStreamTest {
     clientStream.transportState().transportReportStatus(Status.UNAVAILABLE, false, new Metadata());
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(clientListener).closed(statusCaptor.capture(), isA(Metadata.class));
+    verify(clientListener)
+        .closed(statusCaptor.capture(), isA(RpcProgress.class), isA(Metadata.class));
     Status status = statusCaptor.getValue();
     assertEquals(Status.UNAVAILABLE.getCode(), status.getCode());
   }
@@ -447,7 +459,8 @@ public final class CronetClientStreamTest {
     clientStream.transportState().transportReportStatus(Status.UNAVAILABLE, false, new Metadata());
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(clientListener).closed(statusCaptor.capture(), isA(Metadata.class));
+    verify(clientListener)
+        .closed(statusCaptor.capture(), isA(RpcProgress.class), isA(Metadata.class));
     Status status = statusCaptor.getValue();
     // Stream has already finished so OK status should be reported.
     assertEquals(Status.UNAVAILABLE.getCode(), status.getCode());
@@ -479,7 +492,8 @@ public final class CronetClientStreamTest {
     clientStream.transportState().transportReportStatus(Status.UNAVAILABLE, false, new Metadata());
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(clientListener).closed(statusCaptor.capture(), isA(Metadata.class));
+    verify(clientListener)
+        .closed(statusCaptor.capture(), isA(RpcProgress.class), isA(Metadata.class));
     Status status = statusCaptor.getValue();
     // Stream has already finished so OK status should be reported.
     assertEquals(Status.OK.getCode(), status.getCode());
@@ -522,12 +536,14 @@ public final class CronetClientStreamTest {
     // Receive trailer first
     ((CronetClientStream.BidirectionalStreamCallback) callback)
         .processTrailers(trailers(Status.UNAUTHENTICATED.getCode().value()));
-    verify(clientListener, times(0)).closed(isA(Status.class), isA(Metadata.class));
+    verify(clientListener, times(0))
+        .closed(isA(Status.class), isA(RpcProgress.class), isA(Metadata.class));
 
     // Receive cronet's endOfStream
     callback.onReadCompleted(cronetStream, null, ByteBuffer.allocate(0), true);
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(clientListener, times(1)).closed(statusCaptor.capture(), isA(Metadata.class));
+    verify(clientListener, times(1))
+        .closed(statusCaptor.capture(), isA(RpcProgress.class), isA(Metadata.class));
     Status status = statusCaptor.getValue();
     assertEquals(Status.UNAUTHENTICATED.getCode(), status.getCode());
   }
@@ -548,17 +564,20 @@ public final class CronetClientStreamTest {
     callback.onResponseHeadersReceived(cronetStream, info);
     // Receive cronet's endOfStream
     callback.onReadCompleted(cronetStream, null, ByteBuffer.allocate(0), true);
-    verify(clientListener, times(0)).closed(isA(Status.class), isA(Metadata.class));
+    verify(clientListener, times(0))
+        .closed(isA(Status.class), isA(RpcProgress.class), isA(Metadata.class));
 
     // Receive trailer
     ((CronetClientStream.BidirectionalStreamCallback) callback)
         .processTrailers(trailers(Status.UNAUTHENTICATED.getCode().value()));
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(clientListener, times(1)).closed(statusCaptor.capture(), isA(Metadata.class));
+    verify(clientListener, times(1))
+        .closed(statusCaptor.capture(), isA(RpcProgress.class), isA(Metadata.class));
     Status status = statusCaptor.getValue();
     assertEquals(Status.UNAUTHENTICATED.getCode(), status.getCode());
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void addCronetRequestAnnotation_deprecated() {
     Object annotation = new Object();
@@ -576,8 +595,10 @@ public final class CronetClientStreamTest {
             false /* alwaysUsePut */,
             method,
             StatsTraceContext.NOOP,
-            CallOptions.DEFAULT.withOption(CronetCallOptions.CRONET_ANNOTATION_KEY, annotation),
-            transportTracer);
+            CallOptions.DEFAULT.withOption(CronetClientStream.CRONET_ANNOTATION_KEY, annotation),
+            transportTracer,
+            false,
+            false);
     callback.setStream(stream);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
@@ -592,8 +613,8 @@ public final class CronetClientStreamTest {
   public void withAnnotation() {
     Object annotation1 = new Object();
     Object annotation2 = new Object();
-    CallOptions callOptions = CronetCallOptions.withAnnotation(CallOptions.DEFAULT, annotation1);
-    callOptions = CronetCallOptions.withAnnotation(callOptions, annotation2);
+    CallOptions callOptions = CronetClientStream.withAnnotation(CallOptions.DEFAULT, annotation1);
+    callOptions = CronetClientStream.withAnnotation(callOptions, annotation2);
 
     SetStreamFactoryRunnable callback = new SetStreamFactoryRunnable(factory);
     CronetClientStream stream =
@@ -610,7 +631,9 @@ public final class CronetClientStreamTest {
             method,
             StatsTraceContext.NOOP,
             callOptions,
-            transportTracer);
+            transportTracer,
+            false,
+            false);
     callback.setStream(stream);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
@@ -648,7 +671,9 @@ public final class CronetClientStreamTest {
             getMethod,
             StatsTraceContext.NOOP,
             CallOptions.DEFAULT,
-            transportTracer);
+            transportTracer,
+            true,
+            false);
     callback.setStream(stream);
     ExperimentalBidirectionalStream.Builder getBuilder =
         mock(ExperimentalBidirectionalStream.Builder.class);
@@ -703,7 +728,9 @@ public final class CronetClientStreamTest {
             idempotentMethod,
             StatsTraceContext.NOOP,
             CallOptions.DEFAULT,
-            transportTracer);
+            transportTracer,
+            true,
+            true);
     callback.setStream(stream);
     ExperimentalBidirectionalStream.Builder builder =
         mock(ExperimentalBidirectionalStream.Builder.class);
@@ -733,7 +760,9 @@ public final class CronetClientStreamTest {
             method,
             StatsTraceContext.NOOP,
             CallOptions.DEFAULT,
-            transportTracer);
+            transportTracer,
+            true,
+            true);
     callback.setStream(stream);
     ExperimentalBidirectionalStream.Builder builder =
         mock(ExperimentalBidirectionalStream.Builder.class);
@@ -771,7 +800,9 @@ public final class CronetClientStreamTest {
             method,
             StatsTraceContext.NOOP,
             CallOptions.DEFAULT,
-            transportTracer);
+            transportTracer,
+            false,
+            false);
     callback.setStream(stream);
     ExperimentalBidirectionalStream.Builder builder =
         mock(ExperimentalBidirectionalStream.Builder.class);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,6 +45,9 @@ public interface Stream {
    * <p>It is recommended that the caller consult {@link #isReady()} before calling this method to
    * avoid excessive buffering in the transport.
    *
+   * <p>This method takes ownership of the InputStream, and implementations are responsible for
+   * calling {@link InputStream#close}.
+   *
    * @param message stream containing the serialized message to be sent
    */
   void writeMessage(InputStream message);
@@ -63,6 +66,13 @@ public interface Stream {
    * result in excessive buffering within the transport.
    */
   boolean isReady();
+
+  /**
+   * Provides a hint that directExecutor is being used by the listener for callbacks to the
+   * application. No action is required. There is no requirement that this method actually matches
+   * the executor used.
+   */
+  void optimizeForDirectExecutor();
 
   /**
    * Sets the compressor on the framer.

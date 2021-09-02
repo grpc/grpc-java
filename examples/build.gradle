@@ -1,54 +1,54 @@
-apply plugin: 'java'
-apply plugin: 'com.google.protobuf'
-
-buildscript {
-  repositories {
-    mavenCentral()
-  }
-  dependencies {
-    // ASSUMES GRADLE 2.12 OR HIGHER. Use plugin version 0.7.5 with earlier
-    // gradle versions
-    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.3'
-  }
+plugins {
+    // Provide convenience executables for trying out the examples.
+    id 'application'
+    // ASSUMES GRADLE 5.6 OR HIGHER. Use plugin version 0.8.10 with earlier gradle versions
+    id 'com.google.protobuf' version '0.8.17'
+    // Generate IntelliJ IDEA's .idea & .iml project files
+    id 'idea'
 }
 
 repositories {
-  mavenCentral()
-  mavenLocal()
+    maven { // The google mirror is less flaky than mavenCentral()
+        url "https://maven-central.storage-download.googleapis.com/maven2/" }
+    mavenCentral()
+    mavenLocal()
 }
+
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
 
 // IMPORTANT: You probably want the non-SNAPSHOT version of gRPC. Make sure you
 // are looking at a tagged version of the example and not "master"!
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.10.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.41.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.17.2'
+def protocVersion = protobufVersion
 
 dependencies {
-  compile "com.google.api.grpc:proto-google-common-protos:1.0.0"
-  compile "io.grpc:grpc-netty:${grpcVersion}"
-  compile "io.grpc:grpc-protobuf:${grpcVersion}"
-  compile "io.grpc:grpc-stub:${grpcVersion}"
+    implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+    implementation "io.grpc:grpc-stub:${grpcVersion}"
+    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
 
-  testCompile "io.grpc:grpc-testing:${grpcVersion}"
-  testCompile "junit:junit:4.12"
-  testCompile "org.mockito:mockito-core:1.9.5"
+    // examples/advanced need this for JsonFormat
+    implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
+
+    runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
+
+    testImplementation "io.grpc:grpc-testing:${grpcVersion}"
+    testImplementation "junit:junit:4.12"
+    testImplementation "org.mockito:mockito-core:3.4.0"
 }
 
 protobuf {
-  protoc {
-    artifact = 'com.google.protobuf:protoc:3.5.1-1'
-  }
-  plugins {
-    grpc {
-      artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}"
+    protoc { artifact = "com.google.protobuf:protoc:${protocVersion}" }
+    plugins {
+        grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" }
     }
-  }
-  generateProtoTasks {
-    all()*.plugins {
-      grpc {}
+    generateProtoTasks {
+        all()*.plugins { grpc {} }
     }
-  }
 }
 
 // Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
@@ -61,54 +61,96 @@ sourceSets {
     }
 }
 
-// Generate IntelliJ IDEA's .idea & .iml project files
-apply plugin: 'idea'
-
-// Provide convenience executables for trying out the examples.
-apply plugin: 'application'
-
 startScripts.enabled = false
 
 task routeGuideServer(type: CreateStartScripts) {
-  mainClassName = 'io.grpc.examples.routeguide.RouteGuideServer'
-  applicationName = 'route-guide-server'
-  outputDir = new File(project.buildDir, 'tmp')
-  classpath = jar.outputs.files + project.configurations.runtime
+    mainClassName = 'io.grpc.examples.routeguide.RouteGuideServer'
+    applicationName = 'route-guide-server'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
 }
 
 task routeGuideClient(type: CreateStartScripts) {
-  mainClassName = 'io.grpc.examples.routeguide.RouteGuideClient'
-  applicationName = 'route-guide-client'
-  outputDir = new File(project.buildDir, 'tmp')
-  classpath = jar.outputs.files + project.configurations.runtime
+    mainClassName = 'io.grpc.examples.routeguide.RouteGuideClient'
+    applicationName = 'route-guide-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
 }
 
 task helloWorldServer(type: CreateStartScripts) {
-  mainClassName = 'io.grpc.examples.helloworld.HelloWorldServer'
-  applicationName = 'hello-world-server'
-  outputDir = new File(project.buildDir, 'tmp')
-  classpath = jar.outputs.files + project.configurations.runtime
+    mainClassName = 'io.grpc.examples.helloworld.HelloWorldServer'
+    applicationName = 'hello-world-server'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
 }
 
 task helloWorldClient(type: CreateStartScripts) {
-  mainClassName = 'io.grpc.examples.helloworld.HelloWorldClient'
-  applicationName = 'hello-world-client'
-  outputDir = new File(project.buildDir, 'tmp')
-  classpath = jar.outputs.files + project.configurations.runtime
+    mainClassName = 'io.grpc.examples.helloworld.HelloWorldClient'
+    applicationName = 'hello-world-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task retryingHelloWorldServer(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.retrying.RetryingHelloWorldServer'
+    applicationName = 'retrying-hello-world-server'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task retryingHelloWorldClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.retrying.RetryingHelloWorldClient'
+    applicationName = 'retrying-hello-world-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task hedgingHelloWorldServer(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.hedging.HedgingHelloWorldServer'
+    applicationName = 'hedging-hello-world-server'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task hedgingHelloWorldClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.hedging.HedgingHelloWorldClient'
+    applicationName = 'hedging-hello-world-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
 }
 
 task compressingHelloWorldClient(type: CreateStartScripts) {
-  mainClassName = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
-  applicationName = 'compressing-hello-world-client'
-  outputDir = new File(project.buildDir, 'tmp')
-  classpath = jar.outputs.files + project.configurations.runtime
+    mainClassName = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
+    applicationName = 'compressing-hello-world-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task manualFlowControlClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.manualflowcontrol.ManualFlowControlClient'
+    applicationName = 'manual-flow-control-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task manualFlowControlServer(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.manualflowcontrol.ManualFlowControlServer'
+    applicationName = 'manual-flow-control-server'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
 }
 
 applicationDistribution.into('bin') {
-  from(routeGuideServer)
-  from(routeGuideClient)
-  from(helloWorldServer)
-  from(helloWorldClient)
-  from(compressingHelloWorldClient)
-  fileMode = 0755
+    from(routeGuideServer)
+    from(routeGuideClient)
+    from(helloWorldServer)
+    from(helloWorldClient)
+    from(hedgingHelloWorldClient)
+    from(hedgingHelloWorldServer)
+    from(retryingHelloWorldClient)
+    from(retryingHelloWorldServer)
+    from(compressingHelloWorldClient)
+    from(manualFlowControlClient)
+    from(manualFlowControlServer)
+    fileMode = 0755
 }

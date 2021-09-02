@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import io.grpc.protobuf.lite.ProtoLiteUtils;
 import javax.annotation.Nullable;
 
 /** Utility methods for working with {@link com.google.rpc.Status}. */
-@ExperimentalApi
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4695")
 public final class StatusProto {
   private StatusProto() {}
 
@@ -46,6 +46,7 @@ public final class StatusProto {
    *
    * @throws IllegalArgumentException if the value of {@code statusProto.getCode()} is not a valid
    *     gRPC status code.
+   * @since 1.3.0
    */
   public static StatusRuntimeException toStatusRuntimeException(com.google.rpc.Status statusProto) {
     return toStatus(statusProto).asRuntimeException(toMetadata(statusProto));
@@ -62,6 +63,7 @@ public final class StatusProto {
    *
    * @throws IllegalArgumentException if the value of {@code statusProto.getCode()} is not a valid
    *     gRPC status code.
+   * @since 1.3.0
    */
   public static StatusRuntimeException toStatusRuntimeException(
       com.google.rpc.Status statusProto, Metadata metadata) {
@@ -77,6 +79,7 @@ public final class StatusProto {
    *
    * @throws IllegalArgumentException if the value of {@code statusProto.getCode()} is not a valid
    *     gRPC status code.
+   * @since 1.3.0
    */
   public static StatusException toStatusException(com.google.rpc.Status statusProto) {
     return toStatus(statusProto).asException(toMetadata(statusProto));
@@ -93,6 +96,7 @@ public final class StatusProto {
    *
    * @throws IllegalArgumentException if the value of {@code statusProto.getCode()} is not a valid
    *     gRPC status code.
+   * @since 1.3.0
    */
   public static StatusException toStatusException(
       com.google.rpc.Status statusProto, Metadata metadata) {
@@ -124,6 +128,7 @@ public final class StatusProto {
    * @return the extracted {@link com.google.rpc.Status} instance, or {@code null} if none exists.
    * @throws IllegalArgumentException if an embedded {@link com.google.rpc.Status} is found and its
    *     code does not match the gRPC {@link Status} code.
+   * @since 1.3.0
    */
   @Nullable
   public static com.google.rpc.Status fromThrowable(Throwable t) {
@@ -131,18 +136,27 @@ public final class StatusProto {
     while (cause != null) {
       if (cause instanceof StatusException) {
         StatusException e = (StatusException) cause;
-        return toStatusProto(e.getStatus(), e.getTrailers());
+        return fromStatusAndTrailers(e.getStatus(), e.getTrailers());
       } else if (cause instanceof StatusRuntimeException) {
         StatusRuntimeException e = (StatusRuntimeException) cause;
-        return toStatusProto(e.getStatus(), e.getTrailers());
+        return fromStatusAndTrailers(e.getStatus(), e.getTrailers());
       }
       cause = cause.getCause();
     }
     return null;
   }
 
-  @Nullable
-  private static com.google.rpc.Status toStatusProto(Status status, Metadata trailers) {
+  /**
+   * Extracts the {@code google.rpc.Status} from trailers, and makes sure they match the gRPC
+   * {@code status}. If the trailers do not contain a {@code google.rpc.Status}, it uses
+   * {@code status} param to generate a {@code google.rpc.Status}.
+   *
+   * @return the embedded google.rpc.Status
+   * @since 1.11.0
+   */
+  public static com.google.rpc.Status fromStatusAndTrailers(
+      Status status, @Nullable Metadata trailers) {
+    checkNotNull(status, "status");
     if (trailers != null) {
       com.google.rpc.Status statusProto = trailers.get(STATUS_DETAILS_KEY);
       if (statusProto != null) {
@@ -152,6 +166,12 @@ public final class StatusProto {
         return statusProto;
       }
     }
-    return null;
+    // fall-back to status, this is useful if the error is local. e.g. Server is unavailable.
+    com.google.rpc.Status.Builder statusBuilder = com.google.rpc.Status.newBuilder()
+        .setCode(status.getCode().value());
+    if (status.getDescription() != null) {
+      statusBuilder.setMessage(status.getDescription());
+    }
+    return statusBuilder.build();
   }
 }

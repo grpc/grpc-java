@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,14 +18,19 @@ package io.grpc.netty.shaded;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import io.grpc.ChannelCredentials;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
-import io.grpc.ServerBuilder;
+import io.grpc.ServerCredentials;
+import io.grpc.TlsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
+import io.grpc.netty.shaded.io.grpc.netty.NettySslContextChannelCredentials;
 import io.grpc.netty.shaded.io.netty.handler.ssl.SslContextBuilder;
 import io.grpc.netty.shaded.io.netty.handler.ssl.SslProvider;
 import io.grpc.stub.StreamObserver;
@@ -34,13 +39,18 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.grpc.testing.protobuf.SimpleServiceGrpc.SimpleServiceBlockingStub;
 import io.grpc.testing.protobuf.SimpleServiceGrpc.SimpleServiceImplBase;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link Shading}. */
+/** Unit tests for shaded gRPC Netty. */
 @RunWith(JUnit4.class)
 public final class ShadingTest {
   private ManagedChannel channel;
@@ -64,21 +74,34 @@ public final class ShadingTest {
     Class.forName("io.grpc.netty.NettyServerBuilder");
   }
 
+  /** Verify that resources under META-INF/native-image reference shaded class names. */
+  @Test
+  public void nettyResourcesUpdated() throws IOException {
+    InputStream inputStream = NettyChannelBuilder.class.getClassLoader()
+        .getResourceAsStream("META-INF/native-image/io.netty/transport/reflection-config.json");
+    assertThat(inputStream).isNotNull();
+
+    Scanner s = new Scanner(inputStream, StandardCharsets.UTF_8.name()).useDelimiter("\\A");
+    String reflectionConfig = s.hasNext() ? s.next() : "";
+
+    assertThat(reflectionConfig).contains("io.grpc.netty.shaded.io.netty");
+  }
+
   @Test
   public void serviceLoaderFindsNetty() throws Exception {
-    assertThat(ServerBuilder.forPort(0)).isInstanceOf(NettyServerBuilder.class);
-    assertThat(ManagedChannelBuilder.forAddress("localhost", 1234))
+    assertThat(Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create()))
+        .isInstanceOf(NettyServerBuilder.class);
+    assertThat(Grpc.newChannelBuilder("localhost:1234", InsecureChannelCredentials.create()))
         .isInstanceOf(NettyChannelBuilder.class);
   }
 
   @Test
   public void basic() throws Exception {
-    server = ServerBuilder.forPort(0)
+    server = Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
         .addService(new SimpleServiceImpl())
         .build().start();
-    channel = ManagedChannelBuilder
-        .forAddress("localhost", server.getPort())
-        .usePlaintext(true)
+    channel = Grpc.newChannelBuilder(
+          "localhost:" + server.getPort(), InsecureChannelCredentials.create())
         .build();
     SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(channel);
     assertThat(SimpleResponse.getDefaultInstance())
@@ -87,15 +110,15 @@ public final class ShadingTest {
 
   @Test
   public void tcnative() throws Exception {
-    server = NettyServerBuilder.forPort(0)
-        .useTransportSecurity(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
+    ServerCredentials serverCreds = TlsServerCredentials.create(
+        TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
+    server = Grpc.newServerBuilderForPort(0, serverCreds)
         .addService(new SimpleServiceImpl())
         .build().start();
-    channel = NettyChannelBuilder
-        .forAddress("localhost", server.getPort())
-        .sslContext(
-            GrpcSslContexts.configure(SslContextBuilder.forClient(), SslProvider.OPENSSL)
-                .trustManager(TestUtils.loadCert("ca.pem")).build())
+    ChannelCredentials creds = NettySslContextChannelCredentials.create(
+        GrpcSslContexts.configure(SslContextBuilder.forClient(), SslProvider.OPENSSL)
+            .trustManager(TestUtils.loadCert("ca.pem")).build());
+    channel = Grpc.newChannelBuilder("localhost:" + server.getPort(), creds)
         .overrideAuthority("foo.test.google.fr")
         .build();
     SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(channel);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,10 +21,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.internal.Channelz.TransportStats;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import java.util.concurrent.Executor;
 
 /**
@@ -33,16 +36,19 @@ import java.util.concurrent.Executor;
 class FailingClientTransport implements ClientTransport {
   @VisibleForTesting
   final Status error;
+  private final RpcProgress rpcProgress;
 
-  FailingClientTransport(Status error) {
+  FailingClientTransport(Status error, RpcProgress rpcProgress) {
     Preconditions.checkArgument(!error.isOk(), "error must not be OK");
     this.error = error;
+    this.rpcProgress = rpcProgress;
   }
 
   @Override
   public ClientStream newStream(
-      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-    return new FailingClientStream(error);
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      ClientStreamTracer[] tracers) {
+    return new FailingClientStream(error, rpcProgress, tracers);
   }
 
   @Override
@@ -55,14 +61,14 @@ class FailingClientTransport implements ClientTransport {
   }
 
   @Override
-  public ListenableFuture<TransportStats> getStats() {
-    SettableFuture<TransportStats> ret = SettableFuture.create();
+  public ListenableFuture<SocketStats> getStats() {
+    SettableFuture<SocketStats> ret = SettableFuture.create();
     ret.set(null);
     return ret;
   }
 
   @Override
-  public LogId getLogId() {
+  public InternalLogId getLogId() {
     throw new UnsupportedOperationException("Not a real transport");
   }
 }

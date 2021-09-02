@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,6 +53,18 @@ public class OkHttpReadableBufferTest extends ReadableBufferTestBase {
   @Override
   @Test
   public void partialReadToByteBufferShouldSucceed() {
+    // Not supported.
+  }
+
+  @Override
+  @Test
+  public void markAndResetWithReadShouldSucceed() {
+    // Not supported.
+  }
+
+  @Override
+  @Test
+  public void markAndResetWithReadToReadableBufferShouldSucceed() {
     // Not supported.
   }
 

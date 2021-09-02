@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import io.netty.handler.codec.http2.Http2Headers;
 /**
  * Command sent from the transport to the Netty channel to send response headers to the client.
  */
-class SendResponseHeadersCommand extends WriteQueue.AbstractQueuedCommand {
+final class SendResponseHeadersCommand extends WriteQueue.AbstractQueuedCommand {
   private final StreamIdHolder stream;
   private final Http2Headers headers;
   private final Status status;

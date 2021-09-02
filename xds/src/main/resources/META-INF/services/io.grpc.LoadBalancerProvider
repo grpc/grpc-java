@@ -1,0 +1,7 @@
+io.grpc.xds.CdsLoadBalancerProvider
+io.grpc.xds.PriorityLoadBalancerProvider
+io.grpc.xds.WeightedTargetLoadBalancerProvider
+io.grpc.xds.ClusterManagerLoadBalancerProvider
+io.grpc.xds.ClusterResolverLoadBalancerProvider
+io.grpc.xds.ClusterImplLoadBalancerProvider
+io.grpc.xds.RingHashLoadBalancerProvider

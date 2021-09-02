@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
@@ -25,20 +26,27 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.InternalLimitedInfoFactory;
+import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalLogId;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalMetadata.TrustedAsciiMarshaller;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ProxiedSocketAddress;
+import io.grpc.ProxyDetector;
 import io.grpc.Status;
-import io.grpc.internal.Channelz.TransportStats;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
@@ -50,26 +58,26 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.Immutable;
 
 /**
  * Common utilities for GRPC.
  */
 public final class GrpcUtil {
 
-  public static final Charset US_ASCII = Charset.forName("US-ASCII");
+  private static final Logger log = Logger.getLogger(GrpcUtil.class.getName());
 
-  // AppEngine runtimes have constraints on threading and socket handling
-  // that need to be accommodated.
-  public static final boolean IS_RESTRICTED_APPENGINE =
-      System.getProperty("com.google.appengine.runtime.environment") != null
-          && "1.7".equals(System.getProperty("java.specification.version"));
+  public static final Charset US_ASCII = Charset.forName("US-ASCII");
 
   /**
    * {@link io.grpc.Metadata.Key} for the timeout header.
@@ -194,12 +202,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.10.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
-
-  /**
-   * The default delay in nanos before we send a keepalive.
-   */
-  public static final long DEFAULT_KEEPALIVE_TIME_NANOS = TimeUnit.MINUTES.toNanos(1);
+  private static final String IMPLEMENTATION_VERSION = "1.41.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -237,20 +240,32 @@ public final class GrpcUtil {
   public static final ProxyDetector NOOP_PROXY_DETECTOR = new ProxyDetector() {
     @Nullable
     @Override
-    public ProxyParameters proxyFor(SocketAddress targetServerAddress) {
+    public ProxiedSocketAddress proxyFor(SocketAddress targetServerAddress) {
       return null;
     }
   };
 
   /**
-   * Returns a proxy detector appropriate for the current environment.
+   * The very default load-balancing policy.
    */
-  public static ProxyDetector getProxyDetector() {
-    if (IS_RESTRICTED_APPENGINE) {
-      return NOOP_PROXY_DETECTOR;
-    } else {
-      return DEFAULT_PROXY_DETECTOR;
-    }
+  public static final String DEFAULT_LB_POLICY = "pick_first";
+
+  /**
+   * RPCs created on the Channel returned by {@link io.grpc.LoadBalancer.Subchannel#asChannel}
+   * will have this option with value {@code true}.  They will be treated differently from
+   * the ones created by application.
+   */
+  public static final CallOptions.Key<Boolean> CALL_OPTIONS_RPC_OWNED_BY_BALANCER =
+      CallOptions.Key.create("io.grpc.internal.CALL_OPTIONS_RPC_OWNED_BY_BALANCER");
+
+  private static final ClientStreamTracer NOOP_TRACER = new ClientStreamTracer() {};
+
+  /**
+   * Returns true if an RPC with the given properties should be counted when calculating the
+   * in-use state of a transport.
+   */
+  public static boolean shouldBeCountedForInUse(CallOptions callOptions) {
+    return !Boolean.TRUE.equals(callOptions.getOption(CALL_OPTIONS_RPC_OWNED_BY_BALANCER));
   }
 
   /**
@@ -337,7 +352,11 @@ public final class GrpcUtil {
 
     Http2Error(int code, Status status) {
       this.code = code;
-      this.status = status.augmentDescription("HTTP/2 error code: " + this.name());
+      String description = "HTTP/2 error code: " + this.name();
+      if (status.getDescription() != null) {
+        description += " (" + status.getDescription() + ")";
+      }
+      this.status = status.withDescription(description);
     }
 
     /**
@@ -437,6 +456,38 @@ public final class GrpcUtil {
     return builder.toString();
   }
 
+  @Immutable
+  public static final class GrpcBuildVersion {
+    private final String userAgent;
+    private final String implementationVersion;
+
+    private GrpcBuildVersion(String userAgent, String implementationVersion) {
+      this.userAgent = Preconditions.checkNotNull(userAgent, "userAgentName");
+      this.implementationVersion =
+          Preconditions.checkNotNull(implementationVersion, "implementationVersion");
+    }
+
+    public String getUserAgent() {
+      return userAgent;
+    }
+
+    public String getImplementationVersion() {
+      return implementationVersion;
+    }
+
+    @Override
+    public String toString() {
+      return userAgent + " " + implementationVersion;
+    }
+  }
+
+  /**
+   * Returns the build version of gRPC.
+   */
+  public static GrpcBuildVersion getGrpcBuildVersion() {
+    return new GrpcBuildVersion("gRPC Java", IMPLEMENTATION_VERSION);
+  }
+
   /**
    * Parse an authority into a URI for retrieving the host and port.
    */
@@ -468,6 +519,7 @@ public final class GrpcUtil {
   /**
    * Combine a host and port into an authority string.
    */
+  // There is a copy of this method in io.grpc.Grpc
   public static String authorityFromHostAndPort(String host, int port) {
     try {
       return new URI(null, null, host, port, null, null, null).getAuthority();
@@ -479,17 +531,17 @@ public final class GrpcUtil {
   /**
    * Shared executor for channels.
    */
-  public static final Resource<ExecutorService> SHARED_CHANNEL_EXECUTOR =
-      new Resource<ExecutorService>() {
+  public static final Resource<Executor> SHARED_CHANNEL_EXECUTOR =
+      new Resource<Executor>() {
         private static final String NAME = "grpc-default-executor";
         @Override
-        public ExecutorService create() {
+        public Executor create() {
           return Executors.newCachedThreadPool(getThreadFactory(NAME + "-%d", true));
         }
 
         @Override
-        public void close(ExecutorService instance) {
-          instance.shutdown();
+        public void close(Executor instance) {
+          ((ExecutorService) instance).shutdown();
         }
 
         @Override
@@ -527,7 +579,7 @@ public final class GrpcUtil {
             throw new RuntimeException(e);
           }
 
-          return service;
+          return Executors.unconfigurableScheduledExecutorService(service);
         }
 
         @Override
@@ -545,16 +597,10 @@ public final class GrpcUtil {
    * @return a {@link ThreadFactory}.
    */
   public static ThreadFactory getThreadFactory(String nameFormat, boolean daemon) {
-    if (IS_RESTRICTED_APPENGINE) {
-      @SuppressWarnings("BetaApi")
-      ThreadFactory factory = MoreExecutors.platformThreadFactory();
-      return factory;
-    } else {
-      return new ThreadFactoryBuilder()
-          .setDaemon(daemon)
-          .setNameFormat(nameFormat)
-          .build();
-    }
+    return new ThreadFactoryBuilder()
+        .setDaemon(daemon)
+        .setNameFormat(nameFormat)
+        .build();
   }
 
   /**
@@ -660,7 +706,7 @@ public final class GrpcUtil {
     final ClientTransport transport;
     Subchannel subchannel = result.getSubchannel();
     if (subchannel != null) {
-      transport = ((AbstractSubchannel) subchannel).obtainActiveTransport();
+      transport = ((TransportProvider) subchannel.getInternalSubchannel()).obtainActiveTransport();
     } else {
       transport = null;
     }
@@ -672,9 +718,14 @@ public final class GrpcUtil {
       return new ClientTransport() {
         @Override
         public ClientStream newStream(
-            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
-          return transport.newStream(
-              method, headers, callOptions.withStreamTracerFactory(streamTracerFactory));
+            MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+            ClientStreamTracer[] tracers) {
+          StreamInfo info = StreamInfo.newBuilder().setCallOptions(callOptions).build();
+          ClientStreamTracer streamTracer =
+              newClientStreamTracer(streamTracerFactory, info, headers);
+          checkState(tracers[tracers.length - 1] == NOOP_TRACER, "lb tracer already assigned");
+          tracers[tracers.length - 1] = streamTracer;
+          return transport.newStream(method, headers, callOptions, tracers);
         }
 
         @Override
@@ -683,20 +734,91 @@ public final class GrpcUtil {
         }
 
         @Override
-        public LogId getLogId() {
+        public InternalLogId getLogId() {
           return transport.getLogId();
         }
 
         @Override
-        public ListenableFuture<TransportStats> getStats() {
+        public ListenableFuture<SocketStats> getStats() {
           return transport.getStats();
         }
       };
     }
-    if (!result.getStatus().isOk() && (result.isDrop() || !isWaitForReady)) {
-      return new FailingClientTransport(result.getStatus());
+    if (!result.getStatus().isOk()) {
+      if (result.isDrop()) {
+        return new FailingClientTransport(result.getStatus(), RpcProgress.DROPPED);
+      }
+      if (!isWaitForReady) {
+        return new FailingClientTransport(result.getStatus(), RpcProgress.PROCESSED);
+      }
     }
     return null;
+  }
+
+  /** Gets stream tracers based on CallOptions. */
+  public static ClientStreamTracer[] getClientStreamTracers(
+      CallOptions callOptions, Metadata headers, int previousAttempts, boolean isTransparentRetry) {
+    List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
+    ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
+    StreamInfo streamInfo = StreamInfo.newBuilder()
+        .setCallOptions(callOptions)
+        .setPreviousAttempts(previousAttempts)
+        .setIsTransparentRetry(isTransparentRetry)
+        .build();
+    for (int i = 0; i < factories.size(); i++) {
+      tracers[i] = newClientStreamTracer(factories.get(i), streamInfo, headers);
+    }
+    // Reserved to be set later by the lb as per the API contract of ClientTransport.newStream().
+    // See also GrpcUtil.getTransportFromPickResult()
+    tracers[tracers.length - 1] = NOOP_TRACER;
+    return tracers;
+  }
+
+  // A util function for backward compatibility to support deprecated StreamInfo.getAttributes().
+  @VisibleForTesting
+  static ClientStreamTracer newClientStreamTracer(
+      final ClientStreamTracer.Factory streamTracerFactory, final StreamInfo info,
+      final Metadata headers) {
+    ClientStreamTracer streamTracer;
+    if (streamTracerFactory instanceof InternalLimitedInfoFactory) {
+      streamTracer = streamTracerFactory.newClientStreamTracer(info, headers);
+    } else {
+      streamTracer = new ForwardingClientStreamTracer() {
+        final ClientStreamTracer noop = new ClientStreamTracer() {};
+        volatile ClientStreamTracer delegate = noop;
+
+        void maybeInit(StreamInfo info, Metadata headers) {
+          if (delegate != noop) {
+            return;
+          }
+          synchronized (this) {
+            if (delegate == noop) {
+              delegate = streamTracerFactory.newClientStreamTracer(info, headers);
+            }
+          }
+        }
+
+        @Override
+        protected ClientStreamTracer delegate() {
+          return delegate;
+        }
+
+        @SuppressWarnings("deprecation")
+        @Override
+        public void streamCreated(Attributes transportAttrs, Metadata headers) {
+          StreamInfo streamInfo = info.toBuilder().setTransportAttrs(transportAttrs).build();
+          maybeInit(streamInfo, headers);
+          delegate().streamCreated(transportAttrs, headers);
+        }
+
+        @Override
+        public void streamClosed(Status status) {
+          maybeInit(info, headers);
+          delegate().streamClosed(status);
+        }
+      };
+    }
+    return streamTracer;
   }
 
   /** Quietly closes all messages in MessageProducer. */
@@ -707,12 +829,19 @@ public final class GrpcUtil {
     }
   }
 
-  /** Closes an InputStream, ignoring IOExceptions. */
-  static void closeQuietly(InputStream message) {
+  /**
+   * Closes a Closeable, ignoring IOExceptions.
+   * This method exists because Guava's {@code Closeables.closeQuietly()} is beta.
+   */
+  public static void closeQuietly(@Nullable Closeable message) {
+    if (message == null) {
+      return;
+    }
     try {
       message.close();
     } catch (IOException ioException) {
-      // do nothing
+      // do nothing except log
+      log.log(Level.WARNING, "exception caught in closeQuietly", ioException);
     }
   }
 

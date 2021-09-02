@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -91,4 +91,9 @@ public interface ServerStream extends Stream {
    * The context for recording stats and traces for this stream.
    */
   StatsTraceContext statsTraceContext();
+
+  /**
+   * The HTTP/2 stream id, or {@code -1} if not supported.
+   */
+  int streamId();
 }

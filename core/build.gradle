@@ -1,41 +1,122 @@
+buildscript {
+    dependencies {
+        classpath 'com.google.guava:guava:30.0-android'
+    }
+}
+
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+    id "me.champeau.gradle.jmh"
+    id "ru.vyarus.animalsniffer"
+}
+
+import static java.nio.charset.StandardCharsets.US_ASCII;
+
+import com.google.common.primitives.Bytes;
+
 description = 'gRPC: Core'
 
+evaluationDependsOn(project(':grpc-context').path)
+evaluationDependsOn(project(':grpc-api').path)
+
 dependencies {
-    compile project(':grpc-context'),
-            libraries.gson,
-            libraries.guava,
+    api project(':grpc-api')
+    implementation libraries.gson,
+            libraries.android_annotations,
+            libraries.animalsniffer_annotations,
             libraries.errorprone,
-            libraries.jsr305
-    compile (libraries.opencensus_api) {
-        // prefer 3.0.0 from libraries instead of 3.0.1
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        // prefer 2.1.2 from libraries instead of 2.2.0
-        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
-        // we'll always be more up-to-date
-        exclude group: 'io.grpc', module: 'grpc-context'
-    }
-    compile (libraries.opencensus_contrib_grpc_metrics) {
-        // prefer 3.0.0 from libraries instead of 3.0.1
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        // we'll always be more up-to-date
-        exclude group: 'io.grpc', module: 'grpc-context'
-        // prefer 2.1.2 from libraries instead of 2.2.0
-        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
+            libraries.guava,
+            libraries.perfmark
+    testImplementation project(':grpc-context').sourceSets.test.output,
+            project(':grpc-api').sourceSets.test.output,
+            project(':grpc-testing'),
+            project(':grpc-grpclb')
+    testImplementation (libraries.guava_testlib) {
+        exclude group: 'junit', module: 'junit'
     }
 
-    testCompile project(':grpc-context').sourceSets.test.output,
-                project(':grpc-testing')
+    testRuntimeOnly project(':grpc-census')
 
-    signature "org.codehaus.mojo.signature:java16:1.1@signature"
+    jmh project(':grpc-testing')
+
+    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
 
 javadoc {
-    // We want io.grpc.Internal, but not io.grpc.Internal*
-    exclude 'io/grpc/Internal?*.java'
     exclude 'io/grpc/internal/**'
+    exclude 'io/grpc/inprocess/Internal*'
+    // Disabled until kinda stable.
+    exclude 'io/grpc/perfmark/**'
 }
 
 animalsniffer {
     // Don't check sourceSets.jmh
-    sourceSets = [sourceSets.main, sourceSets.test]
+    sourceSets = [
+        sourceSets.main,
+        sourceSets.test
+    ]
+}
+
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+def replaceBytes(byte[] haystack, byte[] needle, byte[] replacement) {
+    int i = Bytes.indexOf(haystack, needle);
+    assert i != -1;
+    byte[] result = new byte[haystack.length - needle.length + replacement.length];
+    System.arraycopy(haystack, 0, result, 0, i);
+    System.arraycopy(replacement, 0, result, i, replacement.length);
+    System.arraycopy(haystack, i + needle.length, result, i + replacement.length, haystack.length - i - needle.length);
+    return result;
+}
+
+def bigEndianShortBytes(int value) {
+    return [value >> 8, value & 0xFF] as byte[];
+}
+
+def replaceConstant(File file, String needle, String replacement) {
+    // CONSTANT_Utf8_info. https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.4.7
+    byte[] needleBytes = Bytes.concat(
+        [1] as byte[], bigEndianShortBytes(needle.length()), needle.getBytes(US_ASCII));
+    byte[] replacementBytes = Bytes.concat(
+        [1] as byte[], bigEndianShortBytes(replacement.length()), replacement.getBytes(US_ASCII));
+    file.setBytes(replaceBytes(file.getBytes(), needleBytes, replacementBytes));
+}
+
+plugins.withId("java") {
+    compileJava {
+        doLast {
+            // Replace value of Signature Attribute.
+            // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.7.9
+	    //
+	    // Have new compilations compile against a public class, without breaking the internal
+	    // ABI for the moment. After giving users some time to recompile, this should be removed
+	    // and #7211 can continue. When this is removed, at the very least the generics need to
+	    // be changed to avoid <? extends io.grpc.internal.*>.
+            project.replaceConstant(
+                destinationDirectory.file(
+                    "io/grpc/internal/AbstractManagedChannelImplBuilder.class").get().getAsFile(),
+                "<T:Lio/grpc/internal/AbstractManagedChannelImplBuilder<TT;>;>Lio/grpc/ManagedChannelBuilder<TT;>;",
+                "<T:Lio/grpc/ManagedChannelBuilder<TT;>;>Lio/grpc/ManagedChannelBuilder<TT;>;");
+            project.replaceConstant(
+                destinationDirectory.file(
+                    "io/grpc/internal/AbstractServerImplBuilder.class").get().getAsFile(),
+                "<T:Lio/grpc/internal/AbstractServerImplBuilder<TT;>;>Lio/grpc/ServerBuilder<TT;>;",
+                "<T:Lio/grpc/ServerBuilder<TT;>;>Lio/grpc/ServerBuilder<TT;>;");
+        }
+    }
+
+    compileJmhJava {
+        // This project targets Java 7 (no method references)
+        options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
+    }
+}
+
+task versionFile() {
+    doLast {
+        new File(buildDir, "version").write("${project.version}\n")
+    }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,10 @@
 
 package io.grpc.internal;
 
-import com.google.common.annotations.VisibleForTesting;
-import io.grpc.internal.Channelz.ChannelStats;
+import static io.grpc.internal.TimeProvider.SYSTEM_TIME_PROVIDER;
+
+import io.grpc.InternalChannelz.ChannelStats;
+import io.grpc.InternalChannelz.ServerStats;
 
 /**
  * A collection of call stats for channelz.
@@ -27,7 +29,7 @@ final class CallTracer {
   private final LongCounter callsStarted = LongCounterFactory.create();
   private final LongCounter callsSucceeded = LongCounterFactory.create();
   private final LongCounter callsFailed = LongCounterFactory.create();
-  private volatile long lastCallStartedMillis;
+  private volatile long lastCallStartedNanos;
 
   CallTracer(TimeProvider timeProvider) {
     this.timeProvider = timeProvider;
@@ -35,7 +37,7 @@ final class CallTracer {
 
   public void reportCallStarted() {
     callsStarted.add(1);
-    lastCallStartedMillis = timeProvider.currentTimeMillis();
+    lastCallStartedNanos = timeProvider.currentTimeNanos();
   }
 
   public void reportCallEnded(boolean success) {
@@ -51,25 +53,20 @@ final class CallTracer {
         .setCallsStarted(callsStarted.value())
         .setCallsSucceeded(callsSucceeded.value())
         .setCallsFailed(callsFailed.value())
-        .setLastCallStartedMillis(lastCallStartedMillis);
+        .setLastCallStartedNanos(lastCallStartedNanos);
   }
 
-  @VisibleForTesting
-  interface TimeProvider {
-    /** Returns the current milli time. */
-    long currentTimeMillis();
+  void updateBuilder(ServerStats.Builder builder) {
+    builder
+        .setCallsStarted(callsStarted.value())
+        .setCallsSucceeded(callsSucceeded.value())
+        .setCallsFailed(callsFailed.value())
+        .setLastCallStartedNanos(lastCallStartedNanos);
   }
 
   public interface Factory {
     CallTracer create();
   }
-
-  static final TimeProvider SYSTEM_TIME_PROVIDER = new TimeProvider() {
-    @Override
-    public long currentTimeMillis() {
-      return System.currentTimeMillis();
-    }
-  };
 
   static final Factory DEFAULT_FACTORY = new Factory() {
     @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,7 @@ package io.grpc.testing.integration;
 
 import com.google.protobuf.MessageLite;
 import io.grpc.Metadata;
-import io.grpc.protobuf.ProtoUtils;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.security.Provider;
-import java.security.Security;
+import io.grpc.protobuf.lite.ProtoLiteUtils;
 import java.util.List;
 import org.junit.Assert;
 
@@ -32,13 +28,16 @@ import org.junit.Assert;
 public class Util {
 
   public static final Metadata.Key<Messages.SimpleContext> METADATA_KEY =
-      ProtoUtils.keyForProto(Messages.SimpleContext.getDefaultInstance());
+      Metadata.Key.of(
+          "grpc.testing.SimpleContext" + Metadata.BINARY_HEADER_SUFFIX,
+          ProtoLiteUtils.metadataMarshaller(Messages.SimpleContext.getDefaultInstance()));
   public static final Metadata.Key<String> ECHO_INITIAL_METADATA_KEY
       = Metadata.Key.of("x-grpc-test-echo-initial", Metadata.ASCII_STRING_MARSHALLER);
   public static final Metadata.Key<byte[]> ECHO_TRAILING_METADATA_KEY
       = Metadata.Key.of("x-grpc-test-echo-trailing-bin", Metadata.BINARY_BYTE_MARSHALLER);
 
   /** Assert that two messages are equal, producing a useful message if not. */
+  @SuppressWarnings("LiteProtoToString")
   public static void assertEquals(MessageLite expected, MessageLite actual) {
     if (expected == null || actual == null) {
       Assert.assertEquals(expected, actual);
@@ -65,42 +64,5 @@ public class Util {
         assertEquals(expected.get(i), actual.get(i));
       }
     }
-  }
-
-  private static boolean conscryptInstallAttempted;
-
-  /**
-   * Add Conscrypt to the list of security providers, if it is available. If it appears to be
-   * available but fails to load, this method will throw an exception. Since the list of security
-   * providers is static, this method does nothing if the provider is not available or succeeded
-   * previously.
-   */
-  public static void installConscryptIfAvailable() {
-    if (conscryptInstallAttempted) {
-      return;
-    }
-    Class<?> conscrypt;
-    try {
-      conscrypt = Class.forName("org.conscrypt.Conscrypt");
-    } catch (ClassNotFoundException ex) {
-      conscryptInstallAttempted = true;
-      return;
-    }
-    Method newProvider;
-    try {
-      newProvider = conscrypt.getMethod("newProvider");
-    } catch (NoSuchMethodException ex) {
-      throw new RuntimeException("Could not find newProvider method on Conscrypt", ex);
-    }
-    Provider provider;
-    try {
-      provider = (Provider) newProvider.invoke(null);
-    } catch (IllegalAccessException ex) {
-      throw new RuntimeException("Could not invoke Conscrypt.newProvider", ex);
-    } catch (InvocationTargetException ex) {
-      throw new RuntimeException("Could not invoke Conscrypt.newProvider", ex);
-    }
-    Security.addProvider(provider);
-    conscryptInstallAttempted = true;
   }
 }

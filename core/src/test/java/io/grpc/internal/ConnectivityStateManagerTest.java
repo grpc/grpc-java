@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ConnectivityState;
@@ -39,12 +38,13 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class ConnectivityStateManagerTest {
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
 
   private final FakeClock executor = new FakeClock();
   private final ConnectivityStateManager state = new ConnectivityStateManager();
-  private final LinkedList<ConnectivityState> sink = new LinkedList<ConnectivityState>();
+  private final LinkedList<ConnectivityState> sink = new LinkedList<>();
 
   @Test
   public void noCallback() {
@@ -148,7 +148,7 @@ public class ConnectivityStateManagerTest {
 
   @Test
   public void multipleCallbacks() {
-    final LinkedList<String> callbackRuns = new LinkedList<String>();
+    final LinkedList<String> callbackRuns = new LinkedList<>();
     state.notifyWhenStateChanged(new Runnable() {
         @Override
         public void run() {
@@ -232,36 +232,6 @@ public class ConnectivityStateManagerTest {
     state.gotoState(READY);
     assertEquals(1, sink.size());
     assertEquals(READY, sink.poll());
-  }
-
-  @Test
-  public void disable() {
-    state.disable();
-    assertTrue(state.isDisabled());
-
-    thrown.expect(UnsupportedOperationException.class);
-    thrown.expectMessage("Channel state API is not implemented");
-    state.getState();
-  }
-
-  @Test
-  public void disableThenDisable() {
-    state.disable();
-    state.disable();
-    assertTrue(state.isDisabled());
-
-    thrown.expect(UnsupportedOperationException.class);
-    thrown.expectMessage("Channel state API is not implemented");
-    state.getState();
-  }
-
-  @Test
-  public void disableThenGotoReady() {
-    state.disable();
-
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("ConnectivityStateManager is already disabled");
-    state.gotoState(READY);
   }
 
   @Test

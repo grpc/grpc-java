@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import com.google.common.base.Function;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Maps;
+import io.grpc.Context;
 import io.opencensus.common.Scope;
 import io.opencensus.stats.Measure;
 import io.opencensus.stats.MeasureMap;
@@ -31,6 +32,8 @@ import io.opencensus.tags.Tag;
 import io.opencensus.tags.TagContext;
 import io.opencensus.tags.TagContextBuilder;
 import io.opencensus.tags.TagKey;
+import io.opencensus.tags.TagMetadata;
+import io.opencensus.tags.TagMetadata.TagTtl;
 import io.opencensus.tags.TagValue;
 import io.opencensus.tags.Tagger;
 import io.opencensus.tags.propagation.TagContextBinarySerializer;
@@ -40,7 +43,7 @@ import io.opencensus.trace.Annotation;
 import io.opencensus.trace.AttributeValue;
 import io.opencensus.trace.EndSpanOptions;
 import io.opencensus.trace.Link;
-import io.opencensus.trace.NetworkEvent;
+import io.opencensus.trace.MessageEvent;
 import io.opencensus.trace.Sampler;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanBuilder;
@@ -151,7 +154,7 @@ public class StatsTestUtils {
      */
     // This needs to be synchronized with getCurrentRecordSink() which may run concurrently.
     public synchronized void rolloverRecords() {
-      records = new LinkedBlockingQueue<MetricsRecord>();
+      records = new LinkedBlockingQueue<>();
     }
 
     private synchronized BlockingQueue<MetricsRecord> getCurrentRecordSink() {
@@ -168,7 +171,7 @@ public class StatsTestUtils {
 
     @Override
     public TagContext getCurrentTagContext() {
-      return ContextUtils.TAG_CONTEXT_KEY.get();
+      return ContextUtils.getValue(Context.current());
     }
 
     @Override
@@ -201,7 +204,7 @@ public class StatsTestUtils {
       String serializedString = new String(bytes, UTF_8);
       if (serializedString.startsWith(EXTRA_TAG_HEADER_VALUE_PREFIX)) {
         return tagger.emptyBuilder()
-            .put(EXTRA_TAG,
+            .putLocal(EXTRA_TAG,
                 TagValue.create(serializedString.substring(EXTRA_TAG_HEADER_VALUE_PREFIX.length())))
             .build();
       } else {
@@ -256,6 +259,9 @@ public class StatsTestUtils {
     private static final FakeTagContext EMPTY =
         new FakeTagContext(ImmutableMap.<TagKey, TagValue>of());
 
+    private static final TagMetadata METADATA_PROPAGATING =
+        TagMetadata.create(TagTtl.UNLIMITED_PROPAGATION);
+
     private final ImmutableMap<TagKey, TagValue> tags;
 
     private FakeTagContext(ImmutableMap<TagKey, TagValue> tags) {
@@ -278,7 +284,7 @@ public class StatsTestUtils {
           new Function<Map.Entry<TagKey, TagValue>, Tag>() {
             @Override
             public Tag apply(@Nullable Map.Entry<TagKey, TagValue> entry) {
-              return Tag.create(entry.getKey(), entry.getValue());
+              return Tag.create(entry.getKey(), entry.getValue(), METADATA_PROPAGATING);
             }
           });
     }
@@ -292,6 +298,7 @@ public class StatsTestUtils {
       tagsBuilder.putAll(tags);
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public TagContextBuilder put(TagKey key, TagValue value) {
       tagsBuilder.put(key, value);
@@ -328,6 +335,7 @@ public class StatsTestUtils {
     /**
      * Creates a MockableSpan with a random trace ID and span ID.
      */
+    @SuppressWarnings("deprecation")
     public static MockableSpan generateRandomSpan(Random random) {
       return new MockableSpan(
           SpanContext.create(
@@ -347,7 +355,7 @@ public class StatsTestUtils {
     public void addAnnotation(Annotation annotation) {}
 
     @Override
-    public void addNetworkEvent(NetworkEvent networkEvent) {}
+    public void addMessageEvent(MessageEvent messageEvent) {}
 
     @Override
     public void addLink(Link link) {}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package io.grpc.testing;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.truth.Fact.fact;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.truth.ComparableSubject;
@@ -28,10 +29,9 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
-/**
- * Propositions for {@link Deadline} subjects.
- */
-public final class DeadlineSubject extends ComparableSubject<DeadlineSubject, Deadline> {
+/** Propositions for {@link Deadline} subjects. */
+@SuppressWarnings("rawtypes") // Generics in this class are going away in a subsequent Truth.
+public final class DeadlineSubject extends ComparableSubject {
   private static final Subject.Factory<DeadlineSubject, Deadline> deadlineFactory =
       new Factory();
 
@@ -39,8 +39,12 @@ public final class DeadlineSubject extends ComparableSubject<DeadlineSubject, De
     return deadlineFactory;
   }
 
+  private final Deadline actual;
+
+  @SuppressWarnings("unchecked")
   private DeadlineSubject(FailureMetadata metadata, Deadline subject) {
     super(metadata, subject);
+    this.actual = subject;
   }
 
   /**
@@ -52,7 +56,7 @@ public final class DeadlineSubject extends ComparableSubject<DeadlineSubject, De
     return new TolerantDeadlineComparison() {
       @Override
       public void of(Deadline expected) {
-        Deadline actual = actual();
+        Deadline actual = DeadlineSubject.this.actual;
         checkNotNull(actual, "actual value cannot be null. expected=%s", expected);
 
         // This is probably overkill, but easier than thinking about overflow.
@@ -60,11 +64,10 @@ public final class DeadlineSubject extends ComparableSubject<DeadlineSubject, De
         BigInteger expectedTimeRemaining = BigInteger.valueOf(expected.timeRemaining(NANOSECONDS));
         BigInteger deltaNanos = BigInteger.valueOf(timeUnit.toNanos(delta));
         if (actualTimeRemaining.subtract(expectedTimeRemaining).abs().compareTo(deltaNanos) > 0) {
-          failWithRawMessage(
-              "%s and <%s> should have been within <%sns> of each other",
-              actualAsString(),
-              expected,
-              deltaNanos);
+          failWithoutActual(
+              fact("expected", expected),
+              fact("but was", actual),
+              fact("outside tolerance in ns", deltaNanos));
         }
       }
     };

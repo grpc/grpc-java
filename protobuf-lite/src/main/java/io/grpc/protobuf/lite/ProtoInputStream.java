@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ import javax.annotation.Nullable;
 /**
  * An {@link InputStream} backed by a protobuf.
  */
-class ProtoInputStream extends InputStream implements Drainable, KnownLength {
+final class ProtoInputStream extends InputStream implements Drainable, KnownLength {
 
   // ProtoInputStream is first initialized with a *message*. *partial* is initially null.
   // Once there has been a read operation on this stream, *message* is serialized to *partial* and
@@ -39,7 +39,7 @@ class ProtoInputStream extends InputStream implements Drainable, KnownLength {
   private final Parser<?> parser;
   @Nullable private ByteArrayInputStream partial;
 
-  public ProtoInputStream(MessageLite message, Parser<?> parser) {
+  ProtoInputStream(MessageLite message, Parser<?> parser) {
     this.message = message;
     this.parser = parser;
   }
@@ -61,7 +61,7 @@ class ProtoInputStream extends InputStream implements Drainable, KnownLength {
   }
 
   @Override
-  public int read() throws IOException {
+  public int read() {
     if (message != null) {
       partial = new ByteArrayInputStream(message.toByteArray());
       message = null;
@@ -103,7 +103,7 @@ class ProtoInputStream extends InputStream implements Drainable, KnownLength {
   }
 
   @Override
-  public int available() throws IOException {
+  public int available() {
     if (message != null) {
       return message.getSerializedSize();
     } else if (partial != null) {

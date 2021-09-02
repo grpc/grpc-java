@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +18,11 @@ package io.grpc.internal;
 
 import io.grpc.Attributes;
 import io.grpc.Compressor;
+import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Status;
 import java.io.InputStream;
+import javax.annotation.Nonnull;
 
 /**
  * An implementation of {@link ClientStream} that silently does nothing for the operations.
@@ -65,6 +67,9 @@ public class NoopClientStream implements ClientStream {
   }
 
   @Override
+  public void optimizeForDirectExecutor() {}
+
+  @Override
   public void setCompressor(Compressor compressor) {}
 
   @Override
@@ -78,4 +83,12 @@ public class NoopClientStream implements ClientStream {
 
   @Override
   public void setMaxOutboundMessageSize(int maxSize) {}
+
+  @Override
+  public void setDeadline(@Nonnull Deadline deadline) {}
+
+  @Override
+  public void appendTimeoutInsight(InsightBuilder insight) {
+    insight.append("noop");
+  }
 }

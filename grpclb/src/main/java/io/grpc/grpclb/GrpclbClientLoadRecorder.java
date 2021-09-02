@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,14 +19,15 @@ package io.grpc.grpclb;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.protobuf.util.Timestamps;
-import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.TimeProvider;
+import io.grpc.lb.v1.ClientStats;
+import io.grpc.lb.v1.ClientStatsPerToken;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -36,7 +37,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * span of an LB stream with the remote load-balancer.
  */
 @ThreadSafe
-final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
+final class GrpclbClientLoadRecorder extends ClientStreamTracer.InternalLimitedInfoFactory {
 
   private static final AtomicLongFieldUpdater<GrpclbClientLoadRecorder> callsStartedUpdater =
       AtomicLongFieldUpdater.newUpdater(GrpclbClientLoadRecorder.class, "callsStarted");
@@ -61,7 +62,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
 
   // Specific finish types
   @GuardedBy("this")
-  private Map<String, LongHolder> callsDroppedPerToken = new HashMap<String, LongHolder>(1);
+  private Map<String, LongHolder> callsDroppedPerToken = new HashMap<>(1);
   @SuppressWarnings("unused")
   private volatile long callsFailedToSend;
   @SuppressWarnings("unused")
@@ -72,7 +73,8 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
   }
 
   @Override
-  public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
+  public ClientStreamTracer newClientStreamTracer(
+      ClientStreamTracer.StreamInfo info, Metadata headers) {
     callsStartedUpdater.getAndIncrement(this);
     return new StreamTracer();
   }
@@ -99,7 +101,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
   ClientStats generateLoadReport() {
     ClientStats.Builder statsBuilder =
         ClientStats.newBuilder()
-        .setTimestamp(Timestamps.fromMillis(time.currentTimeMillis()))
+        .setTimestamp(Timestamps.fromNanos(time.currentTimeNanos()))
         .setNumCallsStarted(callsStartedUpdater.getAndSet(this, 0))
         .setNumCallsFinished(callsFinishedUpdater.getAndSet(this, 0))
         .setNumCallsFinishedWithClientFailedToSend(callsFailedToSendUpdater.getAndSet(this, 0))
@@ -109,10 +111,10 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
     synchronized (this) {
       if (!callsDroppedPerToken.isEmpty()) {
         localCallsDroppedPerToken = callsDroppedPerToken;
-        callsDroppedPerToken = new HashMap<String, LongHolder>(localCallsDroppedPerToken.size());
+        callsDroppedPerToken = new HashMap<>(localCallsDroppedPerToken.size());
       }
     }
-    for (Entry<String, LongHolder> entry : localCallsDroppedPerToken.entrySet()) {
+    for (Map.Entry<String, LongHolder> entry : localCallsDroppedPerToken.entrySet()) {
       statsBuilder.addCallsFinishedWithDrop(
           ClientStatsPerToken.newBuilder()
               .setLoadBalanceToken(entry.getKey())

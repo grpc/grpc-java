@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,13 @@
 
 package io.grpc.internal;
 
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalInstrumented;
 import io.grpc.Status;
-import io.grpc.internal.Channelz.TransportStats;
 import java.util.concurrent.ScheduledExecutorService;
 
 /** An inbound connection. */
-public interface ServerTransport extends Instrumented<TransportStats> {
+public interface ServerTransport extends InternalInstrumented<SocketStats> {
   /**
    * Initiates an orderly shutdown of the transport. Existing streams continue, but new streams will
    * eventually begin failing. New streams "eventually" begin failing because shutdown may need to

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import io.grpc.benchmarks.Utils;
 import io.grpc.benchmarks.proto.BenchmarkServiceGrpc;
 import io.grpc.benchmarks.proto.Messages;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
@@ -33,9 +32,6 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.SslProvider;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.io.File;
 import java.io.IOException;
@@ -80,6 +76,7 @@ public class AsyncServer {
 
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
+      @SuppressWarnings("CatchAndPrintStackTrace")
       public void run() {
         try {
           System.out.println("QPS Server shutting down");
@@ -92,28 +89,7 @@ public class AsyncServer {
     server.awaitTermination();
   }
 
-  @SuppressWarnings("LiteralClassName") // Epoll is not available on windows
   static Server newServer(ServerConfiguration config) throws IOException {
-    SslContext sslContext = null;
-    if (config.tls) {
-      System.out.println("Using fake CA for TLS certificate.\n"
-          + "Run the Java client with --tls --testca");
-
-      File cert = TestUtils.loadCert("server1.pem");
-      File key = TestUtils.loadCert("server1.key");
-      SslContextBuilder sslContextBuilder = GrpcSslContexts.forServer(cert, key);
-      if (config.transport == ServerConfiguration.Transport.NETTY_NIO) {
-        sslContextBuilder = GrpcSslContexts.configure(sslContextBuilder, SslProvider.JDK);
-      } else {
-        // Native transport with OpenSSL
-        sslContextBuilder = GrpcSslContexts.configure(sslContextBuilder, SslProvider.OPENSSL);
-      }
-      if (config.useDefaultCiphers) {
-        sslContextBuilder.ciphers(null);
-      }
-      sslContext = sslContextBuilder.build();
-    }
-
     final EventLoopGroup boss;
     final EventLoopGroup worker;
     final Class<? extends ServerChannel> channelType;
@@ -134,14 +110,14 @@ public class AsyncServer {
               Class.forName("io.netty.channel.epoll.EpollServerSocketChannel");
           boss =
               (EventLoopGroup)
-                  (groupClass
+                  groupClass
                       .getConstructor(int.class, ThreadFactory.class)
-                      .newInstance(1, tf));
+                      .newInstance(1, tf);
           worker =
               (EventLoopGroup)
-                  (groupClass
+                  groupClass
                       .getConstructor(int.class, ThreadFactory.class)
-                      .newInstance(0, tf));
+                      .newInstance(0, tf);
           channelType = channelClass;
           break;
         } catch (Exception e) {
@@ -157,14 +133,14 @@ public class AsyncServer {
               Class.forName("io.netty.channel.epoll.EpollServerDomainSocketChannel");
           boss =
               (EventLoopGroup)
-                  (groupClass
+                  groupClass
                       .getConstructor(int.class, ThreadFactory.class)
-                      .newInstance(1, tf));
+                      .newInstance(1, tf);
           worker =
               (EventLoopGroup)
-                  (groupClass
+                  groupClass
                       .getConstructor(int.class, ThreadFactory.class)
-                      .newInstance(0, tf));
+                      .newInstance(0, tf);
           channelType = channelClass;
           break;
         } catch (Exception e) {
@@ -183,8 +159,15 @@ public class AsyncServer {
         .workerEventLoopGroup(worker)
         .channelType(channelType)
         .addService(new BenchmarkServiceImpl())
-        .sslContext(sslContext)
         .flowControlWindow(config.flowControlWindow);
+    if (config.tls) {
+      System.out.println("Using fake CA for TLS certificate.\n"
+          + "Run the Java client with --tls --testca");
+
+      File cert = TestUtils.loadCert("server1.pem");
+      File key = TestUtils.loadCert("server1.key");
+      builder.useTransportSecurity(cert, key);
+    }
     if (config.directExecutor) {
       builder.directExecutor();
     } else {

@@ -1,47 +1,96 @@
+pluginManagement {
+    plugins {
+        id "com.android.application" version "3.5.0"
+        id "com.android.library" version "3.5.0"
+        id "com.github.johnrengelman.shadow" version "6.1.0"
+        id "com.github.kt3k.coveralls" version "2.10.2"
+        id "com.google.osdetector" version "1.6.2"
+        id "com.google.protobuf" version "0.8.17"
+        id "digital.wup.android-maven-publish" version "3.6.2"
+        id "me.champeau.gradle.japicmp" version "0.2.5"
+        id "me.champeau.gradle.jmh" version "0.5.2"
+        id "net.ltgt.errorprone" version "1.3.0"
+        id "ru.vyarus.animalsniffer" version "1.5.2"
+    }
+    resolutionStrategy {
+        eachPlugin {
+            if (target.id.namespace == "com.android") {
+                useModule("com.android.tools.build:gradle:${target.version}")
+            }
+        }
+    }
+    repositories {
+        gradlePluginPortal()
+        google()
+    }
+}
+
 rootProject.name = "grpc"
+include ":grpc-api"
 include ":grpc-core"
 include ":grpc-context"
 include ":grpc-stub"
+include ":grpc-census"
 include ":grpc-auth"
 include ":grpc-okhttp"
 include ":grpc-protobuf"
 include ":grpc-protobuf-lite"
-include ":grpc-protobuf-nano"
 include ":grpc-netty"
 include ":grpc-netty-shaded"
 include ":grpc-grpclb"
 include ":grpc-testing"
 include ":grpc-testing-proto"
 include ":grpc-interop-testing"
-include ":grpc-gae-interop-testing-jdk7"
 include ":grpc-gae-interop-testing-jdk8"
 include ":grpc-all"
+include ":grpc-alts"
 include ":grpc-benchmarks"
 include ":grpc-services"
+include ":grpc-xds"
+include ":grpc-bom"
+include ":grpc-rls"
 
+project(':grpc-api').projectDir = "$rootDir/api" as File
 project(':grpc-core').projectDir = "$rootDir/core" as File
 project(':grpc-context').projectDir = "$rootDir/context" as File
 project(':grpc-stub').projectDir = "$rootDir/stub" as File
+project(':grpc-census').projectDir = "$rootDir/census" as File
 project(':grpc-auth').projectDir = "$rootDir/auth" as File
 project(':grpc-okhttp').projectDir = "$rootDir/okhttp" as File
 project(':grpc-protobuf').projectDir = "$rootDir/protobuf" as File
 project(':grpc-protobuf-lite').projectDir = "$rootDir/protobuf-lite" as File
-project(':grpc-protobuf-nano').projectDir = "$rootDir/protobuf-nano" as File
 project(':grpc-netty').projectDir = "$rootDir/netty" as File
 project(':grpc-netty-shaded').projectDir = "$rootDir/netty/shaded" as File
 project(':grpc-grpclb').projectDir = "$rootDir/grpclb" as File
 project(':grpc-testing').projectDir = "$rootDir/testing" as File
 project(':grpc-testing-proto').projectDir = "$rootDir/testing-proto" as File
 project(':grpc-interop-testing').projectDir = "$rootDir/interop-testing" as File
-project(':grpc-gae-interop-testing-jdk7').projectDir = "$rootDir/gae-interop-testing/gae-jdk7" as File
 project(':grpc-gae-interop-testing-jdk8').projectDir = "$rootDir/gae-interop-testing/gae-jdk8" as File
 project(':grpc-all').projectDir = "$rootDir/all" as File
+project(':grpc-alts').projectDir = "$rootDir/alts" as File
 project(':grpc-benchmarks').projectDir = "$rootDir/benchmarks" as File
 project(':grpc-services').projectDir = "$rootDir/services" as File
+project(':grpc-xds').projectDir = "$rootDir/xds" as File
+project(':grpc-bom').projectDir = "$rootDir/bom" as File
+project(':grpc-rls').projectDir = "$rootDir/rls" as File
 
 if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {
-  println '*** Skipping the build of codegen and compilation of proto files because skipCodegen=true'
+    println '*** Skipping the build of codegen and compilation of proto files because skipCodegen=true'
 } else {
-  include ":grpc-compiler"
-  project(':grpc-compiler').projectDir = "$rootDir/compiler" as File
+    include ":grpc-compiler"
+    project(':grpc-compiler').projectDir = "$rootDir/compiler" as File
+}
+
+if (settings.hasProperty('skipAndroid') && skipAndroid.toBoolean()) {
+    println '  * Skipping the build of Android projects because skipAndroid=true'
+} else {
+    println '*** Android SDK is required. To avoid building Android projects, set -PskipAndroid=true'
+    include ":grpc-cronet"
+    project(':grpc-cronet').projectDir = "$rootDir/cronet" as File
+    include ":grpc-android"
+    project(':grpc-android').projectDir = "$rootDir/android" as File
+    include ":grpc-android-interop-testing"
+    project(':grpc-android-interop-testing').projectDir = "$rootDir/android-interop-testing" as File
+    include ":grpc-binder"
+    project(':grpc-binder').projectDir = "$rootDir/binder" as File
 }

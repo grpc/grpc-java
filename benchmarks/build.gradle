@@ -1,13 +1,11 @@
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath libraries.protobuf_plugin
-    }
-}
+plugins {
+    id "application"
+    id "java"
+    id "maven-publish"
 
-apply plugin: 'application'
+    id "com.google.protobuf"
+    id "me.champeau.gradle.jmh"
+}
 
 description = "grpc Benchmarks"
 
@@ -16,70 +14,75 @@ run.enabled = false
 
 jmh {
     jvmArgs = "-server -Xms2g -Xmx2g"
-    // Workaround
-    // https://github.com/melix/jmh-gradle-plugin/issues/97#issuecomment-316664026
-    includeTests = true
+}
+
+configurations {
+    alpnagent
 }
 
 dependencies {
-    compile project(':grpc-core'),
+    implementation project(':grpc-core'),
             project(':grpc-netty'),
             project(':grpc-okhttp'),
             project(':grpc-stub'),
             project(':grpc-protobuf'),
             project(':grpc-testing'),
-            libraries.junit,
-            libraries.mockito,
             libraries.hdrhistogram,
             libraries.netty_tcnative,
             libraries.netty_epoll,
             libraries.math
+    compileOnly libraries.javax_annotation
+    alpnagent libraries.jetty_alpn_agent
+
+    testImplementation libraries.junit,
+            libraries.mockito
 }
 
+import net.ltgt.gradle.errorprone.CheckSeverity
+
 compileJava {
-  // The Control.Void protobuf clashes
-  options.compilerArgs += ["-Xep:JavaLangClash:OFF"]
+    // The Control.Void protobuf clashes
+    options.errorprone.check("JavaLangClash", CheckSeverity.OFF)
 }
 
 configureProtoCompilation()
 
 def vmArgs = [
-        "-server",
-        "-Xms2g",
-        "-Xmx2g",
-        "-XX:+PrintGCDetails"
+    "-server",
+    "-Xms2g",
+    "-Xmx2g",
+    "-XX:+PrintGCDetails"
 ]
 
 task qps_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.benchmarks.qps.AsyncClient"
     applicationName = "qps_client"
-    defaultJvmOpts = ["-javaagent:" + configurations.alpnagent.asPath] + vmArgs
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + project.configurations.runtime
+    defaultJvmOpts = vmArgs
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
 task openloop_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.benchmarks.qps.OpenLoopClient"
     applicationName = "openloop_client"
-    defaultJvmOpts = ["-javaagent:" + configurations.alpnagent.asPath] + vmArgs
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + project.configurations.runtime
+    defaultJvmOpts = vmArgs
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
 task qps_server(type: CreateStartScripts) {
     mainClassName = "io.grpc.benchmarks.qps.AsyncServer"
     applicationName = "qps_server"
-    defaultJvmOpts = ["-javaagent:" + configurations.alpnagent.asPath] + vmArgs
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + project.configurations.runtime
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
 task benchmark_worker(type: CreateStartScripts) {
     mainClassName = "io.grpc.benchmarks.driver.LoadWorker"
     applicationName = "benchmark_worker"
-    defaultJvmOpts = ["-javaagent:" + configurations.alpnagent.asPath] + vmArgs
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + project.configurations.runtime
+    defaultJvmOpts = vmArgs
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
 }
 
 applicationDistribution.into("bin") {
@@ -90,11 +93,11 @@ applicationDistribution.into("bin") {
     fileMode = 0755
 }
 
-// Let intellij projects refer to generated code
-idea {
-    module {
-        sourceDirs += file("${projectDir}/src/generated/main/java");
-        sourceDirs += file("${projectDir}/src/generated/main/grpc");
+publishing {
+    publications {
+        maven(MavenPublication) {
+            artifact distZip
+            artifact distTar
+        }
     }
 }
-

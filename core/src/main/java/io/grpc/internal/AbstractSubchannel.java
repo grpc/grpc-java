@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,26 +16,21 @@
 
 package io.grpc.internal;
 
+import com.google.common.annotations.VisibleForTesting;
+import io.grpc.InternalChannelz.ChannelStats;
+import io.grpc.InternalInstrumented;
 import io.grpc.LoadBalancer;
-import io.grpc.internal.Channelz.ChannelStats;
-import javax.annotation.Nullable;
 
 /**
  * The base interface of the Subchannels returned by {@link
  * io.grpc.LoadBalancer.Helper#createSubchannel}.
  */
-abstract class AbstractSubchannel extends LoadBalancer.Subchannel
-    implements Instrumented<ChannelStats> {
-  private final LogId logId = LogId.allocate(getClass().getName());
+abstract class AbstractSubchannel extends LoadBalancer.Subchannel {
 
   /**
-   * Same as {@link InternalSubchannel#obtainActiveTransport}.
+   * Returns the InternalSubchannel as an {@code Instrumented<T>} for the sole purpose of channelz
+   * unit tests.
    */
-  @Nullable
-  abstract ClientTransport obtainActiveTransport();
-
-  @Override
-  public LogId getLogId() {
-    return logId;
-  }
+  @VisibleForTesting
+  abstract InternalInstrumented<ChannelStats> getInstrumentedInternalSubchannel();
 }

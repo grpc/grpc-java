@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,8 +27,6 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-import io.grpc.examples.helloworld.HelloWorldClient;
-import io.grpc.protobuf.ProtoUtils;
 import io.grpc.stub.AbstractStub;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -44,7 +42,7 @@ import java.util.logging.Logger;
  * https://groups.google.com/forum/#!forum/grpc-io
  */
 public final class HelloJsonClient {
-  private static final Logger logger = Logger.getLogger(HelloWorldClient.class.getName());
+  private static final Logger logger = Logger.getLogger(HelloJsonClient.class.getName());
 
   private final ManagedChannel channel;
   private final HelloJsonStub blockingStub;
@@ -52,7 +50,7 @@ public final class HelloJsonClient {
   /** Construct client connecting to HelloWorld server at {@code host:port}. */
   public HelloJsonClient(String host, int port) {
     channel = ManagedChannelBuilder.forAddress(host, port)
-        .usePlaintext(true)
+        .usePlaintext()
         .build();
     blockingStub = new HelloJsonStub(channel);
   }
@@ -80,12 +78,13 @@ public final class HelloJsonClient {
    * greeting.
    */
   public static void main(String[] args) throws Exception {
+    // Access a service running on the local machine on port 50051
     HelloJsonClient client = new HelloJsonClient("localhost", 50051);
     try {
-      /* Access a service running on the local machine on port 50051 */
       String user = "world";
+      // Use the arg as the name to greet if provided
       if (args.length > 0) {
-        user = args[0]; /* Use the arg as the name to greet if provided */
+        user = args[0];
       }
       client.greet(user);
     } finally {
@@ -98,8 +97,8 @@ public final class HelloJsonClient {
     static final MethodDescriptor<HelloRequest, HelloReply> METHOD_SAY_HELLO =
         GreeterGrpc.getSayHelloMethod()
             .toBuilder(
-                ProtoUtils.jsonMarshaller(HelloRequest.getDefaultInstance()),
-                ProtoUtils.jsonMarshaller(HelloReply.getDefaultInstance()))
+                JsonMarshaller.jsonMarshaller(HelloRequest.getDefaultInstance()),
+                JsonMarshaller.jsonMarshaller(HelloReply.getDefaultInstance()))
             .build();
 
     protected HelloJsonStub(Channel channel) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,6 @@ import static io.grpc.benchmarks.qps.ClientConfiguration.ClientParam.TARGET_QPS;
 import static io.grpc.benchmarks.qps.ClientConfiguration.ClientParam.TESTCA;
 import static io.grpc.benchmarks.qps.ClientConfiguration.ClientParam.TLS;
 import static io.grpc.benchmarks.qps.ClientConfiguration.ClientParam.TRANSPORT;
-import static io.grpc.benchmarks.qps.ClientConfiguration.ClientParam.USE_DEFAULT_CIPHERS;
 
 import io.grpc.Channel;
 import io.grpc.ManagedChannel;
@@ -66,7 +65,7 @@ public class OpenLoopClient {
   public static void main(String... args) throws Exception {
     ClientConfiguration.Builder configBuilder = ClientConfiguration.newBuilder(
         ADDRESS, TARGET_QPS, CLIENT_PAYLOAD, SERVER_PAYLOAD, TLS,
-        TESTCA, USE_DEFAULT_CIPHERS, TRANSPORT, DURATION, SAVE_HISTOGRAM, FLOW_CONTROL_WINDOW);
+        TESTCA, TRANSPORT, DURATION, SAVE_HISTOGRAM, FLOW_CONTROL_WINDOW);
     ClientConfiguration config;
     try {
       config = configBuilder.build(args);
@@ -204,7 +203,7 @@ public class OpenLoopClient {
     private void waitForRpcsToComplete(int duration) {
       long now = System.nanoTime();
       long end = now + duration * 1000 * 1000 * 1000;
-      while (histogram.getTotalCount() < numRpcs && now < end) {
+      while (histogram.getTotalCount() < numRpcs && end - now > 0) {
         now = System.nanoTime();
       }
     }

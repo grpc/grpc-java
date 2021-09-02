@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ abstract class ContextRunnable implements Runnable {
 
   private final Context context;
 
-  public ContextRunnable(Context context) {
+  protected ContextRunnable(Context context) {
     this.context = context;
   }
 

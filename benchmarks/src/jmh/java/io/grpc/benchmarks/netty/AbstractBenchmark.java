@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package io.grpc.benchmarks.netty;
 
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -25,6 +26,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
+import io.grpc.ServerCredentials;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
@@ -40,6 +42,8 @@ import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -135,6 +139,7 @@ public abstract class AbstractBenchmark {
    * sudo ip addr add dev lo 127.127.127.127/32 label lo:benchmark
    * </pre>
    */
+  @SuppressWarnings("JdkObsolete") // No choice but to use Enumeration
   private static InetAddress buildBenchmarkAddr() {
     InetAddress tmp = null;
     try {
@@ -178,7 +183,7 @@ public abstract class AbstractBenchmark {
   private MethodDescriptor<ByteBuf, ByteBuf> flowControlledStreaming;
   protected ManagedChannel[] channels;
 
-  public AbstractBenchmark() {
+  protected AbstractBenchmark() {
   }
 
   /**
@@ -192,11 +197,12 @@ public abstract class AbstractBenchmark {
                     ChannelType channelType,
                     int maxConcurrentStreams,
                     int channelCount) throws Exception {
+    ServerCredentials serverCreds = InsecureServerCredentials.create();
     NettyServerBuilder serverBuilder;
     NettyChannelBuilder channelBuilder;
     if (channelType == ChannelType.LOCAL) {
       LocalAddress address = new LocalAddress("netty-e2e-benchmark");
-      serverBuilder = NettyServerBuilder.forAddress(address);
+      serverBuilder = NettyServerBuilder.forAddress(address, serverCreds);
       serverBuilder.channelType(LocalServerChannel.class);
       channelBuilder = NettyChannelBuilder.forAddress(address);
       channelBuilder.channelType(LocalChannel.class);
@@ -206,8 +212,9 @@ public abstract class AbstractBenchmark {
       sock.bind(new InetSocketAddress(BENCHMARK_ADDR, 0));
       SocketAddress address = sock.getLocalSocketAddress();
       sock.close();
-      serverBuilder = NettyServerBuilder.forAddress(address);
-      channelBuilder = NettyChannelBuilder.forAddress(address);
+      serverBuilder = NettyServerBuilder.forAddress(address, serverCreds)
+          .channelType(NioServerSocketChannel.class);
+      channelBuilder = NettyChannelBuilder.forAddress(address).channelType(NioSocketChannel.class);
     }
 
     if (serverExecutor == ExecutorType.DIRECT) {
@@ -220,6 +227,7 @@ public abstract class AbstractBenchmark {
     // Always use a different worker group from the client.
     ThreadFactory serverThreadFactory = new DefaultThreadFactory("STF pool", true /* daemon */);
     serverBuilder.workerEventLoopGroup(new NioEventLoopGroup(0, serverThreadFactory));
+    serverBuilder.bossEventLoopGroup(new NioEventLoopGroup(1, serverThreadFactory));
 
     // Always set connection and stream window size to same value
     serverBuilder.flowControlWindow(windowSize.bytes());
@@ -432,7 +440,7 @@ public abstract class AbstractBenchmark {
         final ClientCall<ByteBuf, ByteBuf> streamingCall =
             channel.newCall(pingPongMethod, CALL_OPTIONS);
         final AtomicReference<StreamObserver<ByteBuf>> requestObserverRef =
-            new AtomicReference<StreamObserver<ByteBuf>>();
+            new AtomicReference<>();
         final AtomicBoolean ignoreMessages = new AtomicBoolean();
         StreamObserver<ByteBuf> requestObserver = ClientCalls.asyncBidiStreamingCall(
             streamingCall,
@@ -486,7 +494,7 @@ public abstract class AbstractBenchmark {
         final ClientCall<ByteBuf, ByteBuf> streamingCall =
             channel.newCall(flowControlledStreaming, CALL_OPTIONS);
         final AtomicReference<StreamObserver<ByteBuf>> requestObserverRef =
-            new AtomicReference<StreamObserver<ByteBuf>>();
+            new AtomicReference<>();
         final AtomicBoolean ignoreMessages = new AtomicBoolean();
         StreamObserver<ByteBuf> requestObserver = ClientCalls.asyncBidiStreamingCall(
             streamingCall,

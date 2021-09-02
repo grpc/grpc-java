@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ public class ManualFlowControlClient {
     // Create a channel and a stub
     ManagedChannel channel = ManagedChannelBuilder
         .forAddress("localhost", 50051)
-        .usePlaintext(true)
+        .usePlaintext()
         .build();
     StreamingGreeterGrpc.StreamingGreeterStub stub = StreamingGreeterGrpc.newStub(channel);
 
@@ -54,7 +54,7 @@ public class ManualFlowControlClient {
             this.requestStream = requestStream;
             // Set up manual flow control for the response stream. It feels backwards to configure the response
             // stream's flow control using the request stream's observer, but this is the way it is.
-            requestStream.disableAutoInboundFlowControl();
+            requestStream.disableAutoRequestWithInitial(1);
 
             // Set up a back-pressure-aware producer for the request stream. The onReadyHandler will be invoked
             // when the consuming side has enough buffer space to receive more messages.
@@ -64,9 +64,9 @@ public class ManualFlowControlClient {
             // request() to pull a buffered message from the client.
             //
             // Note: the onReadyHandler's invocation is serialized on the same thread pool as the incoming
-            // StreamObserver'sonNext(), onError(), and onComplete() handlers. Blocking the onReadyHandler will prevent
+            // StreamObserver's onNext(), onError(), and onComplete() handlers. Blocking the onReadyHandler will prevent
             // additional messages from being processed by the incoming StreamObserver. The onReadyHandler must return
-            // in a timely manor or else message processing throughput will suffer.
+            // in a timely manner or else message processing throughput will suffer.
             requestStream.setOnReadyHandler(new Runnable() {
               // An iterator is used so we can pause and resume iteration of the request data.
               Iterator<String> iterator = names().iterator();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -97,10 +97,12 @@ public final class ReflectionLongAdderCounter implements LongCounter {
     return initializationException == null;
   }
 
+  private static final Object[] one = new Object[] { 1L };
+
   @Override
   public void add(long delta) {
     try {
-      addMethod.invoke(instance, delta);
+      addMethod.invoke(instance, delta == 1L ? one : new Object[] { delta });
     } catch (IllegalAccessException e) {
       throw new RuntimeException(e);
     } catch (InvocationTargetException e) {

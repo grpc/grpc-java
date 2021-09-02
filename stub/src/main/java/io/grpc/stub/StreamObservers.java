@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,11 +24,12 @@ import java.util.Iterator;
  * Utility functions for working with {@link StreamObserver} and it's common subclasses like
  * {@link CallStreamObserver}.
  */
-@ExperimentalApi
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4694")
 public final class StreamObservers {
   /**
    * Copy the values of an {@link Iterator} to the target {@link CallStreamObserver} while properly
-   * accounting for outbound flow-control.
+   * accounting for outbound flow-control.  After calling this method, {@code target} should no
+   * longer be used.
    *
    * <p>For clients this method is safe to call inside {@link ClientResponseObserver#beforeStart},
    * on servers it is safe to call inside the service method implementation.
@@ -43,12 +44,20 @@ public final class StreamObservers {
     Preconditions.checkNotNull(target, "target");
 
     final class FlowControllingOnReadyHandler implements Runnable {
+      private boolean completed;
+
       @Override
       public void run() {
+        if (completed) {
+          return;
+        }
+
         while (target.isReady() && source.hasNext()) {
           target.onNext(source.next());
         }
+
         if (!source.hasNext()) {
+          completed = true;
           target.onCompleted();
         }
       }
@@ -59,7 +68,8 @@ public final class StreamObservers {
 
   /**
    * Copy the values of an {@link Iterable} to the target {@link CallStreamObserver} while properly
-   * accounting for outbound flow-control.
+   * accounting for outbound flow-control.  After calling this method, {@code target} should no
+   * longer be used.
    *
    * <p>For clients this method is safe to call inside {@link ClientResponseObserver#beforeStart},
    * on servers it is safe to call inside the service method implementation.

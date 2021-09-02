@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,6 +72,7 @@ final class JettyTlsUtil {
   static synchronized Throwable getJettyAlpnUnavailabilityCause() {
     // This case should be unlikely
     if (jettyAlpnUnavailabilityCause == null) {
+      @SuppressWarnings("UnusedVariable")
       boolean discard = isJettyAlpnConfigured();
     }
     return jettyAlpnUnavailabilityCause;
@@ -93,6 +94,7 @@ final class JettyTlsUtil {
   static synchronized Throwable getJettyNpnUnavailabilityCause() {
     // This case should be unlikely
     if (jettyNpnUnavailabilityCause == null) {
+      @SuppressWarnings("UnusedVariable")
       boolean discard = isJettyNpnConfigured();
     }
     return jettyNpnUnavailabilityCause;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,10 @@
 package io.grpc.netty;
 
 import io.grpc.Internal;
-import io.grpc.internal.ProxyParameters;
-import java.net.SocketAddress;
+import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.SharedResourcePool;
+import io.netty.channel.socket.nio.NioSocketChannel;
 
 /**
  * Internal {@link NettyChannelBuilder} accessor.  This is intended for usage internal to the gRPC
@@ -27,39 +29,43 @@ import java.net.SocketAddress;
 @Internal
 public final class InternalNettyChannelBuilder {
 
-  /**
-   * Checks authority upon channel construction.  The purpose of this interface is to raise the
-   * visibility of {@link NettyChannelBuilder.OverrideAuthorityChecker}.
-   */
-  public interface OverrideAuthorityChecker extends NettyChannelBuilder.OverrideAuthorityChecker {}
+  public static void disableCheckAuthority(NettyChannelBuilder builder) {
+    builder.disableCheckAuthority();
+  }
 
-  public static void overrideAuthorityChecker(
-      NettyChannelBuilder channelBuilder, OverrideAuthorityChecker authorityChecker) {
-    channelBuilder.overrideAuthorityChecker(authorityChecker);
+  public static void enableCheckAuthority(NettyChannelBuilder builder) {
+    builder.enableCheckAuthority();
+  }
+
+  /** A class that provides a Netty handler to control protocol negotiation. */
+  public interface ProtocolNegotiatorFactory {
+    InternalProtocolNegotiator.ProtocolNegotiator buildProtocolNegotiator();
   }
 
   /**
-   * Interface to create netty dynamic parameters.
+   * Sets the {@link ProtocolNegotiatorFactory} to be used. Overrides any specified negotiation type
+   * and {@code SslContext}.
    */
-  public interface TransportCreationParamsFilterFactory
-      extends NettyChannelBuilder.TransportCreationParamsFilterFactory {
-    @Override
-    TransportCreationParamsFilter create(
-        SocketAddress targetServerAddress, String authority, String userAgent,
-        ProxyParameters proxy);
+  public static void setProtocolNegotiatorFactory(
+      NettyChannelBuilder builder, final ProtocolNegotiatorFactory protocolNegotiator) {
+    builder.protocolNegotiatorFactory(new ProtocolNegotiator.ClientFactory() {
+      @Override public ProtocolNegotiator newNegotiator() {
+        return protocolNegotiator.buildProtocolNegotiator();
+      }
+
+      @Override public int getDefaultPort() {
+        return GrpcUtil.DEFAULT_PORT_SSL;
+      }
+    });
   }
 
   /**
-   * {@link TransportCreationParamsFilter} are those that may depend on late-known information about
-   * a client transport.  This interface can be used to dynamically alter params based on the
-   * params of {@code ClientTransportFactory#newClientTransport}.
+   * Sets the {@link ProtocolNegotiatorFactory} to be used. Overrides any specified negotiation type
+   * and {@code SslContext}.
    */
-  public interface TransportCreationParamsFilter
-      extends NettyChannelBuilder.TransportCreationParamsFilter {}
-
-  public static void setDynamicTransportParamsFactory(
-      NettyChannelBuilder builder, TransportCreationParamsFilterFactory factory) {
-    builder.setDynamicParamsFactory(factory);
+  public static void setProtocolNegotiatorFactory(
+      NettyChannelBuilder builder, InternalProtocolNegotiator.ClientFactory protocolNegotiator) {
+    builder.protocolNegotiatorFactory(protocolNegotiator);
   }
 
   public static void setStatsEnabled(NettyChannelBuilder builder, boolean value) {
@@ -72,6 +78,29 @@ public final class InternalNettyChannelBuilder {
 
   public static void setStatsRecordStartedRpcs(NettyChannelBuilder builder, boolean value) {
     builder.setStatsRecordStartedRpcs(value);
+  }
+
+  public static void setStatsRecordFinishedRpcs(NettyChannelBuilder builder, boolean value) {
+    builder.setStatsRecordFinishedRpcs(value);
+  }
+
+  public static void setStatsRecordRealTimeMetrics(NettyChannelBuilder builder, boolean value) {
+    builder.setStatsRecordRealTimeMetrics(value);
+  }
+
+  /**
+   * Sets {@link io.grpc.Channel} and {@link io.netty.channel.EventLoopGroup} to Nio. A major
+   * benefit over using setters is gRPC will manage the life cycle of {@link
+   * io.netty.channel.EventLoopGroup}.
+   */
+  public static void useNioTransport(NettyChannelBuilder builder) {
+    builder.channelType(NioSocketChannel.class);
+    builder
+        .eventLoopGroupPool(SharedResourcePool.forResource(Utils.NIO_WORKER_EVENT_LOOP_GROUP));
+  }
+
+  public static ClientTransportFactory buildTransportFactory(NettyChannelBuilder builder) {
+    return builder.buildTransportFactory();
   }
 
   private InternalNettyChannelBuilder() {}

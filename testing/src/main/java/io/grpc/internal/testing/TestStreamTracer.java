@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -91,9 +91,10 @@ public interface TestStreamTracer {
     protected final AtomicLong inboundWireSize = new AtomicLong();
     protected final AtomicLong outboundUncompressedSize = new AtomicLong();
     protected final AtomicLong inboundUncompressedSize = new AtomicLong();
-    protected final LinkedBlockingQueue<String> outboundEvents = new LinkedBlockingQueue<String>();
-    protected final LinkedBlockingQueue<String> inboundEvents = new LinkedBlockingQueue<String>();
-    protected final AtomicReference<Status> streamClosedStatus = new AtomicReference<Status>();
+    protected final LinkedBlockingQueue<String> outboundEvents = new LinkedBlockingQueue<>();
+    protected final LinkedBlockingQueue<String> inboundEvents = new LinkedBlockingQueue<>();
+    protected final AtomicReference<Status> streamClosedStatus = new AtomicReference<>();
+    protected final AtomicReference<Throwable> streamClosedStack = new AtomicReference<>();
     protected final CountDownLatch streamClosed = new CountDownLatch(1);
     protected final AtomicBoolean failDuplicateCallbacks = new AtomicBoolean(true);
 
@@ -154,9 +155,10 @@ public interface TestStreamTracer {
 
     @Override
     public void streamClosed(Status status) {
+      streamClosedStack.compareAndSet(null, new Throwable("first call"));
       if (!streamClosedStatus.compareAndSet(null, status)) {
         if (failDuplicateCallbacks.get()) {
-          throw new AssertionError("streamClosed called more than once");
+          throw new AssertionError("streamClosed called more than once", streamClosedStack.get());
         }
       } else {
         streamClosed.countDown();

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,30 +17,48 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.grpc.ForwardingTestUtil;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
+import java.util.Collections;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link ForwardingReadableBuffer}.
  */
 @RunWith(JUnit4.class)
 public class ForwardingReadableBufferTest {
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock private ReadableBuffer delegate;
   private ForwardingReadableBuffer buffer;
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     buffer = new ForwardingReadableBuffer(delegate) {};
+  }
+
+  @Test
+  public void allMethodsForwarded() throws Exception {
+    ForwardingTestUtil.testMethodsForwarded(
+        ReadableBuffer.class,
+        delegate,
+        buffer,
+        Collections.<Method>emptyList());
   }
 
   @Test
@@ -73,23 +91,26 @@ public class ForwardingReadableBufferTest {
 
   @Test
   public void readBytes() {
-    buffer.readBytes(null, 1, 2);
+    byte[] dest = new byte[1];
+    buffer.readBytes(dest, 1, 2);
 
-    verify(delegate).readBytes(null, 1, 2);
+    verify(delegate).readBytes(dest, 1, 2);
   }
 
   @Test
   public void readBytes_overload1() {
-    buffer.readBytes(null);
+    ByteBuffer dest = mock(ByteBuffer.class);
+    buffer.readBytes(dest);
 
-    verify(delegate).readBytes(null);
+    verify(delegate).readBytes(dest);
   }
 
   @Test
   public void readBytes_overload2() throws IOException {
-    buffer.readBytes(null, 1);
+    OutputStream dest = mock(OutputStream.class);
+    buffer.readBytes(dest, 1);
 
-    verify(delegate).readBytes(null, 1);
+    verify(delegate).readBytes(dest, 1);
   }
 
   @Test
@@ -108,9 +129,10 @@ public class ForwardingReadableBufferTest {
 
   @Test
   public void array() {
-    when(delegate.array()).thenReturn(null);
+    byte[] array = new byte[1];
+    when(delegate.array()).thenReturn(array);
 
-    assertEquals(null, buffer.array());
+    assertEquals(array, buffer.array());
   }
 
   @Test

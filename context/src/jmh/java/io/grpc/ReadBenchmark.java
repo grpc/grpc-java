@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,8 +33,8 @@ public class ReadBenchmark {
 
   @State(Scope.Benchmark)
   public static class ContextState {
-    List<Context.Key<Object>> keys = new ArrayList<Context.Key<Object>>();
-    List<Context> contexts = new ArrayList<Context>();
+    List<Context.Key<Object>> keys = new ArrayList<>();
+    List<Context> contexts = new ArrayList<>();
 
     @Setup
     public void setup() {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ import org.junit.runners.JUnit4;
 public class SerializingExecutorTest {
   private SingleExecutor singleExecutor = new SingleExecutor();
   private SerializingExecutor executor = new SerializingExecutor(singleExecutor);
-  private List<Integer> runs = new ArrayList<Integer>();
+  private List<Integer> runs = new ArrayList<>();
 
   private class AddToRuns implements Runnable {
     private final int val;
@@ -207,6 +207,38 @@ public class SerializingExecutorTest {
     assertEquals(Arrays.asList(1, 2), runs);
     executor.execute(new AddToRuns(3));
     assertEquals(Arrays.asList(1, 2, 3), runs);
+  }
+
+  @Test
+  public void switchable() {
+    final SerializingExecutor testExecutor =
+            new SerializingExecutor(MoreExecutors.directExecutor());
+    testExecutor.execute(new Runnable() {
+      @Override
+      public void run() {
+        runs.add(1);
+        testExecutor.setExecutor(singleExecutor);
+      }
+    });
+    testExecutor.execute(new AddToRuns(-2));
+    assertThat(runs).isEqualTo(Arrays.asList(1));
+    singleExecutor.drain();
+    assertThat(runs).isEqualTo(Arrays.asList(1, -2));
+  }
+
+  @Test
+  public void notSwitch() {
+    executor.execute(new Runnable() {
+      @Override
+      public void run() {
+        runs.add(1);
+        executor.setExecutor(singleExecutor);
+      }
+    });
+    executor.execute(new AddToRuns(-2));
+    assertThat(runs).isEqualTo(Collections.emptyList());
+    singleExecutor.drain();
+    assertThat(runs).isEqualTo(Arrays.asList(1, -2));
   }
 
   private static class SingleExecutor implements Executor {

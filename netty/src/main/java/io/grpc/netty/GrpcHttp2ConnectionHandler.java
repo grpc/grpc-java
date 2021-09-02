@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,12 @@
 
 package io.grpc.netty;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.Internal;
+import io.grpc.InternalChannelz;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
@@ -33,14 +37,29 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
 
   @Nullable
   protected final ChannelPromise channelUnused;
+  private final ChannelLogger negotiationLogger;
 
-  public GrpcHttp2ConnectionHandler(
+  protected GrpcHttp2ConnectionHandler(
       ChannelPromise channelUnused,
       Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,
-      Http2Settings initialSettings) {
+      Http2Settings initialSettings,
+      ChannelLogger negotiationLogger) {
     super(decoder, encoder, initialSettings);
     this.channelUnused = channelUnused;
+    this.negotiationLogger = negotiationLogger;
+  }
+
+  /**
+   * Same as {@link #handleProtocolNegotiationCompleted(
+   *   Attributes, io.grpc.InternalChannelz.Security)}
+   * but with no {@link io.grpc.InternalChannelz.Security}.
+   *
+   * @deprecated Use the two argument method instead.
+   */
+  @Deprecated
+  public void handleProtocolNegotiationCompleted(Attributes attrs) {
+    handleProtocolNegotiationCompleted(attrs, /*securityInfo=*/ null);
   }
 
   /**
@@ -50,8 +69,18 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
    * channel.
    *
    * @param attrs arbitrary attributes passed after protocol negotiation (eg. SSLSession).
+   * @param securityInfo informs channelz about the security protocol.
    */
-  public void handleProtocolNegotiationCompleted(Attributes attrs) {
+  public void handleProtocolNegotiationCompleted(
+      Attributes attrs, InternalChannelz.Security securityInfo) {
+  }
+
+  /**
+   * Returns the channel logger for the given channel context.
+   */
+  public ChannelLogger getNegotiationLogger() {
+    checkState(negotiationLogger != null, "NegotiationLogger must not be null");
+    return negotiationLogger;
   }
 
   /**
@@ -60,7 +89,22 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
    * useful if the channel will soon be deregistered from the executor and used in a non-Netty
    * context.
    */
+  @SuppressWarnings("FutureReturnValueIgnored")
   public void notifyUnused() {
     channelUnused.setSuccess(null);
+  }
+
+  /** Get the attributes of the EquivalentAddressGroup used to create this transport. */
+  public Attributes getEagAttributes() {
+    return Attributes.EMPTY;
+  }
+
+  /**
+   * Returns the authority of the server. Only available on the client-side.
+   *
+   * @throws UnsupportedOperationException if on server-side
+   */
+  public String getAuthority() {
+    throw new UnsupportedOperationException();
   }
 }

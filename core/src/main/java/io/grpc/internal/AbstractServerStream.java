@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,12 +62,6 @@ public abstract class AbstractServerStream extends AbstractStream
     void writeTrailers(Metadata trailers, boolean headersSent, Status status);
 
     /**
-     * Requests up to the given number of messages from the call to be delivered. This should end up
-     * triggering {@link TransportState#requestMessagesFromDeframer(int)} on the transport thread.
-     */
-    void request(int numMessages);
-
-    /**
      * Tears down the stream, typically in the event of a timeout. This method may be called
      * multiple times and from any thread.
      *
@@ -102,11 +96,6 @@ public abstract class AbstractServerStream extends AbstractStream
   }
 
   @Override
-  public final void request(int numMessages) {
-    abstractServerStreamSink().request(numMessages);
-  }
-
-  @Override
   public final void writeHeaders(Metadata headers) {
     Preconditions.checkNotNull(headers, "headers");
 
@@ -128,7 +117,6 @@ public abstract class AbstractServerStream extends AbstractStream
     Preconditions.checkNotNull(trailers, "trailers");
     if (!outboundClosed) {
       outboundClosed = true;
-      statsTraceCtx.streamClosed(status);
       endOfMessages();
       addStatusToTrailers(trailers, status);
       // Safe to set without synchronization because access is tightly controlled.
@@ -223,6 +211,7 @@ public abstract class AbstractServerStream extends AbstractStream
     @Override
     public final void onStreamAllocated() {
       super.onStreamAllocated();
+      getTransportTracer().reportRemoteStreamStarted();
     }
 
     @Override
@@ -335,6 +324,7 @@ public abstract class AbstractServerStream extends AbstractStream
           statsTraceCtx.streamClosed(newStatus);
           getTransportTracer().reportStreamClosed(false);
         } else {
+          statsTraceCtx.streamClosed(closedStatus);
           getTransportTracer().reportStreamClosed(closedStatus.isOk());
         }
         listenerClosed = true;

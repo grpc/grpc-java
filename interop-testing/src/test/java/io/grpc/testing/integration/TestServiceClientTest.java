@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import org.junit.runners.JUnit4;
 public class TestServiceClientTest {
 
   @Test
-  public void emptyArgumentListShouldNotThrowException() {
+  public void emptyArgumentListShouldNotThrowException() throws Exception {
     TestServiceClient client = new TestServiceClient();
     client.parseArgs(new String[0]);
     client.setUp();

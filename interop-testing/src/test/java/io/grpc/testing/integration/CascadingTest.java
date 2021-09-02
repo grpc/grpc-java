@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -295,7 +295,9 @@ public class CascadingTest {
                       Context.currentContextExecutor(otherWork).execute(new Runnable() {
                         @Override
                         public void run() {
-                          call.close(Status.ABORTED, new Metadata());
+                          synchronized (call) {
+                            call.close(Status.ABORTED, new Metadata());
+                          }
                         }
                       });
                     } else if (req.getResponseSize() != 0) {
@@ -316,7 +318,9 @@ public class CascadingTest {
                                 }
                                 // Propagate closure upwards.
                                 try {
-                                  call.close(status, new Metadata());
+                                  synchronized (call) {
+                                    call.close(status, new Metadata());
+                                  }
                                 } catch (IllegalStateException t2) {
                                   // Ignore error if already closed.
                                 }

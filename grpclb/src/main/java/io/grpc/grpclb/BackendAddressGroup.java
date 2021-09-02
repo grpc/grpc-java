@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,5 +38,16 @@ final class BackendAddressGroup {
   @Nullable
   String getToken() {
     return token;
+  }
+
+  @Override
+  public String toString() {
+    // This is printed in logs.  Be concise.
+    StringBuilder buffer = new StringBuilder();
+    buffer.append(addresses);
+    if (token != null) {
+      buffer.append("(").append(token).append(")");
+    }
+    return buffer.toString();
   }
 }

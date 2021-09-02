@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ public class TestCasesTest {
       "server_compressed_unary",
       "client_streaming",
       "client_compressed_streaming",
+      "compute_engine_channel_credentials",
       "server_streaming",
       "server_compressed_streaming",
       "ping_pong",
@@ -56,8 +57,10 @@ public class TestCasesTest {
       "jwt_token_creds",
       "oauth2_auth_token",
       "per_rpc_creds",
+      "google_default_credentials",
       "custom_metadata",
       "status_code_and_message",
+      "special_status_message",
       "unimplemented_method",
       "unimplemented_service",
       "cancel_after_begin",
@@ -65,10 +68,23 @@ public class TestCasesTest {
       "timeout_on_sleeping_server"
     };
 
-    assertEquals(testCases.length, TestCases.values().length);
+    // additional test cases
+    String[] additionalTestCases = {
+      "client_compressed_unary_noprobe",
+      "client_compressed_streaming_noprobe",
+      "very_large_request",
+      "pick_first_unary",
+      "channel_soak",
+      "rpc_soak"
+    };
 
-    Set<TestCases> testCaseSet = new HashSet<TestCases>(testCases.length);
+    assertEquals(testCases.length + additionalTestCases.length, TestCases.values().length);
+
+    Set<TestCases> testCaseSet = new HashSet<>(testCases.length);
     for (String testCase : testCases) {
+      testCaseSet.add(TestCases.fromString(testCase));
+    }
+    for (String testCase : additionalTestCases) {
       testCaseSet.add(TestCases.fromString(testCase));
     }
 

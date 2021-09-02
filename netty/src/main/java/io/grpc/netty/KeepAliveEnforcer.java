@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ class KeepAliveEnforcer {
 
   @VisibleForTesting
   KeepAliveEnforcer(boolean permitWithoutCalls, long minTime, TimeUnit unit, Ticker ticker) {
-    Preconditions.checkArgument(minTime >= 0, "minTime must be non-negative");
+    Preconditions.checkArgument(minTime >= 0, "minTime must be non-negative: %s", minTime);
 
     this.permitWithoutCalls = permitWithoutCalls;
     this.minTimeNanos = Math.min(unit.toNanos(minTime), IMPLICIT_PERMIT_TIME_NANOS);
@@ -64,7 +64,7 @@ class KeepAliveEnforcer {
     }
     if (!valid) {
       pingStrikes++;
-      return !(pingStrikes > MAX_PING_STRIKES);
+      return pingStrikes <= MAX_PING_STRIKES;
     } else {
       lastValidPingTime = now;
       return true;

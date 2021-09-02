@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,27 +16,23 @@
 
 package io.grpc.internal;
 
+import static io.grpc.internal.TimeProvider.SYSTEM_TIME_PROVIDER;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import io.grpc.internal.Channelz.TransportStats;
-import java.util.concurrent.TimeUnit;
+import io.grpc.InternalChannelz.TransportStats;
 
 /**
  * A class for gathering statistics about a transport. This is an experimental feature.
  * Can only be called from the transport thread unless otherwise noted.
  */
 public final class TransportTracer {
-  private static final TimeProvider SYSTEM_TIME_PROVIDER = new TimeProvider() {
-    @Override
-    public long currentTimeMillis() {
-      return System.currentTimeMillis();
-    }
-  };
   private static final Factory DEFAULT_FACTORY = new Factory(SYSTEM_TIME_PROVIDER);
 
   private final TimeProvider timeProvider;
   private long streamsStarted;
-  private long lastStreamCreatedTimeNanos;
+  private long lastLocalStreamCreatedTimeNanos;
+  private long lastRemoteStreamCreatedTimeNanos;
   private long streamsSucceeded;
   private long streamsFailed;
   private long keepAlivesSent;
@@ -66,7 +62,8 @@ public final class TransportTracer {
         flowControlWindowReader == null ? -1 : flowControlWindowReader.read().remoteBytes;
     return new TransportStats(
         streamsStarted,
-        lastStreamCreatedTimeNanos,
+        lastLocalStreamCreatedTimeNanos,
+        lastRemoteStreamCreatedTimeNanos,
         streamsSucceeded,
         streamsFailed,
         messagesSent,
@@ -79,12 +76,19 @@ public final class TransportTracer {
   }
 
   /**
-   * Called by the transport to report a stream has started. For clients, this happens when a header
-   * is sent. For servers, this happens when a header is received.
+   * Called by the client to report a stream has started.
    */
-  public void reportStreamStarted() {
+  public void reportLocalStreamStarted() {
     streamsStarted++;
-    lastStreamCreatedTimeNanos = currentTimeNanos();
+    lastLocalStreamCreatedTimeNanos = timeProvider.currentTimeNanos();
+  }
+
+  /**
+   * Called by the server to report a stream has started.
+   */
+  public void reportRemoteStreamStarted() {
+    streamsStarted++;
+    lastRemoteStreamCreatedTimeNanos = timeProvider.currentTimeNanos();
   }
 
   /**
@@ -106,7 +110,7 @@ public final class TransportTracer {
       return;
     }
     messagesSent += numMessages;
-    lastMessageSentTimeNanos = currentTimeNanos();
+    lastMessageSentTimeNanos = timeProvider.currentTimeNanos();
   }
 
   /**
@@ -114,7 +118,7 @@ public final class TransportTracer {
    */
   public void reportMessageReceived() {
     messagesReceived.add(1);
-    lastMessageReceivedTimeNanos = currentTimeNanos();
+    lastMessageReceivedTimeNanos = timeProvider.currentTimeNanos();
   }
 
   /**
@@ -152,22 +156,8 @@ public final class TransportTracer {
     FlowControlWindows read();
   }
 
-  private long currentTimeNanos() {
-    return TimeUnit.MILLISECONDS.toNanos(timeProvider.currentTimeMillis());
-  }
-
-  /**
-   * Time source representing the current system time in millis. Used to inject a fake clock
-   * into unit tests.
-   */
-  @VisibleForTesting
-  public interface TimeProvider {
-    /** Returns the current milli time. */
-    long currentTimeMillis();
-  }
-
   public static final class Factory {
-    private TimeProvider timeProvider;
+    private final TimeProvider timeProvider;
 
     @VisibleForTesting
     public Factory(TimeProvider timeProvider) {

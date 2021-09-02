@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,9 +57,9 @@ public class LoadWorkerTest {
     int port = Utils.pickUnusedPort();
     worker = new LoadWorker(port, 0);
     worker.start();
-    channel = NettyChannelBuilder.forAddress("localhost", port).usePlaintext(true).build();
+    channel = NettyChannelBuilder.forAddress("localhost", port).usePlaintext().build();
     workerServiceStub = WorkerServiceGrpc.newStub(channel);
-    marksQueue = new LinkedBlockingQueue<Stats.ClientStats>();
+    marksQueue = new LinkedBlockingQueue<>();
   }
 
   @Test

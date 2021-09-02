@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,10 @@
 package io.grpc.internal;
 
 import io.grpc.Attributes;
+import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Status;
+import javax.annotation.Nonnull;
 
 /**
  * Extension of {@link Stream} to support client-side termination semantics.
@@ -87,7 +89,20 @@ public interface ClientStream extends Stream {
   void setMaxOutboundMessageSize(int maxSize);
 
   /**
-   * Attributes that the stream holds at the current moment.
+   * Sets the effective deadline of the RPC.
+   */
+  void setDeadline(@Nonnull Deadline deadline);
+
+  /**
+   * Attributes that the stream holds at the current moment.  Thread-safe and can be called at any
+   * time, although some attributes are there only after a certain point.
    */
   Attributes getAttributes();
+
+  /**
+   * Append information that will be included in the locally generated DEADLINE_EXCEEDED errors to
+   * the given {@link InsightBuilder}, in order to tell the user about the state of the stream so
+   * that they can better diagnose the cause of the error.
+   */
+  void appendTimeoutInsight(InsightBuilder insight);
 }

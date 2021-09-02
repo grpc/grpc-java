@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,21 +21,24 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.cronet.CronetChannelBuilder.StreamBuilderFactory;
-import io.grpc.internal.Channelz.TransportStats;
 import io.grpc.internal.ConnectionClientTransport;
+import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.LogId;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
-import io.grpc.internal.WithLogId;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
@@ -45,19 +48,22 @@ import javax.annotation.concurrent.GuardedBy;
  * A cronet-based {@link ConnectionClientTransport} implementation.
  */
 class CronetClientTransport implements ConnectionClientTransport {
-  private final LogId logId = LogId.allocate(getClass().getName());
+  private final InternalLogId logId;
   private final InetSocketAddress address;
   private final String authority;
   private final String userAgent;
   private Listener listener;
   private final Object lock = new Object();
   @GuardedBy("lock")
-  private final Set<CronetClientStream> streams =
-      new HashSet<CronetClientStream>();
+  private final Set<CronetClientStream> streams = Collections.newSetFromMap(
+          new IdentityHashMap<CronetClientStream, Boolean>());
   private final Executor executor;
   private final int maxMessageSize;
   private final boolean alwaysUsePut;
   private final TransportTracer transportTracer;
+  private final Attributes attrs;
+  private final boolean useGetForSafeMethods;
+  private final boolean usePutForIdempotentMethods;
   // Indicates the transport is in go-away state: no new streams will be processed,
   // but existing streams may continue.
   @GuardedBy("lock")
@@ -80,11 +86,15 @@ class CronetClientTransport implements ConnectionClientTransport {
       InetSocketAddress address,
       String authority,
       @Nullable String userAgent,
+      Attributes eagAttrs,
       Executor executor,
       int maxMessageSize,
       boolean alwaysUsePut,
-      TransportTracer transportTracer) {
+      TransportTracer transportTracer,
+      boolean useGetForSafeMethods,
+      boolean usePutForIdempotentMethods) {
     this.address = Preconditions.checkNotNull(address, "address");
+    this.logId = InternalLogId.allocate(getClass(), address.toString());
     this.authority = authority;
     this.userAgent = GrpcUtil.getGrpcUserAgent("cronet", userAgent);
     this.maxMessageSize = maxMessageSize;
@@ -92,18 +102,24 @@ class CronetClientTransport implements ConnectionClientTransport {
     this.executor = Preconditions.checkNotNull(executor, "executor");
     this.streamFactory = Preconditions.checkNotNull(streamFactory, "streamFactory");
     this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
+    this.attrs = Attributes.newBuilder()
+        .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
+        .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs)
+        .build();
+    this.useGetForSafeMethods = useGetForSafeMethods;
+    this.usePutForIdempotentMethods = usePutForIdempotentMethods;
   }
 
   @Override
-  public ListenableFuture<TransportStats> getStats() {
-    SettableFuture<TransportStats> f = SettableFuture.create();
+  public ListenableFuture<SocketStats> getStats() {
+    SettableFuture<SocketStats> f = SettableFuture.create();
     f.set(null);
     return f;
   }
 
   @Override
   public CronetClientStream newStream(final MethodDescriptor<?, ?> method, final Metadata headers,
-      final CallOptions callOptions) {
+      final CallOptions callOptions, ClientStreamTracer[] tracers) {
     Preconditions.checkNotNull(method, "method");
     Preconditions.checkNotNull(headers, "headers");
 
@@ -111,11 +127,12 @@ class CronetClientTransport implements ConnectionClientTransport {
     final String url = "https://" + authority + defaultPath;
 
     final StatsTraceContext statsTraceCtx =
-        StatsTraceContext.newClientContext(callOptions, headers);
+        StatsTraceContext.newClientContext(tracers, attrs, headers);
     class StartCallback implements Runnable {
       final CronetClientStream clientStream = new CronetClientStream(
           url, userAgent, executor, headers, CronetClientTransport.this, this, lock, maxMessageSize,
-          alwaysUsePut, method, statsTraceCtx, callOptions, transportTracer);
+          alwaysUsePut, method, statsTraceCtx, callOptions, transportTracer, useGetForSafeMethods,
+          usePutForIdempotentMethods);
 
       @Override
       public void run() {
@@ -134,9 +151,12 @@ class CronetClientTransport implements ConnectionClientTransport {
     return new StartCallback().clientStream;
   }
 
+  @SuppressWarnings("GuardedBy")
   @GuardedBy("lock")
   private void startStream(CronetClientStream stream) {
     streams.add(stream);
+    // TODO(b/145386688): This access should be guarded by 'stream.transportState().lock'; instead
+    // found: 'this.lock'
     stream.transportState().start(streamFactory);
   }
 
@@ -182,7 +202,7 @@ class CronetClientTransport implements ConnectionClientTransport {
     synchronized (lock) {
       // A copy is always necessary since cancel() can call finishStream() which calls
       // streams.remove()
-      streamsCopy = new ArrayList<CronetClientStream>(streams);
+      streamsCopy = new ArrayList<>(streams);
     }
     for (int i = 0; i < streamsCopy.size(); i++) {
       // Avoid deadlock by calling into stream without lock held
@@ -193,8 +213,7 @@ class CronetClientTransport implements ConnectionClientTransport {
 
   @Override
   public Attributes getAttributes() {
-    // TODO(zhangkun83): fill channel security attributes
-    return Attributes.EMPTY;
+    return attrs;
   }
 
   private void startGoAway(Status status) {
@@ -226,7 +245,7 @@ class CronetClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public LogId getLogId() {
+  public InternalLogId getLogId() {
     return logId;
   }
 

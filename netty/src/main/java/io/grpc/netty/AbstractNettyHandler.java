@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,11 @@
 
 package io.grpc.netty;
 
-import static io.netty.buffer.Unpooled.directBuffer;
-import static io.netty.buffer.Unpooled.unreleasableBuffer;
 import static io.netty.handler.codec.http2.Http2CodecUtil.getEmbeddedHttp2Exception;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.netty.buffer.ByteBuf;
+import com.google.common.base.Preconditions;
+import io.grpc.ChannelLogger;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
@@ -38,21 +37,25 @@ import java.util.concurrent.TimeUnit;
  */
 abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
   private static final long GRACEFUL_SHUTDOWN_NO_TIMEOUT = -1;
-  private boolean autoTuneFlowControlOn = false;
-  private int initialConnectionWindow;
-  private ChannelHandlerContext ctx;
-  private final FlowControlPinger flowControlPing = new FlowControlPinger();
 
-  private static final int BDP_MEASUREMENT_PING = 1234;
-  private static final ByteBuf payloadBuf =
-      unreleasableBuffer(directBuffer(8).writeLong(BDP_MEASUREMENT_PING));
+  private final int initialConnectionWindow;
+  private final FlowControlPinger flowControlPing;
+
+  private boolean autoTuneFlowControlOn;
+  private ChannelHandlerContext ctx;
+  private boolean initialWindowSent = false;
+
+  private static final long BDP_MEASUREMENT_PING = 1234;
 
   AbstractNettyHandler(
       ChannelPromise channelUnused,
       Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,
-      Http2Settings initialSettings) {
-    super(channelUnused, decoder, encoder, initialSettings);
+      Http2Settings initialSettings,
+      ChannelLogger negotiationLogger,
+      boolean autoFlowControl,
+      PingLimiter pingLimiter) {
+    super(channelUnused, decoder, encoder, initialSettings, negotiationLogger);
 
     // During a graceful shutdown, wait until all streams are closed.
     gracefulShutdownTimeoutMillis(GRACEFUL_SHUTDOWN_NO_TIMEOUT);
@@ -60,6 +63,11 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     // Extract the connection window from the settings if it was set.
     this.initialConnectionWindow = initialSettings.initialWindowSize() == null ? -1 :
             initialSettings.initialWindowSize();
+    this.autoTuneFlowControlOn = autoFlowControl;
+    if (pingLimiter == null) {
+      pingLimiter = new AllowPingLimiter();
+    }
+    this.flowControlPing = new FlowControlPinger(pingLimiter);
   }
 
   @Override
@@ -83,7 +91,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     if (embedded == null) {
       // There was no embedded Http2Exception, assume it's a connection error. Subclasses are
       // responsible for storing the appropriate status and shutting down the connection.
-      onError(ctx, cause);
+      onError(ctx, /* outbound= */ false, cause);
     } else {
       super.exceptionCaught(ctx, cause);
     }
@@ -97,12 +105,12 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
    * Sends initial connection window to the remote endpoint if necessary.
    */
   private void sendInitialConnectionWindow() throws Http2Exception {
-    if (ctx.channel().isActive() && initialConnectionWindow > 0) {
+    if (!initialWindowSent && ctx.channel().isActive()) {
       Http2Stream connectionStream = connection().connectionStream();
       int currentSize = connection().local().flowController().windowSize(connectionStream);
       int delta = initialConnectionWindow - currentSize;
       decoder().flowController().incrementWindowSize(connectionStream, delta);
-      initialConnectionWindow = -1;
+      initialWindowSent = true;
       ctx.flush();
     }
   }
@@ -123,6 +131,8 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
   final class FlowControlPinger {
 
     private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
+
+    private final PingLimiter pingLimiter;
     private int pingCount;
     private int pingReturn;
     private boolean pinging;
@@ -130,7 +140,12 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     private float lastBandwidth; // bytes per second
     private long lastPingTime;
 
-    public int payload() {
+    public FlowControlPinger(PingLimiter pingLimiter) {
+      Preconditions.checkNotNull(pingLimiter, "pingLimiter");
+      this.pingLimiter = pingLimiter;
+    }
+
+    public long payload() {
       return BDP_MEASUREMENT_PING;
     }
 
@@ -142,7 +157,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       if (!autoTuneFlowControlOn) {
         return;
       }
-      if (!isPinging()) {
+      if (!isPinging() && pingLimiter.isPingAllowed()) {
         setPinging(true);
         sendPing(ctx());
       }
@@ -173,7 +188,6 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
         settings.initialWindowSize(targetWindow);
         frameWriter().writeSettings(ctx(), settings, ctx().newPromise());
       }
-
     }
 
     private boolean isPinging() {
@@ -187,7 +201,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     private void sendPing(ChannelHandlerContext ctx) {
       setDataSizeSincePing(0);
       lastPingTime = System.nanoTime();
-      encoder().writePing(ctx, false, payloadBuf.slice(), ctx.newPromise());
+      encoder().writePing(ctx, false, BDP_MEASUREMENT_PING, ctx.newPromise());
       pingCount++;
     }
 
@@ -211,9 +225,25 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       return dataSizeSincePing;
     }
 
-    @VisibleForTesting
-    void setDataSizeSincePing(int dataSize) {
+    private void setDataSizeSincePing(int dataSize) {
       dataSizeSincePing = dataSize;
+    }
+
+    @VisibleForTesting
+    void setDataSizeAndSincePing(int dataSize) {
+      setDataSizeSincePing(dataSize);
+      lastPingTime = System.nanoTime() - TimeUnit.SECONDS.toNanos(1);
+    }
+  }
+
+  /** Controls whether PINGs like those for BDP are permitted to be sent at the current time. */
+  public interface PingLimiter {
+    public boolean isPingAllowed();
+  }
+
+  private static final class AllowPingLimiter implements PingLimiter {
+    @Override public boolean isPingAllowed() {
+      return true;
     }
   }
 }

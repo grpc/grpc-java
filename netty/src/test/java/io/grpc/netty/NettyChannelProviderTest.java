@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,17 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import io.grpc.InternalServiceProviders;
 import io.grpc.ManagedChannelProvider;
+import io.grpc.ManagedChannelProvider.NewChannelBuilderResult;
+import io.grpc.ManagedChannelRegistryAccessor;
+import io.grpc.TlsChannelCredentials;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -34,7 +39,8 @@ public class NettyChannelProviderTest {
   @Test
   public void provided() {
     for (ManagedChannelProvider current
-        : ManagedChannelProvider.getCandidatesViaServiceLoader(getClass().getClassLoader())) {
+        : InternalServiceProviders.getCandidatesViaServiceLoader(
+            ManagedChannelProvider.class, getClass().getClassLoader())) {
       if (current instanceof NettyChannelProvider) {
         return;
       }
@@ -44,8 +50,8 @@ public class NettyChannelProviderTest {
 
   @Test
   public void providedHardCoded() {
-    for (ManagedChannelProvider current : ManagedChannelProvider.getCandidatesViaHardCoded()) {
-      if (current instanceof NettyChannelProvider) {
+    for (Class<?> current : ManagedChannelRegistryAccessor.getHardCodedClasses()) {
+      if (current == NettyChannelProvider.class) {
         return;
       }
     }
@@ -61,5 +67,24 @@ public class NettyChannelProviderTest {
   @Test
   public void builderIsANettyBuilder() {
     assertSame(NettyChannelBuilder.class, provider.builderForAddress("localhost", 443).getClass());
+  }
+
+  @Test
+  public void builderForTarget() {
+    assertThat(provider.builderForTarget("localhost:443")).isInstanceOf(NettyChannelBuilder.class);
+  }
+
+  @Test
+  public void newChannelBuilder_success() {
+    NewChannelBuilderResult result =
+        provider.newChannelBuilder("localhost:443", TlsChannelCredentials.create());
+    assertThat(result.getChannelBuilder()).isInstanceOf(NettyChannelBuilder.class);
+  }
+
+  @Test
+  public void newChannelBuilder_fail() {
+    NewChannelBuilderResult result = provider.newChannelBuilder("localhost:443",
+        TlsChannelCredentials.newBuilder().requireFakeFeature().build());
+    assertThat(result.getError()).contains("FAKE");
   }
 }

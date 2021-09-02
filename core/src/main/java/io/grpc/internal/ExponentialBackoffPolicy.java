@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,8 +28,8 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>TODO(carl-mastrangelo): add unit tests for this class
  */
-final class ExponentialBackoffPolicy implements BackoffPolicy {
-  static final class Provider implements BackoffPolicy.Provider {
+public final class ExponentialBackoffPolicy implements BackoffPolicy {
+  public static final class Provider implements BackoffPolicy.Provider {
     @Override
     public BackoffPolicy get() {
       return new ExponentialBackoffPolicy();

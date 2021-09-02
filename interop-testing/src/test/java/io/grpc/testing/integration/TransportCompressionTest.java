@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package io.grpc.testing.integration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import com.google.protobuf.BoolValue;
 import com.google.protobuf.ByteString;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -30,19 +29,21 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.ForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
-import io.grpc.ManagedChannel;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
-import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.testing.integration.Messages.BoolValue;
 import io.grpc.testing.integration.Messages.Payload;
-import io.grpc.testing.integration.Messages.PayloadType;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import java.io.FilterInputStream;
@@ -84,9 +85,9 @@ public class TransportCompressionTest extends AbstractInteropTest {
   }
 
   @Override
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
-    return NettyServerBuilder.forPort(0)
-        .maxMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
+  protected ServerBuilder<?> getServerBuilder() {
+    NettyServerBuilder builder = NettyServerBuilder.forPort(0, InsecureServerCredentials.create())
+        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .compressorRegistry(compressors)
         .decompressorRegistry(decompressors)
         .intercept(new ServerInterceptor() {
@@ -99,6 +100,9 @@ public class TransportCompressionTest extends AbstractInteropTest {
               return listener;
             }
           });
+    // Disable the default census stats tracer, use testing tracer instead.
+    InternalNettyServerBuilder.setStatsEnabled(builder, false);
+    return builder.addStreamTracerFactory(createCustomCensusTracerFactory());
   }
 
   @Test
@@ -107,13 +111,11 @@ public class TransportCompressionTest extends AbstractInteropTest {
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setResponseSize(314159)
         .setResponseCompressed(BoolValue.newBuilder().setValue(true))
-        .setResponseType(PayloadType.COMPRESSABLE)
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[271828])))
         .build();
     final SimpleResponse goldenResponse = SimpleResponse.newBuilder()
         .setPayload(Payload.newBuilder()
-            .setType(PayloadType.COMPRESSABLE)
             .setBody(ByteString.copyFrom(new byte[314159])))
         .build();
 
@@ -125,8 +127,8 @@ public class TransportCompressionTest extends AbstractInteropTest {
   }
 
   @Override
-  protected ManagedChannel createChannel() {
-    NettyChannelBuilder builder = NettyChannelBuilder.forAddress("localhost", getPort())
+  protected NettyChannelBuilder createChannelBuilder() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forAddress(getListenAddress())
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .decompressorRegistry(decompressors)
         .compressorRegistry(compressors)
@@ -167,10 +169,10 @@ public class TransportCompressionTest extends AbstractInteropTest {
             };
           }
         })
-        .usePlaintext(true);
-    io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder, createClientCensusStatsModule());
-    return builder.build();
+        .usePlaintext();
+    // Disable the default census stats interceptor, use testing interceptor instead.
+    InternalNettyChannelBuilder.setStatsEnabled(builder, false);
+    return builder.intercept(createCensusStatsClientInterceptor());
   }
 
   /**

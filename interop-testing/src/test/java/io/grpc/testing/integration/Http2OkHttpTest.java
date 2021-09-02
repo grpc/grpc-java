@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,25 +21,25 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.base.Throwables;
-import com.google.protobuf.EmptyProtos.Empty;
 import com.squareup.okhttp.ConnectionSpec;
-import com.squareup.okhttp.TlsVersion;
+import io.grpc.ChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.ServerBuilder;
+import io.grpc.ServerCredentials;
+import io.grpc.TlsChannelCredentials;
+import io.grpc.TlsServerCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.stub.StreamObserver;
-import io.netty.handler.ssl.OpenSsl;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.SslProvider;
-import io.netty.handler.ssl.SupportedCipherSuiteFilter;
+import io.grpc.testing.integration.EmptyProtos.Empty;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
@@ -60,55 +60,63 @@ public class Http2OkHttpTest extends AbstractInteropTest {
   public static void loadConscrypt() throws Exception {
     // Load conscrypt if it is available. Either Conscrypt or Jetty ALPN needs to be available for
     // OkHttp to negotiate.
-    Util.installConscryptIfAvailable();
+    TestUtils.installConscryptIfAvailable();
   }
 
   @Override
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
+  protected ServerBuilder<?> getServerBuilder() {
     // Starts the server with HTTPS.
     try {
-      SslProvider sslProvider = SslContext.defaultServerProvider();
-      if (sslProvider == SslProvider.OPENSSL && !OpenSsl.isAlpnSupported()) {
-        // OkHttp only supports Jetty ALPN on OpenJDK. So if OpenSSL doesn't support ALPN, then we
-        // are forced to use Jetty ALPN for Netty instead of OpenSSL.
-        sslProvider = SslProvider.JDK;
-      }
-      SslContextBuilder contextBuilder = SslContextBuilder
-          .forServer(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
-      GrpcSslContexts.configure(contextBuilder, sslProvider);
-      contextBuilder.ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE);
-      return NettyServerBuilder.forPort(0)
-          .flowControlWindow(65 * 1024)
-          .maxMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-          .sslContext(contextBuilder.build());
+      ServerCredentials serverCreds = TlsServerCredentials.create(
+          TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
+      NettyServerBuilder builder = NettyServerBuilder.forPort(0, serverCreds)
+          .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
+          .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+      // Disable the default census stats tracer, use testing tracer instead.
+      InternalNettyServerBuilder.setStatsEnabled(builder, false);
+      return builder.addStreamTracerFactory(createCustomCensusTracerFactory());
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
   }
 
   @Override
-  protected ManagedChannel createChannel() {
-    return createChannelBuilder().build();
+  protected OkHttpChannelBuilder createChannelBuilder() {
+    int port = ((InetSocketAddress) getListenAddress()).getPort();
+    ChannelCredentials channelCreds;
+    try {
+      channelCreds = TlsChannelCredentials.newBuilder()
+          .trustManager(TestUtils.loadCert("ca.pem"))
+          .build();
+    } catch (IOException ex) {
+      throw new RuntimeException(ex);
+    }
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("localhost", port, channelCreds)
+        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
+        .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
+            TestUtils.TEST_SERVER_HOST, port));
+    // Disable the default census stats interceptor, use testing interceptor instead.
+    InternalOkHttpChannelBuilder.setStatsEnabled(builder, false);
+    return builder.intercept(createCensusStatsClientInterceptor());
   }
 
-  private OkHttpChannelBuilder createChannelBuilder() {
-    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("localhost", getPort())
+  private OkHttpChannelBuilder createChannelBuilderPreCredentialsApi() {
+    int port = ((InetSocketAddress) getListenAddress()).getPort();
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("localhost", port)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-        .connectionSpec(new ConnectionSpec.Builder(OkHttpChannelBuilder.DEFAULT_CONNECTION_SPEC)
-            .cipherSuites(TestUtils.preferredTestCiphers().toArray(new String[0]))
-            .tlsVersions(ConnectionSpec.MODERN_TLS.tlsVersions().toArray(new TlsVersion[0]))
+        .connectionSpec(new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
             .build())
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
-            TestUtils.TEST_SERVER_HOST, getPort()));
-    io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder, createClientCensusStatsModule());
+            TestUtils.TEST_SERVER_HOST, port));
     try {
       builder.sslSocketFactory(TestUtils.newSslSocketFactoryForCa(Platform.get().getProvider(),
           TestUtils.loadCert("ca.pem")));
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
-    return builder;
+    // Disable the default census stats interceptor, use testing interceptor instead.
+    InternalOkHttpChannelBuilder.setStatsEnabled(builder, false);
+    return builder.intercept(createCensusStatsClientInterceptor());
   }
 
   @Test
@@ -117,8 +125,7 @@ public class Http2OkHttpTest extends AbstractInteropTest {
         Messages.ResponseParameters.newBuilder()
         .setSize(1);
     Messages.StreamingOutputCallRequest.Builder requestBuilder =
-        Messages.StreamingOutputCallRequest.newBuilder()
-            .setResponseType(Messages.PayloadType.COMPRESSABLE);
+        Messages.StreamingOutputCallRequest.newBuilder();
     for (int i = 0; i < 1000; i++) {
       requestBuilder.addResponseParameters(responseParameters);
     }
@@ -138,9 +145,10 @@ public class Http2OkHttpTest extends AbstractInteropTest {
 
   @Test
   public void wrongHostNameFailHostnameVerification() throws Exception {
-    ManagedChannel channel = createChannelBuilder()
+    int port = ((InetSocketAddress) getListenAddress()).getPort();
+    ManagedChannel channel = createChannelBuilderPreCredentialsApi()
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
-            BAD_HOSTNAME, getPort()))
+            BAD_HOSTNAME, port))
         .build();
     TestServiceGrpc.TestServiceBlockingStub blockingStub =
         TestServiceGrpc.newBlockingStub(channel);
@@ -160,9 +168,10 @@ public class Http2OkHttpTest extends AbstractInteropTest {
 
   @Test
   public void hostnameVerifierWithBadHostname() throws Exception {
-    ManagedChannel channel = createChannelBuilder()
+    int port = ((InetSocketAddress) getListenAddress()).getPort();
+    ManagedChannel channel = createChannelBuilderPreCredentialsApi()
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
-            BAD_HOSTNAME, getPort()))
+            BAD_HOSTNAME, port))
         .hostnameVerifier(new HostnameVerifier() {
           @Override
           public boolean verify(String hostname, SSLSession session) {
@@ -180,9 +189,10 @@ public class Http2OkHttpTest extends AbstractInteropTest {
 
   @Test
   public void hostnameVerifierWithCorrectHostname() throws Exception {
-    ManagedChannel channel = createChannelBuilder()
+    int port = ((InetSocketAddress) getListenAddress()).getPort();
+    ManagedChannel channel = createChannelBuilderPreCredentialsApi()
         .overrideAuthority(GrpcUtil.authorityFromHostAndPort(
-            TestUtils.TEST_SERVER_HOST, getPort()))
+            TestUtils.TEST_SERVER_HOST, port))
         .hostnameVerifier(new HostnameVerifier() {
           @Override
           public boolean verify(String hostname, SSLSession session) {

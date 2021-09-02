@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,13 +18,12 @@ package io.grpc.examples.routeguide;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.google.protobuf.Message;
-import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.examples.routeguide.RouteGuideClient.TestHelper;
@@ -32,6 +31,7 @@ import io.grpc.examples.routeguide.RouteGuideGrpc.RouteGuideImplBase;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.MutableHandlerRegistry;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -40,8 +40,8 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -52,11 +52,21 @@ import org.mockito.ArgumentCaptor;
  * For demonstrating how to write gRPC unit test only.
  * Not intended to provide a high code coverage or to test every major usecase.
  *
+ * directExecutor() makes it easier to have deterministic tests.
+ * However, if your implementation uses another thread and uses streaming it is better to use
+ * the default executor, to avoid hitting bug #3084.
+ *
  * <p>For basic unit test examples see {@link io.grpc.examples.helloworld.HelloWorldClientTest} and
  * {@link io.grpc.examples.helloworld.HelloWorldServerTest}.
  */
 @RunWith(JUnit4.class)
 public class RouteGuideClientTest {
+  /**
+   * This rule manages automatic graceful shutdown for the registered server at the end of test.
+   */
+  @Rule
+  public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
+
   private final MutableHandlerRegistry serviceRegistry = new MutableHandlerRegistry();
   private final TestHelper testHelper = mock(TestHelper.class);
   private final Random noRandomness =
@@ -76,25 +86,18 @@ public class RouteGuideClientTest {
           return retVal;
         }
       };
-  private Server fakeServer;
   private RouteGuideClient client;
 
   @Before
   public void setUp() throws Exception {
-    String uniqueServerName = "fake server for " + getClass();
-
-    // use a mutable service registry for later registering the service impl for each test case.
-    fakeServer = InProcessServerBuilder.forName(uniqueServerName)
-        .fallbackHandlerRegistry(serviceRegistry).directExecutor().build().start();
-    client =
-        new RouteGuideClient(InProcessChannelBuilder.forName(uniqueServerName).directExecutor());
+    // Generate a unique in-process server name.
+    String serverName = InProcessServerBuilder.generateName();
+    // Use a mutable service registry for later registering the service impl for each test case.
+    grpcCleanup.register(InProcessServerBuilder.forName(serverName)
+        .fallbackHandlerRegistry(serviceRegistry).directExecutor().build().start());
+    client = new RouteGuideClient(grpcCleanup.register(
+        InProcessChannelBuilder.forName(serverName).directExecutor().build()));
     client.setTestHelper(testHelper);
-  }
-
-  @After
-  public void tearDown() throws Exception {
-    client.shutdown();
-    fakeServer.shutdownNow();
   }
 
   /**
@@ -249,7 +252,7 @@ public class RouteGuideClientTest {
         Feature.newBuilder().setLocation(point3).build();
     final List<Feature> features = Arrays.asList(
         requestFeature1, requestFeature2, requestFeature3);
-    final List<Point> pointsDelivered = new ArrayList<Point>();
+    final List<Point> pointsDelivered = new ArrayList<>();
     final RouteSummary fakeResponse = RouteSummary
         .newBuilder()
         .setPointCount(7)
@@ -352,8 +355,8 @@ public class RouteGuideClientTest {
   public void routeChat_simpleResponse() throws Exception {
     RouteNote fakeResponse1 = RouteNote.newBuilder().setMessage("dummy msg1").build();
     RouteNote fakeResponse2 = RouteNote.newBuilder().setMessage("dummy msg2").build();
-    final List<String> messagesDelivered = new ArrayList<String>();
-    final List<Point> locationsDelivered = new ArrayList<Point>();
+    final List<String> messagesDelivered = new ArrayList<>();
+    final List<Point> locationsDelivered = new ArrayList<>();
     final AtomicReference<StreamObserver<RouteNote>> responseObserverRef =
         new AtomicReference<StreamObserver<RouteNote>>();
     final CountDownLatch allRequestsDelivered = new CountDownLatch(1);
@@ -397,9 +400,9 @@ public class RouteGuideClientTest {
     assertEquals(
         Arrays.asList(
             Point.newBuilder().setLatitude(0).setLongitude(0).build(),
-            Point.newBuilder().setLatitude(0).setLongitude(1).build(),
-            Point.newBuilder().setLatitude(1).setLongitude(0).build(),
-            Point.newBuilder().setLatitude(1).setLongitude(1).build()
+            Point.newBuilder().setLatitude(0).setLongitude(10_000_000).build(),
+            Point.newBuilder().setLatitude(10_000_000).setLongitude(0).build(),
+            Point.newBuilder().setLatitude(10_000_000).setLongitude(10_000_000).build()
         ),
         locationsDelivered);
 
@@ -423,7 +426,7 @@ public class RouteGuideClientTest {
    */
   @Test
   public void routeChat_echoResponse() throws Exception {
-    final List<RouteNote> notesDelivered = new ArrayList<RouteNote>();
+    final List<RouteNote> notesDelivered = new ArrayList<>();
 
     // implement the fake service
     RouteGuideImplBase routeChatImpl =
@@ -471,7 +474,7 @@ public class RouteGuideClientTest {
    */
   @Test
   public void routeChat_errorResponse() throws Exception {
-    final List<RouteNote> notesDelivered = new ArrayList<RouteNote>();
+    final List<RouteNote> notesDelivered = new ArrayList<>();
     final StatusRuntimeException fakeError = new StatusRuntimeException(Status.PERMISSION_DENIED);
 
     // implement the fake service

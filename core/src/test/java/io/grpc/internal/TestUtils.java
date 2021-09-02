@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,25 +16,68 @@
 
 package io.grpc.internal;
 
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.grpc.CallOptions;
+import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
+import io.grpc.InternalLogId;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import java.net.SocketAddress;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import javax.annotation.Nullable;
+import org.mockito.ArgumentMatchers;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 /**
  * Common utility methods for tests.
  */
-final class TestUtils {
+public final class TestUtils {
+
+  /** Base class for a standard LoadBalancerProvider implementation. */
+  public abstract static class StandardLoadBalancerProvider extends LoadBalancerProvider {
+    private final String policyName;
+
+    protected StandardLoadBalancerProvider(String policyName) {
+      this.policyName = policyName;
+    }
+
+    @Override
+    public boolean isAvailable() {
+      return true;
+    }
+
+    @Override
+    public int getPriority() {
+      return 5;
+    }
+
+    @Override
+    public final String getPolicyName() {
+      return policyName;
+    }
+  }
+
+  /** Creates a {@link SubchannelPicker} that returns the given {@link Subchannel} on every pick. */
+  public static SubchannelPicker pickerOf(final Subchannel subchannel) {
+    return new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel);
+      }
+    };
+  }
 
   static class MockClientTransportInfo {
     /**
@@ -68,14 +111,17 @@ final class TestUtils {
   static BlockingQueue<MockClientTransportInfo> captureTransports(
       ClientTransportFactory mockTransportFactory, @Nullable final Runnable startRunnable) {
     final BlockingQueue<MockClientTransportInfo> captor =
-        new LinkedBlockingQueue<MockClientTransportInfo>();
+        new LinkedBlockingQueue<>();
 
     doAnswer(new Answer<ConnectionClientTransport>() {
       @Override
       public ConnectionClientTransport answer(InvocationOnMock invocation) throws Throwable {
         final ConnectionClientTransport mockTransport = mock(ConnectionClientTransport.class);
+        when(mockTransport.getLogId())
+            .thenReturn(InternalLogId.allocate("mocktransport", /*details=*/ null));
         when(mockTransport.newStream(
-                any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class)))
+                any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class),
+                ArgumentMatchers.<ClientStreamTracer[]>any()))
             .thenReturn(mock(ClientStream.class));
         // Save the listener
         doAnswer(new Answer<Runnable>() {
@@ -89,12 +135,23 @@ final class TestUtils {
         return mockTransport;
       }
     }).when(mockTransportFactory)
-        .newClientTransport(any(SocketAddress.class), any(String.class), any(String.class),
-            any(ProxyParameters.class));
+        .newClientTransport(
+            any(SocketAddress.class),
+            any(ClientTransportFactory.ClientTransportOptions.class),
+            any(ChannelLogger.class));
 
     return captor;
   }
 
   private TestUtils() {
+  }
+
+  public static class NoopChannelLogger extends ChannelLogger {
+
+    @Override
+    public void log(ChannelLogLevel level, String message) {}
+
+    @Override
+    public void log(ChannelLogLevel level, String messageFormat, Object... args) {}
   }
 }

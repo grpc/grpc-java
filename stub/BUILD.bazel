@@ -5,10 +5,20 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
+        "//api",
         "//context",
-        "//core",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_errorprone_error_prone_annotations//jar",
         "@com_google_guava_guava//jar",
+        "@com_google_j2objc_j2objc_annotations//jar",
     ],
+)
+
+# javax.annotation.Generated is not included in the default root modules in 9,
+# see: http://openjdk.java.net/jeps/320.
+java_library(
+    name = "javax_annotation",
+    neverlink = 1,  # @Generated is source-retention
+    visibility = ["//visibility:public"],
+    exports = ["@org_apache_tomcat_annotations_api//jar"],
 )

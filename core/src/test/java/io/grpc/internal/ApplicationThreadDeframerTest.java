@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
@@ -51,13 +50,13 @@ public class ApplicationThreadDeframerTest {
   @Before
   public void setUp() {
     // ApplicationThreadDeframer constructor injects itself as the wrapped deframer's listener.
-    verify(mockDeframer).setListener(applicationThreadDeframer);
+    verify(mockDeframer).setListener(applicationThreadDeframer.getAppListener());
   }
 
   @Test
   public void requestInvokesMessagesAvailableOnListener() {
     applicationThreadDeframer.request(1);
-    verifyZeroInteractions(mockDeframer);
+    verifyNoMoreInteractions(mockDeframer);
     listener.runStoredProducer();
     verify(mockDeframer).request(1);
   }
@@ -66,7 +65,7 @@ public class ApplicationThreadDeframerTest {
   public void deframeInvokesMessagesAvailableOnListener() {
     ReadableBuffer frame = ReadableBuffers.wrap(new byte[1]);
     applicationThreadDeframer.deframe(frame);
-    verifyZeroInteractions(mockDeframer);
+    verifyNoMoreInteractions(mockDeframer);
     listener.runStoredProducer();
     verify(mockDeframer).deframe(frame);
   }
@@ -74,7 +73,7 @@ public class ApplicationThreadDeframerTest {
   @Test
   public void closeWhenCompleteInvokesMessagesAvailableOnListener() {
     applicationThreadDeframer.closeWhenComplete();
-    verifyZeroInteractions(mockDeframer);
+    verifyNoMoreInteractions(mockDeframer);
     listener.runStoredProducer();
     verify(mockDeframer).closeWhenComplete();
   }
@@ -90,7 +89,7 @@ public class ApplicationThreadDeframerTest {
 
   @Test
   public void bytesReadInvokesTransportExecutor() {
-    applicationThreadDeframer.bytesRead(1);
+    applicationThreadDeframer.getAppListener().bytesRead(1);
     assertEquals(0, listener.bytesRead);
     transportExecutor.runStoredRunnable();
     assertEquals(1, listener.bytesRead);
@@ -98,7 +97,7 @@ public class ApplicationThreadDeframerTest {
 
   @Test
   public void deframerClosedInvokesTransportExecutor() {
-    applicationThreadDeframer.deframerClosed(true);
+    applicationThreadDeframer.getAppListener().deframerClosed(true);
     assertFalse(listener.deframerClosedWithPartialMessage);
     transportExecutor.runStoredRunnable();
     assertTrue(listener.deframerClosedWithPartialMessage);
@@ -107,7 +106,7 @@ public class ApplicationThreadDeframerTest {
   @Test
   public void deframeFailedInvokesTransportExecutor() {
     Throwable cause = new Throwable("error");
-    applicationThreadDeframer.deframeFailed(cause);
+    applicationThreadDeframer.getAppListener().deframeFailed(cause);
     assertNull(listener.deframeFailedCause);
     transportExecutor.runStoredRunnable();
     assertEquals(cause, listener.deframeFailedCause);
@@ -117,12 +116,12 @@ public class ApplicationThreadDeframerTest {
   public void messagesAvailableDrainsToMessageReadQueue_returnedByInitializingMessageProducer()
       throws Exception {
     byte[][] messageBytes = {{1, 2, 3}, {4}, {5, 6}};
-    Queue<InputStream> messages = new LinkedList<InputStream>();
+    Queue<InputStream> messages = new LinkedList<>();
     for (int i = 0; i < messageBytes.length; i++) {
       messages.add(new ByteArrayInputStream(messageBytes[i]));
     }
     MultiMessageProducer messageProducer = new MultiMessageProducer(messages);
-    applicationThreadDeframer.messagesAvailable(messageProducer);
+    applicationThreadDeframer.getAppListener().messagesAvailable(messageProducer);
     applicationThreadDeframer.request(1 /* value is ignored */);
     for (int i = 0; i < messageBytes.length; i++) {
       InputStream message = listener.storedProducer.next();

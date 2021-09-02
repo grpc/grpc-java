@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,8 +28,6 @@ import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
-import static io.netty.buffer.Unpooled.directBuffer;
-import static io.netty.handler.codec.http2.Http2CodecUtil.DEFAULT_PRIORITY_WEIGHT;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -37,9 +35,12 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -70,7 +71,6 @@ import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -129,7 +129,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private NettyServerStream stream;
   private KeepAliveManager spyKeepAliveManager;
 
-  final Queue<InputStream> streamListenerMessageQueue = new LinkedList<InputStream>();
+  final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
 
   private int maxConcurrentStreams = Integer.MAX_VALUE;
   private int maxHeaderListSize = Integer.MAX_VALUE;
@@ -194,7 +194,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     handler().setKeepAliveManagerForTest(spyKeepAliveManager);
 
     // Simulate receipt of the connection preface
-    handler().handleProtocolNegotiationCompleted(Attributes.EMPTY);
+    handler().handleProtocolNegotiationCompleted(Attributes.EMPTY, /*securityInfo=*/ null);
     channelRead(Http2CodecUtil.connectionPrefaceBuf());
     // Simulate receipt of initial remote settings.
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
@@ -205,7 +205,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   public void transportReadyDelayedUntilConnectionPreface() throws Exception {
     initChannel(new GrpcHttp2ServerHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
 
-    handler().handleProtocolNegotiationCompleted(Attributes.EMPTY);
+    handler().handleProtocolNegotiationCompleted(Attributes.EMPTY, /*securityInfo=*/ null);
     verify(transportListener, never()).transportReady(any(Attributes.class));
 
     // Simulate receipt of the connection preface
@@ -330,12 +330,21 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void closeShouldCloseChannel() throws Exception {
+  public void closeShouldGracefullyCloseChannel() throws Exception {
     manualSetUp();
     handler().close(ctx(), newPromise());
 
+    verifyWrite().writeGoAway(eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()),
+        isA(ByteBuf.class), any(ChannelPromise.class));
+    verifyWrite().writePing(
+        eq(ctx()),
+        eq(false),
+        eq(NettyServerHandler.GRACEFUL_SHUTDOWN_PING),
+        isA(ChannelPromise.class));
+    channelRead(pingFrame(/*ack=*/ true , NettyServerHandler.GRACEFUL_SHUTDOWN_PING));
+
     verifyWrite().writeGoAway(eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()),
-        eq(Unpooled.EMPTY_BUFFER), any(ChannelPromise.class));
+        isA(ByteBuf.class), any(ChannelPromise.class));
 
     // Verify that the channel was closed.
     assertFalse(channel().isOpen());
@@ -423,10 +432,16 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
         .set(InternalStatus.MESSAGE_KEY.name(), "Content-Type 'application/bad' is not supported")
         .status("" + 415)
-        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
 
-    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
-        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
+    verifyWrite()
+        .writeHeaders(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(responseHeaders),
+            eq(0),
+            eq(false),
+            any(ChannelPromise.class));
   }
 
   @Test
@@ -442,10 +457,16 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
         .set(InternalStatus.MESSAGE_KEY.name(), "Method 'FAKE' is not supported")
         .status("" + 405)
-        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
 
-    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
-        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
+    verifyWrite()
+        .writeHeaders(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(responseHeaders),
+            eq(0),
+            eq(false),
+            any(ChannelPromise.class));
   }
 
   @Test
@@ -460,10 +481,16 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.UNIMPLEMENTED.value()))
         .set(InternalStatus.MESSAGE_KEY.name(), "Expected path but is missing")
         .status("" + 404)
-        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
 
-    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
-        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
+    verifyWrite()
+        .writeHeaders(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(responseHeaders),
+            eq(0),
+            eq(false),
+            any(ChannelPromise.class));
   }
 
   @Test
@@ -479,10 +506,16 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.UNIMPLEMENTED.value()))
         .set(InternalStatus.MESSAGE_KEY.name(), "Expected path to start with /: foo/bar")
         .status("" + 404)
-        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
 
-    verifyWrite().writeHeaders(eq(ctx()), eq(STREAM_ID), eq(responseHeaders), eq(0),
-        eq(DEFAULT_PRIORITY_WEIGHT), eq(false), eq(0), eq(false), any(ChannelPromise.class));
+    verifyWrite()
+        .writeHeaders(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(responseHeaders),
+            eq(0),
+            eq(false),
+            any(ChannelPromise.class));
   }
 
   @Test
@@ -545,9 +578,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Test
   public void keepAliveManagerOnDataReceived_pingRead() throws Exception {
     manualSetUp();
-    ByteBuf payload = handler().ctx().alloc().buffer(8);
-    payload.writeLong(1234L);
-    channelRead(pingFrame(false /* isAck */, payload));
+    channelRead(pingFrame(false /* isAck */, 1234L));
 
     verify(spyKeepAliveManager).onDataReceived();
     verify(spyKeepAliveManager, never()).onTransportTermination();
@@ -556,9 +587,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   @Test
   public void keepAliveManagerOnDataReceived_pingActRead() throws Exception {
     manualSetUp();
-    ByteBuf payload = handler().ctx().alloc().buffer(8);
-    payload.writeLong(1234L);
-    channelRead(pingFrame(true /* isAck */, payload));
+    channelRead(pingFrame(true /* isAck */, 1234L));
 
     verify(spyKeepAliveManager).onDataReceived();
     verify(spyKeepAliveManager, never()).onTransportTermination();
@@ -574,7 +603,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   @Test
   public void keepAliveManager_pingSent() throws Exception {
-    ByteBuf pingBuf = directBuffer(8).writeLong(0xDEADL);
     keepAliveTimeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
     keepAliveTimeoutInNanos = TimeUnit.MINUTES.toNanos(30L);
     manualSetUp();
@@ -583,20 +611,20 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardNanos(keepAliveTimeInNanos);
     assertEquals(1, transportTracer.getStats().keepAlivesSent);
 
-    verifyWrite().writePing(eq(ctx()), eq(false), eq(pingBuf), any(ChannelPromise.class));
+    verifyWrite().writePing(eq(ctx()), eq(false), eq(0xDEADL), any(ChannelPromise.class));
 
     spyKeepAliveManager.onDataReceived();
     fakeClock().forwardTime(10L, TimeUnit.MILLISECONDS);
 
     verifyWrite(times(2))
-        .writePing(eq(ctx()), eq(false), eq(pingBuf), any(ChannelPromise.class));
+        .writePing(eq(ctx()), eq(false), eq(0xDEADL), any(ChannelPromise.class));
     assertTrue(channel().isOpen());
   }
 
   @Test
   public void keepAliveManager_pingTimeout() throws Exception {
-    keepAliveTimeInNanos = TimeUnit.NANOSECONDS.toNanos(123L);
-    keepAliveTimeoutInNanos = TimeUnit.NANOSECONDS.toNanos(456L);
+    keepAliveTimeInNanos = 123L /* nanoseconds */;
+    keepAliveTimeoutInNanos = 456L /* nanoseconds */;
     manualSetUp();
 
     fakeClock().forwardNanos(keepAliveTimeInNanos);
@@ -614,12 +642,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     permitKeepAliveTimeInNanos = TimeUnit.HOURS.toNanos(1);
     manualSetUp();
 
-    ByteBuf payload = handler().ctx().alloc().buffer(8);
-    payload.writeLong(1);
     for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES + 1; i++) {
-      channelRead(pingFrame(false /* isAck */, payload.slice()));
+      channelRead(pingFrame(false /* isAck */, 1L));
     }
-    payload.release();
     verifyWrite().writeGoAway(eq(ctx()), eq(0), eq(Http2Error.ENHANCE_YOUR_CALM.code()),
         any(ByteBuf.class), any(ChannelPromise.class));
     assertFalse(channel().isActive());
@@ -636,16 +661,13 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     ChannelFuture future = enqueue(
         SendResponseHeadersCommand.createHeaders(stream.transportState(), headers));
     future.get();
-    ByteBuf payload = handler().ctx().alloc().buffer(8);
-    payload.writeLong(1);
     for (int i = 0; i < 10; i++) {
       future = enqueue(
           new SendGrpcFrameCommand(stream.transportState(), content().retainedSlice(), false));
       future.get();
       channel().releaseOutbound();
-      channelRead(pingFrame(false /* isAck */, payload.slice()));
+      channelRead(pingFrame(false /* isAck */, 1L));
     }
-    payload.release();
     verifyWrite(never()).writeGoAway(eq(ctx()), eq(STREAM_ID),
         eq(Http2Error.ENHANCE_YOUR_CALM.code()), any(ByteBuf.class), any(ChannelPromise.class));
   }
@@ -656,12 +678,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     permitKeepAliveTimeInNanos = 0;
     manualSetUp();
 
-    ByteBuf payload = handler().ctx().alloc().buffer(8);
-    payload.writeLong(1);
     for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES + 1; i++) {
-      channelRead(pingFrame(false /* isAck */, payload.slice()));
+      channelRead(pingFrame(false /* isAck */, 1L));
     }
-    payload.release();
     verifyWrite().writeGoAway(eq(ctx()), eq(0),
         eq(Http2Error.ENHANCE_YOUR_CALM.code()), any(ByteBuf.class), any(ChannelPromise.class));
     assertFalse(channel().isActive());
@@ -674,12 +693,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     manualSetUp();
 
     createStream();
-    ByteBuf payload = handler().ctx().alloc().buffer(8);
-    payload.writeLong(1);
     for (int i = 0; i < 10; i++) {
-      channelRead(pingFrame(false /* isAck */, payload.slice()));
+      channelRead(pingFrame(false /* isAck */, 1L));
     }
-    payload.release();
     verifyWrite(never()).writeGoAway(eq(ctx()), eq(STREAM_ID),
         eq(Http2Error.ENHANCE_YOUR_CALM.code()), any(ByteBuf.class), any(ChannelPromise.class));
   }
@@ -692,12 +708,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     createStream();
     channelRead(rstStreamFrame(STREAM_ID, (int) Http2Error.CANCEL.code()));
-    ByteBuf payload = handler().ctx().alloc().buffer(8);
-    payload.writeLong(1);
     for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES + 1; i++) {
-      channelRead(pingFrame(false /* isAck */, payload.slice()));
+      channelRead(pingFrame(false /* isAck */, 1L));
     }
-    payload.release();
     verifyWrite().writeGoAway(eq(ctx()), eq(STREAM_ID),
         eq(Http2Error.ENHANCE_YOUR_CALM.code()), any(ByteBuf.class), any(ChannelPromise.class));
     assertFalse(channel().isActive());
@@ -711,31 +724,83 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardTime(20, TimeUnit.MINUTES);
 
     // GO_AWAY not sent yet
-    verifyWrite(never()).writeGoAway(
-        any(ChannelHandlerContext.class), any(Integer.class), any(Long.class), any(ByteBuf.class),
-        any(ChannelPromise.class));
+    verifyWrite(never())
+        .writeGoAway(
+            any(ChannelHandlerContext.class),
+            anyInt(),
+            anyLong(),
+            any(ByteBuf.class),
+            any(ChannelPromise.class));
     assertTrue(channel().isOpen());
   }
 
   @Test
-  public void maxConnectionIdle_goAwaySent() throws Exception {
+  public void maxConnectionIdle_goAwaySent_pingAck() throws Exception {
     maxConnectionIdleInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
     manualSetUp();
     assertTrue(channel().isOpen());
 
     fakeClock().forwardNanos(maxConnectionIdleInNanos);
 
-    // GO_AWAY sent
+    // first GO_AWAY sent
     verifyWrite().writeGoAway(
         eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
+    // ping sent
+    verifyWrite().writePing(
+        eq(ctx()), eq(false), eq(0x97ACEF001L), any(ChannelPromise.class));
+    verifyWrite(never()).writeGoAway(
+        eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
 
+    channelRead(pingFrame(true /* isAck */, 0xDEADL)); // irrelevant ping Ack
+    verifyWrite(never()).writeGoAway(
+        eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    assertTrue(channel().isOpen());
+
+    channelRead(pingFrame(true /* isAck */, 0x97ACEF001L));
+
+    // second GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
     // channel closed
     assertTrue(!channel().isOpen());
   }
 
   @Test
-  public void maxConnectionIdle_activeThenRst() throws Exception {
+  public void maxConnectionIdle_goAwaySent_pingTimeout() throws Exception {
+    maxConnectionIdleInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
+    manualSetUp();
+    assertTrue(channel().isOpen());
+
+    fakeClock().forwardNanos(maxConnectionIdleInNanos);
+
+    // first GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    // ping sent
+    verifyWrite().writePing(
+        eq(ctx()), eq(false), eq(0x97ACEF001L), any(ChannelPromise.class));
+    verifyWrite(never()).writeGoAway(
+        eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    assertTrue(channel().isOpen());
+
+    fakeClock().forwardTime(10, TimeUnit.SECONDS);
+
+    // second GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    // channel closed
+    assertTrue(!channel().isOpen());
+  }
+
+  @Test
+  public void maxConnectionIdle_activeThenRst_pingAck() throws Exception {
     maxConnectionIdleInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
     manualSetUp();
     createStream();
@@ -743,20 +808,81 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardNanos(maxConnectionIdleInNanos);
 
     // GO_AWAY not sent when active
-    verifyWrite(never()).writeGoAway(
-        any(ChannelHandlerContext.class), any(Integer.class), any(Long.class), any(ByteBuf.class),
-        any(ChannelPromise.class));
+    verifyWrite(never())
+        .writeGoAway(
+            any(ChannelHandlerContext.class),
+            anyInt(),
+            anyLong(),
+            any(ByteBuf.class),
+            any(ChannelPromise.class));
     assertTrue(channel().isOpen());
 
     channelRead(rstStreamFrame(STREAM_ID, (int) Http2Error.CANCEL.code()));
 
     fakeClock().forwardNanos(maxConnectionIdleInNanos);
 
-    // GO_AWAY sent
+    // first GO_AWAY sent
     verifyWrite().writeGoAway(
         eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
+    // ping sent
+    verifyWrite().writePing(
+        eq(ctx()), eq(false), eq(0x97ACEF001L), any(ChannelPromise.class));
+    verifyWrite(never()).writeGoAway(
+        eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    assertTrue(channel().isOpen());
 
+    fakeClock().forwardTime(10, TimeUnit.SECONDS);
+
+    // second GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    // channel closed
+    assertTrue(!channel().isOpen());
+  }
+
+  @Test
+  public void maxConnectionIdle_activeThenRst_pingTimeoutk() throws Exception {
+    maxConnectionIdleInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
+    manualSetUp();
+    createStream();
+
+    fakeClock().forwardNanos(maxConnectionIdleInNanos);
+
+    // GO_AWAY not sent when active
+    verifyWrite(never())
+        .writeGoAway(
+            any(ChannelHandlerContext.class),
+            anyInt(),
+            anyLong(),
+            any(ByteBuf.class),
+            any(ChannelPromise.class));
+    assertTrue(channel().isOpen());
+
+    channelRead(rstStreamFrame(STREAM_ID, (int) Http2Error.CANCEL.code()));
+
+    fakeClock().forwardNanos(maxConnectionIdleInNanos);
+
+    // first GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    // ping sent
+    verifyWrite().writePing(
+        eq(ctx()), eq(false), eq(0x97ACEF001L), any(ChannelPromise.class));
+    verifyWrite(never()).writeGoAway(
+        eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    assertTrue(channel().isOpen());
+
+    channelRead(pingFrame(true /* isAck */, 0x97ACEF001L));
+
+    // second GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
     // channel closed
     assertTrue(!channel().isOpen());
   }
@@ -769,25 +895,79 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     fakeClock().forwardTime(20, TimeUnit.MINUTES);
 
     // GO_AWAY not sent yet
-    verifyWrite(never()).writeGoAway(
-        any(ChannelHandlerContext.class), any(Integer.class), any(Long.class), any(ByteBuf.class),
-        any(ChannelPromise.class));
+    verifyWrite(never())
+        .writeGoAway(
+            any(ChannelHandlerContext.class),
+            anyInt(),
+            anyLong(),
+            any(ByteBuf.class),
+            any(ChannelPromise.class));
     assertTrue(channel().isOpen());
   }
 
   @Test
-  public void maxConnectionAge_goAwaySent() throws Exception {
+  public void maxConnectionAge_goAwaySent_pingAck() throws Exception {
+
     maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
     manualSetUp();
     assertTrue(channel().isOpen());
 
     fakeClock().forwardNanos(maxConnectionAgeInNanos);
 
-    // GO_AWAY sent
+    // first GO_AWAY sent
     verifyWrite().writeGoAway(
         eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
+    // ping sent
+    verifyWrite().writePing(
+        eq(ctx()), eq(false), eq(0x97ACEF001L), any(ChannelPromise.class));
+    verifyWrite(never()).writeGoAway(
+        eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
 
+    channelRead(pingFrame(true /* isAck */, 0xDEADL)); // irrelevant ping Ack
+    verifyWrite(never()).writeGoAway(
+        eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    assertTrue(channel().isOpen());
+
+    channelRead(pingFrame(true /* isAck */, 0x97ACEF001L));
+
+    // second GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    // channel closed
+    assertTrue(!channel().isOpen());
+  }
+
+  @Test
+  public void maxConnectionAge_goAwaySent_pingTimeout() throws Exception {
+
+    maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
+    manualSetUp();
+    assertTrue(channel().isOpen());
+
+    fakeClock().forwardNanos(maxConnectionAgeInNanos);
+
+    // first GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    // ping sent
+    verifyWrite().writePing(
+        eq(ctx()), eq(false), eq(0x97ACEF001L), any(ChannelPromise.class));
+    verifyWrite(never()).writeGoAway(
+        eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    assertTrue(channel().isOpen());
+
+    fakeClock().forwardTime(10, TimeUnit.SECONDS);
+
+    // second GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
     // channel closed
     assertTrue(!channel().isOpen());
   }
@@ -801,31 +981,100 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
     fakeClock().forwardNanos(maxConnectionAgeInNanos);
 
+    // first GO_AWAY sent
     verifyWrite().writeGoAway(
         eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    // ping sent
+    verifyWrite().writePing(
+        eq(ctx()), eq(false), eq(0x97ACEF001L), any(ChannelPromise.class));
+    verifyWrite(never()).writeGoAway(
+        eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
 
     fakeClock().forwardTime(20, TimeUnit.MINUTES);
 
+    // second GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
     // channel not closed yet
     assertTrue(channel().isOpen());
   }
 
   @Test
-  public void maxConnectionAgeGrace_channelClosedAfterGracePeriod() throws Exception {
+  public void maxConnectionAgeGrace_channelClosedAfterGracePeriod_withPingTimeout()
+      throws Exception {
     maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
-    maxConnectionAgeGraceInNanos = TimeUnit.MINUTES.toNanos(30L);
+    maxConnectionAgeGraceInNanos = TimeUnit.MINUTES.toNanos(30L); // greater than ping timeout
     manualSetUp();
     createStream();
 
     fakeClock().forwardNanos(maxConnectionAgeInNanos);
 
+    // first GO_AWAY sent
     verifyWrite().writeGoAway(
         eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
         any(ChannelPromise.class));
+    // ping sent
+    verifyWrite().writePing(
+        eq(ctx()), eq(false), eq(0x97ACEF001L), any(ChannelPromise.class));
+    verifyWrite(never()).writeGoAway(
+        eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+
+    fakeClock().forwardNanos(TimeUnit.SECONDS.toNanos(10));
+
+    // second GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+
+    fakeClock().forwardNanos(maxConnectionAgeGraceInNanos - 2);
+
     assertTrue(channel().isOpen());
 
-    fakeClock().forwardNanos(maxConnectionAgeGraceInNanos);
+    fakeClock().forwardTime(2, TimeUnit.MILLISECONDS);
+
+    // channel closed
+    assertTrue(!channel().isOpen());
+  }
+
+  @Test
+  public void maxConnectionAgeGrace_channelClosedAfterGracePeriod_withPingAck()
+      throws Exception {
+    maxConnectionAgeInNanos = TimeUnit.MILLISECONDS.toNanos(10L);
+    maxConnectionAgeGraceInNanos = TimeUnit.MINUTES.toNanos(30L); // greater than ping timeout
+    manualSetUp();
+    createStream();
+
+    fakeClock().forwardNanos(maxConnectionAgeInNanos);
+
+    // first GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+    // ping sent
+    verifyWrite().writePing(
+        eq(ctx()), eq(false), eq(0x97ACEF001L), any(ChannelPromise.class));
+    verifyWrite(never()).writeGoAway(
+        eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+
+    long pingRoundTripMillis = 100;  // less than ping timeout
+    fakeClock().forwardTime(pingRoundTripMillis, TimeUnit.MILLISECONDS);
+    channelRead(pingFrame(true /* isAck */, 0x97ACEF001L));
+
+    // second GO_AWAY sent
+    verifyWrite().writeGoAway(
+        eq(ctx()), eq(STREAM_ID), eq(Http2Error.NO_ERROR.code()), any(ByteBuf.class),
+        any(ChannelPromise.class));
+
+    fakeClock().forwardNanos(maxConnectionAgeGraceInNanos - TimeUnit.MILLISECONDS.toNanos(2));
+
+    assertTrue(channel().isOpen());
+
+    fakeClock().forwardTime(2, TimeUnit.MILLISECONDS);
 
     // channel closed
     assertTrue(!channel().isOpen());
@@ -867,6 +1116,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         Arrays.asList(streamTracerFactory),
         transportTracer,
         maxConcurrentStreams,
+        autoFlowControl,
         flowControlWindow,
         maxHeaderListSize,
         DEFAULT_MAX_MESSAGE_SIZE,
@@ -876,7 +1126,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxConnectionAgeInNanos,
         maxConnectionAgeGraceInNanos,
         permitKeepAliveWithoutCalls,
-        permitKeepAliveTimeInNanos);
+        permitKeepAliveTimeInNanos,
+        Attributes.EMPTY);
   }
 
   @Override

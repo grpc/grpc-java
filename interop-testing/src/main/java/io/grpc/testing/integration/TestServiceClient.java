@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,20 +18,31 @@ package io.grpc.testing.integration;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
+import io.grpc.ChannelCredentials;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.internal.AbstractManagedChannelImplBuilder;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.ServerBuilder;
+import io.grpc.TlsChannelCredentials;
+import io.grpc.alts.AltsChannelCredentials;
+import io.grpc.alts.ComputeEngineChannelCredentials;
+import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.JsonParser;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NegotiationType;
+import io.grpc.netty.InsecureFromHttp1ChannelCredentials;
+import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
-import io.grpc.okhttp.internal.Platform;
-import io.netty.handler.ssl.SslContext;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
-import javax.net.ssl.SSLSocketFactory;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 /**
  * Application that starts a client for the {@link TestServiceGrpc.TestServiceImplBase} and runs
@@ -45,23 +56,11 @@ public class TestServiceClient {
    * The main application allowing this client to be launched from the command line.
    */
   public static void main(String[] args) throws Exception {
-    // Let OkHttp use Conscrypt if it is available.
-    Util.installConscryptIfAvailable();
+    // Let Netty or OkHttp use Conscrypt if it is available.
+    TestUtils.installConscryptIfAvailable();
     final TestServiceClient client = new TestServiceClient();
     client.parseArgs(args);
     client.setUp();
-
-    Runtime.getRuntime().addShutdownHook(new Thread() {
-      @Override
-      public void run() {
-        System.out.println("Shutting down");
-        try {
-          client.tearDown();
-        } catch (Exception e) {
-          e.printStackTrace();
-        }
-      }
-    });
 
     try {
       client.run();
@@ -76,17 +75,27 @@ public class TestServiceClient {
   private int serverPort = 8080;
   private String testCase = "empty_unary";
   private boolean useTls = true;
+  private boolean useAlts = false;
+  private boolean useH2cUpgrade = false;
+  private String customCredentialsType;
   private boolean useTestCa;
   private boolean useOkHttp;
   private String defaultServiceAccount;
   private String serviceAccountKeyFile;
   private String oauthScope;
   private boolean fullStreamDecompression;
+  private int localHandshakerPort = -1;
+  private Map<String, ?> serviceConfig = null;
+  private int soakIterations = 10;
+  private int soakMaxFailures = 0;
+  private int soakPerIterationMaxAcceptableLatencyMs = 1000;
+  private int soakOverallTimeoutSeconds =
+      soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
 
   private Tester tester = new Tester();
 
   @VisibleForTesting
-  void parseArgs(String[] args) {
+  void parseArgs(String[] args) throws Exception {
     boolean usage = false;
     for (String arg : args) {
       if (!arg.startsWith("--")) {
@@ -116,6 +125,12 @@ public class TestServiceClient {
         testCase = value;
       } else if ("use_tls".equals(key)) {
         useTls = Boolean.parseBoolean(value);
+      } else if ("use_upgrade".equals(key)) {
+        useH2cUpgrade = Boolean.parseBoolean(value);
+      } else if ("use_alts".equals(key)) {
+        useAlts = Boolean.parseBoolean(value);
+      } else if ("custom_credentials_type".equals(key)) {
+        customCredentialsType = value;
       } else if ("use_test_ca".equals(key)) {
         useTestCa = Boolean.parseBoolean(value);
       } else if ("use_okhttp".equals(key)) {
@@ -134,11 +149,28 @@ public class TestServiceClient {
         oauthScope = value;
       } else if ("full_stream_decompression".equals(key)) {
         fullStreamDecompression = Boolean.parseBoolean(value);
+      } else if ("local_handshaker_port".equals(key)) {
+        localHandshakerPort = Integer.parseInt(value);
+      } else if ("service_config_json".equals(key)) {
+        @SuppressWarnings("unchecked")
+        Map<String, ?> map = (Map<String, ?>) JsonParser.parse(value);
+        serviceConfig = map;
+      } else if ("soak_iterations".equals(key)) {
+        soakIterations = Integer.parseInt(value);
+      } else if ("soak_max_failures".equals(key)) {
+        soakMaxFailures = Integer.parseInt(value);
+      } else if ("soak_per_iteration_max_acceptable_latency_ms".equals(key)) {
+        soakPerIterationMaxAcceptableLatencyMs = Integer.parseInt(value);
+      } else if ("soak_overall_timeout_seconds".equals(key)) {
+        soakOverallTimeoutSeconds = Integer.parseInt(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
         break;
       }
+    }
+    if (useAlts || useH2cUpgrade) {
+      useTls = false;
     }
     if (usage) {
       TestServiceClient c = new TestServiceClient();
@@ -153,6 +185,16 @@ public class TestServiceClient {
           + "\n    Valid options:"
           + validTestCasesHelpText()
           + "\n  --use_tls=true|false        Whether to use TLS. Default " + c.useTls
+          + "\n  --use_alts=true|false       Whether to use ALTS. Enable ALTS will disable TLS."
+          + "\n                              Default " + c.useAlts
+          + "\n  --local_handshaker_port=PORT"
+          + "\n                              Use local ALTS handshaker service on the specified "
+          + "\n                              port for testing. Only effective when --use_alts=true."
+          + "\n  --use_upgrade=true|false    Whether to use the h2c Upgrade mechanism."
+          + "\n                              Enabling h2c Upgrade will disable TLS."
+          + "\n                              Default " + c.useH2cUpgrade
+          + "\n  --custom_credentials_type   Custom credentials type to use. Default "
+            + c.customCredentialsType
           + "\n  --use_test_ca=true|false    Whether to trust our fake CA. Requires --use_tls=true "
           + "\n                              to have effect. Default " + c.useTestCa
           + "\n  --use_okhttp=true|false     Whether to use OkHttp instead of Netty. Default "
@@ -164,6 +206,26 @@ public class TestServiceClient {
           + "\n  --oauth_scope               Scope for OAuth tokens. Default " + c.oauthScope
           + "\n  --full_stream_decompression Enable full-stream decompression. Default "
             + c.fullStreamDecompression
+          + "\n --service_config_json=SERVICE_CONFIG_JSON"
+          + "\n                              Disables service config lookups and sets the provided "
+          + "\n                              string as the default service config."
+          + "\n --soak_iterations            The number of iterations to use for the two soak "
+          + "\n                              tests: rpc_soak and channel_soak. Default "
+            + c.soakIterations
+          + "\n --soak_max_failures          The number of iterations in soak tests that are "
+          + "\n                              allowed to fail (either due to non-OK status code or "
+          + "\n                              exceeding the per-iteration max acceptable latency). "
+          + "\n                              Default " + c.soakMaxFailures
+          + "\n --soak_per_iteration_max_acceptable_latency_ms "
+          + "\n                              The number of milliseconds a single iteration in the "
+          + "\n                              two soak tests (rpc_soak and channel_soak) should "
+          + "\n                              take. Default "
+            + c.soakPerIterationMaxAcceptableLatencyMs
+          + "\n --soak_overall_timeout_seconds "
+          + "\n                              The overall number of seconds after which a soak test "
+          + "\n                              should stop and fail, if the desired number of "
+          + "\n                              iterations have not yet completed. Default "
+            + c.soakOverallTimeoutSeconds
       );
       System.exit(1);
     }
@@ -212,7 +274,11 @@ public class TestServiceClient {
         break;
 
       case CLIENT_COMPRESSED_UNARY:
-        tester.clientCompressedUnary();
+        tester.clientCompressedUnary(true);
+        break;
+
+      case CLIENT_COMPRESSED_UNARY_NOPROBE:
+        tester.clientCompressedUnary(false);
         break;
 
       case SERVER_COMPRESSED_UNARY:
@@ -224,7 +290,11 @@ public class TestServiceClient {
         break;
 
       case CLIENT_COMPRESSED_STREAMING:
-        tester.clientCompressedStreaming();
+        tester.clientCompressedStreaming(true);
+        break;
+
+      case CLIENT_COMPRESSED_STREAMING_NOPROBE:
+        tester.clientCompressedStreaming(false);
         break;
 
       case SERVER_STREAMING:
@@ -246,6 +316,31 @@ public class TestServiceClient {
       case COMPUTE_ENGINE_CREDS:
         tester.computeEngineCreds(defaultServiceAccount, oauthScope);
         break;
+
+      case COMPUTE_ENGINE_CHANNEL_CREDENTIALS: {
+        ManagedChannelBuilder<?> builder;
+        if (serverPort == 0) {
+          builder = Grpc.newChannelBuilder(serverHost, ComputeEngineChannelCredentials.create());
+        } else {
+          builder =
+              Grpc.newChannelBuilderForAddress(
+                  serverHost, serverPort, ComputeEngineChannelCredentials.create());
+        }
+        if (serviceConfig != null) {
+          builder.disableServiceConfigLookUp();
+          builder.defaultServiceConfig(serviceConfig);
+        }
+        ManagedChannel channel = builder.build();
+        try {
+          TestServiceGrpc.TestServiceBlockingStub computeEngineStub =
+              TestServiceGrpc.newBlockingStub(channel);
+          tester.computeEngineChannelCredentials(defaultServiceAccount, computeEngineStub);
+        } finally {
+          channel.shutdownNow();
+          channel.awaitTermination(5, TimeUnit.SECONDS);
+        }
+        break;
+      }
 
       case SERVICE_ACCOUNT_CREDS: {
         String jsonKey = Files.asCharSource(new File(serviceAccountKeyFile), UTF_8).read();
@@ -274,6 +369,30 @@ public class TestServiceClient {
         break;
       }
 
+      case GOOGLE_DEFAULT_CREDENTIALS: {
+        ManagedChannelBuilder<?> builder;
+        if (serverPort == 0) {
+          builder = Grpc.newChannelBuilder(serverHost, GoogleDefaultChannelCredentials.create());
+        } else {
+          builder =
+              Grpc.newChannelBuilderForAddress(
+                  serverHost, serverPort, GoogleDefaultChannelCredentials.create());
+        }
+        if (serviceConfig != null) {
+          builder.disableServiceConfigLookUp();
+          builder.defaultServiceConfig(serviceConfig);
+        }
+        ManagedChannel channel = builder.build();
+        try {
+          TestServiceGrpc.TestServiceBlockingStub googleDefaultStub =
+              TestServiceGrpc.newBlockingStub(channel);
+          tester.googleDefaultCredentials(defaultServiceAccount, googleDefaultStub);
+        } finally {
+          channel.shutdownNow();
+        }
+        break;
+      }
+
       case CUSTOM_METADATA: {
         tester.customMetadata();
         break;
@@ -283,6 +402,10 @@ public class TestServiceClient {
         tester.statusCodeAndMessage();
         break;
       }
+
+      case SPECIAL_STATUS_MESSAGE:
+        tester.specialStatusMessage();
+        break;
 
       case UNIMPLEMENTED_METHOD: {
         tester.unimplementedMethod();
@@ -309,6 +432,36 @@ public class TestServiceClient {
         break;
       }
 
+      case VERY_LARGE_REQUEST: {
+        tester.veryLargeRequest();
+        break;
+      }
+
+      case PICK_FIRST_UNARY: {
+        tester.pickFirstUnary();
+        break;
+      }
+
+      case RPC_SOAK: {
+        tester.performSoakTest(
+            false /* resetChannelPerIteration */,
+            soakIterations,
+            soakMaxFailures,
+            soakPerIterationMaxAcceptableLatencyMs,
+            soakOverallTimeoutSeconds);
+        break;
+      }
+
+      case CHANNEL_SOAK: {
+        tester.performSoakTest(
+            true /* resetChannelPerIteration */,
+            soakIterations,
+            soakMaxFailures,
+            soakPerIterationMaxAcceptableLatencyMs,
+            soakOverallTimeoutSeconds);
+        break;
+      }
+
       default:
         throw new IllegalArgumentException("Unknown test case: " + testCase);
     }
@@ -316,58 +469,115 @@ public class TestServiceClient {
 
   private class Tester extends AbstractInteropTest {
     @Override
-    protected ManagedChannel createChannel() {
-      AbstractManagedChannelImplBuilder<?> builder;
-      if (!useOkHttp) {
-        SslContext sslContext = null;
-        if (useTestCa) {
+    protected ManagedChannelBuilder<?> createChannelBuilder() {
+      boolean useGeneric = false;
+      ChannelCredentials channelCredentials;
+      if (customCredentialsType != null) {
+        useGeneric = true; // Retain old behavior; avoids erroring if incompatible
+        if (customCredentialsType.equals("google_default_credentials")) {
+          channelCredentials = GoogleDefaultChannelCredentials.create();
+        } else if (customCredentialsType.equals("compute_engine_channel_creds")) {
+          channelCredentials = ComputeEngineChannelCredentials.create();
+        } else {
+          throw new IllegalArgumentException(
+              "Unknown custom credentials: " + customCredentialsType);
+        }
+
+      } else if (useAlts) {
+        useGeneric = true; // Retain old behavior; avoids erroring if incompatible
+        if (localHandshakerPort > -1) {
+          channelCredentials = AltsChannelCredentials.newBuilder()
+              .enableUntrustedAltsForTesting()
+              .setHandshakerAddressForTesting("localhost:" + localHandshakerPort).build();
+        } else {
+          channelCredentials = AltsChannelCredentials.create();
+        }
+
+      } else if (useTls) {
+        if (!useTestCa) {
+          channelCredentials = TlsChannelCredentials.create();
+        } else {
           try {
-            sslContext = GrpcSslContexts.forClient().trustManager(
-                    TestUtils.loadCert("ca.pem")).build();
+            channelCredentials = TlsChannelCredentials.newBuilder()
+                .trustManager(TestUtils.loadCert("ca.pem"))
+                .build();
           } catch (Exception ex) {
             throw new RuntimeException(ex);
           }
         }
-        NettyChannelBuilder nettyBuilder =
-            NettyChannelBuilder.forAddress(serverHost, serverPort)
-                .flowControlWindow(65 * 1024)
-                .negotiationType(useTls ? NegotiationType.TLS : NegotiationType.PLAINTEXT)
-                .sslContext(sslContext);
+
+      } else {
+        if (useH2cUpgrade) {
+          if (useOkHttp) {
+            throw new IllegalArgumentException("OkHttp does not support HTTP/1 upgrade");
+          } else {
+            channelCredentials = InsecureFromHttp1ChannelCredentials.create();
+          }
+        } else {
+          channelCredentials = InsecureChannelCredentials.create();
+        }
+      }
+      if (useGeneric) {
+        ManagedChannelBuilder<?> channelBuilder;
+        if (serverPort == 0) {
+          channelBuilder = Grpc.newChannelBuilder(serverHost, channelCredentials);
+        } else {
+          channelBuilder =
+              Grpc.newChannelBuilderForAddress(serverHost, serverPort, channelCredentials);
+        }
+        if (serverHostOverride != null) {
+          channelBuilder.overrideAuthority(serverHostOverride);
+        }
+        if (serviceConfig != null) {
+          channelBuilder.disableServiceConfigLookUp();
+          channelBuilder.defaultServiceConfig(serviceConfig);
+        }
+        return channelBuilder;
+      }
+      if (!useOkHttp) {
+        NettyChannelBuilder nettyBuilder;
+        if (serverPort == 0) {
+          nettyBuilder = NettyChannelBuilder.forTarget(serverHost, channelCredentials);
+        } else {
+          nettyBuilder = NettyChannelBuilder.forAddress(serverHost, serverPort, channelCredentials);
+        }
+        nettyBuilder.flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW);
         if (serverHostOverride != null) {
           nettyBuilder.overrideAuthority(serverHostOverride);
         }
         if (fullStreamDecompression) {
           nettyBuilder.enableFullStreamDecompression();
         }
-        builder = nettyBuilder;
-      } else {
-        OkHttpChannelBuilder okBuilder = OkHttpChannelBuilder.forAddress(serverHost, serverPort);
-        if (serverHostOverride != null) {
-          // Force the hostname to match the cert the server uses.
-          okBuilder.overrideAuthority(
-              GrpcUtil.authorityFromHostAndPort(serverHostOverride, serverPort));
+        // Disable the default census stats interceptor, use testing interceptor instead.
+        InternalNettyChannelBuilder.setStatsEnabled(nettyBuilder, false);
+        if (serviceConfig != null) {
+          nettyBuilder.disableServiceConfigLookUp();
+          nettyBuilder.defaultServiceConfig(serviceConfig);
         }
-        if (useTls) {
-          try {
-            SSLSocketFactory factory = useTestCa
-                ? TestUtils.newSslSocketFactoryForCa(Platform.get().getProvider(),
-                    TestUtils.loadCert("ca.pem"))
-                : (SSLSocketFactory) SSLSocketFactory.getDefault();
-            okBuilder.sslSocketFactory(factory);
-          } catch (Exception e) {
-            throw new RuntimeException(e);
-          }
-        } else {
-          okBuilder.usePlaintext(true);
-        }
-        if (fullStreamDecompression) {
-          okBuilder.enableFullStreamDecompression();
-        }
-        builder = okBuilder;
+        return nettyBuilder.intercept(createCensusStatsClientInterceptor());
       }
-      io.grpc.internal.TestingAccessor.setStatsImplementation(
-          builder, createClientCensusStatsModule());
-      return builder.build();
+
+      OkHttpChannelBuilder okBuilder;
+      if (serverPort == 0) {
+        okBuilder = OkHttpChannelBuilder.forTarget(serverHost, channelCredentials);
+      } else {
+        okBuilder = OkHttpChannelBuilder.forAddress(serverHost, serverPort, channelCredentials);
+      }
+      if (serverHostOverride != null) {
+        // Force the hostname to match the cert the server uses.
+        okBuilder.overrideAuthority(
+            GrpcUtil.authorityFromHostAndPort(serverHostOverride, serverPort));
+      }
+      if (fullStreamDecompression) {
+        okBuilder.enableFullStreamDecompression();
+      }
+      // Disable the default census stats interceptor, use testing interceptor instead.
+      InternalOkHttpChannelBuilder.setStatsEnabled(okBuilder, false);
+      if (serviceConfig != null) {
+        okBuilder.disableServiceConfigLookUp();
+        okBuilder.defaultServiceConfig(serviceConfig);
+      }
+      return okBuilder.intercept(createCensusStatsClientInterceptor());
     }
 
     @Override
@@ -376,6 +586,18 @@ public class TestServiceClient {
       // https://github.com/grpc/grpc-go/issues/1572
       // TODO(zhangkun83): remove this override once the said issue is fixed.
       return false;
+    }
+
+    @Override
+    @Nullable
+    protected ServerBuilder<?> getHandshakerServerBuilder() {
+      if (localHandshakerPort > -1) {
+        return Grpc.newServerBuilderForPort(localHandshakerPort,
+            InsecureServerCredentials.create())
+            .addService(new AltsHandshakerTestService());
+      } else {
+        return null;
+      }
     }
   }
 

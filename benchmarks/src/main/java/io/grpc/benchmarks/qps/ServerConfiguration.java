@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,6 @@ class ServerConfiguration implements Configuration {
 
   Transport transport = Transport.NETTY_NIO;
   boolean tls;
-  boolean useDefaultCiphers;
   boolean directExecutor;
   SocketAddress address;
   int flowControlWindow = NettyChannelBuilder.DEFAULT_FLOW_CONTROL_WINDOW;
@@ -157,13 +156,6 @@ class ServerConfiguration implements Configuration {
       @Override
       protected void setServerValue(ServerConfiguration config, String value) {
         config.tls = parseBoolean(value);
-      }
-    },
-    USE_DEFAULT_CIPHERS("", "Use the default JDK ciphers for TLS (Used to support Java 7).",
-            "false") {
-      @Override
-      protected void setServerValue(ServerConfiguration config, String value) {
-        config.useDefaultCiphers = parseBoolean(value);
       }
     },
     TRANSPORT("STR", Transport.getDescriptionString(), DEFAULT.transport.name().toLowerCase()) {

@@ -1,19 +1,7 @@
 java_library(
     name = "core",
-    srcs = glob([
-        "src/main/java/io/grpc/*.java",
-    ]),
-    resources = glob([
-        "src/main/resources/**",
-    ]),
     visibility = ["//visibility:public"],
-    deps = [
-        "//context",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_errorprone_error_prone_annotations//jar",
-        "@com_google_guava_guava//jar",
-        "@io_opencensus_opencensus_api//jar",
-    ],
+    exports = ["//api"],
 )
 
 java_library(
@@ -23,10 +11,13 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-        ":core",
         ":internal",
+        "//api",
+        "//context",
         "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_errorprone_error_prone_annotations//jar",
         "@com_google_guava_guava//jar",
+        "@com_google_j2objc_j2objc_annotations//jar",
     ],
 )
 
@@ -35,16 +26,22 @@ java_library(
     srcs = glob([
         "src/main/java/io/grpc/internal/*.java",
     ]),
+    javacopts = ["-Xep:DoNotCall:OFF"],  # Remove once requiring Bazel 3.4.0+; allows non-final
+    resources = glob([
+        "src/bazel-internal/resources/**",
+    ]),
     visibility = ["//:__subpackages__"],
     deps = [
-        ":core",
+        "//api",
         "//context",
+        "@com_google_android_annotations//jar",
         "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_errorprone_error_prone_annotations//jar",
         "@com_google_code_gson_gson//jar",
+        "@com_google_errorprone_error_prone_annotations//jar",
         "@com_google_guava_guava//jar",
-        "@io_opencensus_opencensus_api//jar",
-        "@io_opencensus_opencensus_contrib_grpc_metrics//jar",
+        "@com_google_j2objc_j2objc_annotations//jar",
+        "@io_perfmark_perfmark_api//jar",
+        "@org_codehaus_mojo_animal_sniffer_annotations//jar",
     ],
 )
 
@@ -53,11 +50,31 @@ java_library(
     srcs = glob([
         "src/main/java/io/grpc/util/*.java",
     ]),
+    resources = glob([
+        "src/bazel-util/resources/**",
+    ]),
     visibility = ["//visibility:public"],
     deps = [
-        ":core",
         ":internal",
+        "//api",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
+        "@com_google_j2objc_j2objc_annotations//jar",
+        "@org_codehaus_mojo_animal_sniffer_annotations//jar",
+    ],
+)
+
+# Mirrors the dependencies included in the artifact on Maven Central for usage
+# with maven_install's override_targets. Purposefully does not export any
+# symbols, as it should only be used as a dep for pre-compiled binaries on
+# Maven Central.
+java_library(
+    name = "core_maven",
+    visibility = ["//visibility:public"],
+    runtime_deps = [
+        ":inprocess",
+        ":internal",
+        ":util",
+        "//api",
     ],
 )

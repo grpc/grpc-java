@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,15 +18,16 @@ package io.grpc.inprocess;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalInstrumented;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransportListener;
-import io.grpc.internal.SharedResourceHolder.Resource;
-import io.grpc.internal.SharedResourcePool;
 import java.io.IOException;
+import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,17 +38,18 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 final class InProcessServer implements InternalServer {
   private static final ConcurrentMap<String, InProcessServer> registry
-      = new ConcurrentHashMap<String, InProcessServer>();
+      = new ConcurrentHashMap<>();
 
   static InProcessServer findServer(String name) {
     return registry.get(name);
   }
 
   private final String name;
+  private final int maxInboundMetadataSize;
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
   private ServerListener listener;
   private boolean shutdown;
-  /** Expected to be a SharedResourcePool except in testing. */
+  /** Defaults to be a SharedResourcePool. */
   private final ObjectPool<ScheduledExecutorService> schedulerPool;
   /**
    * Only used to make sure the scheduler has at least one reference. Since child transports can
@@ -56,17 +58,11 @@ final class InProcessServer implements InternalServer {
   private ScheduledExecutorService scheduler;
 
   InProcessServer(
-      String name, Resource<ScheduledExecutorService> schedulerResource,
-      List<ServerStreamTracer.Factory> streamTracerFactories) {
-    this(name, SharedResourcePool.forResource(schedulerResource), streamTracerFactories);
-  }
-
-  @VisibleForTesting
-  InProcessServer(
-      String name, ObjectPool<ScheduledExecutorService> schedulerPool,
-      List<ServerStreamTracer.Factory> streamTracerFactories) {
-    this.name = name;
-    this.schedulerPool = schedulerPool;
+      InProcessServerBuilder builder,
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+    this.name = builder.name;
+    this.schedulerPool = builder.schedulerPool;
+    this.maxInboundMetadataSize = builder.maxInboundMetadataSize;
     this.streamTracerFactories =
         Collections.unmodifiableList(checkNotNull(streamTracerFactories, "streamTracerFactories"));
   }
@@ -82,8 +78,23 @@ final class InProcessServer implements InternalServer {
   }
 
   @Override
-  public int getPort() {
-    return -1;
+  public SocketAddress getListenSocketAddress() {
+    return new InProcessSocketAddress(name);
+  }
+
+  @Override
+  public List<? extends SocketAddress> getListenSocketAddresses() {
+    return Collections.singletonList(getListenSocketAddress());
+  }
+
+  @Override
+  public InternalInstrumented<SocketStats> getListenSocketStats() {
+    return null;
+  }
+
+  @Override
+  public List<InternalInstrumented<SocketStats>> getListenSocketStatsList() {
+    return null;
   }
 
   @Override
@@ -98,6 +109,11 @@ final class InProcessServer implements InternalServer {
     }
   }
 
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this).add("name", name).toString();
+  }
+
   synchronized ServerTransportListener register(InProcessTransport transport) {
     if (shutdown) {
       return null;
@@ -107,6 +123,10 @@ final class InProcessServer implements InternalServer {
 
   ObjectPool<ScheduledExecutorService> getScheduledExecutorServicePool() {
     return schedulerPool;
+  }
+
+  int getMaxInboundMetadataSize() {
+    return maxInboundMetadataSize;
   }
 
   List<ServerStreamTracer.Factory> getStreamTracerFactories() {

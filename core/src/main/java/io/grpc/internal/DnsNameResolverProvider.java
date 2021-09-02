@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,9 @@
 package io.grpc.internal;
 
 import com.google.common.base.Preconditions;
-import io.grpc.Attributes;
+import com.google.common.base.Stopwatch;
+import io.grpc.InternalServiceProviders;
+import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import java.net.URI;
 
@@ -41,14 +43,19 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   private static final String SCHEME = "dns";
 
   @Override
-  public DnsNameResolver newNameResolver(URI targetUri, Attributes params) {
+  public DnsNameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
       String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(targetPath.startsWith("/"),
           "the path component (%s) of the target (%s) must start with '/'", targetPath, targetUri);
       String name = targetPath.substring(1);
-      return new DnsNameResolver(targetUri.getAuthority(), name, params, GrpcUtil.TIMER_SERVICE,
-          GrpcUtil.SHARED_CHANNEL_EXECUTOR, GrpcUtil.getProxyDetector());
+      return new DnsNameResolver(
+          targetUri.getAuthority(),
+          name,
+          args,
+          GrpcUtil.SHARED_CHANNEL_EXECUTOR,
+          Stopwatch.createUnstarted(),
+          InternalServiceProviders.isAndroid(getClass().getClassLoader()));
     } else {
       return null;
     }
@@ -65,7 +72,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   }
 
   @Override
-  protected int priority() {
+  public int priority() {
     return 5;
   }
 }

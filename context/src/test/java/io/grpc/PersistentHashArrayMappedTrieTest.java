@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,12 +35,15 @@ public class PersistentHashArrayMappedTrieTest {
     Key key = new Key(0);
     Object value1 = new Object();
     Object value2 = new Object();
-    Leaf<Key, Object> leaf = new Leaf<Key, Object>(key, value1);
+    Leaf<Key, Object> leaf = new Leaf<>(key, value1);
     Node<Key, Object> ret = leaf.put(key, value2, key.hashCode(), 0);
     assertTrue(ret instanceof Leaf);
     assertSame(value2, ret.get(key, key.hashCode(), 0));
 
     assertSame(value1, leaf.get(key, key.hashCode(), 0));
+
+    assertEquals(1, leaf.size());
+    assertEquals(1, ret.size());
   }
 
   @Test
@@ -49,7 +52,7 @@ public class PersistentHashArrayMappedTrieTest {
     Key key2 = new Key(0);
     Object value1 = new Object();
     Object value2 = new Object();
-    Leaf<Key, Object> leaf = new Leaf<Key, Object>(key1, value1);
+    Leaf<Key, Object> leaf = new Leaf<>(key1, value1);
     Node<Key, Object> ret = leaf.put(key2, value2, key2.hashCode(), 0);
     assertTrue(ret instanceof CollisionLeaf);
     assertSame(value1, ret.get(key1, key1.hashCode(), 0));
@@ -57,6 +60,9 @@ public class PersistentHashArrayMappedTrieTest {
 
     assertSame(value1, leaf.get(key1, key1.hashCode(), 0));
     assertSame(null, leaf.get(key2, key2.hashCode(), 0));
+
+    assertEquals(1, leaf.size());
+    assertEquals(2, ret.size());
   }
 
   @Test
@@ -65,7 +71,7 @@ public class PersistentHashArrayMappedTrieTest {
     Key key2 = new Key(1);
     Object value1 = new Object();
     Object value2 = new Object();
-    Leaf<Key, Object> leaf = new Leaf<Key, Object>(key1, value1);
+    Leaf<Key, Object> leaf = new Leaf<>(key1, value1);
     Node<Key, Object> ret = leaf.put(key2, value2, key2.hashCode(), 0);
     assertTrue(ret instanceof CompressedIndex);
     assertSame(value1, ret.get(key1, key1.hashCode(), 0));
@@ -73,17 +79,20 @@ public class PersistentHashArrayMappedTrieTest {
 
     assertSame(value1, leaf.get(key1, key1.hashCode(), 0));
     assertSame(null, leaf.get(key2, key2.hashCode(), 0));
+
+    assertEquals(1, leaf.size());
+    assertEquals(2, ret.size());
   }
 
   @Test(expected = AssertionError.class)
   public void collisionLeaf_assertKeysDifferent() {
     Key key1 = new Key(0);
-    new CollisionLeaf<Key, Object>(key1, new Object(), key1, new Object());
+    new CollisionLeaf<>(key1, new Object(), key1, new Object());
   }
 
   @Test(expected = AssertionError.class)
   public void collisionLeaf_assertHashesSame() {
-    new CollisionLeaf<Key, Object>(new Key(0), new Object(), new Key(1), new Object());
+    new CollisionLeaf<>(new Key(0), new Object(), new Key(1), new Object());
   }
 
   @Test
@@ -95,7 +104,7 @@ public class PersistentHashArrayMappedTrieTest {
     Object value2 = new Object();
     Object insertValue = new Object();
     CollisionLeaf<Key, Object> leaf =
-        new CollisionLeaf<Key, Object>(key1, value1, key2, value2);
+        new CollisionLeaf<>(key1, value1, key2, value2);
 
     Node<Key, Object> ret = leaf.put(insertKey, insertValue, insertKey.hashCode(), 0);
     assertTrue(ret instanceof CompressedIndex);
@@ -106,6 +115,9 @@ public class PersistentHashArrayMappedTrieTest {
     assertSame(value1, leaf.get(key1, key1.hashCode(), 0));
     assertSame(value2, leaf.get(key2, key2.hashCode(), 0));
     assertSame(null, leaf.get(insertKey, insertKey.hashCode(), 0));
+
+    assertEquals(2, leaf.size());
+    assertEquals(3, ret.size());
   }
 
   @Test
@@ -115,7 +127,7 @@ public class PersistentHashArrayMappedTrieTest {
     Key key = new Key(replaceKey.hashCode());
     Object value = new Object();
     CollisionLeaf<Key, Object> leaf =
-        new CollisionLeaf<Key, Object>(replaceKey, originalValue, key, value);
+        new CollisionLeaf<>(replaceKey, originalValue, key, value);
     Object replaceValue = new Object();
     Node<Key, Object> ret = leaf.put(replaceKey, replaceValue, replaceKey.hashCode(), 0);
     assertTrue(ret instanceof CollisionLeaf);
@@ -124,6 +136,9 @@ public class PersistentHashArrayMappedTrieTest {
 
     assertSame(value, leaf.get(key, key.hashCode(), 0));
     assertSame(originalValue, leaf.get(replaceKey, replaceKey.hashCode(), 0));
+
+    assertEquals(2, leaf.size());
+    assertEquals(2, ret.size());
   }
 
   @Test
@@ -135,7 +150,7 @@ public class PersistentHashArrayMappedTrieTest {
     Object value2 = new Object();
     Object value3 = new Object();
     CollisionLeaf<Key, Object> leaf =
-        new CollisionLeaf<Key, Object>(key1, value1, key2, value2);
+        new CollisionLeaf<>(key1, value1, key2, value2);
 
     Node<Key, Object> ret = leaf.put(key3, value3, key3.hashCode(), 0);
     assertTrue(ret instanceof CollisionLeaf);
@@ -146,6 +161,9 @@ public class PersistentHashArrayMappedTrieTest {
     assertSame(value1, leaf.get(key1, key1.hashCode(), 0));
     assertSame(value2, leaf.get(key2, key2.hashCode(), 0));
     assertSame(null, leaf.get(key3, key3.hashCode(), 0));
+
+    assertEquals(2, leaf.size());
+    assertEquals(3, ret.size());
   }
 
   @Test
@@ -154,8 +172,8 @@ public class PersistentHashArrayMappedTrieTest {
     final Key key2 = new Key(19);
     final Object value1 = new Object();
     final Object value2 = new Object();
-    Leaf<Key, Object> leaf1 = new Leaf<Key, Object>(key1, value1);
-    Leaf<Key, Object> leaf2 = new Leaf<Key, Object>(key2, value2);
+    Leaf<Key, Object> leaf1 = new Leaf<>(key1, value1);
+    Leaf<Key, Object> leaf2 = new Leaf<>(key2, value2);
     class Verifier {
       private void verify(Node<Key, Object> ret) {
         CompressedIndex<Key, Object> collisionLeaf = (CompressedIndex<Key, Object>) ret;
@@ -166,12 +184,17 @@ public class PersistentHashArrayMappedTrieTest {
 
         assertSame(value1, ret.get(key1, key1.hashCode(), 0));
         assertSame(value2, ret.get(key2, key2.hashCode(), 0));
+
+        assertEquals(2, ret.size());
       }
     }
 
     Verifier verifier = new Verifier();
     verifier.verify(CompressedIndex.combine(leaf1, key1.hashCode(), leaf2, key2.hashCode(), 0));
     verifier.verify(CompressedIndex.combine(leaf2, key2.hashCode(), leaf1, key1.hashCode(), 0));
+
+    assertEquals(1, leaf1.size());
+    assertEquals(1, leaf2.size());
   }
 
   @Test
@@ -180,8 +203,8 @@ public class PersistentHashArrayMappedTrieTest {
     final Key key2 = new Key(31 << 5 | 1); // 5 bit regions: (31, 1)
     final Object value1 = new Object();
     final Object value2 = new Object();
-    Leaf<Key, Object> leaf1 = new Leaf<Key, Object>(key1, value1);
-    Leaf<Key, Object> leaf2 = new Leaf<Key, Object>(key2, value2);
+    Leaf<Key, Object> leaf1 = new Leaf<>(key1, value1);
+    Leaf<Key, Object> leaf2 = new Leaf<>(key2, value2);
     class Verifier {
       private void verify(Node<Key, Object> ret) {
         CompressedIndex<Key, Object> collisionInternal = (CompressedIndex<Key, Object>) ret;
@@ -192,12 +215,17 @@ public class PersistentHashArrayMappedTrieTest {
         assertEquals((1 << 31) | (1 << 17), collisionLeaf.bitmap);
         assertSame(value1, ret.get(key1, key1.hashCode(), 0));
         assertSame(value2, ret.get(key2, key2.hashCode(), 0));
+
+        assertEquals(2, ret.size());
       }
     }
 
     Verifier verifier = new Verifier();
     verifier.verify(CompressedIndex.combine(leaf1, key1.hashCode(), leaf2, key2.hashCode, 0));
     verifier.verify(CompressedIndex.combine(leaf2, key2.hashCode(), leaf1, key1.hashCode, 0));
+
+    assertEquals(1, leaf1.size());
+    assertEquals(1, leaf2.size());
   }
 
   /**

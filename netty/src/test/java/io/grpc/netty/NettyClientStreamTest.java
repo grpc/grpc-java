@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.netty.NettyTestUtil.messageFrame;
 import static io.grpc.netty.Utils.CONTENT_TYPE_GRPC;
@@ -28,11 +29,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyBoolean;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -43,11 +44,13 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.io.BaseEncoding;
+import io.grpc.CallOptions;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
@@ -57,6 +60,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.DefaultChannelPromise;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
@@ -70,7 +74,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
@@ -89,7 +93,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   @SuppressWarnings("unchecked")
   private MethodDescriptor.Marshaller<Void> marshaller = mock(MethodDescriptor.Marshaller.class);
-  private final Queue<InputStream> listenerMessageQueue = new LinkedList<InputStream>();
+  private final Queue<InputStream> listenerMessageQueue = new LinkedList<>();
 
   // Must be initialized before @Before, because it is used by createStream()
   private MethodDescriptor<?, ?> methodDescriptor = MethodDescriptor.<Void, Void>newBuilder()
@@ -121,7 +125,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
             }
           })
       .when(listener)
-      .messagesAvailable(Matchers.<StreamListener.MessageProducer>any());
+      .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
   }
 
   @Override
@@ -179,7 +183,6 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream.flush();
     verify(writeQueue).enqueue(
         eq(new SendGrpcFrameCommand(stream.transportState(), messageFrame(MESSAGE), false)),
-        any(ChannelPromise.class),
         eq(true));
   }
 
@@ -195,12 +198,10 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     verify(writeQueue).enqueue(
             eq(new SendGrpcFrameCommand(
                 stream.transportState(), messageFrame(MESSAGE).slice(0, 5), false)),
-            any(ChannelPromise.class),
             eq(false));
     verify(writeQueue).enqueue(
         eq(new SendGrpcFrameCommand(
             stream.transportState(), messageFrame(MESSAGE).slice(5, 11), false)),
-        any(ChannelPromise.class),
         eq(true));
   }
 
@@ -208,14 +209,14 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   public void setStatusWithOkShouldCloseStream() {
     stream().transportState().setId(STREAM_ID);
     stream().transportState().transportReportStatus(Status.OK, true, new Metadata());
-    verify(listener).closed(same(Status.OK), any(Metadata.class));
+    verify(listener).closed(same(Status.OK), same(PROCESSED), any(Metadata.class));
   }
 
   @Test
   public void setStatusWithErrorShouldCloseStream() {
     Status errorStatus = Status.INTERNAL;
     stream().transportState().transportReportStatus(errorStatus, true, new Metadata());
-    verify(listener).closed(eq(errorStatus), any(Metadata.class));
+    verify(listener).closed(eq(errorStatus), same(PROCESSED), any(Metadata.class));
   }
 
   @Test
@@ -223,7 +224,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     Status errorStatus = Status.INTERNAL;
     stream().transportState().transportReportStatus(errorStatus, true, new Metadata());
     stream().transportState().transportReportStatus(Status.OK, true, new Metadata());
-    verify(listener).closed(any(Status.class), any(Metadata.class));
+    verify(listener).closed(any(Status.class), same(PROCESSED), any(Metadata.class));
   }
 
   @Test
@@ -232,7 +233,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream().transportState().transportReportStatus(errorStatus, true, new Metadata());
     stream().transportState().transportReportStatus(
         Status.fromThrowable(new RuntimeException("fake")), true, new Metadata());
-    verify(listener).closed(any(Status.class), any(Metadata.class));
+    verify(listener).closed(any(Status.class), same(PROCESSED), any(Metadata.class));
   }
 
   @Override
@@ -261,6 +262,28 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   }
 
   @Test
+  public void inboundTrailersBeforeHalfCloseSendsRstStream() {
+    stream().transportState().setId(STREAM_ID);
+    stream().transportState().transportHeadersReceived(grpcResponseHeaders(), false);
+    stream().transportState().transportHeadersReceived(grpcResponseTrailers(Status.OK), true);
+
+    // Verify a cancel stream with reason=null is sent to the handler.
+    ArgumentCaptor<CancelClientStreamCommand> captor = ArgumentCaptor
+        .forClass(CancelClientStreamCommand.class);
+    verify(writeQueue).enqueue(captor.capture(), eq(true));
+    assertNull(captor.getValue().reason());
+  }
+
+  @Test
+  public void inboundTrailersAfterHalfCloseDoesNotSendRstStream() {
+    stream().transportState().setId(STREAM_ID);
+    stream().transportState().transportHeadersReceived(grpcResponseHeaders(), false);
+    stream.halfClose();
+    stream().transportState().transportHeadersReceived(grpcResponseTrailers(Status.OK), true);
+    verify(writeQueue, never()).enqueue(isA(CancelClientStreamCommand.class), eq(true));
+  }
+
+  @Test
   public void inboundStatusShouldSetStatus() throws Exception {
     stream().transportState().setId(STREAM_ID);
 
@@ -269,7 +292,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
     stream().transportState().transportHeadersReceived(grpcResponseTrailers(Status.INTERNAL), true);
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(listener).closed(captor.capture(), any(Metadata.class));
+    verify(listener).closed(captor.capture(), same(PROCESSED), any(Metadata.class));
     assertEquals(Status.INTERNAL.getCode(), captor.getValue().getCode());
   }
 
@@ -282,7 +305,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     // Remove once b/16290036 is fixed.
     headers.status(new AsciiString("500"));
     stream().transportState().transportHeadersReceived(headers, false);
-    verify(listener, never()).closed(any(Status.class), any(Metadata.class));
+    verify(listener, never()).closed(
+        any(Status.class), any(RpcProgress.class), any(Metadata.class));
 
     // We are now waiting for 100 bytes of error context on the stream, cancel has not yet been
     // sent
@@ -292,10 +316,10 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream().transportState().transportDataReceived(Unpooled.buffer(1000).writeZero(1000), false);
 
     // Now verify that cancel is sent and an error is reported to the listener
-    verify(writeQueue).enqueue(any(CancelClientStreamCommand.class), eq(true));
+    verify(writeQueue).enqueue(isA(CancelClientStreamCommand.class), eq(true));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
-    verify(listener).closed(captor.capture(), metadataCaptor.capture());
+    verify(listener).closed(captor.capture(), same(PROCESSED), metadataCaptor.capture());
     assertEquals(Status.UNKNOWN.getCode(), captor.getValue().getCode());
     assertEquals("4", metadataCaptor.getValue()
         .get(Metadata.Key.of("random", Metadata.ASCII_STRING_MARSHALLER)));
@@ -314,7 +338,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream().transportState().transportHeadersReceived(trailers, true);
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
-    verify(listener).closed(captor.capture(), metadataCaptor.capture());
+    verify(listener).closed(captor.capture(), same(PROCESSED), metadataCaptor.capture());
     Status status = captor.getValue();
     assertEquals(Status.Code.UNKNOWN, status.getCode());
     assertTrue(status.getDescription().contains("content-type"));
@@ -326,7 +350,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   public void nonGrpcResponseShouldSetStatus() throws Exception {
     stream().transportState().transportDataReceived(Unpooled.copiedBuffer(MESSAGE, UTF_8), true);
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(listener).closed(captor.capture(), any(Metadata.class));
+    verify(listener).closed(captor.capture(), same(PROCESSED), any(Metadata.class));
     assertEquals(Status.Code.INTERNAL, captor.getValue().getCode());
   }
 
@@ -362,7 +386,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
     // Verify that the listener was only notified of the first message, not the second.
     assertNull("no additional message expected", listenerMessageQueue.poll());
-    verify(listener).closed(eq(Status.CANCELLED), eq(trailers));
+    verify(listener).closed(eq(Status.CANCELLED), same(PROCESSED), eq(trailers));
   }
 
   @Test
@@ -381,7 +405,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     assertNull("no additional message expected", listenerMessageQueue.poll());
 
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(listener).closed(captor.capture(), any(Metadata.class));
+    verify(listener).closed(captor.capture(), same(PROCESSED), any(Metadata.class));
     assertEquals(Status.Code.INTERNAL, captor.getValue().getCode());
   }
 
@@ -397,7 +421,9 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("http"),
         AsciiString.of("agent"),
         StatsTraceContext.NOOP,
-        transportTracer);
+        transportTracer,
+        CallOptions.DEFAULT,
+        false);
     stream.start(listener);
     stream().transportState().setId(STREAM_ID);
     verify(listener, never()).onReady();
@@ -413,7 +439,9 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     metadata.put(GrpcUtil.USER_AGENT_KEY, "bad agent");
     listener = mock(ClientStreamListener.class);
     Mockito.reset(writeQueue);
-    when(writeQueue.enqueue(any(QueuedCommand.class), any(boolean.class))).thenReturn(future);
+    ChannelPromise completedPromise = new DefaultChannelPromise(channel)
+        .setSuccess();
+    when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(completedPromise);
 
     stream = new NettyClientStream(
         new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
@@ -424,7 +452,9 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("http"),
         AsciiString.of("good agent"),
         StatsTraceContext.NOOP,
-        transportTracer);
+        transportTracer,
+        CallOptions.DEFAULT,
+        false);
     stream.start(listener);
 
     ArgumentCaptor<CreateStreamCommand> cmdCap = ArgumentCaptor.forClass(CreateStreamCommand.class);
@@ -453,7 +483,9 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("http"),
         AsciiString.of("agent"),
         StatsTraceContext.NOOP,
-        transportTracer);
+        transportTracer,
+        CallOptions.DEFAULT,
+        true);
     stream.start(listener);
     stream.transportState().setId(STREAM_ID);
     stream.transportState().setHttp2Stream(http2Stream);
@@ -462,8 +494,6 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream.writeMessage(new ByteArrayInputStream(msg));
     stream.flush();
     stream.halfClose();
-    verify(writeQueue, never()).enqueue(any(SendGrpcFrameCommand.class), any(ChannelPromise.class),
-        any(Boolean.class));
     ArgumentCaptor<CreateStreamCommand> cmdCap = ArgumentCaptor.forClass(CreateStreamCommand.class);
     verify(writeQueue).enqueue(cmdCap.capture(), eq(true));
     ImmutableListMultimap<CharSequence, CharSequence> headers =
@@ -478,16 +508,6 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
   @Override
   protected NettyClientStream createStream() {
     when(handler.getWriteQueue()).thenReturn(writeQueue);
-    doAnswer(new Answer<Object>() {
-      @Override
-      public Object answer(InvocationOnMock invocation) throws Throwable {
-        if (future.isDone()) {
-          ((ChannelPromise) invocation.getArguments()[1]).trySuccess();
-        }
-        return null;
-      }
-    }).when(writeQueue).enqueue(any(QueuedCommand.class), any(ChannelPromise.class), anyBoolean());
-    when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(future);
     NettyClientStream stream = new NettyClientStream(
         new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
         methodDescriptor,
@@ -497,9 +517,10 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("http"),
         AsciiString.of("agent"),
         StatsTraceContext.NOOP,
-        transportTracer);
+        transportTracer,
+        CallOptions.DEFAULT,
+        false);
     stream.start(listener);
-    stream.transportState().setId(STREAM_ID);
     stream.transportState().setHttp2Stream(http2Stream);
     reset(listener);
     return stream;
@@ -535,7 +556,13 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   private class TransportStateImpl extends NettyClientStream.TransportState {
     public TransportStateImpl(NettyClientHandler handler, int maxMessageSize) {
-      super(handler, channel.eventLoop(), maxMessageSize, StatsTraceContext.NOOP, transportTracer);
+      super(
+          handler,
+          channel.eventLoop(),
+          maxMessageSize,
+          StatsTraceContext.NOOP,
+          transportTracer,
+          "methodName");
     }
 
     @Override

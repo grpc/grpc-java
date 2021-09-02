@@ -1,7 +1,7 @@
 java_library(
     name = "okhttp",
     srcs = glob([
-        "third_party/okhttp/java/**/*.java",
+        "third_party/okhttp/main/java/**/*.java",
         "src/main/java/**/*.java",
     ]),
     resources = glob([
@@ -9,11 +9,14 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-        "//core",
+        "//api",
         "//core:internal",
         "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_errorprone_error_prone_annotations//jar",
         "@com_google_guava_guava//jar",
+        "@com_google_j2objc_j2objc_annotations//jar",
         "@com_squareup_okhttp_okhttp//jar",
         "@com_squareup_okio_okio//jar",
+        "@io_perfmark_perfmark_api//jar",
     ],
 )

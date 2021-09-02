@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 package io.grpc;
 
-import io.grpc.Context.Key;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -30,7 +29,7 @@ import org.openjdk.jmh.annotations.State;
 @State(Scope.Benchmark)
 public class AttachDetachBenchmark {
 
-  private final Key<Integer> key = Context.keyWithDefault("key", 9999);
+  private final Context.Key<Integer> key = Context.keyWithDefault("key", 9999);
   private final Context cu = Context.current().withValue(key, 8888);
 
   /**

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -189,9 +189,9 @@ public class FakeClockTest {
     assertEquals(2, fakeClock.getPendingTasks().size());
     assertEquals(1, fakeClock.getPendingTasks(filter).size());
     assertSame(selectedRunnable, fakeClock.getPendingTasks(filter).iterator().next().command);
-    assertEquals(1, fakeClock.runDueTasks(filter));
+    assertEquals(2, fakeClock.runDueTasks());
     assertTrue(selectedDone.get());
-    assertFalse(ignoredDone.get());
+    assertTrue(ignoredDone.get());
   }
 
   private Runnable newRunnable() {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,33 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.TruthJUnit.assume;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.truth.Truth;
+import io.grpc.InternalChannelz;
+import io.grpc.InternalChannelz.SocketOptions;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFactory;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.ConnectTimeoutException;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ServerChannel;
+import io.netty.channel.WriteBufferWaterMark;
+import io.netty.channel.embedded.EmbeddedChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
+import java.nio.channels.UnresolvedAddressException;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -48,6 +61,8 @@ public class UtilsTest {
     assertSame(s, Utils.statusFromThrowable(new Exception(s.asException())));
     Throwable t;
     t = new ConnectTimeoutException("msg");
+    assertStatusEquals(Status.UNAVAILABLE.withCause(t), Utils.statusFromThrowable(t));
+    t = new UnresolvedAddressException();
     assertStatusEquals(Status.UNAVAILABLE.withCause(t), Utils.statusFromThrowable(t));
     t = new Http2Exception(Http2Error.INTERNAL_ERROR, "msg");
     assertStatusEquals(Status.INTERNAL.withCause(t), Utils.statusFromThrowable(t));
@@ -98,6 +113,7 @@ public class UtilsTest {
   }
 
   @Test
+  @SuppressWarnings("UndefinedEquals") // AsciiString.equals
   public void convertServerHeaders_sanitizes() {
     Metadata metaData = new Metadata();
 
@@ -118,10 +134,94 @@ public class UtilsTest {
     assertEquals(Utils.CONTENT_TYPE_GRPC, headers.get(GrpcUtil.CONTENT_TYPE_KEY.name()));
   }
 
+  @Test
+  public void channelOptionsTest_noLinger() {
+    Channel channel = new EmbeddedChannel();
+    assertNull(channel.config().getOption(ChannelOption.SO_LINGER));
+    InternalChannelz.SocketOptions socketOptions = Utils.getSocketOptions(channel);
+    assertNull(socketOptions.lingerSeconds);
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void channelOptionsTest_oio() {
+    Channel channel = new io.netty.channel.socket.oio.OioSocketChannel();
+    SocketOptions socketOptions = setAndValidateGeneric(channel);
+    assertEquals(250, (int) socketOptions.soTimeoutMillis);
+  }
+
+  @Test
+  public void channelOptionsTest_nio() {
+    Channel channel = new NioSocketChannel();
+    SocketOptions socketOptions = setAndValidateGeneric(channel);
+    assertNull(socketOptions.soTimeoutMillis);
+  }
+
+  private static InternalChannelz.SocketOptions setAndValidateGeneric(Channel channel) {
+    channel.config().setOption(ChannelOption.SO_LINGER, 3);
+    // only applicable for OIO channels:
+    channel.config().setOption(ChannelOption.SO_TIMEOUT, 250);
+    // Test some arbitrarily chosen options with a non numeric values
+    channel.config().setOption(ChannelOption.SO_KEEPALIVE, true);
+    WriteBufferWaterMark writeBufWaterMark = new WriteBufferWaterMark(10, 20);
+    channel.config().setOption(ChannelOption.WRITE_BUFFER_WATER_MARK, writeBufWaterMark);
+
+    InternalChannelz.SocketOptions socketOptions = Utils.getSocketOptions(channel);
+    assertEquals(3, (int) socketOptions.lingerSeconds);
+    assertEquals("true", socketOptions.others.get("SO_KEEPALIVE"));
+    assertEquals(
+        writeBufWaterMark.toString(),
+        socketOptions.others.get(ChannelOption.WRITE_BUFFER_WATER_MARK.toString()));
+    return socketOptions;
+  }
+
   private static void assertStatusEquals(Status expected, Status actual) {
     assertEquals(expected.getCode(), actual.getCode());
-    Truth.assertThat(MoreObjects.firstNonNull(actual.getDescription(), ""))
+    assertThat(MoreObjects.firstNonNull(actual.getDescription(), ""))
         .contains(MoreObjects.firstNonNull(expected.getDescription(), ""));
     assertEquals(expected.getCause(), actual.getCause());
+  }
+
+  @Test
+  public void defaultEventLoopGroup_whenEpollIsAvailable() {
+    assume().that(Utils.isEpollAvailable()).isTrue();
+
+    EventLoopGroup defaultBossGroup = Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP.create();
+    EventLoopGroup defaultWorkerGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
+
+    assertThat(defaultBossGroup.getClass().getName())
+        .isEqualTo("io.netty.channel.epoll.EpollEventLoopGroup");
+    assertThat(defaultWorkerGroup.getClass().getName())
+        .isEqualTo("io.netty.channel.epoll.EpollEventLoopGroup");
+
+    defaultBossGroup.shutdownGracefully();
+    defaultWorkerGroup.shutdownGracefully();
+  }
+
+  @Test
+  public void defaultClientChannelType_whenEpollIsAvailable() {
+    assume().that(Utils.isEpollAvailable()).isTrue();
+
+    Class<? extends Channel> clientChannelType = Utils.DEFAULT_CLIENT_CHANNEL_TYPE;
+
+    assertThat(clientChannelType.getName())
+        .isEqualTo("io.netty.channel.epoll.EpollSocketChannel");
+  }
+
+  @Test
+  public void defaultServerChannelFactory_whenEpollIsAvailable() {
+    assume().that(Utils.isEpollAvailable()).isTrue();
+
+    ChannelFactory<? extends ServerChannel> channelFactory = Utils.DEFAULT_SERVER_CHANNEL_FACTORY;
+
+    assertThat(channelFactory.toString())
+        .isEqualTo("ReflectiveChannelFactory(EpollServerSocketChannel.class)");
+  }
+
+  @Test
+  public void maybeGetTcpUserTimeoutOption() {
+    assume().that(Utils.isEpollAvailable()).isTrue();
+
+    assertThat(Utils.maybeGetTcpUserTimeoutOption()).isNotNull();
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,8 @@ import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelPromise;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -51,7 +53,7 @@ class WriteQueue {
 
   public WriteQueue(Channel channel) {
     this.channel = Preconditions.checkNotNull(channel, "channel");
-    queue = new ConcurrentLinkedQueue<QueuedCommand>();
+    queue = new ConcurrentLinkedQueue<>();
   }
 
   /**
@@ -75,22 +77,10 @@ class WriteQueue {
    */
   @CanIgnoreReturnValue
   ChannelFuture enqueue(QueuedCommand command, boolean flush) {
-    return enqueue(command, channel.newPromise(), flush);
-  }
-
-  /**
-   * Enqueue a write command with a completion listener.
-   *
-   * @param command a write to be executed on the channel.
-   * @param promise to be marked on the completion of the write.
-   * @param flush true if a flush of the write should be schedule, false if a later call to
-   *              enqueue will schedule the flush.
-   */
-  @CanIgnoreReturnValue
-  ChannelFuture enqueue(QueuedCommand command, ChannelPromise promise, boolean flush) {
     // Detect erroneous code that tries to reuse command objects.
     Preconditions.checkArgument(command.promise() == null, "promise must not be set on command");
 
+    ChannelPromise promise = channel.newPromise();
     command.promise(promise);
     queue.add(command);
     if (flush) {
@@ -112,10 +102,24 @@ class WriteQueue {
   }
 
   /**
+   * Executes enqueued work directly on the current thread. This can be used to trigger writes
+   * before performing additional reads. Must be called from the event loop. This method makes no
+   * guarantee that the work queue is empty when it returns.
+   */
+  void drainNow() {
+    Preconditions.checkState(channel.eventLoop().inEventLoop(), "must be on the event loop");
+    if (queue.peek() == null) {
+      return;
+    }
+    flush();
+  }
+
+  /**
    * Process the queue of commands and dispatch them to the stream. This method is only
    * called in the event loop
    */
   private void flush() {
+    PerfMark.startTask("WriteQueue.periodicFlush");
     try {
       QueuedCommand cmd;
       int i = 0;
@@ -127,15 +131,26 @@ class WriteQueue {
           // Flush each chunk so we are releasing buffers periodically. In theory this loop
           // might never end as new events are continuously added to the queue, if we never
           // flushed in that case we would be guaranteed to OOM.
-          channel.flush();
+          PerfMark.startTask("WriteQueue.flush0");
+          try {
+            channel.flush();
+          } finally {
+            PerfMark.stopTask("WriteQueue.flush0");
+          }
           flushedOnce = true;
         }
       }
       // Must flush at least once, even if there were no writes.
       if (i != 0 || !flushedOnce) {
-        channel.flush();
+        PerfMark.startTask("WriteQueue.flush1");
+        try {
+          channel.flush();
+        } finally {
+          PerfMark.stopTask("WriteQueue.flush1");
+        }
       }
     } finally {
+      PerfMark.stopTask("WriteQueue.periodicFlush");
       // Mark the write as done, if the queue is non-empty after marking trigger a new write.
       scheduled.set(false);
       if (!queue.isEmpty()) {
@@ -146,8 +161,10 @@ class WriteQueue {
 
   private static class RunnableCommand implements QueuedCommand {
     private final Runnable runnable;
+    private final Link link;
 
     public RunnableCommand(Runnable runnable) {
+      this.link = PerfMark.linkOut();
       this.runnable = runnable;
     }
 
@@ -165,11 +182,21 @@ class WriteQueue {
     public final void run(Channel channel) {
       runnable.run();
     }
+
+    @Override
+    public Link getLink() {
+      return link;
+    }
   }
 
   abstract static class AbstractQueuedCommand implements QueuedCommand {
 
     private ChannelPromise promise;
+    private final Link link;
+
+    AbstractQueuedCommand() {
+      this.link = PerfMark.linkOut();
+    }
 
     @Override
     public final void promise(ChannelPromise promise) {
@@ -184,6 +211,11 @@ class WriteQueue {
     @Override
     public final void run(Channel channel) {
       channel.write(this, promise);
+    }
+
+    @Override
+    public Link getLink() {
+      return link;
     }
   }
 
@@ -202,5 +234,7 @@ class WriteQueue {
     void promise(ChannelPromise promise);
 
     void run(Channel channel);
+
+    Link getLink();
   }
 }

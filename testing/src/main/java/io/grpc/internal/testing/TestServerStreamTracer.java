@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class TestServerStreamTracer extends ServerStreamTracer implements TestStreamTracer {
   private final TestBaseStreamTracer delegate = new TestBaseStreamTracer();
   protected final AtomicReference<ServerCallInfo<?, ?>> serverCallInfo =
-      new AtomicReference<ServerCallInfo<?, ?>>();
+      new AtomicReference<>();
 
   @Override
   public void await() throws InterruptedException {

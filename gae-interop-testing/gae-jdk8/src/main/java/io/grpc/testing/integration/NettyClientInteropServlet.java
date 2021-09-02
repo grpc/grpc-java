@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,17 +19,25 @@ package io.grpc.testing.integration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import io.grpc.ManagedChannel;
+import io.grpc.Grpc;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.netty.NettyChannelBuilder;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import org.junit.Ignore;
 import org.junit.runner.JUnitCore;
 import org.junit.runner.Result;
 import org.junit.runner.notification.Failure;
@@ -44,8 +52,45 @@ import org.junit.runner.notification.Failure;
 public final class NettyClientInteropServlet extends HttpServlet {
   private static final String INTEROP_TEST_ADDRESS = "grpc-test.sandbox.googleapis.com:443";
 
+  private static final class LogEntryRecorder extends Handler {
+    private Queue<LogRecord> loggedMessages = new ConcurrentLinkedQueue<>();
+
+    @Override
+    public void publish(LogRecord logRecord) {
+      loggedMessages.add(logRecord);
+    }
+
+    @Override
+    public void flush() {}
+
+    @Override
+    public void close() {}
+
+    public String getLogOutput() {
+      SimpleFormatter formatter = new SimpleFormatter();
+      StringBuilder sb = new StringBuilder();
+      for (LogRecord loggedMessage : loggedMessages) {
+        sb.append(formatter.format(loggedMessage));
+      }
+      return sb.toString();
+    }
+  }
+
   @Override
   public void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+    LogEntryRecorder handler = new LogEntryRecorder();
+    Logger.getLogger("").addHandler(handler);
+    try {
+      doGetHelper(resp);
+    } finally {
+      Logger.getLogger("").removeHandler(handler);
+    }
+    resp.getWriter().append("=======================================\n")
+        .append("Server side java.util.logging messages:\n")
+        .append(handler.getLogOutput());
+  }
+
+  private void doGetHelper(HttpServletResponse resp) throws IOException {
     resp.setContentType("text/plain");
     PrintWriter writer = resp.getWriter();
     writer.println("Test invoked at: ");
@@ -82,17 +127,18 @@ public final class NettyClientInteropServlet extends HttpServlet {
 
   public static final class Tester extends AbstractInteropTest {
     @Override
-    protected ManagedChannel createChannel() {
+    protected ManagedChannelBuilder<?> createChannelBuilder() {
       assertEquals(
           "jdk8 required",
           "1.8",
           System.getProperty("java.specification.version"));
       ManagedChannelBuilder<?> builder =
-          ManagedChannelBuilder.forTarget(INTEROP_TEST_ADDRESS)
+          Grpc.newChannelBuilder(INTEROP_TEST_ADDRESS, TlsChannelCredentials.create())
               .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
       assertTrue(builder instanceof NettyChannelBuilder);
-      ((NettyChannelBuilder) builder).flowControlWindow(65 * 1024);
-      return builder.build();
+      ((NettyChannelBuilder) builder)
+          .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW);
+      return builder;
     }
 
     @Override
@@ -102,16 +148,24 @@ public final class NettyClientInteropServlet extends HttpServlet {
     }
 
     // grpc-test.sandbox.googleapis.com does not support these tests
+    @Ignore
     @Override
     public void customMetadata() { }
 
+    @Ignore
     @Override
     public void statusCodeAndMessage() { }
 
+    @Ignore
     @Override
     public void exchangeMetadataUnaryCall() { }
 
+    @Ignore
     @Override
     public void exchangeMetadataStreamingCall() { }
+
+    @Ignore
+    @Override
+    public void specialStatusMessage() {}
   }
 }

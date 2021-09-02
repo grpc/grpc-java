@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
 import java.io.InputStream;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -41,15 +43,29 @@ public abstract class AbstractStream implements Stream {
   protected abstract TransportState transportState();
 
   @Override
+  public void optimizeForDirectExecutor() {
+    transportState().optimizeForDirectExecutor();
+  }
+
+  @Override
   public final void setMessageCompression(boolean enable) {
     framer().setMessageCompression(enable);
   }
 
   @Override
+  public final void request(int numMessages) {
+    transportState().requestMessagesFromDeframer(numMessages);
+  }
+
+  @Override
   public final void writeMessage(InputStream message) {
     checkNotNull(message, "message");
-    if (!framer().isClosed()) {
-      framer().writePayload(message);
+    try {
+      if (!framer().isClosed()) {
+        framer().writePayload(message);
+      }
+    } finally {
+      GrpcUtil.closeQuietly(message);
     }
   }
 
@@ -108,6 +124,7 @@ public abstract class AbstractStream implements Stream {
     private final Object onReadyLock = new Object();
     private final StatsTraceContext statsTraceCtx;
     private final TransportTracer transportTracer;
+    private final MessageDeframer rawDeframer;
 
     /**
      * The number of bytes currently queued, waiting to be sent. When this falls below
@@ -134,18 +151,24 @@ public abstract class AbstractStream implements Stream {
         TransportTracer transportTracer) {
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
       this.transportTracer = checkNotNull(transportTracer, "transportTracer");
-      deframer = new MessageDeframer(
+      rawDeframer = new MessageDeframer(
           this,
           Codec.Identity.NONE,
           maxMessageSize,
           statsTraceCtx,
-          transportTracer,
-          getClass().getName());
+          transportTracer);
+      // TODO(#7168): use MigratingThreadDeframer when enabling retry doesn't break.
+      deframer = rawDeframer;
+    }
+
+    final void optimizeForDirectExecutor() {
+      rawDeframer.setListener(this);
+      deframer = rawDeframer;
     }
 
     protected void setFullStreamDecompressor(GzipInflatingBuffer fullStreamDecompressor) {
-      deframer.setFullStreamDecompressor(fullStreamDecompressor);
-      deframer = new ApplicationThreadDeframer(this, this, (MessageDeframer) deframer);
+      rawDeframer.setFullStreamDecompressor(fullStreamDecompressor);
+      deframer = new ApplicationThreadDeframer(this, this, rawDeframer);
     }
 
     final void setMaxInboundMessageSize(int maxSize) {
@@ -194,15 +217,44 @@ public abstract class AbstractStream implements Stream {
     }
 
     /**
-     * Called to request the given number of messages from the deframer. Must be called from the
-     * transport thread.
+     * Called to request the given number of messages from the deframer. May be called from any
+     * thread.
      */
-    public final void requestMessagesFromDeframer(final int numMessages) {
-      try {
-        deframer.request(numMessages);
-      } catch (Throwable t) {
-        deframeFailed(t);
+    private void requestMessagesFromDeframer(final int numMessages) {
+      if (deframer instanceof ThreadOptimizedDeframer) {
+        PerfMark.startTask("AbstractStream.request");
+        try {
+          deframer.request(numMessages);
+        } finally {
+          PerfMark.stopTask("AbstractStream.request");
+        }
+        return;
       }
+      final Link link = PerfMark.linkOut();
+      class RequestRunnable implements Runnable {
+        @Override public void run() {
+          PerfMark.startTask("AbstractStream.request");
+          PerfMark.linkIn(link);
+          try {
+            deframer.request(numMessages);
+          } catch (Throwable t) {
+            deframeFailed(t);
+          } finally {
+            PerfMark.stopTask("AbstractStream.request");
+          }
+        }
+      }
+
+      runOnTransportThread(new RequestRunnable());
+    }
+
+    /**
+     * Very rarely used. Prefer stream.request() instead of this; this method is only necessary if
+     * a stream is not available.
+     */
+    @VisibleForTesting
+    public final void requestMessagesFromDeframerForTesting(int numMessages) {
+      requestMessagesFromDeframer(numMessages);
     }
 
     public final StatsTraceContext getStatsTraceContext() {
@@ -232,7 +284,6 @@ public abstract class AbstractStream implements Stream {
         allocated = true;
       }
       notifyIfReady();
-      transportTracer.reportStreamStarted();
     }
 
     /**

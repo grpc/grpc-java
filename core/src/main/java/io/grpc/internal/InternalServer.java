@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,17 @@
 
 package io.grpc.internal;
 
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalInstrumented;
 import java.io.IOException;
+import java.net.SocketAddress;
+import java.util.List;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * An object that accepts new incoming connections. This would commonly encapsulate a bound socket
- * that {@code accept()}s new connections.
+ * An object that accepts new incoming connections on one or more listening socket addresses.
+ * This would commonly encapsulate a bound socket that {@code accept()}s new connections.
  */
 @ThreadSafe
 public interface InternalServer {
@@ -38,13 +43,32 @@ public interface InternalServer {
   /**
    * Initiates an orderly shutdown of the server. Existing transports continue, but new transports
    * will not be created (once {@link ServerListener#serverShutdown()} callback is called). This
-   * method may only be called once.
+   * method may only be called once.  Blocks until the listening socket(s) have been closed.  If
+   * interrupted, this method will not wait for the close to complete, but it will happen
+   * asynchronously.
    */
   void shutdown();
 
   /**
-   * Returns what underlying port the server is listening on, or -1 if the port number is not
-   * available or does not make sense.
+   * Returns the first listening socket address.  May change after {@link start(ServerListener)} is
+   * called.
    */
-  int getPort();
+  SocketAddress getListenSocketAddress();
+
+  /**
+   * Returns the first listen socket stats of this server. May return {@code null}.
+   */
+  @Nullable InternalInstrumented<SocketStats> getListenSocketStats();
+
+  /**
+   * Returns a list of listening socket addresses.  May change after {@link start(ServerListener)}
+   * is called.
+   */
+  List<? extends SocketAddress> getListenSocketAddresses();
+
+  /**
+   * Returns a list of listen socket stats of this server. May return {@code null}.
+   */
+  @Nullable List<InternalInstrumented<SocketStats>> getListenSocketStatsList();
+
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,7 +78,7 @@ public class TestUtils {
     } catch (NoSuchAlgorithmException ex) {
       throw new RuntimeException(ex);
     }
-    List<String> ciphersMinusGcm = new ArrayList<String>();
+    List<String> ciphersMinusGcm = new ArrayList<>();
     for (String cipher : ciphers) {
       // The GCM implementation in Java is _very_ slow (~1 MB/s)
       if (cipher.contains("_GCM_")) {
@@ -120,10 +120,14 @@ public class TestUtils {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     ks.load(null, null);
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
-    X509Certificate cert = (X509Certificate) cf.generateCertificate(
-        new BufferedInputStream(new FileInputStream(certChainFile)));
-    X500Principal principal = cert.getSubjectX500Principal();
-    ks.setCertificateEntry(principal.getName("RFC2253"), cert);
+    BufferedInputStream in = new BufferedInputStream(new FileInputStream(certChainFile));
+    try {
+      X509Certificate cert = (X509Certificate) cf.generateCertificate(in);
+      X500Principal principal = cert.getSubjectX500Principal();
+      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
+    } finally {
+      in.close();
+    }
 
     // Set up trust manager factory to use our key store.
     TrustManagerFactory trustManagerFactory =

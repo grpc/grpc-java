@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +18,12 @@ package io.grpc.internal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.same;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -54,6 +57,7 @@ public class AbstractServerStreamTest {
   private static final int TIMEOUT_MS = 1000;
   private static final int MAX_MESSAGE_SIZE = 100;
 
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final WritableBufferAllocator allocator = new WritableBufferAllocator() {
@@ -82,7 +86,7 @@ public class AbstractServerStreamTest {
    */
   @Test
   public void frameShouldBeIgnoredAfterDeframerClosed() {
-    final Queue<InputStream> streamListenerMessageQueue = new LinkedList<InputStream>();
+    final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
     stream.transportState().setListener(new ServerStreamListenerBase() {
       @Override
       public void messagesAvailable(MessageProducer producer) {
@@ -160,7 +164,7 @@ public class AbstractServerStreamTest {
 
     // Queue a partial message in the deframer
     stream.transportState().inboundDataReceived(ReadableBuffers.wrap(new byte[] {1}), true);
-    stream.transportState().requestMessagesFromDeframer(1);
+    stream.request(1);
 
     Status status = closedFuture.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertEquals(Status.INTERNAL.getCode(), status.getCode());
@@ -269,8 +273,7 @@ public class AbstractServerStreamTest {
 
     stream.writeMessage(new ByteArrayInputStream(new byte[]{}));
 
-    verify(sink, never())
-        .writeFrame(any(WritableBuffer.class), any(Boolean.class), any(Integer.class));
+    verify(sink, never()).writeFrame(any(WritableBuffer.class), anyBoolean(), anyInt());
   }
 
   @Test
@@ -281,6 +284,14 @@ public class AbstractServerStreamTest {
     stream.flush();
 
     verify(sink).writeFrame(any(WritableBuffer.class), eq(true), eq(1));
+  }
+
+  @Test
+  public void writeMessage_closesStream() throws Exception {
+    stream.writeHeaders(new Metadata());
+    InputStream input = mock(InputStream.class, delegatesTo(new ByteArrayInputStream(new byte[1])));
+    stream.writeMessage(input);
+    verify(input).close();
   }
 
   @Test
@@ -383,6 +394,11 @@ public class AbstractServerStreamTest {
       public void runOnTransportThread(Runnable r) {
         r.run();
       }
+    }
+
+    @Override
+    public int streamId() {
+      return -1;
     }
   }
 }

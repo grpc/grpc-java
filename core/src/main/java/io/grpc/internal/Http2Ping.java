@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ public class Http2Ping {
    * The registered callbacks and the executor used to invoke them.
    */
   @GuardedBy("this") private Map<PingCallback, Executor> callbacks
-      = new LinkedHashMap<PingCallback, Executor>();
+      = new LinkedHashMap<>();
 
   /**
    * False until the operation completes, either successfully (other side sent acknowledgement) or

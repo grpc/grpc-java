@@ -1,0 +1,107 @@
+load("//:java_grpc_library.bzl", "java_grpc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+java_library(
+    name = "binarylog",
+    srcs = [
+        "src/main/java/io/grpc/protobuf/services/BinaryLogProvider.java",
+        "src/main/java/io/grpc/protobuf/services/BinaryLogProviderImpl.java",
+        "src/main/java/io/grpc/protobuf/services/BinaryLogSink.java",
+        "src/main/java/io/grpc/protobuf/services/BinlogHelper.java",
+        "src/main/java/io/grpc/protobuf/services/InetAddressUtil.java",
+        "src/main/java/io/grpc/protobuf/services/TempFileSink.java",
+    ],
+    deps = [
+        "//api",
+        "//context",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_protobuf//:protobuf_java",
+        "@com_google_protobuf//:protobuf_java_util",
+        "@io_grpc_grpc_proto//:binarylog_java_proto",
+    ],
+)
+
+java_library(
+    name = "channelz",
+    srcs = [
+        "src/main/java/io/grpc/protobuf/services/ChannelzProtoUtil.java",
+        "src/main/java/io/grpc/protobuf/services/ChannelzService.java",
+        "src/main/java/io/grpc/services/ChannelzService.java",
+    ],
+    deps = [
+        ":_channelz_java_grpc",
+        "//api",
+        "//context",
+        "//stub",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_protobuf//:protobuf_java",
+        "@com_google_protobuf//:protobuf_java_util",
+        "@io_grpc_grpc_proto//:channelz_java_proto",
+    ],
+)
+
+java_library(
+    name = "reflection",
+    srcs = [
+        "src/main/java/io/grpc/protobuf/services/ProtoReflectionService.java",
+    ],
+    deps = [
+        ":_reflection_java_grpc",
+        "//api",
+        "//context",
+        "//core:internal",
+        "//core:util",
+        "//protobuf",
+        "//stub",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_protobuf//:protobuf_java",
+        "@com_google_protobuf//:protobuf_java_util",
+        "@io_grpc_grpc_proto//:reflection_java_proto_deprecated",
+    ],
+)
+
+java_library(
+    name = "health",
+    srcs = [
+        "src/main/java/io/grpc/protobuf/services/HealthServiceImpl.java",
+        "src/main/java/io/grpc/protobuf/services/HealthStatusManager.java",
+        "src/main/java/io/grpc/services/HealthStatusManager.java",
+    ],
+    deps = [
+        ":_health_java_grpc",
+        "//api",
+        "//context",
+        "//stub",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@io_grpc_grpc_proto//:health_java_proto",
+    ],
+)
+
+# These shouldn't be here, but this is better than having
+# a circular dependency on grpc-proto and grpc-java.
+
+java_grpc_library(
+    name = "_reflection_java_grpc",
+    srcs = ["@io_grpc_grpc_proto//:reflection_proto_deprecated"],
+    visibility = ["//visibility:private"],
+    deps = ["@io_grpc_grpc_proto//:reflection_java_proto_deprecated"],
+)
+
+java_grpc_library(
+    name = "_channelz_java_grpc",
+    srcs = ["@io_grpc_grpc_proto//:channelz_proto"],
+    visibility = ["//visibility:private"],
+    deps = ["@io_grpc_grpc_proto//:channelz_java_proto"],
+)
+
+java_grpc_library(
+    name = "_health_java_grpc",
+    srcs = ["@io_grpc_grpc_proto//:health_proto"],
+    visibility = ["//visibility:private"],
+    deps = ["@io_grpc_grpc_proto//:health_java_proto"],
+)

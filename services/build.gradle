@@ -1,37 +1,54 @@
-// Add dependency on the protobuf plugin
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath libraries.protobuf_plugin
-    }
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: Services"
 
+[compileJava].each() {
+    // v1alpha of reflection.proto is deprecated at the file level.
+    // Without this workaround, the project can not compile.
+    it.options.compilerArgs += [
+        "-Xlint:-deprecation",
+    ]
+}
+
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
-    compile project(':grpc-protobuf'),
-            project(':grpc-stub')
-    compile (libraries.instrumentation_api) {
-        // prefer 2.0.19 from libraries instead of 2.0.11
-        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
-        // we'll always be more up-to-date
-        exclude group: 'io.grpc', module: 'grpc-context'
-    }
-    testCompile project(':grpc-testing'),
-            libraries.netty_epoll // for DomainSocketAddress
-    signature "org.codehaus.mojo.signature:java16:1.1@signature"
+    api project(':grpc-protobuf'),
+            project(':grpc-stub'),
+            project(':grpc-core')
+    implementation libraries.protobuf_util,
+            libraries.guava
+    runtimeOnly libraries.errorprone
+
+    compileOnly libraries.javax_annotation
+    testImplementation project(':grpc-testing'),
+            libraries.netty_epoll, // for DomainSocketAddress
+            project(':grpc-core').sourceSets.test.output  // for FakeClock
+    testCompileOnly libraries.javax_annotation
+    signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 
 configureProtoCompilation()
 
-// Let intellij projects refer to generated code
-idea {
-    module {
-        sourceDirs += file("${projectDir}/src/generated/main/java");
-        sourceDirs += file("${projectDir}/src/generated/main/grpc");
-        testSourceDirs += file("${projectDir}/src/generated/test/java")
-        testSourceDirs += file("${projectDir}/src/generated/test/grpc")
+javadoc {
+    exclude 'io/grpc/services/Internal*.java'
+    exclude 'io/grpc/services/internal/*'
+}
+
+jacocoTestReport {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it,
+        exclude: [
+                '**/io/grpc/binarylog/v1/**',
+                '**/io/grpc/channelz/v1/**',
+                '**/io/grpc/health/v1/**',
+                '**/io/grpc/reflection/v1alpha/**',
+        ])
     }
 }

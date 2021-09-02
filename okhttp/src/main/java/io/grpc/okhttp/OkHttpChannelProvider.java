@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,10 @@
 
 package io.grpc.okhttp;
 
+import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
+import io.grpc.InternalServiceProviders;
 import io.grpc.ManagedChannelProvider;
-import io.grpc.internal.GrpcUtil;
 
 /**
  * Provider for {@link OkHttpChannelBuilder} instances.
@@ -33,7 +34,7 @@ public final class OkHttpChannelProvider extends ManagedChannelProvider {
 
   @Override
   public int priority() {
-    return (GrpcUtil.IS_RESTRICTED_APPENGINE || isAndroid()) ? 8 : 3;
+    return InternalServiceProviders.isAndroid(getClass().getClassLoader()) ? 8 : 3;
   }
 
   @Override
@@ -44,5 +45,16 @@ public final class OkHttpChannelProvider extends ManagedChannelProvider {
   @Override
   public OkHttpChannelBuilder builderForTarget(String target) {
     return OkHttpChannelBuilder.forTarget(target);
+  }
+
+  @Override
+  public NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds) {
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(creds);
+    if (result.error != null) {
+      return NewChannelBuilderResult.error(result.error);
+    }
+    return NewChannelBuilderResult.channelBuilder(new OkHttpChannelBuilder(
+        target, creds, result.callCredentials, result.factory));
   }
 }

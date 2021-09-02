@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -144,11 +144,17 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
             new Metadata());
         return;
       }
+      int frameSize = frame.readableBytes();
       inboundDataReceived(frame);
       if (endOfStream) {
         // This is a protocol violation as we expect to receive trailers.
-        transportError =
-            Status.INTERNAL.withDescription("Received unexpected EOS on DATA frame from server.");
+        if (frameSize > 0) {
+          transportError = Status.INTERNAL
+              .withDescription("Received unexpected EOS on non-empty DATA frame from server");
+        } else {
+          transportError = Status.INTERNAL
+              .withDescription("Received unexpected EOS on empty DATA frame from server");
+        }
         transportErrorMetadata = new Metadata();
         transportReportStatus(transportError, false, transportErrorMetadata);
       }

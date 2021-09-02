@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,439 +16,263 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.util.concurrent.MoreExecutors;
-import io.grpc.Attributes;
+import com.google.common.base.MoreObjects;
+import com.google.errorprone.annotations.DoNotCall;
+import io.grpc.BinaryLog;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
-import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
-import io.grpc.NameResolverProvider;
-import io.opencensus.trace.Tracing;
-import java.net.SocketAddress;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
+import io.grpc.ProxyDetector;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * The base class for channel builders.
+ * Temporarily duplicates {@link io.grpc.ForwardingChannelBuilder} to fix ABI backward
+ * compatibility.
  *
  * @param <T> The concrete type of this builder.
+ * @see <a href="https://github.com/grpc/grpc-java/issues/7211">grpc/grpc-java#7211</a>
  */
 public abstract class AbstractManagedChannelImplBuilder
-        <T extends AbstractManagedChannelImplBuilder<T>> extends ManagedChannelBuilder<T> {
-  private static final String DIRECT_ADDRESS_SCHEME = "directaddress";
+    <T extends AbstractManagedChannelImplBuilder<T>> extends ManagedChannelBuilder<T> {
 
+  /**
+   * The default constructor.
+   */
+  protected AbstractManagedChannelImplBuilder() {}
+
+  /**
+   * This method serves to force sub classes to "hide" this static factory.
+   */
+  @DoNotCall("Unsupported")
   public static ManagedChannelBuilder<?> forAddress(String name, int port) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
   }
 
+  /**
+   * This method serves to force sub classes to "hide" this static factory.
+   */
+  @DoNotCall("Unsupported")
   public static ManagedChannelBuilder<?> forTarget(String target) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
   }
 
   /**
-   * An idle timeout larger than this would disable idle mode.
+   * Returns the delegated {@code ManagedChannelBuilder}.
    */
-  @VisibleForTesting
-  static final long IDLE_MODE_MAX_TIMEOUT_DAYS = 30;
+  protected abstract ManagedChannelBuilder<?> delegate();
 
-  /**
-   * The default idle timeout.
-   */
-  @VisibleForTesting
-  static final long IDLE_MODE_DEFAULT_TIMEOUT_MILLIS = TimeUnit.MINUTES.toMillis(30);
+  @Override
+  public T directExecutor() {
+    delegate().directExecutor();
+    return thisT();
+  }
 
-  /**
-   * An idle timeout smaller than this would be capped to it.
-   */
-  @VisibleForTesting
-  static final long IDLE_MODE_MIN_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(1);
+  @Override
+  public T executor(Executor executor) {
+    delegate().executor(executor);
+    return thisT();
+  }
 
-  private static final ObjectPool<? extends Executor> DEFAULT_EXECUTOR_POOL =
-      SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
+  @Override
+  public T offloadExecutor(Executor executor) {
+    delegate().offloadExecutor(executor);
+    return thisT();
+  }
 
-  private static final NameResolver.Factory DEFAULT_NAME_RESOLVER_FACTORY =
-      NameResolverProvider.asFactory();
+  @Override
+  public T intercept(List<ClientInterceptor> interceptors) {
+    delegate().intercept(interceptors);
+    return thisT();
+  }
 
-  private static final DecompressorRegistry DEFAULT_DECOMPRESSOR_REGISTRY =
-      DecompressorRegistry.getDefaultInstance();
+  @Override
+  public T intercept(ClientInterceptor... interceptors) {
+    delegate().intercept(interceptors);
+    return thisT();
+  }
 
-  private static final CompressorRegistry DEFAULT_COMPRESSOR_REGISTRY =
-      CompressorRegistry.getDefaultInstance();
+  @Override
+  public T userAgent(String userAgent) {
+    delegate().userAgent(userAgent);
+    return thisT();
+  }
 
-  private static final long DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES = 1L << 24;  // 16M
-  private static final long DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES = 1L << 20; // 1M
+  @Override
+  public T overrideAuthority(String authority) {
+    delegate().overrideAuthority(authority);
+    return thisT();
+  }
 
-  ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
+  @Override
+  public T usePlaintext() {
+    delegate().usePlaintext();
+    return thisT();
+  }
 
-  private final List<ClientInterceptor> interceptors = new ArrayList<ClientInterceptor>();
+  @Override
+  public T useTransportSecurity() {
+    delegate().useTransportSecurity();
+    return thisT();
+  }
 
-  // Access via getter, which may perform authority override as needed
-  private NameResolver.Factory nameResolverFactory = DEFAULT_NAME_RESOLVER_FACTORY;
+  @Deprecated
+  @Override
+  public T nameResolverFactory(NameResolver.Factory resolverFactory) {
+    delegate().nameResolverFactory(resolverFactory);
+    return thisT();
+  }
 
-  final String target;
+  @Override
+  public T defaultLoadBalancingPolicy(String policy) {
+    delegate().defaultLoadBalancingPolicy(policy);
+    return thisT();
+  }
 
-  @Nullable
-  private final SocketAddress directServerAddress;
+  @Override
+  public T enableFullStreamDecompression() {
+    delegate().enableFullStreamDecompression();
+    return thisT();
+  }
 
-  @Nullable
-  String userAgent;
+  @Override
+  public T decompressorRegistry(DecompressorRegistry registry) {
+    delegate().decompressorRegistry(registry);
+    return thisT();
+  }
 
-  @VisibleForTesting
-  @Nullable
-  String authorityOverride;
+  @Override
+  public T compressorRegistry(CompressorRegistry registry) {
+    delegate().compressorRegistry(registry);
+    return thisT();
+  }
 
-  @Nullable LoadBalancer.Factory loadBalancerFactory;
+  @Override
+  public T idleTimeout(long value, TimeUnit unit) {
+    delegate().idleTimeout(value, unit);
+    return thisT();
+  }
 
-  boolean fullStreamDecompression;
-
-  DecompressorRegistry decompressorRegistry = DEFAULT_DECOMPRESSOR_REGISTRY;
-
-  CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
-
-  long idleTimeoutMillis = IDLE_MODE_DEFAULT_TIMEOUT_MILLIS;
-
-  long retryBufferSize = DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES;
-  long perRpcBufferLimit = DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES;
-
-  protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
-
-  private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
-
-  /**
-   * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
-   * larger than this limit is received it will not be processed and the RPC will fail with
-   * RESOURCE_EXHAUSTED.
-   */
-  // Can be overridden by subclasses.
   @Override
   public T maxInboundMessageSize(int max) {
-    checkArgument(max >= 0, "negative max");
-    maxInboundMessageSize = max;
-    return thisT();
-  }
-
-  protected final int maxInboundMessageSize() {
-    return maxInboundMessageSize;
-  }
-
-  private boolean statsEnabled = true;
-  private boolean recordStartedRpcs = true;
-  private boolean recordFinishedRpcs = true;
-  private boolean tracingEnabled = true;
-
-  @Nullable
-  private CensusStatsModule censusStatsOverride;
-
-  protected AbstractManagedChannelImplBuilder(String target) {
-    this.target = Preconditions.checkNotNull(target, "target");
-    this.directServerAddress = null;
-  }
-
-  /**
-   * Returns a target string for the SocketAddress. It is only used as a placeholder, because
-   * DirectAddressNameResolverFactory will not actually try to use it. However, it must be a valid
-   * URI.
-   */
-  @VisibleForTesting
-  static String makeTargetStringForDirectAddress(SocketAddress address) {
-    try {
-      return new URI(DIRECT_ADDRESS_SCHEME, "", "/" + address, null).toString();
-    } catch (URISyntaxException e) {
-      // It should not happen.
-      throw new RuntimeException(e);
-    }
-  }
-
-  protected AbstractManagedChannelImplBuilder(SocketAddress directServerAddress, String authority) {
-    this.target = makeTargetStringForDirectAddress(directServerAddress);
-    this.directServerAddress = directServerAddress;
-    this.nameResolverFactory = new DirectAddressNameResolverFactory(directServerAddress, authority);
-  }
-
-  @Override
-  public final T directExecutor() {
-    return executor(MoreExecutors.directExecutor());
-  }
-
-  @Override
-  public final T executor(Executor executor) {
-    if (executor != null) {
-      this.executorPool = new FixedObjectPool<Executor>(executor);
-    } else {
-      this.executorPool = DEFAULT_EXECUTOR_POOL;
-    }
+    delegate().maxInboundMessageSize(max);
     return thisT();
   }
 
   @Override
-  public final T intercept(List<ClientInterceptor> interceptors) {
-    this.interceptors.addAll(interceptors);
+  public T maxInboundMetadataSize(int max) {
+    delegate().maxInboundMetadataSize(max);
     return thisT();
   }
 
   @Override
-  public final T intercept(ClientInterceptor... interceptors) {
-    return intercept(Arrays.asList(interceptors));
-  }
-
-  @Override
-  public final T nameResolverFactory(NameResolver.Factory resolverFactory) {
-    Preconditions.checkState(directServerAddress == null,
-        "directServerAddress is set (%s), which forbids the use of NameResolverFactory",
-        directServerAddress);
-    if (resolverFactory != null) {
-      this.nameResolverFactory = resolverFactory;
-    } else {
-      this.nameResolverFactory = DEFAULT_NAME_RESOLVER_FACTORY;
-    }
+  public T keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
+    delegate().keepAliveTime(keepAliveTime, timeUnit);
     return thisT();
   }
 
   @Override
-  public final T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory) {
-    Preconditions.checkState(directServerAddress == null,
-        "directServerAddress is set (%s), which forbids the use of LoadBalancer.Factory",
-        directServerAddress);
-    this.loadBalancerFactory = loadBalancerFactory;
+  public T keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
+    delegate().keepAliveTimeout(keepAliveTimeout, timeUnit);
     return thisT();
   }
 
   @Override
-  public final T enableFullStreamDecompression() {
-    this.fullStreamDecompression = true;
+  public T keepAliveWithoutCalls(boolean enable) {
+    delegate().keepAliveWithoutCalls(enable);
     return thisT();
   }
 
   @Override
-  public final T decompressorRegistry(DecompressorRegistry registry) {
-    if (registry != null) {
-      this.decompressorRegistry = registry;
-    } else {
-      this.decompressorRegistry = DEFAULT_DECOMPRESSOR_REGISTRY;
-    } 
+  public T maxRetryAttempts(int maxRetryAttempts) {
+    delegate().maxRetryAttempts(maxRetryAttempts);
     return thisT();
   }
 
   @Override
-  public final T compressorRegistry(CompressorRegistry registry) {
-    if (registry != null) {
-      this.compressorRegistry = registry;
-    } else {
-      this.compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
-    }
+  public T maxHedgedAttempts(int maxHedgedAttempts) {
+    delegate().maxHedgedAttempts(maxHedgedAttempts);
     return thisT();
   }
 
   @Override
-  public final T userAgent(@Nullable String userAgent) {
-    this.userAgent = userAgent;
+  public T retryBufferSize(long bytes) {
+    delegate().retryBufferSize(bytes);
     return thisT();
   }
 
   @Override
-  public final T overrideAuthority(String authority) {
-    this.authorityOverride = checkAuthority(authority);
+  public T perRpcBufferLimit(long bytes) {
+    delegate().perRpcBufferLimit(bytes);
     return thisT();
   }
 
   @Override
-  public final T idleTimeout(long value, TimeUnit unit) {
-    checkArgument(value > 0, "idle timeout is %s, but must be positive", value);
-    // We convert to the largest unit to avoid overflow
-    if (unit.toDays(value) >= IDLE_MODE_MAX_TIMEOUT_DAYS) {
-      // This disables idle mode
-      this.idleTimeoutMillis = ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE;
-    } else {
-      this.idleTimeoutMillis = Math.max(unit.toMillis(value), IDLE_MODE_MIN_TIMEOUT_MILLIS);
-    }
+  public T disableRetry() {
+    delegate().disableRetry();
     return thisT();
   }
 
   @Override
-  public final T retryBufferSize(long bytes) {
-    checkArgument(bytes > 0L, "retry buffer size must be positive");
-    retryBufferSize = bytes;
+  public T enableRetry() {
+    delegate().enableRetry();
     return thisT();
   }
 
   @Override
-  public final T perRpcBufferLimit(long bytes) {
-    checkArgument(bytes > 0L, "per RPC buffer limit must be positive");
-    perRpcBufferLimit = bytes;
+  public T setBinaryLog(BinaryLog binaryLog) {
+    delegate().setBinaryLog(binaryLog);
+    return thisT();
+  }
+
+  @Override
+  public T maxTraceEvents(int maxTraceEvents) {
+    delegate().maxTraceEvents(maxTraceEvents);
+    return thisT();
+  }
+
+  @Override
+  public T proxyDetector(ProxyDetector proxyDetector) {
+    delegate().proxyDetector(proxyDetector);
+    return thisT();
+  }
+
+  @Override
+  public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) {
+    delegate().defaultServiceConfig(serviceConfig);
+    return thisT();
+  }
+
+  @Override
+  public T disableServiceConfigLookUp() {
+    delegate().disableServiceConfigLookUp();
     return thisT();
   }
 
   /**
-   * Override the default stats implementation.
+   * Returns the {@link ManagedChannel} built by the delegate by default. Overriding method can
+   * return different value.
    */
-  @VisibleForTesting
-  protected final T overrideCensusStatsModule(CensusStatsModule censusStats) {
-    this.censusStatsOverride = censusStats;
-    return thisT();
-  }
-
-  /**
-   * Disable or enable stats features.  Enabled by default.
-   */
-  protected void setStatsEnabled(boolean value) {
-    statsEnabled = value;
-  }
-
-  /**
-   * Disable or enable stats recording for RPC upstarts.  Effective only if {@link
-   * #setStatsEnabled} is set to true.  Enabled by default.
-   */
-  protected void setStatsRecordStartedRpcs(boolean value) {
-    recordStartedRpcs = value;
-  }
-
-  /**
-   * Disable or enable stats recording for RPC completions.  Effective only if {@link
-   * #setStatsEnabled} is set to true.  Enabled by default.
-   */
-  protected void setStatsRecordFinishedRpcs(boolean value) {
-    recordFinishedRpcs = value;
-  }
-
-  /**
-   * Disable or enable tracing features.  Enabled by default.
-   */
-  protected void setTracingEnabled(boolean value) {
-    tracingEnabled = value;
-  }
-
-  @VisibleForTesting
-  final long getIdleTimeoutMillis() {
-    return idleTimeoutMillis;
-  }
-
-  /**
-   * Verifies the authority is valid.  This method exists as an escape hatch for putting in an
-   * authority that is valid, but would fail the default validation provided by this
-   * implementation.
-   */
-  protected String checkAuthority(String authority) {
-    return GrpcUtil.checkAuthority(authority);
-  }
-
   @Override
   public ManagedChannel build() {
-    return new ManagedChannelImpl(
-        this,
-        buildTransportFactory(),
-        // TODO(carl-mastrangelo): Allow clients to pass this in
-        new ExponentialBackoffPolicy.Provider(),
-        SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
-        GrpcUtil.STOPWATCH_SUPPLIER,
-        getEffectiveInterceptors(),
-        GrpcUtil.getProxyDetector(),
-        CallTracer.getDefaultFactory());
+    return delegate().build();
   }
 
-  @VisibleForTesting
-  final List<ClientInterceptor> getEffectiveInterceptors() {
-    List<ClientInterceptor> effectiveInterceptors =
-        new ArrayList<ClientInterceptor>(this.interceptors);
-    if (statsEnabled) {
-      CensusStatsModule censusStats = this.censusStatsOverride;
-      if (censusStats == null) {
-        censusStats = new CensusStatsModule(GrpcUtil.STOPWATCH_SUPPLIER, true);
-      }
-      // First interceptor runs last (see ClientInterceptors.intercept()), so that no
-      // other interceptor can override the tracer factory we set in CallOptions.
-      effectiveInterceptors.add(
-          0, censusStats.getClientInterceptor(recordStartedRpcs, recordFinishedRpcs));
-    }
-    if (tracingEnabled) {
-      CensusTracingModule censusTracing =
-          new CensusTracingModule(Tracing.getTracer(),
-              Tracing.getPropagationComponent().getBinaryFormat());
-      effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
-    }
-    return effectiveInterceptors;
-  }
-
-  /**
-   * Subclasses should override this method to provide the {@link ClientTransportFactory}
-   * appropriate for this channel. This method is meant for Transport implementors and should not
-   * be used by normal users.
-   */
-  protected abstract ClientTransportFactory buildTransportFactory();
-
-  /**
-   * Subclasses can override this method to provide additional parameters to {@link
-   * NameResolver.Factory#newNameResolver}. The default implementation returns {@link
-   * Attributes#EMPTY}.
-   */
-  protected Attributes getNameResolverParams() {
-    return Attributes.EMPTY;
-  }
-
-  /**
-   * Returns a {@link NameResolver.Factory} for the channel.
-   */
-  NameResolver.Factory getNameResolverFactory() {
-    if (authorityOverride == null) {
-      return nameResolverFactory;
-    } else {
-      return new OverrideAuthorityNameResolverFactory(nameResolverFactory, authorityOverride);
-    }
-  }
-
-  private static class DirectAddressNameResolverFactory extends NameResolver.Factory {
-    final SocketAddress address;
-    final String authority;
-
-    DirectAddressNameResolverFactory(SocketAddress address, String authority) {
-      this.address = address;
-      this.authority = authority;
-    }
-
-    @Override
-    public NameResolver newNameResolver(URI notUsedUri, Attributes params) {
-      return new NameResolver() {
-        @Override
-        public String getServiceAuthority() {
-          return authority;
-        }
-
-        @Override
-        public void start(final Listener listener) {
-          listener.onAddresses(
-              Collections.singletonList(new EquivalentAddressGroup(address)),
-              Attributes.EMPTY);
-        }
-
-        @Override
-        public void shutdown() {}
-      };
-    }
-
-    @Override
-    public String getDefaultScheme() {
-      return DIRECT_ADDRESS_SCHEME;
-    }
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
   }
 
   /**
    * Returns the correctly typed version of the builder.
    */
-  private T thisT() {
+  protected final T thisT() {
     @SuppressWarnings("unchecked")
     T thisT = (T) this;
     return thisT;

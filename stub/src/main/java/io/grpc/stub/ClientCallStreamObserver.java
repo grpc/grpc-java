@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,19 @@
 
 package io.grpc.stub;
 
-import com.google.errorprone.annotations.DoNotMock;
-import io.grpc.ExperimentalApi;
-
 import javax.annotation.Nullable;
 
 /**
  * A refinement of {@link CallStreamObserver} that allows for lower-level interaction with
- * client calls.
+ * client calls. An instance of this class is obtained via {@link ClientResponseObserver}, or by
+ * manually casting the {@code StreamObserver} returned by a stub.
  *
  * <p>Like {@code StreamObserver}, implementations are not required to be thread-safe; if multiple
  * threads will be writing to an instance concurrently, the application must synchronize its calls.
+ *
+ * <p>DO NOT MOCK: The API is too complex to reliably mock. Use InProcessChannelBuilder to create
+ * "real" RPCs suitable for testing and make a fake for the server-side.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1788")
-@DoNotMock
 public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> {
   /**
    * Prevent any further processing for this {@code ClientCallStreamObserver}. No further messages
@@ -47,4 +46,69 @@ public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> 
    * @param cause if not {@code null}, will appear as the cause of the CANCELLED status
    */
   public abstract void cancel(@Nullable String message, @Nullable Throwable cause);
+
+  /**
+   * Swaps to manual flow control where no message will be delivered to {@link
+   * StreamObserver#onNext(Object)} unless it is {@link #request request()}ed. Since {@code
+   * request()} may not be called before the call is started, a number of initial requests may be
+   * specified.
+   *
+   * <p>This method may only be called during {@link ClientResponseObserver#beforeStart
+   * ClientResponseObserver.beforeStart()}.
+   */
+  public void disableAutoRequestWithInitial(int request) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * If {@code true}, indicates that the observer is capable of sending additional messages
+   * without requiring excessive buffering internally. This value is just a suggestion and the
+   * application is free to ignore it, however doing so may result in excessive buffering within the
+   * observer.
+   *
+   * <p>If {@code false}, the runnable passed to {@link #setOnReadyHandler} will be called after
+   * {@code isReady()} transitions to {@code true}.
+   */
+  @Override
+  public abstract boolean isReady();
+
+  /**
+   * Set a {@link Runnable} that will be executed every time the stream {@link #isReady()} state
+   * changes from {@code false} to {@code true}.  While it is not guaranteed that the same
+   * thread will always be used to execute the {@link Runnable}, it is guaranteed that executions
+   * are serialized with calls to the 'inbound' {@link StreamObserver}.
+   *
+   * <p>On client-side this method may only be called during {@link
+   * ClientResponseObserver#beforeStart}. On server-side it may only be called during the initial
+   * call to the application, before the service returns its {@code StreamObserver}.
+   *
+   * <p>Because there is a processing delay to deliver this notification, it is possible for
+   * concurrent writes to cause {@code isReady() == false} within this callback. Handle "spurious"
+   * notifications by checking {@code isReady()}'s current value instead of assuming it is now
+   * {@code true}. If {@code isReady() == false} the normal expectations apply, so there would be
+   * <em>another</em> {@code onReadyHandler} callback.
+   *
+   * @param onReadyHandler to call when peer is ready to receive more messages.
+   */
+  @Override
+  public abstract void setOnReadyHandler(Runnable onReadyHandler);
+
+  /**
+   * Requests the peer to produce {@code count} more messages to be delivered to the 'inbound'
+   * {@link StreamObserver}.
+   *
+   * <p>This method is safe to call from multiple threads without external synchronization.
+   *
+   * @param count more messages
+   */
+  @Override
+  public abstract void request(int count);
+
+  /**
+   * Sets message compression for subsequent calls to {@link #onNext}.
+   *
+   * @param enable whether to enable compression.
+   */
+  @Override
+  public abstract void setMessageCompression(boolean enable);
 }

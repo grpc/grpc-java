@@ -1,35 +1,36 @@
-buildscript {
-    repositories {
-        jcenter()
-    }
-    dependencies {
-        classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.1'
-    }
-}
+import com.github.jengelman.gradle.plugins.shadow.transformers.Transformer
+import com.github.jengelman.gradle.plugins.shadow.transformers.TransformerContext
+import org.gradle.api.file.FileTreeElement
+import shadow.org.apache.tools.zip.ZipOutputStream
+import shadow.org.apache.tools.zip.ZipEntry
 
-apply plugin: 'com.github.johnrengelman.shadow'
+plugins {
+    id "java"
+    id "maven-publish"
+
+    id "com.github.johnrengelman.shadow"
+}
 
 description = "gRPC: Netty Shaded"
 
-sourceSets {
-    testShadow {}
-}
+sourceSets { testShadow {} }
 
 dependencies {
-    compile project(':grpc-netty')
-    runtime libraries.netty_tcnative
-    testShadowCompile files(shadowJar),
-                      configurations.shadow,
-                      project(':grpc-testing-proto'),
-                      project(':grpc-testing'),
-                      libraries.truth
-    shadow project(':grpc-core')
+    implementation project(':grpc-netty')
+    runtimeOnly libraries.netty_tcnative,
+            libraries.netty_epoll
+    testShadowImplementation files(shadowJar),
+            project(':grpc-testing-proto'),
+            project(':grpc-testing'),
+            libraries.truth
+    shadow project(':grpc-netty').configurations.runtimeClasspath.allDependencies.matching {
+        it.group != 'io.netty'
+    }
 }
 
-artifacts {
-    // We want uploadArchives to handle the shadowJar; we don't care about
-    // uploadShadow
-    archives shadowJar
+jar {
+    // Must use a different classifier to avoid conflicting with shadowJar
+    classifier = 'original'
 }
 
 shadowJar {
@@ -38,6 +39,7 @@ shadowJar {
         include(project(':grpc-netty'))
         include(dependency('io.netty:'))
     }
+    exclude 'META-INF/maven/**'
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
     // We have to be careful with these replacements as they must not match any
@@ -45,16 +47,43 @@ shadowJar {
     // this includes concatenation of string literals and constants.
     relocate 'META-INF/native/libnetty', 'META-INF/native/libio_grpc_netty_shaded_netty'
     relocate 'META-INF/native/netty', 'META-INF/native/io_grpc_netty_shaded_netty'
+    transform(NettyResourceTransformer.class)
     mergeServiceFiles()
 }
 
-// This is a hack to have shadow plugin modify the uploadArchives POM's
-// dependencies. If we delete the uploadShadow task, then the plugin will no
-// longer modify the POM. This probably can break horribly with parallel build,
-// but that's broken anyway with install/uploadArchives
-uploadShadow.repositories.addAll(uploadArchives.repositories)
-// And then we use a further hack to share that POM with install
-install.repositories.mavenInstaller.pom = uploadArchives.repositories.mavenDeployer.pom
+publishing {
+    publications {
+        maven(MavenPublication) {
+            project.shadow.component(it)
+
+            // Empty jars are not published via withJavadocJar() and withSourcesJar()
+            artifact javadocJar
+            artifact sourcesJar
+
+            // Avoid confusing error message "class file for
+            // io.grpc.internal.AbstractServerImplBuilder not found"
+            // (https://github.com/grpc/grpc-java/issues/5881). This can be
+            // removed after https://github.com/grpc/grpc-java/issues/7211 is
+            // resolved.
+            pom.withXml {
+                asNode().dependencies.'*'.findAll() { dep ->
+                    dep.artifactId.text() == 'grpc-core'
+                }.each() { core ->
+                    core.scope*.value = "compile"
+                }
+            }
+
+            // shadow.component() is run after the main build.gradle's withXml
+            pom.withXml {
+                asNode().dependencies.'*'.findAll() { dep ->
+                    dep.artifactId.text() in ['grpc-api', 'grpc-core']
+                }.each() { core ->
+                    core.version*.value = "[" + core.version.text() + "]"
+                }
+            }
+        }
+    }
+}
 
 task testShadow(type: Test) {
     testClassesDirs = sourceSets.testShadow.output.classesDirs
@@ -64,3 +93,41 @@ compileTestShadowJava.options.compilerArgs = compileTestJava.options.compilerArg
 compileTestShadowJava.options.encoding = compileTestJava.options.encoding
 
 test.dependsOn testShadow
+
+/**
+ * A Transformer which updates the Netty JAR META-INF/ resources to accurately
+ * reference shaded class names.
+ */
+class NettyResourceTransformer implements Transformer {
+
+    // A map of resource file paths to be modified
+    private Map<String, String> resources = [:]
+
+    @Override
+    boolean canTransformResource(FileTreeElement fileTreeElement) {
+        fileTreeElement.name.startsWith("META-INF/native-image/io.netty")
+    }
+
+    @Override
+    void transform(TransformerContext context) {
+        String updatedContent = context.is.getText().replace("io.netty", "io.grpc.netty.shaded.io.netty")
+        resources.put(context.path, updatedContent)
+    }
+
+    @Override
+    boolean hasTransformedResource() {
+        resources.size() > 0
+    }
+
+    @Override
+    void modifyOutputStream(ZipOutputStream outputStream, boolean preserveFileTimestamps) {
+        for (resourceEntry in resources) {
+            ZipEntry entry = new ZipEntry(resourceEntry.key)
+            entry.time = TransformerContext.getEntryTimestamp(preserveFileTimestamps, entry.time)
+
+            outputStream.putNextEntry(entry)
+            outputStream.write(resourceEntry.value.getBytes())
+            outputStream.closeEntry()
+        }
+    }
+}

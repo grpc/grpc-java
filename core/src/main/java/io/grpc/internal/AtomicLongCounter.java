@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package io.grpc.internal;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * An implementation of {@link LongCounter} that is just an {@Link AtomicLong}.
+ * An implementation of {@link LongCounter} that is just an {@link AtomicLong}.
  */
 final class AtomicLongCounter implements LongCounter {
   private final AtomicLong counter = new AtomicLong();

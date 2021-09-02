@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,6 @@ import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.Payload;
-import io.grpc.testing.integration.Messages.PayloadType;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import java.net.InetAddress;
@@ -38,6 +37,7 @@ import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -85,9 +85,9 @@ public final class Http2Client {
   private Tester tester = new Tester();
   private ListeningExecutorService threadpool;
 
-  protected ManagedChannel channel;
-  protected TestServiceGrpc.TestServiceBlockingStub blockingStub;
-  protected TestServiceGrpc.TestServiceStub asyncStub;
+  ManagedChannel channel;
+  TestServiceGrpc.TestServiceBlockingStub blockingStub;
+  TestServiceGrpc.TestServiceStub asyncStub;
 
   private void parseArgs(String[] args) {
     boolean usage = false;
@@ -205,12 +205,10 @@ public final class Http2Client {
     private final int payloadSize = 271828;
     private final SimpleRequest simpleRequest = SimpleRequest.newBuilder()
         .setResponseSize(responseSize)
-        .setResponseType(PayloadType.COMPRESSABLE)
         .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[payloadSize])))
         .build();
     final SimpleResponse goldenResponse = SimpleResponse.newBuilder()
         .setPayload(Payload.newBuilder()
-            .setType(PayloadType.COMPRESSABLE)
             .setBody(ByteString.copyFrom(new byte[responseSize])))
         .build();
 
@@ -272,7 +270,7 @@ public final class Http2Client {
       assertResponseEquals(blockingStub.unaryCall(simpleRequest), goldenResponse);
 
       threadpool = MoreExecutors.listeningDecorator(newFixedThreadPool(numThreads));
-      List<ListenableFuture<?>> workerFutures = new ArrayList<ListenableFuture<?>>();
+      List<ListenableFuture<?>> workerFutures = new ArrayList<>();
       for (int i = 0; i < numThreads; i++) {
         workerFutures.add(threadpool.submit(new MaxStreamsWorker(i, simpleRequest)));
       }
@@ -282,7 +280,7 @@ public final class Http2Client {
 
     private class RstStreamObserver implements StreamObserver<SimpleResponse> {
       private final CountDownLatch latch = new CountDownLatch(1);
-      private final List<SimpleResponse> responses = new ArrayList<SimpleResponse>();
+      private final List<SimpleResponse> responses = new ArrayList<>();
       private Throwable error;
 
       @Override
@@ -371,7 +369,7 @@ public final class Http2Client {
   private static String validTestCasesHelpText() {
     StringBuilder builder = new StringBuilder();
     for (Http2TestCases testCase : Http2TestCases.values()) {
-      String strTestcase = testCase.name().toLowerCase();
+      String strTestcase = testCase.name().toLowerCase(Locale.ROOT);
       builder.append("\n      ")
           .append(strTestcase)
           .append(": ")

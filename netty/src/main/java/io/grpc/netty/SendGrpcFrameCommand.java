@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,13 +21,16 @@ import io.netty.buffer.ByteBufHolder;
 import io.netty.buffer.DefaultByteBufHolder;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPromise;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
 
 /**
  * Command sent from the transport to the Netty channel to send a GRPC frame to the remote endpoint.
  */
-class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQueue.QueuedCommand {
+final class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQueue.QueuedCommand {
   private final StreamIdHolder stream;
   private final boolean endStream;
+  private final Link link;
 
   private ChannelPromise promise;
 
@@ -35,10 +38,16 @@ class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQueue.Qu
     super(content);
     this.stream = stream;
     this.endStream = endStream;
+    this.link = PerfMark.linkOut();
   }
 
-  int streamId() {
-    return stream.id();
+  @Override
+  public Link getLink() {
+    return link;
+  }
+
+  StreamIdHolder stream() {
+    return stream;
   }
 
   boolean endStream() {
@@ -91,7 +100,7 @@ class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQueue.Qu
 
   @Override
   public String toString() {
-    return getClass().getSimpleName() + "(streamId=" + streamId()
+    return getClass().getSimpleName() + "(streamId=" + stream.id()
         + ", endStream=" + endStream + ", content=" + content()
         + ")";
   }

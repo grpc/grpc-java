@@ -1,0 +1,69 @@
+plugins {
+    id 'application' // Provide convenience executables for trying out the examples.
+    // ASSUMES GRADLE 5.6 OR HIGHER. Use plugin version 0.8.10 with earlier gradle versions
+    id 'com.google.protobuf' version '0.8.17'
+    // Generate IntelliJ IDEA's .idea & .iml project files
+    id 'idea'
+    id 'java'
+}
+
+repositories {
+    maven { // The google mirror is less flaky than mavenCentral()
+        url "https://maven-central.storage-download.googleapis.com/maven2/" }
+    mavenCentral()
+    mavenLocal()
+}
+
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
+
+// IMPORTANT: You probably want the non-SNAPSHOT version of gRPC. Make sure you
+// are looking at a tagged version of the example and not "master"!
+
+// Feel free to delete the comment at the next line. It is just for safely
+// updating the version in our release process.
+def grpcVersion = '1.41.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def nettyTcNativeVersion = '2.0.31.Final'
+def protocVersion = '3.17.2'
+
+dependencies {
+    implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+    implementation "io.grpc:grpc-services:${grpcVersion}"
+    implementation "io.grpc:grpc-stub:${grpcVersion}"
+    implementation "io.grpc:grpc-xds:${grpcVersion}"
+    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
+
+    runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
+}
+
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:${protocVersion}" }
+    plugins {
+        grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" }
+    }
+    generateProtoTasks {
+        all()*.plugins { grpc {} }
+    }
+}
+
+startScripts.enabled = false
+
+task xdsHelloWorldClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.helloworldxds.XdsHelloWorldClient'
+    applicationName = 'xds-hello-world-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task xdsHelloWorldServer(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.helloworldxds.XdsHelloWorldServer'
+    applicationName = 'xds-hello-world-server'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+applicationDistribution.into('bin') {
+    from(xdsHelloWorldClient)
+    from(xdsHelloWorldServer)
+    fileMode = 0755
+}

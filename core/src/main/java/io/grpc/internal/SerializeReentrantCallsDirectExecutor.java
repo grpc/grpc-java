@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -74,7 +74,7 @@ class SerializeReentrantCallsDirectExecutor implements Executor {
 
   private void enqueue(Runnable r) {
     if (taskQueue == null) {
-      taskQueue = new ArrayDeque<Runnable>(4);
+      taskQueue = new ArrayDeque<>(4);
     }
     taskQueue.add(r);
   }

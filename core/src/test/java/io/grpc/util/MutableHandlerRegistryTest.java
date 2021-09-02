@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,9 +60,6 @@ public class MutableHandlerRegistryTest {
   @Mock
   private ServerCallHandler<String, Integer> fewHandler;
 
-  @Mock
-  private ServerCallHandler<String, Integer>  otherFlowHandler;
-
   private ServerServiceDefinition basicServiceDefinition;
   private ServerServiceDefinition multiServiceDefinition;
 
@@ -99,8 +96,8 @@ public class MutableHandlerRegistryTest {
   /** Final checks for all tests. */
   @After
   public void makeSureMocksUnused() {
-    Mockito.verifyZeroInteractions(requestMarshaller);
-    Mockito.verifyZeroInteractions(responseMarshaller);
+    Mockito.verifyNoInteractions(requestMarshaller);
+    Mockito.verifyNoInteractions(responseMarshaller);
     Mockito.verifyNoMoreInteractions(flowHandler);
     Mockito.verifyNoMoreInteractions(coupleHandler);
     Mockito.verifyNoMoreInteractions(fewHandler);

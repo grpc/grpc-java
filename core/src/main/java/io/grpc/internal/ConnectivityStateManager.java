@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,14 +17,12 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 
 import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import java.util.ArrayList;
 import java.util.concurrent.Executor;
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -35,7 +33,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 final class ConnectivityStateManager {
-  private ArrayList<Listener> listeners = new ArrayList<Listener>();
+  private ArrayList<Listener> listeners = new ArrayList<>();
 
   private volatile ConnectivityState state = ConnectivityState.IDLE;
 
@@ -63,11 +61,6 @@ final class ConnectivityStateManager {
    */
   void gotoState(@Nonnull ConnectivityState newState) {
     checkNotNull(newState, "newState");
-    checkState(!isDisabled(), "ConnectivityStateManager is already disabled");
-    gotoNullableState(newState);
-  }
-
-  private void gotoNullableState(@Nullable ConnectivityState newState) {
     if (state != newState && state != ConnectivityState.SHUTDOWN) {
       state = newState;
       if (listeners.isEmpty()) {
@@ -76,7 +69,7 @@ final class ConnectivityStateManager {
       // Swap out callback list before calling them, because a callback may register new callbacks,
       // if run in direct executor, can cause ConcurrentModificationException.
       ArrayList<Listener> savedListeners = listeners;
-      listeners = new ArrayList<Listener>();
+      listeners = new ArrayList<>();
       for (Listener listener : savedListeners) {
         listener.runInExecutor();
       }
@@ -92,21 +85,6 @@ final class ConnectivityStateManager {
       throw new UnsupportedOperationException("Channel state API is not implemented");
     }
     return stateCopy;
-  }
-
-  /**
-   * Call this method when the channel learns from the load balancer that channel state API is not
-   * supported.
-   */
-  void disable() {
-    gotoNullableState(null);
-  }
-
-  /**
-   * This method is threadsafe.
-   */
-  boolean isDisabled() {
-    return state == null;
   }
 
   private static final class Listener {

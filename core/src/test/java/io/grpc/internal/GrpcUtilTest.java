@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,30 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
+import io.grpc.Attributes;
+import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.GrpcUtil.Http2Error;
+import io.grpc.testing.TestMethodDescriptors;
+import java.util.ArrayDeque;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -34,6 +50,11 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class GrpcUtilTest {
 
+  private static final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
+      new ClientStreamTracer() {}
+  };
+
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   @Test
@@ -214,5 +235,98 @@ public class GrpcUtilTest {
     for (int i = -1; i < 800; i++) {
       assertFalse(GrpcUtil.httpStatusToGrpcStatus(i).isOk());
     }
+  }
+
+  @Test
+  public void getTransportFromPickResult_errorPickResult_waitForReady() {
+    Status status = Status.UNAVAILABLE;
+    PickResult pickResult = PickResult.withError(status);
+    ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult, true);
+
+    assertNull(transport);
+  }
+
+  @Test
+  public void getTransportFromPickResult_errorPickResult_failFast() {
+    Status status = Status.UNAVAILABLE;
+    PickResult pickResult = PickResult.withError(status);
+    ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult, false);
+
+    assertNotNull(transport);
+
+    ClientStream stream = transport.newStream(
+        TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT,
+        tracers);
+    ClientStreamListener listener = mock(ClientStreamListener.class);
+    stream.start(listener);
+
+    verify(listener).closed(eq(status), eq(RpcProgress.PROCESSED), any(Metadata.class));
+  }
+
+  @Test
+  public void getTransportFromPickResult_dropPickResult_waitForReady() {
+    Status status = Status.UNAVAILABLE;
+    PickResult pickResult = PickResult.withDrop(status);
+    ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult, true);
+
+    assertNotNull(transport);
+
+    ClientStream stream = transport.newStream(
+        TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT,
+        tracers);
+    ClientStreamListener listener = mock(ClientStreamListener.class);
+    stream.start(listener);
+
+    verify(listener).closed(eq(status), eq(RpcProgress.DROPPED), any(Metadata.class));
+  }
+
+  @Test
+  public void getTransportFromPickResult_dropPickResult_failFast() {
+    Status status = Status.UNAVAILABLE;
+    PickResult pickResult = PickResult.withDrop(status);
+    ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult, false);
+
+    assertNotNull(transport);
+
+    ClientStream stream = transport.newStream(
+        TestMethodDescriptors.voidMethod(), new Metadata(), CallOptions.DEFAULT,
+        tracers);
+    ClientStreamListener listener = mock(ClientStreamListener.class);
+    stream.start(listener);
+
+    verify(listener).closed(eq(status), eq(RpcProgress.DROPPED), any(Metadata.class));
+  }
+
+  @Test
+  public void clientStreamTracerFactoryBackwardCompatibility() {
+    final AtomicReference<Attributes> transportAttrsRef = new AtomicReference<>();
+    final ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    final Metadata.Key<String> key = Metadata.Key.of("fake-key", Metadata.ASCII_STRING_MARSHALLER);
+    final ArrayDeque<ClientStreamTracer> tracers = new ArrayDeque<>();
+    ClientStreamTracer.Factory oldFactoryImpl = new ClientStreamTracer.Factory() {
+      @SuppressWarnings("deprecation")
+      @Override
+      public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+        transportAttrsRef.set(info.getTransportAttrs());
+        headers.put(key, "fake-value");
+        tracers.offer(mockTracer);
+        return mockTracer;
+      }
+    };
+
+    StreamInfo info =
+        StreamInfo.newBuilder().setCallOptions(CallOptions.DEFAULT.withWaitForReady()).build();
+    Metadata metadata = new Metadata();
+    Attributes transAttrs =
+        Attributes.newBuilder().set(Attributes.Key.<String>create("foo"), "bar").build();
+    ClientStreamTracer tracer = GrpcUtil.newClientStreamTracer(oldFactoryImpl, info, metadata);
+    tracer.streamCreated(transAttrs, metadata);
+    assertThat(tracers.poll()).isSameInstanceAs(mockTracer);
+    assertThat(transportAttrsRef.get()).isEqualTo(transAttrs);
+    assertThat(metadata.get(key)).isEqualTo("fake-value");
+
+    tracer.streamClosed(Status.UNAVAILABLE);
+    // verify that newClientStreamTracer() is called no more than once
+    assertThat(tracers).isEmpty();
   }
 }

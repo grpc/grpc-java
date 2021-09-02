@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -186,7 +186,7 @@ public final class TrafficControlProxy {
     DataInputStream inStream;
     DataOutputStream outStream;
     int bytesQueued;
-    BlockingQueue<Message> queue = new DelayQueue<Message>();
+    BlockingQueue<Message> queue = new DelayQueue<>();
 
     MessageQueue(DataInputStream inputStream, DataOutputStream outputStream) {
       inStream = inputStream;

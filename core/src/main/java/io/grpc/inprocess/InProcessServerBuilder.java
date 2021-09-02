@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,27 @@
 
 package io.grpc.inprocess;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.DoNotCall;
+import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
+import io.grpc.Internal;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.InternalServer;
+import io.grpc.internal.ObjectPool;
+import io.grpc.internal.ServerImplBuilder;
+import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
+import io.grpc.internal.SharedResourcePool;
 import java.io.File;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -40,11 +54,12 @@ import java.util.concurrent.TimeUnit;
  * <h3>Usage example</h3>
  * <h4>Server and client channel setup</h4>
  * <pre>
- *   Server server = InProcessServerBuilder.forName("unique-name")
+ *   String uniqueName = InProcessServerBuilder.generateName();
+ *   Server server = InProcessServerBuilder.forName(uniqueName)
  *       .directExecutor() // directExecutor is fine for unit tests
  *       .addService(&#47;* your code here *&#47;)
  *       .build().start();
- *   ManagedChannel channel = InProcessChannelBuilder.forName("unique-name")
+ *   ManagedChannel channel = InProcessChannelBuilder.forName(uniqueName)
  *       .directExecutor()
  *       .build();
  * </pre>
@@ -57,8 +72,8 @@ import java.util.concurrent.TimeUnit;
  * </pre>
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1783")
-public final class InProcessServerBuilder
-    extends AbstractServerImplBuilder<InProcessServerBuilder> {
+public final class InProcessServerBuilder extends
+    AbstractServerImplBuilder<InProcessServerBuilder> {
   /**
    * Create a server builder that will bind with the given name.
    *
@@ -72,31 +87,118 @@ public final class InProcessServerBuilder
   /**
    * Always fails.  Call {@link #forName} instead.
    */
+  @DoNotCall("Unsupported. Use forName() instead")
   public static InProcessServerBuilder forPort(int port) {
     throw new UnsupportedOperationException("call forName() instead");
   }
 
-  private final String name;
+  /**
+   * Generates a new server name that is unique each time.
+   */
+  public static String generateName() {
+    return UUID.randomUUID().toString();
+  }
+
+  private final ServerImplBuilder serverImplBuilder;
+  final String name;
+  int maxInboundMetadataSize = Integer.MAX_VALUE;
+  ObjectPool<ScheduledExecutorService> schedulerPool =
+      SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
 
   private InProcessServerBuilder(String name) {
     this.name = Preconditions.checkNotNull(name, "name");
+
+    final class InProcessClientTransportServersBuilder implements ClientTransportServersBuilder {
+      @Override
+      public InternalServer buildClientTransportServers(
+          List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+        return buildTransportServers(streamTracerFactories);
+      }
+    }
+
+    serverImplBuilder = new ServerImplBuilder(new InProcessClientTransportServersBuilder());
+
     // In-process transport should not record its traffic to the stats module.
     // https://github.com/grpc/grpc-java/issues/2284
-    setStatsRecordStartedRpcs(false);
-    setStatsRecordFinishedRpcs(false);
+    serverImplBuilder.setStatsRecordStartedRpcs(false);
+    serverImplBuilder.setStatsRecordFinishedRpcs(false);
     // Disable handshake timeout because it is unnecessary, and can trigger Thread creation that can
     // break some environments (like tests).
     handshakeTimeout(Long.MAX_VALUE, TimeUnit.SECONDS);
   }
 
+  @Internal
   @Override
-  protected InProcessServer buildTransportServer(
-      List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return new InProcessServer(name, GrpcUtil.TIMER_SERVICE, streamTracerFactories);
+  protected ServerBuilder<?> delegate() {
+    return serverImplBuilder;
+  }
+
+  /**
+   * Provides a custom scheduled executor service.
+   *
+   * <p>It's an optional parameter. If the user has not provided a scheduled executor service when
+   * the channel is built, the builder will use a static cached thread pool.
+   *
+   * @return this
+   *
+   * @since 1.11.0
+   */
+  public InProcessServerBuilder scheduledExecutorService(
+      ScheduledExecutorService scheduledExecutorService) {
+    schedulerPool = new FixedObjectPool<>(
+        checkNotNull(scheduledExecutorService, "scheduledExecutorService"));
+    return this;
+  }
+
+  /**
+   * Provides a custom deadline ticker that this server will use to create incoming {@link
+   * Deadline}s.
+   *
+   * <p>This is intended for unit tests that fake out the clock.  You should also have a fake {@link
+   * ScheduledExecutorService} whose clock is synchronized with this ticker and set it to {@link
+   * #scheduledExecutorService}. DO NOT use this in production.
+   *
+   * @return this
+   * @see Deadline#after(long, TimeUnit, Deadline.Ticker)
+   *
+   * @since 1.24.0
+   */
+  public InProcessServerBuilder deadlineTicker(Deadline.Ticker ticker) {
+    serverImplBuilder.setDeadlineTicker(ticker);
+    return this;
+  }
+
+  /**
+   * Sets the maximum size of metadata allowed to be received. {@code Integer.MAX_VALUE} disables
+   * the enforcement. Defaults to no limit ({@code Integer.MAX_VALUE}).
+   *
+   * <p>There is potential for performance penalty when this setting is enabled, as the Metadata
+   * must actually be serialized. Since the current implementation of Metadata pre-serializes, it's
+   * currently negligible. But Metadata is free to change its implementation.
+   *
+   * @param bytes the maximum size of received metadata
+   * @return this
+   * @throws IllegalArgumentException if bytes is non-positive
+   * @since 1.17.0
+   */
+  @Override
+  public InProcessServerBuilder maxInboundMetadataSize(int bytes) {
+    Preconditions.checkArgument(bytes > 0, "maxInboundMetadataSize must be > 0");
+    this.maxInboundMetadataSize = bytes;
+    return this;
+  }
+
+  InProcessServer buildTransportServers(
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+    return new InProcessServer(this, streamTracerFactories);
   }
 
   @Override
   public InProcessServerBuilder useTransportSecurity(File certChain, File privateKey) {
     throw new UnsupportedOperationException("TLS not supported in InProcessServer");
+  }
+
+  void setStatsEnabled(boolean value) {
+    this.serverImplBuilder.setStatsEnabled(value);
   }
 }

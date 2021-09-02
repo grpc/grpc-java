@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static io.grpc.Contexts.statusFromCancelled;
@@ -25,29 +26,47 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
+import io.grpc.BinaryLog;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
+import io.grpc.InternalChannelz;
+import io.grpc.InternalChannelz.ServerStats;
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalInstrumented;
+import io.grpc.InternalLogId;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
+import io.grpc.ServerCallExecutorSupplier;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
+import io.perfmark.Tag;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
@@ -70,15 +89,15 @@ import javax.annotation.concurrent.GuardedBy;
  * <p>Starting the server starts the underlying transport for servicing requests. Stopping the
  * server stops servicing new requests and waits for all connections to terminate.
  */
-public final class ServerImpl extends io.grpc.Server implements WithLogId {
+public final class ServerImpl extends io.grpc.Server implements InternalInstrumented<ServerStats> {
   private static final Logger log = Logger.getLogger(ServerImpl.class.getName());
   private static final ServerStreamListener NOOP_LISTENER = new NoopListener();
 
-  private final LogId logId = LogId.allocate(getClass().getName());
+  private final InternalLogId logId;
   private final ObjectPool<? extends Executor> executorPool;
   /** Executor for application processing. Safe to read after {@link #start()}. */
   private Executor executor;
-  private final InternalHandlerRegistry registry;
+  private final HandlerRegistry registry;
   private final HandlerRegistry fallbackRegistry;
   private final List<ServerTransportFilter> transportFilters;
   // This is iterated on a per-call basis.  Use an array instead of a Collection to avoid iterator
@@ -95,25 +114,30 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   /** Service encapsulating something similar to an accept() socket. */
   private final InternalServer transportServer;
   private final Object lock = new Object();
-  @GuardedBy("lock") private boolean transportServerTerminated;
+  @GuardedBy("lock") private boolean transportServersTerminated;
   /** {@code transportServer} and services encapsulating something similar to a TCP connection. */
-  @GuardedBy("lock") private final Collection<ServerTransport> transports =
-      new HashSet<ServerTransport>();
+  @GuardedBy("lock") private final Set<ServerTransport> transports = new HashSet<>();
 
   private final Context rootContext;
 
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
+  private final BinaryLog binlog;
+
+  private final InternalChannelz channelz;
+  private final CallTracer serverCallTracer;
+  private final Deadline.Ticker ticker;
+  private final ServerCallExecutorSupplier executorSupplier;
 
   /**
    * Construct a server.
    *
    * @param builder builder with configuration for server
-   * @param transportServer transport server that will create new incoming transports
+   * @param transportServer transport servers that will create new incoming transports
    * @param rootContext context that callbacks for new RPCs should be derived from
    */
   ServerImpl(
-      AbstractServerImplBuilder<?> builder,
+      ServerImplBuilder builder,
       InternalServer transportServer,
       Context rootContext) {
     this.executorPool = Preconditions.checkNotNull(builder.executorPool, "executorPool");
@@ -121,16 +145,24 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     this.fallbackRegistry =
         Preconditions.checkNotNull(builder.fallbackRegistry, "fallbackRegistry");
     this.transportServer = Preconditions.checkNotNull(transportServer, "transportServer");
+    this.logId =
+        InternalLogId.allocate("Server", String.valueOf(getListenSocketsIgnoringLifecycle()));
     // Fork from the passed in context so that it does not propagate cancellation, it only
     // inherits values.
     this.rootContext = Preconditions.checkNotNull(rootContext, "rootContext").fork();
     this.decompressorRegistry = builder.decompressorRegistry;
     this.compressorRegistry = builder.compressorRegistry;
     this.transportFilters = Collections.unmodifiableList(
-        new ArrayList<ServerTransportFilter>(builder.transportFilters));
+        new ArrayList<>(builder.transportFilters));
     this.interceptors =
         builder.interceptors.toArray(new ServerInterceptor[builder.interceptors.size()]);
     this.handshakeTimeoutMillis = builder.handshakeTimeoutMillis;
+    this.binlog = builder.binlog;
+    this.channelz = builder.channelz;
+    this.serverCallTracer = builder.callTracerFactory.create();
+    this.ticker = checkNotNull(builder.ticker, "ticker");
+    channelz.addServer(this);
+    this.executorSupplier = builder.executorSupplier;
   }
 
   /**
@@ -145,20 +177,43 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     synchronized (lock) {
       checkState(!started, "Already started");
       checkState(!shutdown, "Shutting down");
-      // Start and wait for any port to actually be bound.
-      transportServer.start(new ServerListenerImpl());
+      // Start and wait for any ports to actually be bound.
+
+      ServerListenerImpl listener = new ServerListenerImpl();
+      transportServer.start(listener);
       executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
       started = true;
       return this;
     }
   }
 
+
   @Override
   public int getPort() {
     synchronized (lock) {
       checkState(started, "Not started");
       checkState(!terminated, "Already terminated");
-      return transportServer.getPort();
+      for (SocketAddress addr: transportServer.getListenSocketAddresses()) {
+        if (addr instanceof InetSocketAddress) {
+          return ((InetSocketAddress) addr).getPort();
+        }
+      }
+      return -1;
+    }
+  }
+
+  @Override
+  public List<SocketAddress> getListenSockets() {
+    synchronized (lock) {
+      checkState(started, "Not started");
+      checkState(!terminated, "Already terminated");
+      return getListenSocketsIgnoringLifecycle();
+    }
+  }
+
+  private List<SocketAddress> getListenSocketsIgnoringLifecycle() {
+    synchronized (lock) {
+      return Collections.unmodifiableList(transportServer.getListenSocketAddresses());
     }
   }
 
@@ -171,7 +226,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       List<ServerServiceDefinition> registryServices = registry.getServices();
       int servicesCount = registryServices.size() + fallbackServices.size();
       List<ServerServiceDefinition> services =
-          new ArrayList<ServerServiceDefinition>(servicesCount);
+          new ArrayList<>(servicesCount);
       services.addAll(registryServices);
       services.addAll(fallbackServices);
       return Collections.unmodifiableList(services);
@@ -193,19 +248,19 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
    */
   @Override
   public ServerImpl shutdown() {
-    boolean shutdownTransportServer;
+    boolean shutdownTransportServers;
     synchronized (lock) {
       if (shutdown) {
         return this;
       }
       shutdown = true;
-      shutdownTransportServer = started;
-      if (!shutdownTransportServer) {
-        transportServerTerminated = true;
+      shutdownTransportServers = started;
+      if (!shutdownTransportServers) {
+        transportServersTerminated = true;
         checkForTermination();
       }
     }
-    if (shutdownTransportServer) {
+    if (shutdownTransportServers) {
       transportServer.shutdown();
     }
     return this;
@@ -224,7 +279,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
         return this;
       }
       shutdownNowStatus = nowStatus;
-      transportsCopy = new ArrayList<ServerTransport>(transports);
+      transportsCopy = new ArrayList<>(transports);
       savedServerShutdownCallbackInvoked = serverShutdownCallbackInvoked;
     }
     // Short-circuiting not strictly necessary, but prevents transports from needing to handle
@@ -285,6 +340,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       if (!transports.remove(transport)) {
         throw new AssertionError("Transport already removed");
       }
+      channelz.removeServerSocket(ServerImpl.this, transport);
       checkForTermination();
     }
   }
@@ -292,21 +348,22 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
   /** Notify of complete shutdown if necessary. */
   private void checkForTermination() {
     synchronized (lock) {
-      if (shutdown && transports.isEmpty() && transportServerTerminated) {
+      if (shutdown && transports.isEmpty() && transportServersTerminated) {
         if (terminated) {
           throw new AssertionError("Server already terminated");
         }
         terminated = true;
+        channelz.removeServer(this);
         if (executor != null) {
           executor = executorPool.returnObject(executor);
         }
-        // TODO(carl-mastrangelo): move this outside the synchronized block.
         lock.notifyAll();
       }
     }
   }
 
   private final class ServerListenerImpl implements ServerListener {
+
     @Override
     public ServerTransportListener transportCreated(ServerTransport transport) {
       synchronized (lock) {
@@ -322,9 +379,13 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       ArrayList<ServerTransport> copiedTransports;
       Status shutdownNowStatusCopy;
       synchronized (lock) {
+        if (serverShutdownCallbackInvoked) {
+          return;
+        }
+
         // transports collection can be modified during shutdown(), even if we hold the lock, due
         // to reentrancy.
-        copiedTransports = new ArrayList<ServerTransport>(transports);
+        copiedTransports = new ArrayList<>(transports);
         shutdownNowStatusCopy = shutdownNowStatus;
         serverShutdownCallbackInvoked = true;
       }
@@ -336,7 +397,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
         }
       }
       synchronized (lock) {
-        transportServerTerminated = true;
+        transportServersTerminated = true;
         checkForTermination();
       }
     }
@@ -367,6 +428,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
           @Override public void run() {}
         }, null);
       }
+      channelz.addServerSocket(ServerImpl.this, transport);
     }
 
     @Override
@@ -394,13 +456,35 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       transportClosed(transport);
     }
 
+
     @Override
-    public void streamCreated(
-        final ServerStream stream, final String methodName, final Metadata headers) {
+    public void streamCreated(ServerStream stream, String methodName, Metadata headers) {
+      Tag tag = PerfMark.createTag(methodName, stream.streamId());
+      PerfMark.startTask("ServerTransportListener.streamCreated", tag);
+      try {
+        streamCreatedInternal(stream, methodName, headers, tag);
+      } finally {
+        PerfMark.stopTask("ServerTransportListener.streamCreated", tag);
+      }
+    }
+
+    private void streamCreatedInternal(
+        final ServerStream stream, final String methodName, final Metadata headers, final Tag tag) {
+      final Executor wrappedExecutor;
+      // This is a performance optimization that avoids the synchronization and queuing overhead
+      // that comes with SerializingExecutor.
+      if (executorSupplier != null || executor != directExecutor()) {
+        wrappedExecutor = new SerializingExecutor(executor);
+      } else {
+        wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
+        stream.optimizeForDirectExecutor();
+      }
+
       if (headers.containsKey(MESSAGE_ENCODING_KEY)) {
         String encoding = headers.get(MESSAGE_ENCODING_KEY);
         Decompressor decompressor = decompressorRegistry.lookupDecompressor(encoding);
         if (decompressor == null) {
+          stream.setListener(NOOP_LISTENER);
           stream.close(
               Status.UNIMPLEMENTED.withDescription(
                   String.format("Can't find decompressor for %s", encoding)),
@@ -413,33 +497,43 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
       final StatsTraceContext statsTraceCtx = Preconditions.checkNotNull(
           stream.statsTraceContext(), "statsTraceCtx not present from stream");
 
-      final Context.CancellableContext context = createContext(stream, headers, statsTraceCtx);
-      final Executor wrappedExecutor;
-      // This is a performance optimization that avoids the synchronization and queuing overhead
-      // that comes with SerializingExecutor.
-      if (executor == directExecutor()) {
-        wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
-      } else {
-        wrappedExecutor = new SerializingExecutor(executor);
-      }
+      final Context.CancellableContext context = createContext(headers, statsTraceCtx);
+
+      final Link link = PerfMark.linkOut();
 
       final JumpToApplicationThreadServerStreamListener jumpListener
           = new JumpToApplicationThreadServerStreamListener(
-              wrappedExecutor, executor, stream, context);
+                  wrappedExecutor, executor, stream, context, tag);
       stream.setListener(jumpListener);
-      // Run in wrappedExecutor so jumpListener.setListener() is called before any callbacks
-      // are delivered, including any errors. Callbacks can still be triggered, but they will be
-      // queued.
+      final SettableFuture<ServerCallParameters<?,?>> future = SettableFuture.create();
+      // Run in serializing executor so jumpListener.setListener() is called before any callbacks
+      // are delivered, including any errors. MethodLookup() and HandleServerCall() are proactively
+      // queued before any callbacks are queued at serializing executor.
+      // MethodLookup() runs on the default executor.
+      // When executorSupplier is enabled, MethodLookup() may set/change the executor in the
+      // SerializingExecutor before it finishes running.
+      // Then HandleServerCall() and callbacks would switch to the executorSupplier executor.
+      // Otherwise, they all run on the default executor.
 
-      final class StreamCreated extends ContextRunnable {
-
-        StreamCreated() {
+      final class MethodLookup extends ContextRunnable {
+        MethodLookup() {
           super(context);
         }
 
         @Override
         public void runInContext() {
-          ServerStreamListener listener = NOOP_LISTENER;
+          PerfMark.startTask("ServerTransportListener$MethodLookup.startCall", tag);
+          PerfMark.linkIn(link);
+          try {
+            runInternal();
+          } finally {
+            PerfMark.stopTask("ServerTransportListener$MethodLookup.startCall", tag);
+          }
+        }
+
+        private void runInternal() {
+          ServerMethodDefinition<?, ?> wrapMethod;
+          ServerCallParameters<?, ?> callParams;
           try {
             ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
             if (method == null) {
@@ -447,93 +541,198 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
             }
             if (method == null) {
               Status status = Status.UNIMPLEMENTED.withDescription(
-                  "Method not found: " + methodName);
+                      "Method not found: " + methodName);
               // TODO(zhangkun83): this error may be recorded by the tracer, and if it's kept in
               // memory as a map whose key is the method name, this would allow a misbehaving
               // client to blow up the server in-memory stats storage by sending large number of
               // distinct unimplemented method
               // names. (https://github.com/grpc/grpc-java/issues/2285)
+              jumpListener.setListener(NOOP_LISTENER);
               stream.close(status, new Metadata());
               context.cancel(null);
+              future.cancel(false);
               return;
             }
-            listener = startCall(stream, methodName, method, headers, context, statsTraceCtx);
-          } catch (RuntimeException e) {
-            stream.close(Status.fromThrowable(e), new Metadata());
+            wrapMethod = wrapMethod(stream, method, statsTraceCtx);
+            callParams = maySwitchExecutor(wrapMethod, stream, headers, context, tag);
+            future.set(callParams);
+          } catch (Throwable t) {
+            jumpListener.setListener(NOOP_LISTENER);
+            stream.close(Status.fromThrowable(t), new Metadata());
             context.cancel(null);
-            throw e;
-          } catch (Error e) {
-            stream.close(Status.fromThrowable(e), new Metadata());
-            context.cancel(null);
-            throw e;
-          } finally {
-            jumpListener.setListener(listener);
+            future.cancel(false);
+            throw t;
           }
+        }
+
+        private <ReqT, RespT> ServerCallParameters<ReqT, RespT> maySwitchExecutor(
+            final ServerMethodDefinition<ReqT, RespT> methodDef,
+            final ServerStream stream,
+            final Metadata headers,
+            final Context.CancellableContext context,
+            final Tag tag) {
+          final ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<>(
+                  stream,
+                  methodDef.getMethodDescriptor(),
+                  headers,
+                  context,
+                  decompressorRegistry,
+                  compressorRegistry,
+                  serverCallTracer,
+                  tag);
+          if (executorSupplier != null) {
+            Executor switchingExecutor = executorSupplier.getExecutor(call, headers);
+            if (switchingExecutor != null) {
+              ((SerializingExecutor)wrappedExecutor).setExecutor(switchingExecutor);
+            }
+          }
+          return new ServerCallParameters<>(call, methodDef.getServerCallHandler());
         }
       }
 
-      wrappedExecutor.execute(new StreamCreated());
+      final class HandleServerCall extends ContextRunnable {
+        HandleServerCall() {
+          super(context);
+        }
+
+        @Override
+        public void runInContext() {
+          PerfMark.startTask("ServerTransportListener$HandleServerCall.startCall", tag);
+          PerfMark.linkIn(link);
+          try {
+            runInternal();
+          } finally {
+            PerfMark.stopTask("ServerTransportListener$HandleServerCall.startCall", tag);
+          }
+        }
+
+        private void runInternal() {
+          ServerStreamListener listener = NOOP_LISTENER;
+          if (future.isCancelled()) {
+            return;
+          }
+          try {
+            listener = startWrappedCall(methodName, Futures.getDone(future), headers);
+          } catch (Throwable ex) {
+            stream.close(Status.fromThrowable(ex), new Metadata());
+            context.cancel(null);
+            throw new IllegalStateException(ex);
+          } finally {
+            jumpListener.setListener(listener);
+          }
+
+          // An extremely short deadline may expire before stream.setListener(jumpListener).
+          // This causes NPE as in issue: https://github.com/grpc/grpc-java/issues/6300
+          // Delay of setting cancellationListener to context will fix the issue.
+          final class ServerStreamCancellationListener implements Context.CancellationListener {
+            @Override
+            public void cancelled(Context context) {
+              Status status = statusFromCancelled(context);
+              if (DEADLINE_EXCEEDED.getCode().equals(status.getCode())) {
+                // This should rarely get run, since the client will likely cancel the stream
+                // before the timeout is reached.
+                stream.cancel(status);
+              }
+            }
+          }
+
+          context.addListener(new ServerStreamCancellationListener(), directExecutor());
+        }
+      }
+
+      wrappedExecutor.execute(new MethodLookup());
+      wrappedExecutor.execute(new HandleServerCall());
     }
 
     private Context.CancellableContext createContext(
-        final ServerStream stream, Metadata headers, StatsTraceContext statsTraceCtx) {
+        Metadata headers, StatsTraceContext statsTraceCtx) {
       Long timeoutNanos = headers.get(TIMEOUT_KEY);
 
-      Context baseContext = statsTraceCtx.serverFilterContext(rootContext);
+      Context baseContext =
+          statsTraceCtx
+              .serverFilterContext(rootContext)
+              .withValue(io.grpc.InternalServer.SERVER_CONTEXT_KEY, ServerImpl.this);
 
       if (timeoutNanos == null) {
         return baseContext.withCancellation();
       }
 
-      Context.CancellableContext context = baseContext.withDeadlineAfter(
-          timeoutNanos, NANOSECONDS, transport.getScheduledExecutorService());
-      final class ServerStreamCancellationListener implements Context.CancellationListener {
-        @Override
-        public void cancelled(Context context) {
-          Status status = statusFromCancelled(context);
-          if (DEADLINE_EXCEEDED.getCode().equals(status.getCode())) {
-            // This should rarely get run, since the client will likely cancel the stream before
-            // the timeout is reached.
-            stream.cancel(status);
-          }
-        }
-      }
-
-      context.addListener(new ServerStreamCancellationListener(), directExecutor());
+      Context.CancellableContext context =
+          baseContext.withDeadline(
+              Deadline.after(timeoutNanos, NANOSECONDS, ticker),
+              transport.getScheduledExecutorService());
 
       return context;
     }
 
     /** Never returns {@code null}. */
-    private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream, String fullMethodName,
-        ServerMethodDefinition<ReqT, RespT> methodDef, Metadata headers,
-        Context.CancellableContext context, StatsTraceContext statsTraceCtx) {
+    private <ReqT, RespT> ServerMethodDefinition<?,?> wrapMethod(ServerStream stream,
+        ServerMethodDefinition<ReqT, RespT> methodDef, StatsTraceContext statsTraceCtx) {
       // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
-      ServerCallImpl<ReqT, RespT> call = new ServerCallImpl<ReqT, RespT>(
-          stream, methodDef.getMethodDescriptor(), headers, context,
-          decompressorRegistry, compressorRegistry);
-      ServerCallHandler<ReqT, RespT> callHandler = methodDef.getServerCallHandler();
       statsTraceCtx.serverCallStarted(
-          new ServerCallInfoImpl<ReqT, RespT>(
-              methodDef.getMethodDescriptor(),
-              call.getAttributes(),
-              call.getAuthority()));
-
+          new ServerCallInfoImpl<>(
+              methodDef.getMethodDescriptor(), // notify with original method descriptor
+              stream.getAttributes(),
+              stream.getAuthority()));
+      ServerCallHandler<ReqT, RespT> handler = methodDef.getServerCallHandler();
       for (ServerInterceptor interceptor : interceptors) {
-        callHandler = InternalServerInterceptors.interceptCallHandler(interceptor, callHandler);
+        handler = InternalServerInterceptors.interceptCallHandlerCreate(interceptor, handler);
       }
-      ServerCall.Listener<ReqT> listener = callHandler.startCall(call, headers);
-      if (listener == null) {
+      ServerMethodDefinition<ReqT, RespT> interceptedDef = methodDef.withServerCallHandler(handler);
+      ServerMethodDefinition<?, ?> wMethodDef = binlog == null
+          ? interceptedDef : binlog.wrapMethodDefinition(interceptedDef);
+      return wMethodDef;
+    }
+
+    private final class ServerCallParameters<ReqT, RespT> {
+      ServerCallImpl<ReqT, RespT> call;
+      ServerCallHandler<ReqT, RespT> callHandler;
+
+      public ServerCallParameters(ServerCallImpl<ReqT, RespT> call,
+                                  ServerCallHandler<ReqT, RespT> callHandler) {
+        this.call = call;
+        this.callHandler = callHandler;
+      }
+    }
+
+    private <WReqT, WRespT> ServerStreamListener startWrappedCall(
+        String fullMethodName,
+        ServerCallParameters<WReqT, WRespT> params,
+        Metadata headers) {
+      ServerCall.Listener<WReqT> callListener =
+              params.callHandler.startCall(params.call, headers);
+      if (callListener == null) {
         throw new NullPointerException(
-            "startCall() returned a null listener for method " + fullMethodName);
+                "startCall() returned a null listener for method " + fullMethodName);
       }
-      return call.newServerStreamListener(listener);
+      return params.call.newServerStreamListener(callListener);
     }
   }
 
   @Override
-  public LogId getLogId() {
+  public InternalLogId getLogId() {
     return logId;
+  }
+
+  @Override
+  public ListenableFuture<ServerStats> getStats() {
+    ServerStats.Builder builder = new ServerStats.Builder();
+    List<InternalInstrumented<SocketStats>> stats = transportServer.getListenSocketStatsList();
+    if (stats != null ) {
+      builder.addListenSockets(stats);
+    }
+    serverCallTracer.updateBuilder(builder);
+    SettableFuture<ServerStats> ret = SettableFuture.create();
+    ret.set(builder.build());
+    return ret;
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("logId", logId.getId())
+        .add("transportServer", transportServer)
+        .toString();
   }
 
   private static final class NoopListener implements ServerStreamListener {
@@ -578,15 +777,17 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     private final Executor cancelExecutor;
     private final Context.CancellableContext context;
     private final ServerStream stream;
+    private final Tag tag;
     // Only accessed from callExecutor.
     private ServerStreamListener listener;
 
     public JumpToApplicationThreadServerStreamListener(Executor executor,
-        Executor cancelExecutor, ServerStream stream, Context.CancellableContext context) {
+        Executor cancelExecutor, ServerStream stream, Context.CancellableContext context, Tag tag) {
       this.callExecutor = executor;
       this.cancelExecutor = cancelExecutor;
       this.stream = stream;
       this.context = context;
+      this.tag = tag;
     }
 
     /**
@@ -609,13 +810,15 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
     /**
      * Like {@link ServerCall#close(Status, Metadata)}, but thread-safe for internal use.
      */
-    private void internalClose() {
+    private void internalClose(Throwable t) {
       // TODO(ejona86): this is not thread-safe :)
-      stream.close(Status.UNKNOWN, new Metadata());
+      stream.close(Status.UNKNOWN.withCause(t), new Metadata());
     }
 
     @Override
     public void messagesAvailable(final MessageProducer producer) {
+      PerfMark.startTask("ServerStreamListener.messagesAvailable", tag);
+      final Link link = PerfMark.linkOut();
 
       final class MessagesAvailable extends ContextRunnable {
 
@@ -625,23 +828,31 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
         @Override
         public void runInContext() {
+          PerfMark.startTask("ServerCallListener(app).messagesAvailable", tag);
+          PerfMark.linkIn(link);
           try {
             getListener().messagesAvailable(producer);
-          } catch (RuntimeException e) {
-            internalClose();
-            throw e;
-          } catch (Error e) {
-            internalClose();
-            throw e;
+          } catch (Throwable t) {
+            internalClose(t);
+            throw t;
+          } finally {
+            PerfMark.stopTask("ServerCallListener(app).messagesAvailable", tag);
           }
         }
       }
 
-      callExecutor.execute(new MessagesAvailable());
+      try {
+        callExecutor.execute(new MessagesAvailable());
+      } finally {
+        PerfMark.stopTask("ServerStreamListener.messagesAvailable", tag);
+      }
     }
 
     @Override
     public void halfClosed() {
+      PerfMark.startTask("ServerStreamListener.halfClosed", tag);
+      final Link link = PerfMark.linkOut();
+
       final class HalfClosed extends ContextRunnable {
         HalfClosed() {
           super(context);
@@ -649,23 +860,37 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
         @Override
         public void runInContext() {
+          PerfMark.startTask("ServerCallListener(app).halfClosed", tag);
+          PerfMark.linkIn(link);
           try {
             getListener().halfClosed();
-          } catch (RuntimeException e) {
-            internalClose();
-            throw e;
-          } catch (Error e) {
-            internalClose();
-            throw e;
+          } catch (Throwable t) {
+            internalClose(t);
+            throw t;
+          } finally {
+            PerfMark.stopTask("ServerCallListener(app).halfClosed", tag);
           }
         }
       }
 
-      callExecutor.execute(new HalfClosed());
+      try {
+        callExecutor.execute(new HalfClosed());
+      } finally {
+        PerfMark.stopTask("ServerStreamListener.halfClosed", tag);
+      }
     }
 
     @Override
     public void closed(final Status status) {
+      PerfMark.startTask("ServerStreamListener.closed", tag);
+      try {
+        closedInternal(status);
+      } finally {
+        PerfMark.stopTask("ServerStreamListener.closed", tag);
+      }
+    }
+
+    private void closedInternal(final Status status) {
       // For cancellations, promptly inform any users of the context that their work should be
       // aborted. Otherwise, we can wait until pending work is done.
       if (!status.isOk()) {
@@ -673,6 +898,7 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
         // is not serializing.
         cancelExecutor.execute(new ContextCloser(context, status.getCause()));
       }
+      final Link link = PerfMark.linkOut();
 
       final class Closed extends ContextRunnable {
         Closed() {
@@ -681,7 +907,13 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
         @Override
         public void runInContext() {
-          getListener().closed(status);
+          PerfMark.startTask("ServerCallListener(app).closed", tag);
+          PerfMark.linkIn(link);
+          try {
+            getListener().closed(status);
+          } finally {
+            PerfMark.stopTask("ServerCallListener(app).closed", tag);
+          }
         }
       }
 
@@ -690,6 +922,8 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
     @Override
     public void onReady() {
+      PerfMark.startTask("ServerStreamListener.onReady", tag);
+      final Link link = PerfMark.linkOut();
       final class OnReady extends ContextRunnable {
         OnReady() {
           super(context);
@@ -697,19 +931,24 @@ public final class ServerImpl extends io.grpc.Server implements WithLogId {
 
         @Override
         public void runInContext() {
+          PerfMark.startTask("ServerCallListener(app).onReady", tag);
+          PerfMark.linkIn(link);
           try {
             getListener().onReady();
-          } catch (RuntimeException e) {
-            internalClose();
-            throw e;
-          } catch (Error e) {
-            internalClose();
-            throw e;
+          } catch (Throwable t) {
+            internalClose(t);
+            throw t;
+          } finally {
+            PerfMark.stopTask("ServerCallListener(app).onReady", tag);
           }
         }
       }
 
-      callExecutor.execute(new OnReady());
+      try {
+        callExecutor.execute(new OnReady());
+      } finally {
+        PerfMark.stopTask("ServerStreamListener.onReady", tag);
+      }
     }
   }
 

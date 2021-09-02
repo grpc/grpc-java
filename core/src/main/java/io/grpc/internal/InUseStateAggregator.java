@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, gRPC Authors All rights reserved.
+ * Copyright 2016 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,23 +16,25 @@
 
 package io.grpc.internal;
 
-import java.util.HashSet;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * Aggregates the in-use state of a set of objects.
  */
 @NotThreadSafe
-abstract class InUseStateAggregator<T> {
+public abstract class InUseStateAggregator<T> {
 
-  private final HashSet<T> inUseObjects = new HashSet<T>();
+  private final Set<T> inUseObjects = Collections.newSetFromMap(new IdentityHashMap<T,Boolean>());
 
   /**
    * Update the in-use state of an object. Initially no object is in use.
    *
    * <p>This may call into {@link #handleInUse} or {@link #handleNotInUse} when appropriate.
    */
-  final void updateObjectInUse(T object, boolean inUse) {
+  public final void updateObjectInUse(T object, boolean inUse) {
     int origSize = inUseObjects.size();
     if (inUse) {
       inUseObjects.add(object);
@@ -47,18 +49,33 @@ abstract class InUseStateAggregator<T> {
     }
   }
 
-  final boolean isInUse() {
+  public final boolean isInUse() {
     return !inUseObjects.isEmpty();
+  }
+
+  /**
+   * Returns {@code true} if any of the given objects are in use.
+   *
+   * @param objects The objects to consider.
+   * @return {@code true} if any of the given objects are in use.
+   */
+  public final boolean anyObjectInUse(Object... objects) {
+    for (Object object : objects) {
+      if (inUseObjects.contains(object)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
    * Called when the aggregated in-use state has changed to true, which means at least one object is
    * in use.
    */
-  abstract void handleInUse();
+  protected abstract void handleInUse();
 
   /**
    * Called when the aggregated in-use state has changed to false, which means no object is in use.
    */
-  abstract void handleNotInUse();
+  protected abstract void handleNotInUse();
 }

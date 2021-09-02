@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, gRPC Authors All rights reserved.
+ * Copyright 2014 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ public interface ClientStreamListener extends StreamListener {
    * Called upon receiving all header information from the remote end-point. Note that transports
    * are not required to call this method if no header information is received, this would occur
    * when a stream immediately terminates with an error and only
-   * {@link #closed(io.grpc.Status, Metadata)} is called.
+   * {@link #closed(io.grpc.Status, RpcProgress, Metadata)} is called.
    *
    * <p>This method should return quickly, as the same thread may be used to process other streams.
    *
@@ -43,7 +43,26 @@ public interface ClientStreamListener extends StreamListener {
    * <p>This method should return quickly, as the same thread may be used to process other streams.
    *
    * @param status details about the remote closure
+   * @param rpcProgress RPC progress when client stream listener is closed
    * @param trailers trailing metadata
    */
-  void closed(Status status, Metadata trailers);
+  void closed(Status status, RpcProgress rpcProgress, Metadata trailers);
+
+  /**
+   * The progress of the RPC when client stream listener is closed.
+   */
+  enum RpcProgress {
+    /**
+     * The RPC is processed by the server normally.
+     */
+    PROCESSED,
+    /**
+     * The RPC is not processed by the server's application logic.
+     */
+    REFUSED,
+    /**
+     * The RPC is dropped (by load balancer).
+     */
+    DROPPED
+  }
 }

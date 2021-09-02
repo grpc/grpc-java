@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, gRPC Authors All rights reserved.
+ * Copyright 2017 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,8 @@ import org.junit.runners.Parameterized.Parameters;
 
 /**
  * Tests that Channel and Server builders properly hide the static constructors.
+ *
+ * <p>This test does nothing on Java 9.
  */
 @RunWith(Parameterized.class)
 public class ChannelAndServerBuilderTest {
@@ -49,13 +51,23 @@ public class ChannelAndServerBuilderTest {
   @Parameters(name = "class={0}")
   public static Collection<Object[]> params() throws Exception {
     ClassLoader loader = ChannelAndServerBuilderTest.class.getClassLoader();
-    List<Object[]> classes = new ArrayList<Object[]>();
-    for (ClassInfo classInfo : ClassPath.from(loader).getTopLevelClassesRecursive("io.grpc")) {
-      Class<?> clazz = Class.forName(classInfo.getName(), false /*initialize*/, loader);
+    Collection<ClassInfo> classInfos =
+        ClassPath.from(loader).getTopLevelClassesRecursive("io.grpc");
+    // Java 9 doesn't expose the URLClassLoader, which breaks searching through the classpath
+    if (classInfos.isEmpty()) {
+      return new ArrayList<>();
+    }
+    List<Object[]> classes = new ArrayList<>();
+    for (ClassInfo classInfo : classInfos) {
+      String className = classInfo.getName();
+      if (className.contains("io.grpc.netty.shaded.io.netty")) {
+        continue;
+      }
+      Class<?> clazz = Class.forName(className, false /*initialize*/, loader);
       if (ServerBuilder.class.isAssignableFrom(clazz) && clazz != ServerBuilder.class) {
         classes.add(new Object[]{clazz});
       } else if (ManagedChannelBuilder.class.isAssignableFrom(clazz)
-          && clazz != ManagedChannelBuilder.class ) {
+          && clazz != ManagedChannelBuilder.class) {
         classes.add(new Object[]{clazz});
       }
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, gRPC Authors All rights reserved.
+ * Copyright 2015 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,11 @@
 package io.grpc.netty;
 
 import io.grpc.Internal;
+import io.grpc.ServerCredentials;
 import io.grpc.ServerProvider;
+import java.net.InetSocketAddress;
 
-
-/** Provider for {@link NettyChannelBuilder} instances. */
+/** Provider for {@link NettyServerBuilder} instances. */
 @Internal
 public final class NettyServerProvider extends ServerProvider {
 
@@ -37,6 +38,16 @@ public final class NettyServerProvider extends ServerProvider {
   @Override
   protected NettyServerBuilder builderForPort(int port) {
     return NettyServerBuilder.forPort(port);
+  }
+
+  @Override
+  protected NewServerBuilderResult newServerBuilderForPort(int port, ServerCredentials creds) {
+    ProtocolNegotiators.FromServerCredentialsResult result = ProtocolNegotiators.from(creds);
+    if (result.error != null) {
+      return NewServerBuilderResult.error(result.error);
+    }
+    return NewServerBuilderResult.serverBuilder(
+        new NettyServerBuilder(new InetSocketAddress(port), result.negotiator));
   }
 }
 

@@ -1,19 +1,45 @@
-description = "gRPC: Netty"
-dependencies {
-    compile project(':grpc-core'),
-            libraries.netty,
-            libraries.netty_proxy_handler
+plugins {
+    id "java-library"
+    id "maven-publish"
 
-    // Tests depend on base class defined by core module.
-    testCompile project(':grpc-core').sourceSets.test.output,
-                project(':grpc-testing')
-    testRuntime libraries.netty_tcnative
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    id "me.champeau.gradle.japicmp"
+    id "me.champeau.gradle.jmh"
+    id "ru.vyarus.animalsniffer"
 }
 
+description = "gRPC: Netty"
+
+configurations {
+    alpnagent
+}
+
+evaluationDependsOn(project(':grpc-core').path)
+
+dependencies {
+    api project(':grpc-core'),
+            libraries.netty
+    implementation libraries.netty_proxy_handler,
+            libraries.guava,
+            libraries.errorprone,
+            libraries.perfmark
+
+    // Tests depend on base class defined by core module.
+    testImplementation project(':grpc-core').sourceSets.test.output,
+            project(':grpc-api').sourceSets.test.output,
+            project(':grpc-testing'),
+            project(':grpc-testing-proto')
+    testRuntimeOnly libraries.netty_tcnative,
+            libraries.conscrypt,
+            libraries.netty_epoll
+    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    alpnagent libraries.jetty_alpn_agent
+}
+
+import net.ltgt.gradle.errorprone.CheckSeverity
+
 [compileJava, compileTestJava].each() {
-  // Netty retuns a lot of futures that we mostly don't care about.
-  it.options.compilerArgs += ["-Xep:FutureReturnValueIgnored:OFF"]
+    // Netty retuns a lot of futures that we mostly don't care about.
+    it.options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
 }
 
 javadoc {
@@ -22,16 +48,20 @@ javadoc {
 }
 
 project.sourceSets {
-    main {
-        java {
-            srcDir "${projectDir}/third_party/netty/java"
-        }
-    }
+    main { java { srcDir "${projectDir}/third_party/netty/java" } }
 }
 
+test {
+    // Allow testing Jetty ALPN in TlsTest
+    jvmArgs "-javaagent:" + configurations.alpnagent.asPath
+}
 
 jmh {
     // Workaround
     // https://github.com/melix/jmh-gradle-plugin/issues/97#issuecomment-316664026
     includeTests = true
+}
+
+checkstyleMain {
+    source = source.minus(fileTree(dir: "src/main", include: "**/Http2ControlFrameLimitEncoder.java"))
 }
