@@ -498,7 +498,7 @@ final class CensusStatsModule {
       boolean shouldRecordFinishedCall = false;
       synchronized (lock) {
         if (callEnded) {
-          // FIXME(https://github.com/grpc/grpc-java/issues/7921): this shouldn't happen
+          // TODO(https://github.com/grpc/grpc-java/issues/7921): this shouldn't happen
           return;
         }
         callEnded = true;
