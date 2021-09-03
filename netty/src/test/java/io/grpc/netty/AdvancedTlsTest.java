@@ -180,8 +180,6 @@ public class AdvancedTlsTest {
         .keyManager(clientKeyManager).trustManager(clientTrustManager).build();
     channel = Grpc.newChannelBuilderForAddress("localhost", server.getPort(), channelCredentials)
         .overrideAuthority("foo.test.google.com.au").build();
-    // Wait 5 seconds for the client and server to load their credentials.
-    TimeUnit.SECONDS.sleep(5);
     // Start the connection.
     try {
       SimpleServiceGrpc.SimpleServiceBlockingStub client =
@@ -233,7 +231,6 @@ public class AdvancedTlsTest {
         .clientAuth(ClientAuth.REQUIRE).build();
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
-    TimeUnit.SECONDS.sleep(5);
 
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
@@ -308,7 +305,6 @@ public class AdvancedTlsTest {
         .clientAuth(ClientAuth.REQUIRE).build();
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
-    TimeUnit.SECONDS.sleep(5);
 
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
@@ -360,7 +356,6 @@ public class AdvancedTlsTest {
         .clientAuth(ClientAuth.REQUIRE).build();
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
-    TimeUnit.SECONDS.sleep(5);
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File,
