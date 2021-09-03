@@ -69,7 +69,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"));
   @VisibleForTesting
   static boolean enableSecurity =
-      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"));
+      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"))
+          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"));
   private static final Attributes.Key<ClusterLocalityStats> ATTR_CLUSTER_LOCALITY_STATS =
       Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocalityStats");
 

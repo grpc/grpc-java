@@ -480,16 +480,16 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
-  public void endpointAddressesAttachedWithTlsConfig_enableSecurity() {
+  public void endpointAddressesAttachedWithTlsConfig_disableSecurity() {
     boolean originalEnableSecurity = ClusterImplLoadBalancer.enableSecurity;
-    ClusterImplLoadBalancer.enableSecurity = true;
-    subtest_endpointAddressesAttachedWithTlsConfig(true);
+    ClusterImplLoadBalancer.enableSecurity = false;
+    subtest_endpointAddressesAttachedWithTlsConfig(false);
     ClusterImplLoadBalancer.enableSecurity = originalEnableSecurity;
   }
 
   @Test
-  public void endpointAddressesAttachedWithTlsConfig_securityDisabledByDefault() {
-    subtest_endpointAddressesAttachedWithTlsConfig(false);
+  public void endpointAddressesAttachedWithTlsConfig_securityEnabledByDefault() {
+    subtest_endpointAddressesAttachedWithTlsConfig(true);
   }
 
   private void subtest_endpointAddressesAttachedWithTlsConfig(boolean enableSecurity) {
