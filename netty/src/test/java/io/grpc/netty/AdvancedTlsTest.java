@@ -181,8 +181,6 @@ public class AdvancedTlsTest {
         .keyManager(clientKeyManager).trustManager(clientTrustManager).build();
     channel = Grpc.newChannelBuilderForAddress("localhost", server.getPort(), channelCredentials)
         .overrideAuthority("foo.test.google.com.au").build();
-    // Wait 5 seconds for the client and server to load their credentials.
-    TimeUnit.SECONDS.sleep(5);
     // Start the connection.
     try {
       SimpleServiceGrpc.SimpleServiceBlockingStub client =
