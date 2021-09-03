@@ -644,7 +644,8 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder)
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
-    assertThat(struct.getStruct().retryPolicy()).isNull();
+    assertThat(struct.getStruct().retryPolicy().retryableStatusCodes())
+        .containsExactly(Code.CANCELLED);
 
     // unsupported retry_on code
     builder = RetryPolicy.newBuilder()
@@ -660,7 +661,25 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder)
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
-    assertThat(struct.getStruct().retryPolicy()).isNull();
+    assertThat(struct.getStruct().retryPolicy().retryableStatusCodes())
+        .containsExactly(Code.CANCELLED);
+
+    // whitespace in retry_on
+    builder = RetryPolicy.newBuilder()
+        .setNumRetries(UInt32Value.of(3))
+        .setRetryBackOff(
+            RetryBackOff.newBuilder()
+                .setBaseInterval(Durations.fromMillis(500))
+                .setMaxInterval(Durations.fromMillis(600)))
+        .setPerTryTimeout(Durations.fromMillis(300))
+        .setRetryOn("abort, , cancelled , ");
+    proto = io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+        .setCluster("cluster-foo")
+        .setRetryPolicy(builder)
+        .build();
+    struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
+    assertThat(struct.getStruct().retryPolicy().retryableStatusCodes())
+        .containsExactly(Code.CANCELLED);
   }
 
   @Test

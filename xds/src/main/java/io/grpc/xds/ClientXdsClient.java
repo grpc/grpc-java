@@ -1237,21 +1237,20 @@ final class ClientXdsClient extends AbstractXdsClient {
         maxBackoff = Durations.fromNanos(Durations.toNanos(initialBackoff) * 10);
       }
     }
-    Iterable<String> retryOns = Splitter.on(',').split(retryPolicyProto.getRetryOn());
+    Iterable<String> retryOns =
+        Splitter.on(',').omitEmptyStrings().trimResults().split(retryPolicyProto.getRetryOn());
     ImmutableList.Builder<Code> retryableStatusCodesBuilder = ImmutableList.builder();
     for (String retryOn : retryOns) {
       Code code;
       try {
         code = Code.valueOf(retryOn.toUpperCase(Locale.US).replace('-', '_'));
       } catch (IllegalArgumentException e) {
-        // TODO(zdapeng): TBD
         // unsupported value, such as "5xx"
-        return null;
+        continue;
       }
       if (!SUPPORTED_RETRYABLE_CODES.contains(code)) {
-        // TODO(zdapeng): TBD
         // unsupported value
-        return null;
+        continue;
       }
       retryableStatusCodesBuilder.add(code);
     }
