@@ -200,18 +200,18 @@ public class ServerCallsTest {
   }
 
   @Test
-  public void onFinishHandlerCalledIfSetInStreamingClientCall() throws Exception {
-    final AtomicBoolean onFinish = new AtomicBoolean();
+  public void onCloseHandlerCalledIfSetInStreamingClientCall() throws Exception {
+    final AtomicBoolean onCloseHandlerCalled = new AtomicBoolean();
     ServerCallHandler<Integer, Integer> callHandler = ServerCalls.asyncBidiStreamingCall(
         new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
           @Override
           public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
             ServerCallStreamObserver<Integer> serverCallObserver =
                 (ServerCallStreamObserver<Integer>) responseObserver;
-            serverCallObserver.setOnFinishHandler(new Runnable() {
+            serverCallObserver.setOnCloseHandler(new Runnable() {
               @Override
               public void run() {
-                onFinish.set(true);
+                onCloseHandlerCalled.set(true);
               }
             });
             return new ServerCalls.NoopStreamObserver<>();
@@ -219,22 +219,22 @@ public class ServerCallsTest {
         });
     ServerCall.Listener<Integer> callListener = callHandler.startCall(serverCall, new Metadata());
     callListener.onComplete();
-    assertTrue(onFinish.get());
+    assertTrue(onCloseHandlerCalled.get());
   }
 
   @Test
-  public void onFinishHandlerCalledIfSetInUnaryClientCall() throws Exception {
-    final AtomicBoolean onFinish = new AtomicBoolean();
+  public void onCloseHandlerCalledIfSetInUnaryClientCall() throws Exception {
+    final AtomicBoolean onCloseHandlerCalled = new AtomicBoolean();
     ServerCallHandler<Integer, Integer> callHandler = ServerCalls.asyncServerStreamingCall(
         new ServerCalls.ServerStreamingMethod<Integer, Integer>() {
           @Override
           public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
             ServerCallStreamObserver<Integer> serverCallObserver =
                 (ServerCallStreamObserver<Integer>) responseObserver;
-            serverCallObserver.setOnFinishHandler(new Runnable() {
+            serverCallObserver.setOnCloseHandler(new Runnable() {
               @Override
               public void run() {
-                onFinish.set(true);
+                onCloseHandlerCalled.set(true);
               }
             });
           }
@@ -243,7 +243,7 @@ public class ServerCallsTest {
     callListener.onMessage(0);
     callListener.onHalfClose();
     callListener.onComplete();
-    assertTrue(onFinish.get());
+    assertTrue(onCloseHandlerCalled.get());
   }
 
   @Test
@@ -303,7 +303,7 @@ public class ServerCallsTest {
   }
 
   @Test
-  public void cannotSetOnFinishHandlerAfterServiceInvocation() throws Exception {
+  public void cannotSetOnCloseHandlerAfterServiceInvocation() throws Exception {
     final AtomicReference<ServerCallStreamObserver<Integer>> callObserver = new AtomicReference<>();
     ServerCallHandler<Integer, Integer> callHandler = ServerCalls.asyncBidiStreamingCall(
         new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
@@ -316,7 +316,7 @@ public class ServerCallsTest {
     ServerCall.Listener<Integer> callListener = callHandler.startCall(serverCall, new Metadata());
     callListener.onMessage(1);
     try {
-      callObserver.get().setOnFinishHandler(new Runnable() {
+      callObserver.get().setOnCloseHandler(new Runnable() {
         @Override
         public void run() {
         }

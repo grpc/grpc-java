@@ -147,26 +147,26 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
   public abstract void setMessageCompression(boolean enable);
 
   /**
-   * Sets a {@link Runnable} to be executed when the call is correctly finished from the server's
+   * Sets a {@link Runnable} to be executed when the call is closed correctly from the server's
    * point of view: either {@link #onCompleted()} or {@link #onError(Throwable)} has been called,
    * all the messages and trailing metadata have been put on the wire and the stream has been
    * closed.
    * Note however that the client still may have not received all the messages due to race
    * conditions or crashes.
    *
-   * <p>Unless server exits abruptly, if both {@code onFinishHandler} and {@code onCancelHandler}
+   * <p>Unless server exits abruptly, if both {@code onCloseHandler} and {@code onCancelHandler}
    * are set, then after a call to either {@link #onCompleted()} or {@link #onError(Throwable)}
-   * exactly 1 of {@code onFinishHandler} and {@code onCancelHandler} will be called eventually.</p>
+   * exactly 1 of {@code onCloseHandler} and {@code onCancelHandler} will be called eventually.</p>
    *
-   * <p>It is guaranteed that execution of the {@code onFinishHandler} is serialized with calls to
+   * <p>It is guaranteed that execution of {@code onCloseHandler} is serialized with calls to
    * the 'inbound' {@link StreamObserver}. That also means that the callback will be delayed if
    * other callbacks are running.</p>
    *
    * <p>This method may only be called during the initial call to the application, before the
-   * service returns its {@code StreamObserver}.</p>
+   * service returns its {@link StreamObserver request observer}.</p>
    *
-   * @param onFinishHandler to call when the call has been correctly finished.
+   * @param onCloseHandler to execute when the call has been closed correctly.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8467")
-  public abstract void setOnFinishHandler(Runnable onFinishHandler);
+  public abstract void setOnCloseHandler(Runnable onCloseHandler);
 }
