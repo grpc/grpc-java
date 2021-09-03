@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -45,7 +46,8 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
   static final long MAX_RING_SIZE = 8 * 1024 * 1024L;
 
   private static final boolean enableRingHash =
-      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH"));
+      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH"))
+          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH"));
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {

@@ -18,7 +18,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.40.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.41.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -145,9 +145,9 @@ subprojects {
             animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.19",
             autovalue: "com.google.auto.value:auto-value:${autovalueVersion}",
             autovalue_annotation: "com.google.auto.value:auto-value-annotations:${autovalueVersion}",
-            errorprone: "com.google.errorprone:error_prone_annotations:2.4.0",
-            cronet_api: 'org.chromium.net:cronet-api:76.3809.111',
-            cronet_embedded: 'org.chromium.net:cronet-embedded:66.3359.158',
+            errorprone: "com.google.errorprone:error_prone_annotations:2.9.0",
+            cronet_api: 'org.chromium.net:cronet-api:92.4515.131',
+            cronet_embedded: 'org.chromium.net:cronet-embedded:92.4515.131',
             gson: "com.google.code.gson:gson:2.8.6",
             guava: "com.google.guava:guava:${guavaVersion}",
             javax_annotation: 'org.apache.tomcat:annotations-api:6.0.53',
@@ -269,11 +269,7 @@ subprojects {
 
         jar.manifest {
             attributes('Implementation-Title': name,
-            'Implementation-Version': version,
-            'Built-By': System.getProperty('user.name'),
-            'Built-JDK': System.getProperty('java.version'),
-            'Source-Compatibility': sourceCompatibility,
-            'Target-Compatibility': targetCompatibility)
+            'Implementation-Version': version)
         }
 
         javadoc.options {

@@ -43,7 +43,7 @@ public abstract class Server {
    * listening socket(s).
    *
    * @return {@code this} object
-   * @throws IllegalStateException if already started
+   * @throws IllegalStateException if already started or shut down
    * @throws IOException if unable to bind
    * @since 1.0.0
    */
@@ -119,6 +119,9 @@ public abstract class Server {
    * {@link #awaitTermination()} or {@link #awaitTermination(long, TimeUnit)} needs to be called to
    * wait for existing calls to finish.
    *
+   * <p>Calling this method before {@code start()} will shut down and terminate the server like
+   * normal, but prevents starting the server in the future.
+   *
    * @return {@code this} object
    * @since 1.0.0
    */
@@ -129,6 +132,9 @@ public abstract class Server {
    * forceful, the shutdown process is still not instantaneous; {@link #isTerminated()} will likely
    * return {@code false} immediately after this method returns. After this call returns, this
    * server has released the listening socket(s) and may be reused by another server.
+   *
+   * <p>Calling this method before {@code start()} will shut down and terminate the server like
+   * normal, but prevents starting the server in the future.
    *
    * @return {@code this} object
    * @since 1.0.0
@@ -157,12 +163,18 @@ public abstract class Server {
   /**
    * Waits for the server to become terminated, giving up if the timeout is reached.
    *
+   * <p>Calling this method before {@code start()} or {@code shutdown()} is permitted and does not
+   * change its behavior.
+   *
    * @return whether the server is terminated, as would be done by {@link #isTerminated()}.
    */
   public abstract boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException;
 
   /**
    * Waits for the server to become terminated.
+   *
+   * <p>Calling this method before {@code start()} or {@code shutdown()} is permitted and does not
+   * change its behavior.
    *
    * @since 1.0.0
    */

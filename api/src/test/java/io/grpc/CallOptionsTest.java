@@ -30,6 +30,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.base.Objects;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.internal.SerializingExecutor;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -271,7 +272,7 @@ public class CallOptionsTest {
     }
   }
 
-  private static class FakeTracerFactory extends ClientStreamTracer.Factory {
+  private static class FakeTracerFactory extends ClientStreamTracer.InternalLimitedInfoFactory {
     final String name;
 
     FakeTracerFactory(String name) {
@@ -279,8 +280,7 @@ public class CallOptionsTest {
     }
 
     @Override
-    public ClientStreamTracer newClientStreamTracer(
-        ClientStreamTracer.StreamInfo info, Metadata headers) {
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
       return new ClientStreamTracer() {};
     }
 

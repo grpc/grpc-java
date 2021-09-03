@@ -467,7 +467,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.11.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
   public T disableRetry() {
     throw new UnsupportedOperationException();
   }
@@ -479,13 +478,9 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * transparent retries, which are safe for non-idempotent RPCs. Service config is ideally provided
    * by the name resolver, but may also be specified via {@link #defaultServiceConfig}.
    *
-   * <p>For the current release, this method may have a side effect that disables Census stats and
-   * tracing.
-   *
    * @return this
    * @since 1.11.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
   public T enableRetry() {
     throw new UnsupportedOperationException();
   }

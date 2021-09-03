@@ -486,9 +486,8 @@ public class NettyServerTest {
     assertEquals(ns.getListenSocketAddress(), socketStats.local);
     assertNull(socketStats.remote);
 
-    // TODO(zpencer): uncomment when sock options are exposed
     // by default, there are some socket options set on the listen socket
-    // assertThat(socketStats.socketOptions.additional).isNotEmpty();
+    assertThat(socketStats.socketOptions.others).isNotEmpty();
 
     // Cleanup
     ns.shutdown();

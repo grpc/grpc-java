@@ -18,7 +18,8 @@ package io.grpc.stub;
 
 /**
  * A refinement of {@link CallStreamObserver} to allows for interaction with call
- * cancellation events on the server side.
+ * cancellation events on the server side. An instance of this class is obtained by casting the
+ * {@code StreamObserver} passed as an argument to service implementations.
  *
  * <p>Like {@code StreamObserver}, implementations are not required to be thread-safe; if multiple
  * threads will be writing to an instance concurrently, the application must synchronize its calls.

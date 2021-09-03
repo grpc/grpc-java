@@ -4,16 +4,6 @@ import org.gradle.api.file.FileTreeElement
 import shadow.org.apache.tools.zip.ZipOutputStream
 import shadow.org.apache.tools.zip.ZipEntry
 
-
-buildscript {
-    repositories {
-        jcenter()
-    }
-    dependencies {
-        classpath "com.github.jengelman.gradle.plugins:shadow:6.1.0"
-    }
-}
-
 plugins {
     id "java"
     id "maven-publish"
@@ -120,8 +110,9 @@ class NettyResourceTransformer implements Transformer {
 
     @Override
     void transform(TransformerContext context) {
+        String updatedPath = context.path.replace("io.netty", "io.grpc.netty.shaded.io.netty")
         String updatedContent = context.is.getText().replace("io.netty", "io.grpc.netty.shaded.io.netty")
-        resources.put(context.path, updatedContent)
+        resources.put(updatedPath, updatedContent)
     }
 
     @Override

@@ -17,6 +17,7 @@
 package io.grpc.util;
 
 import com.google.common.base.MoreObjects;
+import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
@@ -26,6 +27,11 @@ import io.grpc.Status;
 public abstract class ForwardingClientStreamTracer extends ClientStreamTracer {
   /** Returns the underlying {@code ClientStreamTracer}. */
   protected abstract ClientStreamTracer delegate();
+
+  @Override
+  public void streamCreated(Attributes transportAttrs, Metadata headers) {
+    delegate().streamCreated(transportAttrs, headers);
+  }
 
   @Override
   public void outboundHeaders() {

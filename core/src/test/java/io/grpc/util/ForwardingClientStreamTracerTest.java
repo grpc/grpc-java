@@ -40,6 +40,7 @@ public class ForwardingClientStreamTracerTest {
         Collections.<Method>emptyList());
   }
 
+  @SuppressWarnings("deprecation")
   private final class TestClientStreamTracer extends ForwardingClientStreamTracer {
     @Override
     protected ClientStreamTracer delegate() {

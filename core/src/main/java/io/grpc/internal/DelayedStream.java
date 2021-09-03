@@ -324,9 +324,13 @@ class DelayedStream implements ClientStream {
       });
     } else {
       drainPendingCalls();
+      onEarlyCancellation(reason);
       // Note that listener is a DelayedStreamListener
       listener.closed(reason, RpcProgress.PROCESSED, new Metadata());
     }
+  }
+
+  protected void onEarlyCancellation(Status reason) {
   }
 
   @GuardedBy("this")

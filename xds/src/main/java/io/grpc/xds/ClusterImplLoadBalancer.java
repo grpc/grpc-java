@@ -31,8 +31,8 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.ObjectPool;
-import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
@@ -69,7 +69,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_CIRCUIT_BREAKING"));
   @VisibleForTesting
   static boolean enableSecurity =
-      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"));
+      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"))
+          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT"));
   private static final Attributes.Key<ClusterLocalityStats> ATTR_CLUSTER_LOCALITY_STATS =
       Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocalityStats");
 
@@ -329,7 +330,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
   }
 
-  private static final class CountingStreamTracerFactory extends ClientStreamTracer.Factory {
+  private static final class CountingStreamTracerFactory extends
+      ClientStreamTracer.InternalLimitedInfoFactory {
     private ClusterLocalityStats stats;
     private final AtomicLong inFlights;
     @Nullable
