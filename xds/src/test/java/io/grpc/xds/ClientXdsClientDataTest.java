@@ -1182,7 +1182,7 @@ public class ClientXdsClientDataTest {
                             HttpFilter.newBuilder().setName("envoy.filter.bar").setIsOptional(true))
                     .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("The last HttpFilter must be a terminal filter: null");
+    thrown.expectMessage("The last HttpFilter must be a terminal filter: envoy.filter.bar");
     ClientXdsClient.parseHttpConnectionManager(
             hcm, new HashSet<String>(), filterRegistry, true /* parseHttpFilter */,
             true /* does not matter */);
@@ -1194,7 +1194,7 @@ public class ClientXdsClientDataTest {
             HttpConnectionManager.newBuilder()
                     .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("The last HttpFilter must be a terminal filter: null");
+    thrown.expectMessage("Missing HttpFilter in HttpConnectionManager.");
     ClientXdsClient.parseHttpConnectionManager(
             hcm, new HashSet<String>(), filterRegistry, true /* parseHttpFilter */,
             true /* does not matter */);

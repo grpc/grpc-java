@@ -736,9 +736,11 @@ final class ClientXdsClient extends AbstractXdsClient {
     // Parse http filters.
     List<NamedFilterConfig> filterConfigs = null;
     if (parseHttpFilter) {
+      if (isForClient && proto.getHttpFiltersList().isEmpty()) {
+        throw new ResourceInvalidException("Missing HttpFilter in HttpConnectionManager.");
+      }
       filterConfigs = new ArrayList<>();
       Set<String> names = new HashSet<>();
-      NamedFilterConfig lastFilter = new NamedFilterConfig(null, null);
       for (int i = 0; i < proto.getHttpFiltersCount(); i++) {
         io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
                 httpFilter = proto.getHttpFiltersList().get(i);
@@ -749,8 +751,12 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
         StructOrError<FilterConfig> filterConfig =
             parseHttpFilter(httpFilter, filterRegistry, isForClient);
-        if (i == proto.getHttpFiltersCount() - 1 && filterConfig != null) {
-          lastFilter = new NamedFilterConfig(filterName, filterConfig.struct);
+        if (isForClient) {
+          if ((i == proto.getHttpFiltersCount() - 1)
+                  && (filterConfig == null || !isTerminalFilter(filterConfig.struct))) {
+            throw new ResourceInvalidException("The last HttpFilter must be a terminal filter: "
+                    + filterName);
+          }
         }
         if (filterConfig == null) {
           continue;
@@ -767,10 +773,6 @@ final class ClientXdsClient extends AbstractXdsClient {
           }
         }
         filterConfigs.add(new NamedFilterConfig(filterName, filterConfig.struct));
-      }
-      if (isForClient && !isTerminalFilter(lastFilter.filterConfig)) {
-        throw new ResourceInvalidException("The last HttpFilter must be a terminal filter: "
-                + lastFilter.name);
       }
     }
 
