@@ -149,9 +149,9 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
   /**
    * Sets a {@link Runnable} to be executed when the call is closed cleanly from the server's
    * point of view: either {@link #onCompleted()} or {@link #onError(Throwable)} has been called,
-   * all the messages and trailing metadata have been put on the wire and the stream has been
-   * closed. Note however that the client still may have not received all the messages due to
-   * network delay, client crashes, and cancellation races.
+   * all the messages and trailing metadata have been sent and the stream has been closed. Note
+   * however that the client still may have not received all the messages due to network delay,
+   * client crashes, and cancellation races.
    *
    * <p>Exactly one of {@code onCloseHandler} and {@code onCancelHandler} is guaranteed to be called
    * when the RPC terminates.</p>
