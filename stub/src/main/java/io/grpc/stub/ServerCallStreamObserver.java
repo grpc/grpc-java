@@ -153,9 +153,8 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    * closed. Note however that the client still may have not received all the messages due to
    * network delay, client crashes, and cancellation races.
    *
-   * <p>Unless server exits abruptly, if both {@code onCloseHandler} and {@code onCancelHandler}
-   * are set, then after a call to either {@link #onCompleted()} or {@link #onError(Throwable)}
-   * exactly 1 of {@code onCloseHandler} and {@code onCancelHandler} will be called eventually.</p>
+   * <p>Exactly one of {@code onCloseHandler} and {@code onCancelHandler} is guaranteed to be called
+   * when the RPC terminates.</p>
    *
    * <p>It is guaranteed that execution of {@code onCloseHandler} is serialized with calls to
    * the 'inbound' {@link StreamObserver}. That also means that the callback will be delayed if
