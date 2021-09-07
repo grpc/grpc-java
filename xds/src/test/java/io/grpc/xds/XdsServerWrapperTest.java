@@ -18,7 +18,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsServerWrapper.ATTR_SERVER_ROUTING_CONFIG;
+import static io.grpc.xds.XdsServerWrapper.ATTR_SERVER_ROUTING_CONFIG_REF;
 import static io.grpc.xds.XdsServerWrapper.RETRY_DELAY_NANOS;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -378,10 +378,9 @@ public class XdsServerWrapperTest {
     start.get(5000, TimeUnit.MILLISECONDS);
     FilterChainSelector selector = selectorRef.get();
     assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
-    assertThat(selector.getRoutingConfigs()).isEqualTo(ImmutableMap.of(
-            filterChain, ServerRoutingConfig.create(httpConnectionManager.httpFilterConfigs(),
-                    httpConnectionManager.virtualHosts())
-    ));
+    assertThat(selector.getRoutingConfigs().get(filterChain.getName()).routingConfigRef.get())
+        .isEqualTo(ServerRoutingConfig.create(httpConnectionManager.httpFilterConfigs(),
+            httpConnectionManager.virtualHosts()));
     verify(listener).onServing();
     verify(mockServer).start();
   }
@@ -427,15 +426,16 @@ public class XdsServerWrapperTest {
             Collections.singletonList(createVirtualHost("virtual-host-2")));
     start.get(5000, TimeUnit.MILLISECONDS);
     verify(mockServer).start();
-    assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
-            f0, ServerRoutingConfig.create(
-                    hcmVirtual.httpFilterConfigs(), hcmVirtual.virtualHosts()),
-            f2, ServerRoutingConfig.create(f2.getHttpConnectionManager().httpFilterConfigs(),
-                    Collections.singletonList(createVirtualHost("virtual-host-1")))
-    ));
-    assertThat(selectorRef.get().getDefaultRoutingConfig()).isEqualTo(
-            ServerRoutingConfig.create(f3.getHttpConnectionManager().httpFilterConfigs(),
-                    Collections.singletonList(createVirtualHost("virtual-host-2"))));
+    assertThat(selectorRef.get().getRoutingConfigRef(f0.getName()).get()).isEqualTo(
+        ServerRoutingConfig.create(
+                    hcmVirtual.httpFilterConfigs(), hcmVirtual.virtualHosts()));
+    assertThat(selectorRef.get().getRoutingConfigRef(f2.getName()).get()).isEqualTo(
+        ServerRoutingConfig.create(f2.getHttpConnectionManager().httpFilterConfigs(),
+            Collections.singletonList(createVirtualHost("virtual-host-1")))
+    );
+    assertThat(selectorRef.get().getDefaultRoutingConfigRef().get()).isEqualTo(
+        ServerRoutingConfig.create(f3.getHttpConnectionManager().httpFilterConfigs(),
+            Collections.singletonList(createVirtualHost("virtual-host-2"))));
     assertThat(selectorRef.get().getDefaultSslContextProviderSupplier()).isEqualTo(
             f3.getSslContextProviderSupplier());
   }
@@ -469,14 +469,14 @@ public class XdsServerWrapperTest {
             Collections.singletonList(createVirtualHost("virtual-host-0")));
     start.get(5000, TimeUnit.MILLISECONDS);
     verify(mockServer, times(1)).start();
-    assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
-            f0, ServerRoutingConfig.create(
-                    f0.getHttpConnectionManager().httpFilterConfigs(),
-                    Collections.singletonList(createVirtualHost("virtual-host-0"))),
-            f1, ServerRoutingConfig.create(f1.getHttpConnectionManager().httpFilterConfigs(),
-                    Collections.singletonList(createVirtualHost("virtual-host-0")))
-    ));
-    assertThat(selectorRef.get().getDefaultRoutingConfig()).isEqualTo(
+    assertThat(selectorRef.get().getRoutingConfigs().size()).isEqualTo(2);
+    assertThat(selectorRef.get().getRoutingConfigs().get(f0.getName()).routingConfigRef.get())
+        .isEqualTo(ServerRoutingConfig.create(f0.getHttpConnectionManager().httpFilterConfigs(),
+                    Collections.singletonList(createVirtualHost("virtual-host-0"))));
+    assertThat(selectorRef.get().getRoutingConfigs().get(f1.getName()).routingConfigRef.get())
+        .isEqualTo(ServerRoutingConfig.create(f1.getHttpConnectionManager().httpFilterConfigs(),
+                    Collections.singletonList(createVirtualHost("virtual-host-0"))));
+    assertThat(selectorRef.get().getDefaultRoutingConfigRef().get()).isEqualTo(
             ServerRoutingConfig.create(f2.getHttpConnectionManager().httpFilterConfigs(),
                     Collections.singletonList(createVirtualHost("virtual-host-0"))));
     assertThat(selectorRef.get().getDefaultSslContextProviderSupplier()).isSameInstanceAs(
@@ -491,14 +491,14 @@ public class XdsServerWrapperTest {
             Collections.singletonList(createVirtualHost("virtual-host-1")));
     xdsClient.deliverRdsUpdate("r0",
             Collections.singletonList(createVirtualHost("virtual-host-0")));
-    assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
-            f1, ServerRoutingConfig.create(
-                    f1.getHttpConnectionManager().httpFilterConfigs(),
-                    Collections.singletonList(createVirtualHost("virtual-host-0"))),
-            f3, ServerRoutingConfig.create(f3.getHttpConnectionManager().httpFilterConfigs(),
-                    Collections.singletonList(createVirtualHost("virtual-host-0")))
-    ));
-    assertThat(selectorRef.get().getDefaultRoutingConfig()).isEqualTo(
+    assertThat(selectorRef.get().getRoutingConfigs().size()).isEqualTo(2);
+    assertThat(selectorRef.get().getRoutingConfigs().get(f1.getName()).routingConfigRef.get())
+        .isEqualTo(ServerRoutingConfig.create(f1.getHttpConnectionManager().httpFilterConfigs(),
+            Collections.singletonList(createVirtualHost("virtual-host-0"))));
+    assertThat(selectorRef.get().getRoutingConfigs().get(f3.getName()).routingConfigRef.get())
+        .isEqualTo(ServerRoutingConfig.create(f3.getHttpConnectionManager().httpFilterConfigs(),
+                    Collections.singletonList(createVirtualHost("virtual-host-0"))));
+    assertThat(selectorRef.get().getDefaultRoutingConfigRef().get()).isEqualTo(
             ServerRoutingConfig.create(f4.getHttpConnectionManager().httpFilterConfigs(),
                     Collections.singletonList(createVirtualHost("virtual-host-1"))));
     assertThat(selectorRef.get().getDefaultSslContextProviderSupplier()).isSameInstanceAs(
@@ -535,24 +535,24 @@ public class XdsServerWrapperTest {
     xdsClient.rdsCount.await();
     xdsClient.rdsWatchers.get("r0").onError(Status.CANCELLED);
     start.get(5000, TimeUnit.MILLISECONDS);
-    assertThat(selectorRef.get().getRoutingConfigs().get(f1)).isEqualTo(ServerRoutingConfig.create(
-            ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of())
-    );
+    assertThat(selectorRef.get().getRoutingConfigs().get(f1.getName()).routingConfigRef.get())
+        .isEqualTo(ServerRoutingConfig.create(ImmutableList.<NamedFilterConfig>of(),
+            ImmutableList.<VirtualHost>of()));
     xdsClient.deliverRdsUpdate("r0",
-            Collections.singletonList(createVirtualHost("virtual-host-1")));
-    assertThat(selectorRef.get().getRoutingConfigs().get(f1)).isEqualTo(
-            ServerRoutingConfig.create(f1.getHttpConnectionManager().httpFilterConfigs(),
+        Collections.singletonList(createVirtualHost("virtual-host-1")));
+    assertThat(selectorRef.get().getRoutingConfigs().get(f1.getName()).routingConfigRef.get())
+        .isEqualTo(ServerRoutingConfig.create(f1.getHttpConnectionManager().httpFilterConfigs(),
             Collections.singletonList(createVirtualHost("virtual-host-1"))));
 
     xdsClient.rdsWatchers.get("r0").onError(Status.CANCELLED);
-    assertThat(selectorRef.get().getRoutingConfigs().get(f1)).isEqualTo(
-            ServerRoutingConfig.create(f1.getHttpConnectionManager().httpFilterConfigs(),
-                    Collections.singletonList(createVirtualHost("virtual-host-1"))));
+    assertThat(selectorRef.get().getRoutingConfigs().get(f1.getName()).routingConfigRef.get())
+        .isEqualTo(ServerRoutingConfig.create(f1.getHttpConnectionManager().httpFilterConfigs(),
+            Collections.singletonList(createVirtualHost("virtual-host-1"))));
 
     xdsClient.rdsWatchers.get("r0").onResourceDoesNotExist("r0");
-    assertThat(selectorRef.get().getRoutingConfigs().get(f1)).isEqualTo(ServerRoutingConfig.create(
-            ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of())
-    );
+    assertThat(selectorRef.get().getRoutingConfigs().get(f1.getName()).routingConfigRef.get())
+        .isEqualTo(ServerRoutingConfig.create(
+            ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of()));
   }
 
 
@@ -602,24 +602,24 @@ public class XdsServerWrapperTest {
     verify(mockBuilder, times(1)).build();
     verify(mockServer, times(2)).start();
     verify(listener, times(1)).onServing();
-    assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
-            filterChain1, ServerRoutingConfig.create(
-                    filterChain1.getHttpConnectionManager().httpFilterConfigs(),
-                    Collections.singletonList(createVirtualHost("virtual-host-1")))
-    ));
+    assertThat(selectorRef.get().getRoutingConfigs()
+        .get(filterChain1.getName()).routingConfigRef.get()).isEqualTo(
+            ServerRoutingConfig.create(
+                filterChain1.getHttpConnectionManager().httpFilterConfigs(),
+                Collections.singletonList(createVirtualHost("virtual-host-1"))));
     // xds update after start
     xdsClient.deliverRdsUpdate("rds",
-            Collections.singletonList(createVirtualHost("virtual-host-2")));
+        Collections.singletonList(createVirtualHost("virtual-host-2")));
     assertThat(sslSupplier1.isShutdown()).isFalse();
     xdsClient.ldsWatcher.onError(Status.DEADLINE_EXCEEDED);
     verify(mockBuilder, times(1)).build();
     verify(mockServer, times(2)).start();
     verify(listener, times(2)).onNotServing(any(StatusException.class));
-    assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
-            filterChain1, ServerRoutingConfig.create(
-                    filterChain1.getHttpConnectionManager().httpFilterConfigs(),
-                    Collections.singletonList(createVirtualHost("virtual-host-2")))
-    ));
+    assertThat(selectorRef.get().getRoutingConfigRef(filterChain1.getName()).get()).isEqualTo(
+        ServerRoutingConfig.create(
+            filterChain1.getHttpConnectionManager().httpFilterConfigs(),
+            Collections.singletonList(createVirtualHost("virtual-host-2")))
+    );
     assertThat(sslSupplier1.isShutdown()).isFalse();
 
     // not serving after serving
@@ -652,11 +652,11 @@ public class XdsServerWrapperTest {
     verify(mockServer, times(3)).start();
     verify(listener, times(1)).onServing();
     verify(listener, times(3)).onNotServing(any(StatusException.class));
-    assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
-            filterChain2, ServerRoutingConfig.create(
-                    filterChain2.getHttpConnectionManager().httpFilterConfigs(),
-                    Collections.singletonList(createVirtualHost("virtual-host-1")))
-    ));
+    assertThat(selectorRef.get().getRoutingConfigRef(filterChain2.getName()).get()).isEqualTo(
+        ServerRoutingConfig.create(
+            filterChain2.getHttpConnectionManager().httpFilterConfigs(),
+            Collections.singletonList(createVirtualHost("virtual-host-1")))
+    );
     assertThat(executor.numPendingTasks()).isEqualTo(1);
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
     verify(mockServer, times(4)).shutdown();
@@ -676,11 +676,11 @@ public class XdsServerWrapperTest {
     verify(listener, times(1)).onServing();
     when(mockServer.isShutdown()).thenReturn(false);
     verify(listener, times(4)).onNotServing(any(StatusException.class));
-    assertThat(selectorRef.get().getRoutingConfigs()).isEqualTo(ImmutableMap.of(
-            filterChain3, ServerRoutingConfig.create(
-                    filterChain3.getHttpConnectionManager().httpFilterConfigs(),
-                    Collections.singletonList(createVirtualHost("virtual-host-1")))
-    ));
+    assertThat(selectorRef.get().getRoutingConfigRef(filterChain3.getName()).get()).isEqualTo(
+        ServerRoutingConfig.create(
+            filterChain3.getHttpConnectionManager().httpFilterConfigs(),
+            Collections.singletonList(createVirtualHost("virtual-host-1")))
+    );
     xdsServerWrapper.shutdown();
     verify(mockServer, times(5)).shutdown();
     assertThat(sslSupplier3.isShutdown()).isTrue();
@@ -711,7 +711,8 @@ public class XdsServerWrapperTest {
             "foo.google.com", "filter-type-url");
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     when(serverCall.getAttributes()).thenReturn(
-            Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, routingConfig).build());
+        Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG_REF,
+            new AtomicReference<>(routingConfig)).build());
     when(serverCall.getMethodDescriptor()).thenReturn(createMethod("FooService/barMethod"));
     when(serverCall.getAuthority()).thenReturn("foo.google.com");
 
@@ -752,7 +753,8 @@ public class XdsServerWrapperTest {
             "foo.google.com", "filter-type-url");
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     when(serverCall.getAttributes()).thenReturn(
-            Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, routingConfig).build());
+        Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG_REF,
+            new AtomicReference<>(routingConfig)).build());
     when(serverCall.getAuthority()).thenReturn("not-match.google.com");
 
     Filter filter = mock(Filter.class);
@@ -791,7 +793,8 @@ public class XdsServerWrapperTest {
             "foo.google.com", "filter-type-url");
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     when(serverCall.getAttributes()).thenReturn(
-            Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, routingConfig).build());
+        Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG_REF,
+            new AtomicReference<ServerRoutingConfig>(routingConfig)).build());
     when(serverCall.getMethodDescriptor()).thenReturn(createMethod("NotMatchMethod"));
     when(serverCall.getAuthority()).thenReturn("foo.google.com");
 
@@ -828,10 +831,11 @@ public class XdsServerWrapperTest {
     verify(mockBuilder).intercept(interceptorCaptor.capture());
     ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
     ServerRoutingConfig failingConfig = ServerRoutingConfig.create(
-            ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of());
+        ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of());
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     when(serverCall.getAttributes()).thenReturn(
-            Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, failingConfig).build());
+        Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG_REF,
+            new AtomicReference<>(failingConfig)).build());
 
     ServerCallHandler<Void, Void> next = mock(ServerCallHandler.class);
     interceptor.interceptCall(serverCall, new Metadata(), next);
@@ -907,7 +911,8 @@ public class XdsServerWrapperTest {
     final ServerCall.Listener<Void> listener = new ServerCall.Listener<Void>() {};
     when(mockNext.startCall(any(ServerCall.class), any(Metadata.class))).thenReturn(listener);
     when(serverCall.getAttributes()).thenReturn(
-            Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, routingConfig).build());
+        Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG_REF,
+            new AtomicReference<>(routingConfig)).build());
     when(serverCall.getMethodDescriptor()).thenReturn(createMethod("FooService/barMethod"));
     when(serverCall.getAuthority()).thenReturn("foo.google.com");
 

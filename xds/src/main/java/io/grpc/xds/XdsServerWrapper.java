@@ -87,8 +87,9 @@ final class XdsServerWrapper extends Server {
         }
       });
 
-  public static final Attributes.Key<ServerRoutingConfig> ATTR_SERVER_ROUTING_CONFIG =
-          Attributes.Key.create("io.grpc.xds.ServerWrapper.serverRoutingConfig");
+  public static final Attributes.Key<AtomicReference<ServerRoutingConfig>>
+      ATTR_SERVER_ROUTING_CONFIG_REF =
+      Attributes.Key.create("io.grpc.xds.ServerWrapper.serverRoutingConfig");
 
   @VisibleForTesting
   static final long RETRY_DELAY_NANOS = TimeUnit.MINUTES.toNanos(1);
@@ -456,23 +457,47 @@ final class XdsServerWrapper extends Server {
      * just complete and the newest filter chain is ready to be applied to the
      * filterChainSelectorRef. Call updateSelector(false) for subsequent routing update
      * corresponding to the same filter chain list.
+     *
+     * <p>Also use firstTimeNoPendingRds to retrieve and reset existing routing config references
+     * in order to immediately apply rds changes to new RPCs for the selected filter chain on the
+     * same connection.
      */
     private void updateSelector(boolean firstTimeNoPendingRds) {
-      Map<FilterChain, ServerRoutingConfig> filterChainRouting = new HashMap<>();
+      Map<String, FilterChainSelectorEntry> filterChainRouting = new HashMap<>();
       for (FilterChain filterChain: filterChains) {
-        filterChainRouting.put(filterChain, generateRoutingConfig(filterChain));
+        AtomicReference<ServerRoutingConfig> routingConfigRef;
+        if (firstTimeNoPendingRds) {
+          routingConfigRef = new AtomicReference<>();
+          routingConfigRef.set(generateRoutingConfig(filterChain));
+          filterChainRouting.put(filterChain.getName(),
+              new FilterChainSelectorEntry(filterChain, routingConfigRef));
+        } else {
+          checkNotNull(filterChainSelectorRef.get(), "filterChainSelectorRef");
+          routingConfigRef = filterChainSelectorRef.get().getRoutingConfigRef(
+              filterChain.getName());
+          routingConfigRef.set(generateRoutingConfig(filterChain));
+        }
       }
-      FilterChainSelector selector = new FilterChainSelector(
-          Collections.unmodifiableMap(filterChainRouting),
-          defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
-          defaultFilterChain == null ? null : generateRoutingConfig(defaultFilterChain));
-      List<SslContextProviderSupplier> toRelease = Collections.emptyList();
+      AtomicReference<ServerRoutingConfig> defaultRoutingConfigRef;
       if (firstTimeNoPendingRds) {
-        toRelease = getSuppliersInUse();
+        defaultRoutingConfigRef = new AtomicReference<>();
+      } else {
+        checkNotNull(filterChainSelectorRef.get(), "filterChainSelectorRef");
+        defaultRoutingConfigRef = filterChainSelectorRef.get().getDefaultRoutingConfigRef();
       }
-      filterChainSelectorRef.set(selector);
-      for (SslContextProviderSupplier e: toRelease) {
-        e.close();
+      if (defaultFilterChain != null) {
+        defaultRoutingConfigRef.set(generateRoutingConfig(defaultFilterChain));
+      }
+      if (firstTimeNoPendingRds) {
+        FilterChainSelector selector = new FilterChainSelector(
+            Collections.unmodifiableMap(filterChainRouting),
+            defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
+            defaultRoutingConfigRef);
+        List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
+        filterChainSelectorRef.set(selector);
+        for (SslContextProviderSupplier e: toRelease) {
+          e.close();
+        }
       }
       startDelegateServer();
     }
@@ -525,9 +550,9 @@ final class XdsServerWrapper extends Server {
       List<SslContextProviderSupplier> toRelease = new ArrayList<>();
       FilterChainSelector selector = filterChainSelectorRef.get();
       if (selector != null) {
-        for (FilterChain f: selector.getRoutingConfigs().keySet()) {
-          if (f.getSslContextProviderSupplier() != null) {
-            toRelease.add(f.getSslContextProviderSupplier());
+        for (FilterChainSelectorEntry f: selector.getRoutingConfigs().values()) {
+          if (f.filterChain.getSslContextProviderSupplier() != null) {
+            toRelease.add(f.filterChain.getSslContextProviderSupplier());
           }
         }
         SslContextProviderSupplier defaultSupplier =
@@ -643,7 +668,10 @@ final class XdsServerWrapper extends Server {
     @Override
     public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
         Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-      ServerRoutingConfig routingConfig = call.getAttributes().get(ATTR_SERVER_ROUTING_CONFIG);
+      AtomicReference<ServerRoutingConfig> routingConfigRef =
+              call.getAttributes().get(ATTR_SERVER_ROUTING_CONFIG_REF);
+      ServerRoutingConfig routingConfig =
+              routingConfigRef == null ? null : routingConfigRef.get();
       if (routingConfig == null
               || routingConfig.equals(ServerRoutingConfig.FAILING_ROUTING_CONFIG)) {
         String errorMsg = "Missing xDS routing config. " + (routingConfig == null ? "" :
@@ -745,6 +773,17 @@ final class XdsServerWrapper extends Server {
       checkNotNull(virtualHosts, "virtualHosts");
       return new AutoValue_XdsServerWrapper_ServerRoutingConfig(
               ImmutableList.copyOf(httpFilterConfigs), ImmutableList.copyOf(virtualHosts));
+    }
+  }
+
+  static class FilterChainSelectorEntry {
+    final FilterChain filterChain;
+    final AtomicReference<ServerRoutingConfig> routingConfigRef;
+
+    public FilterChainSelectorEntry(FilterChain filterChain,
+                                    AtomicReference<ServerRoutingConfig> routingConfigRef) {
+      this.filterChain = filterChain;
+      this.routingConfigRef = routingConfigRef;
     }
   }
 }

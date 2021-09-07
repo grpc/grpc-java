@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_REF;
-import static io.grpc.xds.XdsServerWrapper.ATTR_SERVER_ROUTING_CONFIG;
+import static io.grpc.xds.XdsServerWrapper.ATTR_SERVER_ROUTING_CONFIG_REF;
 import static io.grpc.xds.internal.sds.SdsProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -51,8 +51,10 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
@@ -107,7 +109,7 @@ final class FilterChainMatchingProtocolNegotiators {
       // TODO(zivy): merge into one key and take care of this outer class visibility.
       Attributes attr = InternalProtocolNegotiationEvent.getAttributes(pne).toBuilder()
               .set(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER, config.sslContextProviderSupplier)
-              .set(ATTR_SERVER_ROUTING_CONFIG, config.routingConfig)
+              .set(ATTR_SERVER_ROUTING_CONFIG_REF, config.routingConfig)
               .build();
       pne = InternalProtocolNegotiationEvent.withAttributes(pne, attr);
       ctx.pipeline().replace(this, null, delegate.newHandler(grpcHandler));
@@ -116,28 +118,34 @@ final class FilterChainMatchingProtocolNegotiators {
 
     static final class FilterChainSelector {
       public static final FilterChainSelector NO_FILTER_CHAIN = new FilterChainSelector(
-              Collections.<FilterChain, ServerRoutingConfig>emptyMap(), null, null);
-      private final Map<FilterChain, ServerRoutingConfig> routingConfigs;
+          Collections.<String, XdsServerWrapper.FilterChainSelectorEntry>emptyMap(),
+          null, new AtomicReference<ServerRoutingConfig>());
+      private final Map<String, XdsServerWrapper.FilterChainSelectorEntry> routingConfigs;
       @Nullable
       private final SslContextProviderSupplier defaultSslContextProviderSupplier;
-      @Nullable
-      private final ServerRoutingConfig defaultRoutingConfig;
+      private final AtomicReference<ServerRoutingConfig> defaultRoutingConfig;
+      private final Set<FilterChain> selectingFilterChains = new HashSet<>();
 
-      FilterChainSelector(Map<FilterChain, ServerRoutingConfig> routingConfigs,
+      FilterChainSelector(Map<String, XdsServerWrapper.FilterChainSelectorEntry> routingConfigs,
                           @Nullable SslContextProviderSupplier defaultSslContextProviderSupplier,
-                          @Nullable ServerRoutingConfig defaultRoutingConfig) {
+                          AtomicReference<ServerRoutingConfig> defaultRoutingConfig) {
         this.routingConfigs = checkNotNull(routingConfigs, "routingConfigs");
+        for (XdsServerWrapper.FilterChainSelectorEntry entry : routingConfigs.values()) {
+          selectingFilterChains.add(checkNotNull(entry.filterChain, "filterChain"));
+        }
         this.defaultSslContextProviderSupplier = defaultSslContextProviderSupplier;
-        this.defaultRoutingConfig = defaultRoutingConfig;
+        this.defaultRoutingConfig = checkNotNull(defaultRoutingConfig, "defaultRoutingConfig");
       }
 
-      @VisibleForTesting
-      Map<FilterChain, ServerRoutingConfig> getRoutingConfigs() {
+      Map<String, XdsServerWrapper.FilterChainSelectorEntry> getRoutingConfigs() {
         return routingConfigs;
       }
 
-      @VisibleForTesting
-      ServerRoutingConfig getDefaultRoutingConfig() {
+      AtomicReference<ServerRoutingConfig> getRoutingConfigRef(String filterChainName) {
+        return routingConfigs.get(filterChainName).routingConfigRef;
+      }
+
+      AtomicReference<ServerRoutingConfig> getDefaultRoutingConfigRef() {
         return defaultRoutingConfig;
       }
 
@@ -150,7 +158,7 @@ final class FilterChainMatchingProtocolNegotiators {
        * Throws IllegalStateException when no exact one match, and we should close the connection.
        */
       SelectedConfig select(InetSocketAddress localAddr, InetSocketAddress remoteAddr) {
-        Collection<FilterChain> filterChains = routingConfigs.keySet();
+        Collection<FilterChain> filterChains = new HashSet<>(selectingFilterChains);
         filterChains = filterOnDestinationPort(filterChains);
         filterChains = filterOnIpAddress(filterChains, localAddr.getAddress(), true);
         filterChains = filterOnServerNames(filterChains);
@@ -168,9 +176,10 @@ final class FilterChainMatchingProtocolNegotiators {
         if (filterChains.size() == 1) {
           FilterChain selected = Iterables.getOnlyElement(filterChains);
           return new SelectedConfig(
-                  routingConfigs.get(selected), selected.getSslContextProviderSupplier());
+                  routingConfigs.get(selected.getName()).routingConfigRef,
+                  selected.getSslContextProviderSupplier());
         }
-        if (defaultRoutingConfig != null) {
+        if (defaultRoutingConfig.get() != null) {
           return new SelectedConfig(defaultRoutingConfig, defaultSslContextProviderSupplier);
         }
         return null;
@@ -374,11 +383,11 @@ final class FilterChainMatchingProtocolNegotiators {
    * The FilterChain level configuration.
    */
   private static final class SelectedConfig {
-    private final ServerRoutingConfig routingConfig;
+    private final AtomicReference<ServerRoutingConfig> routingConfig;
     @Nullable
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    private SelectedConfig(ServerRoutingConfig routingConfig,
+    private SelectedConfig(AtomicReference<ServerRoutingConfig> routingConfig,
                            @Nullable SslContextProviderSupplier sslContextProviderSupplier) {
       this.routingConfig = checkNotNull(routingConfig, "routingConfig");
       this.sslContextProviderSupplier = sslContextProviderSupplier;
