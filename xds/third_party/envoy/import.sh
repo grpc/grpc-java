@@ -18,7 +18,7 @@
 set -e
 BRANCH=main
 # import VERSION from one of the google internal CLs
-VERSION=62ca8bd2b5960ed1c6ce2be97d3120cee719ecab
+VERSION=c223756b0856f734a6a5cff2d0b95388cd2583d4
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api

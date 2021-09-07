@@ -1321,6 +1321,7 @@ public abstract class ClientXdsClientTestBase {
    * CDS response containing UpstreamTlsContext for a cluster.
    */
   @Test
+  @SuppressWarnings("deprecation")
   public void cdsResponseWithUpstreamTlsContext() {
     Assume.assumeTrue(useProtocolV3());
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);

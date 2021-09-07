@@ -535,6 +535,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     protected Message buildUpstreamTlsContext(String instanceName, String certName) {
       CommonTlsContext.Builder commonTlsContextBuilder = CommonTlsContext.newBuilder();
       if (instanceName != null && certName != null) {
