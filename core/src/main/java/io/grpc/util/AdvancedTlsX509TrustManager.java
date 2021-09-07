@@ -223,7 +223,8 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       ScheduledExecutorService executor) throws IOException, GeneralSecurityException {
     long updatedTime = readAndUpdate(trustCertFile, 0);
     if (updatedTime == 0) {
-      throw new GeneralSecurityException("The initial update was not successful");
+      throw new GeneralSecurityException(
+          "Files were unmodified before their initial update. Probably a bug.");
     }
     final ScheduledFuture<?> future =
         executor.scheduleWithFixedDelay(

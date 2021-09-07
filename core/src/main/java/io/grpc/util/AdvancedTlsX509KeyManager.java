@@ -128,7 +128,8 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
       GeneralSecurityException {
     UpdateResult newResult = readAndUpdate(keyFile, certFile, 0, 0);
     if (!newResult.success) {
-      throw new GeneralSecurityException("The initial update was not successful");
+      throw new GeneralSecurityException(
+          "Files were unmodified before their initial update. Probably a bug.");
     }
     final ScheduledFuture<?> future =
         executor.scheduleWithFixedDelay(
