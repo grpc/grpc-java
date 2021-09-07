@@ -256,6 +256,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseRouteMatch_withHeaderMatcher() {
     io.envoyproxy.envoy.config.route.v3.RouteMatch proto =
         io.envoyproxy.envoy.config.route.v3.RouteMatch.newBuilder()
@@ -336,6 +337,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseHeaderMatcher_withExactMatch() {
     io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
@@ -349,6 +351,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseHeaderMatcher_withSafeRegExMatch() {
     io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
@@ -388,6 +391,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseHeaderMatcher_withPrefixMatch() {
     io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
@@ -401,6 +405,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseHeaderMatcher_withSuffixMatch() {
     io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
@@ -414,6 +419,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void parseHeaderMatcher_malformedRegExPattern() {
     io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto =
         io.envoyproxy.envoy.config.route.v3.HeaderMatcher.newBuilder()
@@ -1562,6 +1568,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_validationContextCertificateProvider()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1575,6 +1582,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_validationContextCertificateProviderInstance()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1600,6 +1608,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_tlsCertificateProviderInstance()
           throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1611,6 +1620,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_tlsCertificateProviderInstance_absentInBootstrapFile()
           throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1625,6 +1635,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_validationContextProviderInstance()
           throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1639,6 +1650,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_validationContextProviderInstance_absentInBootstrapFile()
           throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1679,6 +1691,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_tlsCertificateCertificateProvider()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1716,6 +1729,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_combinedValContextWithDefaultValContextForServer()
       throws ResourceInvalidException, InvalidProtocolBufferException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1735,6 +1749,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_combinedValContextWithDefaultValContextVerifyCertSpki()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1754,6 +1769,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_combinedValContextWithDefaultValContextVerifyCertHash()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1773,6 +1789,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_combinedValContextDfltValContextRequireSignedCertTimestamp()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1793,6 +1810,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_combinedValidationContextWithDefaultValidationContextCrl()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1811,6 +1829,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_combinedValContextWithDfltValContextCustomValidatorConfig()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -1838,6 +1857,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateDownstreamTlsContext_hasRequireSni() throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
@@ -1857,6 +1877,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void validateDownstreamTlsContext_hasOcspStaplePolicy() throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(

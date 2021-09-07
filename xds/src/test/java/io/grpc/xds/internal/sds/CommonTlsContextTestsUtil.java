@@ -62,6 +62,7 @@ public class CommonTlsContextTestsUtil {
   public static final String BAD_CLIENT_KEY_FILE = "badclient.key";
 
   /** takes additional values and creates CombinedCertificateValidationContext as needed. */
+  @SuppressWarnings("deprecation")
   static CommonTlsContext buildCommonTlsContextWithAdditionalValues(
       String certInstanceName, String certName,
       String validationContextCertInstanceName, String validationContextCertName,
@@ -208,6 +209,7 @@ public class CommonTlsContextTestsUtil {
     return text;
   }
 
+  @SuppressWarnings("deprecation")
   private static CommonTlsContext buildCommonTlsContextForCertProviderInstance(
       String certInstanceName,
       String certName,
@@ -232,6 +234,7 @@ public class CommonTlsContextTestsUtil {
     return builder.build();
   }
 
+  @SuppressWarnings("deprecation")
   private static CommonTlsContext.Builder addCertificateValidationContext(
       CommonTlsContext.Builder builder,
       String rootInstanceName,
