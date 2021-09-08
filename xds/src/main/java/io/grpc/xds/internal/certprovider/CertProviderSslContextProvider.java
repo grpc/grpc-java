@@ -18,9 +18,11 @@ package io.grpc.xds.internal.certprovider;
 
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CertificateProviderInstance;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
+import io.grpc.xds.internal.sds.CommonTlsContextUtil;
 import io.grpc.xds.internal.sds.DynamicSslContextProvider;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
@@ -86,6 +88,52 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   private static CertificateProviderInfo getCertProviderConfig(
       @Nullable Map<String, CertificateProviderInfo> certProviders, String pluginInstanceName) {
     return certProviders != null ? certProviders.get(pluginInstanceName) : null;
+  }
+
+  @Nullable
+  protected static CertificateProviderInstance getCertProviderInstance(
+      CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasTlsCertificateProviderInstance()) {
+      return CommonTlsContextUtil.convert(commonTlsContext.getTlsCertificateProviderInstance());
+    } else if (commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
+      return commonTlsContext.getTlsCertificateCertificateProviderInstance();
+    }
+    return null;
+  }
+
+  @Nullable
+  protected static CertificateValidationContext getStaticValidationContext(
+      CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasValidationContext()) {
+      return commonTlsContext.getValidationContext();
+    } else if (commonTlsContext.hasCombinedValidationContext()) {
+      CommonTlsContext.CombinedCertificateValidationContext combinedValidationContext =
+          commonTlsContext.getCombinedValidationContext();
+      if (combinedValidationContext.hasDefaultValidationContext()) {
+        return combinedValidationContext.getDefaultValidationContext();
+      }
+    }
+    return null;
+  }
+
+  @Nullable
+  protected static CommonTlsContext.CertificateProviderInstance getRootCertProviderInstance(
+      CommonTlsContext commonTlsContext) {
+    CertificateValidationContext certValidationContext = getStaticValidationContext(
+        commonTlsContext);
+    if (certValidationContext != null && certValidationContext.hasCaCertificateProviderInstance()) {
+      return CommonTlsContextUtil.convert(certValidationContext.getCaCertificateProviderInstance());
+    }
+    if (commonTlsContext.hasCombinedValidationContext()) {
+      CommonTlsContext.CombinedCertificateValidationContext combinedValidationContext =
+          commonTlsContext.getCombinedValidationContext();
+      if (combinedValidationContext.hasValidationContextCertificateProviderInstance()) {
+        return combinedValidationContext.getValidationContextCertificateProviderInstance();
+      }
+    } else if (commonTlsContext.hasValidationContextCertificateProviderInstance()) {
+      return commonTlsContext.getValidationContextCertificateProviderInstance();
+    }
+    return null;
   }
 
   @Override

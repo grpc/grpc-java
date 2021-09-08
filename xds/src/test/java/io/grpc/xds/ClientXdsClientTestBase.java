@@ -39,6 +39,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.BindableService;
 import io.grpc.Context;
@@ -1354,6 +1355,42 @@ public abstract class ClientXdsClientTestBase {
   }
 
   /**
+   * CDS response containing new UpstreamTlsContext for a cluster.
+   */
+  @Test
+  @SuppressWarnings("deprecation")
+  public void cdsResponseWithNewUpstreamTlsContext() {
+    Assume.assumeTrue(useProtocolV3());
+    DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
+
+    // Management server sends back CDS response with UpstreamTlsContext.
+    Any clusterEds =
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
+            null, true,
+            mf.buildNewUpstreamTlsContext("cert-instance-name", "cert1"),
+            "envoy.transport_sockets.tls", null));
+    List<Any> clusters = ImmutableList.of(
+        Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com",
+            "dns-service-bar.googleapis.com", 443, "round_robin", null, false, null, null)),
+        clusterEds,
+        Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null, false,
+            null, "envoy.transport_sockets.tls", null)));
+    call.sendResponse(CDS, clusters, VERSION_1, "0000");
+
+    // Client sent an ACK CDS request.
+    call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(cdsResourceWatcher, times(1)).onChanged(cdsUpdateCaptor.capture());
+    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    CertificateProviderPluginInstance certificateProviderInstance =
+        cdsUpdate.upstreamTlsContext().getCommonTlsContext().getValidationContext()
+            .getCaCertificateProviderInstance();
+    assertThat(certificateProviderInstance.getInstanceName()).isEqualTo("cert-instance-name");
+    assertThat(certificateProviderInstance.getCertificateName()).isEqualTo("cert1");
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+  }
+
+  /**
    * CDS response containing bad UpstreamTlsContext for a cluster.
    */
   @Test
@@ -1373,7 +1410,7 @@ public abstract class ClientXdsClientTestBase {
         "CDS response Cluster 'cluster.googleapis.com' validation error: "
             + "Cluster cluster.googleapis.com: malformed UpstreamTlsContext: "
             + "io.grpc.xds.ClientXdsClient$ResourceInvalidException: "
-            + "combined_validation_context is required in upstream-tls-context"));
+            + "ca_certificate_provider_instance is required in upstream-tls-context"));
     verifyNoInteractions(cdsResourceWatcher);
   }
 
@@ -2399,6 +2436,8 @@ public abstract class ClientXdsClientTestBase {
         long maxRingSize);
 
     protected abstract Message buildUpstreamTlsContext(String instanceName, String certName);
+
+    protected abstract Message buildNewUpstreamTlsContext(String instanceName, String certName);
 
     protected abstract Message buildCircuitBreakers(int highPriorityMaxRequests,
         int defaultPriorityMaxRequests);

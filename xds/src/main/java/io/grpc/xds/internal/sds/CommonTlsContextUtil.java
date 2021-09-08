@@ -16,11 +16,12 @@
 
 package io.grpc.xds.internal.sds;
 
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
 
 /** Class for utility functions for {@link CommonTlsContext}. */
-final class CommonTlsContextUtil {
+public final class CommonTlsContextUtil {
 
   private CommonTlsContextUtil() {}
 
@@ -37,5 +38,16 @@ final class CommonTlsContextUtil {
       return combinedCertificateValidationContext.hasValidationContextCertificateProviderInstance();
     }
     return commonTlsContext.hasValidationContextCertificateProviderInstance();
+  }
+
+  /**
+   * Converts {@link CertificateProviderPluginInstance} to
+   * {@link CommonTlsContext.CertificateProviderInstance}.
+   */
+  public static CommonTlsContext.CertificateProviderInstance convert(
+      CertificateProviderPluginInstance pluginInstance) {
+    return CommonTlsContext.CertificateProviderInstance.newBuilder()
+        .setInstanceName(pluginInstance.getInstanceName())
+        .setCertificateName(pluginInstance.getCertificateName()).build();
   }
 }
