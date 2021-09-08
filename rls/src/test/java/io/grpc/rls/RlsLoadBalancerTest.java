@@ -144,13 +144,15 @@ public class RlsLoadBalancerTest {
             .build();
     fakeRlsServerImpl.setLookupTable(
         ImmutableMap.of(
-            new RouteLookupRequest(
-                "fake-bigtable.googleapis.com", "/com.google/Search", "grpc",
-                ImmutableMap.<String, String>of()),
+            new RouteLookupRequest(ImmutableMap.of(
+                "server", "fake-bigtable.googleapis.com",
+                "service-key", "com.google",
+                "method-key", "Search")),
             new RouteLookupResponse(ImmutableList.of("wilderness"), "where are you?"),
-            new RouteLookupRequest(
-                "fake-bigtable.googleapis.com", "/com.google/Rescue", "grpc",
-                ImmutableMap.<String, String>of()),
+            new RouteLookupRequest(ImmutableMap.of(
+                "server", "fake-bigtable.googleapis.com",
+                "service-key", "com.google",
+                "method-key", "Rescue")),
             new RouteLookupResponse(ImmutableList.of("civilization"), "you are safe")));
 
     rlsLb = (RlsLoadBalancer) provider.newLoadBalancer(helper);
@@ -409,7 +411,12 @@ public class RlsLoadBalancerTest {
         + "          \"names\": [\"PermitId\"],\n"
         + "          \"optional\": true\n"
         + "        }\n"
-        + "      ]\n"
+        + "      ],\n"
+        + "      \"extraKeys\": {\n"
+        + "        \"host\": \"server\",\n"
+        + "        \"service\": \"service-key\",\n"
+        + "        \"method\": \"method-key\"\n"
+        + "      }\n"
         + "    }\n"
         + "  ],\n"
         + "  \"lookupService\": \"localhost:8972\",\n"

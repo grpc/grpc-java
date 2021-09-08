@@ -27,6 +27,7 @@ import io.grpc.lookup.v1.RouteLookupResponse;
 import io.grpc.rls.RlsProtoConverters.RouteLookupConfigConverter;
 import io.grpc.rls.RlsProtoConverters.RouteLookupRequestConverter;
 import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
+import io.grpc.rls.RlsProtoData.ExtraKeys;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
@@ -41,40 +42,29 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class RlsProtoConvertersTest {
 
-  @SuppressWarnings("deprecation")
   @Test
   public void convert_toRequestProto() {
     Converter<RouteLookupRequest, RlsProtoData.RouteLookupRequest> converter =
         new RouteLookupRequestConverter();
     RouteLookupRequest proto = RouteLookupRequest.newBuilder()
-        .setServer("server")
-        .setPath("path")
-        .setTargetType("target")
         .putKeyMap("key1", "val1")
         .build();
 
     RlsProtoData.RouteLookupRequest object = converter.convert(proto);
 
-    assertThat(object.getServer()).isEqualTo("server");
-    assertThat(object.getPath()).isEqualTo("path");
-    assertThat(object.getTargetType()).isEqualTo("target");
     assertThat(object.getKeyMap()).containsExactly("key1", "val1");
   }
 
-  @SuppressWarnings("deprecation")
   @Test
   public void convert_toRequestObject() {
     Converter<RlsProtoData.RouteLookupRequest, RouteLookupRequest> converter =
         new RouteLookupRequestConverter().reverse();
     RlsProtoData.RouteLookupRequest requestObject =
-        new RlsProtoData.RouteLookupRequest(
-            "server", "path", "target", ImmutableMap.of("key1", "val1"));
+        new RlsProtoData.RouteLookupRequest(ImmutableMap.of("key1", "val1"));
 
     RouteLookupRequest proto = converter.convert(requestObject);
 
-    assertThat(proto.getServer()).isEqualTo("server");
-    assertThat(proto.getPath()).isEqualTo("path");
-    assertThat(proto.getTargetType()).isEqualTo("target");
+    assertThat(proto.getTargetType()).isEqualTo("grpc");
     assertThat(proto.getKeyMapMap()).containsExactly("key1", "val1");
   }
 
@@ -164,7 +154,15 @@ public class RlsProtoConvertersTest {
         + "          \"names\": [\"User\", \"Parent\"],\n"
         + "          \"optional\": true\n"
         + "        }\n"
-        + "      ]\n"
+        + "      ],\n"
+        + "      \"extraKeys\": {\n"
+        + "        \"host\": \"host-key\",\n"
+        + "        \"service\": \"service-key\",\n"
+        + "        \"method\": \"method-key\"\n"
+        + "      }, \n"
+        + "      \"constantKeys\": {\n"
+        + "        \"constKey1\": \"value1\"\n"
+        + "      }\n"
         + "    }\n"
         + "  ],\n"
         + "  \"lookupService\": \"service1\",\n"
@@ -183,16 +181,22 @@ public class RlsProtoConvertersTest {
                     ImmutableList.of(new Name("service1", "create")),
                     ImmutableList.of(
                         new NameMatcher("user", ImmutableList.of("User", "Parent"), true),
-                        new NameMatcher("id", ImmutableList.of("X-Google-Id"), true))),
+                        new NameMatcher("id", ImmutableList.of("X-Google-Id"), true)),
+                    ExtraKeys.DEFAULT,
+                    ImmutableMap.<String, String>of()),
                 new GrpcKeyBuilder(
                     ImmutableList.of(new Name("service1")),
                     ImmutableList.of(
                         new NameMatcher("user", ImmutableList.of("User", "Parent"), true),
-                        new NameMatcher("password", ImmutableList.of("Password"), true))),
+                        new NameMatcher("password", ImmutableList.of("Password"), true)),
+                    ExtraKeys.DEFAULT,
+                    ImmutableMap.<String, String>of()),
                 new GrpcKeyBuilder(
                     ImmutableList.of(new Name("service3")),
                     ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent"), true)))),
+                        new NameMatcher("user", ImmutableList.of("User", "Parent"), true)),
+                    ExtraKeys.create("host-key", "service-key", "method-key"),
+                    ImmutableMap.of("constKey1", "value1"))),
             /* lookupService= */ "service1",
             /* lookupServiceTimeoutInMillis= */ TimeUnit.SECONDS.toMillis(2),
             /* maxAgeInMillis= */ TimeUnit.SECONDS.toMillis(300),

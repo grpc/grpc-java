@@ -65,6 +65,7 @@ import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.LruCache.EvictionListener;
 import io.grpc.rls.LruCache.EvictionType;
 import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
+import io.grpc.rls.RlsProtoData.ExtraKeys;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
@@ -191,9 +192,8 @@ public class CachingRlsLbClientTest {
   public void get_noError_lifeCycle() throws Exception {
     setUpRlsLbClient();
     InOrder inOrder = inOrder(evictionListener);
-    RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest(
-            "bigtable.googleapis.com", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+    RouteLookupRequest routeLookupRequest = new RouteLookupRequest(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
@@ -242,9 +242,8 @@ public class CachingRlsLbClientTest {
   public void rls_overDirectPath() throws Exception {
     CachingRlsLbClient.enableOobChannelDirectPath = true;
     setUpRlsLbClient();
-    RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest(
-            "bigtable.googleapis.com", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+    RouteLookupRequest routeLookupRequest = new RouteLookupRequest(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
@@ -276,8 +275,8 @@ public class CachingRlsLbClientTest {
   @Test
   public void get_throttledAndRecover() throws Exception {
     setUpRlsLbClient();
-    RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest("server", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+    RouteLookupRequest routeLookupRequest = new RouteLookupRequest(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
@@ -319,9 +318,8 @@ public class CachingRlsLbClientTest {
   public void get_updatesLbState() throws Exception {
     setUpRlsLbClient();
     InOrder inOrder = inOrder(helper);
-    RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest(
-            "bigtable.googleapis.com", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
+    RouteLookupRequest routeLookupRequest = new RouteLookupRequest(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "service1", "method-key", "create"));
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
@@ -349,7 +347,8 @@ public class CachingRlsLbClientTest {
     Metadata headers = new Metadata();
     PickResult pickResult = pickerCaptor.getValue().pickSubchannel(
         new PickSubchannelArgsImpl(
-            TestMethodDescriptors.voidMethod().toBuilder().setFullMethodName("foo/bar").build(),
+            TestMethodDescriptors.voidMethod().toBuilder().setFullMethodName("service1/create")
+                .build(),
             headers,
             CallOptions.DEFAULT));
     assertThat(pickResult.getStatus().isOk()).isTrue();
@@ -360,8 +359,7 @@ public class CachingRlsLbClientTest {
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(100, TimeUnit.MILLISECONDS);
     // try to get invalid
     RouteLookupRequest invalidRouteLookupRequest =
-        new RouteLookupRequest(
-            "bigtable.googleapis.com", "/doesn/exists", "grpc", ImmutableMap.<String, String>of());
+        new RouteLookupRequest(ImmutableMap.<String, String>of());
     CachedRouteLookupResponse errorResp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(errorResp.isPending()).isTrue();
     fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
@@ -369,7 +367,7 @@ public class CachingRlsLbClientTest {
     errorResp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(errorResp.hasError()).isTrue();
 
-    // Channel is still READY because the subchannel for method /foo/bar is still READY.
+    // Channel is still READY because the subchannel for method /service1/create is still READY.
     // Method /doesn/exists will use fallback child balancer and fail immediately.
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
@@ -387,10 +385,10 @@ public class CachingRlsLbClientTest {
   @Test
   public void get_childPolicyWrapper_reusedForSameTarget() throws Exception {
     setUpRlsLbClient();
-    RouteLookupRequest routeLookupRequest =
-        new RouteLookupRequest("server", "/foo/bar", "grpc", ImmutableMap.<String, String>of());
-    RouteLookupRequest routeLookupRequest2 =
-        new RouteLookupRequest("server", "/foo/baz", "grpc", ImmutableMap.<String, String>of());
+    RouteLookupRequest routeLookupRequest = new RouteLookupRequest(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
+    RouteLookupRequest routeLookupRequest2 = new RouteLookupRequest(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "baz"));
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest, new RouteLookupResponse(ImmutableList.of("target"), "header"),
@@ -426,7 +424,9 @@ public class CachingRlsLbClientTest {
                 ImmutableList.of(new Name("service1", "create")),
                 ImmutableList.of(
                     new NameMatcher("user", ImmutableList.of("User", "Parent"), true),
-                    new NameMatcher("id", ImmutableList.of("X-Google-Id"), true)))),
+                    new NameMatcher("id", ImmutableList.of("X-Google-Id"), true)),
+                ExtraKeys.create("server", "service-key", "method-key"),
+                ImmutableMap.<String, String>of())),
         /* lookupService= */ "service1",
         /* lookupServiceTimeoutInMillis= */ TimeUnit.SECONDS.toMillis(2),
         /* maxAgeInMillis= */ TimeUnit.SECONDS.toMillis(300),

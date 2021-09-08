@@ -20,9 +20,11 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Converter;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.JsonUtil;
 import io.grpc.lookup.v1.RouteLookupRequest;
 import io.grpc.lookup.v1.RouteLookupResponse;
+import io.grpc.rls.RlsProtoData.ExtraKeys;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
@@ -46,25 +48,16 @@ final class RlsProtoConverters {
   static final class RouteLookupRequestConverter
       extends Converter<RouteLookupRequest, RlsProtoData.RouteLookupRequest> {
 
-    @SuppressWarnings("deprecation")
     @Override
     protected RlsProtoData.RouteLookupRequest doForward(RouteLookupRequest routeLookupRequest) {
-      return
-          new RlsProtoData.RouteLookupRequest(
-              /* server= */ routeLookupRequest.getServer(),
-              /* path= */ routeLookupRequest.getPath(),
-              /* targetType= */ routeLookupRequest.getTargetType(),
-              routeLookupRequest.getKeyMapMap());
+      return new RlsProtoData.RouteLookupRequest(routeLookupRequest.getKeyMapMap());
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     protected RouteLookupRequest doBackward(RlsProtoData.RouteLookupRequest routeLookupRequest) {
       return
           RouteLookupRequest.newBuilder()
-              .setServer(routeLookupRequest.getServer())
-              .setPath(routeLookupRequest.getPath())
-              .setTargetType(routeLookupRequest.getTargetType())
+              .setTargetType("grpc")
               .putAllKeyMap(routeLookupRequest.getKeyMap())
               .build();
     }
@@ -183,7 +176,19 @@ final class RlsProtoConverters {
             matcher.isOptional(), "NameMatcher for GrpcKeyBuilders shouldn't be required");
         nameMatchers.add(matcher);
       }
-      return new GrpcKeyBuilder(names, nameMatchers);
+      ExtraKeys extraKeys = ExtraKeys.DEFAULT;
+      Map<String, String> rawExtraKeys =
+          (Map<String, String>) JsonUtil.getObject(keyBuilder,  "extraKeys");
+      if (rawExtraKeys != null) {
+        extraKeys = ExtraKeys.create(
+            rawExtraKeys.get("host"), rawExtraKeys.get("service"), rawExtraKeys.get("method"));
+      }
+      Map<String, String> constantKeys =
+          (Map<String, String>) JsonUtil.getObject(keyBuilder,  "constantKeys");
+      if (constantKeys == null) {
+        constantKeys = ImmutableMap.of();
+      }
+      return new GrpcKeyBuilder(names, nameMatchers, extraKeys, constantKeys);
     }
   }
 
