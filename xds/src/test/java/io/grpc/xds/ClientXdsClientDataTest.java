@@ -77,6 +77,7 @@ import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CertificateProviderInstance;
@@ -1551,7 +1552,7 @@ public class ClientXdsClientDataTest {
             .setValidationContext(CertificateValidationContext.getDefaultInstance())
             .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("common-tls-context with validation_context is not supported");
+    thrown.expectMessage("ca_certificate_provider_instance is required in upstream-tls-context");
     ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
@@ -1603,14 +1604,26 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
-        "tls_certificate_certificate_provider_instance is required in downstream-tls-context");
+        "tls_certificate_provider_instance is required in downstream-tls-context");
     ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, true);
   }
 
   @Test
   @SuppressWarnings("deprecation")
+  public void validateCommonTlsContext_tlsNewCertificateProviderInstance()
+      throws ResourceInvalidException {
+    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
+        .setTlsCertificateProviderInstance(
+            CertificateProviderPluginInstance.newBuilder().setInstanceName("name1").build())
+        .build();
+    ClientXdsClient
+        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), true);
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
   public void validateCommonTlsContext_tlsCertificateProviderInstance()
-          throws ResourceInvalidException {
+      throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setTlsCertificateCertificateProviderInstance(
             CertificateProviderInstance.newBuilder().setInstanceName("name1").build())
@@ -1662,7 +1675,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
-        "ValidationContextProvider instance name 'bad-name' not defined in the bootstrap file.");
+        "ca_certificate_provider_instance name 'bad-name' not defined in the bootstrap file.");
     ClientXdsClient
         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), false);
   }
@@ -1674,7 +1687,7 @@ public class ClientXdsClientDataTest {
             .addTlsCertificates(TlsCertificate.getDefaultInstance())
             .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("common-tls-context with tls_certificates is not supported");
+    thrown.expectMessage("tls_certificate_provider_instance is unset");
     ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
@@ -1686,7 +1699,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
-        "common-tls-context with tls_certificate_sds_secret_configs is not supported");
+        "tls_certificate_provider_instance is unset");
     ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
@@ -1700,7 +1713,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
-        "common-tls-context with tls_certificate_certificate_provider is not supported");
+        "tls_certificate_provider_instance is unset");
     ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
@@ -1710,7 +1723,7 @@ public class ClientXdsClientDataTest {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("combined_validation_context is required in upstream-tls-context");
+    thrown.expectMessage("ca_certificate_provider_instance is required in upstream-tls-context");
     ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
@@ -1723,8 +1736,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
-        "validation_context_certificate_provider_instance is required in "
-            + "combined_validation_context");
+        "ca_certificate_provider_instance is required in upstream-tls-context");
     ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 

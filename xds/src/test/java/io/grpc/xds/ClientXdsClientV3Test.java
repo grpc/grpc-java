@@ -77,6 +77,8 @@ import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
@@ -549,6 +551,20 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
                 .setValidationContextCertificateProviderInstance(providerInstance)
                 .build();
         commonTlsContextBuilder.setCombinedValidationContext(combined);
+      }
+      return UpstreamTlsContext.newBuilder()
+          .setCommonTlsContext(commonTlsContextBuilder)
+          .build();
+    }
+
+    @Override
+    protected Message buildNewUpstreamTlsContext(String instanceName, String certName) {
+      CommonTlsContext.Builder commonTlsContextBuilder = CommonTlsContext.newBuilder();
+      if (instanceName != null && certName != null) {
+        commonTlsContextBuilder.setValidationContext(CertificateValidationContext.newBuilder()
+            .setCaCertificateProviderInstance(
+                CertificateProviderPluginInstance.newBuilder().setInstanceName(instanceName)
+                    .setCertificateName(certName).build()));
       }
       return UpstreamTlsContext.newBuilder()
           .setCommonTlsContext(commonTlsContextBuilder)

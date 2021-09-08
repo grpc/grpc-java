@@ -456,10 +456,6 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (commonTlsContext.hasTlsParams()) {
       throw new ResourceInvalidException("common-tls-context with tls_params is not supported");
     }
-    if (commonTlsContext.hasValidationContext()) {
-      throw new ResourceInvalidException(
-          "common-tls-context with validation_context is not supported");
-    }
     if (commonTlsContext.hasValidationContextSdsSecretConfig()) {
       throw new ResourceInvalidException(
           "common-tls-context with validation_context_sds_secret_config is not supported");
@@ -473,54 +469,50 @@ final class ClientXdsClient extends AbstractXdsClient {
           "common-tls-context with validation_context_certificate_provider_instance is not"
               + " supported");
     }
-    String certInstanceName = null;
-    if (!commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
+    String certInstanceName = getIdentityCertInstanceName(commonTlsContext);
+    if (certInstanceName == null) {
       if (server) {
         throw new ResourceInvalidException(
-            "tls_certificate_certificate_provider_instance is required in downstream-tls-context");
+            "tls_certificate_provider_instance is required in downstream-tls-context");
       }
       if (commonTlsContext.getTlsCertificatesCount() > 0) {
         throw new ResourceInvalidException(
-            "common-tls-context with tls_certificates is not supported");
+            "tls_certificate_provider_instance is unset");
       }
       if (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() > 0) {
         throw new ResourceInvalidException(
-            "common-tls-context with tls_certificate_sds_secret_configs is not supported");
+            "tls_certificate_provider_instance is unset");
       }
       if (commonTlsContext.hasTlsCertificateCertificateProvider()) {
         throw new ResourceInvalidException(
-            "common-tls-context with tls_certificate_certificate_provider is not supported");
+            "tls_certificate_provider_instance is unset");
       }
-    } else {
-      certInstanceName = commonTlsContext.getTlsCertificateCertificateProviderInstance()
-          .getInstanceName();
+    } else if (certProviderInstances == null || !certProviderInstances.contains(certInstanceName)) {
+      throw new ResourceInvalidException(
+          "CertificateProvider instance name '" + certInstanceName
+              + "' not defined in the bootstrap file.");
     }
-    if (certInstanceName != null) {
-      if (certProviderInstances == null || !certProviderInstances.contains(certInstanceName)) {
-        throw new ResourceInvalidException(
-            "CertificateProvider instance name '" + certInstanceName
-                + "' not defined in the bootstrap file.");
-      }
-    }
-    String rootCaInstanceName = null;
-    if (!commonTlsContext.hasCombinedValidationContext()) {
+    String rootCaInstanceName = getRootCertInstanceName(commonTlsContext);
+    if (rootCaInstanceName == null) {
       if (!server) {
         throw new ResourceInvalidException(
-            "combined_validation_context is required in upstream-tls-context");
+            "ca_certificate_provider_instance is required in upstream-tls-context");
       }
     } else {
-      CommonTlsContext.CombinedCertificateValidationContext combinedCertificateValidationContext
-          = commonTlsContext.getCombinedValidationContext();
-      if (!combinedCertificateValidationContext.hasValidationContextCertificateProviderInstance()) {
+      if (certProviderInstances == null || !certProviderInstances.contains(rootCaInstanceName)) {
         throw new ResourceInvalidException(
-            "validation_context_certificate_provider_instance is required in"
-                + " combined_validation_context");
+                "ca_certificate_provider_instance name '" + rootCaInstanceName
+                        + "' not defined in the bootstrap file.");
       }
-      rootCaInstanceName = combinedCertificateValidationContext
-          .getValidationContextCertificateProviderInstance().getInstanceName();
-      if (combinedCertificateValidationContext.hasDefaultValidationContext()) {
-        CertificateValidationContext certificateValidationContext
-            = combinedCertificateValidationContext.getDefaultValidationContext();
+      CertificateValidationContext certificateValidationContext = null;
+      if (commonTlsContext.hasValidationContext()) {
+        certificateValidationContext = commonTlsContext.getValidationContext();
+      } else if (commonTlsContext.hasCombinedValidationContext() && commonTlsContext
+          .getCombinedValidationContext().hasDefaultValidationContext()) {
+        certificateValidationContext = commonTlsContext.getCombinedValidationContext()
+            .getDefaultValidationContext();
+      }
+      if (certificateValidationContext != null) {
         if (certificateValidationContext.getMatchSubjectAltNamesCount() > 0 && server) {
           throw new ResourceInvalidException(
               "match_subject_alt_names only allowed in upstream_tls_context");
@@ -547,13 +539,38 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
     }
-    if (rootCaInstanceName != null) {
-      if (certProviderInstances == null || !certProviderInstances.contains(rootCaInstanceName)) {
-        throw new ResourceInvalidException(
-            "ValidationContextProvider instance name '" + rootCaInstanceName
-                + "' not defined in the bootstrap file.");
+  }
+
+  private static String getIdentityCertInstanceName(CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasTlsCertificateProviderInstance()) {
+      return commonTlsContext.getTlsCertificateProviderInstance().getInstanceName();
+    } else if (commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
+      return commonTlsContext.getTlsCertificateCertificateProviderInstance().getInstanceName();
+    }
+    return null;
+  }
+
+  private static String getRootCertInstanceName(CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasValidationContext()) {
+      if (commonTlsContext.getValidationContext().hasCaCertificateProviderInstance()) {
+        return commonTlsContext.getValidationContext().getCaCertificateProviderInstance()
+            .getInstanceName();
+      }
+    } else if (commonTlsContext.hasCombinedValidationContext()) {
+      CommonTlsContext.CombinedCertificateValidationContext combinedCertificateValidationContext
+          = commonTlsContext.getCombinedValidationContext();
+      if (combinedCertificateValidationContext.hasDefaultValidationContext()
+          && combinedCertificateValidationContext.getDefaultValidationContext()
+          .hasCaCertificateProviderInstance()) {
+        return combinedCertificateValidationContext.getDefaultValidationContext()
+            .getCaCertificateProviderInstance().getInstanceName();
+      } else if (combinedCertificateValidationContext
+          .hasValidationContextCertificateProviderInstance()) {
+        return combinedCertificateValidationContext
+            .getValidationContextCertificateProviderInstance().getInstanceName();
       }
     }
+    return null;
   }
 
   private static void checkForUniqueness(Set<FilterChainMatch> uniqueSet,
