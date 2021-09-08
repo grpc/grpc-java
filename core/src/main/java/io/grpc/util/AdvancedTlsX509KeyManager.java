@@ -23,12 +23,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.Socket;
-import java.security.NoSuchAlgorithmException;
+import java.security.GeneralSecurityException;
 import java.security.Principal;
 import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.security.spec.InvalidKeySpecException;
 import java.util.Arrays;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -107,8 +106,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * @param key  the private key that is going to be used
    * @param certs  the certificate chain that is going to be used
    */
-  public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs)
-      throws CertificateException {
+  public void updateIdentityCredentials(PrivateKey key, X509Certificate[] certs) {
     // TODO(ZhenLian): explore possibilities to do a crypto check here.
     this.keyInfo = new KeyInfo(checkNotNull(key, "key"), checkNotNull(certs, "certs"));
   }
@@ -126,10 +124,16 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * @return an object that caller should close when the file refreshes are not needed
    */
   public Closeable updateIdentityCredentialsFromFile(File keyFile, File certFile,
-      long period, TimeUnit unit, ScheduledExecutorService executor) {
+      long period, TimeUnit unit, ScheduledExecutorService executor) throws IOException,
+      GeneralSecurityException {
+    UpdateResult newResult = readAndUpdate(keyFile, certFile, 0, 0);
+    if (!newResult.success) {
+      throw new GeneralSecurityException(
+          "Files were unmodified before their initial update. Probably a bug.");
+    }
     final ScheduledFuture<?> future =
         executor.scheduleWithFixedDelay(
-            new LoadFilePathExecution(keyFile, certFile), 0, period, unit);
+            new LoadFilePathExecution(keyFile, certFile), period, period, unit);
     return new Closeable() {
       @Override public void close() {
         future.cancel(false);
@@ -170,8 +174,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
           this.currentKeyTime = newResult.keyTime;
           this.currentCertTime = newResult.certTime;
         }
-      } catch (CertificateException | IOException | NoSuchAlgorithmException
-          | InvalidKeySpecException e) {
+      } catch (IOException | GeneralSecurityException e) {
         log.log(Level.SEVERE, "Failed refreshing private key and certificate chain from files. "
             + "Using previous ones", e);
       }
@@ -201,7 +204,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * @return the result of this update execution
    */
   private UpdateResult readAndUpdate(File keyFile, File certFile, long oldKeyTime, long oldCertTime)
-      throws IOException, CertificateException, NoSuchAlgorithmException, InvalidKeySpecException {
+      throws IOException, GeneralSecurityException {
     long newKeyTime = keyFile.lastModified();
     long newCertTime = certFile.lastModified();
     // We only update when both the key and the certs are updated.

@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -124,8 +125,8 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    *
    * @param trustCerts the trust certificates that are going to be used
    */
-  public void updateTrustCredentials(X509Certificate[] trustCerts) throws CertificateException,
-      KeyStoreException, NoSuchAlgorithmException, IOException {
+  public void updateTrustCredentials(X509Certificate[] trustCerts) throws IOException,
+      GeneralSecurityException {
     KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
     keyStore.load(null, null);
     int i = 1;
@@ -219,10 +220,15 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    * @return an object that caller should close when the file refreshes are not needed
    */
   public Closeable updateTrustCredentialsFromFile(File trustCertFile, long period, TimeUnit unit,
-      ScheduledExecutorService executor) {
+      ScheduledExecutorService executor) throws IOException, GeneralSecurityException {
+    long updatedTime = readAndUpdate(trustCertFile, 0);
+    if (updatedTime == 0) {
+      throw new GeneralSecurityException(
+          "Files were unmodified before their initial update. Probably a bug.");
+    }
     final ScheduledFuture<?> future =
         executor.scheduleWithFixedDelay(
-            new LoadFilePathExecution(trustCertFile), 0, period, unit);
+            new LoadFilePathExecution(trustCertFile), period, period, unit);
     return new Closeable() {
       @Override public void close() {
         future.cancel(false);
@@ -243,8 +249,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
     public void run() {
       try {
         this.currentTime = readAndUpdate(this.file, this.currentTime);
-      } catch (CertificateException | IOException | KeyStoreException
-          | NoSuchAlgorithmException e) {
+      } catch (IOException | GeneralSecurityException e) {
         log.log(Level.SEVERE, "Failed refreshing trust CAs from file. Using previous CAs", e);
       }
     }
@@ -259,7 +264,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
    * @return oldTime if failed or the modified time is not changed, otherwise the new modified time
    */
   private long readAndUpdate(File trustCertFile, long oldTime)
-      throws CertificateException, IOException, KeyStoreException, NoSuchAlgorithmException {
+      throws IOException, GeneralSecurityException {
     long newTime = trustCertFile.lastModified();
     if (newTime == oldTime) {
       return oldTime;

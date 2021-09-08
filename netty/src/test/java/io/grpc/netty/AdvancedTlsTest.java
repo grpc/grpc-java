@@ -45,6 +45,7 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.net.Socket;
+import java.security.GeneralSecurityException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.cert.CertificateException;
@@ -169,7 +170,6 @@ public class AdvancedTlsTest {
         .clientAuth(ClientAuth.REQUIRE).build();
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
-    TimeUnit.SECONDS.sleep(5);
     // Create a client with the key manager and trust manager.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
@@ -232,7 +232,6 @@ public class AdvancedTlsTest {
         .clientAuth(ClientAuth.REQUIRE).build();
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
-    TimeUnit.SECONDS.sleep(5);
 
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
@@ -307,7 +306,6 @@ public class AdvancedTlsTest {
         .clientAuth(ClientAuth.REQUIRE).build();
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
-    TimeUnit.SECONDS.sleep(5);
 
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     clientKeyManager.updateIdentityCredentials(clientKey0, clientCert0);
@@ -359,7 +357,6 @@ public class AdvancedTlsTest {
         .clientAuth(ClientAuth.REQUIRE).build();
     server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
         new SimpleServiceImpl()).build().start();
-    TimeUnit.SECONDS.sleep(5);
     // Create a client to connect.
     AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
     Closeable clientKeyShutdown = clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File,
@@ -389,6 +386,28 @@ public class AdvancedTlsTest {
     serverTrustShutdown.close();
     clientKeyShutdown.close();
     clientTrustShutdown.close();
+  }
+
+  @Test
+  public void onFileReloadingKeyManagerBadInitialContentTest() throws Exception {
+    exceptionRule.expect(GeneralSecurityException.class);
+    AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
+    // We swap the order of key and certificates to intentionally create an exception.
+    Closeable keyShutdown = keyManager.updateIdentityCredentialsFromFile(serverCert0File,
+        serverKey0File, 100, TimeUnit.MILLISECONDS, executor);
+    keyShutdown.close();
+  }
+
+  @Test
+  public void onFileReloadingTrustManagerBadInitialContentTest() throws Exception {
+    exceptionRule.expect(GeneralSecurityException.class);
+    AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
+        .build();
+    // We pass in a key as the trust certificates to intentionally create an exception.
+    Closeable trustShutdown = trustManager.updateTrustCredentialsFromFile(serverKey0File,
+        100, TimeUnit.MILLISECONDS, executor);
+    trustShutdown.close();
   }
 
   @Test
