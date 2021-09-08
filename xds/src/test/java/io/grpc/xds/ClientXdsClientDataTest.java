@@ -1604,7 +1604,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
-        "tls_certificate_certificate_provider_instance is required in downstream-tls-context");
+        "tls_certificate_provider_instance is required in downstream-tls-context");
     ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, true);
   }
 
@@ -1687,7 +1687,7 @@ public class ClientXdsClientDataTest {
             .addTlsCertificates(TlsCertificate.getDefaultInstance())
             .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("common-tls-context with tls_certificates is not supported");
+    thrown.expectMessage("tls_certificate_provider_instance is unset");
     ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
@@ -1699,7 +1699,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
-        "common-tls-context with tls_certificate_sds_secret_configs is not supported");
+        "tls_certificate_provider_instance is unset");
     ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
@@ -1713,7 +1713,7 @@ public class ClientXdsClientDataTest {
         .build();
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
-        "common-tls-context with tls_certificate_certificate_provider is not supported");
+        "tls_certificate_provider_instance is unset");
     ClientXdsClient.validateCommonTlsContext(commonTlsContext, null, false);
   }
 

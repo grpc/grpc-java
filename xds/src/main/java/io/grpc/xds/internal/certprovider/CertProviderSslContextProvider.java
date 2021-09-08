@@ -90,17 +90,18 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     return certProviders != null ? certProviders.get(pluginInstanceName) : null;
   }
 
+  @Nullable
   protected static CertificateProviderInstance getCertProviderInstance(
       CommonTlsContext commonTlsContext) {
-    CertificateProviderInstance certInstance = null;
     if (commonTlsContext.hasTlsCertificateProviderInstance()) {
       return CommonTlsContextUtil.convert(commonTlsContext.getTlsCertificateProviderInstance());
     } else if (commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
-      certInstance = commonTlsContext.getTlsCertificateCertificateProviderInstance();
+      return commonTlsContext.getTlsCertificateCertificateProviderInstance();
     }
-    return certInstance;
+    return null;
   }
 
+  @Nullable
   protected static CertificateValidationContext getStaticValidationContext(
       CommonTlsContext commonTlsContext) {
     if (commonTlsContext.hasValidationContext()) {
@@ -115,6 +116,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     return null;
   }
 
+  @Nullable
   protected static CommonTlsContext.CertificateProviderInstance getRootCertProviderInstance(
       CommonTlsContext commonTlsContext) {
     CertificateValidationContext certValidationContext = getStaticValidationContext(

@@ -473,26 +473,24 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (certInstanceName == null) {
       if (server) {
         throw new ResourceInvalidException(
-            "tls_certificate_certificate_provider_instance is required in downstream-tls-context");
+            "tls_certificate_provider_instance is required in downstream-tls-context");
       }
       if (commonTlsContext.getTlsCertificatesCount() > 0) {
         throw new ResourceInvalidException(
-            "common-tls-context with tls_certificates is not supported");
+            "tls_certificate_provider_instance is unset");
       }
       if (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() > 0) {
         throw new ResourceInvalidException(
-            "common-tls-context with tls_certificate_sds_secret_configs is not supported");
+            "tls_certificate_provider_instance is unset");
       }
       if (commonTlsContext.hasTlsCertificateCertificateProvider()) {
         throw new ResourceInvalidException(
-            "common-tls-context with tls_certificate_certificate_provider is not supported");
+            "tls_certificate_provider_instance is unset");
       }
-    } else {
-      if (certProviderInstances == null || !certProviderInstances.contains(certInstanceName)) {
-        throw new ResourceInvalidException(
-            "CertificateProvider instance name '" + certInstanceName
-                + "' not defined in the bootstrap file.");
-      }
+    } else if (certProviderInstances == null || !certProviderInstances.contains(certInstanceName)) {
+      throw new ResourceInvalidException(
+          "CertificateProvider instance name '" + certInstanceName
+              + "' not defined in the bootstrap file.");
     }
     String rootCaInstanceName = getRootCertInstanceName(commonTlsContext);
     if (rootCaInstanceName == null) {
