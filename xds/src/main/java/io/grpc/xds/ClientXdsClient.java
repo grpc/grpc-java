@@ -736,7 +736,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     // Parse http filters.
     List<NamedFilterConfig> filterConfigs = null;
     if (parseHttpFilter) {
-      if (isForClient && proto.getHttpFiltersList().isEmpty()) {
+      if (proto.getHttpFiltersList().isEmpty()) {
         throw new ResourceInvalidException("Missing HttpFilter in HttpConnectionManager.");
       }
       filterConfigs = new ArrayList<>();
@@ -751,12 +751,10 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
         StructOrError<FilterConfig> filterConfig =
             parseHttpFilter(httpFilter, filterRegistry, isForClient);
-        if (isForClient) {
-          if ((i == proto.getHttpFiltersCount() - 1)
-                  && (filterConfig == null || !isTerminalFilter(filterConfig.struct))) {
-            throw new ResourceInvalidException("The last HttpFilter must be a terminal filter: "
-                    + filterName);
-          }
+        if ((i == proto.getHttpFiltersCount() - 1)
+                && (filterConfig == null || !isTerminalFilter(filterConfig.struct))) {
+          throw new ResourceInvalidException("The last HttpFilter must be a terminal filter: "
+                  + filterName);
         }
         if (filterConfig == null) {
           continue;
@@ -766,11 +764,9 @@ final class ClientXdsClient extends AbstractXdsClient {
               "HttpConnectionManager contains invalid HttpFilter: "
                   + filterConfig.getErrorDetail());
         }
-        if (isForClient) {
-          if ((i < proto.getHttpFiltersCount() - 1) && isTerminalFilter(filterConfig.getStruct())) {
-            throw new ResourceInvalidException("A terminal HttpFilter must be the last filter: "
-                    + filterName);
-          }
+        if ((i < proto.getHttpFiltersCount() - 1) && isTerminalFilter(filterConfig.getStruct())) {
+          throw new ResourceInvalidException("A terminal HttpFilter must be the last filter: "
+                  + filterName);
         }
         filterConfigs.add(new NamedFilterConfig(filterName, filterConfig.struct));
       }

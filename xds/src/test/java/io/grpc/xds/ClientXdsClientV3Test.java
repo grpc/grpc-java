@@ -739,6 +739,13 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
               Any.pack(hcmBuilder.build(), "type.googleapis.com"))
           .build();
     }
+
+    @Override
+    protected Message buildTerminalFilter() {
+      return HttpFilter.newBuilder()
+          .setName("terminal")
+          .setTypedConfig(Any.pack(Router.newBuilder().build())).build();
+    }
   }
 
   /**

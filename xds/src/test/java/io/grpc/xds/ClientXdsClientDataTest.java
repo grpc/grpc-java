@@ -128,7 +128,7 @@ public class ClientXdsClientDataTest {
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
-  private final FilterRegistry filterRegistry = FilterRegistry.newRegistry();
+  private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private boolean originalEnableRetry;
 
   @Before
@@ -1340,7 +1340,8 @@ public class ClientXdsClientDataTest {
   @Test
   public void parseServerSideListener_nonUniqueFilterChainMatch() throws ResourceInvalidException {
     Filter filter1 = buildHttpConnectionManagerFilter(
-        HttpFilter.newBuilder().setName("http-filter-1").setIsOptional(true).build());
+        HttpFilter.newBuilder().setName("http-filter-1").setTypedConfig(
+            Any.pack(Router.newBuilder().build())).setIsOptional(true).build());
     FilterChainMatch filterChainMatch1 =
         FilterChainMatch.newBuilder()
             .addAllSourcePorts(Arrays.asList(80, 8080))
@@ -1356,7 +1357,8 @@ public class ClientXdsClientDataTest {
             .addFilters(filter1)
             .build();
     Filter filter2 = buildHttpConnectionManagerFilter(
-        HttpFilter.newBuilder().setName("http-filter-2").setIsOptional(true).build());
+        HttpFilter.newBuilder().setName("http-filter-2").setTypedConfig(
+            Any.pack(Router.newBuilder().build())).setIsOptional(true).build());
     FilterChainMatch filterChainMatch2 =
         FilterChainMatch.newBuilder()
             .addAllSourcePorts(Arrays.asList(443, 8080))
@@ -1388,7 +1390,8 @@ public class ClientXdsClientDataTest {
   public void parseServerSideListener_nonUniqueFilterChainMatch_sameFilter()
       throws ResourceInvalidException {
     Filter filter1 = buildHttpConnectionManagerFilter(
-        HttpFilter.newBuilder().setName("http-filter-1").setIsOptional(true).build());
+        HttpFilter.newBuilder().setName("http-filter-1").setTypedConfig(
+            Any.pack(Router.newBuilder().build())).setIsOptional(true).build());
     FilterChainMatch filterChainMatch1 =
         FilterChainMatch.newBuilder()
             .addAllSourcePorts(Arrays.asList(80, 8080))
@@ -1403,7 +1406,8 @@ public class ClientXdsClientDataTest {
             .addFilters(filter1)
             .build();
     Filter filter2 = buildHttpConnectionManagerFilter(
-        HttpFilter.newBuilder().setName("http-filter-2").setIsOptional(true).build());
+        HttpFilter.newBuilder().setName("http-filter-2").setTypedConfig(
+            Any.pack(Router.newBuilder().build())).setIsOptional(true).build());
     FilterChainMatch filterChainMatch2 =
         FilterChainMatch.newBuilder()
             .addAllSourcePorts(Arrays.asList(443, 8080))
@@ -1434,7 +1438,8 @@ public class ClientXdsClientDataTest {
   @Test
   public void parseServerSideListener_uniqueFilterChainMatch() throws ResourceInvalidException {
     Filter filter1 = buildHttpConnectionManagerFilter(
-        HttpFilter.newBuilder().setName("http-filter-1").setIsOptional(true).build());
+        HttpFilter.newBuilder().setName("http-filter-1").setTypedConfig(
+            Any.pack(Router.newBuilder().build())).setIsOptional(true).build());
     FilterChainMatch filterChainMatch1 =
         FilterChainMatch.newBuilder()
             .addAllSourcePorts(Arrays.asList(80, 8080))
@@ -1451,7 +1456,8 @@ public class ClientXdsClientDataTest {
             .addFilters(filter1)
             .build();
     Filter filter2 = buildHttpConnectionManagerFilter(
-        HttpFilter.newBuilder().setName("http-filter-2").setIsOptional(true).build());
+        HttpFilter.newBuilder().setName("http-filter-2").setTypedConfig(
+            Any.pack(Router.newBuilder().build())).setIsOptional(true).build());
     FilterChainMatch filterChainMatch2 =
         FilterChainMatch.newBuilder()
             .addAllSourcePorts(Arrays.asList(443, 8080))
@@ -1564,6 +1570,7 @@ public class ClientXdsClientDataTest {
                 HttpFilter.newBuilder()
                     .setName("http-filter-foo")
                     .setIsOptional(true)
+                    .setTypedConfig(Any.pack(Router.newBuilder().build()))
                     .build()))
             .build();
     FilterChain filterChain2 =
@@ -1572,6 +1579,7 @@ public class ClientXdsClientDataTest {
             .addFilters(buildHttpConnectionManagerFilter(
                 HttpFilter.newBuilder()
                     .setName("http-filter-bar")
+                    .setTypedConfig(Any.pack(Router.newBuilder().build()))
                     .setIsOptional(true)
                     .build()))
             .build();
@@ -1584,7 +1592,6 @@ public class ClientXdsClientDataTest {
         null, true /* does not matter */);
     assertThat(parsedFilterChain1.getName()).isNotEqualTo(parsedFilterChain2.getName());
   }
-
 
   @Test
   public void validateCommonTlsContext_tlsParams() throws ResourceInvalidException {

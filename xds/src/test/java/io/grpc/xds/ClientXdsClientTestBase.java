@@ -994,7 +994,7 @@ public abstract class ClientXdsClientTestBase {
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
 
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
-        RDS_RESOURCE, null, Collections.<Message>emptyList());
+        RDS_RESOURCE, null, Collections.singletonList(mf.buildTerminalFilter()));
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
         "google-sds-config-default", "ROOTCA", false);
     Message filterChain = mf.buildFilterChain(
@@ -1029,7 +1029,7 @@ public abstract class ClientXdsClientTestBase {
         null,
         mf.buildRouteConfiguration(
             "route-bar.googleapis.com", mf.buildOpaqueVirtualHosts(VHOST_SIZE)),
-        Collections.<Message>emptyList());
+        Collections.singletonList(mf.buildTerminalFilter()));
     filterChain = mf.buildFilterChain(
         Collections.<String>emptyList(), downstreamTlsContext, "envoy.transport_sockets.tls",
         hcmFilter);
@@ -2167,7 +2167,8 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
-        "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+        "route-foo.googleapis.com", null,
+        Collections.singletonList(mf.buildTerminalFilter()));
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
         "google-sds-config-default", "ROOTCA", false);
     Message filterChain = mf.buildFilterChain(
@@ -2190,7 +2191,8 @@ public abstract class ClientXdsClientTestBase {
     assertThat(parsedFilterChain.getFilterChainMatch().getApplicationProtocols()).isEmpty();
     assertThat(parsedFilterChain.getHttpConnectionManager().rdsName())
         .isEqualTo("route-foo.googleapis.com");
-    assertThat(parsedFilterChain.getHttpConnectionManager().httpFilterConfigs()).isEmpty();
+    assertThat(parsedFilterChain.getHttpConnectionManager().httpFilterConfigs().get(0).filterConfig)
+        .isEqualTo(RouterFilter.ROUTER_CONFIG);
 
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -2201,7 +2203,8 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
-        "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+        "route-foo.googleapis.com", null,
+        Collections.singletonList(mf.buildTerminalFilter()));
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
         "google-sds-config-default", "ROOTCA", false);
     Message filterChain = mf.buildFilterChain(
@@ -2227,7 +2230,8 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClientTestBase.DiscoveryRpcCall call =
             startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
-            "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+            "route-foo.googleapis.com", null,
+        Collections.singletonList(mf.buildTerminalFilter()));
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
             null, null,false);
     Message filterChain = mf.buildFilterChain(
@@ -2250,7 +2254,8 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
-        "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+        "route-foo.googleapis.com", null,
+        Collections.singletonList(mf.buildTerminalFilter()));
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
         "cert1", "cert2",false);
     Message filterChain = mf.buildFilterChain(
@@ -2432,5 +2437,7 @@ public abstract class ClientXdsClientTestBase {
 
     protected abstract Message buildHttpConnectionManagerFilter(
         @Nullable String rdsName, @Nullable Message routeConfig, List<Message> httpFilters);
+
+    protected abstract Message buildTerminalFilter();
   }
 }
