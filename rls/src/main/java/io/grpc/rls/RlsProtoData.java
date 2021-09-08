@@ -539,7 +539,8 @@ final class RlsProtoData {
 
     @Nullable abstract String method();
 
-    static ExtraKeys create(String host, String service, String method) {
+    static ExtraKeys create(
+        @Nullable String host, @Nullable String service, @Nullable String method) {
       return new AutoValue_RlsProtoData_ExtraKeys(host, service, method);
     }
   }

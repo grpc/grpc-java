@@ -54,9 +54,8 @@ final class RlsRequestFactory {
     Map<String, GrpcKeyBuilder> table = new HashMap<>();
     for (GrpcKeyBuilder grpcKeyBuilder : config.getGrpcKeyBuilders()) {
       for (Name name : grpcKeyBuilder.getNames()) {
-        String method =
-            name.getMethod() == null || name.getMethod().isEmpty()
-                ? "*" : name.getMethod();
+        boolean hasMethod = name.getMethod() == null || name.getMethod().isEmpty();
+        String method = hasMethod ? "*" : name.getMethod();
         String path = "/" + name.getService() + "/" + method;
         table.put(path, grpcKeyBuilder);
       }

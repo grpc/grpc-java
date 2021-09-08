@@ -181,9 +181,7 @@ final class RlsProtoConverters {
           (Map<String, String>) JsonUtil.getObject(keyBuilder,  "extraKeys");
       if (rawExtraKeys != null) {
         extraKeys = ExtraKeys.create(
-            /* host= */ rawExtraKeys.get("host"),
-            /* service= */ rawExtraKeys.get("service"),
-            /* method= */ rawExtraKeys.get("method"));
+            rawExtraKeys.get("host"), rawExtraKeys.get("service"), rawExtraKeys.get("method"));
       }
       Map<String, String> constantKeys =
           (Map<String, String>) JsonUtil.getObject(keyBuilder,  "constantKeys");
