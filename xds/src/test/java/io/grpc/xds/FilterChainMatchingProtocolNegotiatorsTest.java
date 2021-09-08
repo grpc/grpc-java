@@ -91,7 +91,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   private static final String LOCAL_IP = "10.1.2.3";  // dest
   private static final String REMOTE_IP = "10.4.2.3"; // source
   private static final int PORT = 7000;
-  private static final ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
+  private final ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
           new ArrayList<NamedFilterConfig>(), new AtomicReference<ImmutableList<VirtualHost>>());
 
   @Test
