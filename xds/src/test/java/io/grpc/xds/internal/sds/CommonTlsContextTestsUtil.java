@@ -22,6 +22,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import com.google.common.io.CharStreams;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.BoolValue;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CertificateProviderInstance;
@@ -234,6 +235,30 @@ public class CommonTlsContextTestsUtil {
     return builder.build();
   }
 
+  private static CommonTlsContext buildNewCommonTlsContextForCertProviderInstance(
+          String certInstanceName,
+          String certName,
+          String rootInstanceName,
+          String rootCertName,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext) {
+    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
+    if (certInstanceName != null) {
+      builder =
+              builder.setTlsCertificateProviderInstance(
+                      CertificateProviderPluginInstance.newBuilder()
+                              .setInstanceName(certInstanceName)
+                              .setCertificateName(certName));
+    }
+    builder =
+            addNewCertificateValidationContext(
+                    builder, rootInstanceName, rootCertName, staticCertValidationContext);
+    if (alpnProtocols != null) {
+      builder.addAllAlpnProtocols(alpnProtocols);
+    }
+    return builder.build();
+  }
+
   @SuppressWarnings("deprecation")
   private static CommonTlsContext.Builder addCertificateValidationContext(
       CommonTlsContext.Builder builder,
@@ -259,6 +284,26 @@ public class CommonTlsContextTestsUtil {
     return builder;
   }
 
+  private static CommonTlsContext.Builder addNewCertificateValidationContext(
+          CommonTlsContext.Builder builder,
+          String rootInstanceName,
+          String rootCertName,
+          CertificateValidationContext staticCertValidationContext) {
+    if (rootInstanceName != null) {
+      CertificateProviderPluginInstance providerInstance =
+          CertificateProviderPluginInstance.newBuilder()
+              .setInstanceName(rootInstanceName)
+              .setCertificateName(rootCertName)
+              .build();
+      CertificateValidationContext.Builder validationContextBuilder =
+          staticCertValidationContext != null ? staticCertValidationContext.toBuilder()
+              : CertificateValidationContext.newBuilder();
+      return builder.setValidationContext(
+          validationContextBuilder.setCaCertificateProviderInstance(providerInstance));
+    }
+    return builder;
+  }
+
   /** Helper method to build UpstreamTlsContext for CertProvider tests. */
   public static EnvoyServerProtoData.UpstreamTlsContext
       buildUpstreamTlsContextForCertProviderInstance(
@@ -270,6 +315,25 @@ public class CommonTlsContextTestsUtil {
           CertificateValidationContext staticCertValidationContext) {
     return buildUpstreamTlsContext(
         buildCommonTlsContextForCertProviderInstance(
+            certInstanceName,
+            certName,
+            rootInstanceName,
+            rootCertName,
+            alpnProtocols,
+            staticCertValidationContext));
+  }
+
+  /** Helper method to build UpstreamTlsContext for CertProvider tests. */
+  public static EnvoyServerProtoData.UpstreamTlsContext
+      buildNewUpstreamTlsContextForCertProviderInstance(
+          @Nullable String certInstanceName,
+          @Nullable String certName,
+          @Nullable String rootInstanceName,
+          @Nullable String rootCertName,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext) {
+    return buildUpstreamTlsContext(
+        buildNewCommonTlsContextForCertProviderInstance(
             certInstanceName,
             certName,
             rootInstanceName,
@@ -298,6 +362,25 @@ public class CommonTlsContextTestsUtil {
             staticCertValidationContext), requireClientCert);
   }
 
+  /** Helper method to build DownstreamTlsContext for CertProvider tests. */
+  public static EnvoyServerProtoData.DownstreamTlsContext
+      buildNewDownstreamTlsContextForCertProviderInstance(
+          @Nullable String certInstanceName,
+          @Nullable String certName,
+          @Nullable String rootInstanceName,
+          @Nullable String rootCertName,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext,
+          boolean requireClientCert) {
+    return buildInternalDownstreamTlsContext(
+            buildNewCommonTlsContextForCertProviderInstance(
+                    certInstanceName,
+                    certName,
+                    rootInstanceName,
+                    rootCertName,
+                    alpnProtocols,
+                    staticCertValidationContext), requireClientCert);
+  }
 
   /** Perform some simple checks on sslContext. */
   public static void doChecksOnSslContext(boolean server, SslContext sslContext,
