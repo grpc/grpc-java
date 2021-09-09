@@ -23,6 +23,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
@@ -62,6 +63,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -88,6 +91,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   private static final String LOCAL_IP = "10.1.2.3";  // dest
   private static final String REMOTE_IP = "10.4.2.3"; // source
   private static final int PORT = 7000;
+  private final ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
+          new ArrayList<NamedFilterConfig>(), new AtomicReference<ImmutableList<VirtualHost>>());
 
   @Test
   public void nofilterChainMatch_defaultSslContext() throws Exception {
@@ -98,8 +103,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
 
     SslContextProviderSupplier defaultSsl = new SslContextProviderSupplier(createTls(),
             tlsContextManager);
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             new HashMap<FilterChain, ServerRoutingConfig>(), defaultSsl, noopConfig);
     FilterChainMatchingHandler filterChainMatchingHandler =
@@ -154,8 +157,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             "filter-chain-foo", filterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext,
             tlsContextManager);
 
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(ImmutableMap.of(filterChain, noopConfig),
             null, null);
     FilterChainMatchingHandler filterChainMatchingHandler =
@@ -195,8 +196,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-bar", null, HTTP_CONNECTION_MANAGER, defaultTlsContext,
             tlsContextManager);
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChain, randomConfig("no-match")),
             defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
@@ -241,12 +240,11 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
                     tlsContextForDefaultFilterChain, tlsContextManager);
 
     ServerRoutingConfig routingConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), Arrays.asList(createVirtualHost("virtual")));
-    ServerRoutingConfig defaultRoutingConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
+            new ArrayList<NamedFilterConfig>(), new AtomicReference<>(
+                ImmutableList.of(createVirtualHost("virtual"))));
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChainWithDestPort, routingConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), defaultRoutingConfig);
+            defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
 
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
@@ -259,7 +257,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
     assertThat(sslSet.get()).isEqualTo(defaultFilterChain.getSslContextProviderSupplier());
-    assertThat(routingSettable.get()).isEqualTo(defaultRoutingConfig);
+    assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext())
             .isSameInstanceAs(tlsContextForDefaultFilterChain);
   }
@@ -287,8 +285,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
             tlsContextForDefaultFilterChain, tlsContextManager);
 
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChainWithMatch, noopConfig),
             defaultFilterChain.getSslContextProviderSupplier(), randomConfig("no-match"));
@@ -333,8 +329,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
             tlsContextForDefaultFilterChain, tlsContextManager);
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChainWithMismatch, randomConfig("no-match")),
             defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
@@ -380,8 +374,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
             tlsContextForDefaultFilterChain, tlsContextManager);
 
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChain0Length, noopConfig),
             defaultFilterChain.getSslContextProviderSupplier(), null);
@@ -439,8 +431,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
                     tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChainLessSpecific, randomConfig("no-match"),
                     filterChainMoreSpecific, noopConfig),
@@ -500,8 +490,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
                     tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChainLessSpecific, randomConfig("no-match"),
                     filterChainMoreSpecific, noopConfig),
@@ -559,8 +547,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
                     tlsContextMoreSpecific, tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChainLessSpecific, randomConfig("no-match"),
                     filterChainMoreSpecific, noopConfig),
@@ -624,8 +610,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
 
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChainMoreSpecificWith2, noopConfig,
                     filterChainLessSpecific, randomConfig("no-match")),
@@ -669,8 +653,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,tlsContextForDefaultFilterChain,
             tlsContextManager);
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChainWithMismatch, randomConfig("no-match")),
             defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
@@ -716,8 +698,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             "filter-chain-bar", null, HTTP_CONNECTION_MANAGER, tlsContextForDefaultFilterChain,
             tlsContextManager);
 
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChainWithMatch, noopConfig),
             defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default"));
@@ -777,8 +757,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
 
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChainMoreSpecificWith2, noopConfig,
                     filterChainLessSpecific, randomConfig("no-match")),
@@ -845,8 +823,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, null);
 
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChain1, noopConfig, filterChain2, noopConfig),
             defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
@@ -908,8 +884,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
 
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChainEmptySourcePorts, randomConfig("no-match"),
                     filterChainSourcePortMatch, noopConfig),
@@ -1059,8 +1033,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-7", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
 
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     Map<FilterChain, ServerRoutingConfig> map = new HashMap<>();
     map.put(filterChain1, randomConfig("1"));
     map.put(filterChain2, randomConfig("2"));
@@ -1142,8 +1114,6 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             "filter-chain-baz", defaultFilterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext3,
             mock(TlsContextManager.class));
 
-    ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new ArrayList<VirtualHost>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChain1, randomConfig("1"), filterChain2, randomConfig("2")),
             defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
@@ -1177,7 +1147,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
 
   private static ServerRoutingConfig randomConfig(String domain) {
     return ServerRoutingConfig.create(
-          new ArrayList<NamedFilterConfig>(), Arrays.asList(createVirtualHost(domain)));
+        new ArrayList<NamedFilterConfig>(), new AtomicReference<>(
+            ImmutableList.of(createVirtualHost(domain))));
   }
 
   private EnvoyServerProtoData.DownstreamTlsContext createTls() {
