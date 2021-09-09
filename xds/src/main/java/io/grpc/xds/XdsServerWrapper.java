@@ -396,7 +396,7 @@ final class XdsServerWrapper extends Server {
           }
           routeDiscoveryStates.keySet().retainAll(allRds);
           if (pendingRds.isEmpty()) {
-            updateSelector(true);
+            updateSelector();
           }
         }
       });
@@ -450,14 +450,7 @@ final class XdsServerWrapper extends Server {
       releaseSuppliersInFlight();
     }
 
-    /**
-     * Use firstTimeNoPendingRds to indicate that the previous SslContextProviderSuppliers in
-     * filterChainSelectorRef should be released. Call updateSelector(true) when all routing are
-     * just complete and the newest filter chain is ready to be applied to the
-     * filterChainSelectorRef. Call updateSelector(false) for subsequent routing update
-     * corresponding to the same filter chain list.
-     */
-    private void updateSelector(boolean firstTimeNoPendingRds) {
+    private void updateSelector() {
       Map<FilterChain, ServerRoutingConfig> filterChainRouting = new HashMap<>();
       for (FilterChain filterChain: filterChains) {
         filterChainRouting.put(filterChain, generateRoutingConfig(filterChain));
@@ -466,10 +459,7 @@ final class XdsServerWrapper extends Server {
           Collections.unmodifiableMap(filterChainRouting),
           defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
           defaultFilterChain == null ? null : generateRoutingConfig(defaultFilterChain));
-      List<SslContextProviderSupplier> toRelease = Collections.emptyList();
-      if (firstTimeNoPendingRds) {
-        toRelease = getSuppliersInUse();
-      }
+      List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
       filterChainSelectorRef.set(selector);
       for (SslContextProviderSupplier e: toRelease) {
         e.close();
@@ -480,14 +470,12 @@ final class XdsServerWrapper extends Server {
     private ServerRoutingConfig generateRoutingConfig(FilterChain filterChain) {
       HttpConnectionManager hcm = filterChain.getHttpConnectionManager();
       if (hcm.virtualHosts() != null) {
-        return ServerRoutingConfig.create(hcm.httpFilterConfigs(), hcm.virtualHosts());
+        return ServerRoutingConfig.create(hcm.httpFilterConfigs(),
+            new AtomicReference<>(hcm.virtualHosts()));
       } else {
         RouteDiscoveryState rds = routeDiscoveryStates.get(hcm.rdsName());
-        if (rds != null && rds.savedVirtualHosts != null) {
-          return ServerRoutingConfig.create(hcm.httpFilterConfigs(), rds.savedVirtualHosts);
-        } else {
-          return ServerRoutingConfig.FAILING_ROUTING_CONFIG;
-        }
+        checkNotNull(rds, "rds");
+        return ServerRoutingConfig.create(hcm.httpFilterConfigs(), rds.savedVirtualHosts);
       }
     }
 
@@ -555,8 +543,8 @@ final class XdsServerWrapper extends Server {
 
     private final class RouteDiscoveryState implements RdsResourceWatcher {
       private final String resourceName;
-      @Nullable
-      private List<VirtualHost> savedVirtualHosts;
+      private AtomicReference<ImmutableList<VirtualHost>> savedVirtualHosts =
+          new AtomicReference<>();
       private boolean isPending = true;
 
       private RouteDiscoveryState(String resourceName) {
@@ -571,7 +559,7 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            savedVirtualHosts = update.virtualHosts;
+            savedVirtualHosts.set(ImmutableList.copyOf(update.virtualHosts));
             maybeUpdateSelector();
           }
         });
@@ -586,7 +574,7 @@ final class XdsServerWrapper extends Server {
               return;
             }
             logger.log(Level.WARNING, "Rds {0} unavailable", resourceName);
-            savedVirtualHosts = null;
+            savedVirtualHosts.set(null);
             maybeUpdateSelector();
           }
         });
@@ -608,13 +596,13 @@ final class XdsServerWrapper extends Server {
       }
 
       // Update the selector to use the most recently updated configs only after all rds have been
-      // discovered, i.e. pendingRds is empty. Do the updateSelector even after rds are already
-      // fully discovered and new change comes.
+      // discovered for the first time. Later changes on rds will be applied through virtual host
+      // list atomic ref.
       private void maybeUpdateSelector() {
         isPending = false;
-        boolean isLastPending = pendingRds.remove(resourceName);
-        if (pendingRds.isEmpty()) {
-          updateSelector(isLastPending);
+        boolean isLastPending = pendingRds.remove(resourceName) && pendingRds.isEmpty();
+        if (isLastPending) {
+          updateSelector();
         }
       }
     }
@@ -644,15 +632,19 @@ final class XdsServerWrapper extends Server {
     public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
         Metadata headers, ServerCallHandler<ReqT, RespT> next) {
       ServerRoutingConfig routingConfig = call.getAttributes().get(ATTR_SERVER_ROUTING_CONFIG);
-      if (routingConfig == null
-              || routingConfig.equals(ServerRoutingConfig.FAILING_ROUTING_CONFIG)) {
-        String errorMsg = "Missing xDS routing config. " + (routingConfig == null ? "" :
-                "RDS config unavailable.");
+      if (routingConfig == null) {
+        String errorMsg = "Missing xDS routing config.";
+        call.close(Status.UNAVAILABLE.withDescription(errorMsg), new Metadata());
+        return new Listener<ReqT>() {};
+      }
+      List<VirtualHost> virtualHosts = routingConfig.virtualHosts().get();
+      if (virtualHosts == null) {
+        String errorMsg = "Missing xDS routing config VirtualHosts due to RDS config unavailable.";
         call.close(Status.UNAVAILABLE.withDescription(errorMsg), new Metadata());
         return new Listener<ReqT>() {};
       }
       VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(
-          routingConfig.virtualHosts(), call.getAuthority());
+          virtualHosts, call.getAuthority());
       if (virtualHost == null) {
         call.close(
                 Status.UNAVAILABLE.withDescription("Could not find xDS virtual host matching RPC"),
@@ -727,24 +719,20 @@ final class XdsServerWrapper extends Server {
    */
   @AutoValue
   abstract static class ServerRoutingConfig {
-    private static final ServerRoutingConfig FAILING_ROUTING_CONFIG =
-            new AutoValue_XdsServerWrapper_ServerRoutingConfig(
-                    ImmutableList.<NamedFilterConfig>of(), ImmutableList.<VirtualHost>of());
-
     // Top level http filter configs.
     abstract ImmutableList<NamedFilterConfig> httpFilterConfigs();
 
-    abstract ImmutableList<VirtualHost> virtualHosts();
+    abstract AtomicReference<ImmutableList<VirtualHost>> virtualHosts();
 
     /**
      * Server routing configuration.
      * */
     public static ServerRoutingConfig create(List<NamedFilterConfig> httpFilterConfigs,
-                                             List<VirtualHost> virtualHosts) {
+        AtomicReference<ImmutableList<VirtualHost>> virtualHosts) {
       checkNotNull(httpFilterConfigs, "httpFilterConfigs");
       checkNotNull(virtualHosts, "virtualHosts");
       return new AutoValue_XdsServerWrapper_ServerRoutingConfig(
-              ImmutableList.copyOf(httpFilterConfigs), ImmutableList.copyOf(virtualHosts));
+              ImmutableList.copyOf(httpFilterConfigs), virtualHosts);
     }
   }
 }
