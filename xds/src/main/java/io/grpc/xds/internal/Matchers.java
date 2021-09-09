@@ -117,13 +117,8 @@ public final class Matchers {
 
     /** Returns the matching result. */
     public boolean matches(@Nullable String value) {
-      if (present() != null) {
-        return (value == null) == present().equals(inverted());
-      }
-      // FIXME(zivy@): invert result for null value.
-      // https://github.com/envoyproxy/envoy/blob/0fae6970ddaf93f024908ba304bbd2b34e997a51/source/common/http/header_utility.cc#L130
       if (value == null) {
-        return false;
+        return present() != null && present() == inverted();
       }
       boolean baseMatch;
       if (exactValue() != null) {
@@ -141,6 +136,8 @@ public final class Matchers {
         }
       } else if (prefix() != null) {
         baseMatch = value.startsWith(prefix());
+      } else if (present() != null) {
+        baseMatch = present();
       } else {
         baseMatch = value.endsWith(suffix());
       }
