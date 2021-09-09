@@ -1087,6 +1087,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
   public void filterChainMatch_unsupportedMatchers() throws Exception {
     EnvoyServerProtoData.DownstreamTlsContext tlsContext1 =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "ROOTCA");

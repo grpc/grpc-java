@@ -155,7 +155,7 @@ public class RbacFilterTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({"unchecked", "deprecation"})
   public void headerParser() {
     HeaderMatcher headerMatcher = HeaderMatcher.newBuilder()
             .setName("party").setExactMatch("win").build();
