@@ -39,6 +39,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.route.v3.FilterConfig;
+import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.BindableService;
@@ -658,7 +659,8 @@ public abstract class ClientXdsClientTestBase {
                     mf.buildHttpFaultTypedConfig(
                         1L, 2, "cluster1", ImmutableList.<String>of(), 3, null, null,
                         null),
-                    false))));
+                    false),
+                mf.buildHttpFilter("terminal", Any.pack(Router.newBuilder().build()), true))));
     call.sendResponse(LDS, listener, VERSION_1, "0000");
 
     // Client sends an ACK LDS request.
@@ -993,7 +995,7 @@ public abstract class ClientXdsClientTestBase {
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
 
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
-        RDS_RESOURCE, null, Collections.<Message>emptyList());
+        RDS_RESOURCE, null, Collections.singletonList(mf.buildTerminalFilter()));
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
         "google-sds-config-default", "ROOTCA", false);
     Message filterChain = mf.buildFilterChain(
@@ -1028,7 +1030,7 @@ public abstract class ClientXdsClientTestBase {
         null,
         mf.buildRouteConfiguration(
             "route-bar.googleapis.com", mf.buildOpaqueVirtualHosts(VHOST_SIZE)),
-        Collections.<Message>emptyList());
+        Collections.singletonList(mf.buildTerminalFilter()));
     filterChain = mf.buildFilterChain(
         Collections.<String>emptyList(), downstreamTlsContext, "envoy.transport_sockets.tls",
         hcmFilter);
@@ -2203,7 +2205,8 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
-        "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+        "route-foo.googleapis.com", null,
+        Collections.singletonList(mf.buildTerminalFilter()));
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
         "google-sds-config-default", "ROOTCA", false);
     Message filterChain = mf.buildFilterChain(
@@ -2226,7 +2229,8 @@ public abstract class ClientXdsClientTestBase {
     assertThat(parsedFilterChain.getFilterChainMatch().getApplicationProtocols()).isEmpty();
     assertThat(parsedFilterChain.getHttpConnectionManager().rdsName())
         .isEqualTo("route-foo.googleapis.com");
-    assertThat(parsedFilterChain.getHttpConnectionManager().httpFilterConfigs()).isEmpty();
+    assertThat(parsedFilterChain.getHttpConnectionManager().httpFilterConfigs().get(0).filterConfig)
+        .isEqualTo(RouterFilter.ROUTER_CONFIG);
 
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
@@ -2237,7 +2241,8 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
-        "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+        "route-foo.googleapis.com", null,
+        Collections.singletonList(mf.buildTerminalFilter()));
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
         "google-sds-config-default", "ROOTCA", false);
     Message filterChain = mf.buildFilterChain(
@@ -2263,7 +2268,8 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClientTestBase.DiscoveryRpcCall call =
             startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
-            "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+            "route-foo.googleapis.com", null,
+        Collections.singletonList(mf.buildTerminalFilter()));
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
             null, null,false);
     Message filterChain = mf.buildFilterChain(
@@ -2286,7 +2292,8 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClientTestBase.DiscoveryRpcCall call =
         startResourceWatcher(LDS, LISTENER_RESOURCE, ldsResourceWatcher);
     Message hcmFilter = mf.buildHttpConnectionManagerFilter(
-        "route-foo.googleapis.com", null, Collections.<Message>emptyList());
+        "route-foo.googleapis.com", null,
+        Collections.singletonList(mf.buildTerminalFilter()));
     Message downstreamTlsContext = CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
         "cert1", "cert2",false);
     Message filterChain = mf.buildFilterChain(
@@ -2385,7 +2392,7 @@ public abstract class ClientXdsClientTestBase {
     /** Throws {@link InvalidProtocolBufferException} on {@link Any#unpack(Class)}. */
     protected static final Any FAILING_ANY = Any.newBuilder().setTypeUrl("fake").build();
 
-    protected final Message buildListenerWithApiListener(String name, Message routeConfiguration) {
+    protected Message buildListenerWithApiListener(String name, Message routeConfiguration) {
       return buildListenerWithApiListener(
           name, routeConfiguration, Collections.<Message>emptyList());
     }
@@ -2470,5 +2477,7 @@ public abstract class ClientXdsClientTestBase {
 
     protected abstract Message buildHttpConnectionManagerFilter(
         @Nullable String rdsName, @Nullable Message routeConfig, List<Message> httpFilters);
+
+    protected abstract Message buildTerminalFilter();
   }
 }

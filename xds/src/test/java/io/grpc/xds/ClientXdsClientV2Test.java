@@ -641,6 +641,11 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
         @Nullable String rdsName, @Nullable Message routeConfig, List<Message> httpFilters) {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    protected Message buildTerminalFilter() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**

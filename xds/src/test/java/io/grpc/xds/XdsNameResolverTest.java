@@ -1385,20 +1385,6 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void resolved_withNoRouterFilter() {
-    resolver.start(mockListener);
-    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverLdsUpdateWithNoRouterFilter();
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
-    ResolutionResult result = resolutionResultCaptor.getValue();
-    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
-    ClientCall.Listener<Void> observer = startNewCall(
-        TestMethodDescriptors.voidMethod(), configSelector, Collections.<String, String>emptyMap(),
-        CallOptions.DEFAULT);
-    verifyRpcFailed(observer, Status.UNAVAILABLE.withDescription("No router filter"));
-  }
-
-  @Test
   public void resolved_faultAbortAndDelayInLdsUpdateInLdsUpdate() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
@@ -1824,16 +1810,6 @@ public class XdsNameResolverTest {
           overrideConfig);
       ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
           0L, Collections.singletonList(virtualHost), filterChain)));
-    }
-
-    void deliverLdsUpdateWithNoRouterFilter() {
-      VirtualHost virtualHost = VirtualHost.create(
-          "virtual-host",
-          Collections.singletonList(AUTHORITY),
-          Collections.<Route>emptyList(),
-          Collections.<String, FilterConfig>emptyMap());
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-          0L, Collections.singletonList(virtualHost), ImmutableList.<NamedFilterConfig>of())));
     }
 
     void deliverLdsUpdateForRdsNameWithFaultInjection(
