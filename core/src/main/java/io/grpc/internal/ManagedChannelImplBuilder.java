@@ -162,6 +162,7 @@ public final class ManagedChannelImplBuilder
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
   private boolean recordRealTimeMetrics = false;
+  private boolean recordRetryMetrics = true;
   private boolean tracingEnabled = true;
 
   /**
@@ -583,6 +584,10 @@ public final class ManagedChannelImplBuilder
   public void setStatsRecordRealTimeMetrics(boolean value) {
     recordRealTimeMetrics = value;
   }
+  
+  public void setStatsRecordRetryMetrics(boolean value) {
+    recordRetryMetrics = value;
+  }
 
   /**
    * Disable or enable tracing features.  Enabled by default.
@@ -643,6 +648,7 @@ public final class ManagedChannelImplBuilder
                 "getClientInterceptor",
                 boolean.class,
                 boolean.class,
+                boolean.class,
                 boolean.class);
         statsInterceptor =
             (ClientInterceptor) getClientInterceptorMethod
@@ -650,7 +656,8 @@ public final class ManagedChannelImplBuilder
                     null,
                     recordStartedRpcs,
                     recordFinishedRpcs,
-                    recordRealTimeMetrics);
+                    recordRealTimeMetrics,
+                    recordRetryMetrics);
       } catch (ClassNotFoundException e) {
         // Replace these separate catch statements with multicatch when Android min-API >= 19
         log.log(Level.FINE, "Unable to apply census stats", e);

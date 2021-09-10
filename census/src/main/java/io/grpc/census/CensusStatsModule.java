@@ -88,19 +88,21 @@ final class CensusStatsModule {
   private final boolean recordStartedRpcs;
   private final boolean recordFinishedRpcs;
   private final boolean recordRealTimeMetrics;
+  private final boolean recordRetryMetrics;
 
   /**
    * Creates a {@link CensusStatsModule} with the default OpenCensus implementation.
    */
   CensusStatsModule(Supplier<Stopwatch> stopwatchSupplier,
       boolean propagateTags, boolean recordStartedRpcs, boolean recordFinishedRpcs,
-      boolean recordRealTimeMetrics) {
+      boolean recordRealTimeMetrics, boolean recordRetryMetrics) {
     this(
         Tags.getTagger(),
         Tags.getTagPropagationComponent().getBinarySerializer(),
         Stats.getStatsRecorder(),
         stopwatchSupplier,
-        propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
+        propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics,
+        recordRetryMetrics);
   }
 
   /**
@@ -111,7 +113,7 @@ final class CensusStatsModule {
       final TagContextBinarySerializer tagCtxSerializer,
       StatsRecorder statsRecorder, Supplier<Stopwatch> stopwatchSupplier,
       boolean propagateTags, boolean recordStartedRpcs, boolean recordFinishedRpcs,
-      boolean recordRealTimeMetrics) {
+      boolean recordRealTimeMetrics, boolean recordRetryMetrics) {
     this.tagger = checkNotNull(tagger, "tagger");
     this.statsRecorder = checkNotNull(statsRecorder, "statsRecorder");
     checkNotNull(tagCtxSerializer, "tagCtxSerializer");
@@ -120,6 +122,7 @@ final class CensusStatsModule {
     this.recordStartedRpcs = recordStartedRpcs;
     this.recordFinishedRpcs = recordFinishedRpcs;
     this.recordRealTimeMetrics = recordRealTimeMetrics;
+    this.recordRetryMetrics = recordRetryMetrics;
     this.statsHeader =
         Metadata.Key.of("grpc-tags-bin", new Metadata.BinaryMarshaller<TagContext>() {
             @Override
@@ -521,7 +524,9 @@ final class CensusStatsModule {
       } else if (inboundMetricTracer != null) {
         inboundMetricTracer.recordFinishedAttempt();
       }
-
+      if (!module.recordRetryMetrics) {
+        return;
+      }
       long retriesPerCall = 0;
       long attempts = attemptsPerCall.get();
       if (attempts > 0) {

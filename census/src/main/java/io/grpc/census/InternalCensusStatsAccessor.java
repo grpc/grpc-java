@@ -49,14 +49,16 @@ public final class InternalCensusStatsAccessor {
   public static ClientInterceptor getClientInterceptor(
       boolean recordStartedRpcs,
       boolean recordFinishedRpcs,
-      boolean recordRealTimeMetrics) {
+      boolean recordRealTimeMetrics,
+      boolean recordRetryMetrics) {
     CensusStatsModule censusStats =
         new CensusStatsModule(
             STOPWATCH_SUPPLIER,
             true, /* propagateTags */
             recordStartedRpcs,
             recordFinishedRpcs,
-            recordRealTimeMetrics);
+            recordRealTimeMetrics,
+            recordRetryMetrics);
     return censusStats.getClientInterceptor();
   }
 
@@ -71,11 +73,13 @@ public final class InternalCensusStatsAccessor {
       boolean propagateTags,
       boolean recordStartedRpcs,
       boolean recordFinishedRpcs,
-      boolean recordRealTimeMetrics) {
+      boolean recordRealTimeMetrics,
+      boolean recordRetryMetrics) {
     CensusStatsModule censusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, stopwatchSupplier,
-            propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
+            propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics,
+            recordRetryMetrics);
     return censusStats.getClientInterceptor();
   }
 
@@ -92,7 +96,8 @@ public final class InternalCensusStatsAccessor {
             true, /* propagateTags */
             recordStartedRpcs,
             recordFinishedRpcs,
-            recordRealTimeMetrics);
+            recordRealTimeMetrics,
+            false);
     return censusStats.getServerTracerFactory();
   }
 
@@ -111,7 +116,7 @@ public final class InternalCensusStatsAccessor {
     CensusStatsModule censusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, stopwatchSupplier,
-            propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
+            propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics, false);
     return censusStats.getServerTracerFactory();
   }
 }
