@@ -173,6 +173,21 @@ public class RbacFilterTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
+  public void headerParser_headerName() {
+    HeaderMatcher headerMatcher = HeaderMatcher.newBuilder()
+        .setName("grpc--feature").setExactMatch("win").build();
+    List<Permission> permissionList = Arrays.asList(
+        Permission.newBuilder().setHeader(headerMatcher).build());
+    HeaderMatcher headerMatcher2 = HeaderMatcher.newBuilder()
+        .setName(":scheme").setExactMatch("win").build();
+    List<Principal> principalList = Arrays.asList(
+        Principal.newBuilder().setHeader(headerMatcher2).build());
+    ConfigOrError<RbacConfig> result = parseOverride(permissionList, principalList);
+    assertThat(result.errorDetail).isNotNull();
+  }
+
+  @Test
   @SuppressWarnings("unchecked")
   public void compositeRules() {
     MetadataMatcher metadataMatcher = MetadataMatcher.newBuilder().build();

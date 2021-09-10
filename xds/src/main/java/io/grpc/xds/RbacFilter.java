@@ -216,6 +216,8 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
         return createDestinationIpMatcher(permission.getDestinationIp());
       case DESTINATION_PORT:
         return createDestinationPortMatcher(permission.getDestinationPort());
+      case DESTINATION_PORT_RANGE:
+        // TODO
       case NOT_RULE:
         return new InvertMatcher(parsePermission(permission.getNotRule()));
       case METADATA: // hard coded, never match.
@@ -291,6 +293,14 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
 
   private static AuthHeaderMatcher parseHeaderMatcher(
           io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
+    if (proto.getName().startsWith("grpc--")) {
+      throw new IllegalArgumentException("Invalid header matcher config: [grpc--] prefixed "
+          + "header name is not allowed.");
+    }
+    if (":scheme".equals(proto.getName())) {
+      throw new IllegalArgumentException("Invalid header matcher config: header name [:scheme] "
+          + "is not allowed.");
+    }
     return new AuthHeaderMatcher(MatcherParser.parseHeaderMatcher(proto));
   }
 
