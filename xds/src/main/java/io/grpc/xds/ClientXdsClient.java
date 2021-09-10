@@ -1279,7 +1279,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   protected void handleRdsResponse(String versionInfo, List<Any> resources, String nonce) {
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
-    Set<String> invalidResources = new HashSet<>(resources.size());
+    Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
 
     for (int i = 0; i < resources.size(); i++) {
