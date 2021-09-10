@@ -74,6 +74,7 @@ import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay.HeaderD
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.HeaderAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
+import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
@@ -277,6 +278,15 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
+    protected Message buildListenerWithApiListener(String name, Message routeConfiguration) {
+      return buildListenerWithApiListener(name, routeConfiguration, Arrays.asList(
+              HttpFilter.newBuilder()
+                      .setName("terminal")
+                      .setTypedConfig(Any.pack(Router.newBuilder().build())).build()
+      ));
+    }
+
+    @Override
     protected Message buildListenerWithApiListenerForRds(String name, String rdsResourceName) {
       return Listener.newBuilder()
           .setName(name)
@@ -291,6 +301,10 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
                               .setConfigSource(
                                   ConfigSource.newBuilder()
                                       .setAds(AggregatedConfigSource.getDefaultInstance())))
+                      .addHttpFilters(
+                          HttpFilter.newBuilder()
+                               .setName("terminal")
+                               .setTypedConfig(Any.pack(Router.newBuilder().build())))
                       .build())))
           .build();
     }
@@ -741,6 +755,13 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
           .setTypedConfig(
               Any.pack(hcmBuilder.build(), "type.googleapis.com"))
           .build();
+    }
+
+    @Override
+    protected Message buildTerminalFilter() {
+      return HttpFilter.newBuilder()
+          .setName("terminal")
+          .setTypedConfig(Any.pack(Router.newBuilder().build())).build();
     }
   }
 
