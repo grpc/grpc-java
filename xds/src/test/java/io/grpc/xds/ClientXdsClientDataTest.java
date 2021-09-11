@@ -1107,6 +1107,20 @@ public class ClientXdsClientDataTest {
         hcm, new HashSet<String>(), filterRegistry, false /* does not matter */,
         true /* does not matter */);
   }
+
+  @Test
+  public void parseHttpConnectionManager_OriginalIpDetectionExtensionsMustEmpty()
+      throws ResourceInvalidException {
+    @SuppressWarnings("deprecation")
+    HttpConnectionManager hcm = HttpConnectionManager.newBuilder()
+        .addOriginalIpDetectionExtensions(TypedExtensionConfig.newBuilder().build())
+        .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("HttpConnectionManager original_ip_detection_extensions "
+        + "must be empty when rbac is enabled.");
+    ClientXdsClient.parseHttpConnectionManager(
+        hcm, new HashSet<String>(), filterRegistry, false /* does not matter */, false);
+  }
   
   @Test
   public void parseHttpConnectionManager_missingRdsAndInlinedRouteConfiguration()
