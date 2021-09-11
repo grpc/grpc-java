@@ -214,6 +214,21 @@ public class GrpcAuthorizationEngineTest {
   }
 
   @Test
+  public void headerMatcher_aliasAuthorityAndHost() {
+    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+        .forExactValue("Host", "google", false));
+    OrMatcher principal = OrMatcher.create(headerMatcher);
+    OrMatcher permission = OrMatcher.create(
+        new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
+    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+    AuthDecision decision = engine.evaluate(metadata("authority", "google"), serverCall);
+    assertThat(decision.decision()).isEqualTo(Action.ALLOW);
+    assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
+  }
+
+  @Test
   public void pathMatcher() {
     PathMatcher pathMatcher = new PathMatcher(STRING_MATCHER);
     OrMatcher permission = OrMatcher.create(AlwaysTrueMatcher.INSTANCE);

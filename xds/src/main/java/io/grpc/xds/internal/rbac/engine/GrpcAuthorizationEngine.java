@@ -338,6 +338,9 @@ public final class GrpcAuthorizationEngine {
       if ("TE".equals(headerName)) {
         return null;
       }
+      if ("Host".equals(headerName)) {
+        headerName = "authority";
+      }
       String value = deserializeHeader(headerName);
       if (value == null && ":method".equals(headerName)) {
         return "POST";
