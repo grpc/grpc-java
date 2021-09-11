@@ -41,7 +41,6 @@ import io.netty.handler.codec.http2.Http2HeadersEncoder;
 import io.netty.handler.codec.http2.Http2HeadersEncoder.SensitivityDetector;
 import io.netty.util.AsciiString;
 import java.util.Arrays;
-
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;

@@ -559,7 +559,9 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            savedVirtualHosts.set(ImmutableList.copyOf(update.virtualHosts));
+            if (savedVirtualHosts.getAndSet(ImmutableList.copyOf(update.virtualHosts)) == null) {
+              logger.log(Level.WARNING, "Received valid Rds {0} configuration.", resourceName);
+            }
             maybeUpdateSelector();
           }
         });
@@ -640,15 +642,16 @@ final class XdsServerWrapper extends Server {
       List<VirtualHost> virtualHosts = routingConfig.virtualHosts().get();
       if (virtualHosts == null) {
         String errorMsg = "Missing xDS routing config VirtualHosts due to RDS config unavailable.";
+        logger.log(Level.WARNING, errorMsg);
         call.close(Status.UNAVAILABLE.withDescription(errorMsg), new Metadata());
         return new Listener<ReqT>() {};
       }
       VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(
           virtualHosts, call.getAuthority());
       if (virtualHost == null) {
-        call.close(
-                Status.UNAVAILABLE.withDescription("Could not find xDS virtual host matching RPC"),
-                new Metadata());
+        String errorMsg = "Could not find xDS virtual host matching RPC";
+        logger.log(Level.WARNING, errorMsg);
+        call.close(Status.UNAVAILABLE.withDescription(errorMsg), new Metadata());
         return new Listener<ReqT>() {};
       }
       Route selectedRoute = null;
@@ -664,9 +667,15 @@ final class XdsServerWrapper extends Server {
         }
       }
       if (selectedRoute == null) {
-        call.close(
-            Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"),
-            new Metadata());
+        String errorMessage = "Could not find xDS route matching RPC";
+        logger.log(Level.WARNING, errorMessage);
+        call.close(Status.UNAVAILABLE.withDescription(errorMessage), new Metadata());
+        return new ServerCall.Listener<ReqT>() {};
+      }
+      if (selectedRoute.routeAction() != null) {
+        String errorMessage = "Invalid xDS route action for matching route: only "
+            + "Route.non_forwarding_action should be allowed.";
+        call.close(Status.UNAVAILABLE.withDescription(errorMessage), new Metadata());
         return new ServerCall.Listener<ReqT>() {};
       }
       List<ServerInterceptor> filterInterceptors = new ArrayList<>();
@@ -681,10 +690,10 @@ final class XdsServerWrapper extends Server {
             filterInterceptors.add(interceptor);
           }
         } else {
-          call.close(
-              Status.UNAVAILABLE.withDescription("HttpFilterConfig(type URL: "
-                      + filterConfig.typeUrl() + ") is not supported on server-side."),
-              new Metadata());
+          String errorMessage = "HttpFilterConfig(type URL: "
+              + filterConfig.typeUrl() + ") is not supported on server-side.";
+          logger.log(Level.WARNING, errorMessage);
+          call.close(Status.UNAVAILABLE.withDescription(errorMessage), new Metadata());
           return new Listener<ReqT>() {};
         }
       }
