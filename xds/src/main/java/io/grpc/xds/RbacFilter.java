@@ -28,6 +28,7 @@ import io.envoyproxy.envoy.config.rbac.v3.Policy;
 import io.envoyproxy.envoy.config.rbac.v3.Principal;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBACPerRoute;
+import io.envoyproxy.envoy.type.v3.Int32Range;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
@@ -45,6 +46,7 @@ import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthHeaderMatche
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthenticatedMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.DestinationIpMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.DestinationPortMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.DestinationPortRangeMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.InvertMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.Matcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.OrMatcher;
@@ -217,7 +219,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
       case DESTINATION_PORT:
         return createDestinationPortMatcher(permission.getDestinationPort());
       case DESTINATION_PORT_RANGE:
-        // TODO
+        return parseDestinationPortRangeMatcher(permission.getDestinationPortRange());
       case NOT_RULE:
         return new InvertMatcher(parsePermission(permission.getNotRule()));
       case METADATA: // hard coded, never match.
@@ -312,6 +314,10 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
 
   private static DestinationPortMatcher createDestinationPortMatcher(int port) {
     return new DestinationPortMatcher(port);
+  }
+
+  private static DestinationPortRangeMatcher parseDestinationPortRangeMatcher(Int32Range range) {
+    return new DestinationPortRangeMatcher(range.getStart(), range.getEnd());
   }
 
   private static DestinationIpMatcher createDestinationIpMatcher(CidrRange cidrRange) {

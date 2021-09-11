@@ -41,6 +41,7 @@ import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBACPerRoute;
 import io.envoyproxy.envoy.type.matcher.v3.MetadataMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.PathMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
+import io.envoyproxy.envoy.type.v3.Int32Range;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
@@ -105,6 +106,33 @@ public class RbacFilterTest {
     when(serverCall.getMethodDescriptor()).thenReturn(method().build());
     GrpcAuthorizationEngine engine =
             new GrpcAuthorizationEngine(((RbacConfig)result.config).authConfig());
+    AuthDecision decision = engine.evaluate(new Metadata(), serverCall);
+    assertThat(decision.decision()).isEqualTo(GrpcAuthorizationEngine.Action.DENY);
+  }
+
+  @Test
+  @SuppressWarnings({"unchecked", "deprecation"})
+  public void portRangeParser() {
+    List<Permission> permissionList = Arrays.asList(
+        Permission.newBuilder().setDestinationPortRange(
+            Int32Range.newBuilder().setStart(1010).setEnd(65535).build()
+        ).build());
+    List<Principal> principalList = Arrays.asList(
+        Principal.newBuilder().setRemoteIp(
+            CidrRange.newBuilder().setAddressPrefix("10.10.10.0")
+                .setPrefixLen(UInt32Value.of(24)).build()
+        ).build());
+    ConfigOrError<?> result = parse(permissionList, principalList);
+    assertThat(result.errorDetail).isNull();
+    ServerCall<Void,Void> serverCall = mock(ServerCall.class);
+    Attributes attributes = Attributes.newBuilder()
+        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InetSocketAddress("10.10.10.0", 1))
+        .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InetSocketAddress("10.10.10.0",9090))
+        .build();
+    when(serverCall.getAttributes()).thenReturn(attributes);
+    when(serverCall.getMethodDescriptor()).thenReturn(method().build());
+    GrpcAuthorizationEngine engine =
+        new GrpcAuthorizationEngine(((RbacConfig)result.config).authConfig());
     AuthDecision decision = engine.evaluate(new Metadata(), serverCall);
     assertThat(decision.decision()).isEqualTo(GrpcAuthorizationEngine.Action.DENY);
   }

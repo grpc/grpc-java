@@ -213,7 +213,7 @@ public class GrpcAuthorizationEngineTest {
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
   }
 
-    @Test
+  @Test
   public void pathMatcher() {
     PathMatcher pathMatcher = new PathMatcher(STRING_MATCHER);
     OrMatcher permission = OrMatcher.create(AlwaysTrueMatcher.INSTANCE);

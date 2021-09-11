@@ -236,6 +236,23 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
+  public static final class DestinationPortRangeMatcher implements Matcher {
+    private final int start;
+    private final int end;
+
+    /** Start of the range is inclusive. End of the range is exclusive.*/
+    public DestinationPortRangeMatcher(int start, int end) {
+      this.start = start;
+      this.end = end;
+    }
+
+    @Override
+    public boolean matches(EvaluateArgs args) {
+      int port = args.getDestinationPort();
+      return  port >= start && port < end;
+    }
+  }
+
   public static final class RequestedServerNameMatcher implements Matcher {
     private final Matchers.StringMatcher delegate;
 
