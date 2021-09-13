@@ -97,6 +97,7 @@ public final class InProcessChannelBuilder extends
     // https://github.com/grpc/grpc-java/issues/2284
     managedChannelImplBuilder.setStatsRecordStartedRpcs(false);
     managedChannelImplBuilder.setStatsRecordFinishedRpcs(false);
+    managedChannelImplBuilder.setStatsRecordRetryMetrics(false);
   }
 
   @Internal
