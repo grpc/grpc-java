@@ -182,13 +182,14 @@ final class XdsNameResolver extends NameResolver {
   @VisibleForTesting
   static Map<String, ?> generateServiceConfigWithMethodConfig(
       @Nullable Long timeoutNano, @Nullable RetryPolicy retryPolicy) {
-    if (timeoutNano == null && retryPolicy == null) {
+    if (timeoutNano == null
+        && (retryPolicy == null || retryPolicy.retryableStatusCodes().isEmpty())) {
       return Collections.emptyMap();
     }
     ImmutableMap.Builder<String, Object> methodConfig = ImmutableMap.builder();
     methodConfig.put(
         "name", Collections.singletonList(Collections.emptyMap()));
-    if (retryPolicy != null) {
+    if (retryPolicy != null && !retryPolicy.retryableStatusCodes().isEmpty()) {
       ImmutableMap.Builder<String, Object> rawRetryPolicy = ImmutableMap.builder();
       rawRetryPolicy.put("maxAttempts", (double) retryPolicy.maxAttempts());
       rawRetryPolicy.put("initialBackoff", Durations.toString(retryPolicy.initialBackoff()));
