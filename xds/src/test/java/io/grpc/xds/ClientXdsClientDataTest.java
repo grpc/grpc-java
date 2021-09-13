@@ -552,7 +552,8 @@ public class ClientXdsClientDataTest {
         .setRetryPolicy(builder.build())
         .build();
     struct = ClientXdsClient.parseRouteAction(proto, filterRegistry, false);
-    assertThat(struct.getStruct().retryPolicy()).isNull();
+    assertThat(struct.getStruct().retryPolicy()).isNotNull();
+    assertThat(struct.getStruct().retryPolicy().retryableStatusCodes()).isEmpty();
 
     // base_interval unset
     builder
