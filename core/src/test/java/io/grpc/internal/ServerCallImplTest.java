@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static io.grpc.internal.GrpcUtil.CONTENT_LENGTH_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -149,6 +150,16 @@ public class ServerCallImplTest {
     call.sendHeaders(headers);
 
     verify(stream).writeHeaders(headers);
+  }
+
+  @Test
+  public void sendHeader_contentLengthDiscarded() {
+    Metadata headers = new Metadata();
+    headers.put(CONTENT_LENGTH_KEY, "123");
+    call.sendHeaders(headers);
+
+    verify(stream).writeHeaders(headers);
+    assertNull(headers.get(CONTENT_LENGTH_KEY));
   }
 
   @Test
