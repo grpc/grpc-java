@@ -989,6 +989,8 @@ public class XdsNameResolverTest {
     RetryPolicy retryPolicy = RetryPolicy.create(
         4, ImmutableList.of(Code.UNAVAILABLE, Code.CANCELLED), Durations.fromMillis(100),
         Durations.fromMillis(200), null);
+    RetryPolicy retryPolicyWithEmptyStatusCodes = RetryPolicy.create(
+        4, ImmutableList.<Code>of(), Durations.fromMillis(100), Durations.fromMillis(200), null);
 
     // timeout only
     String expectedServiceConfigJson = "{\n"
@@ -1000,6 +1002,11 @@ public class XdsNameResolverTest {
     Map<String, ?> expectedServiceConfig =
         (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(timeoutNano, null))
+        .isEqualTo(expectedServiceConfig);
+
+    // timeout and retry with empty retriable status codes
+    assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(
+            timeoutNano, retryPolicyWithEmptyStatusCodes))
         .isEqualTo(expectedServiceConfig);
 
     // retry only
@@ -1021,6 +1028,7 @@ public class XdsNameResolverTest {
         (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(null, retryPolicy))
         .isEqualTo(expectedServiceConfig);
+
 
     // timeout and retry
     expectedServiceConfigJson = "{\n"
@@ -1044,11 +1052,15 @@ public class XdsNameResolverTest {
         .isEqualTo(expectedServiceConfig);
 
     // no timeout and no retry
-    // timeout and retry
     expectedServiceConfigJson = "{}";
     expectedServiceConfig =
         (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(null, null))
+        .isEqualTo(expectedServiceConfig);
+
+    // retry with emtry retriable status codes only
+    assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(
+            null, retryPolicyWithEmptyStatusCodes))
         .isEqualTo(expectedServiceConfig);
   }
 
