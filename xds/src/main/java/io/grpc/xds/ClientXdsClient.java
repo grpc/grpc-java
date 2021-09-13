@@ -1273,13 +1273,10 @@ final class ClientXdsClient extends AbstractXdsClient {
       retryableStatusCodesBuilder.add(code);
     }
     List<Code> retryableStatusCodes = retryableStatusCodesBuilder.build();
-    if (!retryableStatusCodes.isEmpty()) {
-      return StructOrError.fromStruct(
-          RetryPolicy.create(
-              maxAttempts, retryableStatusCodes, initialBackoff, maxBackoff,
-              /* perAttemptRecvTimeout= */ null));
-    }
-    return null;
+    return StructOrError.fromStruct(
+        RetryPolicy.create(
+            maxAttempts, retryableStatusCodes, initialBackoff, maxBackoff,
+            /* perAttemptRecvTimeout= */ null));
   }
 
   @VisibleForTesting
