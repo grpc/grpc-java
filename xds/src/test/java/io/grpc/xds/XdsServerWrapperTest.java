@@ -727,9 +727,9 @@ public class XdsServerWrapperTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void interceptor_notServerInterceptor() throws Exception {
+  public void interceptor_success() throws Exception {
     ArgumentCaptor<ConfigApplyingInterceptor> interceptorCaptor =
-            ArgumentCaptor.forClass(ConfigApplyingInterceptor.class);
+        ArgumentCaptor.forClass(ConfigApplyingInterceptor.class);
     final SettableFuture<Server> start = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
@@ -744,26 +744,38 @@ public class XdsServerWrapperTest {
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     verify(mockBuilder).intercept(interceptorCaptor.capture());
     ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
-    ServerRoutingConfig routingConfig = createRoutingConfig("/FooService/barMethod",
-            "foo.google.com", "filter-type-url");
+    RouteMatch routeMatch =
+        RouteMatch.create(
+            PathMatcher.fromPath("/FooService/barMethod", true),
+            Collections.<HeaderMatcher>emptyList(), null);
+    Route route = Route.forAction(routeMatch, null,
+        ImmutableMap.<String, FilterConfig>of());
+    VirtualHost virtualHost  = VirtualHost.create(
+        "v1", Collections.singletonList("foo.google.com"), Arrays.asList(route),
+        ImmutableMap.<String, FilterConfig>of());
+    final List<Integer> interceptorTrace = new ArrayList<>();
+    ServerInterceptor interceptor0 = new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+          Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+        interceptorTrace.add(0);
+        return next.startCall(call, headers);
+      }
+    };
+    ServerRoutingConfig routingConfig = ServerRoutingConfig.create(
+        Collections.<NamedFilterConfig>emptyList(),
+        new AtomicReference<>(ImmutableList.<VirtualHost>of(virtualHost)),
+        new AtomicReference<>(ImmutableMap.of(route, interceptor0))
+    );
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
-    when(serverCall.getAttributes()).thenReturn(
-            Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, routingConfig).build());
     when(serverCall.getMethodDescriptor()).thenReturn(createMethod("FooService/barMethod"));
+    when(serverCall.getAttributes()).thenReturn(
+        Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, routingConfig).build());
     when(serverCall.getAuthority()).thenReturn("foo.google.com");
-
-    Filter filter = mock(Filter.class);
-    when(filter.typeUrls()).thenReturn(new String[]{"filter-type-url"});
-    filterRegistry.register(filter);
     ServerCallHandler<Void, Void> next = mock(ServerCallHandler.class);
     interceptor.interceptCall(serverCall, new Metadata(), next);
-    verify(next, never()).startCall(any(ServerCall.class), any(Metadata.class));
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(serverCall).close(statusCaptor.capture(), any(Metadata.class));
-    Status status = statusCaptor.getValue();
-    assertThat(status.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
-    assertThat(status.getDescription()).isEqualTo(
-            "HttpFilterConfig(type URL: filter-type-url) is not supported on server-side.");
+    verify(next).startCall(eq(serverCall), any(Metadata.class));
+    assertThat(interceptorTrace).isEqualTo(Arrays.asList(0));
   }
 
   @Test
@@ -865,7 +877,9 @@ public class XdsServerWrapperTest {
     verify(mockBuilder).intercept(interceptorCaptor.capture());
     ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
     ServerRoutingConfig failingConfig = ServerRoutingConfig.create(
-            ImmutableList.<NamedFilterConfig>of(), new AtomicReference<ImmutableList<VirtualHost>>()
+            ImmutableList.<NamedFilterConfig>of(),
+        new AtomicReference<ImmutableList<VirtualHost>>(),
+        new AtomicReference<ImmutableMap<Route, ServerInterceptor>>()
     );
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     when(serverCall.getAttributes()).thenReturn(
@@ -884,9 +898,7 @@ public class XdsServerWrapperTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void interceptors() throws Exception {
-    ArgumentCaptor<ConfigApplyingInterceptor> interceptorCaptor =
-            ArgumentCaptor.forClass(ConfigApplyingInterceptor.class);
+  public void buildInterceptor_inline() throws Exception {
     final SettableFuture<Server> start = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
@@ -899,14 +911,12 @@ public class XdsServerWrapperTest {
       }
     });
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
-    verify(mockBuilder).intercept(interceptorCaptor.capture());
-    final ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
     RouteMatch routeMatch =
-            RouteMatch.create(
-                    PathMatcher.fromPath("/FooService/barMethod", true),
-                    Collections.<HeaderMatcher>emptyList(), null);
+        RouteMatch.create(
+            PathMatcher.fromPath("/FooService/barMethod", true),
+            Collections.<HeaderMatcher>emptyList(), null);
     Filter filter = mock(Filter.class, withSettings()
-            .extraInterfaces(ServerInterceptorBuilder.class));
+        .extraInterfaces(ServerInterceptorBuilder.class));
     when(filter.typeUrls()).thenReturn(new String[]{"filter-type-url"});
     filterRegistry.register(filter);
     FilterConfig f0 = mock(FilterConfig.class);
@@ -916,7 +926,7 @@ public class XdsServerWrapperTest {
     ServerInterceptor interceptor0 = new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
-            Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+          Metadata headers, ServerCallHandler<ReqT, RespT> next) {
         interceptorTrace.add(0);
         return next.startCall(call, headers);
       }
@@ -929,55 +939,130 @@ public class XdsServerWrapperTest {
         return next.startCall(call, headers);
       }
     };
-
+    when(((ServerInterceptorBuilder)filter).buildServerInterceptor(f0, null))
+        .thenReturn(interceptor0);
+    when(((ServerInterceptorBuilder)filter).buildServerInterceptor(f0, f0Override))
+        .thenReturn(interceptor1);
+    Route route = Route.forAction(routeMatch, null,
+        ImmutableMap.<String, FilterConfig>of());
     VirtualHost virtualHost  = VirtualHost.create(
-            "v1", Collections.singletonList("foo.google.com"),
-            Arrays.asList(Route.forAction(routeMatch, null,
-                    ImmutableMap.<String, FilterConfig>of())),
-            ImmutableMap.of("filter-config-name-0", f0Override));
-    ServerRoutingConfig routingConfig = ServerRoutingConfig.create(
-            Arrays.asList(new NamedFilterConfig("filter-config-name-0", f0),
-                    new NamedFilterConfig("filter-config-name-1", f0)),
-        new AtomicReference<>(ImmutableList.<VirtualHost>of(virtualHost))
-    );
+        "v1", Collections.singletonList("foo.google.com"), Arrays.asList(route),
+        ImmutableMap.of("filter-config-name-0", f0Override));
+    HttpConnectionManager hcmVirtual = HttpConnectionManager.forVirtualHosts(
+        0L, Collections.singletonList(virtualHost),
+        Arrays.asList(new NamedFilterConfig("filter-config-name-0", f0),
+            new NamedFilterConfig("filter-config-name-1", f0)));
+    EnvoyServerProtoData.FilterChain filterChain = createFilterChain("filter-chain-0", hcmVirtual);
+    xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
+    start.get(5000, TimeUnit.MILLISECONDS);
+    verify(mockServer).start();
+    assertThat(selectorRef.get().getRoutingConfigs().size()).isEqualTo(1);
+    ServerInterceptor realInterceptor = selectorRef.get().getRoutingConfigs()
+        .get(filterChain).interceptors().get().get(route);
+    assertThat(realInterceptor).isNotNull();
+
     ServerCall<Void, Void> serverCall = mock(ServerCall.class);
     ServerCallHandler<Void, Void> mockNext = mock(ServerCallHandler.class);
     final ServerCall.Listener<Void> listener = new ServerCall.Listener<Void>() {};
     when(mockNext.startCall(any(ServerCall.class), any(Metadata.class))).thenReturn(listener);
-    when(serverCall.getAttributes()).thenReturn(
-            Attributes.newBuilder().set(ATTR_SERVER_ROUTING_CONFIG, routingConfig).build());
-    when(serverCall.getMethodDescriptor()).thenReturn(createMethod("FooService/barMethod"));
-    when(serverCall.getAuthority()).thenReturn("foo.google.com");
-
-    when(((ServerInterceptorBuilder)filter).buildServerInterceptor(f0, f0Override))
-            .thenReturn(null);
-    when(((ServerInterceptorBuilder)filter).buildServerInterceptor(f0, null))
-            .thenReturn(null);
-    ServerCall.Listener<Void> configApplyingInterceptorListener =
-            interceptor.interceptCall(serverCall, new Metadata(), mockNext);
-    assertThat(configApplyingInterceptorListener).isSameInstanceAs(listener);
+    realInterceptor.interceptCall(serverCall, new Metadata(), mockNext);
+    assertThat(interceptorTrace).isEqualTo(Arrays.asList(1, 0));
     verify(mockNext).startCall(eq(serverCall), any(Metadata.class));
-    assertThat(interceptorTrace).isEqualTo(Arrays.asList());
+  }
 
-    when(((ServerInterceptorBuilder)filter).buildServerInterceptor(f0, f0Override))
-            .thenReturn(null);
+  @Test
+  @SuppressWarnings("unchecked")
+  public void buildInterceptor_rds() throws Exception {
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+
+    Filter filter = mock(Filter.class, withSettings()
+        .extraInterfaces(ServerInterceptorBuilder.class));
+    when(filter.typeUrls()).thenReturn(new String[]{"filter-type-url"});
+    filterRegistry.register(filter);
+    FilterConfig f0 = mock(FilterConfig.class);
+    FilterConfig f0Override = mock(FilterConfig.class);
+    when(f0.typeUrl()).thenReturn("filter-type-url");
+    final List<Integer> interceptorTrace = new ArrayList<>();
+    ServerInterceptor interceptor0 = new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+          Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+        interceptorTrace.add(0);
+        return next.startCall(call, headers);
+      }
+    };
+    ServerInterceptor interceptor1 = new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+          Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+        interceptorTrace.add(1);
+        return next.startCall(call, headers);
+      }
+    };
     when(((ServerInterceptorBuilder)filter).buildServerInterceptor(f0, null))
-            .thenReturn(interceptor0);
-    configApplyingInterceptorListener = interceptor.interceptCall(
-            serverCall, new Metadata(), mockNext);
-    assertThat(configApplyingInterceptorListener).isSameInstanceAs(listener);
+        .thenReturn(interceptor0);
+    when(((ServerInterceptorBuilder)filter).buildServerInterceptor(f0, f0Override))
+        .thenReturn(interceptor1);
+    RouteMatch routeMatch =
+        RouteMatch.create(
+            PathMatcher.fromPath("/FooService/barMethod", true),
+            Collections.<HeaderMatcher>emptyList(), null);
+
+    HttpConnectionManager rdsHcm = HttpConnectionManager.forRdsName(0L, "r0",
+        Arrays.asList(new NamedFilterConfig("filter-config-name-0", f0),
+            new NamedFilterConfig("filter-config-name-1", f0)));
+    EnvoyServerProtoData.FilterChain filterChain = createFilterChain("filter-chain-0", rdsHcm);
+    xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
+    Route route = Route.forAction(routeMatch, null,
+        ImmutableMap.<String, FilterConfig>of());
+    VirtualHost virtualHost  = VirtualHost.create(
+        "v1", Collections.singletonList("foo.google.com"), Arrays.asList(route),
+        ImmutableMap.of("filter-config-name-0", f0Override));
+    xdsClient.deliverRdsUpdate("r0", Collections.singletonList(virtualHost));
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
+    start.get(5000, TimeUnit.MILLISECONDS);
+    verify(mockServer).start();
+    assertThat(selectorRef.get().getRoutingConfigs().size()).isEqualTo(1);
+    ServerInterceptor realInterceptor = selectorRef.get().getRoutingConfigs()
+        .get(filterChain).interceptors().get().get(route);
+    assertThat(realInterceptor).isNotNull();
+
+    ServerCall<Void, Void> serverCall = mock(ServerCall.class);
+    ServerCallHandler<Void, Void> mockNext = mock(ServerCallHandler.class);
+    final ServerCall.Listener<Void> listener = new ServerCall.Listener<Void>() {};
+    when(mockNext.startCall(any(ServerCall.class), any(Metadata.class))).thenReturn(listener);
+    realInterceptor.interceptCall(serverCall, new Metadata(), mockNext);
+    assertThat(interceptorTrace).isEqualTo(Arrays.asList(1, 0));
+    verify(mockNext).startCall(eq(serverCall), any(Metadata.class));
+
+    xdsClient.rdsCount = new CountDownLatch(1);
+    virtualHost  = VirtualHost.create(
+        "v1", Collections.singletonList("foo.google.com"), Arrays.asList(route),
+         ImmutableMap.<String, FilterConfig>of());
+    xdsClient.deliverRdsUpdate("r0", Collections.singletonList(virtualHost));
+    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
+    realInterceptor = selectorRef.get().getRoutingConfigs()
+        .get(filterChain).interceptors().get().get(route);
+    assertThat(realInterceptor).isNotNull();
+    interceptorTrace.clear();
+    realInterceptor.interceptCall(serverCall, new Metadata(), mockNext);
+    assertThat(interceptorTrace).isEqualTo(Arrays.asList(0, 0));
     verify(mockNext, times(2)).startCall(eq(serverCall), any(Metadata.class));
-    assertThat(interceptorTrace).isEqualTo(Arrays.asList(0));
 
-    when(((ServerInterceptorBuilder)filter).buildServerInterceptor(f0, f0Override))
-            .thenReturn(interceptor0);
-    when(((ServerInterceptorBuilder)filter).buildServerInterceptor(f0, null))
-            .thenReturn(interceptor1);
-    configApplyingInterceptorListener = interceptor.interceptCall(
-            serverCall, new Metadata(), mockNext);
-    assertThat(configApplyingInterceptorListener).isSameInstanceAs(listener);
-    verify(mockNext, times(3)).startCall(eq(serverCall), any(Metadata.class));
-    assertThat(interceptorTrace).isEqualTo(Arrays.asList(0, 0, 1));
+    xdsClient.rdsWatchers.get("r0").onResourceDoesNotExist("r0");
+    assertThat(selectorRef.get().getRoutingConfigs()
+        .get(filterChain).interceptors().get()).isNull();
   }
 
   private static FilterChain createFilterChain(String name, HttpConnectionManager hcm) {
@@ -992,8 +1077,12 @@ public class XdsServerWrapperTest {
   }
 
   private static HttpConnectionManager createRds(String name) {
+    return createRds(name, null);
+  }
+
+  private static HttpConnectionManager createRds(String name, FilterConfig filterConfig) {
     return HttpConnectionManager.forRdsName(0L, name,
-            Arrays.asList(new NamedFilterConfig("named-config-" + name, null)));
+        Arrays.asList(new NamedFilterConfig("named-config-" + name, filterConfig)));
   }
 
   private static EnvoyServerProtoData.FilterChainMatch createMatch() {
@@ -1023,7 +1112,8 @@ public class XdsServerWrapperTest {
     when(f0.typeUrl()).thenReturn(filterType);
     return ServerRoutingConfig.create(
         Arrays.asList(new NamedFilterConfig("filter-config-name-0", f0)),
-        new AtomicReference<>(ImmutableList.<VirtualHost>of(virtualHost))
+        new AtomicReference<>(ImmutableList.<VirtualHost>of(virtualHost)),
+        new AtomicReference<>(ImmutableMap.<Route, ServerInterceptor>of())
     );
   }
 

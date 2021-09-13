@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.ServerInterceptor;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
@@ -92,7 +93,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   private static final String REMOTE_IP = "10.4.2.3"; // source
   private static final int PORT = 7000;
   private final ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-          new ArrayList<NamedFilterConfig>(), new AtomicReference<ImmutableList<VirtualHost>>());
+          new ArrayList<NamedFilterConfig>(), new AtomicReference<ImmutableList<VirtualHost>>(),
+      new AtomicReference<ImmutableMap<Route, ServerInterceptor>>());
 
   @Test
   public void nofilterChainMatch_defaultSslContext() throws Exception {
@@ -241,7 +243,8 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
 
     ServerRoutingConfig routingConfig = ServerRoutingConfig.create(
             new ArrayList<NamedFilterConfig>(), new AtomicReference<>(
-                ImmutableList.of(createVirtualHost("virtual"))));
+                ImmutableList.of(createVirtualHost("virtual"))),
+        new AtomicReference<ImmutableMap<Route, ServerInterceptor>>());
     FilterChainSelector selector = new FilterChainSelector(
             ImmutableMap.of(filterChainWithDestPort, routingConfig),
             defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
@@ -1148,7 +1151,9 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   private static ServerRoutingConfig randomConfig(String domain) {
     return ServerRoutingConfig.create(
         new ArrayList<NamedFilterConfig>(), new AtomicReference<>(
-            ImmutableList.of(createVirtualHost(domain))));
+            ImmutableList.of(createVirtualHost(domain))),
+        new AtomicReference<>(ImmutableMap.<Route, ServerInterceptor>of())
+    );
   }
 
   private EnvoyServerProtoData.DownstreamTlsContext createTls() {
