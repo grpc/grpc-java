@@ -136,7 +136,6 @@ final class ClientXdsClient extends AbstractXdsClient {
   static boolean enableRetry =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"));
-
   @VisibleForTesting
   static boolean enableRbac =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"))

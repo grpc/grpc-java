@@ -131,16 +131,20 @@ public class ClientXdsClientDataTest {
   public final ExpectedException thrown = ExpectedException.none();
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private boolean originalEnableRetry;
+  private boolean originalEnableRbac;
 
   @Before
   public void setUp() {
     originalEnableRetry = ClientXdsClient.enableRetry;
     assertThat(originalEnableRetry).isTrue();
+    originalEnableRbac = ClientXdsClient.enableRbac;
+    assertThat(originalEnableRbac).isTrue();
   }
 
   @After
   public void tearDown() {
     ClientXdsClient.enableRetry = originalEnableRetry;
+    ClientXdsClient.enableRbac = originalEnableRbac;
   }
 
   @Test
