@@ -559,7 +559,8 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            if (savedVirtualHosts.getAndSet(ImmutableList.copyOf(update.virtualHosts)) == null) {
+            if (savedVirtualHosts.getAndSet(ImmutableList.copyOf(update.virtualHosts)) == null
+                && !isPending) {
               logger.log(Level.WARNING, "Received valid Rds {0} configuration.", resourceName);
             }
             maybeUpdateSelector();
@@ -635,23 +636,23 @@ final class XdsServerWrapper extends Server {
         Metadata headers, ServerCallHandler<ReqT, RespT> next) {
       ServerRoutingConfig routingConfig = call.getAttributes().get(ATTR_SERVER_ROUTING_CONFIG);
       if (routingConfig == null) {
-        String errorMsg = "Missing xDS routing config.";
-        call.close(Status.UNAVAILABLE.withDescription(errorMsg), new Metadata());
+        call.close(Status.UNAVAILABLE.withDescription("Missing xDS routing config."),
+            new Metadata());
         return new Listener<ReqT>() {};
       }
       List<VirtualHost> virtualHosts = routingConfig.virtualHosts().get();
       if (virtualHosts == null) {
-        String errorMsg = "Missing xDS routing config VirtualHosts due to RDS config unavailable.";
-        logger.log(Level.WARNING, errorMsg);
-        call.close(Status.UNAVAILABLE.withDescription(errorMsg), new Metadata());
+        call.close(
+            Status.UNAVAILABLE.withDescription("Missing xDS routing config VirtualHosts due to RDS"
+                + " config unavailable."), new Metadata());
         return new Listener<ReqT>() {};
       }
       VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(
           virtualHosts, call.getAuthority());
       if (virtualHost == null) {
-        String errorMsg = "Could not find xDS virtual host matching RPC";
-        logger.log(Level.WARNING, errorMsg);
-        call.close(Status.UNAVAILABLE.withDescription(errorMsg), new Metadata());
+        call.close(
+            Status.UNAVAILABLE.withDescription("Could not find xDS virtual host matching RPC"),
+            new Metadata());
         return new Listener<ReqT>() {};
       }
       Route selectedRoute = null;
@@ -667,15 +668,13 @@ final class XdsServerWrapper extends Server {
         }
       }
       if (selectedRoute == null) {
-        String errorMessage = "Could not find xDS route matching RPC";
-        logger.log(Level.WARNING, errorMessage);
-        call.close(Status.UNAVAILABLE.withDescription(errorMessage), new Metadata());
+        call.close(Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"),
+            new Metadata());
         return new ServerCall.Listener<ReqT>() {};
       }
       if (selectedRoute.routeAction() != null) {
-        String errorMessage = "Invalid xDS route action for matching route: only "
-            + "Route.non_forwarding_action should be allowed.";
-        call.close(Status.UNAVAILABLE.withDescription(errorMessage), new Metadata());
+        call.close(Status.UNAVAILABLE.withDescription("Invalid xDS route action for matching "
+            + "route: only Route.non_forwarding_action should be allowed."), new Metadata());
         return new ServerCall.Listener<ReqT>() {};
       }
       List<ServerInterceptor> filterInterceptors = new ArrayList<>();

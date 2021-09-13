@@ -182,7 +182,8 @@ public class GrpcAuthorizationEngineTest {
   @Test
   public void headerMatcher_binaryHeader() {
     AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
-        .forExactValue(HEADER_KEY + Metadata.BINARY_HEADER_SUFFIX, HEADER_VALUE, false));
+        .forExactValue(HEADER_KEY + Metadata.BINARY_HEADER_SUFFIX,
+            BaseEncoding.base64().encode(HEADER_VALUE.getBytes(US_ASCII)), false));
     OrMatcher principal = OrMatcher.create(headerMatcher);
     OrMatcher permission = OrMatcher.create(
         new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
@@ -191,8 +192,7 @@ public class GrpcAuthorizationEngineTest {
         new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
     Metadata metadata = new Metadata();
     metadata.put(Metadata.Key.of(HEADER_KEY + Metadata.BINARY_HEADER_SUFFIX,
-        Metadata.BINARY_BYTE_MARSHALLER),
-        BaseEncoding.base64().encode(HEADER_VALUE.getBytes(US_ASCII)).getBytes(US_ASCII));
+        Metadata.BINARY_BYTE_MARSHALLER), HEADER_VALUE.getBytes(US_ASCII));
     AuthDecision decision = engine.evaluate(metadata, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
@@ -208,6 +208,12 @@ public class GrpcAuthorizationEngineTest {
     PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
         new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+    when(serverCall.getMethodDescriptor()).thenReturn(
+        MethodDescriptor.<Void,Void>newBuilder()
+            .setType(MethodType.BIDI_STREAMING)
+            .setFullMethodName("")
+            .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
+            .setResponseMarshaller(TestMethodDescriptors.voidMarshaller()).build());
     AuthDecision decision = engine.evaluate(new Metadata(), serverCall);
     assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
@@ -223,7 +229,8 @@ public class GrpcAuthorizationEngineTest {
     PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
         new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
-    AuthDecision decision = engine.evaluate(metadata("authority", "google"), serverCall);
+    when(serverCall.getAuthority()).thenReturn("google");
+    AuthDecision decision = engine.evaluate(new Metadata(), serverCall);
     assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
   }

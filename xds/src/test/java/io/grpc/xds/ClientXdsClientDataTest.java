@@ -1120,8 +1120,7 @@ public class ClientXdsClientDataTest {
         .addOriginalIpDetectionExtensions(TypedExtensionConfig.newBuilder().build())
         .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("HttpConnectionManager original_ip_detection_extensions "
-        + "must be empty when rbac is enabled.");
+    thrown.expectMessage("HttpConnectionManager with original_ip_detection_extensions unsupported");
     ClientXdsClient.parseHttpConnectionManager(
         hcm, new HashSet<String>(), filterRegistry, false /* does not matter */, false);
   }

@@ -741,13 +741,13 @@ final class ClientXdsClient extends AbstractXdsClient {
   static io.grpc.xds.HttpConnectionManager parseHttpConnectionManager(
       HttpConnectionManager proto, Set<String> rdsResources, FilterRegistry filterRegistry,
       boolean parseHttpFilter, boolean isForClient) throws ResourceInvalidException {
-    if (proto.getXffNumTrustedHops() != 0) {
+    if (enableRbac && proto.getXffNumTrustedHops() != 0) {
       throw new ResourceInvalidException(
           "HttpConnectionManager with xff_num_trusted_hops unsupported");
     }
-    if (enableRbac && !isForClient && !proto.getOriginalIpDetectionExtensionsList().isEmpty()) {
-      throw new ResourceInvalidException("HttpConnectionManager original_ip_detection_extensions "
-          + "must be empty when rbac is enabled.");
+    if (enableRbac && !proto.getOriginalIpDetectionExtensionsList().isEmpty()) {
+      throw new ResourceInvalidException("HttpConnectionManager with "
+          + "original_ip_detection_extensions unsupported");
     }
     // Obtain max_stream_duration from Http Protocol Options.
     long maxStreamDuration = 0;

@@ -295,8 +295,8 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
 
   private static AuthHeaderMatcher parseHeaderMatcher(
           io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
-    if (proto.getName().startsWith("grpc--")) {
-      throw new IllegalArgumentException("Invalid header matcher config: [grpc--] prefixed "
+    if (proto.getName().startsWith("grpc-")) {
+      throw new IllegalArgumentException("Invalid header matcher config: [grpc-] prefixed "
           + "header name is not allowed.");
     }
     if (":scheme".equals(proto.getName())) {

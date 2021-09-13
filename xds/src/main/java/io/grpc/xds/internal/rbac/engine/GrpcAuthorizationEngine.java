@@ -17,10 +17,10 @@
 package io.grpc.xds.internal.rbac.engine;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static java.nio.charset.StandardCharsets.US_ASCII;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
@@ -335,15 +335,17 @@ public final class GrpcAuthorizationEngine {
 
     @Nullable
     private String getHeader(String headerName) {
-      if ("TE".equals(headerName)) {
+      headerName = headerName.toLowerCase();
+      if ("te".equals(headerName)) {
         return null;
       }
-      if ("Host".equals(headerName)) {
-        headerName = "authority";
+      if ("host".equals(headerName)) {
+        return serverCall.getAuthority();
       }
       String value = deserializeHeader(headerName);
       if (value == null && ":method".equals(headerName)) {
-        return "POST";
+        String apiMethod = serverCall.getMethodDescriptor().getFullMethodName();
+        return Strings.isNullOrEmpty(apiMethod) ? "POST" : apiMethod;
       }
       return value;
     }
@@ -361,12 +363,11 @@ public final class GrpcAuthorizationEngine {
         if (values == null) {
           return null;
         }
-        List<String> decoded = new ArrayList<>();
+        List<String> encoded = new ArrayList<>();
         for (byte[] v : values) {
-          String encoded = new String(v, US_ASCII);
-          decoded.add(new String(BaseEncoding.base64().decode(encoded), US_ASCII));
+          encoded.add(BaseEncoding.base64().encode(v));
         }
-        return Joiner.on(",").join(decoded);
+        return Joiner.on(",").join(encoded);
       }
       Metadata.Key<String> key;
       try {
