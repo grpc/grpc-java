@@ -546,7 +546,6 @@ public final class Status {
   /**
    * Same as {@link #asException()} but includes the provided trailers in the returned exception.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4683")
   public StatusException asException(@Nullable Metadata trailers) {
     return new StatusException(this, trailers);
   }
