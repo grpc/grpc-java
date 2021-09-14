@@ -24,6 +24,7 @@ import static io.grpc.Contexts.statusFromCancelled;
 import static io.grpc.Status.DEADLINE_EXCEEDED;
 import static io.grpc.internal.GrpcUtil.CONTENT_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.CONTENT_ENCODING_KEY;
+import static io.grpc.internal.GrpcUtil.CONTENT_LENGTH_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 import static java.lang.Math.max;
@@ -163,6 +164,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       DecompressorRegistry decompressorRegistry,
       Compressor compressor,
       boolean fullStreamDecompression) {
+    headers.discardAll(CONTENT_LENGTH_KEY);
     headers.discardAll(MESSAGE_ENCODING_KEY);
     if (compressor != Codec.Identity.NONE) {
       headers.put(MESSAGE_ENCODING_KEY, compressor.getMessageEncoding());
