@@ -16,9 +16,11 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_REF;
+import static io.grpc.xds.InternalXdsAttributes.ATTR_DRAIN_GRACE_NANOS;
+import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_MANAGER;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.DoNotCall;
@@ -33,11 +35,10 @@ import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.InternalNettyServerCredentials;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.NettyServerBuilder;
-import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingNegotiatorServerFactory;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 
 /**
@@ -45,6 +46,8 @@ import java.util.logging.Logger;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
 public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBuilder> {
+  private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000);
+
   private final NettyServerBuilder delegate;
   private final int port;
   private XdsServingStatusListener xdsServingStatusListener;
@@ -52,6 +55,8 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private XdsClientPoolFactory xdsClientPoolFactory =
           SharedXdsClientPoolProvider.getDefaultProvider();
+  private long drainGraceTime = 10;
+  private TimeUnit drainGraceTimeUnit = TimeUnit.MINUTES;
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
@@ -71,6 +76,26 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
       XdsServingStatusListener xdsServingStatusListener) {
     this.xdsServingStatusListener =
         checkNotNull(xdsServingStatusListener, "xdsServingStatusListener");
+    return this;
+  }
+
+  /**
+   * Sets the grace time when draining connections with outdated configuration. When an xDS config
+   * update changes connection configuration, pre-existing connections stop accepting new RPCs to be
+   * replaced by new connections. RPCs on those pre-existing connections have the grace time to
+   * complete. RPCs that do not complete in time will be cancelled, allowing the connection to
+   * terminate. {@code Long.MAX_VALUE} nano seconds or an unreasonably large value are considered
+   * infinite. The default is 10 minutes.
+   */
+  public XdsServerBuilder drainGraceTime(long drainGraceTime, TimeUnit drainGraceTimeUnit) {
+    checkArgument(drainGraceTime >= 0, "drain grace time must be non-negative: %s",
+        drainGraceTime);
+    checkNotNull(drainGraceTimeUnit, "drainGraceTimeUnit");
+    if (drainGraceTimeUnit.toNanos(drainGraceTime) >= AS_LARGE_AS_INFINITE) {
+      drainGraceTimeUnit = null;
+    }
+    this.drainGraceTime = drainGraceTime;
+    this.drainGraceTimeUnit = drainGraceTimeUnit;
     return this;
   }
 
@@ -94,12 +119,15 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   @Override
   public Server build() {
     checkState(isServerBuilt.compareAndSet(false, true), "Server already built!");
-    AtomicReference<FilterChainSelector> filterChainSelectorRef = new AtomicReference<>();
-    InternalNettyServerBuilder.eagAttributes(delegate, Attributes.newBuilder()
-            .set(ATTR_FILTER_CHAIN_SELECTOR_REF, filterChainSelectorRef)
-            .build());
+    FilterChainSelectorManager filterChainSelectorManager = new FilterChainSelectorManager();
+    Attributes.Builder builder = Attributes.newBuilder()
+            .set(ATTR_FILTER_CHAIN_SELECTOR_MANAGER, filterChainSelectorManager);
+    if (drainGraceTimeUnit != null) {
+      builder.set(ATTR_DRAIN_GRACE_NANOS, drainGraceTimeUnit.toNanos(drainGraceTime));
+    }
+    InternalNettyServerBuilder.eagAttributes(delegate, builder.build());
     return new XdsServerWrapper("0.0.0.0:" + port, delegate, xdsServingStatusListener,
-            filterChainSelectorRef, xdsClientPoolFactory, filterRegistry);
+            filterChainSelectorManager, xdsClientPoolFactory, filterRegistry);
   }
 
   @VisibleForTesting

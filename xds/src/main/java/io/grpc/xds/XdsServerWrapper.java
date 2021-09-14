@@ -100,7 +100,7 @@ final class XdsServerWrapper extends Server {
   private final ThreadSafeRandom random = ThreadSafeRandomImpl.instance;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final XdsServingStatusListener listener;
-  private final AtomicReference<FilterChainSelector> filterChainSelectorRef;
+  private final FilterChainSelectorManager filterChainSelectorManager;
   private final AtomicBoolean started = new AtomicBoolean(false);
   private final AtomicBoolean shutdown = new AtomicBoolean(false);
   private boolean isServing;
@@ -117,11 +117,11 @@ final class XdsServerWrapper extends Server {
       String listenerAddress,
       ServerBuilder<?> delegateBuilder,
       XdsServingStatusListener listener,
-      AtomicReference<FilterChainSelector> filterChainSelectorRef,
+      FilterChainSelectorManager filterChainSelectorManager,
       XdsClientPoolFactory xdsClientPoolFactory,
       FilterRegistry filterRegistry) {
-    this(listenerAddress, delegateBuilder, listener, filterChainSelectorRef, xdsClientPoolFactory,
-            filterRegistry, SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
+    this(listenerAddress, delegateBuilder, listener, filterChainSelectorManager,
+        xdsClientPoolFactory, filterRegistry, SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
     sharedTimeService = true;
   }
 
@@ -130,7 +130,7 @@ final class XdsServerWrapper extends Server {
           String listenerAddress,
           ServerBuilder<?> delegateBuilder,
           XdsServingStatusListener listener,
-          AtomicReference<FilterChainSelector> filterChainSelectorRef,
+          FilterChainSelectorManager filterChainSelectorManager,
           XdsClientPoolFactory xdsClientPoolFactory,
           FilterRegistry filterRegistry,
           ScheduledExecutorService timeService) {
@@ -138,7 +138,8 @@ final class XdsServerWrapper extends Server {
     this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
     this.delegateBuilder.intercept(new ConfigApplyingInterceptor());
     this.listener = checkNotNull(listener, "listener");
-    this.filterChainSelectorRef = checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
+    this.filterChainSelectorManager
+        = checkNotNull(filterChainSelectorManager, "filterChainSelectorManager");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
     this.timeService = checkNotNull(timeService, "timeService");
     this.filterRegistry = checkNotNull(filterRegistry,"filterRegistry");
@@ -361,8 +362,8 @@ final class XdsServerWrapper extends Server {
           }
           checkNotNull(update.listener(), "update");
           if (!pendingRds.isEmpty()) {
-            // filter chain state has not yet been applied to filterChainSelectorRef and there are
-            // two sets of sslContextProviderSuppliers, so we release the old ones.
+            // filter chain state has not yet been applied to filterChainSelectorManager and there
+            // are two sets of sslContextProviderSuppliers, so we release the old ones.
             releaseSuppliersInFlight();
             pendingRds.clear();
           }
@@ -443,7 +444,7 @@ final class XdsServerWrapper extends Server {
       logger.log(Level.FINE, "Stop watching LDS resource {0}", resourceName);
       xdsClient.cancelLdsResourceWatch(resourceName, this);
       List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
-      filterChainSelectorRef.set(FilterChainSelector.NO_FILTER_CHAIN);
+      filterChainSelectorManager.updateSelector(FilterChainSelector.NO_FILTER_CHAIN);
       for (SslContextProviderSupplier s: toRelease) {
         s.close();
       }
@@ -460,7 +461,7 @@ final class XdsServerWrapper extends Server {
           defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
           defaultFilterChain == null ? null : generateRoutingConfig(defaultFilterChain));
       List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
-      filterChainSelectorRef.set(selector);
+      filterChainSelectorManager.updateSelector(selector);
       for (SslContextProviderSupplier e: toRelease) {
         e.close();
       }
@@ -482,7 +483,7 @@ final class XdsServerWrapper extends Server {
     private void handleConfigNotFound(StatusException exception) {
       cleanUpRouteDiscoveryStates();
       List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
-      filterChainSelectorRef.set(FilterChainSelector.NO_FILTER_CHAIN);
+      filterChainSelectorManager.updateSelector(FilterChainSelector.NO_FILTER_CHAIN);
       for (SslContextProviderSupplier s: toRelease) {
         s.close();
       }
@@ -511,7 +512,7 @@ final class XdsServerWrapper extends Server {
 
     private List<SslContextProviderSupplier> getSuppliersInUse() {
       List<SslContextProviderSupplier> toRelease = new ArrayList<>();
-      FilterChainSelector selector = filterChainSelectorRef.get();
+      FilterChainSelector selector = filterChainSelectorManager.getSelectorToUpdateSelector();
       if (selector != null) {
         for (FilterChain f: selector.getRoutingConfigs().keySet()) {
           if (f.getSslContextProviderSupplier() != null) {

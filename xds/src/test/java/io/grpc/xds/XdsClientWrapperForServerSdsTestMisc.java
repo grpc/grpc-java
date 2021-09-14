@@ -72,7 +72,6 @@ import java.util.Collections;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -101,7 +100,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
   @Mock
   private XdsServingStatusListener listener;
   private FakeXdsClient xdsClient = new FakeXdsClient();
-  private AtomicReference<FilterChainSelector> selectorRef = new AtomicReference<>();
+  private FilterChainSelectorManager selectorManager = new FilterChainSelectorManager();
   private XdsServerWrapper xdsServerWrapper;
 
 
@@ -117,13 +116,14 @@ public class XdsClientWrapperForServerSdsTestMisc {
     when(mockBuilder.build()).thenReturn(mockServer);
     when(mockServer.isShutdown()).thenReturn(false);
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:" + PORT, mockBuilder, listener,
-            selectorRef, new FakeXdsClientPoolFactory(xdsClient), FilterRegistry.newRegistry());
+            selectorManager, new FakeXdsClientPoolFactory(xdsClient), FilterRegistry.newRegistry());
   }
 
   @Test
   public void nonInetSocketAddress_expectNull() throws Exception {
     sendListenerUpdate(new InProcessSocketAddress("test1"), null, null, tlsContextManager);
-    assertThat(getSslContextProviderSupplier(selectorRef.get())).isNull();
+    assertThat(getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector()))
+        .isNull();
   }
 
   @Test
@@ -168,7 +168,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.ldsWatcher.onChanged(listenerUpdate);
     start.get(5, TimeUnit.SECONDS);
-    FilterChainSelector selector = selectorRef.get();
+    FilterChainSelector selector = selectorManager.getSelectorToUpdateSelector();
     assertThat(getSslContextProviderSupplier(selector)).isNull();
   }
 
@@ -193,7 +193,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     } catch (ExecutionException ex) {
       assertThat(ex.getCause()).isInstanceOf(IOException.class);
     }
-    assertThat(selectorRef.get()).isSameInstanceAs(NO_FILTER_CHAIN);
+    assertThat(selectorManager.getSelectorToUpdateSelector()).isSameInstanceAs(NO_FILTER_CHAIN);
   }
 
   @Test
@@ -217,7 +217,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     } catch (ExecutionException ex) {
       assertThat(ex.getCause()).isInstanceOf(IOException.class);
     }
-    assertThat(selectorRef.get()).isSameInstanceAs(NO_FILTER_CHAIN);
+    assertThat(selectorManager.getSelectorToUpdateSelector()).isSameInstanceAs(NO_FILTER_CHAIN);
   }
 
   @Test
@@ -241,7 +241,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     } catch (ExecutionException ex) {
       assertThat(ex.getCause()).isInstanceOf(IOException.class);
     }
-    assertThat(selectorRef.get()).isSameInstanceAs(NO_FILTER_CHAIN);
+    assertThat(selectorManager.getSelectorToUpdateSelector()).isSameInstanceAs(NO_FILTER_CHAIN);
   }
 
   @Test
@@ -263,13 +263,14 @@ public class XdsClientWrapperForServerSdsTestMisc {
     localAddress = new InetSocketAddress(ipLocalAddress, PORT);
     sendListenerUpdate(localAddress, tlsContext1, null,
             tlsContextManager);
-    SslContextProviderSupplier returnedSupplier = getSslContextProviderSupplier(selectorRef.get());
+    SslContextProviderSupplier returnedSupplier =
+        getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext1);
     callUpdateSslContext(returnedSupplier);
     XdsServerTestHelper
         .generateListenerUpdate(xdsClient, Arrays.<Integer>asList(1234), tlsContext2,
             tlsContext3, tlsContextManager);
-    returnedSupplier = getSslContextProviderSupplier(selectorRef.get());
+    returnedSupplier = getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext2);
     verify(tlsContextManager, times(1)).releaseServerSslContextProvider(eq(sslContextProvider1));
     reset(tlsContextManager);
@@ -294,7 +295,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
         }
     };
     pipeline = channel.pipeline();
-    returnedSupplier = getSslContextProviderSupplier(selectorRef.get());
+    returnedSupplier = getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext3);
     callUpdateSslContext(returnedSupplier);
     xdsServerWrapper.shutdown();
@@ -314,7 +315,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     sendListenerUpdate(localAddress, tlsContext1, null,
             tlsContextManager);
     SslContextProviderSupplier returnedSupplier =
-            getSslContextProviderSupplier(selectorRef.get());
+            getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext1);
     callUpdateSslContext(returnedSupplier);
     xdsClient.ldsWatcher.onResourceDoesNotExist("not-found Error");
@@ -331,7 +332,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     sendListenerUpdate(localAddress, tlsContext1, null,
             tlsContextManager);
     SslContextProviderSupplier returnedSupplier =
-            getSslContextProviderSupplier(selectorRef.get());
+            getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext1);
     callUpdateSslContext(returnedSupplier);
     xdsClient.ldsWatcher.onError(Status.PERMISSION_DENIED);
@@ -348,7 +349,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     sendListenerUpdate(localAddress, tlsContext1, null,
             tlsContextManager);
     SslContextProviderSupplier returnedSupplier =
-            getSslContextProviderSupplier(selectorRef.get());
+            getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext1);
     callUpdateSslContext(returnedSupplier);
     xdsClient.ldsWatcher.onError(Status.CANCELLED);
@@ -412,8 +413,10 @@ public class XdsClientWrapperForServerSdsTestMisc {
     ProtocolNegotiator mockDelegate = mock(ProtocolNegotiator.class);
     GrpcHttp2ConnectionHandler grpcHandler = FakeGrpcHttp2ConnectionHandler.newHandler();
     when(mockDelegate.newHandler(grpcHandler)).thenReturn(next);
+    FilterChainSelectorManager manager = new FilterChainSelectorManager();
+    manager.updateSelector(selector);
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, manager, mockDelegate);
     pipeline.addLast(filterChainMatchingHandler);
     ProtocolNegotiationEvent event = InternalProtocolNegotiationEvent.getDefault();
     pipeline.fireUserEventTriggered(event);
