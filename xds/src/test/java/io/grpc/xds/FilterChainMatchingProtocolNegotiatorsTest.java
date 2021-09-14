@@ -65,6 +65,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -87,12 +88,23 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   private ChannelHandlerContext channelHandlerCtx;
   @Mock
   private ProtocolNegotiator mockDelegate;
+  private FilterChainSelectorManager selectorManager = new FilterChainSelectorManager();
   private static final HttpConnectionManager HTTP_CONNECTION_MANAGER = createRds("routing-config");
   private static final String LOCAL_IP = "10.1.2.3";  // dest
   private static final String REMOTE_IP = "10.4.2.3"; // source
   private static final int PORT = 7000;
   private final ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
           new ArrayList<NamedFilterConfig>(), new AtomicReference<ImmutableList<VirtualHost>>());
+
+  @After
+  @SuppressWarnings("FutureReturnValueIgnored")
+  public void tearDown() {
+    if (channel.isActive()) {
+      channel.close();
+      channel.runPendingTasks();
+    }
+    assertThat(selectorManager.getRegisterCount()).isEqualTo(0);
+  }
 
   @Test
   public void nofilterChainMatch_defaultSslContext() throws Exception {
@@ -103,10 +115,10 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
 
     SslContextProviderSupplier defaultSsl = new SslContextProviderSupplier(createTls(),
             tlsContextManager);
-    FilterChainSelector selector = new FilterChainSelector(
-            new HashMap<FilterChain, ServerRoutingConfig>(), defaultSsl, noopConfig);
+    selectorManager.updateSelector(new FilterChainSelector(
+            new HashMap<FilterChain, ServerRoutingConfig>(), defaultSsl, noopConfig));
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
     setupChannel("172.168.1.1", "172.168.1.2", 80, filterChainMatchingHandler);
     ChannelHandlerContext channelHandlerCtx = pipeline.context(filterChainMatchingHandler);
     assertThat(channelHandlerCtx).isNotNull();
@@ -125,10 +137,10 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
 
   @Test
   public void noFilterChainMatch_noDefaultSslContext() {
-    FilterChainSelector selector = new FilterChainSelector(
-            new HashMap<FilterChain, ServerRoutingConfig>(), null, null);
+    selectorManager.updateSelector(new FilterChainSelector(
+            new HashMap<FilterChain, ServerRoutingConfig>(), null, null));
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
     setupChannel("172.168.1.1", "172.168.2.2", 90, filterChainMatchingHandler);
     channelHandlerCtx = pipeline.context(filterChainMatchingHandler);
     assertThat(channelHandlerCtx).isNotNull();
@@ -137,6 +149,33 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
     assertThat(channel.closeFuture().isDone()).isTrue();
+  }
+
+  @Test
+  public void filterSelectorChange_drainsConnection() {
+    ChannelHandler next = new ChannelInboundHandlerAdapter();
+    when(mockDelegate.newHandler(grpcHandler)).thenReturn(next);
+    selectorManager.updateSelector(new FilterChainSelector(
+            new HashMap<FilterChain, ServerRoutingConfig>(), null, noopConfig));
+    FilterChainMatchingHandler filterChainMatchingHandler =
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
+    setupChannel("172.168.1.1", "172.168.2.2", 90, filterChainMatchingHandler);
+    channelHandlerCtx = pipeline.context(filterChainMatchingHandler);
+    assertThat(channelHandlerCtx).isNotNull();
+
+    pipeline.fireUserEventTriggered(event);
+    channelHandlerCtx = pipeline.context(filterChainMatchingHandler);
+    assertThat(channelHandlerCtx).isNull();
+
+    channel.runPendingTasks();
+    channelHandlerCtx = pipeline.context(next);
+    assertThat(channelHandlerCtx).isNotNull();
+    assertThat(channel.readOutbound()).isNull();
+
+    selectorManager.updateSelector(new FilterChainSelector(
+            new HashMap<FilterChain, ServerRoutingConfig>(), null, noopConfig));
+    assertThat(channel.readOutbound().getClass().getName())
+        .isEqualTo("io.grpc.netty.GracefulServerCloseCommand");
   }
 
   @Test
@@ -157,10 +196,10 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             "filter-chain-foo", filterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext,
             tlsContextManager);
 
-    FilterChainSelector selector = new FilterChainSelector(ImmutableMap.of(filterChain, noopConfig),
-            null, null);
+    selectorManager.updateSelector(new FilterChainSelector(ImmutableMap.of(filterChain, noopConfig),
+            null, null));
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
     ChannelHandler next = captureAttrHandler(sslSet, routingSettable);
@@ -196,11 +235,11 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-bar", null, HTTP_CONNECTION_MANAGER, defaultTlsContext,
             tlsContextManager);
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChain, randomConfig("no-match")),
-            defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
+            defaultFilterChain.getSslContextProviderSupplier(), noopConfig));
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
@@ -242,12 +281,12 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     ServerRoutingConfig routingConfig = ServerRoutingConfig.create(
             new ArrayList<NamedFilterConfig>(), new AtomicReference<>(
                 ImmutableList.of(createVirtualHost("virtual"))));
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainWithDestPort, routingConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
+            defaultFilterChain.getSslContextProviderSupplier(), noopConfig));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
@@ -285,12 +324,12 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
             tlsContextForDefaultFilterChain, tlsContextManager);
 
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainWithMatch, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("no-match"));
+            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("no-match")));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
@@ -329,12 +368,12 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
             tlsContextForDefaultFilterChain, tlsContextManager);
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainWithMismatch, randomConfig("no-match")),
-            defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
+            defaultFilterChain.getSslContextProviderSupplier(), noopConfig));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
@@ -374,11 +413,11 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
             tlsContextForDefaultFilterChain, tlsContextManager);
 
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChain0Length, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), null);
+            defaultFilterChain.getSslContextProviderSupplier(), null));
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
@@ -431,13 +470,13 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
                     tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainLessSpecific, randomConfig("no-match"),
                     filterChainMoreSpecific, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default"));
+            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
@@ -490,12 +529,12 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
                     tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainLessSpecific, randomConfig("no-match"),
                     filterChainMoreSpecific, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default"));
+            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
@@ -547,13 +586,13 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
                     tlsContextMoreSpecific, tlsContextManager);
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainLessSpecific, randomConfig("no-match"),
                     filterChainMoreSpecific, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default"));
+            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
@@ -610,12 +649,12 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
 
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainMoreSpecificWith2, noopConfig,
                     filterChainLessSpecific, randomConfig("no-match")),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default"));
+            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
@@ -653,11 +692,11 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,tlsContextForDefaultFilterChain,
             tlsContextManager);
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainWithMismatch, randomConfig("no-match")),
-            defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
+            defaultFilterChain.getSslContextProviderSupplier(), noopConfig));
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
@@ -698,11 +737,11 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             "filter-chain-bar", null, HTTP_CONNECTION_MANAGER, tlsContextForDefaultFilterChain,
             tlsContextManager);
 
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainWithMatch, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default"));
+            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
     setupChannel(LOCAL_IP, LOCAL_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
@@ -757,13 +796,13 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
 
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainMoreSpecificWith2, noopConfig,
                     filterChainLessSpecific, randomConfig("no-match")),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default"));
+            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
     setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
@@ -823,12 +862,12 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, null);
 
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChain1, noopConfig, filterChain2, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
+            defaultFilterChain.getSslContextProviderSupplier(), noopConfig));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
     setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
@@ -884,13 +923,13 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
 
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainEmptySourcePorts, randomConfig("no-match"),
                     filterChainSourcePortMatch, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default"));
+            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
     ChannelHandler next = captureAttrHandler(sslSet, routingSettable);
@@ -1040,11 +1079,11 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     map.put(filterChain4, randomConfig("4"));
     map.put(filterChain5, noopConfig);
     map.put(filterChain6, randomConfig("6"));
-    FilterChainSelector selector = new FilterChainSelector(
-            map, defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default"));
+    selectorManager.updateSelector(new FilterChainSelector(
+            map, defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
@@ -1114,12 +1153,12 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             "filter-chain-baz", defaultFilterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext3,
             mock(TlsContextManager.class));
 
-    FilterChainSelector selector = new FilterChainSelector(
+    selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChain1, randomConfig("1"), filterChain2, randomConfig("2")),
-            defaultFilterChain.getSslContextProviderSupplier(), noopConfig);
+            defaultFilterChain.getSslContextProviderSupplier(), noopConfig));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
-            new FilterChainMatchingHandler(grpcHandler, selector, mockDelegate);
+            new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
     final SettableFuture<SslContextProviderSupplier> sslSet = SettableFuture.create();
     final SettableFuture<ServerRoutingConfig> routingSettable = SettableFuture.create();
     ChannelHandler next = captureAttrHandler(sslSet, routingSettable);

@@ -281,4 +281,15 @@ public class XdsServerBuilderTest {
       assertThat(expected).hasMessageThat().contains("Server already built!");
     }
   }
+
+  @Test
+  public void drainGraceTime_negativeThrows() throws IOException {
+    buildBuilder(null);
+    try {
+      builder.drainGraceTime(-1, TimeUnit.SECONDS);
+      fail("exception expected");
+    } catch (IllegalArgumentException expected) {
+      assertThat(expected).hasMessageThat().contains("drain grace time");
+    }
+  }
 }
