@@ -124,6 +124,8 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
       promise.setFailure(failCause);
       ReferenceCountUtil.release(msg);
     } else {
+      // Do not special case GracefulServerCloseCommand, as we don't want to cause handshake
+      // failures.
       if (msg instanceof GracefulCloseCommand || msg instanceof ForcefulCloseCommand) {
         // No point in continuing negotiation
         ctx.close();
