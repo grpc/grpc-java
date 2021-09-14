@@ -641,6 +641,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       sendResponseHeaders(ctx, (SendResponseHeadersCommand) msg, promise);
     } else if (msg instanceof CancelServerStreamCommand) {
       cancelStream(ctx, (CancelServerStreamCommand) msg, promise);
+    } else if (msg instanceof GracefulServerCloseCommand) {
+      gracefulClose(ctx, (GracefulServerCloseCommand) msg, promise);
     } else if (msg instanceof ForcefulCloseCommand) {
       forcefulClose(ctx, (ForcefulCloseCommand) msg, promise);
     } else {
@@ -654,11 +656,8 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   @Override
   public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-    if (gracefulShutdown == null) {
-      gracefulShutdown = new GracefulShutdown("app_requested", null);
-      gracefulShutdown.start(ctx);
-      ctx.flush();
-    }
+    gracefulClose(ctx, new GracefulServerCloseCommand("app_requested"), promise);
+    ctx.flush();
   }
 
   /**
@@ -737,6 +736,21 @@ class NettyServerHandler extends AbstractNettyHandler {
     } finally {
       PerfMark.stopTask("NettyServerHandler.cancelStream", cmd.stream().tag());
     }
+  }
+
+  private void gracefulClose(final ChannelHandlerContext ctx, final GracefulServerCloseCommand msg,
+      ChannelPromise promise) throws Exception {
+    // Ideally we'd adjust a pre-existing graceful shutdown's grace period to at least what is
+    // requested here. But that's an edge case and seems bug-prone.
+    if (gracefulShutdown == null) {
+      Long graceTimeInNanos = null;
+      if (msg.getGraceTimeUnit() != null) {
+        graceTimeInNanos = msg.getGraceTimeUnit().toNanos(msg.getGraceTime());
+      }
+      gracefulShutdown = new GracefulShutdown(msg.getGoAwayDebugString(), graceTimeInNanos);
+      gracefulShutdown.start(ctx);
+    }
+    promise.setSuccess();
   }
 
   private void forcefulClose(final ChannelHandlerContext ctx, final ForcefulCloseCommand msg,
