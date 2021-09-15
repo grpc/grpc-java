@@ -26,7 +26,6 @@ import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
-import static io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
 import static io.netty.handler.codec.http.HttpHeaderNames.HOST;
 import static io.netty.handler.codec.http2.DefaultHttp2LocalFlowController.DEFAULT_WINDOW_UPDATE_RATIO;
 import static io.netty.handler.codec.http2.Http2Headers.PseudoHeaderName.AUTHORITY;
@@ -378,12 +377,6 @@ class NettyServerHandler extends AbstractNettyHandler {
   private void onHeadersRead(ChannelHandlerContext ctx, int streamId, Http2Headers headers)
       throws Http2Exception {
     try {
-      // Connection-specific header fields makes a request malformed. Ideally this would be handled
-      // by Netty. RFC 7540 section 8.1.2.2
-      if (headers.contains(CONNECTION)) {
-        resetStream(ctx, streamId, Http2Error.PROTOCOL_ERROR.code(), ctx.newPromise());
-        return;
-      }
 
       if (headers.authority() == null) {
         List<CharSequence> hosts = headers.getAll(HOST);
