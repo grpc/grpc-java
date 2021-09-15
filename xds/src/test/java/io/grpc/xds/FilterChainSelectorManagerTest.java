@@ -34,13 +34,15 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public final class FilterChainSelectorManagerTest {
   private FilterChainSelectorManager manager = new FilterChainSelectorManager();
-  private ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-          new AtomicReference<ImmutableList<VirtualHost>>(),
-      new AtomicReference<ImmutableMap<VirtualHost.Route, ServerInterceptor>>());
+  private AtomicReference<ServerRoutingConfig> noopConfig = new AtomicReference<>(
+      ServerRoutingConfig.create(ImmutableList.<VirtualHost>of(),
+      ImmutableMap.<VirtualHost.Route, ServerInterceptor>of()));
   private FilterChainSelector selector1 = new FilterChainSelector(
-            Collections.<FilterChain,ServerRoutingConfig>emptyMap(), null, null);
+            Collections.<FilterChain,AtomicReference<ServerRoutingConfig>>emptyMap(),
+      null, new AtomicReference<ServerRoutingConfig>());
   private FilterChainSelector selector2 = new FilterChainSelector(
-            Collections.<FilterChain,ServerRoutingConfig>emptyMap(), null, noopConfig);
+            Collections.<FilterChain,AtomicReference<ServerRoutingConfig>>emptyMap(),
+      null, noopConfig);
   private CounterRunnable runnable1 = new CounterRunnable();
   private CounterRunnable runnable2 = new CounterRunnable();
 

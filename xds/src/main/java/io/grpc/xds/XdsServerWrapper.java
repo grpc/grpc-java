@@ -89,8 +89,9 @@ final class XdsServerWrapper extends Server {
         }
       });
 
-  public static final Attributes.Key<ServerRoutingConfig> ATTR_SERVER_ROUTING_CONFIG =
-          Attributes.Key.create("io.grpc.xds.ServerWrapper.serverRoutingConfig");
+  public static final Attributes.Key<AtomicReference<ServerRoutingConfig>>
+      ATTR_SERVER_ROUTING_CONFIG =
+      Attributes.Key.create("io.grpc.xds.ServerWrapper.serverRoutingConfig");
 
   @VisibleForTesting
   static final long RETRY_DELAY_NANOS = TimeUnit.MINUTES.toNanos(1);
@@ -348,8 +349,8 @@ final class XdsServerWrapper extends Server {
     @Nullable
     private FilterChain defaultFilterChain;
     private boolean stopped;
-    private final Map<FilterChain, AtomicReference<ImmutableMap<Route, ServerInterceptor>>>
-        rdsPrebuiltInterceptorRef = new HashMap<>();
+    private final Map<FilterChain, AtomicReference<ServerRoutingConfig>> savedRdsRoutingConfigRef 
+        = new HashMap<>();
     private final ServerInterceptor noopInterceptor = new ServerInterceptor() {
       @Override
       public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
@@ -463,15 +464,16 @@ final class XdsServerWrapper extends Server {
     }
 
     private void updateSelector() {
-      Map<FilterChain, ServerRoutingConfig> filterChainRouting = new HashMap<>();
-      rdsPrebuiltInterceptorRef.clear();
+      Map<FilterChain, AtomicReference<ServerRoutingConfig>> filterChainRouting = new HashMap<>();
+      savedRdsRoutingConfigRef.clear();
       for (FilterChain filterChain: filterChains) {
         filterChainRouting.put(filterChain, generateRoutingConfig(filterChain));
       }
       FilterChainSelector selector = new FilterChainSelector(
           Collections.unmodifiableMap(filterChainRouting),
           defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
-          defaultFilterChain == null ? null : generateRoutingConfig(defaultFilterChain));
+          defaultFilterChain == null ? new AtomicReference<ServerRoutingConfig>() :
+              generateRoutingConfig(defaultFilterChain));
       List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
       filterChainSelectorManager.updateSelector(selector);
       for (SslContextProviderSupplier e: toRelease) {
@@ -480,30 +482,32 @@ final class XdsServerWrapper extends Server {
       startDelegateServer();
     }
 
-    private ServerRoutingConfig generateRoutingConfig(FilterChain filterChain) {
+    private AtomicReference<ServerRoutingConfig> generateRoutingConfig(FilterChain filterChain) {
       HttpConnectionManager hcm = filterChain.getHttpConnectionManager();
       if (hcm.virtualHosts() != null) {
-        AtomicReference<ImmutableMap<Route, ServerInterceptor>> interceptorRef =
-            new AtomicReference<>(generatePerRouteInterceptors(
-                hcm.httpFilterConfigs(), hcm.virtualHosts()));
-        return ServerRoutingConfig.create(new AtomicReference<>(hcm.virtualHosts()),
-            interceptorRef);
+        ImmutableMap<Route, ServerInterceptor> interceptors = generatePerRouteInterceptors(
+                hcm.httpFilterConfigs(), hcm.virtualHosts());
+        return new AtomicReference<>(ServerRoutingConfig.create(hcm.virtualHosts(),interceptors));
       } else {
         RouteDiscoveryState rds = routeDiscoveryStates.get(hcm.rdsName());
         checkNotNull(rds, "rds");
-        AtomicReference<ImmutableMap<Route, ServerInterceptor>> interceptorRef =
-            new AtomicReference<>(generatePerRouteInterceptors(
-                hcm.httpFilterConfigs(), rds.savedVirtualHosts.get()));
-        rdsPrebuiltInterceptorRef.put(filterChain, interceptorRef);
-        return ServerRoutingConfig.create(rds.savedVirtualHosts, interceptorRef);
+        AtomicReference<ServerRoutingConfig> serverRoutingConfigRef = new AtomicReference<>();
+        if (rds.savedVirtualHosts != null) {
+          ImmutableMap<Route, ServerInterceptor> interceptors = generatePerRouteInterceptors(
+              hcm.httpFilterConfigs(), rds.savedVirtualHosts);
+          ServerRoutingConfig serverRoutingConfig =
+              ServerRoutingConfig.create(rds.savedVirtualHosts, interceptors);
+          serverRoutingConfigRef.set(serverRoutingConfig);
+        } else {
+          serverRoutingConfigRef.set(ServerRoutingConfig.FAILING_ROUTING_CONFIG);
+        }
+        savedRdsRoutingConfigRef.put(filterChain, serverRoutingConfigRef);
+        return serverRoutingConfigRef;
       }
     }
 
     private ImmutableMap<Route, ServerInterceptor> generatePerRouteInterceptors(
-        List<NamedFilterConfig> namedFilterConfigs, @Nullable List<VirtualHost> virtualHosts) {
-      if (virtualHosts == null) {
-        return null;
-      }
+        List<NamedFilterConfig> namedFilterConfigs, List<VirtualHost> virtualHosts) {
       ImmutableMap.Builder<Route, ServerInterceptor> perRouteInterceptors =
           new ImmutableMap.Builder<>();
       for (VirtualHost virtualHost : virtualHosts) {
@@ -584,7 +588,7 @@ final class XdsServerWrapper extends Server {
         xdsClient.cancelRdsResourceWatch(rdsName, rdsState);
       }
       routeDiscoveryStates.clear();
-      rdsPrebuiltInterceptorRef.clear();
+      savedRdsRoutingConfigRef.clear();
     }
 
     private List<SslContextProviderSupplier> getSuppliersInUse() {
@@ -621,8 +625,7 @@ final class XdsServerWrapper extends Server {
 
     private final class RouteDiscoveryState implements RdsResourceWatcher {
       private final String resourceName;
-      private AtomicReference<ImmutableList<VirtualHost>> savedVirtualHosts =
-          new AtomicReference<>();
+      private ImmutableList<VirtualHost> savedVirtualHosts;
       private boolean isPending = true;
 
       private RouteDiscoveryState(String resourceName) {
@@ -637,8 +640,8 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
-            savedVirtualHosts.set(ImmutableList.copyOf(update.virtualHosts));
-            updateRdsPrebuiltInterceptorRef(update.virtualHosts);
+            savedVirtualHosts = ImmutableList.copyOf(update.virtualHosts);
+            updateRdsRoutingConfig();
             maybeUpdateSelector();
           }
         });
@@ -653,8 +656,8 @@ final class XdsServerWrapper extends Server {
               return;
             }
             logger.log(Level.WARNING, "Rds {0} unavailable", resourceName);
-            savedVirtualHosts.set(null);
-            updateRdsPrebuiltInterceptorRef(null);
+            savedVirtualHosts = null;
+            updateRdsRoutingConfig();
             maybeUpdateSelector();
           }
         });
@@ -675,13 +678,21 @@ final class XdsServerWrapper extends Server {
         });
       }
 
-      private void updateRdsPrebuiltInterceptorRef(@Nullable List<VirtualHost> virtualHosts) {
-        for (FilterChain filterChain : rdsPrebuiltInterceptorRef.keySet()) {
+      private void updateRdsRoutingConfig() {
+        for (FilterChain filterChain : savedRdsRoutingConfigRef.keySet()) {
           if (resourceName.equals(filterChain.getHttpConnectionManager().rdsName())) {
-            ImmutableMap<Route, ServerInterceptor> updatedInterceptors =
-                generatePerRouteInterceptors(
-                    filterChain.getHttpConnectionManager().httpFilterConfigs(), virtualHosts);
-            rdsPrebuiltInterceptorRef.get(filterChain).set(updatedInterceptors);
+            ServerRoutingConfig updatedRoutingConfig;
+            if (savedVirtualHosts == null) {
+              updatedRoutingConfig = ServerRoutingConfig.FAILING_ROUTING_CONFIG;
+            } else {
+              ImmutableMap<Route, ServerInterceptor> updatedInterceptors =
+                  generatePerRouteInterceptors(
+                      filterChain.getHttpConnectionManager().httpFilterConfigs(),
+                      savedVirtualHosts);
+              updatedRoutingConfig = ServerRoutingConfig.create(savedVirtualHosts,
+                  updatedInterceptors);
+            }
+            savedRdsRoutingConfigRef.get(filterChain).set(updatedRoutingConfig);
           }
         }
       }
@@ -722,18 +733,16 @@ final class XdsServerWrapper extends Server {
     @Override
     public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
         Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-      ServerRoutingConfig routingConfig = call.getAttributes().get(ATTR_SERVER_ROUTING_CONFIG);
-      if (routingConfig == null) {
-        String errorMsg = "Missing xDS routing config.";
+      AtomicReference<ServerRoutingConfig> routingConfigRef =
+          call.getAttributes().get(ATTR_SERVER_ROUTING_CONFIG);
+      ServerRoutingConfig routingConfig = routingConfigRef == null ? null :
+          routingConfigRef.get();
+      if (routingConfig == null || routingConfig == ServerRoutingConfig.FAILING_ROUTING_CONFIG) {
+        String errorMsg = "Missing or broken xDS routing config: RDS config unavailable.";
         call.close(Status.UNAVAILABLE.withDescription(errorMsg), new Metadata());
         return new Listener<ReqT>() {};
       }
-      List<VirtualHost> virtualHosts = routingConfig.virtualHosts().get();
-      if (virtualHosts == null) {
-        String errorMsg = "Missing xDS routing config VirtualHosts due to RDS config unavailable.";
-        call.close(Status.UNAVAILABLE.withDescription(errorMsg), new Metadata());
-        return new Listener<ReqT>() {};
-      }
+      List<VirtualHost> virtualHosts = routingConfig.virtualHosts();
       VirtualHost virtualHost = RoutingUtils.findVirtualHostForHostName(
           virtualHosts, call.getAuthority());
       if (virtualHost == null) {
@@ -758,7 +767,7 @@ final class XdsServerWrapper extends Server {
         return new ServerCall.Listener<ReqT>() {};
       }
       ServerInterceptor routeInterceptor = noopInterceptor;
-      Map<Route, ServerInterceptor> perRouteInterceptors = routingConfig.interceptors().get();
+      Map<Route, ServerInterceptor> perRouteInterceptors = routingConfig.interceptors();
       if (perRouteInterceptors != null && perRouteInterceptors.get(selectedRoute) != null) {
         routeInterceptor = perRouteInterceptors.get(selectedRoute);
       }
@@ -771,17 +780,21 @@ final class XdsServerWrapper extends Server {
    */
   @AutoValue
   abstract static class ServerRoutingConfig {
-    abstract AtomicReference<ImmutableList<VirtualHost>> virtualHosts();
+    @VisibleForTesting
+    static final ServerRoutingConfig FAILING_ROUTING_CONFIG = ServerRoutingConfig.create(
+        ImmutableList.<VirtualHost>of(), ImmutableMap.<Route, ServerInterceptor>of());
+
+    abstract ImmutableList<VirtualHost> virtualHosts();
 
     // Prebuilt per route server interceptors from http filter configs.
-    abstract AtomicReference<ImmutableMap<Route, ServerInterceptor>> interceptors();
+    abstract ImmutableMap<Route, ServerInterceptor> interceptors();
 
     /**
      * Server routing configuration.
      * */
     public static ServerRoutingConfig create(
-        AtomicReference<ImmutableList<VirtualHost>> virtualHosts,
-        AtomicReference<ImmutableMap<Route, ServerInterceptor>> interceptors) {
+        ImmutableList<VirtualHost> virtualHosts,
+        ImmutableMap<Route, ServerInterceptor> interceptors) {
       checkNotNull(virtualHosts, "virtualHosts");
       checkNotNull(interceptors, "interceptors");
       return new AutoValue_XdsServerWrapper_ServerRoutingConfig(virtualHosts, interceptors);
