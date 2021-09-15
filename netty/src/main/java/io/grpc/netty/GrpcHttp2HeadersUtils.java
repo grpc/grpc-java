@@ -146,11 +146,6 @@ class GrpcHttp2HeadersUtils {
     }
 
     @Override
-    public boolean contains(CharSequence name) {
-      return get(name) != null;
-    }
-
-    @Override
     public CharSequence status() {
       return get(Http2Headers.PseudoHeaderName.STATUS.value());
     }
