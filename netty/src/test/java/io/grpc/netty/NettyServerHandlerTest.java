@@ -606,7 +606,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
-  public void headersWithOnlyHostBecomseAuthority() throws Exception {
+  public void headersWithOnlyHostBecomesAuthority() throws Exception {
     manualSetUp();
     // No authority header
     Http2Headers headers = new DefaultHttp2Headers()
