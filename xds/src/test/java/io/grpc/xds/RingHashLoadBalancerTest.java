@@ -473,6 +473,8 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getSubchannel()).isNull();  // buffer request
     verify(subchannels.get(Collections.singletonList(servers.get(2))))
         .requestConnection();  // kick off connection to server2
+    verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
+        .requestConnection();  // no excessive connection
 
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(2))),
@@ -496,16 +498,15 @@ public class RingHashLoadBalancerTest {
   @Test
   public void skipFailingHosts_firstTwoHostsFailed_pickNextFirstReady() {
     // Map each server address to exactly one ring entry.
-    RingHashConfig config = new RingHashConfig(4, 4);
-    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1, 1);
+    RingHashConfig config = new RingHashConfig(3, 3);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-    verify(helper, times(4)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
     verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));  // initial IDLE
     reset(helper);
     // ring:
-    //   "[FakeSocketAddress-server3]_0"
     //   "[FakeSocketAddress-server1]_0"
     //   "[FakeSocketAddress-server0]_0"
     //   "[FakeSocketAddress-server2]_0"
@@ -515,7 +516,7 @@ public class RingHashLoadBalancerTest {
         TestMethodDescriptors.voidMethod(), new Metadata(),
         CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, rpcHash));
 
-    // Bring down server0 and server2 to force trying other servers.
+    // Bring down server0 and server2 to force trying server1.
     deliverSubchannelState(
         subchannels.get(Collections.singletonList(servers.get(0))),
         ConnectivityStateInfo.forTransientFailure(
@@ -525,7 +526,7 @@ public class RingHashLoadBalancerTest {
         ConnectivityStateInfo.forTransientFailure(
             Status.PERMISSION_DENIED.withDescription("permission denied")));
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    verify(subchannels.get(Collections.singletonList(servers.get(3))))
+    verify(subchannels.get(Collections.singletonList(servers.get(1))))
         .requestConnection();  // LB attempts to recover by itself
 
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
@@ -533,14 +534,12 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().getCode())
         .isEqualTo(Code.UNAVAILABLE);  // with error status for the original server hit by hash
     assertThat(result.getStatus().getDescription()).isEqualTo("unreachable");
-    verify(subchannels.get(Collections.singletonList(servers.get(3))), times(2))
+    verify(subchannels.get(Collections.singletonList(servers.get(1))), times(2))
         .requestConnection();  // kickoff connection to server3 (next first non-failing)
-    verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
-        .requestConnection();  // no excessive connection
 
-    // Now connecting to server3.
+    // Now connecting to server1.
     deliverSubchannelState(
-        subchannels.get(Collections.singletonList(servers.get(3))),
+        subchannels.get(Collections.singletonList(servers.get(1))),
         ConnectivityStateInfo.forNonError(CONNECTING));
     verify(helper, times(2)).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
 
@@ -549,8 +548,6 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().getCode())
         .isEqualTo(Code.UNAVAILABLE);  // with error status for the original server hit by hash
     assertThat(result.getStatus().getDescription()).isEqualTo("unreachable");
-    verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
-        .requestConnection();  // no excessive connection (server3 connection already in progress)
 
     // Simulate server1 becomes READY.
     deliverSubchannelState(

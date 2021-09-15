@@ -181,8 +181,8 @@ public final class GoogleDefaultProtocolNegotiatorTest {
 
     @Test
     public void tlsHandler_googleCfe() {
-      Attributes attrs =
-          Attributes.newBuilder().set(XDS_CLUSTER_NAME_ATTR_KEY, "google_cfe").build();
+      Attributes attrs = Attributes.newBuilder().set(
+          XDS_CLUSTER_NAME_ATTR_KEY, "google_cfe_api.googleapis.com").build();
       subtest_tlsHandler(attrs);
     }
   }

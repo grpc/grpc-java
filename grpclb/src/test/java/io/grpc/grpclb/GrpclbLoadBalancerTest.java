@@ -481,6 +481,7 @@ public class GrpclbLoadBalancerTest {
 
     ClientStreamTracer tracer1 =
         pick1.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
+    tracer1.streamCreated(Attributes.EMPTY, new Metadata());
 
     PickResult pick2 = picker.pickSubchannel(args);
     assertNull(pick2.getSubchannel());
@@ -504,6 +505,7 @@ public class GrpclbLoadBalancerTest {
     assertSame(getLoadRecorder(), pick3.getStreamTracerFactory());
     ClientStreamTracer tracer3 =
         pick3.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
+    tracer3.streamCreated(Attributes.EMPTY, new Metadata());
 
     // pick3 has sent out headers
     tracer3.outboundHeaders();
@@ -541,6 +543,7 @@ public class GrpclbLoadBalancerTest {
     assertSame(getLoadRecorder(), pick5.getStreamTracerFactory());
     ClientStreamTracer tracer5 =
         pick5.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, new Metadata());
+    tracer5.streamCreated(Attributes.EMPTY, new Metadata());
 
     // pick3 ended without receiving response headers
     tracer3.streamClosed(Status.DEADLINE_EXCEEDED);
@@ -929,7 +932,7 @@ public class GrpclbLoadBalancerTest {
     logs.clear();
     lbResponseObserver.onNext(buildInitialResponse());
     assertThat(logs).containsExactly(
-        "DEBUG: [grpclb-<api.google.com>] Got an LB response: " + buildInitialResponse());
+        "INFO: [grpclb-<api.google.com>] Got an LB initial response: " + buildInitialResponse());
     logs.clear();
     lbResponseObserver.onNext(buildLbResponse(backends1));
 
@@ -1452,8 +1455,11 @@ public class GrpclbLoadBalancerTest {
   public void grpclbFallback_noBalancerAddress() {
     InOrder inOrder = inOrder(helper, subchannelPool);
 
-    // Create just backend addresses
-    List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
+    // Create 5 distinct backends
+    List<EquivalentAddressGroup> backends = createResolvedBackendAddresses(5);
+
+    // Name resolver gives the first two backend addresses
+    List<EquivalentAddressGroup> backendList = backends.subList(0, 2);
     deliverResolvedAddresses(backendList, Collections.<EquivalentAddressGroup>emptyList());
 
     assertThat(logs).containsAtLeast(
@@ -1472,6 +1478,28 @@ public class GrpclbLoadBalancerTest {
     assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
     verify(helper, never())
         .createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>anyList(), anyString());
+    logs.clear();
+
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // Name resolver sends new resolution results with new backend addr but no balancer addr
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // Name resolver then gives the last three backends
+    backendList = backends.subList(2, 5);
+    deliverResolvedAddresses(backendList, Collections.<EquivalentAddressGroup>emptyList());
+
+    assertThat(logs).containsAtLeast(
+        "INFO: [grpclb-<api.google.com>] Using fallback backends",
+        "INFO: [grpclb-<api.google.com>] "
+            + "Using RR list=[[[FakeSocketAddress-fake-address-2]/{}], "
+            + "[[FakeSocketAddress-fake-address-3]/{}], "
+            + "[[FakeSocketAddress-fake-address-4]/{}]], drop=[null, null, null]",
+        "INFO: [grpclb-<api.google.com>] "
+            + "Update balancing state to CONNECTING: picks=[BUFFER_ENTRY], "
+            + "drops=[null, null, null]")
+        .inOrder();
+
+    // Shift to use updated backends
+    fallbackTestVerifyUseOfFallbackBackendLists(inOrder, backendList);
     logs.clear();
 
     ///////////////////////////////////////////////////////////////////////////////////////
@@ -2497,7 +2525,7 @@ public class GrpclbLoadBalancerTest {
     logs.clear();
     lbResponseObserver.onNext(buildInitialResponse());
     assertThat(logs).containsExactly(
-        "DEBUG: [grpclb-<api.google.com>] Got an LB response: " + buildInitialResponse());
+        "INFO: [grpclb-<api.google.com>] Got an LB initial response: " + buildInitialResponse());
     logs.clear();
     lbResponseObserver.onNext(buildLbResponse(backends1));
 

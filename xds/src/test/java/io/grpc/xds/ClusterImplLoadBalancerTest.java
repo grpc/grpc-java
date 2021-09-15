@@ -138,7 +138,9 @@ public class ClusterImplLoadBalancerTest {
 
   @After
   public void tearDown() {
-    loadBalancer.shutdown();
+    if (loadBalancer != null) {
+      loadBalancer.shutdown();
+    }
     assertThat(xdsClientRefs).isEqualTo(0);
     assertThat(downstreamBalancers).isEmpty();
   }
@@ -339,8 +341,8 @@ public class ClusterImplLoadBalancerTest {
       PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
       assertThat(result.getStatus().isOk()).isTrue();
       ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
-      streamTracerFactory.newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(),
-          new Metadata());
+      streamTracerFactory.newClientStreamTracer(
+          ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
     }
     ClusterStats clusterStats =
         Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
@@ -427,8 +429,8 @@ public class ClusterImplLoadBalancerTest {
       PickResult result = currentPicker.pickSubchannel(mock(PickSubchannelArgs.class));
       assertThat(result.getStatus().isOk()).isTrue();
       ClientStreamTracer.Factory streamTracerFactory = result.getStreamTracerFactory();
-      streamTracerFactory.newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(),
-          new Metadata());
+      streamTracerFactory.newClientStreamTracer(
+          ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
     }
     ClusterStats clusterStats =
         Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
@@ -478,24 +480,21 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
-  public void endpointAddressesAttachedWithTlsConfig_enableSecurity() {
+  public void endpointAddressesAttachedWithTlsConfig_disableSecurity() {
     boolean originalEnableSecurity = ClusterImplLoadBalancer.enableSecurity;
-    ClusterImplLoadBalancer.enableSecurity = true;
-    subtest_endpointAddressesAttachedWithTlsConfig(true);
+    ClusterImplLoadBalancer.enableSecurity = false;
+    subtest_endpointAddressesAttachedWithTlsConfig(false);
     ClusterImplLoadBalancer.enableSecurity = originalEnableSecurity;
   }
 
   @Test
-  public void endpointAddressesAttachedWithTlsConfig_securityDisabledByDefault() {
-    subtest_endpointAddressesAttachedWithTlsConfig(false);
+  public void endpointAddressesAttachedWithTlsConfig_securityEnabledByDefault() {
+    subtest_endpointAddressesAttachedWithTlsConfig(true);
   }
 
   private void subtest_endpointAddressesAttachedWithTlsConfig(boolean enableSecurity) {
     UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
-            CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
     WeightedTargetConfig weightedTargetConfig =
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
@@ -539,10 +538,7 @@ public class ClusterImplLoadBalancerTest {
 
     // Config with a new UpstreamTlsContext.
     upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
-            CommonTlsContextTestsUtil.BAD_CLIENT_KEY_FILE,
-            CommonTlsContextTestsUtil.BAD_CLIENT_PEM_FILE,
-            CommonTlsContextTestsUtil.CA_PEM_FILE);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe1", true);
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_NAME,
         null, Collections.<DropOverload>emptyList(),
         new PolicySelection(weightedTargetProvider, weightedTargetConfig), upstreamTlsContext);
@@ -553,11 +549,21 @@ public class ClusterImplLoadBalancerTest {
       SslContextProviderSupplier supplier =
           eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
       if (enableSecurity) {
+        assertThat(supplier.isShutdown()).isFalse();
         assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
       } else {
         assertThat(supplier).isNull();
       }
     }
+    loadBalancer.shutdown();
+    for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
+      SslContextProviderSupplier supplier =
+              eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+      if (enableSecurity) {
+        assertThat(supplier.isShutdown()).isTrue();
+      }
+    }
+    loadBalancer = null;
   }
 
   private void deliverAddressesAndConfig(List<EquivalentAddressGroup> addresses,

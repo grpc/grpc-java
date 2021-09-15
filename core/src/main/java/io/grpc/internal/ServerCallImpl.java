@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
+import static io.grpc.internal.GrpcUtil.CONTENT_LENGTH_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 
@@ -107,6 +108,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     checkState(!sendHeadersCalled, "sendHeaders has already been called");
     checkState(!closeCalled, "call is closed");
 
+    headers.discardAll(CONTENT_LENGTH_KEY);
     headers.discardAll(MESSAGE_ENCODING_KEY);
     if (compressor == null) {
       compressor = Codec.Identity.NONE;
@@ -279,7 +281,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           new Context.CancellationListener() {
             @Override
             public void cancelled(Context context) {
-              ServerStreamListenerImpl.this.call.cancelled = true;
+              // If the context has a cancellation cause then something exceptional happened
+              // and we should also mark the call as cancelled.
+              if (context.cancellationCause() != null) {
+                ServerStreamListenerImpl.this.call.cancelled = true;
+              }
             }
           },
           MoreExecutors.directExecutor());
@@ -355,6 +361,8 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       } finally {
         // Cancel context after delivering RPC closure notification to allow the application to
         // clean up and update any state based on whether onComplete or onCancel was called.
+        // Note that in failure situations JumpToApplicationThreadServerStreamListener has already
+        // closed the context. In these situations this cancel() call will be a no-op.
         context.cancel(null);
       }
     }

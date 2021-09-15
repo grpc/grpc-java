@@ -23,11 +23,12 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Duration;
 import com.google.re2j.Pattern;
+import io.grpc.Status.Code;
 import io.grpc.xds.Filter.FilterConfig;
-import io.grpc.xds.Matchers.FractionMatcher;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import io.grpc.xds.Matchers.PathMatcher;
+import io.grpc.xds.internal.Matchers.FractionMatcher;
+import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -58,12 +59,23 @@ abstract class VirtualHost {
   abstract static class Route {
     abstract RouteMatch routeMatch();
 
+    @Nullable
     abstract RouteAction routeAction();
 
     abstract ImmutableMap<String, FilterConfig> filterConfigOverrides();
 
-    static Route create(
-        RouteMatch routeMatch, RouteAction routeAction,
+    static Route forAction(RouteMatch routeMatch, RouteAction routeAction,
+        Map<String, FilterConfig> filterConfigOverrides) {
+      return create(routeMatch, routeAction, filterConfigOverrides);
+    }
+
+    static Route forNonForwardingAction(RouteMatch routeMatch,
+        Map<String, FilterConfig> filterConfigOverrides) {
+      return create(routeMatch, null, filterConfigOverrides);
+    }
+
+    private static Route create(
+        RouteMatch routeMatch, @Nullable RouteAction routeAction,
         Map<String, FilterConfig> filterConfigOverrides) {
       return new AutoValue_VirtualHost_Route(
           routeMatch, routeAction, ImmutableMap.copyOf(filterConfigOverrides));
@@ -90,6 +102,47 @@ abstract class VirtualHost {
         return new AutoValue_VirtualHost_Route_RouteMatch(pathMatcher,
             ImmutableList.copyOf(headerMatchers), fractionMatcher);
       }
+
+      /** Matcher for HTTP request path. */
+      @AutoValue
+      abstract static class PathMatcher {
+        // Exact full path to be matched.
+        @Nullable
+        abstract String path();
+
+        // Path prefix to be matched.
+        @Nullable
+        abstract String prefix();
+
+        // Regular expression pattern of the path to be matched.
+        @Nullable
+        abstract Pattern regEx();
+
+        // Whether case sensitivity is taken into account for matching.
+        // Only valid for full path matching or prefix matching.
+        abstract boolean caseSensitive();
+
+        static PathMatcher fromPath(String path, boolean caseSensitive) {
+          checkNotNull(path, "path");
+          return create(path, null, null, caseSensitive);
+        }
+
+        static PathMatcher fromPrefix(String prefix, boolean caseSensitive) {
+          checkNotNull(prefix, "prefix");
+          return create(null, prefix, null, caseSensitive);
+        }
+
+        static PathMatcher fromRegEx(Pattern regEx) {
+          checkNotNull(regEx, "regEx");
+          return create(null, null, regEx, false /* doesn't matter */);
+        }
+
+        private static PathMatcher create(@Nullable String path, @Nullable String prefix,
+            @Nullable Pattern regEx, boolean caseSensitive) {
+          return new AutoValue_VirtualHost_Route_RouteMatch_PathMatcher(path, prefix, regEx,
+              caseSensitive);
+        }
+      }
     }
 
     @AutoValue
@@ -106,24 +159,31 @@ abstract class VirtualHost {
       @Nullable
       abstract ImmutableList<ClusterWeight> weightedClusters();
 
-      static RouteAction forCluster(String cluster, List<HashPolicy> hashPolicies,
-          @Nullable Long timeoutNano) {
+      @Nullable
+      abstract RetryPolicy retryPolicy();
+
+      static RouteAction forCluster(
+          String cluster, List<HashPolicy> hashPolicies, @Nullable Long timeoutNano,
+          @Nullable RetryPolicy retryPolicy) {
         checkNotNull(cluster, "cluster");
-        return RouteAction.create(hashPolicies, timeoutNano, cluster, null);
+        return RouteAction.create(hashPolicies, timeoutNano, cluster, null, retryPolicy);
       }
 
-      static RouteAction forWeightedClusters(List<ClusterWeight> weightedClusters,
-          List<HashPolicy> hashPolicies, @Nullable Long timeoutNano) {
+      static RouteAction forWeightedClusters(
+          List<ClusterWeight> weightedClusters, List<HashPolicy> hashPolicies,
+          @Nullable Long timeoutNano, @Nullable RetryPolicy retryPolicy) {
         checkNotNull(weightedClusters, "weightedClusters");
         checkArgument(!weightedClusters.isEmpty(), "empty cluster list");
-        return RouteAction.create(hashPolicies, timeoutNano, null, weightedClusters);
+        return RouteAction.create(hashPolicies, timeoutNano, null, weightedClusters, retryPolicy);
       }
 
       private static RouteAction create(List<HashPolicy> hashPolicies, @Nullable Long timeoutNano,
-          @Nullable String cluster, @Nullable List<ClusterWeight> weightedClusters) {
+          @Nullable String cluster, @Nullable List<ClusterWeight> weightedClusters,
+          @Nullable RetryPolicy retryPolicy) {
         return new AutoValue_VirtualHost_Route_RouteAction(
             ImmutableList.copyOf(hashPolicies), timeoutNano, cluster,
-            weightedClusters == null ? null : ImmutableList.copyOf(weightedClusters));
+            weightedClusters == null ? null : ImmutableList.copyOf(weightedClusters),
+            retryPolicy);
       }
 
       @AutoValue
@@ -184,6 +244,31 @@ abstract class VirtualHost {
 
         enum Type {
           HEADER, CHANNEL_ID
+        }
+      }
+
+      @AutoValue
+      abstract static class RetryPolicy {
+        abstract int maxAttempts();
+
+        abstract ImmutableList<Code> retryableStatusCodes();
+
+        abstract Duration initialBackoff();
+
+        abstract Duration maxBackoff();
+
+        @Nullable
+        abstract Duration perAttemptRecvTimeout();
+
+        static RetryPolicy create(
+            int maxAttempts, List<Code> retryableStatusCodes, Duration initialBackoff,
+            Duration maxBackoff, @Nullable Duration perAttemptRecvTimeout) {
+          return new AutoValue_VirtualHost_Route_RouteAction_RetryPolicy(
+              maxAttempts,
+              ImmutableList.copyOf(retryableStatusCodes),
+              initialBackoff,
+              maxBackoff,
+              perAttemptRecvTimeout);
         }
       }
     }

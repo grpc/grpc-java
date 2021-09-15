@@ -17,6 +17,7 @@
 package io.grpc;
 
 import com.google.common.base.MoreObjects;
+import com.google.errorprone.annotations.DoNotCall;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -43,6 +44,7 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   /**
    * This method serves to force sub classes to "hide" this static factory.
    */
+  @DoNotCall("Unsupported")
   public static ManagedChannelBuilder<?> forAddress(String name, int port) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
   }
@@ -50,6 +52,7 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   /**
    * This method serves to force sub classes to "hide" this static factory.
    */
+  @DoNotCall("Unsupported")
   public static ManagedChannelBuilder<?> forTarget(String target) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
   }

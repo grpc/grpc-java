@@ -41,6 +41,7 @@ import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.testing.SingleMessageProducer;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -312,7 +313,7 @@ public class DelayedStreamTest {
   public void startThenCancelled() {
     stream.start(listener);
     stream.cancel(Status.CANCELLED);
-    verify(listener).closed(eq(Status.CANCELLED), any(Metadata.class));
+    verify(listener).closed(eq(Status.CANCELLED), any(RpcProgress.class), any(Metadata.class));
   }
 
   @Test
@@ -408,7 +409,7 @@ public class DelayedStreamTest {
         passedListener.messagesAvailable(producer1);
         passedListener.onReady();
         passedListener.messagesAvailable(producer2);
-        passedListener.closed(status, trailers);
+        passedListener.closed(status, RpcProgress.PROCESSED, trailers);
 
         verifyNoMoreInteractions(listener);
       }
@@ -418,7 +419,7 @@ public class DelayedStreamTest {
     inOrder.verify(listener).messagesAvailable(producer1);
     inOrder.verify(listener).onReady();
     inOrder.verify(listener).messagesAvailable(producer2);
-    inOrder.verify(listener).closed(status, trailers);
+    inOrder.verify(listener).closed(status, RpcProgress.PROCESSED, trailers);
   }
 
   @Test
@@ -439,8 +440,8 @@ public class DelayedStreamTest {
     verify(listener).headersRead(headers);
     delayedListener.messagesAvailable(producer);
     verify(listener).messagesAvailable(producer);
-    delayedListener.closed(status, trailers);
-    verify(listener).closed(status, trailers);
+    delayedListener.closed(status, RpcProgress.PROCESSED, trailers);
+    verify(listener).closed(status, RpcProgress.PROCESSED, trailers);
   }
 
   @Test

@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import io.grpc.Status;
@@ -29,7 +28,6 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import java.util.ArrayList;
@@ -48,92 +46,25 @@ import javax.annotation.Nullable;
  */
 abstract class XdsClient {
 
-  static final class LdsUpdate implements ResourceUpdate {
-    // Total number of nanoseconds to keep alive an HTTP request/response stream.
-    final long httpMaxStreamDurationNano;
-    // The name of the route configuration to be used for RDS resource discovery.
+  @AutoValue
+  abstract static class LdsUpdate implements ResourceUpdate {
+    // Http level api listener configuration.
     @Nullable
-    final String rdsName;
-    // The list virtual hosts that make up the route table.
+    abstract HttpConnectionManager httpConnectionManager();
+
+    // Tcp level listener configuration.
     @Nullable
-    final List<VirtualHost> virtualHosts;
-    // Filter instance names. Null if HttpFilter support is not enabled.
-    @Nullable final List<NamedFilterConfig> filterChain;
-    // Server side Listener.
-    @Nullable
-    final Listener listener;
+    abstract Listener listener();
 
-    LdsUpdate(
-        long httpMaxStreamDurationNano, String rdsName,
-        @Nullable List<NamedFilterConfig> filterChain) {
-      this(httpMaxStreamDurationNano, rdsName, null, filterChain);
+    static LdsUpdate forApiListener(HttpConnectionManager httpConnectionManager) {
+      checkNotNull(httpConnectionManager, "httpConnectionManager");
+      return new AutoValue_XdsClient_LdsUpdate(httpConnectionManager, null);
     }
 
-    LdsUpdate(
-        long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts,
-        @Nullable List<NamedFilterConfig> filterChain) {
-      this(httpMaxStreamDurationNano, null, virtualHosts, filterChain);
+    static LdsUpdate forTcpListener(Listener listener) {
+      checkNotNull(listener, "listener");
+      return new AutoValue_XdsClient_LdsUpdate(null, listener);
     }
-
-    private LdsUpdate(
-        long httpMaxStreamDurationNano, @Nullable String rdsName,
-        @Nullable List<VirtualHost> virtualHosts, @Nullable List<NamedFilterConfig> filterChain) {
-      this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
-      this.rdsName = rdsName;
-      this.virtualHosts = virtualHosts == null
-          ? null : Collections.unmodifiableList(new ArrayList<>(virtualHosts));
-      this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
-      this.listener = null;
-    }
-
-    LdsUpdate(Listener listener) {
-      this.listener = listener;
-      this.httpMaxStreamDurationNano = 0L;
-      this.rdsName = null;
-      this.filterChain = null;
-      this.virtualHosts = null;
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(
-          httpMaxStreamDurationNano, rdsName, virtualHosts, filterChain, listener);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      LdsUpdate that = (LdsUpdate) o;
-      return httpMaxStreamDurationNano == that.httpMaxStreamDurationNano
-          && Objects.equals(rdsName, that.rdsName)
-          && Objects.equals(virtualHosts, that.virtualHosts)
-          && Objects.equals(filterChain, that.filterChain)
-          && Objects.equals(listener, that.listener);
-    }
-
-    @Override
-    public String toString() {
-      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
-      toStringHelper.add("httpMaxStreamDurationNano", httpMaxStreamDurationNano);
-      if (rdsName != null) {
-        toStringHelper.add("rdsName", rdsName);
-      } else {
-        toStringHelper.add("virtualHosts", virtualHosts);
-      }
-      if (filterChain != null) {
-        toStringHelper.add("filterChain", filterChain);
-      }
-      if (listener != null) {
-        toStringHelper.add("listener", listener);
-      }
-      return toStringHelper.toString();
-    }
-
   }
 
   static final class RdsUpdate implements ResourceUpdate {
@@ -191,6 +122,12 @@ abstract class XdsClient {
     @Nullable
     abstract String edsServiceName();
 
+    // Corresponding DNS name to be used if upstream endpoints of the cluster is resolvable
+    // via DNS.
+    // Only valid for LOGICAL_DNS cluster.
+    @Nullable
+    abstract String dnsHostName();
+
     // Load report server name for reporting loads via LRS.
     // Only valid for EDS or LOGICAL_DNS cluster.
     @Nullable
@@ -235,13 +172,15 @@ abstract class XdsClient {
           .upstreamTlsContext(upstreamTlsContext);
     }
 
-    static Builder forLogicalDns(String clusterName, @Nullable String lrsServerName,
-        @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext upstreamTlsContext) {
+    static Builder forLogicalDns(String clusterName, String dnsHostName,
+        @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+        @Nullable UpstreamTlsContext upstreamTlsContext) {
       return new AutoValue_XdsClient_CdsUpdate.Builder()
           .clusterName(clusterName)
           .clusterType(ClusterType.LOGICAL_DNS)
           .minRingSize(0)
           .maxRingSize(0)
+          .dnsHostName(dnsHostName)
           .lrsServerName(lrsServerName)
           .maxConcurrentRequests(maxConcurrentRequests)
           .upstreamTlsContext(upstreamTlsContext);
@@ -265,6 +204,7 @@ abstract class XdsClient {
           .add("minRingSize", minRingSize())
           .add("maxRingSize", maxRingSize())
           .add("edsServiceName", edsServiceName())
+          .add("dnsHostName", dnsHostName())
           .add("lrsServerName", lrsServerName())
           .add("maxConcurrentRequests", maxConcurrentRequests())
           // Exclude upstreamTlsContext as its string representation is cumbersome.
@@ -280,20 +220,28 @@ abstract class XdsClient {
       // Private, use one of the static factory methods instead.
       protected abstract Builder clusterType(ClusterType clusterType);
 
-      abstract Builder lbPolicy(LbPolicy lbPolicy);
+      // Private, use roundRobinLbPolicy() or ringHashLbPolicy(long, long).
+      protected abstract Builder lbPolicy(LbPolicy lbPolicy);
 
-      Builder lbPolicy(LbPolicy lbPolicy, long minRingSize, long maxRingSize) {
-        return this.lbPolicy(lbPolicy).minRingSize(minRingSize).maxRingSize(maxRingSize);
+      Builder roundRobinLbPolicy() {
+        return this.lbPolicy(LbPolicy.ROUND_ROBIN);
       }
 
-      // Private, use lbPolicy(LbPolicy, long, long).
+      Builder ringHashLbPolicy(long minRingSize, long maxRingSize) {
+        return this.lbPolicy(LbPolicy.RING_HASH).minRingSize(minRingSize).maxRingSize(maxRingSize);
+      }
+
+      // Private, use ringHashLbPolicy(long, long).
       protected abstract Builder minRingSize(long minRingSize);
 
-      // Private, use lbPolicy(.LbPolicy, long, long)
+      // Private, use ringHashLbPolicy(long, long).
       protected abstract Builder maxRingSize(long maxRingSize);
 
       // Private, use CdsUpdate.forEds() instead.
       protected abstract Builder edsServiceName(String edsServiceName);
+
+      // Private, use CdsUpdate.forLogicalDns() instead.
+      protected abstract Builder dnsHostName(String dnsHostName);
 
       // Private, use one of the static factory methods instead.
       protected abstract Builder lrsServerName(String lrsServerName);

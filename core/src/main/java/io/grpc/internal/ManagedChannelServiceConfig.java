@@ -27,11 +27,13 @@ import io.grpc.CallOptions;
 import io.grpc.InternalConfigSelector;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.MethodDescriptor;
+import io.grpc.Status.Code;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -216,7 +218,8 @@ final class ManagedChannelServiceConfig {
       return false;
     }
     ManagedChannelServiceConfig that = (ManagedChannelServiceConfig) o;
-    return Objects.equal(serviceMethodMap, that.serviceMethodMap)
+    return Objects.equal(defaultMethodConfig, that.defaultMethodConfig)
+        && Objects.equal(serviceMethodMap, that.serviceMethodMap)
         && Objects.equal(serviceMap, that.serviceMap)
         && Objects.equal(retryThrottling, that.retryThrottling)
         && Objects.equal(loadBalancingConfig, that.loadBalancingConfig);
@@ -224,12 +227,14 @@ final class ManagedChannelServiceConfig {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
+    return Objects.hashCode(
+        defaultMethodConfig, serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
   }
 
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
+        .add("defaultMethodConfig", defaultMethodConfig)
         .add("serviceMethodMap", serviceMethodMap)
         .add("serviceMap", serviceMap)
         .add("retryThrottling", retryThrottling)
@@ -354,9 +359,22 @@ final class ManagedChannelServiceConfig {
           "backoffMultiplier must be greater than 0: %s",
           backoffMultiplier);
 
+      Long perAttemptRecvTimeout =
+          ServiceConfigUtil.getPerAttemptRecvTimeoutNanosFromRetryPolicy(retryPolicy);
+      checkArgument(
+          perAttemptRecvTimeout == null || perAttemptRecvTimeout >= 0,
+          "perAttemptRecvTimeout cannot be negative: %s",
+          perAttemptRecvTimeout);
+
+      Set<Code> retryableCodes =
+          ServiceConfigUtil.getRetryableStatusCodesFromRetryPolicy(retryPolicy);
+      checkArgument(
+          perAttemptRecvTimeout != null || !retryableCodes.isEmpty(),
+          "retryableStatusCodes cannot be empty without perAttemptRecvTimeout");
+
       return new RetryPolicy(
           maxAttempts, initialBackoffNanos, maxBackoffNanos, backoffMultiplier,
-          ServiceConfigUtil.getRetryableStatusCodesFromRetryPolicy(retryPolicy));
+          perAttemptRecvTimeout, retryableCodes);
     }
 
     private static HedgingPolicy hedgingPolicy(

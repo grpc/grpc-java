@@ -20,6 +20,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import javax.annotation.Nullable;
 
 /**
  * Interface for an abstract byte buffer. Buffers are intended to be a read-only, except for the
@@ -122,6 +123,44 @@ public interface ReadableBuffer extends Closeable {
    * @throws UnsupportedOperationException the buffer does not support this method
    */
   int arrayOffset();
+
+  /**
+   * Indicates whether or not {@link #mark} operation is supported for this buffer.
+   */
+  boolean markSupported();
+
+  /**
+   * Marks the current position in this buffer. A subsequent call to the {@link #reset} method
+   * repositions this stream at the last marked position so that subsequent reads re-read the same
+   * bytes.
+   */
+  void mark();
+
+  /**
+   * Repositions this buffer to the position at the time {@link #mark} was last called on this
+   * buffer.
+   */
+  void reset();
+
+  /**
+   * Indicates whether or not {@link #getByteBuffer} operation is supported for this buffer.
+   */
+  boolean byteBufferSupported();
+
+  /**
+   * Gets a {@link ByteBuffer} that contains some bytes of the content next to be read, or {@code
+   * null} if this buffer has been exhausted. The number of bytes contained in the returned buffer
+   * is implementation specific. The position of this buffer is unchanged after calling this
+   * method. The returned buffer's content should not be modified, but the position, limit, and
+   * mark may be changed. Operations for changing the position, limit, and mark of the returned
+   * buffer does not affect the position, limit, and mark of this buffer. Buffers returned by this
+   * method have independent position, limit and mark. This is an optional method, so callers
+   * should first check {@link #byteBufferSupported}.
+   *
+   * @throws UnsupportedOperationException the buffer does not support this method.
+   */
+  @Nullable
+  ByteBuffer getByteBuffer();
 
   /**
    * Closes this buffer and releases any resources.

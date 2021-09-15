@@ -42,10 +42,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig.HashFunction;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
-import io.envoyproxy.envoy.config.core.v3.ApiConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ConfigSource;
-import io.envoyproxy.envoy.config.core.v3.GrpcService;
-import io.envoyproxy.envoy.config.core.v3.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.config.core.v3.HealthStatus;
 import io.envoyproxy.envoy.config.core.v3.Locality;
 import io.envoyproxy.envoy.config.core.v3.Node;
@@ -77,11 +74,13 @@ import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay.HeaderD
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.HeaderAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
+import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
@@ -98,7 +97,6 @@ import io.grpc.Context.CancellationListener;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
-import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -264,7 +262,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
 
     @SuppressWarnings("unchecked")
     @Override
-    protected Message buildListener(
+    protected Message buildListenerWithApiListener(
         String name, Message routeConfiguration, List<? extends Message> httpFilters) {
       return Listener.newBuilder()
           .setName(name)
@@ -280,7 +278,16 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildListenerForRds(String name, String rdsResourceName) {
+    protected Message buildListenerWithApiListener(String name, Message routeConfiguration) {
+      return buildListenerWithApiListener(name, routeConfiguration, Arrays.asList(
+              HttpFilter.newBuilder()
+                      .setName("terminal")
+                      .setTypedConfig(Any.pack(Router.newBuilder().build())).build()
+      ));
+    }
+
+    @Override
+    protected Message buildListenerWithApiListenerForRds(String name, String rdsResourceName) {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(Address.getDefaultInstance())
@@ -294,12 +301,16 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
                               .setConfigSource(
                                   ConfigSource.newBuilder()
                                       .setAds(AggregatedConfigSource.getDefaultInstance())))
+                      .addHttpFilters(
+                          HttpFilter.newBuilder()
+                               .setName("terminal")
+                               .setTypedConfig(Any.pack(Router.newBuilder().build())))
                       .build())))
           .build();
     }
 
     @Override
-    protected Message buildListenerInvalid(String name) {
+    protected Message buildListenerWithApiListenerInvalid(String name) {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(Address.getDefaultInstance())
@@ -438,9 +449,10 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     @Override
     protected Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
         String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
-        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+        @Nullable Message upstreamTlsContext, String transportSocketName,
+        @Nullable Message circuitBreakers) {
       Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
-          enableLrs, upstreamTlsContext, circuitBreakers);
+          enableLrs, upstreamTlsContext, transportSocketName, circuitBreakers);
       builder.setType(DiscoveryType.EDS);
       EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
       edsClusterConfigBuilder.setEdsConfig(
@@ -453,12 +465,20 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildLogicalDnsCluster(String clusterName, String lbPolicy,
-        @Nullable Message ringHashLbConfig, boolean enableLrs,
+    protected Message buildLogicalDnsCluster(String clusterName, String dnsHostAddr,
+        int dnsHostPort, String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
       Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
-          enableLrs, upstreamTlsContext, circuitBreakers);
+          enableLrs, upstreamTlsContext, "envoy.transport_sockets.tls", circuitBreakers);
       builder.setType(DiscoveryType.LOGICAL_DNS);
+      builder.setLoadAssignment(
+          ClusterLoadAssignment.newBuilder().addEndpoints(
+              LocalityLbEndpoints.newBuilder().addLbEndpoints(
+                  LbEndpoint.newBuilder().setEndpoint(
+                      Endpoint.newBuilder().setAddress(
+                          Address.newBuilder().setSocketAddress(
+                              SocketAddress.newBuilder()
+                                  .setAddress(dnsHostAddr).setPortValue(dnsHostPort)))))).build());
       return builder.build();
     }
 
@@ -485,7 +505,8 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
 
     private Cluster.Builder initClusterBuilder(String clusterName, String lbPolicy,
         @Nullable Message ringHashLbConfig, boolean enableLrs,
-        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+        @Nullable Message upstreamTlsContext, String transportSocketName,
+        @Nullable Message circuitBreakers) {
       Cluster.Builder builder = Cluster.newBuilder();
       builder.setName(clusterName);
       if (lbPolicy.equals("round_robin")) {
@@ -504,7 +525,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       if (upstreamTlsContext != null) {
         builder.setTransportSocket(
             TransportSocket.newBuilder()
-                .setName("envoy.transport_sockets.tls")
+                .setName(transportSocketName)
                 .setTypedConfig(Any.pack(upstreamTlsContext)));
       }
       if (circuitBreakers != null) {
@@ -530,24 +551,37 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildUpstreamTlsContext(String secretName, String targetUri) {
-      GrpcService grpcService =
-          GrpcService.newBuilder()
-              .setGoogleGrpc(GoogleGrpc.newBuilder().setTargetUri(targetUri))
-              .build();
-      ConfigSource sdsConfig =
-          ConfigSource.newBuilder()
-              .setApiConfigSource(ApiConfigSource.newBuilder().addGrpcServices(grpcService))
-              .build();
-      SdsSecretConfig validationContextSdsSecretConfig =
-          SdsSecretConfig.newBuilder()
-              .setName(secretName)
-              .setSdsConfig(sdsConfig)
-              .build();
+    @SuppressWarnings("deprecation")
+    protected Message buildUpstreamTlsContext(String instanceName, String certName) {
+      CommonTlsContext.Builder commonTlsContextBuilder = CommonTlsContext.newBuilder();
+      if (instanceName != null && certName != null) {
+        CommonTlsContext.CertificateProviderInstance providerInstance =
+            CommonTlsContext.CertificateProviderInstance.newBuilder()
+                .setInstanceName(instanceName)
+                .setCertificateName(certName)
+                .build();
+        CommonTlsContext.CombinedCertificateValidationContext combined =
+            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
+                .setValidationContextCertificateProviderInstance(providerInstance)
+                .build();
+        commonTlsContextBuilder.setCombinedValidationContext(combined);
+      }
       return UpstreamTlsContext.newBuilder()
-          .setCommonTlsContext(
-              CommonTlsContext.newBuilder()
-                  .setValidationContextSdsSecretConfig(validationContextSdsSecretConfig))
+          .setCommonTlsContext(commonTlsContextBuilder)
+          .build();
+    }
+
+    @Override
+    protected Message buildNewUpstreamTlsContext(String instanceName, String certName) {
+      CommonTlsContext.Builder commonTlsContextBuilder = CommonTlsContext.newBuilder();
+      if (instanceName != null && certName != null) {
+        commonTlsContextBuilder.setValidationContext(CertificateValidationContext.newBuilder()
+            .setCaCertificateProviderInstance(
+                CertificateProviderPluginInstance.newBuilder().setInstanceName(instanceName)
+                    .setCertificateName(certName).build()));
+      }
+      return UpstreamTlsContext.newBuilder()
+          .setCommonTlsContext(commonTlsContextBuilder)
           .build();
     }
 
@@ -657,7 +691,8 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     @SuppressWarnings("deprecation")
     @Override
     protected FilterChain buildFilterChain(
-        List<String> alpn, Message tlsContext, Message... filters) {
+        List<String> alpn, Message tlsContext, String transportSocketName,
+        Message... filters) {
       FilterChainMatch filterChainMatch =
           FilterChainMatch.newBuilder().addAllApplicationProtocols(alpn).build();
       Filter[] filterArray = new Filter[filters.length];
@@ -670,7 +705,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
               tlsContext == null
                   ? TransportSocket.getDefaultInstance()
                   : TransportSocket.newBuilder()
-                      .setName("envoy.transport_sockets.tls")
+                      .setName(transportSocketName)
                       .setTypedConfig(Any.pack(tlsContext))
                       .build())
           .addAllFilters(Arrays.asList(filterArray))
@@ -692,41 +727,41 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(listenerAddress)
-          .setDefaultFilterChain(FilterChain.getDefaultInstance())
           .addAllFilterChains(Arrays.asList(filterChainsArray))
           .setTrafficDirection(TrafficDirection.INBOUND)
           .build();
     }
 
     @Override
-    protected Listener buildListenerWithFilterChain(
-        String name, int portValue, String address, String certName, String validationContextName) {
-      FilterChain filterChain =
-          buildFilterChain(
-              Arrays.<String>asList(),
-              CommonTlsContextTestsUtil.buildTestDownstreamTlsContext(
-                  certName, validationContextName),
-              buildTestFilter("envoy.http_connection_manager"));
-      io.envoyproxy.envoy.config.core.v3.Address listenerAddress =
-          io.envoyproxy.envoy.config.core.v3.Address.newBuilder()
-              .setSocketAddress(
-                  SocketAddress.newBuilder().setPortValue(portValue).setAddress(address))
-              .build();
-      return Listener.newBuilder()
-          .setName(name)
-          .setAddress(listenerAddress)
-          .setDefaultFilterChain(FilterChain.getDefaultInstance())
-          .addAllFilterChains(Arrays.asList(filterChain))
-          .setTrafficDirection(TrafficDirection.INBOUND)
+    protected Message buildHttpConnectionManagerFilter(
+        @Nullable String rdsName, @Nullable Message routeConfig, List<Message> httpFilters) {
+      HttpConnectionManager.Builder hcmBuilder = HttpConnectionManager.newBuilder();
+      if (rdsName != null) {
+        hcmBuilder.setRds(
+            Rds.newBuilder()
+                .setRouteConfigName(rdsName)
+                .setConfigSource(
+                    ConfigSource.newBuilder()
+                        .setAds(AggregatedConfigSource.getDefaultInstance())));
+      }
+      if (routeConfig != null) {
+        hcmBuilder.setRouteConfig((RouteConfiguration) routeConfig);
+      }
+      for (Message httpFilter : httpFilters) {
+        hcmBuilder.addHttpFilters((HttpFilter) httpFilter);
+      }
+      return Filter.newBuilder()
+          .setName("envoy.http_connection_manager")
+          .setTypedConfig(
+              Any.pack(hcmBuilder.build(), "type.googleapis.com"))
           .build();
     }
 
     @Override
-    protected Filter buildTestFilter(String name) {
-      return Filter.newBuilder()
-          .setName(name)
-          .setTypedConfig(Any.pack(HttpConnectionManager.getDefaultInstance()))
-          .build();
+    protected Message buildTerminalFilter() {
+      return HttpFilter.newBuilder()
+          .setName("terminal")
+          .setTypedConfig(Any.pack(Router.newBuilder().build())).build();
     }
   }
 

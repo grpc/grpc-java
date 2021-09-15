@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
@@ -61,11 +62,13 @@ public final class ManagedChannelImplBuilder
 
   private static final Logger log = Logger.getLogger(ManagedChannelImplBuilder.class.getName());
 
+  @DoNotCall("ClientTransportFactoryBuilder is required, use a constructor")
   public static ManagedChannelBuilder<?> forAddress(String name, int port) {
     throw new UnsupportedOperationException(
         "ClientTransportFactoryBuilder is required, use a constructor");
   }
 
+  @DoNotCall("ClientTransportFactoryBuilder is required, use a constructor")
   public static ManagedChannelBuilder<?> forTarget(String target) {
     throw new UnsupportedOperationException(
         "ClientTransportFactoryBuilder is required, use a constructor");
@@ -139,11 +142,7 @@ public final class ManagedChannelImplBuilder
   int maxHedgedAttempts = 5;
   long retryBufferSize = DEFAULT_RETRY_BUFFER_SIZE_IN_BYTES;
   long perRpcBufferLimit = DEFAULT_PER_RPC_BUFFER_LIMIT_IN_BYTES;
-  boolean retryEnabled = false; // TODO(zdapeng): default to true
-  // Temporarily disable retry when stats or tracing is enabled to avoid breakage, until we know
-  // what should be the desired behavior for retry + stats/tracing.
-  // TODO(zdapeng): delete me
-  boolean temporarilyDisableRetry;
+  boolean retryEnabled = true;
 
   InternalChannelz channelz = InternalChannelz.instance();
   int maxTraceEvents;
@@ -163,6 +162,7 @@ public final class ManagedChannelImplBuilder
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
   private boolean recordRealTimeMetrics = false;
+  private boolean recordRetryMetrics = true;
   private boolean tracingEnabled = true;
 
   /**
@@ -280,9 +280,25 @@ public final class ManagedChannelImplBuilder
   public ManagedChannelImplBuilder(SocketAddress directServerAddress, String authority,
       ClientTransportFactoryBuilder clientTransportFactoryBuilder,
       @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
+      this(directServerAddress, authority, null, null, clientTransportFactoryBuilder,
+          channelBuilderDefaultPortProvider);
+  }
+
+  /**
+   * Creates a new managed channel builder with the given server address, authority string of the
+   * channel. Transport implementors must provide client transport factory builder, and may set
+   * custom channel default port provider.
+   * 
+   * @param channelCreds The ChannelCredentials provided by the user. These may be used when
+   *     creating derivative channels.
+   */
+  public ManagedChannelImplBuilder(SocketAddress directServerAddress, String authority,
+      @Nullable ChannelCredentials channelCreds, @Nullable CallCredentials callCreds,
+      ClientTransportFactoryBuilder clientTransportFactoryBuilder,
+      @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
     this.target = makeTargetStringForDirectAddress(directServerAddress);
-    this.channelCredentials = null;
-    this.callCredentials = null;
+    this.channelCredentials = channelCreds;
+    this.callCredentials = callCreds;
     this.clientTransportFactoryBuilder = Preconditions
         .checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");
     this.directServerAddress = directServerAddress;
@@ -441,8 +457,6 @@ public final class ManagedChannelImplBuilder
   @Override
   public ManagedChannelImplBuilder enableRetry() {
     retryEnabled = true;
-    statsEnabled = false;
-    tracingEnabled = false;
     return this;
   }
 
@@ -570,12 +584,13 @@ public final class ManagedChannelImplBuilder
   public void setStatsRecordRealTimeMetrics(boolean value) {
     recordRealTimeMetrics = value;
   }
+  
+  public void setStatsRecordRetryMetrics(boolean value) {
+    recordRetryMetrics = value;
+  }
 
   /**
    * Disable or enable tracing features.  Enabled by default.
-   *
-   * <p>For the current release, calling {@code setTracingEnabled(true)} may have a side effect that
-   * disables retry.
    */
   public void setTracingEnabled(boolean value) {
     tracingEnabled = value;
@@ -623,9 +638,7 @@ public final class ManagedChannelImplBuilder
   List<ClientInterceptor> getEffectiveInterceptors() {
     List<ClientInterceptor> effectiveInterceptors =
         new ArrayList<>(this.interceptors);
-    temporarilyDisableRetry = false;
     if (statsEnabled) {
-      temporarilyDisableRetry = true;
       ClientInterceptor statsInterceptor = null;
       try {
         Class<?> censusStatsAccessor =
@@ -635,6 +648,7 @@ public final class ManagedChannelImplBuilder
                 "getClientInterceptor",
                 boolean.class,
                 boolean.class,
+                boolean.class,
                 boolean.class);
         statsInterceptor =
             (ClientInterceptor) getClientInterceptorMethod
@@ -642,7 +656,8 @@ public final class ManagedChannelImplBuilder
                     null,
                     recordStartedRpcs,
                     recordFinishedRpcs,
-                    recordRealTimeMetrics);
+                    recordRealTimeMetrics,
+                    recordRetryMetrics);
       } catch (ClassNotFoundException e) {
         // Replace these separate catch statements with multicatch when Android min-API >= 19
         log.log(Level.FINE, "Unable to apply census stats", e);
@@ -660,7 +675,6 @@ public final class ManagedChannelImplBuilder
       }
     }
     if (tracingEnabled) {
-      temporarilyDisableRetry = true;
       ClientInterceptor tracingInterceptor = null;
       try {
         Class<?> censusTracingAccessor =

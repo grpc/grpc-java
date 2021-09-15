@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.MethodDescriptor.MethodType.UNARY;
 import static io.grpc.Status.Code.UNAVAILABLE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -155,13 +156,14 @@ public class ManagedChannelServiceConfigTest {
         "name", ImmutableList.of(name1, name2),
         "timeout", "1.234s",
         "retryPolicy",
-        ImmutableMap.of(
-            "maxAttempts", 3.0D,
-            "initialBackoff", "1s",
-            "maxBackoff", "10s",
-            "backoffMultiplier", 1.5D,
-            "retryableStatusCodes", ImmutableList.of("UNAVAILABLE")
-        ));
+        ImmutableMap.builder()
+            .put("maxAttempts", 3.0D)
+            .put("initialBackoff", "1s")
+            .put("maxBackoff", "10s")
+            .put("backoffMultiplier", 1.5D)
+            .put("perAttemptRecvTimeout", "2.5s")
+            .put("retryableStatusCodes", ImmutableList.of("UNAVAILABLE"))
+            .build());
     Map<String, ?> defaultMethodConfig = ImmutableMap.of(
         "name", ImmutableList.of(ImmutableMap.of()),
         "timeout", "4.321s");
@@ -187,6 +189,8 @@ public class ManagedChannelServiceConfigTest {
     methodInfo = serviceConfig.getMethodConfig(methodForName("service1", "method1"));
     assertThat(methodInfo.timeoutNanos).isEqualTo(MILLISECONDS.toNanos(1234));
     assertThat(methodInfo.retryPolicy.maxAttempts).isEqualTo(2);
+    assertThat(methodInfo.retryPolicy.perAttemptRecvTimeoutNanos)
+        .isEqualTo(MILLISECONDS.toNanos(2500));
     assertThat(methodInfo.retryPolicy.retryableStatusCodes).containsExactly(UNAVAILABLE);
     methodInfo = serviceConfig.getMethodConfig(methodForName("service1", "methodX"));
     assertThat(methodInfo.timeoutNanos).isEqualTo(MILLISECONDS.toNanos(4321));
@@ -210,6 +214,84 @@ public class ManagedChannelServiceConfigTest {
         ((ManagedChannelServiceConfig) result.getConfig()).getMethodConfig(method);
     assertThat(methodInfoFromDefaultConfigSelector)
         .isEqualTo(serviceConfig.getMethodConfig(method));
+  }
+
+  @Test
+  public void retryConfig_emptyRetriableStatusCodesAllowedWithPerAttemptRecvTimeoutGiven() {
+    Map<String, ?> retryPolicy = ImmutableMap.<String, Object>builder()
+        .put("maxAttempts", 3.0D)
+        .put("initialBackoff", "1s")
+        .put("maxBackoff", "10s")
+        .put("backoffMultiplier", 1.5D)
+        .put("perAttemptRecvTimeout", "2.5s")
+        .put("retryableStatusCodes", ImmutableList.of())
+        .build();
+    Map<String, ?> methodConfig = ImmutableMap.of(
+        "name", ImmutableList.of(ImmutableMap.of()), "retryPolicy", retryPolicy);
+    Map<String, ?> rawServiceConfig =
+        ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
+    assertThat(ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 5, 5, null))
+        .isNotNull();
+  }
+
+  @Test
+  public void retryConfig_PerAttemptRecvTimeoutUnsetAllowedIfRetryableStatusCodesNonempty() {
+    Map<String, ?> retryPolicy = ImmutableMap.<String, Object>builder()
+        .put("maxAttempts", 3.0D)
+        .put("initialBackoff", "1s")
+        .put("maxBackoff", "10s")
+        .put("backoffMultiplier", 1.5D)
+        .put("retryableStatusCodes", ImmutableList.of("UNAVAILABLE"))
+        .build();
+    Map<String, ?> methodConfig = ImmutableMap.of(
+        "name", ImmutableList.of(ImmutableMap.of()), "retryPolicy", retryPolicy);
+    Map<String, ?> rawServiceConfig =
+        ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
+    assertThat(ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 5, 5, null))
+        .isNotNull();
+  }
+
+  @Test
+  public void retryConfig_emptyRetriableStatusCodesNotAllowedWithPerAttemptRecvTimeoutUnset() {
+    Map<String, ?> retryPolicy = ImmutableMap.<String, Object>builder()
+        .put("maxAttempts", 3.0D)
+        .put("initialBackoff", "1s")
+        .put("maxBackoff", "10s")
+        .put("backoffMultiplier", 1.5D)
+        .put("retryableStatusCodes", ImmutableList.of())
+        .build();
+    Map<String, ?> methodConfig = ImmutableMap.of(
+        "name", ImmutableList.of(ImmutableMap.of()), "retryPolicy", retryPolicy);
+    Map<String, ?> rawServiceConfig =
+        ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
+    try {
+      ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 5, 5, null);
+      fail("The expected IllegalArgumentException is not thrown");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains(
+          "retryableStatusCodes cannot be empty without perAttemptRecvTimeout");
+    }
+  }
+
+  // For now we allow perAttemptRecvTimeout being zero although it does not make sense.
+  // TODO(zdapeng): disallow zero perAttemptRecvTimeout if hedging is not enabled once we support
+  //   hedge_on_per_try_timeout.
+  @Test
+  public void retryConfig_AllowPerAttemptRecvTimeoutZero() {
+    Map<String, ?> retryPolicy = ImmutableMap.<String, Object>builder()
+        .put("maxAttempts", 3.0D)
+        .put("initialBackoff", "1s")
+        .put("maxBackoff", "10s")
+        .put("backoffMultiplier", 1.5D)
+        .put("perAttemptRecvTimeout", "0s")
+        .put("retryableStatusCodes", ImmutableList.of())
+        .build();
+    Map<String, ?> methodConfig = ImmutableMap.of(
+        "name", ImmutableList.of(ImmutableMap.of()), "retryPolicy", retryPolicy);
+    Map<String, ?> rawServiceConfig =
+        ImmutableMap.of("methodConfig", ImmutableList.of(methodConfig));
+    assertThat(ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 5, 5, null))
+        .isNotNull();
   }
 
   private static MethodDescriptor<?, ?> methodForName(String service, String method) {

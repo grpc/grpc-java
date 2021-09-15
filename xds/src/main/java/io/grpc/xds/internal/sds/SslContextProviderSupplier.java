@@ -17,8 +17,9 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
@@ -41,8 +42,8 @@ public final class SslContextProviderSupplier implements Closeable {
 
   public SslContextProviderSupplier(
       BaseTlsContext tlsContext, TlsContextManager tlsContextManager) {
-    this.tlsContext = tlsContext;
-    this.tlsContextManager = tlsContextManager;
+    this.tlsContext = checkNotNull(tlsContext, "tlsContext");
+    this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
   }
 
   public BaseTlsContext getTlsContext() {
@@ -52,27 +53,37 @@ public final class SslContextProviderSupplier implements Closeable {
   /** Updates SslContext via the passed callback. */
   public synchronized void updateSslContext(final SslContextProvider.Callback callback) {
     checkNotNull(callback, "callback");
-    checkState(!shutdown, "Supplier is shutdown!");
-    if (sslContextProvider == null) {
-      sslContextProvider = getSslContextProvider();
+    try {
+      if (!shutdown) {
+        if (sslContextProvider == null) {
+          sslContextProvider = getSslContextProvider();
+        }
+      }
+      // we want to increment the ref-count so call findOrCreate again...
+      final SslContextProvider toRelease = getSslContextProvider();
+      toRelease.addCallback(
+          new SslContextProvider.Callback(callback.getExecutor()) {
+
+            @Override
+            public void updateSecret(SslContext sslContext) {
+              callback.updateSecret(sslContext);
+              releaseSslContextProvider(toRelease);
+            }
+
+            @Override
+            public void onException(Throwable throwable) {
+              callback.onException(throwable);
+              releaseSslContextProvider(toRelease);
+            }
+          });
+    } catch (final Throwable throwable) {
+      callback.getExecutor().execute(new Runnable() {
+        @Override
+        public void run() {
+          callback.onException(throwable);
+        }
+      });
     }
-    // we want to increment the ref-count so call findOrCreate again...
-    final SslContextProvider toRelease = getSslContextProvider();
-    sslContextProvider.addCallback(
-        new SslContextProvider.Callback(callback.getExecutor()) {
-
-          @Override
-          public void updateSecret(SslContext sslContext) {
-            callback.updateSecret(sslContext);
-            releaseSslContextProvider(toRelease);
-          }
-
-          @Override
-          public void onException(Throwable throwable) {
-            callback.onException(throwable);
-            releaseSslContextProvider(toRelease);
-          }
-        });
   }
 
   private void releaseSslContextProvider(SslContextProvider toRelease) {
@@ -89,14 +100,31 @@ public final class SslContextProviderSupplier implements Closeable {
         : tlsContextManager.findOrCreateServerSslContextProvider((DownstreamTlsContext) tlsContext);
   }
 
+  @VisibleForTesting public boolean isShutdown() {
+    return shutdown;
+  }
+
   /** Called by consumer when tlsContext changes. */
   @Override
   public synchronized void close() {
-    if (tlsContext instanceof UpstreamTlsContext) {
-      tlsContextManager.releaseClientSslContextProvider(sslContextProvider);
-    } else {
-      tlsContextManager.releaseServerSslContextProvider(sslContextProvider);
+    if (sslContextProvider != null) {
+      if (tlsContext instanceof UpstreamTlsContext) {
+        tlsContextManager.releaseClientSslContextProvider(sslContextProvider);
+      } else {
+        tlsContextManager.releaseServerSslContextProvider(sslContextProvider);
+      }
     }
+    sslContextProvider = null;
     shutdown = true;
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("tlsContext", tlsContext)
+        .add("tlsContextManager", tlsContextManager)
+        .add("sslContextProvider", sslContextProvider)
+        .add("shutdown", shutdown)
+        .toString();
   }
 }

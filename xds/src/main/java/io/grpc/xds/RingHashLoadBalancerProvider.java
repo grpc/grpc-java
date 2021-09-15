@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -32,8 +34,20 @@ import java.util.Map;
 @Internal
 public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
 
+  // Same as ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE
+  @VisibleForTesting
+  static final long DEFAULT_MIN_RING_SIZE = 1024L;
+  // Same as ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE
+  @VisibleForTesting
+  static final long DEFAULT_MAX_RING_SIZE = 8 * 1024 * 1024L;
+  // Maximum number of ring entries allowed. Setting this too large can result in slow
+  // ring construction and OOM error.
+  // Same as ClientXdsClient.MAX_RING_HASH_LB_POLICY_RING_SIZE
+  static final long MAX_RING_SIZE = 8 * 1024 * 1024L;
+
   private static final boolean enableRingHash =
-      Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH"));
+      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH"))
+          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH"));
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
@@ -59,11 +73,14 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLoadBalancingPolicyConfig) {
     Long minRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "minRingSize");
     Long maxRingSize = JsonUtil.getNumberAsLong(rawLoadBalancingPolicyConfig, "maxRingSize");
-    if (minRingSize == null || maxRingSize == null) {
-      return ConfigOrError.fromError(Status.INVALID_ARGUMENT.withDescription(
-          "Missing 'mingRingSize'/'maxRingSize'"));
+    if (minRingSize == null) {
+      minRingSize = DEFAULT_MIN_RING_SIZE;
     }
-    if (minRingSize <= 0 || maxRingSize <= 0 || minRingSize > maxRingSize) {
+    if (maxRingSize == null) {
+      maxRingSize = DEFAULT_MAX_RING_SIZE;
+    }
+    if (minRingSize <= 0 || maxRingSize <= 0 || minRingSize > maxRingSize
+        || maxRingSize > MAX_RING_SIZE) {
       return ConfigOrError.fromError(Status.INVALID_ARGUMENT.withDescription(
           "Invalid 'mingRingSize'/'maxRingSize'"));
     }

@@ -22,9 +22,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
-import com.google.common.collect.Iterables;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
+import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -40,21 +41,21 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.Matchers.FractionMatcher;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import io.grpc.xds.Matchers.PathMatcher;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
+import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
+import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
@@ -62,6 +63,8 @@ import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import io.grpc.xds.internal.Matchers.FractionMatcher;
+import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -91,8 +94,6 @@ final class XdsNameResolver extends NameResolver {
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
   static final CallOptions.Key<Long> RPC_HASH_KEY =
       CallOptions.Key.create("io.grpc.xds.RPC_HASH_KEY");
-  private static final NamedFilterConfig LAME_FILTER =
-      new NamedFilterConfig(null, LameFilter.LAME_CONFIG);
   @VisibleForTesting
   static boolean enableTimeout =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"))
@@ -120,22 +121,25 @@ final class XdsNameResolver extends NameResolver {
   private ResolveState resolveState;
 
   XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
-      SynchronizationContext syncContext, ScheduledExecutorService scheduler) {
+      SynchronizationContext syncContext, ScheduledExecutorService scheduler,
+      @Nullable Map<String, ?> bootstrapOverride) {
     this(name, serviceConfigParser, syncContext, scheduler,
         SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance,
-        FilterRegistry.getDefaultRegistry());
+        FilterRegistry.getDefaultRegistry(), bootstrapOverride);
   }
 
   @VisibleForTesting
   XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
-      FilterRegistry filterRegistry) {
+      FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
     authority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
-    this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    this.xdsClientPoolFactory = bootstrapOverride == null ? checkNotNull(xdsClientPoolFactory,
+            "xdsClientPoolFactory") : new SharedXdsClientPoolProvider();
+    this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
     logId = InternalLogId.allocate("xds-resolver", name);
@@ -176,14 +180,39 @@ final class XdsNameResolver extends NameResolver {
   }
 
   @VisibleForTesting
-  static Map<String, ?> generateServiceConfigWithMethodTimeoutConfig(long timeoutNano) {
-    String timeout = timeoutNano / 1_000_000_000.0 + "s";
-    Map<String, Object> methodConfig = new HashMap<>();
+  static Map<String, ?> generateServiceConfigWithMethodConfig(
+      @Nullable Long timeoutNano, @Nullable RetryPolicy retryPolicy) {
+    if (timeoutNano == null
+        && (retryPolicy == null || retryPolicy.retryableStatusCodes().isEmpty())) {
+      return Collections.emptyMap();
+    }
+    ImmutableMap.Builder<String, Object> methodConfig = ImmutableMap.builder();
     methodConfig.put(
         "name", Collections.singletonList(Collections.emptyMap()));
-    methodConfig.put("timeout", timeout);
+    if (retryPolicy != null && !retryPolicy.retryableStatusCodes().isEmpty()) {
+      ImmutableMap.Builder<String, Object> rawRetryPolicy = ImmutableMap.builder();
+      rawRetryPolicy.put("maxAttempts", (double) retryPolicy.maxAttempts());
+      rawRetryPolicy.put("initialBackoff", Durations.toString(retryPolicy.initialBackoff()));
+      rawRetryPolicy.put("maxBackoff", Durations.toString(retryPolicy.maxBackoff()));
+      rawRetryPolicy.put("backoffMultiplier", 2D);
+      List<String> codes = new ArrayList<>(retryPolicy.retryableStatusCodes().size());
+      for (Code code : retryPolicy.retryableStatusCodes()) {
+        codes.add(code.name());
+      }
+      rawRetryPolicy.put(
+          "retryableStatusCodes", Collections.unmodifiableList(codes));
+      if (retryPolicy.perAttemptRecvTimeout() != null) {
+        rawRetryPolicy.put(
+            "perAttemptRecvTimeout", Durations.toString(retryPolicy.perAttemptRecvTimeout()));
+      }
+      methodConfig.put("retryPolicy", rawRetryPolicy.build());
+    }
+    if (timeoutNano != null) {
+      String timeout = timeoutNano / 1_000_000_000.0 + "s";
+      methodConfig.put("timeout", timeout);
+    }
     return Collections.singletonMap(
-        "methodConfig", Collections.singletonList(Collections.unmodifiableMap(methodConfig)));
+        "methodConfig", Collections.singletonList(methodConfig.build()));
   }
 
   @VisibleForTesting
@@ -343,10 +372,6 @@ final class XdsNameResolver extends NameResolver {
       do {
         routingCfg = routingConfig;
         selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
-        if (routingCfg.filterChain != null
-            && Iterables.getLast(routingCfg.filterChain).equals(LAME_FILTER)) {
-          break;
-        }
         for (Route route : routingCfg.routes) {
           if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
               headers, random)) {
@@ -358,6 +383,10 @@ final class XdsNameResolver extends NameResolver {
         if (selectedRoute == null) {
           return Result.forError(
               Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"));
+        }
+        if (selectedRoute.routeAction() == null) {
+          return Result.forError(Status.UNAVAILABLE.withDescription(
+              "Could not route RPC to Route with non-forwarding action"));
         }
         RouteAction action = selectedRoute.routeAction();
         if (action.cluster() != null) {
@@ -379,20 +408,23 @@ final class XdsNameResolver extends NameResolver {
           }
         }
       } while (!retainCluster(cluster));
-      // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
-      Map<String, ?> rawServiceConfig = Collections.emptyMap();
+      Long timeoutNanos = null;
       if (enableTimeout) {
-        Long timeoutNanos = null;
         if (selectedRoute != null) {
           timeoutNanos = selectedRoute.routeAction().timeoutNano();
         }
         if (timeoutNanos == null) {
           timeoutNanos = routingCfg.fallbackTimeoutNano;
         }
-        if (timeoutNanos > 0) {
-          rawServiceConfig = generateServiceConfigWithMethodTimeoutConfig(timeoutNanos);
+        if (timeoutNanos <= 0) {
+          timeoutNanos = null;
         }
       }
+      RetryPolicy retryPolicy =
+          selectedRoute == null ? null : selectedRoute.routeAction().retryPolicy();
+      // TODO(chengyuanzhang): avoid service config generation and parsing for each call.
+      Map<String, ?> rawServiceConfig =
+          generateServiceConfigWithMethodConfig(timeoutNanos, retryPolicy);
       ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
       Object config = parsedServiceConfig.getConfig();
       if (config == null) {
@@ -404,12 +436,7 @@ final class XdsNameResolver extends NameResolver {
       if (routingCfg.filterChain != null) {
         for (NamedFilterConfig namedFilter : routingCfg.filterChain) {
           FilterConfig filterConfig = namedFilter.filterConfig;
-          Filter filter;
-          if (namedFilter.equals(LAME_FILTER)) {
-            filter = LameFilter.INSTANCE;
-          } else {
-            filter = filterRegistry.get(filterConfig.typeUrl());
-          }
+          Filter filter = filterRegistry.get(filterConfig.typeUrl());
           if (filter instanceof ClientInterceptorBuilder) {
             ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
                 .buildClientInterceptor(
@@ -419,12 +446,6 @@ final class XdsNameResolver extends NameResolver {
               filterInterceptors.add(interceptor);
             }
           }
-        }
-        if (Iterables.getLast(routingCfg.filterChain).equals(LAME_FILTER)) {
-          return Result.newBuilder()
-              .setConfig(config)
-              .setInterceptor(combineInterceptors(filterInterceptors))
-              .build();
         }
       }
       final String finalCluster = cluster;
@@ -556,7 +577,7 @@ final class XdsNameResolver extends NameResolver {
       return false;
     }
     for (HeaderMatcher headerMatcher : routeMatch.headerMatchers()) {
-      if (!matchHeader(headerMatcher, getHeaderValue(headers, headerMatcher.name()))) {
+      if (!headerMatcher.matches(getHeaderValue(headers, headerMatcher.name()))) {
         return false;
       }
     }
@@ -575,35 +596,6 @@ final class XdsNameResolver extends NameResolver {
           : fullMethodName.toLowerCase().startsWith(pathMatcher.prefix().toLowerCase());
     }
     return pathMatcher.regEx().matches(fullMethodName);
-  }
-
-  private static boolean matchHeader(HeaderMatcher headerMatcher, @Nullable String value) {
-    if (headerMatcher.present() != null) {
-      return (value == null) == headerMatcher.present().equals(headerMatcher.inverted());
-    }
-    if (value == null) {
-      return false;
-    }
-    boolean baseMatch;
-    if (headerMatcher.exactValue() != null) {
-      baseMatch = headerMatcher.exactValue().equals(value);
-    } else if (headerMatcher.safeRegEx() != null) {
-      baseMatch = headerMatcher.safeRegEx().matches(value);
-    } else if (headerMatcher.range() != null) {
-      long numValue;
-      try {
-        numValue = Long.parseLong(value);
-        baseMatch = numValue >= headerMatcher.range().start()
-            && numValue <= headerMatcher.range().end();
-      } catch (NumberFormatException ignored) {
-        baseMatch = false;
-      }
-    } else if (headerMatcher.prefix() != null) {
-      baseMatch = value.startsWith(headerMatcher.prefix());
-    } else {
-      baseMatch = value.endsWith(headerMatcher.suffix());
-    }
-    return baseMatch != headerMatcher.inverted();
   }
 
   @Nullable
@@ -647,14 +639,17 @@ final class XdsNameResolver extends NameResolver {
             return;
           }
           logger.log(XdsLogLevel.INFO, "Receive LDS resource update: {0}", update);
-          List<VirtualHost> virtualHosts = update.virtualHosts;
-          String rdsName = update.rdsName;
+          HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
+          List<VirtualHost> virtualHosts = httpConnectionManager.virtualHosts();
+          String rdsName = httpConnectionManager.rdsName();
           cleanUpRouteDiscoveryState();
           if (virtualHosts != null) {
-            updateRoutes(virtualHosts, update.httpMaxStreamDurationNano, update.filterChain);
+            updateRoutes(virtualHosts, httpConnectionManager.httpMaxStreamDurationNano(),
+                httpConnectionManager.httpFilterConfigs());
           } else {
             routeDiscoveryState = new RouteDiscoveryState(
-                rdsName, update.httpMaxStreamDurationNano, update.filterChain);
+                rdsName, httpConnectionManager.httpMaxStreamDurationNano(),
+                httpConnectionManager.httpFilterConfigs());
             logger.log(XdsLogLevel.INFO, "Start watching RDS resource {0}", rdsName);
             xdsClient.watchRdsResource(rdsName, routeDiscoveryState);
           }
@@ -712,37 +707,19 @@ final class XdsNameResolver extends NameResolver {
         return;
       }
 
-      // A router filter is required for request routing. For backward compatibility, routing
-      // is always enabled for gRPC clients without HttpFilter support.
       List<Route> routes = virtualHost.routes();
-      List<NamedFilterConfig> filterChain = null;
-      if (filterConfigs != null) {
-        boolean hasRouter = false;
-        filterChain = new ArrayList<>(filterConfigs.size());
-        for (NamedFilterConfig namedFilter : filterConfigs) {
-          filterChain.add(namedFilter);
-          if (namedFilter.filterConfig.equals(RouterFilter.ROUTER_CONFIG)) {
-            hasRouter = true;
-            break;
-          }
-        }
-        if (!hasRouter) {
-          // Fail all RPCs if a router filter is not present. Reference counts for all currently
-          // selectable clusters should be reclaimed.
-          filterChain.add(LAME_FILTER);
-          routes = Collections.emptyList();
-        }
-      }
 
       // Populate all clusters to which requests can be routed to through the virtual host.
       Set<String> clusters = new HashSet<>();
       for (Route route : routes) {
         RouteAction action = route.routeAction();
-        if (action.cluster() != null) {
-          clusters.add(action.cluster());
-        } else if (action.weightedClusters() != null) {
-          for (ClusterWeight weighedCluster : action.weightedClusters()) {
-            clusters.add(weighedCluster.name());
+        if (action != null) {
+          if (action.cluster() != null) {
+            clusters.add(action.cluster());
+          } else if (action.weightedClusters() != null) {
+            for (ClusterWeight weighedCluster : action.weightedClusters()) {
+              clusters.add(weighedCluster.name());
+            }
           }
         }
       }
@@ -771,7 +748,7 @@ final class XdsNameResolver extends NameResolver {
       // selectable.
       routingConfig =
           new RoutingConfig(
-              httpMaxStreamDurationNano, routes, filterChain,
+              httpMaxStreamDurationNano, routes, filterConfigs,
               virtualHost.filterConfigOverrides());
       shouldUpdateResult = false;
       for (String cluster : deletedClusters) {

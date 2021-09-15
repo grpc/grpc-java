@@ -423,7 +423,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
     delayedTransport.reprocess(null);
     channelLogger.log(ChannelLogLevel.INFO, "Entering IDLE state");
     channelStateManager.gotoState(IDLE);
-    if (inUseStateAggregator.isInUse()) {
+    // If the inUseStateAggregator still considers pending calls to be queued up or the delayed
+    // transport to be holding some we need to exit idle mode to give these calls a chance to
+    // be processed.
+    if (inUseStateAggregator.anyObjectInUse(pendingCallsInUseObject, delayedTransport)) {
       exitIdleMode();
     }
   }
@@ -532,8 +535,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
         ClientTransport transport =
             getTransport(new PickSubchannelArgsImpl(method, headers, callOptions));
         Context origContext = context.attach();
+        ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
+            callOptions, headers, 0, /* isTransparentRetry= */ false);
         try {
-          return transport.newStream(method, headers, callOptions);
+          return transport.newStream(method, headers, callOptions, tracers);
         } finally {
           context.detach(origContext);
         }
@@ -569,13 +574,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           @Override
-          ClientStream newSubstream(ClientStreamTracer.Factory tracerFactory, Metadata newHeaders) {
-            CallOptions newOptions = callOptions.withStreamTracerFactory(tracerFactory);
+          ClientStream newSubstream(
+              Metadata newHeaders, ClientStreamTracer.Factory factory, int previousAttempts,
+              boolean isTransparentRetry) {
+            CallOptions newOptions = callOptions.withStreamTracerFactory(factory);
+            ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
+                newOptions, newHeaders, previousAttempts, isTransparentRetry);
             ClientTransport transport =
                 getTransport(new PickSubchannelArgsImpl(method, newHeaders, newOptions));
             Context origContext = context.attach();
             try {
-              return transport.newStream(method, newHeaders, newOptions);
+              return transport.newStream(method, newHeaders, newOptions, tracers);
             } finally {
               context.detach(origContext);
             }
@@ -619,7 +628,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
-    this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
+    this.retryEnabled = builder.retryEnabled;
     this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
     this.offloadExecutorHolder =
         new ExecutorHolder(
@@ -2318,53 +2327,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void execute(Runnable command) {
       delegate.execute(command);
-    }
-  }
-
-  @VisibleForTesting
-  static final class ScParser extends NameResolver.ServiceConfigParser {
-
-    private final boolean retryEnabled;
-    private final int maxRetryAttemptsLimit;
-    private final int maxHedgedAttemptsLimit;
-    private final AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory;
-
-    ScParser(
-        boolean retryEnabled,
-        int maxRetryAttemptsLimit,
-        int maxHedgedAttemptsLimit,
-        AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory) {
-      this.retryEnabled = retryEnabled;
-      this.maxRetryAttemptsLimit = maxRetryAttemptsLimit;
-      this.maxHedgedAttemptsLimit = maxHedgedAttemptsLimit;
-      this.autoLoadBalancerFactory =
-          checkNotNull(autoLoadBalancerFactory, "autoLoadBalancerFactory");
-    }
-
-    @Override
-    public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
-      try {
-        Object loadBalancingPolicySelection;
-        ConfigOrError choiceFromLoadBalancer =
-            autoLoadBalancerFactory.parseLoadBalancerPolicy(rawServiceConfig);
-        if (choiceFromLoadBalancer == null) {
-          loadBalancingPolicySelection = null;
-        } else if (choiceFromLoadBalancer.getError() != null) {
-          return ConfigOrError.fromError(choiceFromLoadBalancer.getError());
-        } else {
-          loadBalancingPolicySelection = choiceFromLoadBalancer.getConfig();
-        }
-        return ConfigOrError.fromConfig(
-            ManagedChannelServiceConfig.fromServiceConfig(
-                rawServiceConfig,
-                retryEnabled,
-                maxRetryAttemptsLimit,
-                maxHedgedAttemptsLimit,
-                loadBalancingPolicySelection));
-      } catch (RuntimeException e) {
-        return ConfigOrError.fromError(
-            Status.UNKNOWN.withDescription("failed to parse service config").withCause(e));
-      }
     }
   }
 

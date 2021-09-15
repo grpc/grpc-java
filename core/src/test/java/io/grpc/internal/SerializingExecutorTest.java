@@ -209,6 +209,38 @@ public class SerializingExecutorTest {
     assertEquals(Arrays.asList(1, 2, 3), runs);
   }
 
+  @Test
+  public void switchable() {
+    final SerializingExecutor testExecutor =
+            new SerializingExecutor(MoreExecutors.directExecutor());
+    testExecutor.execute(new Runnable() {
+      @Override
+      public void run() {
+        runs.add(1);
+        testExecutor.setExecutor(singleExecutor);
+      }
+    });
+    testExecutor.execute(new AddToRuns(-2));
+    assertThat(runs).isEqualTo(Arrays.asList(1));
+    singleExecutor.drain();
+    assertThat(runs).isEqualTo(Arrays.asList(1, -2));
+  }
+
+  @Test
+  public void notSwitch() {
+    executor.execute(new Runnable() {
+      @Override
+      public void run() {
+        runs.add(1);
+        executor.setExecutor(singleExecutor);
+      }
+    });
+    executor.execute(new AddToRuns(-2));
+    assertThat(runs).isEqualTo(Collections.emptyList());
+    singleExecutor.drain();
+    assertThat(runs).isEqualTo(Arrays.asList(1, -2));
+  }
+
   private static class SingleExecutor implements Executor {
     private Runnable runnable;
 

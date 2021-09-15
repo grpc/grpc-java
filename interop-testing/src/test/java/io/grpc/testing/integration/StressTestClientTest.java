@@ -45,7 +45,7 @@ import org.junit.runners.JUnit4;
 public class StressTestClientTest {
 
   @Rule
-  public final Timeout globalTimeout = Timeout.seconds(5);
+  public final Timeout globalTimeout = Timeout.seconds(10);
 
   @Test
   public void ipv6AddressesShouldBeSupported() {

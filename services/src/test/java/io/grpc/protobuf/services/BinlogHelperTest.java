@@ -928,11 +928,6 @@ public final class BinlogHelperTest {
 
   @Test
   public void serverDeadlineLogged() {
-    final AtomicReference<ServerCall<byte[], byte[]>> interceptedCall =
-        new AtomicReference<>();
-    @SuppressWarnings("unchecked")
-    final ServerCall.Listener<byte[]> mockListener = mock(ServerCall.Listener.class);
-
     final MethodDescriptor<byte[], byte[]> method =
         MethodDescriptor.<byte[], byte[]>newBuilder()
             .setType(MethodType.UNKNOWN)
@@ -940,6 +935,25 @@ public final class BinlogHelperTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
+    final ServerCall<byte[], byte[]> noopServerCall = new NoopServerCall<byte[], byte[]>() {
+      @Override
+      public MethodDescriptor<byte[], byte[]> getMethodDescriptor() {
+        return method;
+      }
+    };
+    final ServerCallHandler<byte[], byte[]> noopHandler = new ServerCallHandler<byte[], byte[]>() {
+      @Override
+      public ServerCall.Listener<byte[]> startCall(
+          ServerCall<byte[], byte[]> call,
+          Metadata headers) {
+        return new ServerCall.Listener<byte[]>() {};
+      }
+    };
+
+    // Warm-up JVM
+    new BinlogHelper(mock(SinkWriter.class))
+        .getServerInterceptor(1234)
+        .interceptCall(noopServerCall, new Metadata(), noopHandler);
 
     // We expect the contents of the "grpc-timeout" header to be installed the context
     Context.current()
@@ -950,23 +964,7 @@ public final class BinlogHelperTest {
             ServerCall.Listener<byte[]> unused =
                 new BinlogHelper(mockSinkWriter)
                     .getServerInterceptor(CALL_ID)
-                    .interceptCall(
-                        new NoopServerCall<byte[], byte[]>() {
-                          @Override
-                          public MethodDescriptor<byte[], byte[]> getMethodDescriptor() {
-                            return method;
-                          }
-                        },
-                        new Metadata(),
-                        new ServerCallHandler<byte[], byte[]>() {
-                          @Override
-                          public ServerCall.Listener<byte[]> startCall(
-                              ServerCall<byte[], byte[]> call,
-                              Metadata headers) {
-                            interceptedCall.set(call);
-                            return mockListener;
-                          }
-                        });
+                    .interceptCall(noopServerCall, new Metadata(), noopHandler);
           }
         });
     ArgumentCaptor<Duration> timeoutCaptor = ArgumentCaptor.forClass(Duration.class);

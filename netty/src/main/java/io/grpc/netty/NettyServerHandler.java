@@ -26,6 +26,7 @@ import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
+import static io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
 import static io.netty.handler.codec.http2.DefaultHttp2LocalFlowController.DEFAULT_WINDOW_UPDATE_RATIO;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -69,7 +70,6 @@ import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Exception.StreamException;
-import io.netty.handler.codec.http2.Http2FlowController;
 import io.netty.handler.codec.http2.Http2FrameAdapter;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2FrameReader;
@@ -367,23 +367,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       keepAliveManager.onTransportStarted();
     }
 
-
-    if (transportTracer != null) {
-      assert encoder().connection().equals(decoder().connection());
-      final Http2Connection connection = encoder().connection();
-      transportTracer.setFlowControlWindowReader(new TransportTracer.FlowControlReader() {
-        private final Http2FlowController local = connection.local().flowController();
-        private final Http2FlowController remote = connection.remote().flowController();
-
-        @Override
-        public TransportTracer.FlowControlWindows read() {
-          assert ctx.executor().inEventLoop();
-          return new TransportTracer.FlowControlWindows(
-              local.windowSize(connection.connectionStream()),
-              remote.windowSize(connection.connectionStream()));
-        }
-      });
-    }
+    assert encoder().connection().equals(decoder().connection());
+    transportTracer.setFlowControlWindowReader(new Utils.FlowControlReader(encoder().connection()));
 
     super.handlerAdded(ctx);
   }
@@ -391,6 +376,12 @@ class NettyServerHandler extends AbstractNettyHandler {
   private void onHeadersRead(ChannelHandlerContext ctx, int streamId, Http2Headers headers)
       throws Http2Exception {
     try {
+      // Connection-specific header fields makes a request malformed. Ideally this would be handled
+      // by Netty. RFC 7540 section 8.1.2.2
+      if (headers.contains(CONNECTION)) {
+        resetStream(ctx, streamId, Http2Error.PROTOCOL_ERROR.code(), ctx.newPromise());
+        return;
+      }
 
       // Remove the leading slash of the path and get the fully qualified method name
       CharSequence path = headers.path();
@@ -764,7 +755,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     Http2Headers headers = new DefaultHttp2Headers(true, serialized.length / 2)
         .status("" + code)
-        .set(CONTENT_TYPE_HEADER, "text/plain; encoding=utf-8");
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
     for (int i = 0; i < serialized.length; i += 2) {
       headers.add(new AsciiString(serialized[i], false), new AsciiString(serialized[i + 1], false));
     }
@@ -895,16 +886,14 @@ class NettyServerHandler extends AbstractNettyHandler {
       ChannelFuture pingFuture = encoder().writePing(
           ctx, false /* isAck */, KEEPALIVE_PING, ctx.newPromise());
       ctx.flush();
-      if (transportTracer != null) {
-        pingFuture.addListener(new ChannelFutureListener() {
-          @Override
-          public void operationComplete(ChannelFuture future) throws Exception {
-            if (future.isSuccess()) {
-              transportTracer.reportKeepAliveSent();
-            }
+      pingFuture.addListener(new ChannelFutureListener() {
+        @Override
+        public void operationComplete(ChannelFuture future) throws Exception {
+          if (future.isSuccess()) {
+            transportTracer.reportKeepAliveSent();
           }
-        });
-      }
+        }
+      });
     }
 
     @Override

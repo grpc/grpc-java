@@ -20,9 +20,11 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.Metadata;
 import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
+import io.grpc.rls.RlsProtoData.ExtraKeys;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
@@ -43,21 +45,29 @@ public class RlsRequestFactoryTest {
                   ImmutableList.of(new Name("com.google.service1", "Create")),
                   ImmutableList.of(
                       new NameMatcher("user", ImmutableList.of("User", "Parent"), true),
-                      new NameMatcher("id", ImmutableList.of("X-Google-Id"), true))),
+                      new NameMatcher("id", ImmutableList.of("X-Google-Id"), true)),
+                  ExtraKeys.create("server-1", null, null),
+                  ImmutableMap.of("const-key-1", "const-value-1")),
               new GrpcKeyBuilder(
                   ImmutableList.of(new Name("com.google.service1")),
                   ImmutableList.of(
                       new NameMatcher("user", ImmutableList.of("User", "Parent"), true),
-                      new NameMatcher("password", ImmutableList.of("Password"), true))),
+                      new NameMatcher("password", ImmutableList.of("Password"), true)),
+                  ExtraKeys.create(null, "service-2", null),
+                  ImmutableMap.of("const-key-2", "const-value-2")),
               new GrpcKeyBuilder(
                   ImmutableList.of(new Name("com.google.service2")),
                   ImmutableList.of(
                       new NameMatcher("user", ImmutableList.of("User", "Parent"), false),
-                      new NameMatcher("password", ImmutableList.of("Password"), true))),
+                      new NameMatcher("password", ImmutableList.of("Password"), true)),
+                  ExtraKeys.create(null, "service-3", "method-3"),
+                  ImmutableMap.<String, String>of()),
               new GrpcKeyBuilder(
                   ImmutableList.of(new Name("com.google.service3")),
                   ImmutableList.of(
-                      new NameMatcher("user", ImmutableList.of("User", "Parent"), true)))),
+                      new NameMatcher("user", ImmutableList.of("User", "Parent"), true)),
+                  ExtraKeys.create(null, null, null),
+                  ImmutableMap.of("const-key-4", "const-value-4"))),
           /* lookupService= */ "bigtable-rls.googleapis.com",
           /* lookupServiceTimeoutInMillis= */ TimeUnit.SECONDS.toMillis(2),
           /* maxAgeInMillis= */ TimeUnit.SECONDS.toMillis(300),
@@ -77,10 +87,11 @@ public class RlsRequestFactoryTest {
     metadata.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar");
 
     RouteLookupRequest request = factory.create("com.google.service1", "Create", metadata);
-    assertThat(request.getTargetType()).isEqualTo("grpc");
-    assertThat(request.getPath()).isEqualTo("/com.google.service1/Create");
-    assertThat(request.getServer()).isEqualTo("bigtable.googleapis.com");
-    assertThat(request.getKeyMap()).containsExactly("user", "test", "id", "123");
+    assertThat(request.getKeyMap()).containsExactly(
+        "user", "test",
+        "id", "123",
+        "server-1", "bigtable.googleapis.com",
+        "const-key-1", "const-value-1");
   }
 
   @Test
@@ -106,10 +117,11 @@ public class RlsRequestFactoryTest {
 
     RouteLookupRequest request = factory.create("com.google.service1" , "Update", metadata);
 
-    assertThat(request.getTargetType()).isEqualTo("grpc");
-    assertThat(request.getPath()).isEqualTo("/com.google.service1/Update");
-    assertThat(request.getServer()).isEqualTo("bigtable.googleapis.com");
-    assertThat(request.getKeyMap()).containsExactly("user", "test", "password", "hunter2");
+    assertThat(request.getKeyMap()).containsExactly(
+        "user", "test",
+        "password", "hunter2",
+        "service-2", "com.google.service1",
+        "const-key-2", "const-value-2");
   }
 
   @Test
@@ -121,10 +133,10 @@ public class RlsRequestFactoryTest {
 
     RouteLookupRequest request = factory.create("com.google.service1", "Update", metadata);
 
-    assertThat(request.getTargetType()).isEqualTo("grpc");
-    assertThat(request.getPath()).isEqualTo("/com.google.service1/Update");
-    assertThat(request.getServer()).isEqualTo("bigtable.googleapis.com");
-    assertThat(request.getKeyMap()).containsExactly("user", "test");
+    assertThat(request.getKeyMap()).containsExactly(
+        "user", "test",
+        "service-2", "com.google.service1",
+        "const-key-2", "const-value-2");
   }
 
   @Test
@@ -135,10 +147,6 @@ public class RlsRequestFactoryTest {
     metadata.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar");
 
     RouteLookupRequest request = factory.create("abc.def.service999", "Update", metadata);
-
-    assertThat(request.getTargetType()).isEqualTo("grpc");
-    assertThat(request.getPath()).isEqualTo("/abc.def.service999/Update");
-    assertThat(request.getServer()).isEqualTo("bigtable.googleapis.com");
     assertThat(request.getKeyMap()).isEmpty();
   }
 
@@ -151,9 +159,7 @@ public class RlsRequestFactoryTest {
 
     RouteLookupRequest request = factory.create("com.google.service3", "Update", metadata);
 
-    assertThat(request.getTargetType()).isEqualTo("grpc");
-    assertThat(request.getPath()).isEqualTo("/com.google.service3/Update");
-    assertThat(request.getServer()).isEqualTo("bigtable.googleapis.com");
-    assertThat(request.getKeyMap()).containsExactly("user", "test");
+    assertThat(request.getKeyMap()).containsExactly(
+        "user", "test", "const-key-4", "const-value-4");
   }
 }

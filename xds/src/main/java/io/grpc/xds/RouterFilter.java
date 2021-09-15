@@ -19,14 +19,16 @@ package io.grpc.xds;
 import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.ServerInterceptor;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
+import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
 /**
  * Router filter implementation. Currently this filter does not parse any field in the config.
  */
-enum RouterFilter implements Filter, ClientInterceptorBuilder {
+enum RouterFilter implements Filter, ClientInterceptorBuilder, ServerInterceptorBuilder {
   INSTANCE;
 
   static final String TYPE_URL =
@@ -64,6 +66,13 @@ enum RouterFilter implements Filter, ClientInterceptorBuilder {
   public ClientInterceptor buildClientInterceptor(
       FilterConfig config, @Nullable FilterConfig overrideConfig, PickSubchannelArgs args,
       ScheduledExecutorService scheduler) {
+    return null;
+  }
+
+  @Nullable
+  @Override
+  public ServerInterceptor buildServerInterceptor(
+      FilterConfig config, @Nullable Filter.FilterConfig overrideConfig) {
     return null;
   }
 }

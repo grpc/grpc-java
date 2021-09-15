@@ -33,12 +33,23 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link TokenAttachingTracerFactory}. */
 @RunWith(JUnit4.class)
 public class TokenAttachingTracerFactoryTest {
-  private static final ClientStreamTracer fakeTracer = new ClientStreamTracer() {};
+  private static final class FakeClientStreamTracer extends ClientStreamTracer {
+    Attributes transportAttrs;
+    Metadata headers;
+
+    @Override
+    public void streamCreated(Attributes transportAttrs, Metadata headers) {
+      this.transportAttrs = transportAttrs;
+      this.headers = headers;
+    }
+  }
+
+  private static final FakeClientStreamTracer fakeTracer = new FakeClientStreamTracer();
 
   private final ClientStreamTracer.Factory delegate = mock(
       ClientStreamTracer.Factory.class,
       delegatesTo(
-          new ClientStreamTracer.Factory() {
+          new ClientStreamTracer.InternalLimitedInfoFactory() {
             @Override
             public ClientStreamTracer newClientStreamTracer(
                 ClientStreamTracer.StreamInfo info, Metadata headers) {
@@ -51,28 +62,25 @@ public class TokenAttachingTracerFactoryTest {
     TokenAttachingTracerFactory factory = new TokenAttachingTracerFactory(delegate);
     Attributes eagAttrs = Attributes.newBuilder()
         .set(GrpclbConstants.TOKEN_ATTRIBUTE_KEY, "token0001").build();
-    ClientStreamTracer.StreamInfo info = ClientStreamTracer.StreamInfo.newBuilder()
-        .setTransportAttrs(
-            Attributes.newBuilder().set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs).build())
-        .build();
+    ClientStreamTracer.StreamInfo info = ClientStreamTracer.StreamInfo.newBuilder().build();
     Metadata headers = new Metadata();
     // Preexisting token should be replaced
     headers.put(GrpclbConstants.TOKEN_METADATA_KEY, "preexisting-token");
 
     ClientStreamTracer tracer = factory.newClientStreamTracer(info, headers);
     verify(delegate).newClientStreamTracer(same(info), same(headers));
-    assertThat(tracer).isSameInstanceAs(fakeTracer);
+    Attributes transportAttrs =
+        Attributes.newBuilder().set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs).build();
+    tracer.streamCreated(transportAttrs, headers);
+    assertThat(fakeTracer.transportAttrs).isSameInstanceAs(transportAttrs);
+    assertThat(fakeTracer.headers).isSameInstanceAs(headers);
     assertThat(headers.getAll(GrpclbConstants.TOKEN_METADATA_KEY)).containsExactly("token0001");
   }
 
   @Test
   public void noToken() {
     TokenAttachingTracerFactory factory = new TokenAttachingTracerFactory(delegate);
-    ClientStreamTracer.StreamInfo info = ClientStreamTracer.StreamInfo.newBuilder()
-        .setTransportAttrs(
-            Attributes.newBuilder()
-                .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, Attributes.EMPTY).build())
-        .build();
+    ClientStreamTracer.StreamInfo info = ClientStreamTracer.StreamInfo.newBuilder().build();
 
     Metadata headers = new Metadata();
     // Preexisting token should be removed
@@ -80,22 +88,25 @@ public class TokenAttachingTracerFactoryTest {
 
     ClientStreamTracer tracer = factory.newClientStreamTracer(info, headers);
     verify(delegate).newClientStreamTracer(same(info), same(headers));
-    assertThat(tracer).isSameInstanceAs(fakeTracer);
+    Attributes transportAttrs =
+        Attributes.newBuilder().set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, Attributes.EMPTY).build();
+    tracer.streamCreated(transportAttrs, headers);
+    assertThat(fakeTracer.transportAttrs).isSameInstanceAs(transportAttrs);
+    assertThat(fakeTracer.headers).isSameInstanceAs(headers);
     assertThat(headers.get(GrpclbConstants.TOKEN_METADATA_KEY)).isNull();
   }
 
   @Test
   public void nullDelegate() {
     TokenAttachingTracerFactory factory = new TokenAttachingTracerFactory(null);
-    ClientStreamTracer.StreamInfo info = ClientStreamTracer.StreamInfo.newBuilder()
-        .setTransportAttrs(
-            Attributes.newBuilder()
-                .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, Attributes.EMPTY).build())
-        .build();
+    ClientStreamTracer.StreamInfo info = ClientStreamTracer.StreamInfo.newBuilder().build();
 
     Metadata headers = new Metadata();
 
     ClientStreamTracer tracer = factory.newClientStreamTracer(info, headers);
+    tracer.streamCreated(
+        Attributes.newBuilder().set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, Attributes.EMPTY).build(),
+        headers);
     assertThat(tracer).isNotNull();
     assertThat(headers.get(GrpclbConstants.TOKEN_METADATA_KEY)).isNull();
   }

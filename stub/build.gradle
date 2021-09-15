@@ -8,8 +8,9 @@ plugins {
 
 description = "gRPC: Stub"
 dependencies {
-    api project(':grpc-api')
-    guavaDependency 'api'
+    api project(':grpc-api'),
+        libraries.guava
+    implementation libraries.errorprone
     testImplementation libraries.truth,
             project(':grpc-testing')
     signature "org.codehaus.mojo.signature:java17:1.0@signature"

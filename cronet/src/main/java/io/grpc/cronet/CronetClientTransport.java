@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
@@ -118,7 +119,7 @@ class CronetClientTransport implements ConnectionClientTransport {
 
   @Override
   public CronetClientStream newStream(final MethodDescriptor<?, ?> method, final Metadata headers,
-      final CallOptions callOptions) {
+      final CallOptions callOptions, ClientStreamTracer[] tracers) {
     Preconditions.checkNotNull(method, "method");
     Preconditions.checkNotNull(headers, "headers");
 
@@ -126,7 +127,7 @@ class CronetClientTransport implements ConnectionClientTransport {
     final String url = "https://" + authority + defaultPath;
 
     final StatsTraceContext statsTraceCtx =
-        StatsTraceContext.newClientContext(callOptions, attrs, headers);
+        StatsTraceContext.newClientContext(tracers, attrs, headers);
     class StartCallback implements Runnable {
       final CronetClientStream clientStream = new CronetClientStream(
           url, userAgent, executor, headers, CronetClientTransport.this, this, lock, maxMessageSize,

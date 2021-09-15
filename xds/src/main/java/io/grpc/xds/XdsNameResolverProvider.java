@@ -42,10 +42,31 @@ import javax.annotation.Nullable;
 public final class XdsNameResolverProvider extends NameResolverProvider {
 
   private static final String SCHEME = "xds";
+  private final String scheme;
+  private final Map<String, ?> bootstrapOverride;
+
+  public XdsNameResolverProvider() {
+    this(SCHEME, null);
+  }
+
+  private XdsNameResolverProvider(String scheme,
+                                 @Nullable Map<String, ?> bootstrapOverride) {
+    this.scheme = checkNotNull(scheme, "scheme");
+    this.bootstrapOverride = bootstrapOverride;
+  }
+
+  /**
+   * A convenient method to allow creating a {@link XdsNameResolverProvider} with custom scheme
+   * and bootstrap.
+   */
+  public static XdsNameResolverProvider createForTest(String scheme,
+                                                      @Nullable Map<String, ?> bootstrapOverride) {
+    return new XdsNameResolverProvider(scheme, bootstrapOverride);
+  }
 
   @Override
   public XdsNameResolver newNameResolver(URI targetUri, Args args) {
-    if (SCHEME.equals(targetUri.getScheme())) {
+    if (scheme.equals(targetUri.getScheme())) {
       String targetPath = checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(
           targetPath.startsWith("/"),
@@ -54,14 +75,15 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetUri);
       String name = targetPath.substring(1);
       return new XdsNameResolver(name, args.getServiceConfigParser(),
-          args.getSynchronizationContext(), args.getScheduledExecutorService());
+              args.getSynchronizationContext(), args.getScheduledExecutorService(),
+              bootstrapOverride);
     }
     return null;
   }
 
   @Override
   public String getDefaultScheme() {
-    return SCHEME;
+    return scheme;
   }
 
   @Override

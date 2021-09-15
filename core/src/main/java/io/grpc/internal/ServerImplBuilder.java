@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.BinaryLog;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
@@ -31,6 +32,7 @@ import io.grpc.HandlerRegistry;
 import io.grpc.InternalChannelz;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerCallExecutorSupplier;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
@@ -55,6 +57,7 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
 
   private static final Logger log = Logger.getLogger(ServerImplBuilder.class.getName());
 
+  @DoNotCall("ClientTransportServersBuilder is required, use a constructor")
   public static ServerBuilder<?> forPort(int port) {
     throw new UnsupportedOperationException(
         "ClientTransportServersBuilder is required, use a constructor");
@@ -91,6 +94,8 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   @Nullable BinaryLog binlog;
   InternalChannelz channelz = InternalChannelz.instance();
   CallTracer.Factory callTracerFactory = CallTracer.getDefaultFactory();
+  @Nullable
+  ServerCallExecutorSupplier executorSupplier;
 
   /**
    * An interface to provide to provide transport specific information for the server. This method
@@ -117,6 +122,12 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   @Override
   public ServerImplBuilder executor(@Nullable Executor executor) {
     this.executorPool = executor != null ? new FixedObjectPool<>(executor) : DEFAULT_EXECUTOR_POOL;
+    return this;
+  }
+
+  @Override
+  public ServerImplBuilder callExecutor(ServerCallExecutorSupplier executorSupplier) {
+    this.executorSupplier = checkNotNull(executorSupplier);
     return this;
   }
 

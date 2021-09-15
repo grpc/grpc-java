@@ -19,6 +19,7 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
@@ -86,6 +87,7 @@ public final class InProcessServerBuilder extends
   /**
    * Always fails.  Call {@link #forName} instead.
    */
+  @DoNotCall("Unsupported. Use forName() instead")
   public static InProcessServerBuilder forPort(int port) {
     throw new UnsupportedOperationException("call forName() instead");
   }

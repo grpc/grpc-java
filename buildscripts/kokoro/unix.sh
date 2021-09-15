@@ -46,8 +46,6 @@ export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS="-I/tmp/protobuf/include"
 
 ./gradlew clean $GRADLE_FLAGS
-# Ensure dependency convergence
-./gradlew :grpc-all:dependencies $GRADLE_FLAGS
 
 if [[ -z "${SKIP_TESTS:-}" ]]; then
   # Ensure all *.proto changes include *.java generated code
@@ -59,12 +57,15 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
     exit 1
   fi
   # Run tests
-  ./gradlew build $GRADLE_FLAGS
+  ./gradlew build :grpc-all:jacocoTestReport $GRADLE_FLAGS
   pushd examples
   ./gradlew clean $GRADLE_FLAGS
   ./gradlew build $GRADLE_FLAGS
   # --batch-mode reduces log spam
   mvn verify --batch-mode
+  popd
+  pushd examples/example-alts
+  ../gradlew build $GRADLE_FLAGS
   popd
   pushd examples/example-hostname
   ../gradlew build $GRADLE_FLAGS

@@ -7,16 +7,37 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
+        ":autovalue",
         ":rls_java_grpc",
         "//api",
         "//core",
         "//core:internal",
         "//core:util",
         "//stub",
+        "@com_google_auto_value_auto_value_annotations//jar",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
         "@io_grpc_grpc_proto//:rls_java_proto",
         "@io_grpc_grpc_proto//:rls_config_java_proto",
+    ],
+)
+
+java_plugin(
+    name = "autovalue_plugin",
+    processor_class = "com.google.auto.value.processor.AutoValueProcessor",
+    deps = [
+        "@com_google_auto_value_auto_value//jar",
+    ],
+)
+
+java_library(
+    name = "autovalue",
+    exported_plugins = [
+        ":autovalue_plugin",
+    ],
+    neverlink = 1,
+    exports = [
+        "@com_google_auto_value_auto_value//jar",
     ],
 )
 

@@ -95,6 +95,14 @@ public final class PriorityLoadBalancerProvider extends LoadBalancerProvider {
         this.policySelection = checkNotNull(policySelection, "policySelection");
         this.ignoreReresolution = ignoreReresolution;
       }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("policySelection", policySelection)
+            .add("ignoreReresolution", ignoreReresolution)
+            .toString();
+      }
     }
   }
 }

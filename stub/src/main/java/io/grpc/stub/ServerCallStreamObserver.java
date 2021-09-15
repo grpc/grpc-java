@@ -18,7 +18,8 @@ package io.grpc.stub;
 
 /**
  * A refinement of {@link CallStreamObserver} to allows for interaction with call
- * cancellation events on the server side.
+ * cancellation events on the server side. An instance of this class is obtained by casting the
+ * {@code StreamObserver} passed as an argument to service implementations.
  *
  * <p>Like {@code StreamObserver}, implementations are not required to be thread-safe; if multiple
  * threads will be writing to an instance concurrently, the application must synchronize its calls.
@@ -53,7 +54,9 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    * service returns its {@code StreamObserver}.
    *
    * <p>Setting the onCancelHandler will suppress the on-cancel exception thrown by
-   * {@link #onNext}.
+   * {@link #onNext}. If the caller is already handling cancellation via polling or cannot
+   * substantially benefit from observing cancellation, using a no-op {@code onCancelHandler} is
+   * useful just to suppress the {@code onNext()} exception.
    *
    * @param onCancelHandler to call when client has cancelled the call.
    */

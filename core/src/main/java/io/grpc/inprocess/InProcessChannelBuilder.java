@@ -19,6 +19,7 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
@@ -60,6 +61,7 @@ public final class InProcessChannelBuilder extends
   /**
    * Always fails.  Call {@link #forName} instead.
    */
+  @DoNotCall("Unsupported. Use forName() instead")
   public static InProcessChannelBuilder forTarget(String target) {
     throw new UnsupportedOperationException("call forName() instead");
   }
@@ -67,6 +69,7 @@ public final class InProcessChannelBuilder extends
   /**
    * Always fails.  Call {@link #forName} instead.
    */
+  @DoNotCall("Unsupported. Use forName() instead")
   public static InProcessChannelBuilder forAddress(String name, int port) {
     throw new UnsupportedOperationException("call forName() instead");
   }
@@ -94,6 +97,7 @@ public final class InProcessChannelBuilder extends
     // https://github.com/grpc/grpc-java/issues/2284
     managedChannelImplBuilder.setStatsRecordStartedRpcs(false);
     managedChannelImplBuilder.setStatsRecordFinishedRpcs(false);
+    managedChannelImplBuilder.setStatsRecordRetryMetrics(false);
   }
 
   @Internal

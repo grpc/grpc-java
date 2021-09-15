@@ -16,7 +16,9 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.auth:google-auth-library-oauth2-http:0.22.0",
     "com.google.code.findbugs:jsr305:3.0.2",
     "com.google.code.gson:gson:jar:2.8.6",
-    "com.google.errorprone:error_prone_annotations:2.4.0",
+    "com.google.auto.value:auto-value:1.7.4",
+    "com.google.auto.value:auto-value-annotations:1.7.4",
+    "com.google.errorprone:error_prone_annotations:2.9.0",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:30.1-android",
     "com.google.j2objc:j2objc-annotations:1.3",
@@ -109,24 +111,24 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "b37e96e81842af659605908a421960a5dc809acbc888f6b947bc320f8628e5b1",
-        strip_prefix = "protobuf-3.12.0",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.12.0.zip"],
+        sha256 = "f6042eef01551cee4c663a11c3f429c06360a1f51daa9f4772bf3f13d24cde1f",
+        strip_prefix = "protobuf-3.17.2",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.17.2.zip"],
     )
 
 def com_google_protobuf_javalite():
     # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
     http_archive(
         name = "com_google_protobuf_javalite",
-        sha256 = "b37e96e81842af659605908a421960a5dc809acbc888f6b947bc320f8628e5b1",
-        strip_prefix = "protobuf-3.12.0",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.12.0.zip"],
+        sha256 = "f6042eef01551cee4c663a11c3f429c06360a1f51daa9f4772bf3f13d24cde1f",
+        strip_prefix = "protobuf-3.17.2",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.17.2.zip"],
     )
 
 def io_grpc_grpc_proto():
     http_archive(
         name = "io_grpc_grpc_proto",
-        sha256 = "5848a4e034126bece0c37c16554fb80625615aedf1acad4e2a3cdbaaa76944eb",
-        strip_prefix = "grpc-proto-cf828d0e1155e5ea58b46d7184ee5596e03ddcb8",
-        urls = ["https://github.com/grpc/grpc-proto/archive/cf828d0e1155e5ea58b46d7184ee5596e03ddcb8.zip"],
+        sha256 = "464e97a24d7d784d9c94c25fa537ba24127af5aae3edd381007b5b98705a0518",
+        strip_prefix = "grpc-proto-08911e9d585cbda3a55eb1dcc4b99c89aebccff8",
+        urls = ["https://github.com/grpc/grpc-proto/archive/08911e9d585cbda3a55eb1dcc4b99c89aebccff8.zip"],
     )

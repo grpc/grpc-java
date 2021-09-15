@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertEquals;
@@ -36,6 +37,7 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
@@ -46,6 +48,7 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Codec;
 import io.grpc.Context;
 import io.grpc.Deadline;
@@ -142,6 +145,8 @@ public class ClientCallImplTest {
             any(Metadata.class),
             any(Context.class)))
         .thenReturn(stream);
+    when(streamTracerFactory.newClientStreamTracer(any(StreamInfo.class), any(Metadata.class)))
+        .thenReturn(new ClientStreamTracer() {});
     doAnswer(new Answer<Void>() {
         @Override
         public Void answer(InvocationOnMock in) {
@@ -155,7 +160,7 @@ public class ClientCallImplTest {
 
   @After
   public void tearDown() {
-    verifyNoInteractions(streamTracerFactory);
+    verifyNoMoreInteractions(streamTracerFactory);
   }
 
   @Test
@@ -173,7 +178,7 @@ public class ClientCallImplTest {
     final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
     streamListener.headersRead(new Metadata());
     Status status = Status.RESOURCE_EXHAUSTED.withDescription("simulated");
-    streamListener.closed(status , new Metadata());
+    streamListener.closed(status , PROCESSED, new Metadata());
     executor.release();
 
     verify(callListener).onClose(same(status), ArgumentMatchers.isA(Metadata.class));
@@ -205,7 +210,7 @@ public class ClientCallImplTest {
      */
     streamListener
         .messagesAvailable(new SingleMessageProducer(new ByteArrayInputStream(new byte[]{})));
-    streamListener.closed(Status.OK, new Metadata());
+    streamListener.closed(Status.OK, PROCESSED, new Metadata());
     executor.release();
 
     verify(callListener).onClose(statusArgumentCaptor.capture(),
@@ -240,7 +245,7 @@ public class ClientCallImplTest {
      * the call being counted as successful.
      */
     streamListener.headersRead(new Metadata());
-    streamListener.closed(Status.OK, new Metadata());
+    streamListener.closed(Status.OK, PROCESSED, new Metadata());
     executor.release();
 
     verify(callListener).onClose(statusArgumentCaptor.capture(),
@@ -292,7 +297,7 @@ public class ClientCallImplTest {
     final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
 
     streamListener.headersRead(new Metadata());
-    streamListener.closed(Status.OK, new Metadata());
+    streamListener.closed(Status.OK, PROCESSED, new Metadata());
   }
 
   @Test
@@ -319,7 +324,7 @@ public class ClientCallImplTest {
      * the call being counted as successful.
      */
     streamListener.onReady();
-    streamListener.closed(Status.OK, new Metadata());
+    streamListener.closed(Status.OK, PROCESSED, new Metadata());
     executor.release();
 
     verify(callListener).onClose(statusArgumentCaptor.capture(),
@@ -462,6 +467,15 @@ public class ClientCallImplTest {
     ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, false);
 
     assertNull(m.get(GrpcUtil.MESSAGE_ENCODING_KEY));
+  }
+
+  @Test
+  public void prepareHeaders_ignoreContentLength() {
+    Metadata m = new Metadata();
+    m.put(GrpcUtil.CONTENT_LENGTH_KEY, "123");
+    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, false);
+
+    assertNull(m.get(GrpcUtil.CONTENT_LENGTH_KEY));
   }
 
   @Test
@@ -664,7 +678,7 @@ public class ClientCallImplTest {
     listener.headersRead(new Metadata());
     listener.messagesAvailable(new SingleMessageProducer(new ByteArrayInputStream(new byte[0])));
     listener.messagesAvailable(new SingleMessageProducer(new ByteArrayInputStream(new byte[0])));
-    listener.closed(Status.OK, new Metadata());
+    listener.closed(Status.OK, PROCESSED, new Metadata());
 
     assertTrue(latch.await(5, TimeUnit.SECONDS));
 
@@ -762,6 +776,7 @@ public class ClientCallImplTest {
         channelCallTracer, configSelector)
             .setDecompressorRegistry(decompressorRegistry);
     call.start(callListener, new Metadata());
+    verify(streamTracerFactory).newClientStreamTracer(any(StreamInfo.class), any(Metadata.class));
     verify(clientStreamProvider, never())
         .newStream(
             (MethodDescriptor<?, ?>) any(MethodDescriptor.class),

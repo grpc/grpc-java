@@ -161,8 +161,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                   clusterState.result.upstreamTlsContext());
             } else {  // logical DNS
               instance = DiscoveryMechanism.forLogicalDns(
-                  clusterState.name, clusterState.result.lrsServerName(),
-                  clusterState.result.maxConcurrentRequests(),
+                  clusterState.name, clusterState.result.dnsHostName(),
+                  clusterState.result.lrsServerName(), clusterState.result.maxConcurrentRequests(),
                   clusterState.result.upstreamTlsContext());
             }
             instances.add(instance);
@@ -188,8 +188,10 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       if (root.result.lbPolicy() == LbPolicy.RING_HASH) {
         lbProvider = lbRegistry.getProvider("ring_hash");
         lbConfig = new RingHashConfig(root.result.minRingSize(), root.result.maxRingSize());
-      } else {
+      }
+      if (lbProvider == null) {
         lbProvider = lbRegistry.getProvider("round_robin");
+        lbConfig = null;
       }
       ClusterResolverConfig config = new ClusterResolverConfig(
           Collections.unmodifiableList(instances), new PolicySelection(lbProvider, lbConfig));

@@ -18,16 +18,17 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.EnvoyServerProtoData.TRANSPORT_SOCKET_NAME_TLS;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
+import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
@@ -41,48 +42,69 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.PortSpecifierCase;
+import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.config.route.v3.RetryPolicy.RetryBackOff;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyServerProtoData.CidrRange;
+import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
+import io.grpc.xds.EnvoyServerProtoData.FilterChain;
+import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.ConfigOrError;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
+import io.grpc.xds.Filter.ServerInterceptorBuilder;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
-import io.grpc.xds.Matchers.FractionMatcher;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import io.grpc.xds.Matchers.PathMatcher;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
+import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
+import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.Matchers.FractionMatcher;
+import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -95,6 +117,13 @@ final class ClientXdsClient extends AbstractXdsClient {
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
+  private static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
+  @VisibleForTesting
+  static final long DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE = 1024L;
+  @VisibleForTesting
+  static final long DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE = 8 * 1024 * 1024L;
+  @VisibleForTesting
+  static final long MAX_RING_HASH_LB_POLICY_RING_SIZE = 8 * 1024 * 1024L;
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   @VisibleForTesting
@@ -103,6 +132,10 @@ final class ClientXdsClient extends AbstractXdsClient {
   static boolean enableFaultInjection =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"));
+  @VisibleForTesting
+  static boolean enableRetry =
+      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"))
+          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"));
 
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
@@ -122,7 +155,13 @@ final class ClientXdsClient extends AbstractXdsClient {
       "type.googleapis.com/udpa.type.v1.TypedStruct";
   private static final String TYPE_URL_FILTER_CONFIG =
       "type.googleapis.com/envoy.config.route.v3.FilterConfig";
+  // TODO(zdapeng): need to discuss how to handle unsupported values.
+  private static final Set<Code> SUPPORTED_RETRYABLE_CODES =
+      Collections.unmodifiableSet(EnumSet.of(
+          Code.CANCELLED, Code.DEADLINE_EXCEEDED, Code.INTERNAL, Code.RESOURCE_EXHAUSTED,
+          Code.UNAVAILABLE));
 
+  private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private final Map<String, ResourceSubscriber> ldsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> rdsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> cdsResourceSubscribers = new HashMap<>();
@@ -151,6 +190,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   protected void handleLdsResponse(String versionInfo, List<Any> resources, String nonce) {
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
+    Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
     Set<String> retainedRdsResources = new HashSet<>();
 
@@ -174,41 +214,32 @@ final class ClientXdsClient extends AbstractXdsClient {
       LdsUpdate ldsUpdate;
       try {
         if (listener.hasApiListener()) {
-          ldsUpdate = processClientSideListener(listener, enableFaultInjection && isResourceV3);
+          ldsUpdate = processClientSideListener(
+              listener, retainedRdsResources, enableFaultInjection && isResourceV3);
         } else {
-          ldsUpdate = processServerSideListener(listener);
+          ldsUpdate = processServerSideListener(
+              listener, retainedRdsResources, enableFaultInjection && isResourceV3);
         }
       } catch (ResourceInvalidException e) {
         errors.add(
             "LDS response Listener '" + listenerName + "' validation error: " + e.getMessage());
+        invalidResources.add(listenerName);
         continue;
       }
 
       // LdsUpdate parsed successfully.
       parsedResources.put(listenerName, new ParsedResource(ldsUpdate, resource));
-      if (ldsUpdate.rdsName != null) {
-        retainedRdsResources.add(ldsUpdate.rdsName);
-      }
     }
     getLogger().log(XdsLogLevel.INFO,
         "Received LDS Response version {0} nonce {1}. Parsed resources: {2}",
         versionInfo, nonce, unpackedResources);
-
-    if (!errors.isEmpty()) {
-      handleResourcesRejected(ResourceType.LDS, unpackedResources, versionInfo, nonce, errors);
-      return;
-    }
-
-    handleResourcesAccepted(ResourceType.LDS, parsedResources, versionInfo, nonce);
-    for (String resource : rdsResourceSubscribers.keySet()) {
-      if (!retainedRdsResources.contains(resource)) {
-        ResourceSubscriber subscriber = rdsResourceSubscribers.get(resource);
-        subscriber.onAbsent();
-      }
-    }
+    handleResourceUpdate(
+        ResourceType.LDS, parsedResources, invalidResources, retainedRdsResources, versionInfo,
+        nonce, errors);
   }
 
-  private static LdsUpdate processClientSideListener(Listener listener, boolean parseFilter)
+  private LdsUpdate processClientSideListener(
+      Listener listener, Set<String> rdsResources, boolean parseHttpFilter)
       throws ResourceInvalidException {
     // Unpack HttpConnectionManager from the Listener.
     HttpConnectionManager hcm;
@@ -220,86 +251,582 @@ final class ClientXdsClient extends AbstractXdsClient {
       throw new ResourceInvalidException(
           "Could not parse HttpConnectionManager config from ApiListener", e);
     }
+    return LdsUpdate.forApiListener(parseHttpConnectionManager(
+        hcm, rdsResources, filterRegistry, parseHttpFilter, true /* isForClient */));
+  }
 
+  private LdsUpdate processServerSideListener(
+      Listener proto, Set<String> rdsResources, boolean parseHttpFilter)
+      throws ResourceInvalidException {
+    Set<String> certProviderInstances = null;
+    if (getBootstrapInfo() != null && getBootstrapInfo().getCertProviders() != null) {
+      certProviderInstances = getBootstrapInfo().getCertProviders().keySet();
+    }
+    return LdsUpdate.forTcpListener(parseServerSideListener(
+        proto, rdsResources, tlsContextManager, filterRegistry, certProviderInstances,
+        parseHttpFilter));
+  }
+
+  @VisibleForTesting
+  static EnvoyServerProtoData.Listener parseServerSideListener(
+      Listener proto, Set<String> rdsResources, TlsContextManager tlsContextManager,
+      FilterRegistry filterRegistry, Set<String> certProviderInstances, boolean parseHttpFilter)
+      throws ResourceInvalidException {
+    if (!proto.getTrafficDirection().equals(TrafficDirection.INBOUND)) {
+      throw new ResourceInvalidException(
+          "Listener " + proto.getName() + " with invalid traffic direction: "
+              + proto.getTrafficDirection());
+    }
+    if (!proto.getListenerFiltersList().isEmpty()) {
+      throw new ResourceInvalidException(
+          "Listener " + proto.getName() + " cannot have listener_filters");
+    }
+    if (proto.hasUseOriginalDst()) {
+      throw new ResourceInvalidException(
+          "Listener " + proto.getName() + " cannot have use_original_dst set to true");
+    }
+
+    String address = null;
+    if (proto.getAddress().hasSocketAddress()) {
+      SocketAddress socketAddress = proto.getAddress().getSocketAddress();
+      address = socketAddress.getAddress();
+      switch (socketAddress.getPortSpecifierCase()) {
+        case NAMED_PORT:
+          address = address + ":" + socketAddress.getNamedPort();
+          break;
+        case PORT_VALUE:
+          address = address + ":" + socketAddress.getPortValue();
+          break;
+        default:
+          // noop
+      }
+    }
+
+    List<FilterChain> filterChains = new ArrayList<>();
+    Set<FilterChainMatch> uniqueSet = new HashSet<>();
+    for (io.envoyproxy.envoy.config.listener.v3.FilterChain fc : proto.getFilterChainsList()) {
+      filterChains.add(
+          parseFilterChain(fc, rdsResources, tlsContextManager, filterRegistry, uniqueSet,
+              certProviderInstances, parseHttpFilter));
+    }
+    FilterChain defaultFilterChain = null;
+    if (proto.hasDefaultFilterChain()) {
+      defaultFilterChain = parseFilterChain(
+          proto.getDefaultFilterChain(), rdsResources, tlsContextManager, filterRegistry,
+          null, certProviderInstances, parseHttpFilter);
+    }
+
+    return new EnvoyServerProtoData.Listener(
+        proto.getName(), address, Collections.unmodifiableList(filterChains), defaultFilterChain);
+  }
+
+  @VisibleForTesting
+  static FilterChain parseFilterChain(
+      io.envoyproxy.envoy.config.listener.v3.FilterChain proto, Set<String> rdsResources,
+      TlsContextManager tlsContextManager, FilterRegistry filterRegistry,
+      Set<FilterChainMatch> uniqueSet, Set<String> certProviderInstances, boolean parseHttpFilters)
+      throws ResourceInvalidException {
+    if (proto.getFiltersCount() != 1) {
+      throw new ResourceInvalidException("FilterChain " + proto.getName()
+              + " should contain exact one HttpConnectionManager filter");
+    }
+    io.envoyproxy.envoy.config.listener.v3.Filter filter = proto.getFiltersList().get(0);
+    if (!filter.hasTypedConfig()) {
+      throw new ResourceInvalidException(
+          "FilterChain " + proto.getName() + " contains filter " + filter.getName()
+              + " without typed_config");
+    }
+    Any any = filter.getTypedConfig();
+    // HttpConnectionManager is the only supported network filter at the moment.
+    if (!any.getTypeUrl().equals(TYPE_URL_HTTP_CONNECTION_MANAGER)) {
+      throw new ResourceInvalidException(
+          "FilterChain " + proto.getName() + " contains filter " + filter.getName()
+              + " with unsupported typed_config type " + any.getTypeUrl());
+    }
+    HttpConnectionManager hcmProto;
+    try {
+      hcmProto = any.unpack(HttpConnectionManager.class);
+    } catch (InvalidProtocolBufferException e) {
+      throw new ResourceInvalidException("FilterChain " + proto.getName() + " with filter "
+          + filter.getName() + " failed to unpack message", e);
+    }
+    io.grpc.xds.HttpConnectionManager httpConnectionManager = parseHttpConnectionManager(
+            hcmProto, rdsResources, filterRegistry, parseHttpFilters, false /* isForClient */);
+
+    EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext = null;
+    if (proto.hasTransportSocket()) {
+      if (!TRANSPORT_SOCKET_NAME_TLS.equals(proto.getTransportSocket().getName())) {
+        throw new ResourceInvalidException("transport-socket with name "
+            + proto.getTransportSocket().getName() + " not supported.");
+      }
+      DownstreamTlsContext downstreamTlsContextProto;
+      try {
+        downstreamTlsContextProto =
+            proto.getTransportSocket().getTypedConfig().unpack(DownstreamTlsContext.class);
+      } catch (InvalidProtocolBufferException e) {
+        throw new ResourceInvalidException("FilterChain " + proto.getName()
+            + " failed to unpack message", e);
+      }
+      downstreamTlsContext =
+          EnvoyServerProtoData.DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
+              validateDownstreamTlsContext(downstreamTlsContextProto, certProviderInstances));
+    }
+
+    String name = proto.getName();
+    if (name.isEmpty()) {
+      name = UUID.randomUUID().toString();
+    }
+    FilterChainMatch filterChainMatch = parseFilterChainMatch(proto.getFilterChainMatch());
+    checkForUniqueness(uniqueSet, filterChainMatch);
+    return new FilterChain(
+        name,
+        filterChainMatch,
+        httpConnectionManager,
+        downstreamTlsContext,
+        tlsContextManager
+    );
+  }
+
+  @VisibleForTesting
+  static DownstreamTlsContext validateDownstreamTlsContext(
+      DownstreamTlsContext downstreamTlsContext, Set<String> certProviderInstances)
+      throws ResourceInvalidException {
+    if (downstreamTlsContext.hasCommonTlsContext()) {
+      validateCommonTlsContext(downstreamTlsContext.getCommonTlsContext(), certProviderInstances,
+          true);
+    } else {
+      throw new ResourceInvalidException(
+          "common-tls-context is required in downstream-tls-context");
+    }
+    if (downstreamTlsContext.hasRequireSni()) {
+      throw new ResourceInvalidException(
+          "downstream-tls-context with require-sni is not supported");
+    }
+    DownstreamTlsContext.OcspStaplePolicy ocspStaplePolicy = downstreamTlsContext
+        .getOcspStaplePolicy();
+    if (ocspStaplePolicy != DownstreamTlsContext.OcspStaplePolicy.UNRECOGNIZED
+        && ocspStaplePolicy != DownstreamTlsContext.OcspStaplePolicy.LENIENT_STAPLING) {
+      throw new ResourceInvalidException(
+          "downstream-tls-context with ocsp_staple_policy value " + ocspStaplePolicy.name()
+              + " is not supported");
+    }
+    return downstreamTlsContext;
+  }
+
+  @VisibleForTesting
+  static io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+      validateUpstreamTlsContext(
+      io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext upstreamTlsContext,
+      Set<String> certProviderInstances)
+      throws ResourceInvalidException {
+    if (upstreamTlsContext.hasCommonTlsContext()) {
+      validateCommonTlsContext(upstreamTlsContext.getCommonTlsContext(), certProviderInstances,
+          false);
+    } else {
+      throw new ResourceInvalidException("common-tls-context is required in upstream-tls-context");
+    }
+    return upstreamTlsContext;
+  }
+
+  @VisibleForTesting
+  static void validateCommonTlsContext(
+      CommonTlsContext commonTlsContext, Set<String> certProviderInstances, boolean server)
+      throws ResourceInvalidException {
+    if (commonTlsContext.hasCustomHandshaker()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with custom_handshaker is not supported");
+    }
+    if (commonTlsContext.hasTlsParams()) {
+      throw new ResourceInvalidException("common-tls-context with tls_params is not supported");
+    }
+    if (commonTlsContext.hasValidationContextSdsSecretConfig()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with validation_context_sds_secret_config is not supported");
+    }
+    if (commonTlsContext.hasValidationContextCertificateProvider()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with validation_context_certificate_provider is not supported");
+    }
+    if (commonTlsContext.hasValidationContextCertificateProviderInstance()) {
+      throw new ResourceInvalidException(
+          "common-tls-context with validation_context_certificate_provider_instance is not"
+              + " supported");
+    }
+    String certInstanceName = getIdentityCertInstanceName(commonTlsContext);
+    if (certInstanceName == null) {
+      if (server) {
+        throw new ResourceInvalidException(
+            "tls_certificate_provider_instance is required in downstream-tls-context");
+      }
+      if (commonTlsContext.getTlsCertificatesCount() > 0) {
+        throw new ResourceInvalidException(
+            "tls_certificate_provider_instance is unset");
+      }
+      if (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() > 0) {
+        throw new ResourceInvalidException(
+            "tls_certificate_provider_instance is unset");
+      }
+      if (commonTlsContext.hasTlsCertificateCertificateProvider()) {
+        throw new ResourceInvalidException(
+            "tls_certificate_provider_instance is unset");
+      }
+    } else if (certProviderInstances == null || !certProviderInstances.contains(certInstanceName)) {
+      throw new ResourceInvalidException(
+          "CertificateProvider instance name '" + certInstanceName
+              + "' not defined in the bootstrap file.");
+    }
+    String rootCaInstanceName = getRootCertInstanceName(commonTlsContext);
+    if (rootCaInstanceName == null) {
+      if (!server) {
+        throw new ResourceInvalidException(
+            "ca_certificate_provider_instance is required in upstream-tls-context");
+      }
+    } else {
+      if (certProviderInstances == null || !certProviderInstances.contains(rootCaInstanceName)) {
+        throw new ResourceInvalidException(
+                "ca_certificate_provider_instance name '" + rootCaInstanceName
+                        + "' not defined in the bootstrap file.");
+      }
+      CertificateValidationContext certificateValidationContext = null;
+      if (commonTlsContext.hasValidationContext()) {
+        certificateValidationContext = commonTlsContext.getValidationContext();
+      } else if (commonTlsContext.hasCombinedValidationContext() && commonTlsContext
+          .getCombinedValidationContext().hasDefaultValidationContext()) {
+        certificateValidationContext = commonTlsContext.getCombinedValidationContext()
+            .getDefaultValidationContext();
+      }
+      if (certificateValidationContext != null) {
+        if (certificateValidationContext.getMatchSubjectAltNamesCount() > 0 && server) {
+          throw new ResourceInvalidException(
+              "match_subject_alt_names only allowed in upstream_tls_context");
+        }
+        if (certificateValidationContext.getVerifyCertificateSpkiCount() > 0) {
+          throw new ResourceInvalidException(
+              "verify_certificate_spki in default_validation_context is not supported");
+        }
+        if (certificateValidationContext.getVerifyCertificateHashCount() > 0) {
+          throw new ResourceInvalidException(
+              "verify_certificate_hash in default_validation_context is not supported");
+        }
+        if (certificateValidationContext.hasRequireSignedCertificateTimestamp()) {
+          throw new ResourceInvalidException(
+              "require_signed_certificate_timestamp in default_validation_context is not "
+                  + "supported");
+        }
+        if (certificateValidationContext.hasCrl()) {
+          throw new ResourceInvalidException("crl in default_validation_context is not supported");
+        }
+        if (certificateValidationContext.hasCustomValidatorConfig()) {
+          throw new ResourceInvalidException(
+              "custom_validator_config in default_validation_context is not supported");
+        }
+      }
+    }
+  }
+
+  private static String getIdentityCertInstanceName(CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasTlsCertificateProviderInstance()) {
+      return commonTlsContext.getTlsCertificateProviderInstance().getInstanceName();
+    } else if (commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
+      return commonTlsContext.getTlsCertificateCertificateProviderInstance().getInstanceName();
+    }
+    return null;
+  }
+
+  private static String getRootCertInstanceName(CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasValidationContext()) {
+      if (commonTlsContext.getValidationContext().hasCaCertificateProviderInstance()) {
+        return commonTlsContext.getValidationContext().getCaCertificateProviderInstance()
+            .getInstanceName();
+      }
+    } else if (commonTlsContext.hasCombinedValidationContext()) {
+      CommonTlsContext.CombinedCertificateValidationContext combinedCertificateValidationContext
+          = commonTlsContext.getCombinedValidationContext();
+      if (combinedCertificateValidationContext.hasDefaultValidationContext()
+          && combinedCertificateValidationContext.getDefaultValidationContext()
+          .hasCaCertificateProviderInstance()) {
+        return combinedCertificateValidationContext.getDefaultValidationContext()
+            .getCaCertificateProviderInstance().getInstanceName();
+      } else if (combinedCertificateValidationContext
+          .hasValidationContextCertificateProviderInstance()) {
+        return combinedCertificateValidationContext
+            .getValidationContextCertificateProviderInstance().getInstanceName();
+      }
+    }
+    return null;
+  }
+
+  private static void checkForUniqueness(Set<FilterChainMatch> uniqueSet,
+      FilterChainMatch filterChainMatch) throws ResourceInvalidException {
+    if (uniqueSet != null) {
+      List<FilterChainMatch> crossProduct = getCrossProduct(filterChainMatch);
+      for (FilterChainMatch cur : crossProduct) {
+        if (!uniqueSet.add(cur)) {
+          throw new ResourceInvalidException("Found duplicate matcher: " + cur);
+        }
+      }
+    }
+  }
+
+  private static List<FilterChainMatch> getCrossProduct(FilterChainMatch filterChainMatch) {
+    // repeating fields to process:
+    // prefixRanges, applicationProtocols, sourcePrefixRanges, sourcePorts, serverNames
+    List<FilterChainMatch> expandedList = expandOnPrefixRange(filterChainMatch);
+    expandedList = expandOnApplicationProtocols(expandedList);
+    expandedList = expandOnSourcePrefixRange(expandedList);
+    expandedList = expandOnSourcePorts(expandedList);
+    return expandOnServerNames(expandedList);
+  }
+
+  private static List<FilterChainMatch> expandOnPrefixRange(FilterChainMatch filterChainMatch) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
+    if (filterChainMatch.getPrefixRanges().isEmpty()) {
+      expandedList.add(filterChainMatch);
+    } else {
+      for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getPrefixRanges()) {
+        expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+            Arrays.asList(cidrRange),
+            Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
+            Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
+            filterChainMatch.getConnectionSourceType(),
+            Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
+            Collections.unmodifiableList(filterChainMatch.getServerNames()),
+            filterChainMatch.getTransportProtocol()));
+      }
+    }
+    return expandedList;
+  }
+
+  private static List<FilterChainMatch> expandOnApplicationProtocols(
+      Collection<FilterChainMatch> set) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
+    for (FilterChainMatch filterChainMatch : set) {
+      if (filterChainMatch.getApplicationProtocols().isEmpty()) {
+        expandedList.add(filterChainMatch);
+      } else {
+        for (String applicationProtocol : filterChainMatch.getApplicationProtocols()) {
+          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
+              Arrays.asList(applicationProtocol),
+              Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
+              filterChainMatch.getConnectionSourceType(),
+              Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
+              Collections.unmodifiableList(filterChainMatch.getServerNames()),
+              filterChainMatch.getTransportProtocol()));
+        }
+      }
+    }
+    return expandedList;
+  }
+
+  private static List<FilterChainMatch> expandOnSourcePrefixRange(
+      Collection<FilterChainMatch> set) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
+    for (FilterChainMatch filterChainMatch : set) {
+      if (filterChainMatch.getSourcePrefixRanges().isEmpty()) {
+        expandedList.add(filterChainMatch);
+      } else {
+        for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getSourcePrefixRanges()) {
+          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
+              Arrays.asList(cidrRange),
+              filterChainMatch.getConnectionSourceType(),
+              Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
+              Collections.unmodifiableList(filterChainMatch.getServerNames()),
+              filterChainMatch.getTransportProtocol()));
+        }
+      }
+    }
+    return expandedList;
+  }
+
+  private static List<FilterChainMatch> expandOnSourcePorts(Collection<FilterChainMatch> set) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
+    for (FilterChainMatch filterChainMatch : set) {
+      if (filterChainMatch.getSourcePorts().isEmpty()) {
+        expandedList.add(filterChainMatch);
+      } else {
+        for (Integer sourcePort : filterChainMatch.getSourcePorts()) {
+          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
+              Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
+              filterChainMatch.getConnectionSourceType(),
+              Arrays.asList(sourcePort),
+              Collections.unmodifiableList(filterChainMatch.getServerNames()),
+              filterChainMatch.getTransportProtocol()));
+        }
+      }
+    }
+    return expandedList;
+  }
+
+  private static List<FilterChainMatch> expandOnServerNames(Collection<FilterChainMatch> set) {
+    ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
+    for (FilterChainMatch filterChainMatch : set) {
+      if (filterChainMatch.getServerNames().isEmpty()) {
+        expandedList.add(filterChainMatch);
+      } else {
+        for (String serverName : filterChainMatch.getServerNames()) {
+          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
+              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
+              Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
+              Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
+              filterChainMatch.getConnectionSourceType(),
+              Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
+              Arrays.asList(serverName),
+              filterChainMatch.getTransportProtocol()));
+        }
+      }
+    }
+    return expandedList;
+  }
+
+  private static FilterChainMatch parseFilterChainMatch(
+      io.envoyproxy.envoy.config.listener.v3.FilterChainMatch proto)
+      throws ResourceInvalidException {
+    List<CidrRange> prefixRanges = new ArrayList<>();
+    List<CidrRange> sourcePrefixRanges = new ArrayList<>();
+    try {
+      for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getPrefixRangesList()) {
+        prefixRanges.add(new CidrRange(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+      }
+      for (io.envoyproxy.envoy.config.core.v3.CidrRange range
+          : proto.getSourcePrefixRangesList()) {
+        sourcePrefixRanges.add(
+            new CidrRange(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+      }
+    } catch (UnknownHostException e) {
+      throw new ResourceInvalidException("Failed to create CidrRange", e);
+    }
+    ConnectionSourceType sourceType;
+    switch (proto.getSourceType()) {
+      case ANY:
+        sourceType = ConnectionSourceType.ANY;
+        break;
+      case EXTERNAL:
+        sourceType = ConnectionSourceType.EXTERNAL;
+        break;
+      case SAME_IP_OR_LOOPBACK:
+        sourceType = ConnectionSourceType.SAME_IP_OR_LOOPBACK;
+        break;
+      default:
+        throw new ResourceInvalidException("Unknown source-type: " + proto.getSourceType());
+    }
+    return new FilterChainMatch(
+        proto.getDestinationPort().getValue(),
+        prefixRanges,
+        proto.getApplicationProtocolsList(),
+        sourcePrefixRanges,
+        sourceType,
+        proto.getSourcePortsList(),
+        proto.getServerNamesList(),
+        proto.getTransportProtocol());
+  }
+
+  @VisibleForTesting
+  static io.grpc.xds.HttpConnectionManager parseHttpConnectionManager(
+      HttpConnectionManager proto, Set<String> rdsResources, FilterRegistry filterRegistry,
+      boolean parseHttpFilter, boolean isForClient) throws ResourceInvalidException {
+    if (proto.getXffNumTrustedHops() != 0) {
+      throw new ResourceInvalidException(
+          "HttpConnectionManager with xff_num_trusted_hops unsupported");
+    }
     // Obtain max_stream_duration from Http Protocol Options.
     long maxStreamDuration = 0;
-    if (hcm.hasCommonHttpProtocolOptions()) {
-      HttpProtocolOptions options = hcm.getCommonHttpProtocolOptions();
+    if (proto.hasCommonHttpProtocolOptions()) {
+      HttpProtocolOptions options = proto.getCommonHttpProtocolOptions();
       if (options.hasMaxStreamDuration()) {
         maxStreamDuration = Durations.toNanos(options.getMaxStreamDuration());
       }
     }
 
-    // Parse filters.
-    List<NamedFilterConfig> filterChain = null;
-    if (parseFilter) {
-      filterChain = new ArrayList<>();
-      List<io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter>
-          httpFilters = hcm.getHttpFiltersList();
-      for (io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
-               httpFilter : httpFilters) {
+    // Parse http filters.
+    List<NamedFilterConfig> filterConfigs = null;
+    if (parseHttpFilter) {
+      if (proto.getHttpFiltersList().isEmpty()) {
+        throw new ResourceInvalidException("Missing HttpFilter in HttpConnectionManager.");
+      }
+      filterConfigs = new ArrayList<>();
+      Set<String> names = new HashSet<>();
+      for (int i = 0; i < proto.getHttpFiltersCount(); i++) {
+        io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
+                httpFilter = proto.getHttpFiltersList().get(i);
         String filterName = httpFilter.getName();
-        StructOrError<FilterConfig> filterConfig = parseHttpFilter(httpFilter);
+        if (!names.add(filterName)) {
+          throw new ResourceInvalidException(
+              "HttpConnectionManager contains duplicate HttpFilter: " + filterName);
+        }
+        StructOrError<FilterConfig> filterConfig =
+            parseHttpFilter(httpFilter, filterRegistry, isForClient);
+        if ((i == proto.getHttpFiltersCount() - 1)
+                && (filterConfig == null || !isTerminalFilter(filterConfig.struct))) {
+          throw new ResourceInvalidException("The last HttpFilter must be a terminal filter: "
+                  + filterName);
+        }
         if (filterConfig == null) {
           continue;
         }
         if (filterConfig.getErrorDetail() != null) {
           throw new ResourceInvalidException(
-              "HttpConnectionManager contains invalid HttpFault filter: "
+              "HttpConnectionManager contains invalid HttpFilter: "
                   + filterConfig.getErrorDetail());
         }
-        filterChain.add(new NamedFilterConfig(filterName, filterConfig.struct));
+        if ((i < proto.getHttpFiltersCount() - 1) && isTerminalFilter(filterConfig.getStruct())) {
+          throw new ResourceInvalidException("A terminal HttpFilter must be the last filter: "
+                  + filterName);
+        }
+        filterConfigs.add(new NamedFilterConfig(filterName, filterConfig.struct));
       }
     }
 
-    // Parse RDS info.
-    if (hcm.hasRouteConfig()) {
-      // Found inlined route_config. Parse it to find the cluster_name.
+    // Parse inlined RouteConfiguration or RDS.
+    if (proto.hasRouteConfig()) {
       List<VirtualHost> virtualHosts = new ArrayList<>();
       for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
-          : hcm.getRouteConfig().getVirtualHostsList()) {
-        StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseFilter);
+          : proto.getRouteConfig().getVirtualHostsList()) {
+        StructOrError<VirtualHost> virtualHost =
+            parseVirtualHost(virtualHostProto, filterRegistry, parseHttpFilter);
         if (virtualHost.getErrorDetail() != null) {
-          throw new ResourceInvalidException("HttpConnectionManager contains invalid virtual host: "
-              + virtualHost.getErrorDetail());
+          throw new ResourceInvalidException(
+              "HttpConnectionManager contains invalid virtual host: "
+                  + virtualHost.getErrorDetail());
         }
         virtualHosts.add(virtualHost.getStruct());
       }
-      return new LdsUpdate(maxStreamDuration, virtualHosts, filterChain);
+      return io.grpc.xds.HttpConnectionManager.forVirtualHosts(
+          maxStreamDuration, virtualHosts, filterConfigs);
     }
-
-    if (hcm.hasRds()) {
-      // Found RDS.
-      Rds rds = hcm.getRds();
+    if (proto.hasRds()) {
+      Rds rds = proto.getRds();
       if (!rds.hasConfigSource()) {
-        throw new ResourceInvalidException("HttpConnectionManager missing config_source for RDS.");
+        throw new ResourceInvalidException(
+            "HttpConnectionManager contains invalid RDS: missing config_source");
       }
       if (!rds.getConfigSource().hasAds()) {
         throw new ResourceInvalidException(
-            "HttpConnectionManager ConfigSource for RDS does not specify ADS.");
+            "HttpConnectionManager contains invalid RDS: must specify ADS");
       }
-      return new LdsUpdate(maxStreamDuration, rds.getRouteConfigName(), filterChain);
+      // Collect the RDS resource referenced by this HttpConnectionManager.
+      rdsResources.add(rds.getRouteConfigName());
+      return io.grpc.xds.HttpConnectionManager.forRdsName(
+          maxStreamDuration, rds.getRouteConfigName(), filterConfigs);
     }
-
     throw new ResourceInvalidException(
-        "HttpConnectionManager neither has inlined route_config nor RDS.");
+        "HttpConnectionManager neither has inlined route_config nor RDS");
   }
 
-  private static LdsUpdate processServerSideListener(Listener listener)
-      throws ResourceInvalidException {
-    StructOrError<EnvoyServerProtoData.Listener> convertedListener =
-        parseServerSideListener(listener);
-    if (convertedListener.getErrorDetail() != null) {
-      throw new ResourceInvalidException(convertedListener.getErrorDetail());
-    }
-    return new LdsUpdate(convertedListener.getStruct());
+  // hard-coded: currently router config is the only terminal filter.
+  private static boolean isTerminalFilter(FilterConfig filterConfig) {
+    return RouterFilter.ROUTER_CONFIG.equals(filterConfig);
   }
 
   @VisibleForTesting
   @Nullable // Returns null if the filter is optional but not supported.
   static StructOrError<FilterConfig> parseHttpFilter(
       io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
-          httpFilter) {
+          httpFilter, FilterRegistry filterRegistry, boolean isForClient) {
     String filterName = httpFilter.getName();
     boolean isOptional = httpFilter.getIsOptional();
     if (!httpFilter.hasTypedConfig()) {
@@ -310,36 +837,12 @@ final class ClientXdsClient extends AbstractXdsClient {
             "HttpFilter [" + filterName + "] is not optional and has no typed config");
       }
     }
-    return parseRawFilterConfig(filterName, httpFilter.getTypedConfig(), isOptional, false);
-  }
-
-  @Nullable // Returns null if the filter should be ignored.
-  private static StructOrError<FilterConfig> parseRawFilterConfig(
-      String filterName, Any anyConfig, Boolean isOptional, boolean isOverrideConfig) {
-    checkArgument(
-        isOptional != null || isOverrideConfig, "isOptional can't be null for top-level config");
-    String typeUrl = anyConfig.getTypeUrl();
-    if (isOverrideConfig) {
-      isOptional = false;
-      if (typeUrl.equals(TYPE_URL_FILTER_CONFIG)) {
-        io.envoyproxy.envoy.config.route.v3.FilterConfig filterConfig;
-        try {
-          filterConfig =
-              anyConfig.unpack(io.envoyproxy.envoy.config.route.v3.FilterConfig.class);
-        } catch (InvalidProtocolBufferException e) {
-          return StructOrError.fromError(
-              "HttpFilter [" + filterName + "] contains invalid proto: " + e);
-        }
-        isOptional = filterConfig.getIsOptional();
-        anyConfig = filterConfig.getConfig();
-        typeUrl = anyConfig.getTypeUrl();
-      }
-    }
-    Message rawConfig = anyConfig;
-    if (anyConfig.getTypeUrl().equals(TYPE_URL_TYPED_STRUCT)) {
+    Message rawConfig = httpFilter.getTypedConfig();
+    String typeUrl = httpFilter.getTypedConfig().getTypeUrl();
+    if (typeUrl.equals(TYPE_URL_TYPED_STRUCT)) {
       TypedStruct typedStruct;
       try {
-        typedStruct = anyConfig.unpack(TypedStruct.class);
+        typedStruct = httpFilter.getTypedConfig().unpack(TypedStruct.class);
       } catch (InvalidProtocolBufferException e) {
         return StructOrError.fromError(
             "HttpFilter [" + filterName + "] contains invalid proto: " + e);
@@ -347,18 +850,18 @@ final class ClientXdsClient extends AbstractXdsClient {
       typeUrl = typedStruct.getTypeUrl();
       rawConfig = typedStruct.getValue();
     }
-    Filter filter = FilterRegistry.getDefaultRegistry().get(typeUrl);
-    if (filter == null) {
+    Filter filter = filterRegistry.get(typeUrl);
+    if ((isForClient && !(filter instanceof ClientInterceptorBuilder))
+        || (!isForClient && !(filter instanceof ServerInterceptorBuilder))) {
       if (isOptional) {
         return null;
       } else {
         return StructOrError.fromError(
-            "HttpFilter [" + filterName + "] is not optional and has an unsupported config type: "
-                + typeUrl);
+            "HttpFilter [" + filterName + "](" + typeUrl + ") is required but unsupported for "
+                + (isForClient ? "client" : "server"));
       }
     }
-    ConfigOrError<? extends FilterConfig> filterConfig = isOverrideConfig
-        ? filter.parseFilterConfigOverride(rawConfig) : filter.parseFilterConfig(rawConfig);
+    ConfigOrError<? extends FilterConfig> filterConfig = filter.parseFilterConfig(rawConfig);
     if (filterConfig.errorDetail != null) {
       return StructOrError.fromError(
           "Invalid filter config for HttpFilter [" + filterName + "]: " + filterConfig.errorDetail);
@@ -366,25 +869,13 @@ final class ClientXdsClient extends AbstractXdsClient {
     return StructOrError.fromStruct(filterConfig.config);
   }
 
-  @VisibleForTesting static StructOrError<EnvoyServerProtoData.Listener> parseServerSideListener(
-      Listener listener) {
-    try {
-      return StructOrError.fromStruct(
-          EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
-    } catch (InvalidProtocolBufferException e) {
-      return StructOrError.fromError(
-          "Failed to unpack Listener " + listener.getName() + ":" + e.getMessage());
-    } catch (IllegalArgumentException e) {
-      return StructOrError.fromError(e.getMessage());
-    }
-  }
-
   private static StructOrError<VirtualHost> parseVirtualHost(
-      io.envoyproxy.envoy.config.route.v3.VirtualHost proto, boolean parseFilter) {
+      io.envoyproxy.envoy.config.route.v3.VirtualHost proto, FilterRegistry filterRegistry,
+      boolean parseHttpFilter) {
     String name = proto.getName();
     List<Route> routes = new ArrayList<>(proto.getRoutesCount());
     for (io.envoyproxy.envoy.config.route.v3.Route routeProto : proto.getRoutesList()) {
-      StructOrError<Route> route = parseRoute(routeProto, parseFilter);
+      StructOrError<Route> route = parseRoute(routeProto, filterRegistry, parseHttpFilter);
       if (route == null) {
         continue;
       }
@@ -394,12 +885,12 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       routes.add(route.getStruct());
     }
-    if (!parseFilter) {
+    if (!parseHttpFilter) {
       return StructOrError.fromStruct(VirtualHost.create(
           name, proto.getDomainsList(), routes, new HashMap<String, FilterConfig>()));
     }
     StructOrError<Map<String, FilterConfig>> overrideConfigs =
-        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap());
+        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap(), filterRegistry);
     if (overrideConfigs.errorDetail != null) {
       return StructOrError.fromError(
           "VirtualHost [" + proto.getName() + "] contains invalid HttpFilter config: "
@@ -411,18 +902,52 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @VisibleForTesting
   static StructOrError<Map<String, FilterConfig>> parseOverrideFilterConfigs(
-      Map<String, Any> rawFilterConfigMap) {
+      Map<String, Any> rawFilterConfigMap, FilterRegistry filterRegistry) {
     Map<String, FilterConfig> overrideConfigs = new HashMap<>();
     for (String name : rawFilterConfigMap.keySet()) {
       Any anyConfig = rawFilterConfigMap.get(name);
-      StructOrError<FilterConfig> filterConfig = parseRawFilterConfig(name, anyConfig, null, true);
-      if (filterConfig == null) {
-        continue;
+      String typeUrl = anyConfig.getTypeUrl();
+      boolean isOptional = false;
+      if (typeUrl.equals(TYPE_URL_FILTER_CONFIG)) {
+        io.envoyproxy.envoy.config.route.v3.FilterConfig filterConfig;
+        try {
+          filterConfig =
+              anyConfig.unpack(io.envoyproxy.envoy.config.route.v3.FilterConfig.class);
+        } catch (InvalidProtocolBufferException e) {
+          return StructOrError.fromError(
+              "FilterConfig [" + name + "] contains invalid proto: " + e);
+        }
+        isOptional = filterConfig.getIsOptional();
+        anyConfig = filterConfig.getConfig();
+        typeUrl = anyConfig.getTypeUrl();
       }
+      Message rawConfig = anyConfig;
+      if (typeUrl.equals(TYPE_URL_TYPED_STRUCT)) {
+        TypedStruct typedStruct;
+        try {
+          typedStruct = anyConfig.unpack(TypedStruct.class);
+        } catch (InvalidProtocolBufferException e) {
+          return StructOrError.fromError(
+              "FilterConfig [" + name + "] contains invalid proto: " + e);
+        }
+        typeUrl = typedStruct.getTypeUrl();
+        rawConfig = typedStruct.getValue();
+      }
+      Filter filter = filterRegistry.get(typeUrl);
+      if (filter == null) {
+        if (isOptional) {
+          continue;
+        }
+        return StructOrError.fromError(
+            "HttpFilter [" + name + "](" + typeUrl + ") is required but unsupported");
+      }
+      ConfigOrError<? extends FilterConfig> filterConfig =
+          filter.parseFilterConfigOverride(rawConfig);
       if (filterConfig.errorDetail != null) {
-        return StructOrError.fromError(filterConfig.errorDetail);
+        return StructOrError.fromError(
+            "Invalid filter config for HttpFilter [" + name + "]: " + filterConfig.errorDetail);
       }
-      overrideConfigs.put(name, filterConfig.struct);
+      overrideConfigs.put(name, filterConfig.config);
     }
     return StructOrError.fromStruct(overrideConfigs);
   }
@@ -430,51 +955,55 @@ final class ClientXdsClient extends AbstractXdsClient {
   @VisibleForTesting
   @Nullable
   static StructOrError<Route> parseRoute(
-      io.envoyproxy.envoy.config.route.v3.Route proto, boolean parseFilter) {
+      io.envoyproxy.envoy.config.route.v3.Route proto, FilterRegistry filterRegistry,
+      boolean parseHttpFilter) {
     StructOrError<RouteMatch> routeMatch = parseRouteMatch(proto.getMatch());
     if (routeMatch == null) {
       return null;
     }
     if (routeMatch.getErrorDetail() != null) {
       return StructOrError.fromError(
-          "Invalid route [" + proto.getName() + "]: " + routeMatch.getErrorDetail());
+          "Route [" + proto.getName() + "] contains invalid RouteMatch: "
+              + routeMatch.getErrorDetail());
     }
 
-    StructOrError<RouteAction> routeAction;
+    Map<String, FilterConfig> overrideConfigs = Collections.emptyMap();
+    if (parseHttpFilter) {
+      StructOrError<Map<String, FilterConfig>> overrideConfigsOrError =
+          parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap(), filterRegistry);
+      if (overrideConfigsOrError.errorDetail != null) {
+        return StructOrError.fromError(
+            "Route [" + proto.getName() + "] contains invalid HttpFilter config: "
+                + overrideConfigsOrError.errorDetail);
+      }
+      overrideConfigs = overrideConfigsOrError.struct;
+    }
+
     switch (proto.getActionCase()) {
       case ROUTE:
-        routeAction = parseRouteAction(proto.getRoute(), parseFilter);
-        break;
+        StructOrError<RouteAction> routeAction =
+            parseRouteAction(proto.getRoute(), filterRegistry, parseHttpFilter);
+        if (routeAction == null) {
+          return null;
+        }
+        if (routeAction.errorDetail != null) {
+          return StructOrError.fromError(
+              "Route [" + proto.getName() + "] contains invalid RouteAction: "
+                  + routeAction.getErrorDetail());
+        }
+        return StructOrError.fromStruct(
+            Route.forAction(routeMatch.struct, routeAction.struct, overrideConfigs));
+      case NON_FORWARDING_ACTION:
+        return StructOrError.fromStruct(
+            Route.forNonForwardingAction(routeMatch.struct, overrideConfigs));
       case REDIRECT:
-        return StructOrError.fromError("Unsupported action type: redirect");
       case DIRECT_RESPONSE:
-        return StructOrError.fromError("Unsupported action type: direct_response");
       case FILTER_ACTION:
-        return StructOrError.fromError("Unsupported action type: filter_action");
       case ACTION_NOT_SET:
       default:
-        return StructOrError.fromError("Unknown action type: " + proto.getActionCase());
+        return StructOrError.fromError(
+            "Route [" + proto.getName() + "] with unknown action type: " + proto.getActionCase());
     }
-    if (routeAction == null) {
-      return null;
-    }
-    if (routeAction.getErrorDetail() != null) {
-      return StructOrError.fromError(
-          "Invalid route [" + proto.getName() + "]: " + routeAction.getErrorDetail());
-    }
-    if (!parseFilter) {
-      return StructOrError.fromStruct(Route.create(
-          routeMatch.getStruct(), routeAction.getStruct(), new HashMap<String, FilterConfig>()));
-    }
-    StructOrError<Map<String, FilterConfig>> overrideConfigs =
-        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap());
-    if (overrideConfigs.errorDetail != null) {
-      return StructOrError.fromError(
-          "Route [" + proto.getName() + "] contains invalid HttpFilter config: "
-              + overrideConfigs.errorDetail);
-    }
-    return StructOrError.fromStruct(Route.create(
-        routeMatch.getStruct(), routeAction.getStruct(), overrideConfigs.struct));
   }
 
   @VisibleForTesting
@@ -597,10 +1126,16 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
+  /**
+   * Parses the RouteAction config. The returned result may contain a (parsed form)
+   * {@link RouteAction} or an error message. Returns {@code null} if the RouteAction
+   * should be ignored.
+   */
   @VisibleForTesting
   @Nullable
   static StructOrError<RouteAction> parseRouteAction(
-      io.envoyproxy.envoy.config.route.v3.RouteAction proto, boolean parseFilter) {
+      io.envoyproxy.envoy.config.route.v3.RouteAction proto, FilterRegistry filterRegistry,
+      boolean parseHttpFilter) {
     Long timeoutNano = null;
     if (proto.hasMaxStreamDuration()) {
       io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration maxStreamDuration
@@ -609,6 +1144,16 @@ final class ClientXdsClient extends AbstractXdsClient {
         timeoutNano = Durations.toNanos(maxStreamDuration.getGrpcTimeoutHeaderMax());
       } else if (maxStreamDuration.hasMaxStreamDuration()) {
         timeoutNano = Durations.toNanos(maxStreamDuration.getMaxStreamDuration());
+      }
+    }
+    RetryPolicy retryPolicy = null;
+    if (enableRetry && proto.hasRetryPolicy()) {
+      StructOrError<RetryPolicy> retryPolicyOrError = parseRetryPolicy(proto.getRetryPolicy());
+      if (retryPolicyOrError != null) {
+        if (retryPolicyOrError.errorDetail != null) {
+          return StructOrError.fromError(retryPolicyOrError.errorDetail);
+        }
+        retryPolicy = retryPolicyOrError.struct;
       }
     }
     List<HashPolicy> hashPolicies = new ArrayList<>();
@@ -646,7 +1191,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     switch (proto.getClusterSpecifierCase()) {
       case CLUSTER:
         return StructOrError.fromStruct(RouteAction.forCluster(
-            proto.getCluster(), hashPolicies, timeoutNano));
+            proto.getCluster(), hashPolicies, timeoutNano, retryPolicy));
       case CLUSTER_HEADER:
         return null;
       case WEIGHTED_CLUSTERS:
@@ -659,7 +1204,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
             : clusterWeights) {
           StructOrError<ClusterWeight> clusterWeightOrError =
-              parseClusterWeight(clusterWeight, parseFilter);
+              parseClusterWeight(clusterWeight, filterRegistry, parseHttpFilter);
           if (clusterWeightOrError.getErrorDetail() != null) {
             return StructOrError.fromError("RouteAction contains invalid ClusterWeight: "
                 + clusterWeightOrError.getErrorDetail());
@@ -668,7 +1213,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
         // TODO(chengyuanzhang): validate if the sum of weights equals to total weight.
         return StructOrError.fromStruct(RouteAction.forWeightedClusters(
-            weightedClusters, hashPolicies, timeoutNano));
+            weightedClusters, hashPolicies, timeoutNano, retryPolicy));
       case CLUSTERSPECIFIER_NOT_SET:
       default:
         return StructOrError.fromError(
@@ -676,16 +1221,74 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
+  @Nullable // Return null if we ignore the given policy.
+  private static StructOrError<RetryPolicy> parseRetryPolicy(
+      io.envoyproxy.envoy.config.route.v3.RetryPolicy retryPolicyProto) {
+    int maxAttempts = 2;
+    if (retryPolicyProto.hasNumRetries()) {
+      maxAttempts = retryPolicyProto.getNumRetries().getValue() + 1;
+    }
+    Duration initialBackoff = Durations.fromMillis(25);
+    Duration maxBackoff = Durations.fromMillis(250);
+    if (retryPolicyProto.hasRetryBackOff()) {
+      RetryBackOff retryBackOff = retryPolicyProto.getRetryBackOff();
+      if (!retryBackOff.hasBaseInterval()) {
+        return StructOrError.fromError("No base_interval specified in retry_backoff");
+      }
+      Duration originalInitialBackoff = initialBackoff = retryBackOff.getBaseInterval();
+      if (Durations.compare(initialBackoff, Durations.ZERO) <= 0) {
+        return StructOrError.fromError("base_interval in retry_backoff must be positive");
+      }
+      if (Durations.compare(initialBackoff, Durations.fromMillis(1)) < 0) {
+        initialBackoff = Durations.fromMillis(1);
+      }
+      if (retryBackOff.hasMaxInterval()) {
+        maxBackoff = retryPolicyProto.getRetryBackOff().getMaxInterval();
+        if (Durations.compare(maxBackoff, originalInitialBackoff) < 0) {
+          return StructOrError.fromError(
+              "max_interval in retry_backoff cannot be less than base_interval");
+        }
+        if (Durations.compare(maxBackoff, Durations.fromMillis(1)) < 0) {
+          maxBackoff = Durations.fromMillis(1);
+        }
+      } else {
+        maxBackoff = Durations.fromNanos(Durations.toNanos(initialBackoff) * 10);
+      }
+    }
+    Iterable<String> retryOns =
+        Splitter.on(',').omitEmptyStrings().trimResults().split(retryPolicyProto.getRetryOn());
+    ImmutableList.Builder<Code> retryableStatusCodesBuilder = ImmutableList.builder();
+    for (String retryOn : retryOns) {
+      Code code;
+      try {
+        code = Code.valueOf(retryOn.toUpperCase(Locale.US).replace('-', '_'));
+      } catch (IllegalArgumentException e) {
+        // unsupported value, such as "5xx"
+        continue;
+      }
+      if (!SUPPORTED_RETRYABLE_CODES.contains(code)) {
+        // unsupported value
+        continue;
+      }
+      retryableStatusCodesBuilder.add(code);
+    }
+    List<Code> retryableStatusCodes = retryableStatusCodesBuilder.build();
+    return StructOrError.fromStruct(
+        RetryPolicy.create(
+            maxAttempts, retryableStatusCodes, initialBackoff, maxBackoff,
+            /* perAttemptRecvTimeout= */ null));
+  }
+
   @VisibleForTesting
   static StructOrError<ClusterWeight> parseClusterWeight(
       io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto,
-      boolean parseFilter) {
-    if (!parseFilter) {
+      FilterRegistry filterRegistry, boolean parseHttpFilter) {
+    if (!parseHttpFilter) {
       return StructOrError.fromStruct(ClusterWeight.create(
           proto.getName(), proto.getWeight().getValue(), new HashMap<String, FilterConfig>()));
     }
     StructOrError<Map<String, FilterConfig>> overrideConfigs =
-        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap());
+        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap(), filterRegistry);
     if (overrideConfigs.errorDetail != null) {
       return StructOrError.fromError(
           "ClusterWeight [" + proto.getName() + "] contains invalid HttpFilter config: "
@@ -699,6 +1302,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   protected void handleRdsResponse(String versionInfo, List<Any> resources, String nonce) {
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
+    Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
 
     for (int i = 0; i < resources.size(); i++) {
@@ -720,11 +1324,13 @@ final class ClientXdsClient extends AbstractXdsClient {
       RdsUpdate rdsUpdate;
       boolean isResourceV3 = resource.getTypeUrl().equals(ResourceType.RDS.typeUrl());
       try {
-        rdsUpdate = processRouteConfiguration(routeConfig, enableFaultInjection && isResourceV3);
+        rdsUpdate = processRouteConfiguration(
+            routeConfig, filterRegistry, enableFaultInjection && isResourceV3);
       } catch (ResourceInvalidException e) {
         errors.add(
             "RDS response RouteConfiguration '" + routeConfigName + "' validation error: " + e
                 .getMessage());
+        invalidResources.add(routeConfigName);
         continue;
       }
 
@@ -733,20 +1339,19 @@ final class ClientXdsClient extends AbstractXdsClient {
     getLogger().log(XdsLogLevel.INFO,
         "Received RDS Response version {0} nonce {1}. Parsed resources: {2}",
         versionInfo, nonce, unpackedResources);
-
-    if (!errors.isEmpty()) {
-      handleResourcesRejected(ResourceType.RDS, unpackedResources, versionInfo, nonce, errors);
-    } else {
-      handleResourcesAccepted(ResourceType.RDS, parsedResources, versionInfo, nonce);
-    }
+    handleResourceUpdate(
+        ResourceType.RDS, parsedResources, invalidResources, Collections.<String>emptySet(),
+        versionInfo, nonce, errors);
   }
 
   private static RdsUpdate processRouteConfiguration(
-      RouteConfiguration routeConfig, boolean parseFilter) throws ResourceInvalidException {
+      RouteConfiguration routeConfig, FilterRegistry filterRegistry, boolean parseHttpFilter)
+      throws ResourceInvalidException {
     List<VirtualHost> virtualHosts = new ArrayList<>(routeConfig.getVirtualHostsCount());
     for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
         : routeConfig.getVirtualHostsList()) {
-      StructOrError<VirtualHost> virtualHost = parseVirtualHost(virtualHostProto, parseFilter);
+      StructOrError<VirtualHost> virtualHost =
+          parseVirtualHost(virtualHostProto, filterRegistry, parseHttpFilter);
       if (virtualHost.getErrorDetail() != null) {
         throw new ResourceInvalidException(
             "RouteConfiguration contains invalid virtual host: " + virtualHost.getErrorDetail());
@@ -760,6 +1365,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   protected void handleCdsResponse(String versionInfo, List<Any> resources, String nonce) {
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
+    Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
     Set<String> retainedEdsResources = new HashSet<>();
 
@@ -788,10 +1394,15 @@ final class ClientXdsClient extends AbstractXdsClient {
       // Process Cluster into CdsUpdate.
       CdsUpdate cdsUpdate;
       try {
-        cdsUpdate = processCluster(cluster, retainedEdsResources);
+        Set<String> certProviderInstances = null;
+        if (getBootstrapInfo() != null && getBootstrapInfo().getCertProviders() != null) {
+          certProviderInstances = getBootstrapInfo().getCertProviders().keySet();
+        }
+        cdsUpdate = parseCluster(cluster, retainedEdsResources, certProviderInstances);
       } catch (ResourceInvalidException e) {
         errors.add(
             "CDS response Cluster '" + clusterName + "' validation error: " + e.getMessage());
+        invalidResources.add(clusterName);
         continue;
       }
       parsedResources.put(clusterName, new ParsedResource(cdsUpdate, resource));
@@ -799,55 +1410,56 @@ final class ClientXdsClient extends AbstractXdsClient {
     getLogger().log(XdsLogLevel.INFO,
         "Received CDS Response version {0} nonce {1}. Parsed resources: {2}",
         versionInfo, nonce, unpackedResources);
-
-    if (!errors.isEmpty()) {
-      handleResourcesRejected(ResourceType.CDS, unpackedResources, versionInfo, nonce, errors);
-      return;
-    }
-
-    handleResourcesAccepted(ResourceType.CDS, parsedResources, versionInfo, nonce);
-    // CDS responses represents the state of the world, EDS resources not referenced in CDS
-    // resources should be deleted.
-    for (String resource : edsResourceSubscribers.keySet()) {
-      ResourceSubscriber subscriber = edsResourceSubscribers.get(resource);
-      if (!retainedEdsResources.contains(resource)) {
-        subscriber.onAbsent();
-      }
-    }
+    handleResourceUpdate(
+        ResourceType.CDS, parsedResources, invalidResources, retainedEdsResources, versionInfo,
+        nonce, errors);
   }
 
-  private static CdsUpdate processCluster(Cluster cluster, Set<String> retainedEdsResources)
+  @VisibleForTesting
+  static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources,
+      Set<String> certProviderInstances)
       throws ResourceInvalidException {
     StructOrError<CdsUpdate.Builder> structOrError;
     switch (cluster.getClusterDiscoveryTypeCase()) {
       case TYPE:
-        structOrError = parseNonAggregateCluster(cluster, retainedEdsResources);
+        structOrError = parseNonAggregateCluster(cluster, retainedEdsResources,
+            certProviderInstances);
         break;
       case CLUSTER_TYPE:
         structOrError = parseAggregateCluster(cluster);
         break;
       case CLUSTERDISCOVERYTYPE_NOT_SET:
       default:
-        throw new ResourceInvalidException("Unspecified cluster discovery type");
+        throw new ResourceInvalidException(
+            "Cluster " + cluster.getName() + ": unspecified cluster discovery type");
     }
     if (structOrError.getErrorDetail() != null) {
       throw new ResourceInvalidException(structOrError.getErrorDetail());
     }
-
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
 
     if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
       RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
-      if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH) {
+      long minRingSize =
+          lbConfig.hasMinimumRingSize()
+              ? lbConfig.getMinimumRingSize().getValue()
+              : DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE;
+      long maxRingSize =
+          lbConfig.hasMaximumRingSize()
+              ? lbConfig.getMaximumRingSize().getValue()
+              : DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE;
+      if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH
+          || minRingSize > maxRingSize
+          || maxRingSize > MAX_RING_HASH_LB_POLICY_RING_SIZE) {
         throw new ResourceInvalidException(
-            "Unsupported ring hash function: " + lbConfig.getHashFunction());
+            "Cluster " + cluster.getName() + ": invalid ring_hash_lb_config: " + lbConfig);
       }
-      updateBuilder.lbPolicy(CdsUpdate.LbPolicy.RING_HASH,
-          lbConfig.getMinimumRingSize().getValue(), lbConfig.getMaximumRingSize().getValue());
+      updateBuilder.ringHashLbPolicy(minRingSize, maxRingSize);
     } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
-      updateBuilder.lbPolicy(CdsUpdate.LbPolicy.ROUND_ROBIN);
+      updateBuilder.roundRobinLbPolicy();
     } else {
-      throw new ResourceInvalidException("Unsupported lb policy: " + cluster.getLbPolicy());
+      throw new ResourceInvalidException(
+          "Cluster " + cluster.getName() + ": unsupported lb policy: " + cluster.getLbPolicy());
     }
 
     return updateBuilder.build();
@@ -874,7 +1486,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   private static StructOrError<CdsUpdate.Builder> parseNonAggregateCluster(
-      Cluster cluster, Set<String> edsResources) {
+      Cluster cluster, Set<String> edsResources, Set<String> certProviderInstances) {
     String clusterName = cluster.getName();
     String lrsServerName = null;
     Long maxConcurrentRequests = null;
@@ -897,14 +1509,23 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
     }
-    if (cluster.hasTransportSocket()
-        && TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
+    if (cluster.getTransportSocketMatchesCount() > 0) {
+      return StructOrError.fromError("Cluster " + clusterName
+          + ": transport-socket-matches not supported.");
+    }
+    if (cluster.hasTransportSocket()) {
+      if (!TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
+        return StructOrError.fromError("transport-socket with name "
+            + cluster.getTransportSocket().getName() + " not supported.");
+      }
       try {
         upstreamTlsContext = UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+                validateUpstreamTlsContext(
             unpackCompatibleType(cluster.getTransportSocket().getTypedConfig(),
                 io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class,
-                TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2));
-      } catch (InvalidProtocolBufferException e) {
+                TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2),
+                certProviderInstances));
+      } catch (InvalidProtocolBufferException | ResourceInvalidException e) {
         return StructOrError.fromError(
             "Cluster " + clusterName + ": malformed UpstreamTlsContext: " + e);
       }
@@ -929,8 +1550,40 @@ final class ClientXdsClient extends AbstractXdsClient {
       return StructOrError.fromStruct(CdsUpdate.forEds(
           clusterName, edsServiceName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
     } else if (type.equals(DiscoveryType.LOGICAL_DNS)) {
+      if (!cluster.hasLoadAssignment()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": LOGICAL_DNS clusters must have a single host");
+      }
+      ClusterLoadAssignment assignment = cluster.getLoadAssignment();
+      if (assignment.getEndpointsCount() != 1
+          || assignment.getEndpoints(0).getLbEndpointsCount() != 1) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": LOGICAL_DNS clusters must have a single "
+                + "locality_lb_endpoint and a single lb_endpoint");
+      }
+      io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint lbEndpoint =
+          assignment.getEndpoints(0).getLbEndpoints(0);
+      if (!lbEndpoint.hasEndpoint() || !lbEndpoint.getEndpoint().hasAddress()
+          || !lbEndpoint.getEndpoint().getAddress().hasSocketAddress()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": LOGICAL_DNS clusters must have an endpoint with address and socket_address");
+      }
+      SocketAddress socketAddress = lbEndpoint.getEndpoint().getAddress().getSocketAddress();
+      if (!socketAddress.getResolverName().isEmpty()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": LOGICAL DNS clusters must NOT have a custom resolver name set");
+      }
+      if (socketAddress.getPortSpecifierCase() != PortSpecifierCase.PORT_VALUE) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": LOGICAL DNS clusters socket_address must have port_value");
+      }
+      String dnsHostName =
+          String.format("%s:%d", socketAddress.getAddress(), socketAddress.getPortValue());
       return StructOrError.fromStruct(CdsUpdate.forLogicalDns(
-          clusterName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
+          clusterName, dnsHostName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
     }
     return StructOrError.fromError(
         "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);
@@ -940,6 +1593,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   protected void handleEdsResponse(String versionInfo, List<Any> resources, String nonce) {
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
+    Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
 
     for (int i = 0; i < resources.size(); i++) {
@@ -974,16 +1628,17 @@ final class ClientXdsClient extends AbstractXdsClient {
       } catch (ResourceInvalidException e) {
         errors.add("EDS response ClusterLoadAssignment '" + clusterName
             + "' validation error: " + e.getMessage());
+        invalidResources.add(clusterName);
         continue;
       }
       parsedResources.put(clusterName, new ParsedResource(edsUpdate, resource));
     }
-
-    if (!errors.isEmpty()) {
-      handleResourcesRejected(ResourceType.EDS, unpackedResources, versionInfo, nonce, errors);
-    } else {
-      handleResourcesAccepted(ResourceType.EDS, parsedResources, versionInfo, nonce);
-    }
+    getLogger().log(
+        XdsLogLevel.INFO, "Received EDS Response version {0} nonce {1}. Parsed resources: {2}",
+        versionInfo, nonce, unpackedResources);
+    handleResourceUpdate(
+        ResourceType.EDS, parsedResources, invalidResources, Collections.<String>emptySet(),
+        versionInfo, nonce, errors);
   }
 
   private static EdsUpdate processClusterLoadAssignment(ClusterLoadAssignment assignment)
@@ -1373,43 +2028,67 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private void handleResourcesAccepted(
-      ResourceType type, Map<String, ParsedResource> parsedResources, String version,
-      String nonce) {
-    ackResponse(type, version, nonce);
-
+  private void handleResourceUpdate(
+      ResourceType type, Map<String, ParsedResource> parsedResources, Set<String> invalidResources,
+      Set<String> retainedResources, String version, String nonce, List<String> errors) {
+    String errorDetail = null;
+    if (errors.isEmpty()) {
+      checkArgument(invalidResources.isEmpty(), "found invalid resources but missing errors");
+      ackResponse(type, version, nonce);
+    } else {
+      errorDetail = Joiner.on('\n').join(errors);
+      getLogger().log(XdsLogLevel.WARNING,
+          "Failed processing {0} Response version {1} nonce {2}. Errors:\n{3}",
+          type, version, nonce, errorDetail);
+      nackResponse(type, nonce, errorDetail);
+    }
     long updateTime = timeProvider.currentTimeNanos();
     for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
       String resourceName = entry.getKey();
       ResourceSubscriber subscriber = entry.getValue();
+      // Attach error details to the subscribed resources that included in the ADS update.
+      if (invalidResources.contains(resourceName)) {
+        subscriber.onRejected(version, updateTime, errorDetail);
+      }
       // Notify the watchers.
       if (parsedResources.containsKey(resourceName)) {
         subscriber.onData(parsedResources.get(resourceName), version, updateTime);
       } else if (type == ResourceType.LDS || type == ResourceType.CDS) {
+        if (subscriber.data != null && invalidResources.contains(resourceName)) {
+          // Update is rejected but keep using the cached data.
+          if (type == ResourceType.LDS) {
+            LdsUpdate ldsUpdate = (LdsUpdate) subscriber.data;
+            io.grpc.xds.HttpConnectionManager hcm = ldsUpdate.httpConnectionManager();
+            if (hcm != null) {
+              String rdsName = hcm.rdsName();
+              if (rdsName != null) {
+                retainedResources.add(rdsName);
+              }
+            }
+          } else {
+            CdsUpdate cdsUpdate = (CdsUpdate) subscriber.data;
+            String edsName = cdsUpdate.edsServiceName();
+            if (edsName == null) {
+              edsName = cdsUpdate.clusterName();
+            }
+            retainedResources.add(edsName);
+          }
+          continue;
+        }
         // For State of the World services, notify watchers when their watched resource is missing
         // from the ADS update.
         subscriber.onAbsent();
       }
     }
-  }
-
-  private void handleResourcesRejected(
-      ResourceType type, Set<String> unpackedResourceNames, String version,
-      String nonce, List<String> errors) {
-    String errorDetail = Joiner.on('\n').join(errors);
-    getLogger().log(XdsLogLevel.WARNING,
-        "Failed processing {0} Response version {1} nonce {2}. Errors:\n{3}",
-        type, version, nonce, errorDetail);
-    nackResponse(type, nonce, errorDetail);
-
-    long updateTime = timeProvider.currentTimeNanos();
-    for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
-      String resourceName = entry.getKey();
-      ResourceSubscriber subscriber = entry.getValue();
-
-      // Attach error details to the subscribed resources that included in the ADS update.
-      if (unpackedResourceNames.contains(resourceName)) {
-        subscriber.onRejected(version, updateTime, errorDetail);
+    // LDS/CDS responses represents the state of the world, RDS/EDS resources not referenced in
+    // LDS/CDS resources should be deleted.
+    if (type == ResourceType.LDS || type == ResourceType.CDS) {
+      Map<String, ResourceSubscriber> dependentSubscribers =
+          type == ResourceType.LDS ? rdsResourceSubscribers : edsResourceSubscribers;
+      for (String resource : dependentSubscribers.keySet()) {
+        if (!retainedResources.contains(resource)) {
+          dependentSubscribers.get(resource).onAbsent();
+        }
       }
     }
   }
@@ -1576,14 +2255,15 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static final class ResourceInvalidException extends Exception {
+  @VisibleForTesting
+  static final class ResourceInvalidException extends Exception {
     private static final long serialVersionUID = 0L;
 
-    public ResourceInvalidException(String message) {
+    private ResourceInvalidException(String message) {
       super(message, null, false, false);
     }
 
-    public ResourceInvalidException(String message, Throwable cause) {
+    private ResourceInvalidException(String message, Throwable cause) {
       super(cause != null ? message + ": " + cause.getMessage() : message, cause, false, false);
     }
   }

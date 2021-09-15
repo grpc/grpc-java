@@ -60,6 +60,10 @@ BoringSSL. It includes pre-built libraries for 64 bit Windows, OS X, and 64 bit
 Linux. For 32 bit Windows, Conscrypt is an option. For all other platforms, Java
 9+ is required.
 
+For users of xDS management protocol, the grpc-netty-shaded transport is
+particularly appropriate since it is already used internally for the xDS
+protocol and is a runtime dependency of grpc-xds.
+
 For users of grpc-netty we recommend [netty-tcnative with
 BoringSSL](#tls-with-netty-tcnative-on-boringssl), although using the built-in
 JDK support in Java 9+, [Conscrypt](#tls-with-conscrypt), and [netty-tcnative

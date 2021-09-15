@@ -24,6 +24,7 @@ import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
@@ -71,6 +72,7 @@ public final class CronetChannelBuilder
   /**
    * Always fails.  Call {@link #forAddress(String, int, CronetEngine)} instead.
    */
+  @DoNotCall("Unsupported. Use forAddress(String, int, CronetEngine) instead")
   public static CronetChannelBuilder forTarget(String target) {
     throw new UnsupportedOperationException("call forAddress() instead");
   }
@@ -78,6 +80,7 @@ public final class CronetChannelBuilder
   /**
    * Always fails.  Call {@link #forAddress(String, int, CronetEngine)} instead.
    */
+  @DoNotCall("Unsupported. Use forAddress(String, int, CronetEngine) instead")
   public static CronetChannelBuilder forAddress(String name, int port) {
     throw new UnsupportedOperationException("call forAddress(String, int, CronetEngine) instead");
   }

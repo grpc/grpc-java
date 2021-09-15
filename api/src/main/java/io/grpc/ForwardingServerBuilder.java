@@ -17,6 +17,7 @@
 package io.grpc;
 
 import com.google.common.base.MoreObjects;
+import com.google.errorprone.annotations.DoNotCall;
 import java.io.File;
 import java.io.InputStream;
 import java.util.concurrent.Executor;
@@ -38,6 +39,7 @@ public abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extend
   /**
    * This method serves to force sub classes to "hide" this static factory.
    */
+  @DoNotCall("Unsupported")
   public static ServerBuilder<?> forPort(int port) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
   }
@@ -56,6 +58,12 @@ public abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extend
   @Override
   public T executor(@Nullable Executor executor) {
     delegate().executor(executor);
+    return thisT();
+  }
+
+  @Override
+  public T callExecutor(ServerCallExecutorSupplier executorSupplier) {
+    delegate().callExecutor(executorSupplier);
     return thisT();
   }
 
