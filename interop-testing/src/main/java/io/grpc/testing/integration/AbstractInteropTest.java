@@ -389,7 +389,8 @@ public abstract class AbstractInteropTest {
                 tagger, tagContextBinarySerializer, clientStatsRecorder,
                 GrpcUtil.STOPWATCH_SUPPLIER,
                 true, true, true,
-                /* recordRealTimeMetrics= */ false);
+                /* recordRealTimeMetrics= */ false,
+                /* recordRetryMetrics= */ true);
   }
 
   protected final ServerStreamTracer.Factory createCustomCensusTracerFactory() {

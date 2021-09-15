@@ -470,6 +470,15 @@ public class ClientCallImplTest {
   }
 
   @Test
+  public void prepareHeaders_ignoreContentLength() {
+    Metadata m = new Metadata();
+    m.put(GrpcUtil.CONTENT_LENGTH_KEY, "123");
+    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, false);
+
+    assertNull(m.get(GrpcUtil.CONTENT_LENGTH_KEY));
+  }
+
+  @Test
   public void prepareHeaders_acceptedMessageEncodingsAdded() {
     Metadata m = new Metadata();
     DecompressorRegistry customRegistry = DecompressorRegistry.emptyInstance()

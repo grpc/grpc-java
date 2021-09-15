@@ -225,7 +225,7 @@ public class CensusModulesTest {
     censusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, fakeClock.getStopwatchSupplier(),
-            true, true, true, false /* real-time */);
+            true, true, true, false /* real-time */, true);
     censusTracing = new CensusTracingModule(tracer, mockTracingPropagationHandler);
   }
 
@@ -400,7 +400,7 @@ public class CensusModulesTest {
     CensusStatsModule localCensusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, fakeClock.getStopwatchSupplier(),
-            true, recordStarts, recordFinishes, recordRealTime);
+            true, recordStarts, recordFinishes, recordRealTime, true);
     CensusStatsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CensusStatsModule.CallAttemptsTracerFactory(
             localCensusStats, tagger.empty(), method.getFullMethodName());
@@ -514,7 +514,7 @@ public class CensusModulesTest {
     CensusStatsModule localCensusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, fakeClock.getStopwatchSupplier(),
-            true, true, true, true);
+            true, true, true, true, true);
     CensusStatsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CensusStatsModule.CallAttemptsTracerFactory(
             localCensusStats, tagger.empty(), method.getFullMethodName());
@@ -908,7 +908,7 @@ public class CensusModulesTest {
             tagCtxSerializer,
             statsRecorder,
             fakeClock.getStopwatchSupplier(),
-            propagate, recordStats, recordStats, recordStats);
+            propagate, recordStats, recordStats, recordStats, recordStats);
     Metadata headers = new Metadata();
     CensusStatsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CensusStatsModule.CallAttemptsTracerFactory(
@@ -1168,7 +1168,7 @@ public class CensusModulesTest {
     CensusStatsModule localCensusStats =
         new CensusStatsModule(
             tagger, tagCtxSerializer, statsRecorder, fakeClock.getStopwatchSupplier(),
-            true, recordStarts, recordFinishes, recordRealTime);
+            true, recordStarts, recordFinishes, recordRealTime, true);
     ServerStreamTracer.Factory tracerFactory = localCensusStats.getServerTracerFactory();
     ServerStreamTracer tracer =
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
@@ -1429,7 +1429,7 @@ public class CensusModulesTest {
 
     CensusStatsModule localCensusStats = new CensusStatsModule(
         tagger, tagCtxSerializer, localStats.getStatsRecorder(), fakeClock.getStopwatchSupplier(),
-        false, false, true, false /* real-time */);
+        false, false, true, false /* real-time */, true);
 
     CensusStatsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CensusStatsModule.CallAttemptsTracerFactory(

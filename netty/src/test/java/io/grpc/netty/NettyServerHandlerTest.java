@@ -351,6 +351,56 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
+  public void gracefulCloseShouldGracefullyCloseChannel() throws Exception {
+    manualSetUp();
+    handler()
+        .write(ctx(), new GracefulServerCloseCommand("test", 1, TimeUnit.MINUTES), newPromise());
+
+    verifyWrite().writeGoAway(eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()),
+        isA(ByteBuf.class), any(ChannelPromise.class));
+    verifyWrite().writePing(
+        eq(ctx()),
+        eq(false),
+        eq(NettyServerHandler.GRACEFUL_SHUTDOWN_PING),
+        isA(ChannelPromise.class));
+    channelRead(pingFrame(/*ack=*/ true , NettyServerHandler.GRACEFUL_SHUTDOWN_PING));
+
+    verifyWrite().writeGoAway(eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()),
+        isA(ByteBuf.class), any(ChannelPromise.class));
+
+    // Verify that the channel was closed.
+    assertFalse(channel().isOpen());
+  }
+
+  @Test
+  public void secondGracefulCloseIsSafe() throws Exception {
+    manualSetUp();
+    handler().write(ctx(), new GracefulServerCloseCommand("test"), newPromise());
+
+    verifyWrite().writeGoAway(eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()),
+        isA(ByteBuf.class), any(ChannelPromise.class));
+    verifyWrite().writePing(
+        eq(ctx()),
+        eq(false),
+        eq(NettyServerHandler.GRACEFUL_SHUTDOWN_PING),
+        isA(ChannelPromise.class));
+
+    handler().write(ctx(), new GracefulServerCloseCommand("test2"), newPromise());
+
+    channel().runPendingTasks();
+    // No additional GOAWAYs.
+    verifyWrite().writeGoAway(any(ChannelHandlerContext.class), any(Integer.class), any(Long.class),
+        any(ByteBuf.class), any(ChannelPromise.class));
+    channel().checkException();
+    assertTrue(channel().isOpen());
+
+    channelRead(pingFrame(/*ack=*/ true , NettyServerHandler.GRACEFUL_SHUTDOWN_PING));
+    verifyWrite().writeGoAway(eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()),
+        isA(ByteBuf.class), any(ChannelPromise.class));
+    assertFalse(channel().isOpen());
+  }
+
+  @Test
   public void exceptionCaughtShouldCloseConnection() throws Exception {
     manualSetUp();
     handler().exceptionCaught(ctx(), new RuntimeException("fake exception"));
@@ -535,6 +585,96 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     verify(transportListener).streamCreated(streamCaptor.capture(), methodCaptor.capture(),
         any(Metadata.class));
     stream = streamCaptor.getValue();
+  }
+
+  @Test
+  public void headersWithConnectionHeaderShouldFail() throws Exception {
+    manualSetUp();
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+        .set(AsciiString.of("connection"), CONTENT_TYPE_GRPC)
+        .path(new AsciiString("/foo/bar"));
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
+    channelRead(headersFrame);
+
+    verifyWrite()
+        .writeRstStream(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(Http2Error.PROTOCOL_ERROR.code()),
+            any(ChannelPromise.class));
+  }
+
+  @Test
+  public void headersWithMultipleHostsShouldFail() throws Exception {
+    manualSetUp();
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+        .add(AsciiString.of("host"), AsciiString.of("example.com"))
+        .add(AsciiString.of("host"), AsciiString.of("bad.com"))
+        .path(new AsciiString("/foo/bar"));
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
+    channelRead(headersFrame);
+    Http2Headers responseHeaders = new DefaultHttp2Headers()
+        .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
+        .set(InternalStatus.MESSAGE_KEY.name(), "Multiple host headers")
+        .status("" + 400)
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
+
+    verifyWrite()
+        .writeHeaders(
+            eq(ctx()),
+            eq(STREAM_ID),
+            eq(responseHeaders),
+            eq(0),
+            eq(false),
+            any(ChannelPromise.class));
+  }
+
+  @Test
+  public void headersWithAuthorityAndHostUsesAuthority() throws Exception {
+    manualSetUp();
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .authority("example.com")
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+        .add(AsciiString.of("host"), AsciiString.of("bad.com"))
+        .path(new AsciiString("/foo/bar"));
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
+    channelRead(headersFrame);
+    Metadata.Key<String> hostKey = Metadata.Key.of("host", Metadata.ASCII_STRING_MARSHALLER);
+
+    ArgumentCaptor<NettyServerStream> streamCaptor =
+        ArgumentCaptor.forClass(NettyServerStream.class);
+    ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
+    verify(transportListener).streamCreated(streamCaptor.capture(), eq("foo/bar"),
+        metadataCaptor.capture());
+    Truth.assertThat(streamCaptor.getValue().getAuthority()).isEqualTo("example.com");
+    Truth.assertThat(metadataCaptor.getValue().get(hostKey)).isNull();
+  }
+
+  @Test
+  public void headersWithOnlyHostBecomesAuthority() throws Exception {
+    manualSetUp();
+    // No authority header
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, CONTENT_TYPE_GRPC)
+        .add(AsciiString.of("host"), AsciiString.of("example.com"))
+        .path(new AsciiString("/foo/bar"));
+    ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
+    channelRead(headersFrame);
+    Metadata.Key<String> hostKey = Metadata.Key.of("host", Metadata.ASCII_STRING_MARSHALLER);
+
+    ArgumentCaptor<NettyServerStream> streamCaptor =
+        ArgumentCaptor.forClass(NettyServerStream.class);
+    ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
+    verify(transportListener).streamCreated(streamCaptor.capture(), eq("foo/bar"),
+        metadataCaptor.capture());
+    Truth.assertThat(streamCaptor.getValue().getAuthority()).isEqualTo("example.com");
+    Truth.assertThat(metadataCaptor.getValue().get(hostKey)).isNull();
   }
 
   @Test

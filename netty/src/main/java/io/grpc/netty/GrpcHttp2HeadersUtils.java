@@ -146,6 +146,11 @@ class GrpcHttp2HeadersUtils {
     }
 
     @Override
+    public boolean contains(CharSequence name) {
+      return get(name) != null;
+    }
+
+    @Override
     public CharSequence status() {
       return get(Http2Headers.PseudoHeaderName.STATUS.value());
     }
@@ -360,12 +365,28 @@ class GrpcHttp2HeadersUtils {
       AsciiString value = requireAsciiString(csValue);
 
       if (equals(PATH_HEADER, name)) {
+        if (path != null) {
+          PlatformDependent.throwException(
+              connectionError(PROTOCOL_ERROR, "Duplicate :path header"));
+        }
         path = value;
       } else if (equals(AUTHORITY_HEADER, name)) {
+        if (authority != null) {
+          PlatformDependent.throwException(
+              connectionError(PROTOCOL_ERROR, "Duplicate :authority header"));
+        }
         authority = value;
       } else if (equals(METHOD_HEADER, name)) {
+        if (method != null) {
+          PlatformDependent.throwException(
+              connectionError(PROTOCOL_ERROR, "Duplicate :method header"));
+        }
         method = value;
       } else if (equals(SCHEME_HEADER, name)) {
+        if (scheme != null) {
+          PlatformDependent.throwException(
+              connectionError(PROTOCOL_ERROR, "Duplicate :scheme header"));
+        }
         scheme = value;
       } else {
         PlatformDependent.throwException(

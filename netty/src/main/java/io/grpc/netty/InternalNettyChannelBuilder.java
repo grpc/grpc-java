@@ -88,6 +88,10 @@ public final class InternalNettyChannelBuilder {
     builder.setStatsRecordRealTimeMetrics(value);
   }
 
+  public static void setStatsRecordRetryMetrics(NettyChannelBuilder builder, boolean value) {
+    builder.setStatsRecordRetryMetrics(value);
+  }
+
   /**
    * Sets {@link io.grpc.Channel} and {@link io.netty.channel.EventLoopGroup} to Nio. A major
    * benefit over using setters is gRPC will manage the life cycle of {@link
