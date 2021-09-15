@@ -1035,8 +1035,8 @@ public class XdsServerWrapperTest {
     VirtualHost virtualHost  = VirtualHost.create(
         "v1", Collections.singletonList("foo.google.com"), Arrays.asList(route),
         ImmutableMap.of("filter-config-name-0", f0Override));
-    xdsClient.deliverRdsUpdate("r0", Collections.singletonList(virtualHost));
     xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
+    xdsClient.deliverRdsUpdate("r0", Collections.singletonList(virtualHost));
     start.get(5000, TimeUnit.MILLISECONDS);
     verify(mockServer).start();
     assertThat(selectorManager.getSelectorToUpdateSelector().getRoutingConfigs().size())
@@ -1053,12 +1053,10 @@ public class XdsServerWrapperTest {
     assertThat(interceptorTrace).isEqualTo(Arrays.asList(1, 0));
     verify(mockNext).startCall(eq(serverCall), any(Metadata.class));
 
-    xdsClient.rdsCount = new CountDownLatch(1);
     virtualHost  = VirtualHost.create(
         "v1", Collections.singletonList("foo.google.com"), Arrays.asList(route),
          ImmutableMap.<String, FilterConfig>of());
     xdsClient.deliverRdsUpdate("r0", Collections.singletonList(virtualHost));
-    xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     realInterceptor = selectorManager.getSelectorToUpdateSelector().getRoutingConfigs()
         .get(filterChain).get().interceptors().get(route);
     assertThat(realInterceptor).isNotNull();
