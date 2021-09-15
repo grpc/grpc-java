@@ -93,7 +93,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   private static final String REMOTE_IP = "10.4.2.3"; // source
   private static final int PORT = 7000;
   private final ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-          new ArrayList<NamedFilterConfig>(), new AtomicReference<ImmutableList<VirtualHost>>(),
+      new AtomicReference<ImmutableList<VirtualHost>>(),
       new AtomicReference<ImmutableMap<Route, ServerInterceptor>>());
 
   @Test
@@ -241,8 +241,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
                     "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
                     tlsContextForDefaultFilterChain, tlsContextManager);
 
-    ServerRoutingConfig routingConfig = ServerRoutingConfig.create(
-            new ArrayList<NamedFilterConfig>(), new AtomicReference<>(
+    ServerRoutingConfig routingConfig = ServerRoutingConfig.create(new AtomicReference<>(
                 ImmutableList.of(createVirtualHost("virtual"))),
         new AtomicReference<ImmutableMap<Route, ServerInterceptor>>());
     FilterChainSelector selector = new FilterChainSelector(
@@ -1149,8 +1148,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   }
 
   private static ServerRoutingConfig randomConfig(String domain) {
-    return ServerRoutingConfig.create(
-        new ArrayList<NamedFilterConfig>(), new AtomicReference<>(
+    return ServerRoutingConfig.create(new AtomicReference<>(
             ImmutableList.of(createVirtualHost(domain))),
         new AtomicReference<>(ImmutableMap.<Route, ServerInterceptor>of())
     );

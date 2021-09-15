@@ -485,8 +485,8 @@ final class XdsServerWrapper extends Server {
         AtomicReference<ImmutableMap<Route, ServerInterceptor>> interceptorRef =
             new AtomicReference<>(generatePerRouteInterceptors(
                 hcm.httpFilterConfigs(), hcm.virtualHosts()));
-        return ServerRoutingConfig.create(hcm.httpFilterConfigs(),
-            new AtomicReference<>(hcm.virtualHosts()), interceptorRef);
+        return ServerRoutingConfig.create(new AtomicReference<>(hcm.virtualHosts()),
+            interceptorRef);
       } else {
         RouteDiscoveryState rds = routeDiscoveryStates.get(hcm.rdsName());
         checkNotNull(rds, "rds");
@@ -494,8 +494,7 @@ final class XdsServerWrapper extends Server {
             new AtomicReference<>(generatePerRouteInterceptors(
                 hcm.httpFilterConfigs(), rds.savedVirtualHosts.get()));
         rdsPrebuiltInterceptorRef.put(filterChain, interceptorRef);
-        return ServerRoutingConfig.create(hcm.httpFilterConfigs(), rds.savedVirtualHosts,
-            interceptorRef);
+        return ServerRoutingConfig.create(rds.savedVirtualHosts, interceptorRef);
       }
     }
 
@@ -771,24 +770,20 @@ final class XdsServerWrapper extends Server {
    */
   @AutoValue
   abstract static class ServerRoutingConfig {
-    // Top level http filter configs.
-    abstract ImmutableList<NamedFilterConfig> httpFilterConfigs();
-
     abstract AtomicReference<ImmutableList<VirtualHost>> virtualHosts();
 
+    // Prebuilt per route server interceptors from http filter configs.
     abstract AtomicReference<ImmutableMap<Route, ServerInterceptor>> interceptors();
 
     /**
      * Server routing configuration.
      * */
-    public static ServerRoutingConfig create(List<NamedFilterConfig> httpFilterConfigs,
+    public static ServerRoutingConfig create(
         AtomicReference<ImmutableList<VirtualHost>> virtualHosts,
         AtomicReference<ImmutableMap<Route, ServerInterceptor>> interceptors) {
-      checkNotNull(httpFilterConfigs, "httpFilterConfigs");
       checkNotNull(virtualHosts, "virtualHosts");
       checkNotNull(interceptors, "interceptors");
-      return new AutoValue_XdsServerWrapper_ServerRoutingConfig(
-              ImmutableList.copyOf(httpFilterConfigs), virtualHosts, interceptors);
+      return new AutoValue_XdsServerWrapper_ServerRoutingConfig(virtualHosts, interceptors);
     }
   }
 }
