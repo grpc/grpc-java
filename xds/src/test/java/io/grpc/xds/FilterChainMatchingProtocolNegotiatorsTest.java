@@ -170,7 +170,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     channel.runPendingTasks();
     channelHandlerCtx = pipeline.context(next);
     assertThat(channelHandlerCtx).isNotNull();
-    assertThat(channel.readOutbound()).isNull();
+    assertThat((Object) channel.readOutbound()).isNull();
 
     selectorManager.updateSelector(new FilterChainSelector(
             new HashMap<FilterChain, ServerRoutingConfig>(), null, noopConfig));
