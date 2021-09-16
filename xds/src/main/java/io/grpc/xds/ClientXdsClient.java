@@ -136,6 +136,10 @@ final class ClientXdsClient extends AbstractXdsClient {
   static boolean enableRetry =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"));
+  @VisibleForTesting
+  static boolean enableRbac =
+      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"))
+          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"));
 
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
@@ -218,7 +222,7 @@ final class ClientXdsClient extends AbstractXdsClient {
               listener, retainedRdsResources, enableFaultInjection && isResourceV3);
         } else {
           ldsUpdate = processServerSideListener(
-              listener, retainedRdsResources, enableFaultInjection && isResourceV3);
+              listener, retainedRdsResources, enableRbac);
         }
       } catch (ResourceInvalidException e) {
         errors.add(
@@ -729,9 +733,13 @@ final class ClientXdsClient extends AbstractXdsClient {
   static io.grpc.xds.HttpConnectionManager parseHttpConnectionManager(
       HttpConnectionManager proto, Set<String> rdsResources, FilterRegistry filterRegistry,
       boolean parseHttpFilter, boolean isForClient) throws ResourceInvalidException {
-    if (proto.getXffNumTrustedHops() != 0) {
+    if (enableRbac && proto.getXffNumTrustedHops() != 0) {
       throw new ResourceInvalidException(
           "HttpConnectionManager with xff_num_trusted_hops unsupported");
+    }
+    if (enableRbac && !proto.getOriginalIpDetectionExtensionsList().isEmpty()) {
+      throw new ResourceInvalidException("HttpConnectionManager with "
+          + "original_ip_detection_extensions unsupported");
     }
     // Obtain max_stream_duration from Http Protocol Options.
     long maxStreamDuration = 0;
