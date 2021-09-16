@@ -25,6 +25,7 @@ import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
+import java.util.Objects;
 
 /**
  * Enables Client or server side to initialize this object with the received {@link BaseTlsContext}
@@ -116,6 +117,24 @@ public final class SslContextProviderSupplier implements Closeable {
     }
     sslContextProvider = null;
     shutdown = true;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    SslContextProviderSupplier that = (SslContextProviderSupplier) o;
+    return Objects.equals(tlsContext, that.tlsContext)
+        && Objects.equals(tlsContextManager, that.tlsContextManager);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(tlsContext, tlsContextManager);
   }
 
   @Override

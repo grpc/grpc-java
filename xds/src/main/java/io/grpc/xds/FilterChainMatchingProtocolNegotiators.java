@@ -17,7 +17,8 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_REF;
+import static io.grpc.xds.InternalXdsAttributes.ATTR_DRAIN_GRACE_NANOS;
+import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_MANAGER;
 import static io.grpc.xds.XdsServerWrapper.ATTR_SERVER_ROUTING_CONFIG;
 import static io.grpc.xds.internal.sds.SdsProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 
@@ -28,6 +29,7 @@ import com.google.protobuf.UInt32Value;
 import io.grpc.Attributes;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
+import io.grpc.netty.InternalGracefulServerCloseCommand;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
@@ -40,6 +42,8 @@ import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHan
 import io.grpc.xds.XdsServerWrapper.ServerRoutingConfig;
 import io.grpc.xds.internal.Matchers.CidrMatcher;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -54,6 +58,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -77,14 +82,16 @@ final class FilterChainMatchingProtocolNegotiators {
   static final class FilterChainMatchingHandler extends ChannelInboundHandlerAdapter {
 
     private final GrpcHttp2ConnectionHandler grpcHandler;
-    private final FilterChainSelector selector;
+    private final FilterChainSelectorManager filterChainSelectorManager;
     private final ProtocolNegotiator delegate;
 
     FilterChainMatchingHandler(
-            GrpcHttp2ConnectionHandler grpcHandler, FilterChainSelector selector,
+            GrpcHttp2ConnectionHandler grpcHandler,
+            FilterChainSelectorManager filterChainSelectorManager,
             ProtocolNegotiator delegate) {
       this.grpcHandler = checkNotNull(grpcHandler, "grpcHandler");
-      this.selector = checkNotNull(selector, "selector");
+      this.filterChainSelectorManager =
+          checkNotNull(filterChainSelectorManager, "filterChainSelectorManager");
       this.delegate = checkNotNull(delegate, "delegate");
     }
 
@@ -94,6 +101,19 @@ final class FilterChainMatchingProtocolNegotiators {
         super.userEventTriggered(ctx, evt);
         return;
       }
+      long drainGraceTime = 0;
+      TimeUnit drainGraceTimeUnit = null;
+      Long drainGraceNanosObj = grpcHandler.getEagAttributes().get(ATTR_DRAIN_GRACE_NANOS);
+      if (drainGraceNanosObj != null) {
+        drainGraceTime = drainGraceNanosObj;
+        drainGraceTimeUnit = TimeUnit.NANOSECONDS;
+      }
+      FilterChainSelectorManager.Closer closer = new FilterChainSelectorManager.Closer(
+          new GracefullyShutdownChannelRunnable(ctx.channel(), drainGraceTime, drainGraceTimeUnit));
+      FilterChainSelector selector = filterChainSelectorManager.register(closer);
+      ctx.channel().closeFuture().addListener(
+          new FilterChainSelectorManagerDeregister(filterChainSelectorManager, closer));
+      checkNotNull(selector, "selector");
       SelectedConfig config = selector.select(
           (InetSocketAddress) ctx.channel().localAddress(),
           (InetSocketAddress) ctx.channel().remoteAddress());
@@ -116,28 +136,29 @@ final class FilterChainMatchingProtocolNegotiators {
 
     static final class FilterChainSelector {
       public static final FilterChainSelector NO_FILTER_CHAIN = new FilterChainSelector(
-              Collections.<FilterChain, ServerRoutingConfig>emptyMap(), null, null);
-      private final Map<FilterChain, ServerRoutingConfig> routingConfigs;
+              Collections.<FilterChain, AtomicReference<ServerRoutingConfig>>emptyMap(),
+          null, new AtomicReference<ServerRoutingConfig>());
+      private final Map<FilterChain, AtomicReference<ServerRoutingConfig>> routingConfigs;
       @Nullable
       private final SslContextProviderSupplier defaultSslContextProviderSupplier;
       @Nullable
-      private final ServerRoutingConfig defaultRoutingConfig;
+      private final AtomicReference<ServerRoutingConfig> defaultRoutingConfig;
 
-      FilterChainSelector(Map<FilterChain, ServerRoutingConfig> routingConfigs,
+      FilterChainSelector(Map<FilterChain, AtomicReference<ServerRoutingConfig>> routingConfigs,
                           @Nullable SslContextProviderSupplier defaultSslContextProviderSupplier,
-                          @Nullable ServerRoutingConfig defaultRoutingConfig) {
+                          @Nullable AtomicReference<ServerRoutingConfig> defaultRoutingConfig) {
         this.routingConfigs = checkNotNull(routingConfigs, "routingConfigs");
         this.defaultSslContextProviderSupplier = defaultSslContextProviderSupplier;
-        this.defaultRoutingConfig = defaultRoutingConfig;
+        this.defaultRoutingConfig = checkNotNull(defaultRoutingConfig, "defaultRoutingConfig");
       }
 
       @VisibleForTesting
-      Map<FilterChain, ServerRoutingConfig> getRoutingConfigs() {
+      Map<FilterChain, AtomicReference<ServerRoutingConfig>> getRoutingConfigs() {
         return routingConfigs;
       }
 
       @VisibleForTesting
-      ServerRoutingConfig getDefaultRoutingConfig() {
+      AtomicReference<ServerRoutingConfig> getDefaultRoutingConfig() {
         return defaultRoutingConfig;
       }
 
@@ -170,7 +191,7 @@ final class FilterChainMatchingProtocolNegotiators {
           return new SelectedConfig(
                   routingConfigs.get(selected), selected.getSslContextProviderSupplier());
         }
-        if (defaultRoutingConfig != null) {
+        if (defaultRoutingConfig.get() != null) {
           return new SelectedConfig(defaultRoutingConfig, defaultSslContextProviderSupplier);
         }
         return null;
@@ -354,10 +375,10 @@ final class FilterChainMatchingProtocolNegotiators {
 
         @Override
         public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-          AtomicReference<FilterChainSelector> filterChainSelectorRef =
-                  grpcHandler.getEagAttributes().get(ATTR_FILTER_CHAIN_SELECTOR_REF);
-          checkNotNull(filterChainSelectorRef, "filterChainSelectorRef");
-          return new FilterChainMatchingHandler(grpcHandler, filterChainSelectorRef.get(),
+          FilterChainSelectorManager filterChainSelectorManager =
+              grpcHandler.getEagAttributes().get(ATTR_FILTER_CHAIN_SELECTOR_MANAGER);
+          checkNotNull(filterChainSelectorManager, "filterChainSelectorManager");
+          return new FilterChainMatchingHandler(grpcHandler, filterChainSelectorManager,
                   delegate.newNegotiator(offloadExecutorPool));
         }
 
@@ -374,14 +395,52 @@ final class FilterChainMatchingProtocolNegotiators {
    * The FilterChain level configuration.
    */
   private static final class SelectedConfig {
-    private final ServerRoutingConfig routingConfig;
+    private final AtomicReference<ServerRoutingConfig> routingConfig;
     @Nullable
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    private SelectedConfig(ServerRoutingConfig routingConfig,
+    private SelectedConfig(AtomicReference<ServerRoutingConfig> routingConfig,
                            @Nullable SslContextProviderSupplier sslContextProviderSupplier) {
       this.routingConfig = checkNotNull(routingConfig, "routingConfig");
       this.sslContextProviderSupplier = sslContextProviderSupplier;
+    }
+  }
+
+  private static class FilterChainSelectorManagerDeregister implements ChannelFutureListener {
+    private final FilterChainSelectorManager filterChainSelectorManager;
+    private final FilterChainSelectorManager.Closer closer;
+
+    public FilterChainSelectorManagerDeregister(
+        FilterChainSelectorManager filterChainSelectorManager,
+        FilterChainSelectorManager.Closer closer) {
+      this.filterChainSelectorManager =
+          checkNotNull(filterChainSelectorManager, "filterChainSelectorManager");
+      this.closer = checkNotNull(closer, "closer");
+    }
+
+    @Override public void operationComplete(ChannelFuture future) throws Exception {
+      filterChainSelectorManager.deregister(closer);
+    }
+  }
+
+  private static class GracefullyShutdownChannelRunnable implements Runnable {
+    private final Channel channel;
+    private final long drainGraceTime;
+    @Nullable
+    private final TimeUnit drainGraceTimeUnit;
+
+    public GracefullyShutdownChannelRunnable(
+        Channel channel, long drainGraceTime, @Nullable TimeUnit drainGraceTimeUnit) {
+      this.channel = checkNotNull(channel, "channel");
+      this.drainGraceTime = drainGraceTime;
+      this.drainGraceTimeUnit = drainGraceTimeUnit;
+    }
+
+    @Override public void run() {
+      Object gracefulCloseCommand = InternalGracefulServerCloseCommand.create(
+          "xds_drain", drainGraceTime, drainGraceTimeUnit);
+      channel.writeAndFlush(gracefulCloseCommand)
+          .addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
     }
   }
 }

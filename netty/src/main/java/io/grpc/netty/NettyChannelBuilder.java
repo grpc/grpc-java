@@ -605,6 +605,10 @@ public final class NettyChannelBuilder extends
     this.managedChannelImplBuilder.setStatsRecordRealTimeMetrics(value);
   }
 
+  void setStatsRecordRetryMetrics(boolean value) {
+    this.managedChannelImplBuilder.setStatsRecordRetryMetrics(value);
+  }
+
   @VisibleForTesting
   NettyChannelBuilder setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
     this.transportTracerFactory = transportTracerFactory;

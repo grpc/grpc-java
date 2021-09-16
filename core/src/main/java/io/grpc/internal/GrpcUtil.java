@@ -109,6 +109,9 @@ public final class GrpcUtil {
   public static final Metadata.Key<byte[]> CONTENT_ACCEPT_ENCODING_KEY =
       InternalMetadata.keyOf(GrpcUtil.CONTENT_ACCEPT_ENCODING, new AcceptEncodingMarshaller());
 
+  static final Metadata.Key<String> CONTENT_LENGTH_KEY =
+      Metadata.Key.of("content-length", Metadata.ASCII_STRING_MARSHALLER);
+
   private static final class AcceptEncodingMarshaller implements TrustedAsciiMarshaller<byte[]> {
     @Override
     public byte[] toAsciiString(byte[] value) {

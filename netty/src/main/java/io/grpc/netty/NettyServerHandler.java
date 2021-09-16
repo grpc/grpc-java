@@ -26,7 +26,9 @@ import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
+import static io.netty.handler.codec.http.HttpHeaderNames.HOST;
 import static io.netty.handler.codec.http2.DefaultHttp2LocalFlowController.DEFAULT_WINDOW_UPDATE_RATIO;
+import static io.netty.handler.codec.http2.Http2Headers.PseudoHeaderName.AUTHORITY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -376,6 +378,20 @@ class NettyServerHandler extends AbstractNettyHandler {
       throws Http2Exception {
     try {
 
+      if (headers.authority() == null) {
+        List<CharSequence> hosts = headers.getAll(HOST);
+        if (hosts.size() > 1) {
+          // RFC 7230 section 5.4
+          respondWithHttpError(ctx, streamId, 400, Status.Code.INTERNAL,
+              "Multiple host headers");
+          return;
+        }
+        if (!hosts.isEmpty()) {
+          headers.add(AUTHORITY.value(), hosts.get(0));
+        }
+      }
+      headers.remove(HOST);
+
       // Remove the leading slash of the path and get the fully qualified method name
       CharSequence path = headers.path();
 
@@ -618,6 +634,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       sendResponseHeaders(ctx, (SendResponseHeadersCommand) msg, promise);
     } else if (msg instanceof CancelServerStreamCommand) {
       cancelStream(ctx, (CancelServerStreamCommand) msg, promise);
+    } else if (msg instanceof GracefulServerCloseCommand) {
+      gracefulClose(ctx, (GracefulServerCloseCommand) msg, promise);
     } else if (msg instanceof ForcefulCloseCommand) {
       forcefulClose(ctx, (ForcefulCloseCommand) msg, promise);
     } else {
@@ -631,11 +649,8 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   @Override
   public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-    if (gracefulShutdown == null) {
-      gracefulShutdown = new GracefulShutdown("app_requested", null);
-      gracefulShutdown.start(ctx);
-      ctx.flush();
-    }
+    gracefulClose(ctx, new GracefulServerCloseCommand("app_requested"), promise);
+    ctx.flush();
   }
 
   /**
@@ -714,6 +729,21 @@ class NettyServerHandler extends AbstractNettyHandler {
     } finally {
       PerfMark.stopTask("NettyServerHandler.cancelStream", cmd.stream().tag());
     }
+  }
+
+  private void gracefulClose(final ChannelHandlerContext ctx, final GracefulServerCloseCommand msg,
+      ChannelPromise promise) throws Exception {
+    // Ideally we'd adjust a pre-existing graceful shutdown's grace period to at least what is
+    // requested here. But that's an edge case and seems bug-prone.
+    if (gracefulShutdown == null) {
+      Long graceTimeInNanos = null;
+      if (msg.getGraceTimeUnit() != null) {
+        graceTimeInNanos = msg.getGraceTimeUnit().toNanos(msg.getGraceTime());
+      }
+      gracefulShutdown = new GracefulShutdown(msg.getGoAwayDebugString(), graceTimeInNanos);
+      gracefulShutdown.start(ctx);
+    }
+    promise.setSuccess();
   }
 
   private void forcefulClose(final ChannelHandlerContext ctx, final ForcefulCloseCommand msg,
