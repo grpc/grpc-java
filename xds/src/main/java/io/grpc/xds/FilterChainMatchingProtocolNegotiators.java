@@ -59,6 +59,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -135,28 +136,29 @@ final class FilterChainMatchingProtocolNegotiators {
 
     static final class FilterChainSelector {
       public static final FilterChainSelector NO_FILTER_CHAIN = new FilterChainSelector(
-              Collections.<FilterChain, ServerRoutingConfig>emptyMap(), null, null);
-      private final Map<FilterChain, ServerRoutingConfig> routingConfigs;
+              Collections.<FilterChain, AtomicReference<ServerRoutingConfig>>emptyMap(),
+          null, new AtomicReference<ServerRoutingConfig>());
+      private final Map<FilterChain, AtomicReference<ServerRoutingConfig>> routingConfigs;
       @Nullable
       private final SslContextProviderSupplier defaultSslContextProviderSupplier;
       @Nullable
-      private final ServerRoutingConfig defaultRoutingConfig;
+      private final AtomicReference<ServerRoutingConfig> defaultRoutingConfig;
 
-      FilterChainSelector(Map<FilterChain, ServerRoutingConfig> routingConfigs,
+      FilterChainSelector(Map<FilterChain, AtomicReference<ServerRoutingConfig>> routingConfigs,
                           @Nullable SslContextProviderSupplier defaultSslContextProviderSupplier,
-                          @Nullable ServerRoutingConfig defaultRoutingConfig) {
+                          @Nullable AtomicReference<ServerRoutingConfig> defaultRoutingConfig) {
         this.routingConfigs = checkNotNull(routingConfigs, "routingConfigs");
         this.defaultSslContextProviderSupplier = defaultSslContextProviderSupplier;
-        this.defaultRoutingConfig = defaultRoutingConfig;
+        this.defaultRoutingConfig = checkNotNull(defaultRoutingConfig, "defaultRoutingConfig");
       }
 
       @VisibleForTesting
-      Map<FilterChain, ServerRoutingConfig> getRoutingConfigs() {
+      Map<FilterChain, AtomicReference<ServerRoutingConfig>> getRoutingConfigs() {
         return routingConfigs;
       }
 
       @VisibleForTesting
-      ServerRoutingConfig getDefaultRoutingConfig() {
+      AtomicReference<ServerRoutingConfig> getDefaultRoutingConfig() {
         return defaultRoutingConfig;
       }
 
@@ -189,7 +191,7 @@ final class FilterChainMatchingProtocolNegotiators {
           return new SelectedConfig(
                   routingConfigs.get(selected), selected.getSslContextProviderSupplier());
         }
-        if (defaultRoutingConfig != null) {
+        if (defaultRoutingConfig.get() != null) {
           return new SelectedConfig(defaultRoutingConfig, defaultSslContextProviderSupplier);
         }
         return null;
@@ -393,11 +395,11 @@ final class FilterChainMatchingProtocolNegotiators {
    * The FilterChain level configuration.
    */
   private static final class SelectedConfig {
-    private final ServerRoutingConfig routingConfig;
+    private final AtomicReference<ServerRoutingConfig> routingConfig;
     @Nullable
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
-    private SelectedConfig(ServerRoutingConfig routingConfig,
+    private SelectedConfig(AtomicReference<ServerRoutingConfig> routingConfig,
                            @Nullable SslContextProviderSupplier sslContextProviderSupplier) {
       this.routingConfig = checkNotNull(routingConfig, "routingConfig");
       this.sslContextProviderSupplier = sslContextProviderSupplier;
