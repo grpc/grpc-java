@@ -339,17 +339,19 @@ public final class GrpcAuthorizationEngine {
       if ("te".equals(headerName)) {
         return null;
       }
+      if (":authority".equals(headerName)) {
+        headerName = "host";
+      }
       if ("host".equals(headerName)) {
         return serverCall.getAuthority();
       }
       if (":path".equals(headerName)) {
         return getPath();
       }
-      String value = deserializeHeader(headerName);
-      if (value == null && ":method".equals(headerName)) {
+      if (":method".equals(headerName)) {
         return "POST";
       }
-      return value;
+      return deserializeHeader(headerName);
     }
 
     @Nullable
