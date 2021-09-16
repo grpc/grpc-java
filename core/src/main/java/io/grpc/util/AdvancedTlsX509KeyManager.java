@@ -142,13 +142,12 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   }
 
   /**
-   * Loads the private key and certificate chains from the local file paths. The contents are only
-   * read at the construction time and won't be updated afterwards.
+   * Updates the private key and certificate chains from the local file paths.
    *
    * @param keyFile  the file on disk holding the private key
    * @param certFile  the file on disk holding the certificate chain
    */
-  public void loadIdentityCredentialsFromFile(File keyFile, File certFile) throws IOException,
+  public void updateIdentityCredentialsFromFile(File keyFile, File certFile) throws IOException,
       GeneralSecurityException {
     UpdateResult newResult = readAndUpdate(keyFile, certFile, 0, 0);
     if (!newResult.success) {

@@ -256,12 +256,11 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   }
 
   /**
-   * Loads the trust certificates from a local file path. The contents are only read at the
-   * construction time and won't be updated afterwards.
+   * Updates the trust certificates from a local file path.
    *
    * @param trustCertFile  the file on disk holding the trust certificates
    */
-  public void loadTrustCredentialsFromFile(File trustCertFile) throws IOException,
+  public void updateTrustCredentialsFromFile(File trustCertFile) throws IOException,
       GeneralSecurityException {
     long updatedTime = readAndUpdate(trustCertFile, 0);
     if (updatedTime == 0) {
