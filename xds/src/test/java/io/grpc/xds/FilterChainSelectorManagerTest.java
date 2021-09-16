@@ -19,8 +19,9 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import io.grpc.ServerInterceptor;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
-import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.FilterChainSelectorManager.Closer;
 import io.grpc.xds.XdsServerWrapper.ServerRoutingConfig;
@@ -33,13 +34,15 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public final class FilterChainSelectorManagerTest {
   private FilterChainSelectorManager manager = new FilterChainSelectorManager();
-  private ServerRoutingConfig noopConfig = ServerRoutingConfig.create(
-          Collections.<NamedFilterConfig>emptyList(),
-          new AtomicReference<ImmutableList<VirtualHost>>());
+  private AtomicReference<ServerRoutingConfig> noopConfig = new AtomicReference<>(
+      ServerRoutingConfig.create(ImmutableList.<VirtualHost>of(),
+      ImmutableMap.<VirtualHost.Route, ServerInterceptor>of()));
   private FilterChainSelector selector1 = new FilterChainSelector(
-            Collections.<FilterChain,ServerRoutingConfig>emptyMap(), null, null);
+            Collections.<FilterChain,AtomicReference<ServerRoutingConfig>>emptyMap(),
+      null, new AtomicReference<ServerRoutingConfig>());
   private FilterChainSelector selector2 = new FilterChainSelector(
-            Collections.<FilterChain,ServerRoutingConfig>emptyMap(), null, noopConfig);
+            Collections.<FilterChain,AtomicReference<ServerRoutingConfig>>emptyMap(),
+      null, noopConfig);
   private CounterRunnable runnable1 = new CounterRunnable();
   private CounterRunnable runnable2 = new CounterRunnable();
 
