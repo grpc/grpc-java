@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.base.Joiner;
-import com.google.common.base.Strings;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
@@ -37,6 +36,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -335,17 +335,19 @@ public final class GrpcAuthorizationEngine {
 
     @Nullable
     private String getHeader(String headerName) {
-      headerName = headerName.toLowerCase();
+      headerName = headerName.toLowerCase(Locale.ROOT);
       if ("te".equals(headerName)) {
         return null;
       }
       if ("host".equals(headerName)) {
         return serverCall.getAuthority();
       }
+      if (":path".equals(headerName)) {
+        return getPath();
+      }
       String value = deserializeHeader(headerName);
       if (value == null && ":method".equals(headerName)) {
-        String apiMethod = serverCall.getMethodDescriptor().getFullMethodName();
-        return Strings.isNullOrEmpty(apiMethod) ? "POST" : apiMethod;
+        return "POST";
       }
       return value;
     }
@@ -365,7 +367,7 @@ public final class GrpcAuthorizationEngine {
         }
         List<String> encoded = new ArrayList<>();
         for (byte[] v : values) {
-          encoded.add(BaseEncoding.base64().encode(v));
+          encoded.add(BaseEncoding.base64().omitPadding().encode(v));
         }
         return Joiner.on(",").join(encoded);
       }
