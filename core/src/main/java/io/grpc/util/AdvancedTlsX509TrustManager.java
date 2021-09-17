@@ -256,6 +256,20 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   }
 
   /**
+   * Updates the trust certificates from a local file path.
+   *
+   * @param trustCertFile  the file on disk holding the trust certificates
+   */
+  public void updateTrustCredentialsFromFile(File trustCertFile) throws IOException,
+      GeneralSecurityException {
+    long updatedTime = readAndUpdate(trustCertFile, 0);
+    if (updatedTime == 0) {
+      throw new GeneralSecurityException(
+          "Files were unmodified before their initial update. Probably a bug.");
+    }
+  }
+
+  /**
    * Reads the trust certificates specified in the path location, and update the key store if the
    * modified time has changed since last read.
    *
