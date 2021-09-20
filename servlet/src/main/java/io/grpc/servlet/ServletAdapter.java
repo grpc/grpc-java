@@ -92,7 +92,7 @@ public final class ServletAdapter {
    * Call this method inside {@link javax.servlet.http.HttpServlet#doGet(HttpServletRequest,
    * HttpServletResponse)} to serve gRPC GET request.
    *
-   * <p>This method is currently not impelemented.
+   * <p>This method is currently not implemented.
    *
    * <p>Note that in rare case gRPC client sends GET requests.
    *
@@ -155,7 +155,7 @@ public final class ServletAdapter {
 
     asyncCtx.getRequest().getInputStream()
         .setReadListener(new GrpcReadListener(stream, asyncCtx, logId));
-    asyncCtx.addListener(new GrpcAsycListener(stream, logId));
+    asyncCtx.addListener(new GrpcAsyncListener(stream, logId));
   }
 
   private static Metadata getHeaders(HttpServletRequest req) {
@@ -199,11 +199,11 @@ public final class ServletAdapter {
     transportListener.transportTerminated();
   }
 
-  private static final class GrpcAsycListener implements AsyncListener {
+  private static final class GrpcAsyncListener implements AsyncListener {
     final InternalLogId logId;
     final ServletServerStream stream;
 
-    GrpcAsycListener(ServletServerStream stream, InternalLogId logId) {
+    GrpcAsyncListener(ServletServerStream stream, InternalLogId logId) {
       this.stream = stream;
       this.logId = logId;
     }
