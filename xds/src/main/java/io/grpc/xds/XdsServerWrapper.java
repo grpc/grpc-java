@@ -639,6 +639,9 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
+            if (savedVirtualHosts == null && !isPending) {
+              logger.log(Level.WARNING, "Received valid Rds {0} configuration.", resourceName);
+            }
             savedVirtualHosts = ImmutableList.copyOf(update.virtualHosts);
             updateRdsRoutingConfig();
             maybeUpdateSelector();
@@ -746,8 +749,8 @@ final class XdsServerWrapper extends Server {
           virtualHosts, call.getAuthority());
       if (virtualHost == null) {
         call.close(
-                Status.UNAVAILABLE.withDescription("Could not find xDS virtual host matching RPC"),
-                new Metadata());
+            Status.UNAVAILABLE.withDescription("Could not find xDS virtual host matching RPC"),
+            new Metadata());
         return new Listener<ReqT>() {};
       }
       Route selectedRoute = null;
@@ -760,9 +763,13 @@ final class XdsServerWrapper extends Server {
         }
       }
       if (selectedRoute == null) {
-        call.close(
-            Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"),
+        call.close(Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"),
             new Metadata());
+        return new ServerCall.Listener<ReqT>() {};
+      }
+      if (selectedRoute.routeAction() != null) {
+        call.close(Status.UNAVAILABLE.withDescription("Invalid xDS route action for matching "
+            + "route: only Route.non_forwarding_action should be allowed."), new Metadata());
         return new ServerCall.Listener<ReqT>() {};
       }
       ServerInterceptor routeInterceptor = noopInterceptor;

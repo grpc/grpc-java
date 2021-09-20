@@ -131,16 +131,20 @@ public class ClientXdsClientDataTest {
   public final ExpectedException thrown = ExpectedException.none();
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private boolean originalEnableRetry;
+  private boolean originalEnableRbac;
 
   @Before
   public void setUp() {
     originalEnableRetry = ClientXdsClient.enableRetry;
     assertThat(originalEnableRetry).isTrue();
+    originalEnableRbac = ClientXdsClient.enableRbac;
+    assertThat(originalEnableRbac).isTrue();
   }
 
   @After
   public void tearDown() {
     ClientXdsClient.enableRetry = originalEnableRetry;
+    ClientXdsClient.enableRbac = originalEnableRbac;
   }
 
   @Test
@@ -1107,6 +1111,19 @@ public class ClientXdsClientDataTest {
     ClientXdsClient.parseHttpConnectionManager(
         hcm, new HashSet<String>(), filterRegistry, false /* does not matter */,
         true /* does not matter */);
+  }
+
+  @Test
+  public void parseHttpConnectionManager_OriginalIpDetectionExtensionsMustEmpty()
+      throws ResourceInvalidException {
+    @SuppressWarnings("deprecation")
+    HttpConnectionManager hcm = HttpConnectionManager.newBuilder()
+        .addOriginalIpDetectionExtensions(TypedExtensionConfig.newBuilder().build())
+        .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("HttpConnectionManager with original_ip_detection_extensions unsupported");
+    ClientXdsClient.parseHttpConnectionManager(
+        hcm, new HashSet<String>(), filterRegistry, false /* does not matter */, false);
   }
   
   @Test

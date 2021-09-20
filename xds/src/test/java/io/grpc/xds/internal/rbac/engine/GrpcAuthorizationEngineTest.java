@@ -16,12 +16,14 @@
 
 package io.grpc.xds.internal.rbac.engine;
 
+import static com.google.common.base.Charsets.US_ASCII;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
@@ -175,6 +177,71 @@ public class GrpcAuthorizationEngineTest {
             new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
     decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.DENY);
+  }
+
+  @Test
+  public void headerMatcher_binaryHeader() {
+    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+        .forExactValue(HEADER_KEY + Metadata.BINARY_HEADER_SUFFIX,
+            BaseEncoding.base64().omitPadding().encode(HEADER_VALUE.getBytes(US_ASCII)), false));
+    OrMatcher principal = OrMatcher.create(headerMatcher);
+    OrMatcher permission = OrMatcher.create(
+        new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
+    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+    Metadata metadata = new Metadata();
+    metadata.put(Metadata.Key.of(HEADER_KEY + Metadata.BINARY_HEADER_SUFFIX,
+        Metadata.BINARY_BYTE_MARSHALLER), HEADER_VALUE.getBytes(US_ASCII));
+    AuthDecision decision = engine.evaluate(metadata, serverCall);
+    assertThat(decision.decision()).isEqualTo(Action.ALLOW);
+    assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
+  }
+
+  @Test
+  public void headerMatcher_hardcodePostMethod() {
+    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+        .forExactValue(":method", "POST", false));
+    OrMatcher principal = OrMatcher.create(headerMatcher);
+    OrMatcher permission = OrMatcher.create(
+        new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
+    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+    AuthDecision decision = engine.evaluate(new Metadata(), serverCall);
+    assertThat(decision.decision()).isEqualTo(Action.ALLOW);
+    assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
+  }
+
+  @Test
+  public void headerMatcher_pathHeader() {
+    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+        .forExactValue(":path", "/" + PATH, false));
+    OrMatcher principal = OrMatcher.create(headerMatcher);
+    OrMatcher permission = OrMatcher.create(
+        new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
+    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+    AuthDecision decision = engine.evaluate(HEADER, serverCall);
+    assertThat(decision.decision()).isEqualTo(Action.ALLOW);
+    assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
+  }
+
+  @Test
+  public void headerMatcher_aliasAuthorityAndHost() {
+    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+        .forExactValue("Host", "google.com", false));
+    OrMatcher principal = OrMatcher.create(headerMatcher);
+    OrMatcher permission = OrMatcher.create(
+        new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
+    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+    when(serverCall.getAuthority()).thenReturn("google.com");
+    AuthDecision decision = engine.evaluate(new Metadata(), serverCall);
+    assertThat(decision.decision()).isEqualTo(Action.ALLOW);
+    assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
   }
 
   @Test

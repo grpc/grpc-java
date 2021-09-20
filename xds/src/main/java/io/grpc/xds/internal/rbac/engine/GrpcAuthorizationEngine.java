@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.base.Joiner;
+import com.google.common.io.BaseEncoding;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -35,6 +36,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -234,6 +236,23 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
+  public static final class DestinationPortRangeMatcher implements Matcher {
+    private final int start;
+    private final int end;
+
+    /** Start of the range is inclusive. End of the range is exclusive.*/
+    public DestinationPortRangeMatcher(int start, int end) {
+      this.start = start;
+      this.end = end;
+    }
+
+    @Override
+    public boolean matches(EvaluateArgs args) {
+      int port = args.getDestinationPort();
+      return  port >= start && port < end;
+    }
+  }
+
   public static final class RequestedServerNameMatcher implements Matcher {
     private final Matchers.StringMatcher delegate;
 
@@ -316,8 +335,43 @@ public final class GrpcAuthorizationEngine {
 
     @Nullable
     private String getHeader(String headerName) {
-      if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+      headerName = headerName.toLowerCase(Locale.ROOT);
+      if ("te".equals(headerName)) {
         return null;
+      }
+      if (":authority".equals(headerName)) {
+        headerName = "host";
+      }
+      if ("host".equals(headerName)) {
+        return serverCall.getAuthority();
+      }
+      if (":path".equals(headerName)) {
+        return getPath();
+      }
+      if (":method".equals(headerName)) {
+        return "POST";
+      }
+      return deserializeHeader(headerName);
+    }
+
+    @Nullable
+    private String deserializeHeader(String headerName) {
+      if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+        Metadata.Key<byte[]> key;
+        try {
+          key = Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER);
+        } catch (IllegalArgumentException e) {
+          return null;
+        }
+        Iterable<byte[]> values = metadata.getAll(key);
+        if (values == null) {
+          return null;
+        }
+        List<String> encoded = new ArrayList<>();
+        for (byte[] v : values) {
+          encoded.add(BaseEncoding.base64().omitPadding().encode(v));
+        }
+        return Joiner.on(",").join(encoded);
       }
       Metadata.Key<String> key;
       try {

@@ -867,6 +867,50 @@ public class XdsServerWrapperTest {
 
   @Test
   @SuppressWarnings("unchecked")
+  public void interceptor_invalidRouteAction() throws Exception {
+    ArgumentCaptor<ConfigApplyingInterceptor> interceptorCaptor =
+        ArgumentCaptor.forClass(ConfigApplyingInterceptor.class);
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          start.set(xdsServerWrapper.start());
+        } catch (Exception ex) {
+          start.setException(ex);
+        }
+      }
+    });
+    xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
+    verify(mockBuilder).intercept(interceptorCaptor.capture());
+    ConfigApplyingInterceptor interceptor = interceptorCaptor.getValue();
+    ServerRoutingConfig routingConfig = createRoutingConfig("/FooService/barMethod",
+        "foo.google.com", "filter-type-url", Route.RouteAction.forCluster(
+            "cluster", Collections.<Route.RouteAction.HashPolicy>emptyList(), null, null
+        ));
+    ServerCall<Void, Void> serverCall = mock(ServerCall.class);
+    when(serverCall.getAttributes()).thenReturn(
+        Attributes.newBuilder()
+            .set(ATTR_SERVER_ROUTING_CONFIG, new AtomicReference<>(routingConfig)).build());
+    when(serverCall.getMethodDescriptor()).thenReturn(createMethod("FooService/barMethod"));
+    when(serverCall.getAuthority()).thenReturn("foo.google.com");
+
+    Filter filter = mock(Filter.class);
+    when(filter.typeUrls()).thenReturn(new String[]{"filter-type-url"});
+    filterRegistry.register(filter);
+    ServerCallHandler<Void, Void> next = mock(ServerCallHandler.class);
+    interceptor.interceptCall(serverCall, new Metadata(), next);
+    verify(next, never()).startCall(any(ServerCall.class), any(Metadata.class));
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(serverCall).close(statusCaptor.capture(), any(Metadata.class));
+    Status status = statusCaptor.getValue();
+    assertThat(status.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(status.getDescription()).isEqualTo("Invalid xDS route action for matching "
+        + "route: only Route.non_forwarding_action should be allowed.");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   public void interceptor_failingRouterConfig() throws Exception {
     ArgumentCaptor<ConfigApplyingInterceptor> interceptorCaptor =
             ArgumentCaptor.forClass(ConfigApplyingInterceptor.class);
@@ -1104,15 +1148,20 @@ public class XdsServerWrapperTest {
 
   private static ServerRoutingConfig createRoutingConfig(String path, String domain,
                                                          String filterType) {
+    return createRoutingConfig(path, domain, filterType, null);
+  }
+
+  private static ServerRoutingConfig createRoutingConfig(String path, String domain,
+      String filterType, Route.RouteAction action) {
     RouteMatch routeMatch =
-            RouteMatch.create(
-                    PathMatcher.fromPath(path, true),
-                    Collections.<HeaderMatcher>emptyList(), null);
+        RouteMatch.create(
+            PathMatcher.fromPath(path, true),
+            Collections.<HeaderMatcher>emptyList(), null);
     VirtualHost virtualHost  = VirtualHost.create(
-            "v1", Collections.singletonList(domain),
-            Arrays.asList(Route.forAction(routeMatch, null,
-                    ImmutableMap.<String, FilterConfig>of())),
-            Collections.<String, FilterConfig>emptyMap());
+        "v1", Collections.singletonList(domain),
+        Arrays.asList(Route.forAction(routeMatch, action,
+            ImmutableMap.<String, FilterConfig>of())),
+        Collections.<String, FilterConfig>emptyMap());
     FilterConfig f0 = mock(FilterConfig.class);
     when(f0.typeUrl()).thenReturn(filterType);
     return ServerRoutingConfig.create(ImmutableList.<VirtualHost>of(virtualHost),
