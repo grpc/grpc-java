@@ -137,11 +137,11 @@ public class PriorityLoadBalancerTest {
     Attributes attributes =
         Attributes.newBuilder().set(Attributes.Key.create("fakeKey"), "fakeValue").build();
     Object fooConfig0 = new Object();
-    PolicySelection fooPolicy0 = new PolicySelection(fooLbProvider, null, fooConfig0);
+    PolicySelection fooPolicy0 = new PolicySelection(fooLbProvider, fooConfig0);
     Object barConfig0 = new Object();
-    PolicySelection barPolicy0 = new PolicySelection(barLbProvider, null, barConfig0);
+    PolicySelection barPolicy0 = new PolicySelection(barLbProvider, barConfig0);
     Object fooConfig1 = new Object();
-    PolicySelection fooPolicy1 = new PolicySelection(fooLbProvider, null, fooConfig1);
+    PolicySelection fooPolicy1 = new PolicySelection(fooLbProvider, fooConfig1);
     PriorityLbConfig priorityLbConfig =
         new PriorityLbConfig(
             ImmutableMap.of("p0", fooPolicy0, "p1", barPolicy0, "p2", fooPolicy1),
@@ -190,7 +190,7 @@ public class PriorityLoadBalancerTest {
     newEag = AddressFilter.setPathFilter(newEag, ImmutableList.of("p1"));
     List<EquivalentAddressGroup> newAddresses = ImmutableList.of(newEag);
     Object newBarConfig = new Object();
-    PolicySelection newBarPolicy = new PolicySelection(barLbProvider, null, newBarConfig);
+    PolicySelection newBarPolicy = new PolicySelection(barLbProvider, newBarConfig);
     PriorityLbConfig newPriorityLbConfig =
         new PriorityLbConfig(ImmutableMap.of("p1", newBarPolicy), ImmutableList.of("p1"));
     priorityLb.handleResolvedAddresses(
@@ -215,11 +215,48 @@ public class PriorityLoadBalancerTest {
   }
 
   @Test
+  public void handleNameResolutionError() {
+    Object fooConfig0 = new Object();
+    PolicySelection fooPolicy0 = new PolicySelection(fooLbProvider, fooConfig0);
+    Object fooConfig1 = new Object();
+    PolicySelection fooPolicy1 = new PolicySelection(fooLbProvider, fooConfig1);
+
+    PriorityLbConfig priorityLbConfig =
+        new PriorityLbConfig(ImmutableMap.of("p0", fooPolicy0), ImmutableList.of("p0"));
+    priorityLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+    LoadBalancer fooLb0 = Iterables.getOnlyElement(fooBalancers);
+    Status status = Status.DATA_LOSS.withDescription("fake error");
+    priorityLb.handleNameResolutionError(status);
+    verify(fooLb0).handleNameResolutionError(status);
+
+    priorityLbConfig =
+        new PriorityLbConfig(ImmutableMap.of("p1", fooPolicy1), ImmutableList.of("p1"));
+    priorityLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+    assertThat(fooBalancers).hasSize(2);
+    LoadBalancer fooLb1 = Iterables.getLast(fooBalancers);
+    status = Status.UNAVAILABLE.withDescription("fake error");
+    priorityLb.handleNameResolutionError(status);
+    // fooLb0 is deactivated but not yet deleted. However, because it is delisted by the latest
+    // address update, name resolution error will not be propagated to it.
+    verify(fooLb0, never()).shutdown();
+    verify(fooLb0, never()).handleNameResolutionError(status);
+    verify(fooLb1).handleNameResolutionError(status);
+  }
+
+  @Test
   public void typicalPriorityFailOverFlow() {
-    PolicySelection policy0 = new PolicySelection(fooLbProvider, null, new Object());
-    PolicySelection policy1 = new PolicySelection(fooLbProvider, null, new Object());
-    PolicySelection policy2 = new PolicySelection(fooLbProvider, null, new Object());
-    PolicySelection policy3 = new PolicySelection(fooLbProvider, null, new Object());
+    PolicySelection policy0 = new PolicySelection(fooLbProvider, new Object());
+    PolicySelection policy1 = new PolicySelection(fooLbProvider, new Object());
+    PolicySelection policy2 = new PolicySelection(fooLbProvider, new Object());
+    PolicySelection policy3 = new PolicySelection(fooLbProvider, new Object());
     PriorityLbConfig priorityLbConfig =
         new PriorityLbConfig(
             ImmutableMap.of("p0", policy0, "p1", policy1, "p2", policy2, "p3", policy3),

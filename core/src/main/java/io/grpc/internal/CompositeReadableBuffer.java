@@ -102,18 +102,16 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
 
   @Override
   public void readBytes(final ByteBuffer dest) {
-    // Use Buffer instead of ByteBuffer for JDK 9+ compatibility.
-    final Buffer destAsBuffer = dest;
     execute(new ReadOperation() {
       @Override
       public int readInternal(ReadableBuffer buffer, int length) {
         // Change the limit so that only lengthToCopy bytes are available.
-        int prevLimit = destAsBuffer.limit();
-        destAsBuffer.limit(destAsBuffer.position() + length);
+        int prevLimit = dest.limit();
+        ((Buffer) dest).limit(dest.position() + length);
 
         // Write the bytes and restore the original limit.
         buffer.readBytes(dest);
-        destAsBuffer.limit(prevLimit);
+        ((Buffer) dest).limit(prevLimit);
         return 0;
       }
     }, dest.remaining());

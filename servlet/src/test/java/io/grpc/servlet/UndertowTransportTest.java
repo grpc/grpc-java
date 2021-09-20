@@ -23,7 +23,7 @@ import static io.undertow.servlet.Servlets.servlet;
 import com.google.common.collect.ImmutableList;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
-import io.grpc.ServerStreamTracer.Factory;
+import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
@@ -70,7 +70,7 @@ public class UndertowTransportTest extends AbstractTransportTest {
 
   private final FakeClock fakeClock = new FakeClock();
 
-  private Undertow server;
+  private Undertow undertowServer;
   private DeploymentManager manager;
   private int port;
 
@@ -78,8 +78,8 @@ public class UndertowTransportTest extends AbstractTransportTest {
   @Override
   public void tearDown() throws InterruptedException {
     super.tearDown();
-    if (server != null) {
-      server.stop();
+    if (undertowServer != null) {
+      undertowServer.stop();
     }
     if (manager != null) {
       try {
@@ -91,7 +91,8 @@ public class UndertowTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected List<? extends InternalServer> newServer(List<Factory> streamTracerFactories) {
+  protected List<? extends InternalServer> newServer(List<ServerStreamTracer.Factory>
+                                                               streamTracerFactories) {
     return ImmutableList.of(new InternalServer() {
       final InternalServer delegate =
           new ServletServerBuilder().buildTransportServers(streamTracerFactories).iterator().next();
@@ -129,15 +130,15 @@ public class UndertowTransportTest extends AbstractTransportTest {
         PathHandler path =
             Handlers.path(Handlers.redirect(MYAPP))
                 .addPrefixPath("/", servletHandler); // for unimplementedService test
-        server =
+        undertowServer =
             Undertow.builder()
                 .setServerOption(UndertowOptions.ENABLE_HTTP2, true)
                 .setServerOption(UndertowOptions.SHUTDOWN_TIMEOUT, 5000 /* 5 sec */)
                 .addHttpListener(0, HOST)
                 .setHandler(path)
                 .build();
-        server.start();
-        port = ((InetSocketAddress) server.getListenerInfo().get(0).getAddress()).getPort();
+        undertowServer.start();
+        port = ((InetSocketAddress) undertowServer.getListenerInfo().get(0).getAddress()).getPort();
       }
 
       @Override
@@ -159,7 +160,7 @@ public class UndertowTransportTest extends AbstractTransportTest {
 
   @Override
   protected List<? extends InternalServer> newServer(int port,
-      List<Factory> streamTracerFactories) {
+      List<ServerStreamTracer.Factory> streamTracerFactories) {
     return newServer(streamTracerFactories);
   }
 

@@ -25,20 +25,24 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ExperimentalApi;
+import io.grpc.ForwardingServerBuilder;
+import io.grpc.Internal;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerStreamTracer.Factory;
 import io.grpc.Status;
-import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
+import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.SharedResourceHolder;
+
 import java.io.File;
 import java.io.IOException;
 import java.net.SocketAddress;
@@ -56,14 +60,20 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
 @NotThreadSafe
-public final class ServletServerBuilder extends AbstractServerImplBuilder<ServletServerBuilder> {
+public final class ServletServerBuilder extends ForwardingServerBuilder<ServletServerBuilder> {
   List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   int maxInboundMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
+
+  private final ServerImplBuilder serverImplBuilder;
 
   private ScheduledExecutorService scheduler;
   private boolean internalCaller;
   private boolean usingCustomScheduler;
   private InternalServerImpl internalServer;
+
+  public ServletServerBuilder() {
+    serverImplBuilder = new ServerImplBuilder(this::buildTransportServers);
+  }
 
   /**
    * Builds a gRPC server that can run as a servlet.
@@ -112,13 +122,18 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
     return internalServer.serverListener.transportCreated(serverTransport);
   }
 
-  @Override
   protected List<? extends InternalServer> buildTransportServers(
       List<? extends Factory> streamTracerFactories) {
     checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.streamTracerFactories = streamTracerFactories;
     internalServer = new InternalServerImpl();
     return ImmutableList.of(internalServer);
+  }
+
+  @Internal
+  @Override
+  protected ServerBuilder<?> delegate() {
+    return serverImplBuilder;
   }
 
   /**

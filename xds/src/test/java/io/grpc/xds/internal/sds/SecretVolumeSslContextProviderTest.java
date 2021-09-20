@@ -22,16 +22,17 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_KEY_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.doChecksOnSslContext;
+import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.getValueThruCallback;
 
-import com.google.common.util.concurrent.MoreExecutors;
 import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
+import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.TestCallback;
 import io.netty.handler.ssl.SslContext;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
-import java.util.List;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -371,22 +372,6 @@ public class SecretVolumeSslContextProviderTest {
     doChecksOnSslContext(server, sslContext, /* expectedApnProtos= */ null);
   }
 
-  static void doChecksOnSslContext(boolean server, SslContext sslContext,
-      List<String> expectedApnProtos) {
-    if (server) {
-      assertThat(sslContext.isServer()).isTrue();
-    } else {
-      assertThat(sslContext.isClient()).isTrue();
-    }
-    List<String> apnProtos = sslContext.applicationProtocolNegotiator().protocols();
-    assertThat(apnProtos).isNotNull();
-    if (expectedApnProtos != null) {
-      assertThat(apnProtos).isEqualTo(expectedApnProtos);
-    } else {
-      assertThat(apnProtos).contains("h2");
-    }
-  }
-
   @Test
   public void getProviderForServer() throws IOException, CertificateException, CertStoreException {
     sslContextForEitherWithBothCertAndTrust(
@@ -419,32 +404,6 @@ public class SecretVolumeSslContextProviderTest {
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().contains("File does not contain valid private key");
     }
-  }
-
-  static class TestCallback implements SslContextProvider.Callback {
-
-    SslContext updatedSslContext;
-    Throwable updatedThrowable;
-
-    @Override
-    public void updateSecret(SslContext sslContext) {
-      updatedSslContext = sslContext;
-    }
-
-    @Override
-    public void onException(Throwable throwable) {
-      updatedThrowable = throwable;
-    }
-  }
-
-  /**
-   * Helper method to get the value thru directExecutor callback. Because of directExecutor this is
-   * a synchronous callback - so need to provide a listener.
-   */
-  static TestCallback getValueThruCallback(SslContextProvider provider) {
-    TestCallback testCallback = new TestCallback();
-    provider.addCallback(testCallback, MoreExecutors.directExecutor());
-    return testCallback;
   }
 
   @Test

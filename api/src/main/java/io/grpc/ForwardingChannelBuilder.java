@@ -77,13 +77,6 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
     return thisT();
   }
 
-  @Deprecated
-  @Override
-  public T blockingExecutor(Executor executor) {
-    delegate().blockingExecutor(executor);
-    return thisT();
-  }
-
   @Override
   public T intercept(List<ClientInterceptor> interceptors) {
     delegate().intercept(interceptors);

@@ -71,7 +71,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -159,6 +158,7 @@ final class GrpclbState {
   private List<BackendEntry> backendList = Collections.emptyList();
   private RoundRobinPicker currentPicker =
       new RoundRobinPicker(Collections.<DropEntry>emptyList(), Arrays.asList(BUFFER_ENTRY));
+  private boolean requestConnectionPending;
 
   GrpclbState(
       GrpclbConfig config,
@@ -243,9 +243,11 @@ final class GrpclbState {
   }
 
   void requestConnection() {
+    requestConnectionPending = true;
     for (RoundRobinEntry entry : currentPicker.pickList) {
       if (entry instanceof IdleSubchannelEntry) {
         ((IdleSubchannelEntry) entry).subchannel.requestConnection();
+        requestConnectionPending = false;
       }
     }
   }
@@ -424,7 +426,7 @@ final class GrpclbState {
           newBackendList.add(entry);
         }
         // Close Subchannels whose addresses have been delisted
-        for (Entry<List<EquivalentAddressGroup>, Subchannel> entry : subchannels.entrySet()) {
+        for (Map.Entry<List<EquivalentAddressGroup>, Subchannel> entry : subchannels.entrySet()) {
           List<EquivalentAddressGroup> eagList = entry.getKey();
           if (!newSubchannelMap.containsKey(eagList)) {
             returnSubchannelToPool(entry.getValue());
@@ -472,6 +474,10 @@ final class GrpclbState {
               handleSubchannelState(subchannel, newState);
             }
           });
+          if (requestConnectionPending) {
+            subchannel.requestConnection();
+            requestConnectionPending = false;
+          }
         } else {
           subchannel = subchannels.values().iterator().next();
           subchannel.updateAddresses(eagList);

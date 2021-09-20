@@ -46,7 +46,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -488,7 +487,7 @@ public class DnsNameResolver extends NameResolver {
   @VisibleForTesting
   static Map<String, ?> maybeChooseServiceConfig(
       Map<String, ?> choice, Random random, String hostname) {
-    for (Entry<String, ?> entry : choice.entrySet()) {
+    for (Map.Entry<String, ?> entry : choice.entrySet()) {
       Verify.verify(SERVICE_CONFIG_CHOICE_KEYS.contains(entry.getKey()), "Bad key: %s", entry);
     }
 

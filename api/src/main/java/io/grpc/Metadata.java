@@ -753,14 +753,14 @@ public final class Metadata {
     }
 
     /**
-     * @return The original name used to create this key.
+     * Returns the original name used to create this key.
      */
     public final String originalName() {
       return originalName;
     }
 
     /**
-     * @return The normalized name for this key.
+     * Returns the normalized name for this key.
      */
     public final String name() {
       return name;
@@ -870,7 +870,7 @@ public final class Metadata {
     }
   }
 
-  /** A binary key for values which should be serialized lazily to {@Link InputStream}s. */
+  /** A binary key for values which should be serialized lazily to {@link InputStream}s. */
   private static class LazyStreamBinaryKey<T> extends Key<T> {
 
     private final BinaryStreamMarshaller<T> marshaller;

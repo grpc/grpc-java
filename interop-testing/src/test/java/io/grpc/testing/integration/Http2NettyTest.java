@@ -19,9 +19,11 @@ package io.grpc.testing.integration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 
-import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.ServerBuilder;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.netty.handler.ssl.ClientAuth;
@@ -40,11 +42,11 @@ import org.junit.runners.JUnit4;
 public class Http2NettyTest extends AbstractInteropTest {
 
   @Override
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
+  protected ServerBuilder<?> getServerBuilder() {
     // Starts the server with HTTPS.
     try {
-      return NettyServerBuilder.forPort(0)
-          .flowControlWindow(65 * 1024)
+      NettyServerBuilder builder = NettyServerBuilder.forPort(0)
+          .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
           .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
           .sslContext(GrpcSslContexts
               .forServer(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
@@ -52,6 +54,9 @@ public class Http2NettyTest extends AbstractInteropTest {
               .trustManager(TestUtils.loadCert("ca.pem"))
               .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
               .build());
+      // Disable the default census stats tracer, use testing tracer instead.
+      InternalNettyServerBuilder.setStatsEnabled(builder, false);
+      return builder.addStreamTracerFactory(createCustomCensusTracerFactory());
     } catch (IOException ex) {
       throw new RuntimeException(ex);
     }
@@ -62,7 +67,7 @@ public class Http2NettyTest extends AbstractInteropTest {
     try {
       NettyChannelBuilder builder = NettyChannelBuilder
           .forAddress(TestUtils.testServerAddress((InetSocketAddress) getListenAddress()))
-          .flowControlWindow(65 * 1024)
+          .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
           .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
           .sslContext(GrpcSslContexts
               .forClient()
@@ -71,7 +76,7 @@ public class Http2NettyTest extends AbstractInteropTest {
               .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
               .build());
       // Disable the default census stats interceptor, use testing interceptor instead.
-      io.grpc.internal.TestingAccessor.setStatsEnabled(builder, false);
+      InternalNettyChannelBuilder.setStatsEnabled(builder, false);
       return builder.intercept(createCensusStatsClientInterceptor());
     } catch (Exception ex) {
       throw new RuntimeException(ex);

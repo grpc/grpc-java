@@ -38,7 +38,6 @@ import io.grpc.internal.InUseStateAggregator;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ClientHeadersDecoder;
-import io.grpc.netty.ListeningEncoder.ListeningStreamBufferingEncoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -47,6 +46,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.http2.DecoratingHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
@@ -197,8 +197,11 @@ class NettyClientHandler extends AbstractNettyHandler {
     frameReader = new Http2InboundFrameLogger(frameReader, frameLogger);
     frameWriter = new Http2OutboundFrameLogger(frameWriter, frameLogger);
 
+    PingCountingFrameWriter pingCounter;
+    frameWriter = pingCounter = new PingCountingFrameWriter(frameWriter);
+
     StreamBufferingEncoder encoder =
-        new ListeningStreamBufferingEncoder(
+        new StreamBufferingEncoder(
             new DefaultHttp2ConnectionEncoder(connection, frameWriter));
 
     // Create the local flow controller configured to auto-refill the connection window.
@@ -237,7 +240,8 @@ class NettyClientHandler extends AbstractNettyHandler {
         transportTracer,
         eagAttributes,
         authority,
-        autoFlowControl);
+        autoFlowControl,
+        pingCounter);
   }
 
   private NettyClientHandler(
@@ -251,8 +255,9 @@ class NettyClientHandler extends AbstractNettyHandler {
       TransportTracer transportTracer,
       Attributes eagAttributes,
       String authority,
-      boolean autoFlowControl) {
-    super(/* channelUnused= */ null, decoder, encoder, settings, autoFlowControl);
+      boolean autoFlowControl,
+      PingLimiter pingLimiter) {
+    super(/* channelUnused= */ null, decoder, encoder, settings, autoFlowControl, pingLimiter);
     this.lifecycleManager = lifecycleManager;
     this.keepAliveManager = keepAliveManager;
     this.stopwatchFactory = stopwatchFactory;
@@ -910,6 +915,65 @@ class NettyClientHandler extends AbstractNettyHandler {
       if (keepAliveManager != null) {
         keepAliveManager.onDataReceived();
       }
+    }
+  }
+
+  private static class PingCountingFrameWriter extends DecoratingHttp2FrameWriter
+      implements AbstractNettyHandler.PingLimiter {
+    private int pingCount;
+
+    public PingCountingFrameWriter(Http2FrameWriter delegate) {
+      super(delegate);
+    }
+
+    @Override
+    public boolean isPingAllowed() {
+      // "3 strikes" may cause the server to complain, so we limit ourselves to 2 or below.
+      return pingCount < 2;
+    }
+
+    @Override
+    public ChannelFuture writeHeaders(
+        ChannelHandlerContext ctx, int streamId, Http2Headers headers,
+        int padding, boolean endStream, ChannelPromise promise) {
+      pingCount = 0;
+      return super.writeHeaders(ctx, streamId, headers, padding, endStream, promise);
+    }
+
+    @Override
+    public ChannelFuture writeHeaders(
+        ChannelHandlerContext ctx, int streamId, Http2Headers headers,
+        int streamDependency, short weight, boolean exclusive,
+        int padding, boolean endStream, ChannelPromise promise) {
+      pingCount = 0;
+      return super.writeHeaders(ctx, streamId, headers, streamDependency, weight, exclusive,
+          padding, endStream, promise);
+    }
+
+    @Override
+    public ChannelFuture writeWindowUpdate(
+        ChannelHandlerContext ctx, int streamId, int windowSizeIncrement, ChannelPromise promise) {
+      pingCount = 0;
+      return super.writeWindowUpdate(ctx, streamId, windowSizeIncrement, promise);
+    }
+
+    @Override
+    public ChannelFuture writePing(
+        ChannelHandlerContext ctx, boolean ack, long data, ChannelPromise promise) {
+      if (!ack) {
+        pingCount++;
+      }
+      return super.writePing(ctx, ack, data, promise);
+    }
+
+    @Override
+    public ChannelFuture writeData(
+        ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endStream,
+        ChannelPromise promise) {
+      if (data.isReadable()) {
+        pingCount = 0;
+      }
+      return super.writeData(ctx, streamId, data, padding, endStream, promise);
     }
   }
 }

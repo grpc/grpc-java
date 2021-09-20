@@ -943,6 +943,8 @@ public class Context {
    */
   public interface CancellationListener {
     /**
+     * Notifies that a context was cancelled.
+     *
      * @param context the newly cancelled context.
      */
     void cancelled(Context context);
@@ -967,7 +969,6 @@ public class Context {
     /**
      * Get the value from the {@link #current()} context for this key.
      */
-    @SuppressWarnings("unchecked")
     public T get() {
       return get(Context.current());
     }

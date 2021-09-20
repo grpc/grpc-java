@@ -16,7 +16,12 @@
 
 package io.grpc.xds.internal.sds;
 
+import static com.google.common.truth.Truth.assertThat;
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import com.google.common.base.Strings;
+import com.google.common.io.CharStreams;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -28,6 +33,7 @@ import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CertificateProviderInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
@@ -36,8 +42,18 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContex
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.xds.EnvoyServerProtoData;
+import io.grpc.xds.internal.sds.trust.CertificateUtils;
+import io.netty.handler.ssl.SslContext;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
 /** Utility class for client and server ssl provider tests. */
@@ -431,5 +447,164 @@ public class CommonTlsContextTestsUtil {
         UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
     return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
         upstreamTlsContext);
+  }
+
+  /** Gets a cert from contents of a resource. */
+  public static X509Certificate getCertFromResourceName(String resourceName)
+      throws IOException, CertificateException {
+    try (ByteArrayInputStream bais =
+        new ByteArrayInputStream(getResourceContents(resourceName).getBytes(UTF_8))) {
+      return CertificateUtils.toX509Certificate(bais);
+    }
+  }
+
+  /** Gets contents of a resource from TestUtils.class loader. */
+  public static String getResourceContents(String resourceName) throws IOException {
+    InputStream inputStream = TestUtils.class.getResourceAsStream("/certs/" + resourceName);
+    String text = null;
+    try (Reader reader = new InputStreamReader(inputStream, UTF_8)) {
+      text = CharStreams.toString(reader);
+    }
+    return text;
+  }
+
+  private static CommonTlsContext buildCommonTlsContextForCertProviderInstance(
+      String certInstanceName,
+      String certName,
+      String rootInstanceName,
+      String rootCertName,
+      Iterable<String> alpnProtocols,
+      CertificateValidationContext staticCertValidationContext) {
+    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
+    if (certInstanceName != null) {
+      builder =
+          builder.setTlsCertificateCertificateProviderInstance(
+              CommonTlsContext.CertificateProviderInstance.newBuilder()
+                  .setInstanceName(certInstanceName)
+                  .setCertificateName(certName));
+    }
+    builder =
+        addCertificateValidationContext(
+            builder, rootInstanceName, rootCertName, staticCertValidationContext);
+    if (alpnProtocols != null) {
+      builder.addAllAlpnProtocols(alpnProtocols);
+    }
+    return builder.build();
+  }
+
+  private static CommonTlsContext.Builder addCertificateValidationContext(
+      CommonTlsContext.Builder builder,
+      String rootInstanceName,
+      String rootCertName,
+      CertificateValidationContext staticCertValidationContext) {
+    if (rootInstanceName != null) {
+      CertificateProviderInstance providerInstance =
+          CertificateProviderInstance.newBuilder()
+              .setInstanceName(rootInstanceName)
+              .setCertificateName(rootCertName)
+              .build();
+      if (staticCertValidationContext != null) {
+        CombinedCertificateValidationContext combined =
+            CombinedCertificateValidationContext.newBuilder()
+                .setDefaultValidationContext(staticCertValidationContext)
+                .setValidationContextCertificateProviderInstance(providerInstance)
+                .build();
+        return builder.setCombinedValidationContext(combined);
+      }
+      builder = builder.setValidationContextCertificateProviderInstance(providerInstance);
+    }
+    return builder;
+  }
+
+  /** Helper method to build UpstreamTlsContext for CertProvider tests. */
+  public static EnvoyServerProtoData.UpstreamTlsContext
+      buildUpstreamTlsContextForCertProviderInstance(
+          @Nullable String certInstanceName,
+          @Nullable String certName,
+          @Nullable String rootInstanceName,
+          @Nullable String rootCertName,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext) {
+    return buildUpstreamTlsContext(
+        buildCommonTlsContextForCertProviderInstance(
+            certInstanceName,
+            certName,
+            rootInstanceName,
+            rootCertName,
+            alpnProtocols,
+            staticCertValidationContext));
+  }
+
+  /** Helper method to build DownstreamTlsContext for CertProvider tests. */
+  public static EnvoyServerProtoData.DownstreamTlsContext
+      buildDownstreamTlsContextForCertProviderInstance(
+          @Nullable String certInstanceName,
+          @Nullable String certName,
+          @Nullable String rootInstanceName,
+          @Nullable String rootCertName,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext,
+          boolean requireClientCert) {
+    return buildInternalDownstreamTlsContext(
+            buildCommonTlsContextForCertProviderInstance(
+                    certInstanceName,
+                    certName,
+                    rootInstanceName,
+                    rootCertName,
+                    alpnProtocols,
+                    staticCertValidationContext), requireClientCert);
+  }
+
+
+  /** Perform some simple checks on sslContext. */
+  public static void doChecksOnSslContext(boolean server, SslContext sslContext,
+      List<String> expectedApnProtos) {
+    if (server) {
+      assertThat(sslContext.isServer()).isTrue();
+    } else {
+      assertThat(sslContext.isClient()).isTrue();
+    }
+    List<String> apnProtos = sslContext.applicationProtocolNegotiator().protocols();
+    assertThat(apnProtos).isNotNull();
+    if (expectedApnProtos != null) {
+      assertThat(apnProtos).isEqualTo(expectedApnProtos);
+    } else {
+      assertThat(apnProtos).contains("h2");
+    }
+  }
+
+  /**
+   * Helper method to get the value thru directExecutor callback. Because of directExecutor this is
+   * a synchronous callback - so need to provide a listener.
+   */
+  public static TestCallback getValueThruCallback(SslContextProvider provider) {
+    return getValueThruCallback(provider, MoreExecutors.directExecutor());
+  }
+
+  /** Helper method to get the value thru callback with a user passed executor. */
+  public static TestCallback getValueThruCallback(SslContextProvider provider, Executor executor) {
+    TestCallback testCallback = new TestCallback(executor);
+    provider.addCallback(testCallback);
+    return testCallback;
+  }
+
+  public static class TestCallback extends SslContextProvider.Callback {
+
+    public SslContext updatedSslContext;
+    public Throwable updatedThrowable;
+
+    public TestCallback(Executor executor) {
+      super(executor);
+    }
+
+    @Override
+    public void updateSecret(SslContext sslContext) {
+      updatedSslContext = sslContext;
+    }
+
+    @Override
+    public void onException(Throwable throwable) {
+      updatedThrowable = throwable;
+    }
   }
 }

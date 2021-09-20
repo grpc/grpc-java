@@ -25,7 +25,6 @@ import static org.mockito.Mockito.when;
 
 import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
-import io.grpc.ClientStreamTracer.Factory;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -77,9 +76,11 @@ public class ClientLoadCounterTest {
     long numInProgressCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numFailedCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numIssuedCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
-    counter =
-        new ClientLoadCounter(numSucceededCalls, numInProgressCalls, numFailedCalls,
-            numIssuedCalls);
+    counter = new ClientLoadCounter();
+    counter.setCallsSucceeded(numSucceededCalls);
+    counter.setCallsInProgress(numInProgressCalls);
+    counter.setCallsFailed(numFailedCalls);
+    counter.setCallsIssued(numIssuedCalls);
     ClientLoadSnapshot snapshot = counter.snapshot();
     assertQueryCounts(snapshot, numSucceededCalls, numInProgressCalls, numFailedCalls,
         numIssuedCalls);
@@ -224,7 +225,8 @@ public class ClientLoadCounterTest {
       }
 
       @Override
-      protected Factory wrapTracerFactory(Factory originFactory) {
+      protected ClientStreamTracer.Factory wrapTracerFactory(
+          ClientStreamTracer.Factory originFactory) {
         // NO-OP
         return originFactory;
       }

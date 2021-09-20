@@ -18,7 +18,7 @@
 set -e
 BRANCH=master
 # import VERSION from one of the google internal CLs
-VERSION=440899714143b6a143917cbd8e3f0ccba0847cd4
+VERSION=1c27396b1f7e756ba79eed72b47f485d44da1d41
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
@@ -79,8 +79,10 @@ envoy/config/core/v3/http_uri.proto
 envoy/config/core/v3/protocol.proto
 envoy/config/core/v3/proxy_protocol.proto
 envoy/config/core/v3/socket_option.proto
+envoy/config/core/v3/substitution_format_string.proto
 envoy/config/endpoint/v3/endpoint.proto
 envoy/config/endpoint/v3/endpoint_components.proto
+envoy/config/endpoint/v3/load_report.proto
 envoy/config/filter/accesslog/v2/accesslog.proto
 envoy/config/filter/fault/v2/fault.proto
 envoy/config/filter/http/fault/v2/fault.proto
@@ -117,7 +119,10 @@ envoy/extensions/transport_sockets/tls/v3/secret.proto
 envoy/extensions/transport_sockets/tls/v3/tls.proto
 envoy/service/discovery/v2/ads.proto
 envoy/service/discovery/v2/sds.proto
+envoy/service/discovery/v3/ads.proto
+envoy/service/discovery/v3/discovery.proto
 envoy/service/load_stats/v2/lrs.proto
+envoy/service/load_stats/v3/lrs.proto
 envoy/type/http.proto
 envoy/type/matcher/regex.proto
 envoy/type/matcher/string.proto
@@ -125,8 +130,11 @@ envoy/type/matcher/metadata.proto
 envoy/type/matcher/path.proto
 envoy/type/matcher/value.proto
 envoy/type/matcher/number.proto
+envoy/type/matcher/v3/metadata.proto
+envoy/type/matcher/v3/number.proto
 envoy/type/matcher/v3/regex.proto
 envoy/type/matcher/v3/string.proto
+envoy/type/matcher/v3/value.proto
 envoy/type/metadata/v2/metadata.proto
 envoy/type/metadata/v3/metadata.proto
 envoy/type/percent.proto

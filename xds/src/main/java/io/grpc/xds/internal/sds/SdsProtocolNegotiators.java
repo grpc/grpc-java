@@ -29,7 +29,6 @@ import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
-import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.netty.channel.ChannelHandler;
@@ -60,9 +59,14 @@ public final class SdsProtocolNegotiators {
 
   private static final AsciiString SCHEME = AsciiString.of("http");
 
-  /** Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}. */
-  public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory() {
-    return new ClientSdsProtocolNegotiatorFactory();
+  /**
+   * Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}.
+   *
+   * @param fallbackNegotiator protocol negotiator to use as fallback.
+   */
+  public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory(
+      @Nullable ProtocolNegotiator fallbackNegotiator) {
+    return new ClientSdsProtocolNegotiatorFactory(fallbackNegotiator);
   }
 
   /**
@@ -81,9 +85,16 @@ public final class SdsProtocolNegotiators {
   private static final class ClientSdsProtocolNegotiatorFactory
       implements InternalNettyChannelBuilder.ProtocolNegotiatorFactory {
 
+    private final ProtocolNegotiator fallbackProtocolNegotiator;
+
+    private ClientSdsProtocolNegotiatorFactory(ProtocolNegotiator fallbackNegotiator) {
+      this.fallbackProtocolNegotiator = fallbackNegotiator;
+    }
+
     @Override
     public InternalProtocolNegotiator.ProtocolNegotiator buildProtocolNegotiator() {
-      final ClientSdsProtocolNegotiator negotiator = new ClientSdsProtocolNegotiator();
+      final ClientSdsProtocolNegotiator negotiator =
+          new ClientSdsProtocolNegotiator(fallbackProtocolNegotiator);
       final class LocalSdsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
 
         @Override
@@ -109,6 +120,12 @@ public final class SdsProtocolNegotiators {
   @VisibleForTesting
   static final class ClientSdsProtocolNegotiator implements ProtocolNegotiator {
 
+    @Nullable private final ProtocolNegotiator fallbackProtocolNegotiator;
+
+    ClientSdsProtocolNegotiator(@Nullable ProtocolNegotiator fallbackProtocolNegotiator) {
+      this.fallbackProtocolNegotiator = fallbackProtocolNegotiator;
+    }
+
     @Override
     public AsciiString scheme() {
       return SCHEME;
@@ -116,17 +133,15 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      // check if UpstreamTlsContext was passed via attributes
-      UpstreamTlsContext localUpstreamTlsContext =
-          grpcHandler.getEagAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
-      if (isTlsContextEmpty(localUpstreamTlsContext)) {
-        return InternalProtocolNegotiators.plaintext().newHandler(grpcHandler);
+      // check if SslContextProviderSupplier was passed via attributes
+      SslContextProviderSupplier localSslContextProviderSupplier =
+          grpcHandler.getEagAttributes().get(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+      if (localSslContextProviderSupplier == null) {
+        checkNotNull(
+            fallbackProtocolNegotiator, "No TLS config and no fallbackProtocolNegotiator!");
+        return fallbackProtocolNegotiator.newHandler(grpcHandler);
       }
-      return new ClientSdsHandler(grpcHandler, localUpstreamTlsContext);
-    }
-
-    private static boolean isTlsContextEmpty(UpstreamTlsContext upstreamTlsContext) {
-      return upstreamTlsContext == null || upstreamTlsContext.getCommonTlsContext() == null;
+      return new ClientSdsHandler(grpcHandler, localSslContextProviderSupplier);
     }
 
     @Override
@@ -168,10 +183,11 @@ public final class SdsProtocolNegotiators {
   static final class ClientSdsHandler
       extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
-    private final UpstreamTlsContext upstreamTlsContext;
+    private final SslContextProviderSupplier sslContextProviderSupplier;
 
     ClientSdsHandler(
-        GrpcHttp2ConnectionHandler grpcHandler, UpstreamTlsContext upstreamTlsContext) {
+        GrpcHttp2ConnectionHandler grpcHandler,
+        SslContextProviderSupplier sslContextProviderSupplier) {
       super(
           // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
           // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
@@ -184,7 +200,7 @@ public final class SdsProtocolNegotiators {
           });
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
-      this.upstreamTlsContext = upstreamTlsContext;
+      this.sslContextProviderSupplier = sslContextProviderSupplier;
     }
 
     @Override
@@ -192,12 +208,8 @@ public final class SdsProtocolNegotiators {
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
-      final SslContextProvider sslContextProvider =
-          TlsContextManagerImpl.getInstance()
-              .findOrCreateClientSslContextProvider(upstreamTlsContext);
-
-      sslContextProvider.addCallback(
-          new SslContextProvider.Callback() {
+      sslContextProviderSupplier.updateSslContext(
+          new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
             public void updateSecret(SslContext sslContext) {
@@ -212,16 +224,14 @@ public final class SdsProtocolNegotiators {
               ctx.pipeline().addAfter(ctx.name(), null, handler);
               fireProtocolNegotiationEvent(ctx);
               ctx.pipeline().remove(bufferReads);
-              TlsContextManagerImpl.getInstance()
-                  .releaseClientSslContextProvider(sslContextProvider);
             }
 
             @Override
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          },
-          ctx.executor());
+          }
+      );
     }
 
     @Override
@@ -370,7 +380,7 @@ public final class SdsProtocolNegotiators {
       }
       final SslContextProvider sslContextProvider = sslContextProviderTemp;
       sslContextProvider.addCallback(
-          new SslContextProvider.Callback() {
+          new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
             public void updateSecret(SslContext sslContext) {
@@ -389,8 +399,8 @@ public final class SdsProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          },
-          ctx.executor());
+          }
+      );
     }
   }
 }

@@ -49,30 +49,6 @@ public class CertificateProviderStoreTest {
   private CertificateProviderStore certificateProviderStore;
   private boolean throwExceptionForCertUpdates;
 
-  private class TestCertificateProvider extends CertificateProvider {
-    Object config;
-    CertificateProviderProvider certProviderProvider;
-    int closeCalled = 0;
-
-    protected TestCertificateProvider(
-        CertificateProvider.DistributorWatcher watcher,
-        boolean notifyCertUpdates,
-        Object config,
-        CertificateProviderProvider certificateProviderProvider) {
-      super(watcher, notifyCertUpdates);
-      if (throwExceptionForCertUpdates && notifyCertUpdates) {
-        throw new UnsupportedOperationException("Provider does not support Certificate Updates.");
-      }
-      this.config = config;
-      this.certProviderProvider = certificateProviderProvider;
-    }
-
-    @Override
-    public void close() {
-      closeCalled++;
-    }
-  }
-
   @Before
   public void setUp() {
     certificateProviderRegistry = new CertificateProviderRegistry();
@@ -88,7 +64,7 @@ public class CertificateProviderStoreTest {
               "cert-name1", "plugin1", "config", mockWatcher, true);
       fail("exception expected");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Provider not found.");
+      assertThat(expected).hasMessageThat().isEqualTo("Provider not found for plugin1");
     }
   }
 
@@ -105,7 +81,7 @@ public class CertificateProviderStoreTest {
               "cert-name1", "plugin1", "config", mockWatcher, true);
       fail("exception expected");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Provider not found.");
+      assertThat(expected).hasMessageThat().isEqualTo("Provider not found for plugin1");
     }
   }
 
@@ -161,8 +137,9 @@ public class CertificateProviderStoreTest {
     assertThat(handle1.certProvider).isInstanceOf(TestCertificateProvider.class);
     TestCertificateProvider testCertificateProvider =
         (TestCertificateProvider) handle1.certProvider;
+    assertThat(testCertificateProvider.startCalled).isEqualTo(1);
     CertificateProvider.DistributorWatcher distWatcher = testCertificateProvider.getWatcher();
-    assertThat(distWatcher.downsstreamWatchers).hasSize(2);
+    assertThat(distWatcher.downstreamWatchers).hasSize(2);
     PrivateKey testKey = mock(PrivateKey.class);
     X509Certificate cert = mock(X509Certificate.class);
     List<X509Certificate> testList = ImmutableList.of(cert);
@@ -178,7 +155,7 @@ public class CertificateProviderStoreTest {
     reset(mockWatcher2);
     handle1.close();
     assertThat(testCertificateProvider.closeCalled).isEqualTo(0);
-    assertThat(distWatcher.downsstreamWatchers).hasSize(1);
+    assertThat(distWatcher.downstreamWatchers).hasSize(1);
     testCertificateProvider.getWatcher().updateCertificate(testKey, testList);
     verify(mockWatcher1, never())
         .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
@@ -187,6 +164,44 @@ public class CertificateProviderStoreTest {
     verify(mockWatcher2, times(1)).updateTrustedRoots(eq(testList));
     handle2.close();
     assertThat(testCertificateProvider.closeCalled).isEqualTo(1);
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void onePluginSameConfig_secondWatcherAfterFirstNotify() {
+    registerPlugin("plugin1");
+    CertificateProvider.Watcher mockWatcher1 = mock(CertificateProvider.Watcher.class);
+    CertificateProviderStore.Handle handle1 = certificateProviderStore.createOrGetProvider(
+            "cert-name1", "plugin1", "config", mockWatcher1, true);
+    TestCertificateProvider testCertificateProvider =
+            (TestCertificateProvider) handle1.certProvider;
+    CertificateProvider.DistributorWatcher distWatcher = testCertificateProvider.getWatcher();
+    PrivateKey testKey = mock(PrivateKey.class);
+    X509Certificate cert = mock(X509Certificate.class);
+    List<X509Certificate> testList = ImmutableList.of(cert);
+    testCertificateProvider.getWatcher().updateCertificate(testKey, testList);
+    verify(mockWatcher1, times(1)).updateCertificate(eq(testKey), eq(testList));
+    testCertificateProvider.getWatcher().updateTrustedRoots(testList);
+    verify(mockWatcher1, times(1)).updateTrustedRoots(eq(testList));
+    testCertificateProvider.getWatcher().onError(Status.CANCELLED);
+    verify(mockWatcher1, times(1)).onError(eq(Status.CANCELLED));
+    reset(mockWatcher1);
+
+    // now add the second watcher
+    CertificateProvider.Watcher mockWatcher2 = mock(CertificateProvider.Watcher.class);
+    CertificateProviderStore.Handle unused = certificateProviderStore.createOrGetProvider(
+            "cert-name1", "plugin1", "config", mockWatcher2, true);
+    assertThat(distWatcher.downstreamWatchers).hasSize(2);
+    // updates sent to the second watcher
+    verify(mockWatcher2, times(1)).updateCertificate(eq(testKey), eq(testList));
+    verify(mockWatcher2, times(1)).updateTrustedRoots(eq(testList));
+    // but not errors!
+    verify(mockWatcher2, never()).onError(eq(Status.CANCELLED));
+    // and none to first one
+    verify(mockWatcher1, never())
+            .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
+    verify(mockWatcher1, never()).updateTrustedRoots(anyListOf(X509Certificate.class));
+    verify(mockWatcher1, never()).onError(any(Status.class));
   }
 
   @Test
@@ -278,9 +293,9 @@ public class CertificateProviderStoreTest {
     assertThat(testCertificateProvider2.certProviderProvider)
         .isSameInstanceAs(certProviderProvider2);
     CertificateProvider.DistributorWatcher distWatcher1 = testCertificateProvider1.getWatcher();
-    assertThat(distWatcher1.downsstreamWatchers).hasSize(1);
+    assertThat(distWatcher1.downstreamWatchers).hasSize(1);
     CertificateProvider.DistributorWatcher distWatcher2 = testCertificateProvider2.getWatcher();
-    assertThat(distWatcher2.downsstreamWatchers).hasSize(1);
+    assertThat(distWatcher2.downstreamWatchers).hasSize(1);
     PrivateKey testKey1 = mock(PrivateKey.class);
     X509Certificate cert1 = mock(X509Certificate.class);
     List<X509Certificate> testList1 = ImmutableList.of(cert1);
@@ -297,6 +312,8 @@ public class CertificateProviderStoreTest {
     verify(mockWatcher2, times(1)).updateCertificate(eq(testKey2), eq(testList2));
     verify(mockWatcher1, never())
         .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
+    assertThat(testCertificateProvider1.startCalled).isEqualTo(1);
+    assertThat(testCertificateProvider2.startCalled).isEqualTo(1);
     handle2.close();
     assertThat(testCertificateProvider2.closeCalled).isEqualTo(1);
     handle1.close();
@@ -322,7 +339,8 @@ public class CertificateProviderStoreTest {
                     (CertificateProvider.DistributorWatcher) args[1];
                 boolean notifyCertUpdates = (Boolean) args[2];
                 return new TestCertificateProvider(
-                    watcher, notifyCertUpdates, config, certProviderProvider);
+                    watcher, notifyCertUpdates, config, certProviderProvider,
+                    throwExceptionForCertUpdates);
               }
             });
     certificateProviderRegistry.register(certProviderProvider);

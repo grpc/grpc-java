@@ -72,7 +72,7 @@ public final class EnvoyServerProtoData {
   public static final class UpstreamTlsContext extends BaseTlsContext {
 
     @VisibleForTesting
-    UpstreamTlsContext(CommonTlsContext commonTlsContext) {
+    public UpstreamTlsContext(CommonTlsContext commonTlsContext) {
       super(commonTlsContext);
     }
 
@@ -93,7 +93,8 @@ public final class EnvoyServerProtoData {
     private final boolean requireClientCertificate;
 
     @VisibleForTesting
-    DownstreamTlsContext(CommonTlsContext commonTlsContext, boolean requireClientCertificate) {
+    public DownstreamTlsContext(
+        CommonTlsContext commonTlsContext, boolean requireClientCertificate) {
       super(commonTlsContext);
       this.requireClientCertificate = requireClientCertificate;
     }

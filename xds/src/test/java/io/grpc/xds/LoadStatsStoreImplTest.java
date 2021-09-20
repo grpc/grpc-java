@@ -18,13 +18,16 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
-import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
-import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
+import io.grpc.internal.FakeClock;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
+import io.grpc.xds.EnvoyProtoData.ClusterStats;
+import io.grpc.xds.EnvoyProtoData.ClusterStats.DroppedRequests;
+import io.grpc.xds.EnvoyProtoData.EndpointLoadMetricStats;
 import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.UpstreamLocalityStats;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -35,7 +38,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -49,16 +51,15 @@ public class LoadStatsStoreImplTest {
       new Locality("test_region1", "test_zone", "test_subzone");
   private static final Locality LOCALITY2 =
       new Locality("test_region2", "test_zone", "test_subzone");
-  private ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
+  private final FakeClock fakeClock = new FakeClock();
   private ConcurrentMap<String, AtomicLong> dropCounters;
   private LoadStatsStore loadStatsStore;
 
   @Before
   public void setUp() {
-    localityLoadCounters = new ConcurrentHashMap<>();
     dropCounters = new ConcurrentHashMap<>();
-    loadStatsStore =
-        new LoadStatsStoreImpl(CLUSTER_NAME, null, localityLoadCounters, dropCounters);
+    Stopwatch stopwatch = fakeClock.getStopwatchSupplier().get();
+    loadStatsStore = new LoadStatsStoreImpl(CLUSTER_NAME, null, stopwatch, dropCounters);
   }
 
   private static List<EndpointLoadMetricStats> buildEndpointLoadMetricStatsList(
@@ -83,7 +84,7 @@ public class LoadStatsStoreImplTest {
       @Nullable List<EndpointLoadMetricStats> metrics) {
     UpstreamLocalityStats.Builder builder =
         UpstreamLocalityStats.newBuilder()
-            .setLocality(locality.toEnvoyProtoLocality())
+            .setLocality(locality)
             .setTotalSuccessfulRequests(callsSucceed)
             .setTotalErrorRequests(callsFailed)
             .setTotalRequestsInProgress(callsInProgress)
@@ -95,15 +96,12 @@ public class LoadStatsStoreImplTest {
   }
 
   private static DroppedRequests buildDroppedRequests(String category, long counts) {
-    return DroppedRequests.newBuilder()
-        .setCategory(category)
-        .setDroppedCount(counts)
-        .build();
+    return new DroppedRequests(category, counts);
   }
 
   private static ClusterStats buildClusterStats(
       @Nullable List<UpstreamLocalityStats> upstreamLocalityStatsList,
-      @Nullable List<DroppedRequests> droppedRequestsList) {
+      @Nullable List<DroppedRequests> droppedRequestsList, long intervalNano) {
     ClusterStats.Builder clusterStatsBuilder = ClusterStats.newBuilder();
     clusterStatsBuilder.setClusterName(CLUSTER_NAME);
     if (upstreamLocalityStatsList != null) {
@@ -117,14 +115,16 @@ public class LoadStatsStoreImplTest {
       }
       clusterStatsBuilder.setTotalDroppedRequests(dropCount);
     }
+    clusterStatsBuilder.setLoadReportIntervalNanos(intervalNano);
     return clusterStatsBuilder.build();
   }
 
   private static void assertClusterStatsEqual(ClusterStats expected, ClusterStats actual) {
     assertThat(actual.getClusterName()).isEqualTo(expected.getClusterName());
-    assertThat(actual.getLoadReportInterval()).isEqualTo(expected.getLoadReportInterval());
+    assertThat(actual.getLoadReportIntervalNanos())
+        .isEqualTo(expected.getLoadReportIntervalNanos());
     assertThat(actual.getTotalDroppedRequests()).isEqualTo(expected.getTotalDroppedRequests());
-    assertThat(actual.getDroppedRequestsCount()).isEqualTo(expected.getDroppedRequestsCount());
+    assertThat(actual.getDroppedRequestsList()).hasSize(expected.getDroppedRequestsList().size());
     assertThat(new HashSet<>(actual.getDroppedRequestsList()))
         .isEqualTo(new HashSet<>(expected.getDroppedRequestsList()));
     assertUpstreamLocalityStatsListsEqual(actual.getUpstreamLocalityStatsList(),
@@ -134,7 +134,7 @@ public class LoadStatsStoreImplTest {
   private static void assertUpstreamLocalityStatsListsEqual(List<UpstreamLocalityStats> expected,
       List<UpstreamLocalityStats> actual) {
     assertThat(actual).hasSize(expected.size());
-    Map<io.envoyproxy.envoy.api.v2.core.Locality, UpstreamLocalityStats> expectedLocalityStats =
+    Map<Locality, UpstreamLocalityStats> expectedLocalityStats =
         new HashMap<>();
     for (UpstreamLocalityStats stats : expected) {
       expectedLocalityStats.put(stats.getLocality(), stats);
@@ -159,74 +159,47 @@ public class LoadStatsStoreImplTest {
   }
 
   @Test
-  public void addAndGetAndRemoveLocality() {
+  public void removeInactiveCountersAfterGeneratingLoadReport() {
     loadStatsStore.addLocality(LOCALITY1);
-    assertThat(localityLoadCounters).containsKey(LOCALITY1);
-
-    // Adding the same locality counter again causes an exception.
-    try {
-      loadStatsStore.addLocality(LOCALITY1);
-      Assert.fail();
-    } catch (IllegalStateException expected) {
-      assertThat(expected).hasMessageThat()
-          .contains("An active counter for locality " + LOCALITY1 + " already exists");
-    }
-
-    assertThat(loadStatsStore.getLocalityCounter(LOCALITY1))
-        .isSameInstanceAs(localityLoadCounters.get(LOCALITY1));
-    assertThat(loadStatsStore.getLocalityCounter(LOCALITY2)).isNull();
-
-    // Removing an non-existing locality counter causes an exception.
-    try {
-      loadStatsStore.removeLocality(LOCALITY2);
-      Assert.fail();
-    } catch (IllegalStateException expected) {
-      assertThat(expected).hasMessageThat()
-          .contains("No active counter for locality " + LOCALITY2 + " exists");
-    }
-
-    // Removing the locality counter only mark it as inactive, but not throw it away.
-    loadStatsStore.removeLocality(LOCALITY1);
-    assertThat(localityLoadCounters.get(LOCALITY1).isActive()).isFalse();
-
-    // Removing an inactive locality counter causes an exception.
-    try {
-      loadStatsStore.removeLocality(LOCALITY1);
-      Assert.fail();
-    } catch (IllegalStateException expected) {
-      assertThat(expected).hasMessageThat()
-          .contains("No active counter for locality " + LOCALITY1 + " exists");
-    }
-
-    // Adding it back simply mark it as active again.
-    loadStatsStore.addLocality(LOCALITY1);
-    assertThat(localityLoadCounters.get(LOCALITY1).isActive()).isTrue();
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList()).hasSize(1);
+    loadStatsStore.removeLocality(LOCALITY1);  // becomes inactive
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList()).hasSize(1);
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList()).isEmpty();
   }
 
   @Test
-  public void removeInactiveCountersAfterGeneratingLoadReport() {
-    localityLoadCounters.put(LOCALITY1, new ClientLoadCounter());
-    ClientLoadCounter inactiveCounter = new ClientLoadCounter();
-    inactiveCounter.setActive(false);
-    localityLoadCounters.put(LOCALITY2, inactiveCounter);
-    loadStatsStore.generateLoadReport();
-    assertThat(localityLoadCounters).containsKey(LOCALITY1);
-    assertThat(localityLoadCounters).doesNotContainKey(LOCALITY2);
+  public void localityCountersReferenceCounted() {
+    loadStatsStore.addLocality(LOCALITY1);
+    loadStatsStore.addLocality(LOCALITY1);
+    loadStatsStore.removeLocality(LOCALITY1);
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList()).hasSize(1);
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList())
+        .hasSize(1);  // still active
+    loadStatsStore.removeLocality(LOCALITY1);  // becomes inactive
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList()).hasSize(1);
+    assertThat(loadStatsStore.generateLoadReport().getUpstreamLocalityStatsList()).isEmpty();
   }
 
   @Test
   public void loadReportContainsRecordedStats() {
-    ClientLoadCounter counter1 = new ClientLoadCounter(4315, 3421, 23, 593);
+    ClientLoadCounter counter1 = loadStatsStore.addLocality(LOCALITY1);
+    counter1.setCallsSucceeded(4315);
+    counter1.setCallsInProgress(3421);
+    counter1.setCallsFailed(23);
+    counter1.setCallsIssued(593);
     counter1.recordMetric("cpu_utilization", 0.3244);
     counter1.recordMetric("mem_utilization", 0.01233);
     counter1.recordMetric("named_cost_or_utilization", 3221.6543);
-    ClientLoadCounter counter2 = new ClientLoadCounter(41234, 432, 431, 702);
+    ClientLoadCounter counter2 = loadStatsStore.addLocality(LOCALITY2);
+    counter2.setCallsSucceeded(41234);
+    counter2.setCallsInProgress(432);
+    counter2.setCallsFailed(431);
+    counter2.setCallsIssued(702);
     counter2.recordMetric("cpu_utilization", 0.6526);
     counter2.recordMetric("mem_utilization", 0.3473);
     counter2.recordMetric("named_cost_or_utilization", 87653.4234);
-    localityLoadCounters.put(LOCALITY1, counter1);
-    localityLoadCounters.put(LOCALITY2, counter2);
 
+    fakeClock.forwardNanos(1000L);
     Map<String, MetricValue> metrics1 =
         ImmutableMap.of(
             "cpu_utilization", new MetricValue(1, 0.3244),
@@ -245,16 +218,17 @@ public class LoadStatsStoreImplTest {
                 buildUpstreamLocalityStats(LOCALITY2, 41234, 432, 431, 702,
                     buildEndpointLoadMetricStatsList(metrics2))
             ),
-            null);
+            null, 1000L);
     assertClusterStatsEqual(expectedReport, loadStatsStore.generateLoadReport());
 
+    fakeClock.forwardNanos(2000L);
     expectedReport =
         buildClusterStats(
             Arrays.asList(
                 buildUpstreamLocalityStats(LOCALITY1, 0, 3421, 0, 0, null),
                 buildUpstreamLocalityStats(LOCALITY2, 0, 432, 0, 0, null)
             ),
-            null);
+            null, 2000L);
     assertClusterStatsEqual(expectedReport, loadStatsStore.generateLoadReport());
   }
 
@@ -270,10 +244,13 @@ public class LoadStatsStoreImplTest {
     }
     assertThat(dropCounters.get("lb").get()).isEqualTo(numLbDrop);
     assertThat(dropCounters.get("throttle").get()).isEqualTo(numThrottleDrop);
+
+    fakeClock.forwardNanos(1000L);
     ClusterStats expectedLoadReport =
         buildClusterStats(null,
             Arrays.asList(buildDroppedRequests("lb", numLbDrop),
-                buildDroppedRequests("throttle", numThrottleDrop)));
+                buildDroppedRequests("throttle", numThrottleDrop)),
+            1000L);
     assertClusterStatsEqual(expectedLoadReport, loadStatsStore.generateLoadReport());
     assertThat(dropCounters.get("lb").get()).isEqualTo(0);
     assertThat(dropCounters.get("throttle").get()).isEqualTo(0);

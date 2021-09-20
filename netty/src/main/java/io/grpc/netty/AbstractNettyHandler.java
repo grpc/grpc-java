@@ -16,12 +16,10 @@
 
 package io.grpc.netty;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static io.netty.handler.codec.http2.Http2CodecUtil.getEmbeddedHttp2Exception;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.netty.ListeningEncoder.Http2OutboundFrameListener;
-import io.netty.buffer.ByteBuf;
+import com.google.common.base.Preconditions;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
@@ -38,11 +36,9 @@ import java.util.concurrent.TimeUnit;
  */
 abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
   private static final long GRACEFUL_SHUTDOWN_NO_TIMEOUT = -1;
-  private static final int MAX_ALLOWED_PING = 2;
 
   private final int initialConnectionWindow;
-  private final PingCountingListener pingCountingListener = new PingCountingListener();
-  private final FlowControlPinger flowControlPing = new FlowControlPinger(MAX_ALLOWED_PING);
+  private final FlowControlPinger flowControlPing;
 
   private boolean autoTuneFlowControlOn;
   private ChannelHandlerContext ctx;
@@ -55,7 +51,8 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,
       Http2Settings initialSettings,
-      boolean autoFlowControl) {
+      boolean autoFlowControl,
+      PingLimiter pingLimiter) {
     super(channelUnused, decoder, encoder, initialSettings);
 
     // During a graceful shutdown, wait until all streams are closed.
@@ -65,9 +62,10 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     this.initialConnectionWindow = initialSettings.initialWindowSize() == null ? -1 :
             initialSettings.initialWindowSize();
     this.autoTuneFlowControlOn = autoFlowControl;
-    if (encoder instanceof ListeningEncoder) {
-      ((ListeningEncoder) encoder).setListener(pingCountingListener);
+    if (pingLimiter == null) {
+      pingLimiter = new AllowPingLimiter();
     }
+    this.flowControlPing = new FlowControlPinger(pingLimiter);
   }
 
   @Override
@@ -131,7 +129,8 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
   final class FlowControlPinger {
 
     private static final int MAX_WINDOW_SIZE = 8 * 1024 * 1024;
-    private final int maxAllowedPing;
+
+    private final PingLimiter pingLimiter;
     private int pingCount;
     private int pingReturn;
     private boolean pinging;
@@ -139,9 +138,9 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     private float lastBandwidth; // bytes per second
     private long lastPingTime;
 
-    public FlowControlPinger(int maxAllowedPing) {
-      checkArgument(maxAllowedPing > 0, "maxAllowedPing must be positive");
-      this.maxAllowedPing = maxAllowedPing;
+    public FlowControlPinger(PingLimiter pingLimiter) {
+      Preconditions.checkNotNull(pingLimiter, "pingLimiter");
+      this.pingLimiter = pingLimiter;
     }
 
     public long payload() {
@@ -156,7 +155,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       if (!autoTuneFlowControlOn) {
         return;
       }
-      if (!isPinging() && pingCountingListener.pingCount < maxAllowedPing) {
+      if (!isPinging() && pingLimiter.isPingAllowed()) {
         setPinging(true);
         sendPing(ctx());
       }
@@ -235,27 +234,14 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
     }
   }
 
-  private static class PingCountingListener extends Http2OutboundFrameListener {
-    int pingCount = 0;
+  /** Controls whether PINGs like those for BDP are permitted to be sent at the current time. */
+  public interface PingLimiter {
+    public boolean isPingAllowed();
+  }
 
-    @Override
-    public void onWindowUpdate(int streamId, int windowSizeIncrement) {
-      pingCount = 0;
-      super.onWindowUpdate(streamId, windowSizeIncrement);
-    }
-
-    @Override
-    public void onPing(boolean ack, long data) {
-      if (!ack) {
-        pingCount++;
-      }
-      super.onPing(ack, data);
-    }
-
-    @Override
-    public void onData(int streamId, ByteBuf data, int padding, boolean endStream) {
-      pingCount = 0;
-      super.onData(streamId, data, padding, endStream);
+  private static final class AllowPingLimiter implements PingLimiter {
+    @Override public boolean isPingAllowed() {
+      return true;
     }
   }
 }

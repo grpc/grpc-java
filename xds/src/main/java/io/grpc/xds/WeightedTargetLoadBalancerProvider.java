@@ -127,7 +127,6 @@ public final class WeightedTargetLoadBalancerProvider extends LoadBalancerProvid
     final int weight;
     final PolicySelection policySelection;
 
-    @VisibleForTesting
     WeightedPolicySelection(int weight, PolicySelection policySelection) {
       this.weight = weight;
       this.policySelection = policySelection;

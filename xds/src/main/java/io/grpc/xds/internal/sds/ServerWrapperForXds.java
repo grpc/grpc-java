@@ -17,15 +17,23 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Server;
 import io.grpc.ServerServiceDefinition;
+import io.grpc.Status;
+import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.Nullable;
 
 /**
  * Wraps a {@link Server} delegate and {@link XdsClientWrapperForServerSds} and intercepts {@link
@@ -36,20 +44,69 @@ import java.util.concurrent.TimeUnit;
 public final class ServerWrapperForXds extends Server {
   private final Server delegate;
   private final XdsClientWrapperForServerSds xdsClientWrapperForServerSds;
+  @Nullable XdsServerBuilder.ErrorNotifier errorNotifier;
+  @Nullable XdsClientWrapperForServerSds.ServerWatcher serverWatcher;
+  private AtomicBoolean started = new AtomicBoolean();
 
-  ServerWrapperForXds(Server delegate, XdsClientWrapperForServerSds xdsClientWrapperForServerSds) {
+  ServerWrapperForXds(
+      Server delegate,
+      XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
+      @Nullable XdsServerBuilder.ErrorNotifier errorNotifier) {
     this.delegate = checkNotNull(delegate, "delegate");
     this.xdsClientWrapperForServerSds =
         checkNotNull(xdsClientWrapperForServerSds, "xdsClientWrapperForServerSds");
+    this.errorNotifier = errorNotifier;
   }
 
   @Override
   public Server start() throws IOException {
-    delegate.start();
+    checkState(started.compareAndSet(false, true), "Already started");
+    Future<EnvoyServerProtoData.DownstreamTlsContext> future = addServerWatcher();
     if (!xdsClientWrapperForServerSds.hasXdsClient()) {
       xdsClientWrapperForServerSds.createXdsClientAndStart();
     }
+    try {
+      future.get();
+    } catch (InterruptedException | ExecutionException ex) {
+      removeServerWatcher();
+      if (ex instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
+      throw new RuntimeException(ex);
+    }
+    delegate.start();
     return this;
+  }
+
+  private Future<EnvoyServerProtoData.DownstreamTlsContext> addServerWatcher() {
+    final SettableFuture<EnvoyServerProtoData.DownstreamTlsContext> settableFuture =
+        SettableFuture.create();
+    serverWatcher =
+        new XdsClientWrapperForServerSds.ServerWatcher() {
+          @Override
+          public void onError(Status error) {
+            if (errorNotifier != null) {
+              errorNotifier.onError(error);
+            }
+          }
+
+          @Override
+          public void onSuccess(EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext) {
+            removeServerWatcher();
+            settableFuture.set(downstreamTlsContext);
+          }
+        };
+    xdsClientWrapperForServerSds.addServerWatcher(serverWatcher);
+    return settableFuture;
+  }
+
+  private void removeServerWatcher() {
+    synchronized (xdsClientWrapperForServerSds) {
+      if (serverWatcher != null) {
+        xdsClientWrapperForServerSds.removeServerWatcher(serverWatcher);
+        serverWatcher = null;
+      }
+    }
   }
 
   @Override

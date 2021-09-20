@@ -10,7 +10,6 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 
 subprojects {
     apply plugin: "checkstyle"
-    apply plugin: "maven"
     apply plugin: "idea"
     apply plugin: "signing"
     apply plugin: "jacoco"
@@ -19,7 +18,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.31.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.33.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -55,7 +54,7 @@ subprojects {
         protocPluginBaseName = 'protoc-gen-grpc-java'
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
-        nettyVersion = '4.1.48.Final'
+        nettyVersion = '4.1.51.Final'
         guavaVersion = '29.0-android'
         googleauthVersion = '0.20.0'
         protobufVersion = '3.12.0'
@@ -173,14 +172,16 @@ subprojects {
             // SECURITY.md (multiple occurrences)
             // examples/example-tls/build.gradle
             // examples/example-tls/pom.xml
-            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.30.Final',
+            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.31.Final',
 
-            conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:2.2.1',
+            conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:2.5.1',
             re2j: 'com.google.re2j:re2j:1.2',
+
+            bouncycastle: 'org.bouncycastle:bcpkix-jdk15on:1.61',
 
             // Test dependencies.
             junit: 'junit:junit:4.12',
-            mockito: 'org.mockito:mockito-core:2.28.2',
+            mockito: 'org.mockito:mockito-core:3.3.3',
             truth: 'com.google.truth:truth:1.0.1',
             guava_testlib: "com.google.guava:guava-testlib:${guavaVersion}",
             androidx_test: "androidx.test:core:1.2.0",
@@ -286,7 +287,7 @@ subprojects {
     jacoco { toolVersion = "0.8.2" }
 
     checkstyle {
-        configDir = file("$rootDir/buildscripts")
+        configDirectory = file("$rootDir/buildscripts")
         toolVersion = "6.17"
         ignoreFailures = false
         if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
@@ -296,7 +297,7 @@ subprojects {
 
     if (rootProject.properties.get('errorProne', true)) {
         dependencies {
-            errorprone 'com.google.errorprone:error_prone_core:2.3.4'
+            errorprone 'com.google.errorprone:error_prone_core:2.4.0'
             errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
         }
     } else {
@@ -315,7 +316,7 @@ subprojects {
         targetCompatibility = 1.7
 
         dependencies {
-            testCompile libraries.junit,
+            testImplementation libraries.junit,
                     libraries.mockito,
                     libraries.truth
         }
@@ -374,6 +375,8 @@ subprojects {
             options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
             // This project targets Java 7 (no time.Duration class)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
+            // The warning fails to provide a source location
+            options.errorprone.check("MissingSummary", CheckSeverity.OFF)
         }
         compileTestJava {
             // LinkedList doesn't hurt much in tests and has lots of usages
@@ -492,14 +495,9 @@ subprojects {
         }
 
         plugins.withId("java") {
-            task javadocJar(type: Jar) {
-                classifier = 'javadoc'
-                from javadoc
-            }
-
-            task sourcesJar(type: Jar) {
-                classifier = 'sources'
-                from sourceSets.main.allSource
+            java {
+                withJavadocJar()
+                withSourcesJar()
             }
 
             publishing {
@@ -508,9 +506,6 @@ subprojects {
                         if (project.name != 'grpc-netty-shaded') {
                             from components.java
                         }
-
-                        artifact javadocJar
-                        artifact sourcesJar
                     }
                 }
             }

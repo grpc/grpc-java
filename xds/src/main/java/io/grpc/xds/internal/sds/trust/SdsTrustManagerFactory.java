@@ -16,7 +16,7 @@
 
 package io.grpc.xds.internal.sds.trust;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -27,6 +27,7 @@ import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import io.netty.handler.ssl.util.SimpleTrustManagerFactory;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -52,9 +53,29 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
   /** Constructor constructs from a {@link CertificateValidationContext}. */
   public SdsTrustManagerFactory(CertificateValidationContext certificateValidationContext)
       throws CertificateException, IOException, CertStoreException {
-    checkNotNull(certificateValidationContext, "certificateValidationContext");
-    sdsX509TrustManager = createSdsX509TrustManager(
-        getTrustedCaFromCertContext(certificateValidationContext), certificateValidationContext);
+    this(
+        getTrustedCaFromCertContext(certificateValidationContext),
+        certificateValidationContext,
+        false);
+  }
+
+  public SdsTrustManagerFactory(
+          X509Certificate[] certs, CertificateValidationContext staticCertificateValidationContext)
+          throws CertStoreException {
+    this(certs, staticCertificateValidationContext, true);
+  }
+
+  private SdsTrustManagerFactory(
+      X509Certificate[] certs,
+      CertificateValidationContext certificateValidationContext,
+      boolean validationContextIsStatic)
+      throws CertStoreException {
+    if (validationContextIsStatic) {
+      checkArgument(
+          certificateValidationContext == null || !certificateValidationContext.hasTrustedCa(),
+          "only static certificateValidationContext expected");
+    }
+    sdsX509TrustManager = createSdsX509TrustManager(certs, certificateValidationContext);
   }
 
   private static X509Certificate[] getTrustedCaFromCertContext(
@@ -69,8 +90,10 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
           "trustedCa.file-name in certificateValidationContext cannot be empty");
       return CertificateUtils.toX509Certificates(new File(certsFile));
     } else if (specifierCase == SpecifierCase.INLINE_BYTES) {
-      return CertificateUtils.toX509Certificates(
-          certificateValidationContext.getTrustedCa().getInlineBytes().newInput());
+      try (InputStream is =
+          certificateValidationContext.getTrustedCa().getInlineBytes().newInput()) {
+        return CertificateUtils.toX509Certificates(is);
+      }
     } else {
       throw new IllegalArgumentException("Not supported: " + specifierCase);
     }

@@ -148,12 +148,27 @@ public class SdsProtocolNegotiatorsTest {
 
   @Test
   public void clientSdsProtocolNegotiatorNewHandler_noTlsContextAttribute() {
-    ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator();
+    ChannelHandler mockChannelHandler = mock(ChannelHandler.class);
+    ProtocolNegotiator mockProtocolNegotiator = mock(ProtocolNegotiator.class);
+    when(mockProtocolNegotiator.newHandler(grpcHandler)).thenReturn(mockChannelHandler);
+    ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator(mockProtocolNegotiator);
     ChannelHandler newHandler = pn.newHandler(grpcHandler);
     assertThat(newHandler).isNotNull();
-    // ProtocolNegotiators.WaitUntilActiveHandler not accessible, get canonical name
-    assertThat(newHandler.getClass().getCanonicalName())
-        .contains("io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler");
+    assertThat(newHandler).isSameInstanceAs(mockChannelHandler);
+  }
+
+  @Test
+  public void clientSdsProtocolNegotiatorNewHandler_noFallback_expectException() {
+    ClientSdsProtocolNegotiator pn =
+        new ClientSdsProtocolNegotiator(/* fallbackProtocolNegotiator= */ null);
+    try {
+      pn.newHandler(grpcHandler);
+      fail("exception expected!");
+    } catch (NullPointerException expected) {
+      assertThat(expected)
+          .hasMessageThat()
+          .contains("No TLS config and no fallbackProtocolNegotiator!");
+    }
   }
 
   @Test
@@ -161,12 +176,15 @@ public class SdsProtocolNegotiatorsTest {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContext(
             getCommonTlsContext(/* tlsCertificate= */ null, /* certContext= */ null));
-    ClientSdsProtocolNegotiator pn = new ClientSdsProtocolNegotiator();
+    ClientSdsProtocolNegotiator pn =
+        new ClientSdsProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
+    TlsContextManager mockTlsContextManager = mock(TlsContextManager.class);
     when(mockHandler.getEagAttributes())
         .thenReturn(
             Attributes.newBuilder()
-                .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext)
+                .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                    new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
                 .build());
     ChannelHandler newHandler = pn.newHandler(mockHandler);
     assertThat(newHandler).isNotNull();
@@ -178,8 +196,10 @@ public class SdsProtocolNegotiatorsTest {
     UpstreamTlsContext upstreamTlsContext =
         buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
+    SslContextProviderSupplier sslContextProviderSupplier =
+        new SslContextProviderSupplier(upstreamTlsContext, TlsContextManagerImpl.getInstance());
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
-        new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, upstreamTlsContext);
+        new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
     pipeline.addLast(clientSdsHandler);
     channelHandlerCtx = pipeline.context(clientSdsHandler);
     assertNotNull(channelHandlerCtx); // clientSdsHandler ctx is non-null since we just added it
@@ -334,8 +354,10 @@ public class SdsProtocolNegotiatorsTest {
     UpstreamTlsContext upstreamTlsContext =
         buildUpstreamTlsContextFromFilenames(CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
+    SslContextProviderSupplier sslContextProviderSupplier =
+        new SslContextProviderSupplier(upstreamTlsContext, TlsContextManagerImpl.getInstance());
     SdsProtocolNegotiators.ClientSdsHandler clientSdsHandler =
-        new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, upstreamTlsContext);
+        new SdsProtocolNegotiators.ClientSdsHandler(grpcHandler, sslContextProviderSupplier);
 
     pipeline.addLast(clientSdsHandler);
     channelHandlerCtx = pipeline.context(clientSdsHandler);

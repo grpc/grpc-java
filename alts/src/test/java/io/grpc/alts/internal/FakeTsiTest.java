@@ -27,6 +27,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.util.ReferenceCounted;
 import io.netty.util.ResourceLeakDetector;
 import io.netty.util.ResourceLeakDetector.Level;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -86,11 +87,11 @@ public class FakeTsiTest {
 
       byte[] transportBufferBytes = new byte[TsiTest.getDefaultTransportBufferSize()];
       ByteBuffer transportBuffer = ByteBuffer.wrap(transportBufferBytes);
-      transportBuffer.limit(0); // Start off with an empty buffer
+      ((Buffer) transportBuffer).limit(0); // Start off with an empty buffer
 
-      transportBuffer.clear();
+      ((Buffer) transportBuffer).clear();
       clientHandshaker.getBytesToSendToPeer(transportBuffer);
-      transportBuffer.flip();
+      ((Buffer) transportBuffer).flip();
       assertEquals(
           FakeTsiHandshaker.State.CLIENT_INIT.toString().trim(),
           new String(transportBufferBytes, 4, transportBuffer.remaining(), UTF_8).trim());
@@ -99,14 +100,14 @@ public class FakeTsiTest {
       assertFalse(transportBuffer.hasRemaining());
 
       // client shouldn't offer any more bytes
-      transportBuffer.clear();
+      ((Buffer) transportBuffer).clear();
       clientHandshaker.getBytesToSendToPeer(transportBuffer);
-      transportBuffer.flip();
+      ((Buffer) transportBuffer).flip();
       assertFalse(transportBuffer.hasRemaining());
 
-      transportBuffer.clear();
+      ((Buffer) transportBuffer).clear();
       serverHandshaker.getBytesToSendToPeer(transportBuffer);
-      transportBuffer.flip();
+      ((Buffer) transportBuffer).flip();
       assertEquals(
           FakeTsiHandshaker.State.SERVER_INIT.toString().trim(),
           new String(transportBufferBytes, 4, transportBuffer.remaining(), UTF_8).trim());
@@ -115,14 +116,14 @@ public class FakeTsiTest {
       assertFalse(transportBuffer.hasRemaining());
 
       // server shouldn't offer any more bytes
-      transportBuffer.clear();
+      ((Buffer) transportBuffer).clear();
       serverHandshaker.getBytesToSendToPeer(transportBuffer);
-      transportBuffer.flip();
+      ((Buffer) transportBuffer).flip();
       assertFalse(transportBuffer.hasRemaining());
 
-      transportBuffer.clear();
+      ((Buffer) transportBuffer).clear();
       clientHandshaker.getBytesToSendToPeer(transportBuffer);
-      transportBuffer.flip();
+      ((Buffer) transportBuffer).flip();
       assertEquals(
           FakeTsiHandshaker.State.CLIENT_FINISHED.toString().trim(),
           new String(transportBufferBytes, 4, transportBuffer.remaining(), UTF_8).trim());
@@ -131,14 +132,14 @@ public class FakeTsiTest {
       assertFalse(transportBuffer.hasRemaining());
 
       // client shouldn't offer any more bytes
-      transportBuffer.clear();
+      ((Buffer) transportBuffer).clear();
       clientHandshaker.getBytesToSendToPeer(transportBuffer);
-      transportBuffer.flip();
+      ((Buffer) transportBuffer).flip();
       assertFalse(transportBuffer.hasRemaining());
 
-      transportBuffer.clear();
+      ((Buffer) transportBuffer).clear();
       serverHandshaker.getBytesToSendToPeer(transportBuffer);
-      transportBuffer.flip();
+      ((Buffer) transportBuffer).flip();
       assertEquals(
           FakeTsiHandshaker.State.SERVER_FINISHED.toString().trim(),
           new String(transportBufferBytes, 4, transportBuffer.remaining(), UTF_8).trim());
@@ -147,9 +148,9 @@ public class FakeTsiTest {
       assertFalse(transportBuffer.hasRemaining());
 
       // server shouldn't offer any more bytes
-      transportBuffer.clear();
+      ((Buffer) transportBuffer).clear();
       serverHandshaker.getBytesToSendToPeer(transportBuffer);
-      transportBuffer.flip();
+      ((Buffer) transportBuffer).flip();
       assertFalse(transportBuffer.hasRemaining());
     } catch (GeneralSecurityException e) {
       throw new AssertionError(e);

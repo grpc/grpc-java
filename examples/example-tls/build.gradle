@@ -1,8 +1,8 @@
 plugins {
     // Provide convenience executables for trying out the examples.
     id 'application'
-    // ASSUMES GRADLE 2.12 OR HIGHER. Use plugin version 0.7.5 with earlier gradle versions
-    id 'com.google.protobuf' version '0.8.8'
+    // ASSUMES GRADLE 5.6 OR HIGHER. Use plugin version 0.8.10 with earlier gradle versions
+    id 'com.google.protobuf' version '0.8.13'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
 }
@@ -23,8 +23,8 @@ targetCompatibility = 1.7
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.31.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def nettyTcNativeVersion = '2.0.30.Final'
+def grpcVersion = '1.33.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def nettyTcNativeVersion = '2.0.31.Final'
 def protocVersion = '3.12.0'
 
 dependencies {

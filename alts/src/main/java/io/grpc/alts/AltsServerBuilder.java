@@ -30,7 +30,7 @@ import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
-import io.grpc.ServerStreamTracer.Factory;
+import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
@@ -102,7 +102,7 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
 
   /** {@inheritDoc} */
   @Override
-  public AltsServerBuilder addStreamTracerFactory(Factory factory) {
+  public AltsServerBuilder addStreamTracerFactory(ServerStreamTracer.Factory factory) {
     delegate.addStreamTracerFactory(factory);
     return this;
   }

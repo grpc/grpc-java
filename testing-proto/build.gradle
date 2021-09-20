@@ -12,7 +12,7 @@ dependencies {
             project(':grpc-stub')
     compileOnly libraries.javax_annotation
     testImplementation libraries.truth
-    testRuntime libraries.javax_annotation
+    testRuntimeOnly libraries.javax_annotation
 }
 
 configureProtoCompilation()

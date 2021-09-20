@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package udpa.core.v1;
+
+import "udpa/annotations/status.proto";
+import "udpa/core/v1/context_params.proto";
+
+import "validate/validate.proto";
+
+option java_outer_classname = "ResourceNameProto";
+option java_multiple_files = true;
+option java_package = "com.github.udpa.udpa.core.v1";
+
+option (udpa.annotations.file_status).work_in_progress = true;
+
+// UDPA resource name. This has a canonical udpa:// URI representation:
+//
+//   udpa://{authority}/{type_url}/{id/*}?{context_params}
+//
+// where context_params take the form of URI query parameters.
+//
+// A UDPA resource name fully identifies a network resource for transport
+// purposes. UDPA resource names in this form appear only in discovery
+// request/response messages used with the xDS transport.
+message ResourceName {
+  // Opaque identifiers for the resource. These are effectively concatenated
+  // with ‘/’ to form the non-query param path as resource ID.
+  repeated string id = 1 [(validate.rules).repeated = {min_items: 1}];
+
+  // Logical authority for resource (not necessarily transport network address).
+  // Authorities are opaque in the UDPA API, data-plane load balancers will map
+  // them to concrete network transports such as an xDS management server.
+  string authority = 2;
+
+  // Fully qualified resource type (as in type URL without types.googleapis.com/
+  // prefix).
+  string resource_type = 3 [(validate.rules).string = {min_len: 1}];
+
+  // Additional parameters that can be used to select resource variants.
+  ContextParams context = 4;
+}

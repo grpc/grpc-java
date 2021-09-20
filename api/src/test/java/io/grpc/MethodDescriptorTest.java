@@ -37,6 +37,7 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class MethodDescriptorTest {
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
 
@@ -175,6 +176,39 @@ public class MethodDescriptorTest {
         .build();
 
     assertNull(md.getServiceName());
+  }
+
+  @Test
+  public void getBareMethodName_extractsMethod() {
+    Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();
+    MethodDescriptor<?, ?> md = MethodDescriptor.newBuilder(marshaller, marshaller)
+        .setType(MethodType.UNARY)
+        .setFullMethodName("foo/bar")
+        .build();
+
+    assertEquals("bar", md.getBareMethodName());
+  }
+
+  @Test
+  public void getBareMethodName_returnsNull() {
+    Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();
+    MethodDescriptor<?, ?> md = MethodDescriptor.newBuilder(marshaller, marshaller)
+        .setType(MethodType.UNARY)
+        .setFullMethodName("foo-bar")
+        .build();
+
+    assertNull(md.getBareMethodName());
+  }
+
+  @Test
+  public void getBareMethodName_returnsEmptyStringWithMethodMissing() {
+    Marshaller<Void> marshaller = TestMethodDescriptors.voidMarshaller();
+    MethodDescriptor<?, ?> md = MethodDescriptor.newBuilder(marshaller, marshaller)
+        .setType(MethodType.UNARY)
+        .setFullMethodName("foo/")
+        .build();
+
+    assertTrue(md.getBareMethodName().isEmpty());
   }
 
   @Test

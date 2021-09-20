@@ -1,12 +1,12 @@
-grpc Examples
+gRPC Examples
 ==============================================
 
-The examples require grpc-java to already be built. You are strongly encouraged
-to check out a git release tag, since there will already be a build of grpc
+The examples require `grpc-java` to already be built. You are strongly encouraged
+to check out a git release tag, since there will already be a build of gRPC
 available. Otherwise you must follow [COMPILING](../COMPILING.md).
 
 You may want to read through the
-[Quick Start Guide](https://grpc.io/docs/quickstart/java.html)
+[Quick Start](https://grpc.io/docs/languages/java/quickstart)
 before trying out the examples.
 
 ## Basic examples
@@ -90,31 +90,31 @@ before trying out the examples.
 - <details>
   <summary>Retrying</summary>
 
-  The [retrying example](src/main/java/io/grpc/examples/retrying) provides a HelloWorld GRPC client & 
+  The [retrying example](src/main/java/io/grpc/examples/retrying) provides a HelloWorld gRPC client &
   server which demos the effect of client retry policy configured on the [ManagedChannel](
-  ../api/src/main/java/io/grpc/ManagedChannel.java) via [GRPC ServiceConfig](
-  https://github.com/grpc/grpc/blob/master/doc/service_config.md). Retry policy implementation & 
+  ../api/src/main/java/io/grpc/ManagedChannel.java) via [gRPC ServiceConfig](
+  https://github.com/grpc/grpc/blob/master/doc/service_config.md). Retry policy implementation &
   configuration details are outlined in the [proposal](https://github.com/grpc/proposal/blob/master/A6-client-retries.md).
-   
-  This retrying example is very similar to the [hedging example](src/main/java/io/grpc/examples/hedging) in its setup. 
+
+  This retrying example is very similar to the [hedging example](src/main/java/io/grpc/examples/hedging) in its setup.
   The [RetryingHelloWorldServer](src/main/java/io/grpc/examples/retrying/RetryingHelloWorldServer.java) responds with
-  a status UNAVAILABLE error response to a specified percentage of requests to simulate server resource exhaustion and 
-  general flakiness. The [RetryingHelloWorldClient](src/main/java/io/grpc/examples/retrying/RetryingHelloWorldClient.java) makes 
-  a number of sequential requests to the server, several of which will be retried depending on the configured policy in 
-  [retrying_service_config.json](src/main/resources/io/grpc/examples/retrying/retrying_service_config.json). Although 
-  the requests are blocking unary calls for simplicity, these could easily be changed to future unary calls in order to 
+  a status UNAVAILABLE error response to a specified percentage of requests to simulate server resource exhaustion and
+  general flakiness. The [RetryingHelloWorldClient](src/main/java/io/grpc/examples/retrying/RetryingHelloWorldClient.java) makes
+  a number of sequential requests to the server, several of which will be retried depending on the configured policy in
+  [retrying_service_config.json](src/main/resources/io/grpc/examples/retrying/retrying_service_config.json). Although
+  the requests are blocking unary calls for simplicity, these could easily be changed to future unary calls in order to
   test the result of request concurrency with retry policy enabled.
-  
+
   One can experiment with the [RetryingHelloWorldServer](src/main/java/io/grpc/examples/retrying/RetryingHelloWorldServer.java)
   failure conditions to simulate server throttling, as well as alter policy values in the [retrying_service_config.json](
-  src/main/resources/io/grpc/examples/retrying/retrying_service_config.json) to see their effects. To disable retrying 
-  entirely, set environment variable `DISABLE_RETRYING_IN_RETRYING_EXAMPLE=true` before running the client. 
-  Disabling the retry policy should produce many more failed GRPC calls as seen in the output log.
-  
+  src/main/resources/io/grpc/examples/retrying/retrying_service_config.json) to see their effects. To disable retrying
+  entirely, set environment variable `DISABLE_RETRYING_IN_RETRYING_EXAMPLE=true` before running the client.
+  Disabling the retry policy should produce many more failed gRPC calls as seen in the output log.
+
   See [the section below](#to-build-the-examples) for how to build and run the example. The
   executables for the server and the client are `retrying-hello-world-server` and
   `retrying-hello-world-client`.
-  
+
 </details>
 
 ### <a name="to-build-the-examples"></a> To build the examples
@@ -145,9 +145,8 @@ $ ./build/install/examples/bin/hello-world-client
 
 That's it!
 
-Please refer to gRPC Java's [README](../README.md) and
-[tutorial](https://grpc.io/docs/tutorials/basic/java.html) for more
-information.
+For more information, refer to gRPC Java's [README](../README.md) and
+[tutorial](https://grpc.io/docs/languages/java/basics).
 
 ### Maven
 

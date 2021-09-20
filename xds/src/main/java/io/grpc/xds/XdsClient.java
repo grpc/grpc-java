@@ -16,28 +16,26 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
-import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.Bootstrapper.ChannelCreds;
-import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Route;
+import io.grpc.xds.EnvoyProtoData.VirtualHost;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -45,7 +43,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -62,6 +59,7 @@ abstract class XdsClient {
    * traffic mirroring, retry or hedging, default timeouts and load balancing policy that will
    * be used to generate a service config.
    */
+  // TODO(chengyuanzhang): delete me.
   static final class ConfigUpdate {
     private final List<Route> routes;
 
@@ -106,12 +104,151 @@ abstract class XdsClient {
     }
   }
 
-  /**
-   * Data class containing the results of performing a resource discovery RPC via CDS protocol.
-   * The results include configurations for a single upstream cluster, such as endpoint discovery
-   * type, load balancing policy, connection timeout and etc.
-   */
-  static final class ClusterUpdate {
+  static final class LdsUpdate implements ResourceUpdate {
+    // Total number of nanoseconds to keep alive an HTTP request/response stream.
+    private final long httpMaxStreamDurationNano;
+    // The name of the route configuration to be used for RDS resource discovery.
+    @Nullable
+    private final String rdsName;
+    // The list virtual hosts that make up the route table.
+    @Nullable
+    private final List<VirtualHost> virtualHosts;
+
+    private LdsUpdate(long httpMaxStreamDurationNano, @Nullable String rdsName,
+        @Nullable List<VirtualHost> virtualHosts) {
+      this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
+      this.rdsName = rdsName;
+      this.virtualHosts = virtualHosts == null
+          ? null : Collections.unmodifiableList(new ArrayList<>(virtualHosts));
+    }
+
+    long getHttpMaxStreamDurationNano() {
+      return httpMaxStreamDurationNano;
+    }
+
+    @Nullable
+    String getRdsName() {
+      return rdsName;
+    }
+
+    @Nullable
+    List<VirtualHost> getVirtualHosts() {
+      return virtualHosts;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(httpMaxStreamDurationNano, rdsName, virtualHosts);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      LdsUpdate that = (LdsUpdate) o;
+      return Objects.equals(httpMaxStreamDurationNano, that.httpMaxStreamDurationNano)
+          && Objects.equals(rdsName, that.rdsName)
+          && Objects.equals(virtualHosts, that.virtualHosts);
+    }
+
+    @Override
+    public String toString() {
+      ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
+      toStringHelper.add("httpMaxStreamDurationNano", httpMaxStreamDurationNano);
+      if (rdsName != null) {
+        toStringHelper.add("rdsName", rdsName);
+      } else {
+        toStringHelper.add("virtualHosts", virtualHosts);
+      }
+      return toStringHelper.toString();
+    }
+
+    static Builder newBuilder() {
+      return new Builder();
+    }
+
+    static class Builder {
+      private long httpMaxStreamDurationNano;
+      @Nullable
+      private String rdsName;
+      @Nullable
+      private List<VirtualHost> virtualHosts;
+
+      private Builder() {
+      }
+
+      Builder setHttpMaxStreamDurationNano(long httpMaxStreamDurationNano) {
+        this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
+        return this;
+      }
+
+      Builder setRdsName(String rdsName) {
+        this.rdsName = rdsName;
+        return this;
+      }
+
+      Builder addVirtualHost(VirtualHost virtualHost) {
+        if (virtualHosts == null) {
+          virtualHosts = new ArrayList<>();
+        }
+        virtualHosts.add(virtualHost);
+        return this;
+      }
+
+      LdsUpdate build() {
+        checkState((rdsName == null) != (virtualHosts == null), "one of rdsName and virtualHosts");
+        return new LdsUpdate(httpMaxStreamDurationNano, rdsName, virtualHosts);
+      }
+    }
+  }
+
+  static final class RdsUpdate implements ResourceUpdate {
+    // The list virtual hosts that make up the route table.
+    private final List<VirtualHost> virtualHosts;
+
+    private RdsUpdate(List<VirtualHost> virtualHosts) {
+      this.virtualHosts = Collections.unmodifiableList(
+          new ArrayList<>(checkNotNull(virtualHosts, "virtualHosts")));
+    }
+
+    static RdsUpdate fromVirtualHosts(List<VirtualHost> virtualHosts) {
+      return new RdsUpdate(virtualHosts);
+    }
+
+    List<VirtualHost> getVirtualHosts() {
+      return virtualHosts;
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("virtualHosts", virtualHosts)
+          .toString();
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(virtualHosts);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      RdsUpdate that = (RdsUpdate) o;
+      return Objects.equals(virtualHosts, that.virtualHosts);
+    }
+  }
+
+  static final class CdsUpdate implements ResourceUpdate {
     private final String clusterName;
     @Nullable
     private final String edsServiceName;
@@ -120,7 +257,7 @@ abstract class XdsClient {
     private final String lrsServerName;
     private final UpstreamTlsContext upstreamTlsContext;
 
-    private ClusterUpdate(
+    private CdsUpdate(
         String clusterName,
         @Nullable String edsServiceName,
         String lbPolicy,
@@ -195,7 +332,7 @@ abstract class XdsClient {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      ClusterUpdate that = (ClusterUpdate) o;
+      CdsUpdate that = (CdsUpdate) o;
       return Objects.equals(clusterName, that.clusterName)
           && Objects.equals(edsServiceName, that.edsServiceName)
           && Objects.equals(lbPolicy, that.lbPolicy)
@@ -217,7 +354,6 @@ abstract class XdsClient {
       @Nullable
       private UpstreamTlsContext upstreamTlsContext;
 
-      // Use ClusterUpdate.newBuilder().
       private Builder() {
       }
 
@@ -246,29 +382,23 @@ abstract class XdsClient {
         return this;
       }
 
-      ClusterUpdate build() {
+      CdsUpdate build() {
         checkState(clusterName != null, "clusterName is not set");
         checkState(lbPolicy != null, "lbPolicy is not set");
 
         return
-            new ClusterUpdate(
+            new CdsUpdate(
                 clusterName, edsServiceName, lbPolicy, lrsServerName, upstreamTlsContext);
       }
     }
   }
 
-  /**
-   * Data class containing the results of performing a resource discovery RPC via EDS protocol.
-   * The results include endpoint addresses running the requested service, as well as
-   * configurations for traffic control such as drop overloads, inter-cluster load balancing
-   * policy and etc.
-   */
-  static final class EndpointUpdate {
+  static final class EdsUpdate implements ResourceUpdate {
     private final String clusterName;
     private final Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap;
     private final List<DropOverload> dropPolicies;
 
-    private EndpointUpdate(
+    private EdsUpdate(
         String clusterName,
         Map<Locality, LocalityLbEndpoints> localityLbEndpoints,
         List<DropOverload> dropPolicies) {
@@ -307,7 +437,7 @@ abstract class XdsClient {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      EndpointUpdate that = (EndpointUpdate) o;
+      EdsUpdate that = (EdsUpdate) o;
       return Objects.equals(clusterName, that.clusterName)
           && Objects.equals(localityLbEndpointsMap, that.localityLbEndpointsMap)
           && Objects.equals(dropPolicies, that.dropPolicies);
@@ -334,7 +464,6 @@ abstract class XdsClient {
       private Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
       private List<DropOverload> dropPolicies = new ArrayList<>();
 
-      // Use EndpointUpdate.newBuilder().
       private Builder() {
       }
 
@@ -353,10 +482,10 @@ abstract class XdsClient {
         return this;
       }
 
-      EndpointUpdate build() {
+      EdsUpdate build() {
         checkState(clusterName != null, "clusterName is not set");
         return
-            new EndpointUpdate(
+            new EdsUpdate(
                 clusterName,
                 ImmutableMap.copyOf(localityLbEndpointsMap),
                 ImmutableList.copyOf(dropPolicies));
@@ -368,7 +497,7 @@ abstract class XdsClient {
    * Updates via resource discovery RPCs using LDS. Includes {@link Listener} object containing
    * config for security, RBAC or other server side features such as rate limit.
    */
-  static final class ListenerUpdate {
+  static final class ListenerUpdate implements ResourceUpdate {
     // TODO(sanjaypujare): flatten structure by moving Listener class members here.
     private final Listener listener;
 
@@ -410,10 +539,13 @@ abstract class XdsClient {
     }
   }
 
+  interface ResourceUpdate {
+  }
+
   /**
    * Watcher interface for a single requested xDS resource.
    */
-  private interface ResourceWatcher {
+  interface ResourceWatcher {
 
     /**
      * Called when the resource discovery RPC encounters some transient error.
@@ -428,31 +560,32 @@ abstract class XdsClient {
     void onResourceDoesNotExist(String resourceName);
   }
 
+  interface LdsResourceWatcher extends ResourceWatcher {
+    void onChanged(LdsUpdate update);
+  }
+
+  interface RdsResourceWatcher extends ResourceWatcher {
+    void onChanged(RdsUpdate update);
+  }
+
+  interface CdsResourceWatcher extends ResourceWatcher {
+    void onChanged(CdsUpdate update);
+  }
+
+  interface EdsResourceWatcher extends ResourceWatcher {
+    void onChanged(EdsUpdate update);
+  }
+
   /**
    * Config watcher interface. To be implemented by the xDS resolver.
    */
+  // TODO(chengyuanzhang): delete me.
   interface ConfigWatcher extends ResourceWatcher {
 
     /**
      * Called when receiving an update on virtual host configurations.
      */
     void onConfigChanged(ConfigUpdate update);
-  }
-
-  /**
-   * Cluster watcher interface.
-   */
-  interface ClusterWatcher extends ResourceWatcher {
-
-    void onClusterChanged(ClusterUpdate update);
-  }
-
-  /**
-   * Endpoint watcher interface.
-   */
-  interface EndpointWatcher extends ResourceWatcher {
-
-    void onEndpointChanged(EndpointUpdate update);
   }
 
   /**
@@ -482,33 +615,56 @@ abstract class XdsClient {
    *     targets for.
    * @param watcher the {@link ConfigWatcher} to receive {@link ConfigUpdate}.
    */
+  // TODO(chengyuanzhang): delete me.
   void watchConfigData(String targetAuthority, ConfigWatcher watcher) {
   }
 
   /**
-   * Registers a data watcher for the given cluster.
+   * Registers a data watcher for the given LDS resource.
    */
-  void watchClusterData(String clusterName, ClusterWatcher watcher) {
+  void watchLdsResource(String resourceName, LdsResourceWatcher watcher) {
   }
 
   /**
-   * Unregisters the given cluster watcher, which was registered to receive updates for the
-   * given cluster.
+   * Unregisters the given LDS resource watcher.
    */
-  void cancelClusterDataWatch(String clusterName, ClusterWatcher watcher) {
+  void cancelLdsResourceWatch(String resourceName, LdsResourceWatcher watcher) {
   }
 
   /**
-   * Registers a data watcher for endpoints in the given cluster.
+   * Registers a data watcher for the given RDS resource.
    */
-  void watchEndpointData(String clusterName, EndpointWatcher watcher) {
+  void watchRdsResource(String resourceName, RdsResourceWatcher watcher) {
   }
 
   /**
-   * Unregisters the given endpoints watcher, which was registered to receive updates for
-   * endpoints information in the given cluster.
+   * Unregisters the given RDS resource watcher.
    */
-  void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
+  void cancelRdsResourceWatch(String resourceName, RdsResourceWatcher watcher) {
+  }
+
+  /**
+   * Registers a data watcher for the given CDS resource.
+   */
+  void watchCdsResource(String resourceName, CdsResourceWatcher watcher) {
+  }
+
+  /**
+   * Unregisters the given CDS resource watcher.
+   */
+  void cancelCdsResourceWatch(String resourceName, CdsResourceWatcher watcher) {
+  }
+
+  /**
+   * Registers a data watcher for the given EDS resource.
+   */
+  void watchEdsResource(String resourceName, EdsResourceWatcher watcher) {
+  }
+
+  /**
+   * Unregisters the given EDS resource watcher.
+   */
+  void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
   }
 
   /**
@@ -518,23 +674,37 @@ abstract class XdsClient {
   }
 
   /**
-   * Report client load stats to a remote server for the given cluster:cluster_service.
-   *
-   * <p>Note: currently we can only report loads for a single cluster:cluster_service,
-   * as the design for adding clusters to report loads for while load reporting is
-   * happening is undefined.
+   * Starts client side load reporting via LRS. All clusters report load through one LRS stream,
+   * only the first call of this method effectively starts the LRS stream.
    */
-  void reportClientStats(
-      String clusterName, @Nullable String clusterServiceName, LoadStatsStore loadStatsStore) {
+  void reportClientStats() {
+  }
+
+  /**
+   * Stops client side load reporting via LRS. All clusters report load through one LRS stream,
+   * only the last call of this method effectively stops the LRS stream.
+   */
+  void cancelClientStatsReport() {
+  }
+
+  /**
+   * Starts recording client load stats for the given cluster:cluster_service. Caller should use
+   * the returned {@link LoadStatsStore} to record and aggregate stats for load sent to the given
+   * cluster:cluster_service. Recorded stats may be reported to a load reporting server if enabled.
+   */
+  LoadStatsStore addClientStats(String clusterName, @Nullable String clusterServiceName) {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Stops reporting client load stats to the remote server for the given cluster:cluster_service.
+   * Stops recording client load stats for the given cluster:cluster_service. The load reporting
+   * server will no longer receive stats for the given cluster:cluster_service after this call.
    */
-  void cancelClientStatsReport(String clusterName, @Nullable String clusterServiceName) {
+  void removeClientStats(String clusterName, @Nullable String clusterServiceName) {
+    throw new UnsupportedOperationException();
   }
 
+  // TODO(chengyuanzhang): eliminate this factory
   abstract static class XdsClientFactory {
     abstract XdsClient createXdsClient();
   }
@@ -597,51 +767,22 @@ abstract class XdsClient {
     }
   }
 
-  /**
-   * Factory for creating channels to xDS severs.
-   */
-  abstract static class XdsChannelFactory {
-    private static final XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
+  static final class XdsChannel {
+    private final ManagedChannel managedChannel;
+    private final boolean useProtocolV3;
 
-      /**
-       * Creates a channel to the first server in the given list.
-       */
-      @Override
-      ManagedChannel createChannel(List<ServerInfo> servers) {
-        checkArgument(!servers.isEmpty(), "No management server provided.");
-        XdsLogger logger = XdsLogger.withPrefix("xds-client-channel-factory");
-        ServerInfo serverInfo = servers.get(0);
-        String serverUri = serverInfo.getServerUri();
-        logger.log(XdsLogLevel.INFO, "Creating channel to {0}", serverUri);
-        List<ChannelCreds> channelCredsList = serverInfo.getChannelCredentials();
-        ManagedChannelBuilder<?> channelBuilder = null;
-        // Use the first supported channel credentials configuration.
-        // Currently, only "google_default" is supported.
-        for (ChannelCreds creds : channelCredsList) {
-          if (creds.getType().equals("google_default")) {
-            logger.log(XdsLogLevel.INFO, "Using channel credentials: google_default");
-            channelBuilder = GoogleDefaultChannelBuilder.forTarget(serverUri);
-            break;
-          }
-        }
-        if (channelBuilder == null) {
-          logger.log(XdsLogLevel.INFO, "Using default channel credentials");
-          channelBuilder = ManagedChannelBuilder.forTarget(serverUri);
-        }
-
-        return channelBuilder
-            .keepAliveTime(5, TimeUnit.MINUTES)
-            .build();
-      }
-    };
-
-    static XdsChannelFactory getInstance() {
-      return DEFAULT_INSTANCE;
+    @VisibleForTesting
+    XdsChannel(ManagedChannel managedChannel, boolean useProtocolV3) {
+      this.managedChannel = managedChannel;
+      this.useProtocolV3 = useProtocolV3;
     }
 
-    /**
-     * Creates a channel to one of the provided management servers.
-     */
-    abstract ManagedChannel createChannel(List<ServerInfo> servers);
+    ManagedChannel getManagedChannel() {
+      return managedChannel;
+    }
+
+    boolean isUseProtocolV3() {
+      return useProtocolV3;
+    }
   }
 }

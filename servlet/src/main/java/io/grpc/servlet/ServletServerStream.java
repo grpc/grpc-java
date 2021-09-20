@@ -291,12 +291,6 @@ final class ServletServerStream extends AbstractServerStream {
     }
 
     @Override
-    public void request(int numMessages) {
-      transportState.runOnTransportThread(
-          () -> transportState.requestMessagesFromDeframer(numMessages));
-    }
-
-    @Override
     public void cancel(Status status) {
       if (resp.isCommitted() && Code.DEADLINE_EXCEEDED == status.getCode()) {
         return; // let the servlet timeout, the container will sent RST_STREAM automatically

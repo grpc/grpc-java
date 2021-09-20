@@ -195,12 +195,8 @@ public class ServerCallsTest {
     } catch (StatusRuntimeException expected) {
       // Expected
     }
-    try {
-      callObserver.get().onCompleted();
-      fail("Expected cancellation exception when onCallHandler not set");
-    } catch (StatusRuntimeException expected) {
-      // Expected
-    }
+    // No exception
+    callObserver.get().onCompleted();
   }
 
   @Test

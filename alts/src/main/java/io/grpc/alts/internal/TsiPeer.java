@@ -54,7 +54,7 @@ public final class TsiPeer {
     private final String name;
     private final T value;
 
-    public Property(@Nonnull String name, @Nonnull T value) {
+    protected Property(@Nonnull String name, @Nonnull T value) {
       this.name = name;
       this.value = value;
     }

@@ -60,9 +60,6 @@ public class MutableHandlerRegistryTest {
   @Mock
   private ServerCallHandler<String, Integer> fewHandler;
 
-  @Mock
-  private ServerCallHandler<String, Integer>  otherFlowHandler;
-
   private ServerServiceDefinition basicServiceDefinition;
   private ServerServiceDefinition multiServiceDefinition;
 
@@ -99,8 +96,8 @@ public class MutableHandlerRegistryTest {
   /** Final checks for all tests. */
   @After
   public void makeSureMocksUnused() {
-    Mockito.verifyZeroInteractions(requestMarshaller);
-    Mockito.verifyZeroInteractions(responseMarshaller);
+    Mockito.verifyNoInteractions(requestMarshaller);
+    Mockito.verifyNoInteractions(responseMarshaller);
     Mockito.verifyNoMoreInteractions(flowHandler);
     Mockito.verifyNoMoreInteractions(coupleHandler);
     Mockito.verifyNoMoreInteractions(fewHandler);

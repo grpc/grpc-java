@@ -62,7 +62,7 @@ public class RlsRequestFactoryTest {
           /* lookupServiceTimeoutInMillis= */ TimeUnit.SECONDS.toMillis(2),
           /* maxAgeInMillis= */ TimeUnit.SECONDS.toMillis(300),
           /* staleAgeInMillis= */ TimeUnit.SECONDS.toMillis(240),
-          /* cacheSize= */ 1000,
+          /* cacheSizeBytes= */ 1000,
           /* validTargets= */ ImmutableList.of("a valid target"),
           /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
 

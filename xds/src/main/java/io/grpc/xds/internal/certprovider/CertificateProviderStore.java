@@ -129,15 +129,17 @@ public final class CertificateProviderStore {
       CertificateProviderProvider certProviderProvider =
           certificateProviderRegistry.getProvider(key.pluginName);
       if (certProviderProvider == null) {
-        throw new IllegalArgumentException("Provider not found.");
+        throw new IllegalArgumentException("Provider not found for " + key.pluginName);
       }
-      return certProviderProvider.createCertificateProvider(
-          key.config, new CertificateProvider.DistributorWatcher(), key.notifyCertUpdates);
+      CertificateProvider certProvider = certProviderProvider.createCertificateProvider(
+              key.config, new CertificateProvider.DistributorWatcher(), key.notifyCertUpdates);
+      certProvider.start();
+      return certProvider;
     }
   }
 
   @VisibleForTesting
-  CertificateProviderStore(CertificateProviderRegistry certificateProviderRegistry) {
+  public CertificateProviderStore(CertificateProviderRegistry certificateProviderRegistry) {
     this.certificateProviderRegistry = certificateProviderRegistry;
     certProviderMap = new ReferenceCountingMap<>(new CertProviderFactory());
   }

@@ -16,11 +16,14 @@
 
 package io.grpc.xds.internal.certprovider;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Status;
 import io.grpc.xds.internal.sds.Closeable;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -46,37 +49,83 @@ public abstract class CertificateProvider implements Closeable {
   }
 
   @VisibleForTesting
-  static final class DistributorWatcher implements Watcher {
+  public static final class DistributorWatcher implements Watcher {
+    private PrivateKey privateKey;
+    private List<X509Certificate> certChain;
+    private List<X509Certificate> trustedRoots;
+
     @VisibleForTesting
-    final Set<Watcher> downsstreamWatchers = new HashSet<>();
+    final Set<Watcher> downstreamWatchers = new HashSet<>();
 
     synchronized void addWatcher(Watcher watcher) {
-      downsstreamWatchers.add(watcher);
+      downstreamWatchers.add(watcher);
+      if (privateKey != null && certChain != null) {
+        sendLastCertificateUpdate(watcher);
+      }
+      if (trustedRoots != null) {
+        sendLastTrustedRootsUpdate(watcher);
+      }
     }
 
     synchronized void removeWatcher(Watcher watcher) {
-      downsstreamWatchers.remove(watcher);
+      downstreamWatchers.remove(watcher);
+    }
+
+    @VisibleForTesting public Set<Watcher> getDownstreamWatchers() {
+      return Collections.unmodifiableSet(downstreamWatchers);
+    }
+
+    private void sendLastCertificateUpdate(Watcher watcher) {
+      watcher.updateCertificate(privateKey, certChain);
+    }
+
+    private void sendLastTrustedRootsUpdate(Watcher watcher) {
+      watcher.updateTrustedRoots(trustedRoots);
     }
 
     @Override
-    public void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
-      for (Watcher watcher : downsstreamWatchers) {
-        watcher.updateCertificate(key, certChain);
+    public synchronized void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
+      checkNotNull(key, "key");
+      checkNotNull(certChain, "certChain");
+      privateKey = key;
+      this.certChain = certChain;
+      for (Watcher watcher : downstreamWatchers) {
+        sendLastCertificateUpdate(watcher);
       }
     }
 
     @Override
-    public void updateTrustedRoots(List<X509Certificate> trustedRoots) {
-      for (Watcher watcher : downsstreamWatchers) {
-        watcher.updateTrustedRoots(trustedRoots);
+    public synchronized void updateTrustedRoots(List<X509Certificate> trustedRoots) {
+      checkNotNull(trustedRoots, "trustedRoots");
+      this.trustedRoots = trustedRoots;
+      for (Watcher watcher : downstreamWatchers) {
+        sendLastTrustedRootsUpdate(watcher);
       }
     }
 
     @Override
-    public void onError(Status errorStatus) {
-      for (Watcher watcher : downsstreamWatchers) {
+    public synchronized void onError(Status errorStatus) {
+      for (Watcher watcher : downstreamWatchers) {
         watcher.onError(errorStatus);
       }
+    }
+
+    X509Certificate getLastIdentityCert() {
+      if (certChain != null && !certChain.isEmpty()) {
+        return certChain.get(0);
+      }
+      return null;
+    }
+
+    void close() {
+      downstreamWatchers.clear();
+      clearValues();
+    }
+
+    void clearValues() {
+      privateKey = null;
+      certChain = null;
+      trustedRoots = null;
     }
   }
 
@@ -97,6 +146,9 @@ public abstract class CertificateProvider implements Closeable {
   /** Releases all resources and stop cert refreshes and watcher updates. */
   @Override
   public abstract void close();
+
+  /** Starts the cert refresh and watcher update cycle. */
+  public abstract void start();
 
   private final DistributorWatcher watcher;
   private final boolean notifyCertUpdates;

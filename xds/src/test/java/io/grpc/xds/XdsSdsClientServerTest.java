@@ -17,7 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsClientWrapperForServerSdsTest.buildFilterChainMatch;
+import static io.grpc.xds.XdsServerTestHelper.buildFilterChainMatch;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_SERVER_KEY_FILE;
@@ -28,6 +28,7 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
@@ -48,13 +49,14 @@ import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
+import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import io.grpc.xds.internal.sds.XdsChannelBuilder;
 import io.grpc.xds.internal.sds.XdsServerBuilder;
 import io.netty.handler.ssl.NotSslRecordException;
 import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -78,10 +80,12 @@ public class XdsSdsClientServerTest {
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private int port;
   private FakeNameResolverFactory fakeNameResolverFactory;
+  private Bootstrapper mockBootstrapper;
 
   @Before
   public void setUp() throws IOException {
-    port = findFreePort();
+    port = XdsServerTestHelper.findFreePort();
+    mockBootstrapper = mock(Bootstrapper.class);
   }
 
   @After
@@ -283,7 +287,7 @@ public class XdsSdsClientServerTest {
         XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
             port, /* downstreamTlsContext= */ downstreamTlsContext);
     buildServerWithFallbackProtocolNegotiator(xdsClientWrapperForServerSds,
-        InternalProtocolNegotiators.serverPlaintext());
+        InternalProtocolNegotiators.serverPlaintext(), downstreamTlsContext);
 
     XdsClient.ListenerWatcher listenerWatcher = xdsClientWrapperForServerSds.getListenerWatcher();
 
@@ -302,34 +306,39 @@ public class XdsSdsClientServerTest {
   private void buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext,
       ProtocolNegotiator fallbackProtocolNegotiator)
       throws IOException {
-    final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
-            port, /* downstreamTlsContext= */ downstreamTlsContext);
-    buildServerWithFallbackProtocolNegotiator(xdsClientWrapperForServerSds,
-        fallbackProtocolNegotiator);
+    XdsClient mockXdsClient = mock(XdsClient.class);
+    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+        new XdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds.start(mockXdsClient);
+    buildServerWithFallbackProtocolNegotiator(
+        xdsClientWrapperForServerSds, fallbackProtocolNegotiator, downstreamTlsContext);
   }
 
   private void buildServerWithFallbackProtocolNegotiator(
       XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
-      ProtocolNegotiator fallbackProtocolNegotiator) throws IOException {
+      ProtocolNegotiator fallbackProtocolNegotiator,
+      DownstreamTlsContext downstreamTlsContext)
+      throws IOException {
     SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator =
         new SdsProtocolNegotiators.ServerSdsProtocolNegotiator(xdsClientWrapperForServerSds,
             fallbackProtocolNegotiator);
-    buildServer(port, serverSdsProtocolNegotiator);
+    buildServer(
+        port, serverSdsProtocolNegotiator, xdsClientWrapperForServerSds, downstreamTlsContext);
   }
 
   private void buildServer(
-      int port, SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator)
+      int port,
+      SdsProtocolNegotiators.ServerSdsProtocolNegotiator serverSdsProtocolNegotiator,
+      XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
+      DownstreamTlsContext downstreamTlsContext)
       throws IOException {
     XdsServerBuilder builder = XdsServerBuilder.forPort(port).addService(new SimpleServiceImpl());
+    XdsServerTestHelper.generateListenerUpdate(
+        xdsClientWrapperForServerSds.getListenerWatcher(),
+        port,
+            downstreamTlsContext,
+        /* tlsContext2= */null);
     cleanupRule.register(builder.buildServer(serverSdsProtocolNegotiator)).start();
-  }
-
-  private static int findFreePort() throws IOException {
-    try (ServerSocket socket = new ServerSocket(0)) {
-      socket.setReuseAddress(true);
-      return socket.getLocalPort();
-    }
   }
 
   static EnvoyServerProtoData.Listener buildListener(
@@ -349,7 +358,8 @@ public class XdsSdsClientServerTest {
     fakeNameResolverFactory = new FakeNameResolverFactory.Builder(expectedUri).build();
     NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverFactory);
     XdsChannelBuilder channelBuilder =
-        XdsChannelBuilder.forTarget("sdstest://localhost:" + port);
+        XdsChannelBuilder.forTarget("sdstest://localhost:" + port)
+            .fallbackProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     if (overrideAuthority != null) {
       channelBuilder = channelBuilder.overrideAuthority(overrideAuthority);
     }
@@ -358,7 +368,9 @@ public class XdsSdsClientServerTest {
     Attributes attrs =
         (upstreamTlsContext != null)
             ? Attributes.newBuilder()
-                .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext)
+                .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                    new SslContextProviderSupplier(
+                        upstreamTlsContext, new TlsContextManagerImpl(mockBootstrapper)))
                 .build()
             : Attributes.EMPTY;
     fakeNameResolverFactory.setServers(

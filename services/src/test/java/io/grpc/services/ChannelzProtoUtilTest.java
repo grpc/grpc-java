@@ -85,7 +85,7 @@ import java.net.SocketAddress;
 import java.security.cert.Certificate;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Map.Entry;
+import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -932,7 +932,7 @@ public final class ChannelzProtoUtilTest {
     SocketOptions.Builder builder = new SocketOptions.Builder()
         .setSocketOptionTimeoutMillis(options.soTimeoutMillis)
         .setSocketOptionLingerSeconds(options.lingerSeconds);
-    for (Entry<String, String> entry : options.others.entrySet()) {
+    for (Map.Entry<String, String> entry : options.others.entrySet()) {
       builder.addOption(entry.getKey(), entry.getValue());
     }
     return builder;

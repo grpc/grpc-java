@@ -89,8 +89,9 @@ new_apk_size="$(stat --printf=%s $HELLO_WORLD_OUTPUT_DIR/apk/release/app-release
 # Get the APK size and dex count stats using the pull request base commit
 
 cd $BASE_DIR/github/grpc-java
-git checkout HEAD^
 ./gradlew clean
+git checkout HEAD^
+./gradlew --stop  # use a new daemon to build the previous commit
 ./gradlew publishToMavenLocal
 cd examples/android/helloworld/
 ../../gradlew build

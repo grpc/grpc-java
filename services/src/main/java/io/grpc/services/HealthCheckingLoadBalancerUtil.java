@@ -18,7 +18,6 @@ package io.grpc.services;
 
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.Factory;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
@@ -35,7 +34,8 @@ public final class HealthCheckingLoadBalancerUtil {
 
   /**
    * Creates a health-checking-capable LoadBalancer.  This method is used to implement
-   * health-checking-capable {@link Factory}s, which will typically written this way:
+   * health-checking-capable {@link io.grpc.LoadBalancer.Factory}s, which will typically written
+   * this way:
    *
    * <pre>
    * public class HealthCheckingFooLbFactory extends LoadBalancer.Factory {
@@ -52,15 +52,15 @@ public final class HealthCheckingLoadBalancerUtil {
    * </pre>
    *
    * <p>As a requirement for the original LoadBalancer, it must call
-   * {@code Helper.createSubchannel()} from the {@link
-   * io.grpc.LoadBalancer.Helper#getSynchronizationContext() Synchronization Context}, or
-   * {@code createSubchannel()} will throw.
+   * {@code Helper.createSubchannel()} from the {@link Helper#getSynchronizationContext()
+   * Synchronization Context}, or {@code createSubchannel()} will throw.
    *
    * @param factory the original factory that implements load-balancing logic without health
    *        checking
    * @param helper the helper passed to the resulting health-checking LoadBalancer.
    */
-  public static LoadBalancer newHealthCheckingLoadBalancer(Factory factory, Helper helper) {
+  public static LoadBalancer newHealthCheckingLoadBalancer(
+      LoadBalancer.Factory factory, Helper helper) {
     HealthCheckingLoadBalancerFactory hcFactory =
         new HealthCheckingLoadBalancerFactory(
             factory, new ExponentialBackoffPolicy.Provider(),
