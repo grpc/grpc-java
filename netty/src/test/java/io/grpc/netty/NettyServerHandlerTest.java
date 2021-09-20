@@ -351,6 +351,56 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
+  public void gracefulCloseShouldGracefullyCloseChannel() throws Exception {
+    manualSetUp();
+    handler()
+        .write(ctx(), new GracefulServerCloseCommand("test", 1, TimeUnit.MINUTES), newPromise());
+
+    verifyWrite().writeGoAway(eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()),
+        isA(ByteBuf.class), any(ChannelPromise.class));
+    verifyWrite().writePing(
+        eq(ctx()),
+        eq(false),
+        eq(NettyServerHandler.GRACEFUL_SHUTDOWN_PING),
+        isA(ChannelPromise.class));
+    channelRead(pingFrame(/*ack=*/ true , NettyServerHandler.GRACEFUL_SHUTDOWN_PING));
+
+    verifyWrite().writeGoAway(eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()),
+        isA(ByteBuf.class), any(ChannelPromise.class));
+
+    // Verify that the channel was closed.
+    assertFalse(channel().isOpen());
+  }
+
+  @Test
+  public void secondGracefulCloseIsSafe() throws Exception {
+    manualSetUp();
+    handler().write(ctx(), new GracefulServerCloseCommand("test"), newPromise());
+
+    verifyWrite().writeGoAway(eq(ctx()), eq(Integer.MAX_VALUE), eq(Http2Error.NO_ERROR.code()),
+        isA(ByteBuf.class), any(ChannelPromise.class));
+    verifyWrite().writePing(
+        eq(ctx()),
+        eq(false),
+        eq(NettyServerHandler.GRACEFUL_SHUTDOWN_PING),
+        isA(ChannelPromise.class));
+
+    handler().write(ctx(), new GracefulServerCloseCommand("test2"), newPromise());
+
+    channel().runPendingTasks();
+    // No additional GOAWAYs.
+    verifyWrite().writeGoAway(any(ChannelHandlerContext.class), any(Integer.class), any(Long.class),
+        any(ByteBuf.class), any(ChannelPromise.class));
+    channel().checkException();
+    assertTrue(channel().isOpen());
+
+    channelRead(pingFrame(/*ack=*/ true , NettyServerHandler.GRACEFUL_SHUTDOWN_PING));
+    verifyWrite().writeGoAway(eq(ctx()), eq(0), eq(Http2Error.NO_ERROR.code()),
+        isA(ByteBuf.class), any(ChannelPromise.class));
+    assertFalse(channel().isOpen());
+  }
+
+  @Test
   public void exceptionCaughtShouldCloseConnection() throws Exception {
     manualSetUp();
     handler().exceptionCaught(ctx(), new RuntimeException("fake exception"));

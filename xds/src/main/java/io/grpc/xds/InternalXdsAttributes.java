@@ -22,10 +22,8 @@ import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.ObjectPool;
-import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Internal attributes used for xDS implementation. Do not use.
@@ -81,9 +79,14 @@ public final class InternalXdsAttributes {
    * Filter chain match for network filters.
    */
   @Grpc.TransportAttr
-  static final Attributes.Key<AtomicReference<FilterChainSelector>>
-          ATTR_FILTER_CHAIN_SELECTOR_REF = Attributes.Key.create(
-          "io.grpc.xds.InternalXdsAttributes.filterChainSelectorRef");
+  static final Attributes.Key<FilterChainSelectorManager>
+          ATTR_FILTER_CHAIN_SELECTOR_MANAGER = Attributes.Key.create(
+          "io.grpc.xds.InternalXdsAttributes.filterChainSelectorManager");
+
+  /** Grace time to use when draining. Null for an infinite grace time. */
+  @Grpc.TransportAttr
+  static final Attributes.Key<Long> ATTR_DRAIN_GRACE_NANOS =
+      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.drainGraceTime");
 
   private InternalXdsAttributes() {}
 }
