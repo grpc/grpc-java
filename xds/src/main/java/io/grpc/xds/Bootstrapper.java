@@ -47,6 +47,7 @@ public abstract class Bootstrapper {
 
   private static final String LOG_PREFIX = "xds-bootstrap";
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
+  private static final String BOOTSTRAP_PATH_SYS_PROPERTY_VAR = "io.grpc.xds.bootstrap";
   @VisibleForTesting
   static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
       "envoy.lb.does_not_support_overprovisioning";
@@ -54,14 +55,20 @@ public abstract class Bootstrapper {
   private static final Bootstrapper DEFAULT_INSTANCE = new Bootstrapper() {
     @Override
     public BootstrapInfo readBootstrap() throws XdsInitializationException {
-      String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
+      String filePathSource = BOOTSTRAP_PATH_SYS_ENV_VAR;
+      String filePath = System.getenv(filePathSource);
+      if (filePath == null) {
+        filePathSource = BOOTSTRAP_PATH_SYS_PROPERTY_VAR;
+        filePath = System.getProperty(filePathSource);
+      }
       if (filePath == null) {
         throw new XdsInitializationException(
-            "Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not defined.");
+            "Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR
+            + " or Java System Property " + BOOTSTRAP_PATH_SYS_PROPERTY_VAR + " not defined.");
       }
       XdsLogger
           .withPrefix(LOG_PREFIX)
-          .log(XdsLogLevel.INFO, BOOTSTRAP_PATH_SYS_ENV_VAR + "={0}", filePath);
+          .log(XdsLogLevel.INFO, filePathSource + "={0}", filePath);
       String fileContent;
       try {
         fileContent = new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8);
@@ -189,7 +196,8 @@ public abstract class Bootstrapper {
         certProviders.put(name, certificateProviderInfo);
       }
     }
-    return new BootstrapInfo(servers, nodeBuilder.build(), certProviders);
+    String grpcServerResourceId = JsonUtil.getString(rawBootstrap, "grpc_server_resource_name_id");
+    return new BootstrapInfo(servers, nodeBuilder.build(), certProviders, grpcServerResourceId);
   }
 
   static <T> T checkForNull(T value, String fieldName) throws XdsInitializationException {
@@ -295,13 +303,18 @@ public abstract class Bootstrapper {
     private List<ServerInfo> servers;
     private final Node node;
     @Nullable private final Map<String, CertificateProviderInfo> certProviders;
+    @Nullable private final String grpcServerResourceId;
 
     @VisibleForTesting
     BootstrapInfo(
-        List<ServerInfo> servers, Node node, Map<String, CertificateProviderInfo> certProviders) {
+        List<ServerInfo> servers,
+        Node node,
+        Map<String, CertificateProviderInfo> certProviders,
+        String grpcServerResourceId) {
       this.servers = servers;
       this.node = node;
       this.certProviders = certProviders;
+      this.grpcServerResourceId = grpcServerResourceId;
     }
 
     /**
@@ -321,6 +334,11 @@ public abstract class Bootstrapper {
     /** Returns the cert-providers config map. */
     public Map<String, CertificateProviderInfo> getCertProviders() {
       return Collections.unmodifiableMap(certProviders);
+    }
+
+    @Nullable
+    public String getGrpcServerResourceId() {
+      return grpcServerResourceId;
     }
   }
 }

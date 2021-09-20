@@ -23,6 +23,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
+import io.grpc.CallCredentials;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
@@ -109,6 +110,8 @@ public final class ManagedChannelImplBuilder
   private NameResolver.Factory nameResolverFactory = nameResolverRegistry.asFactory();
 
   final String target;
+  @Nullable
+  final CallCredentials callCredentials;
 
   @Nullable
   private final SocketAddress directServerAddress;
@@ -222,7 +225,19 @@ public final class ManagedChannelImplBuilder
   public ManagedChannelImplBuilder(String target,
       ClientTransportFactoryBuilder clientTransportFactoryBuilder,
       @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
+    this(target, null, clientTransportFactoryBuilder, channelBuilderDefaultPortProvider);
+  }
+
+  /**
+   * Creates a new managed channel builder with a target string, which can be either a valid {@link
+   * io.grpc.NameResolver}-compliant URI, or an authority string. Transport implementors must
+   * provide client transport factory builder, and may set custom channel default port provider.
+   */
+  public ManagedChannelImplBuilder(String target, @Nullable CallCredentials callCreds,
+      ClientTransportFactoryBuilder clientTransportFactoryBuilder,
+      @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
     this.target = Preconditions.checkNotNull(target, "target");
+    this.callCredentials = callCreds;
     this.clientTransportFactoryBuilder = Preconditions
         .checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");
     this.directServerAddress = null;
@@ -258,6 +273,7 @@ public final class ManagedChannelImplBuilder
       ClientTransportFactoryBuilder clientTransportFactoryBuilder,
       @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
     this.target = makeTargetStringForDirectAddress(directServerAddress);
+    this.callCredentials = null;
     this.clientTransportFactoryBuilder = Preconditions
         .checkNotNull(clientTransportFactoryBuilder, "clientTransportFactoryBuilder");
     this.directServerAddress = directServerAddress;

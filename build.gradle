@@ -18,7 +18,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.33.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.34.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -56,7 +56,7 @@ subprojects {
 
         nettyVersion = '4.1.51.Final'
         guavaVersion = '29.0-android'
-        googleauthVersion = '0.20.0'
+        googleauthVersion = '0.22.0'
         protobufVersion = '3.12.0'
         protocVersion = protobufVersion
         opencensusVersion = '0.24.0'

@@ -18,13 +18,14 @@ package io.grpc.testing.integration;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.Grpc;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
+import io.grpc.ServerCredentials;
 import io.grpc.ServerInterceptors;
-import io.grpc.alts.AltsServerBuilder;
+import io.grpc.TlsServerCredentials;
+import io.grpc.alts.AltsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NettyServerBuilder;
-import io.netty.handler.ssl.SslContext;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -129,32 +130,22 @@ public class TestServiceServer {
   @VisibleForTesting
   void start() throws Exception {
     executor = Executors.newSingleThreadScheduledExecutor();
-    SslContext sslContext = null;
+    ServerCredentials serverCreds;
     if (useAlts) {
-      server =
-          AltsServerBuilder.forPort(port)
-              .addService(
-                  ServerInterceptors.intercept(
-                      new TestServiceImpl(executor), TestServiceImpl.interceptors()))
-              .build()
-              .start();
+      serverCreds = AltsServerCredentials.create();
+    } else if (useTls) {
+      serverCreds = TlsServerCredentials.create(
+          TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"));
     } else {
-      if (useTls) {
-        sslContext =
-            GrpcSslContexts.forServer(
-                    TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
-                .build();
-      }
-      server =
-          NettyServerBuilder.forPort(port)
-              .sslContext(sslContext)
-              .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-              .addService(
-                  ServerInterceptors.intercept(
-                      new TestServiceImpl(executor), TestServiceImpl.interceptors()))
-              .build()
-              .start();
+      serverCreds = InsecureServerCredentials.create();
     }
+    server = Grpc.newServerBuilderForPort(port, serverCreds)
+        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
+        .addService(
+            ServerInterceptors.intercept(
+                new TestServiceImpl(executor), TestServiceImpl.interceptors()))
+        .build()
+        .start();
   }
 
   @VisibleForTesting

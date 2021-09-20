@@ -16,6 +16,7 @@
 
 package io.grpc.testing.integration;
 
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ServerBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyServerBuilder;
@@ -30,7 +31,7 @@ public class AutoWindowSizingOnTest extends AbstractInteropTest {
 
   @Override
   protected ServerBuilder<?> getServerBuilder() {
-    NettyServerBuilder builder = NettyServerBuilder.forPort(0)
+    NettyServerBuilder builder = NettyServerBuilder.forPort(0, InsecureServerCredentials.create())
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
     // Disable the default census stats tracer, use testing tracer instead.
     InternalNettyServerBuilder.setStatsEnabled(builder, false);

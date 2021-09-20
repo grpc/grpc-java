@@ -26,9 +26,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
-import io.grpc.ForwardingChannelBuilder;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -50,7 +50,8 @@ import org.chromium.net.ExperimentalCronetEngine;
 
 /** Convenience class for building channels with the cronet transport. */
 @ExperimentalApi("There is no plan to make this API stable, given transport API instability")
-public final class CronetChannelBuilder extends ForwardingChannelBuilder<CronetChannelBuilder> {
+public final class CronetChannelBuilder
+    extends AbstractManagedChannelImplBuilder<CronetChannelBuilder> {
 
   private static final String LOG_TAG = "CronetChannelBuilder";
 

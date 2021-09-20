@@ -589,8 +589,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
-    this.transportFactory =
-        new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
+    this.transportFactory = new CallCredentialsApplyingTransportFactory(
+        clientTransportFactory, builder.callCredentials, this.executor);
     this.scheduledExecutor =
         new RestrictedScheduledExecutor(transportFactory.getScheduledExecutorService());
     maxTraceEvents = builder.maxTraceEvents;

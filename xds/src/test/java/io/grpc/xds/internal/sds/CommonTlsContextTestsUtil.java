@@ -337,7 +337,7 @@ public class CommonTlsContextTestsUtil {
         buildTestDownstreamTlsContext(certName, validationContextName));
   }
 
-  static String getTempFileNameForResourcesFile(String resFile) throws IOException {
+  public static String getTempFileNameForResourcesFile(String resFile) throws IOException {
     return TestUtils.loadCert(resFile).getAbsolutePath();
   }
 
@@ -514,6 +514,22 @@ public class CommonTlsContextTestsUtil {
       builder = builder.setValidationContextCertificateProviderInstance(providerInstance);
     }
     return builder;
+  }
+
+  static CommonTlsContext.Builder addCertificateValidationContext(
+      CommonTlsContext.Builder builder,
+      String name,
+      String targetUri,
+      String channelType,
+      CertificateValidationContext staticCertValidationContext) {
+    SdsSecretConfig sdsSecretConfig = buildSdsSecretConfig(name, targetUri, channelType);
+
+    CombinedCertificateValidationContext combined =
+        CombinedCertificateValidationContext.newBuilder()
+            .setDefaultValidationContext(staticCertValidationContext)
+            .setValidationContextSdsSecretConfig(sdsSecretConfig)
+            .build();
+    return builder.setCombinedValidationContext(combined);
   }
 
   /** Helper method to build UpstreamTlsContext for CertProvider tests. */

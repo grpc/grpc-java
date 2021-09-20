@@ -34,7 +34,7 @@ public final class AltsAuthContext {
             .setPeerServiceAccount(result.getPeerIdentity().getServiceAccount())
             .setLocalServiceAccount(result.getLocalIdentity().getServiceAccount())
             .setPeerRpcVersions(result.getPeerRpcVersions())
-            .putAllPeerAttributes(result.getPeerIdentity().getAttributes())
+            .putAllPeerAttributes(result.getPeerIdentity().getAttributesMap())
             .build();
   }
 

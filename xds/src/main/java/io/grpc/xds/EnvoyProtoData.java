@@ -42,7 +42,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -61,6 +60,7 @@ import javax.annotation.Nullable;
  */
 // TODO(chengyuanzhang): put data types into smaller categories.
 final class EnvoyProtoData {
+  static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
 
   // Prevent instantiation.
   private EnvoyProtoData() {
@@ -850,10 +850,23 @@ final class EnvoyProtoData {
     // The list of routes that will be matched, in order, for incoming requests.
     private final List<Route> routes;
 
-    private VirtualHost(String name, List<String> domains, List<Route> routes) {
+    @VisibleForTesting
+    VirtualHost(String name, List<String> domains, List<Route> routes) {
       this.name = name;
       this.domains = domains;
       this.routes = routes;
+    }
+
+    String getName() {
+      return name;
+    }
+
+    List<String> getDomains() {
+      return domains;
+    }
+
+    List<Route> getRoutes() {
+      return routes;
     }
 
     @Override
@@ -903,16 +916,6 @@ final class EnvoyProtoData {
 
     RouteAction getRouteAction() {
       return routeAction;
-    }
-
-    // TODO(chengyuanzhang): delete and do not use after routing feature is always ON.
-    boolean isDefaultRoute() {
-      // For backward compatibility, all the other matchers are ignored.
-      String prefix = routeMatch.getPathMatch().getPrefix();
-      if (prefix != null) {
-        return prefix.isEmpty() || prefix.equals("/");
-      }
-      return false;
     }
 
     @Override
@@ -979,17 +982,12 @@ final class EnvoyProtoData {
     }
 
     @VisibleForTesting
-    @SuppressWarnings("deprecation")
     @Nullable
     static StructOrError<RouteMatch> convertEnvoyProtoRouteMatch(
         io.envoyproxy.envoy.config.route.v3.RouteMatch proto) {
       if (proto.getQueryParametersCount() != 0) {
         return null;
       }
-      if (proto.hasCaseSensitive() && !proto.getCaseSensitive().getValue()) {
-        return StructOrError.fromError("Unsupported match option: case insensitive");
-      }
-
       StructOrError<PathMatcher> pathMatch = convertEnvoyProtoPathMatcher(proto);
       if (pathMatch.getErrorDetail() != null) {
         return StructOrError.fromError(pathMatch.getErrorDetail());
@@ -1019,32 +1017,28 @@ final class EnvoyProtoData {
               pathMatch.getStruct(), Collections.unmodifiableList(headerMatchers), fractionMatch));
     }
 
-    @SuppressWarnings("deprecation")
     private static StructOrError<PathMatcher> convertEnvoyProtoPathMatcher(
         io.envoyproxy.envoy.config.route.v3.RouteMatch proto) {
-      String path = null;
-      String prefix = null;
-      Pattern safeRegEx = null;
+      boolean caseSensitive = proto.getCaseSensitive().getValue();
       switch (proto.getPathSpecifierCase()) {
         case PREFIX:
-          prefix = proto.getPrefix();
-          break;
+          return StructOrError.fromStruct(
+              PathMatcher.fromPrefix(proto.getPrefix(), caseSensitive));
         case PATH:
-          path = proto.getPath();
-          break;
+          return StructOrError.fromStruct(PathMatcher.fromPath(proto.getPath(), caseSensitive));
         case SAFE_REGEX:
           String rawPattern = proto.getSafeRegex().getRegex();
+          Pattern safeRegEx;
           try {
             safeRegEx = Pattern.compile(rawPattern);
           } catch (PatternSyntaxException e) {
             return StructOrError.fromError("Malformed safe regex pattern: " + e.getMessage());
           }
-          break;
+          return StructOrError.fromStruct(PathMatcher.fromRegEx(safeRegEx));
         case PATHSPECIFIER_NOT_SET:
         default:
           return StructOrError.fromError("Unknown path match type");
       }
-      return StructOrError.fromStruct(new PathMatcher(path, prefix, safeRegEx));
     }
 
     private static StructOrError<FractionMatcher> convertEnvoyProtoFraction(
@@ -1123,7 +1117,8 @@ final class EnvoyProtoData {
    * See corresponding Envoy proto message {@link io.envoyproxy.envoy.config.route.v3.RouteAction}.
    */
   static final class RouteAction {
-    private final long timeoutNano;
+    @Nullable
+    private final Long timeoutNano;
     // Exactly one of the following fields is non-null.
     @Nullable
     private final String cluster;
@@ -1131,16 +1126,14 @@ final class EnvoyProtoData {
     private final List<ClusterWeight> weightedClusters;
 
     @VisibleForTesting
-    RouteAction(
-        long timeoutNano,
-        @Nullable String cluster,
+    RouteAction(@Nullable Long timeoutNano, @Nullable String cluster,
         @Nullable List<ClusterWeight> weightedClusters) {
       this.timeoutNano = timeoutNano;
       this.cluster = cluster;
       this.weightedClusters = weightedClusters;
     }
 
-
+    @Nullable
     Long getTimeoutNano() {
       return timeoutNano;
     }
@@ -1177,7 +1170,9 @@ final class EnvoyProtoData {
     @Override
     public String toString() {
       ToStringHelper toStringHelper = MoreObjects.toStringHelper(this);
-      toStringHelper.add("timeout", timeoutNano + "ns");
+      if (timeoutNano != null) {
+        toStringHelper.add("timeout", timeoutNano + "ns");
+      }
       if (cluster != null) {
         toStringHelper.add("cluster", cluster);
       }
@@ -1217,14 +1212,15 @@ final class EnvoyProtoData {
           return StructOrError.fromError(
               "Unknown cluster specifier: " + proto.getClusterSpecifierCase());
       }
-      long timeoutNano = TimeUnit.SECONDS.toNanos(15L);  // default 15s
-      if (proto.hasMaxGrpcTimeout()) {
-        timeoutNano = Durations.toNanos(proto.getMaxGrpcTimeout());
-      } else if (proto.hasTimeout()) {
-        timeoutNano = Durations.toNanos(proto.getTimeout());
-      }
-      if (timeoutNano == 0) {
-        timeoutNano = Long.MAX_VALUE;
+      Long timeoutNano = null;
+      if (proto.hasMaxStreamDuration()) {
+        io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration maxStreamDuration
+            = proto.getMaxStreamDuration();
+        if (maxStreamDuration.hasGrpcTimeoutHeaderMax()) {
+          timeoutNano = Durations.toNanos(maxStreamDuration.getGrpcTimeoutHeaderMax());
+        } else if (maxStreamDuration.hasMaxStreamDuration()) {
+          timeoutNano = Durations.toNanos(maxStreamDuration.getMaxStreamDuration());
+        }
       }
       return StructOrError.fromStruct(new RouteAction(timeoutNano, cluster, weightedClusters));
     }

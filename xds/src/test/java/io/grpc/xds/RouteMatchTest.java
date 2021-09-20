@@ -51,14 +51,14 @@ public class RouteMatchTest {
   public void routeMatching_pathOnly() {
     RouteMatch routeMatch1 =
         new RouteMatch(
-            new PathMatcher("/FooService/barMethod", null, null),
+            PathMatcher.fromPath("/FooService/barMethod", true),
             Collections.<HeaderMatcher>emptyList(), null);
     assertThat(routeMatch1.matches("/FooService/barMethod", headers)).isTrue();
     assertThat(routeMatch1.matches("/FooService/bazMethod", headers)).isFalse();
 
     RouteMatch routeMatch2 =
         new RouteMatch(
-            new PathMatcher(null, "/FooService/", null),
+            PathMatcher.fromPrefix("/FooService/", true),
             Collections.<HeaderMatcher>emptyList(), null);
     assertThat(routeMatch2.matches("/FooService/barMethod", headers)).isTrue();
     assertThat(routeMatch2.matches("/FooService/bazMethod", headers)).isTrue();
@@ -66,15 +66,25 @@ public class RouteMatchTest {
 
     RouteMatch routeMatch3 =
         new RouteMatch(
-            new PathMatcher(null, null, Pattern.compile(".*Foo.*")),
+            PathMatcher.fromRegEx(Pattern.compile(".*Foo.*")),
             Collections.<HeaderMatcher>emptyList(), null);
     assertThat(routeMatch3.matches("/FooService/barMethod", headers)).isTrue();
   }
 
   @Test
+  public void pathMatching_caseInsensitive() {
+    PathMatcher pathMatcher1 = PathMatcher.fromPath("/FooService/barMethod", false);
+    assertThat(pathMatcher1.matches("/fooservice/barmethod")).isTrue();
+
+    PathMatcher pathMatcher2 = PathMatcher.fromPrefix("/FooService", false);
+    assertThat(pathMatcher2.matches("/fooservice/barmethod")).isTrue();
+  }
+
+  @Test
   public void routeMatching_withHeaders() {
+    PathMatcher pathMatcher = PathMatcher.fromPath("/FooService/barMethod", true);
     RouteMatch routeMatch1 = new RouteMatch(
-        new PathMatcher("/FooService/barMethod", null, null),
+        pathMatcher,
         Arrays.asList(
             new HeaderMatcher(
                 "grpc-encoding", "gzip", null, null, null, null, null, false),
@@ -90,7 +100,7 @@ public class RouteMatchTest {
     assertThat(routeMatch1.matches("/FooService/barMethod", headers)).isTrue();
 
     RouteMatch routeMatch2 = new RouteMatch(
-        new PathMatcher("/FooService/barMethod", null, null),
+        pathMatcher,
         Collections.singletonList(
             new HeaderMatcher(
                 "authority", null, Pattern.compile(".*googleapis.*"), null, null, null,
@@ -99,7 +109,7 @@ public class RouteMatchTest {
     assertThat(routeMatch2.matches("/FooService/barMethod", headers)).isFalse();
 
     RouteMatch routeMatch3 = new RouteMatch(
-        new PathMatcher("/FooService/barMethod", null, null),
+        pathMatcher,
         Collections.singletonList(
             new HeaderMatcher(
                 "user-agent", "gRPC-Go", null, null, null, null,
@@ -108,7 +118,7 @@ public class RouteMatchTest {
     assertThat(routeMatch3.matches("/FooService/barMethod", headers)).isFalse();
 
     RouteMatch routeMatch4 = new RouteMatch(
-        new PathMatcher("/FooService/barMethod", null, null),
+        pathMatcher,
         Collections.singletonList(
             new HeaderMatcher(
                 "user-agent", null, null, null, false, null,
@@ -117,7 +127,7 @@ public class RouteMatchTest {
     assertThat(routeMatch4.matches("/FooService/barMethod", headers)).isFalse();
 
     RouteMatch routeMatch5 = new RouteMatch(
-        new PathMatcher("/FooService/barMethod", null, null),
+        pathMatcher,
         Collections.singletonList(
             new HeaderMatcher(
                 "user-agent", null, null, null, false, null,
@@ -126,7 +136,7 @@ public class RouteMatchTest {
     assertThat(routeMatch5.matches("/FooService/barMethod", headers)).isTrue();
 
     RouteMatch routeMatch6 = new RouteMatch(
-        new PathMatcher("/FooService/barMethod", null, null),
+        pathMatcher,
         Collections.singletonList(
             new HeaderMatcher(
                 "user-agent", null, null, null, true, null,
@@ -135,7 +145,7 @@ public class RouteMatchTest {
     assertThat(routeMatch6.matches("/FooService/barMethod", headers)).isFalse();
 
     RouteMatch routeMatch7 = new RouteMatch(
-        new PathMatcher("/FooService/barMethod", null, null),
+        pathMatcher,
         Collections.singletonList(
             new HeaderMatcher(
                 "custom-key", "custom-value1,custom-value2", null, null, null, null,
@@ -146,16 +156,17 @@ public class RouteMatchTest {
 
   @Test
   public void  routeMatching_withRuntimeFraction() {
+    PathMatcher pathMatcher = PathMatcher.fromPath("/FooService/barMethod", true);
     RouteMatch routeMatch1 =
         new RouteMatch(
-            new PathMatcher("/FooService/barMethod", null, null),
+            pathMatcher,
             Collections.<HeaderMatcher>emptyList(),
             new FractionMatcher(100, 1000, new FakeRandom(50)));
     assertThat(routeMatch1.matches("/FooService/barMethod", headers)).isTrue();
 
     RouteMatch routeMatch2 =
         new RouteMatch(
-            new PathMatcher("/FooService/barMethod", null, null),
+            pathMatcher,
             Collections.<HeaderMatcher>emptyList(),
             new FractionMatcher(100, 1000, new FakeRandom(100)));
     assertThat(routeMatch2.matches("/FooService/barMethod", headers)).isFalse();
@@ -163,11 +174,12 @@ public class RouteMatchTest {
 
   @Test
   public void headerMatching_specialCaseGrpcHeaders() {
+    PathMatcher pathMatcher = PathMatcher.fromPath("/FooService/barMethod", true);
     Map<String, Iterable<String>> headers = new HashMap<>();
     headers.put("grpc-previous-rpc-attempts", Collections.singletonList("0"));
 
     RouteMatch routeMatch1 =
-        new RouteMatch(new PathMatcher("/FooService/barMethod", null, null),
+        new RouteMatch(pathMatcher,
             Arrays.asList(
                 new HeaderMatcher(
                     "grpc-previous-rpc-attempts", "0", null, null, null, null,
@@ -176,7 +188,7 @@ public class RouteMatchTest {
     assertThat(routeMatch1.matches("/FooService/barMethod", headers)).isFalse();
 
     RouteMatch routeMatch2 =
-        new RouteMatch(new PathMatcher("/FooService/barMethod", null, null),
+        new RouteMatch(pathMatcher,
             Arrays.asList(
                 new HeaderMatcher(
                     "content-type", "application/grpc", null, null, null, null,

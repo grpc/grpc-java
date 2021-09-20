@@ -63,6 +63,7 @@ envoy/api/v2/route/route_components.proto
 envoy/api/v2/scoped_route.proto
 envoy/api/v2/srds.proto
 envoy/config/accesslog/v3/accesslog.proto
+envoy/config/cluster/aggregate/v2alpha/cluster.proto
 envoy/config/cluster/v3/circuit_breaker.proto
 envoy/config/cluster/v3/cluster.proto
 envoy/config/cluster/v3/filter.proto
@@ -112,6 +113,7 @@ envoy/config/trace/v3/opencensus.proto
 envoy/config/trace/v3/service.proto
 envoy/config/trace/v3/zipkin.proto
 envoy/config/rbac/v2/rbac.proto
+envoy/extensions/clusters/aggregate/v3/cluster.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
 envoy/extensions/transport_sockets/tls/v3/cert.proto
 envoy/extensions/transport_sockets/tls/v3/common.proto

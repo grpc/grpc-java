@@ -87,7 +87,6 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class LoadReportClientTest {
-  private static final String TARGET_NAME = "lrs-test.example.com";
   // bootstrap node identifier
   private static final EnvoyProtoData.Node NODE =
       EnvoyProtoData.Node.newBuilder()
@@ -143,6 +142,8 @@ public class LoadReportClientTest {
   private BackoffPolicy backoffPolicy2;
   @Captor
   private ArgumentCaptor<StreamObserver<LoadStatsResponse>> lrsResponseObserverCaptor;
+  @Captor
+  private ArgumentCaptor<Throwable> errorCaptor;
 
   private LoadReportingServiceGrpc.LoadReportingServiceImplBase mockLoadReportingService;
   private ManagedChannel channel;
@@ -185,7 +186,6 @@ public class LoadReportClientTest {
         .thenReturn(TimeUnit.SECONDS.toNanos(2L), TimeUnit.SECONDS.toNanos(20L));
     lrsClient =
         new LoadReportClient(
-            TARGET_NAME,
             loadStatsManager,
             new XdsChannel(channel, false),
             NODE,
@@ -193,12 +193,17 @@ public class LoadReportClientTest {
             fakeClock.getScheduledExecutorService(),
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
-    lrsClient.startLoadReporting();
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        lrsClient.startLoadReporting();
+      }
+    });
   }
 
   @After
   public void tearDown() {
-    lrsClient.stopLoadReporting();
+    stopLoadReportingInSyncContext();
     assertThat(callEnded.get()).isTrue();
   }
 
@@ -409,7 +414,55 @@ public class LoadReportClientTest {
   }
 
   @Test
-  public void raceBetweenLoadReportingAndLbStreamClosure() {
+  public void raceBetweenStopAndLoadReporting() {
+    verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
+    StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
+    StreamObserver<LoadStatsRequest> requestObserver =
+        Iterables.getOnlyElement(lrsRequestObservers);
+    verify(requestObserver).onNext(eq(buildInitialRequest()));
+
+    responseObserver.onNext(buildLrsResponse(Collections.singletonList(CLUSTER1), 1234));
+    assertEquals(1, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
+    FakeClock.ScheduledTask scheduledTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(LOAD_REPORTING_TASK_FILTER));
+    assertEquals(1234, scheduledTask.getDelay(TimeUnit.NANOSECONDS));
+
+    fakeClock.forwardNanos(1233);
+    stopLoadReportingInSyncContext();
+    verify(requestObserver).onError(errorCaptor.capture());
+    assertEquals("CANCELLED: client cancelled", errorCaptor.getValue().getMessage());
+    assertThat(scheduledTask.isCancelled()).isTrue();
+    fakeClock.forwardNanos(1);
+    assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
+    fakeClock.forwardNanos(1234);
+    verifyNoMoreInteractions(requestObserver);
+  }
+
+  @Test
+  public void raceBetweenStopAndLrsStreamRetry() {
+    verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
+    StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
+    StreamObserver<LoadStatsRequest> requestObserver =
+        Iterables.getOnlyElement(lrsRequestObservers);
+    verify(requestObserver).onNext(eq(buildInitialRequest()));
+
+    responseObserver.onCompleted();
+    assertEquals(1, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
+    FakeClock.ScheduledTask scheduledTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
+    assertEquals(1, scheduledTask.getDelay(TimeUnit.SECONDS));
+
+    fakeClock.forwardTime(999, TimeUnit.MILLISECONDS);
+    stopLoadReportingInSyncContext();
+    assertThat(scheduledTask.isCancelled()).isTrue();
+    fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
+    assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
+    fakeClock.forwardTime(10, TimeUnit.SECONDS);
+    verifyNoMoreInteractions(requestObserver);
+  }
+
+  @Test
+  public void raceBetweenLoadReportingAndLrsStreamClosure() {
     verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
@@ -447,6 +500,15 @@ public class LoadReportClientTest {
     // No report sent. No new task scheduled
     verifyNoMoreInteractions(requestObserver);
     assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
+  }
+
+  private void stopLoadReportingInSyncContext() {
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        lrsClient.stopLoadReporting();
+      }
+    });
   }
 
   private static LoadStatsResponse buildLrsResponse(
@@ -539,6 +601,11 @@ public class LoadReportClientTest {
 
     @Override
     public void recordDroppedRequest(String category) {
+      throw new UnsupportedOperationException("should not used");
+    }
+
+    @Override
+    public void recordDroppedRequest() {
       throw new UnsupportedOperationException("should not used");
     }
 

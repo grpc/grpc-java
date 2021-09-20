@@ -17,7 +17,7 @@
 package io.grpc;
 
 /**
- * A {@link ClientCall} which forwards all of it's methods to another {@link ClientCall}.
+ * A {@link ClientCall} which forwards all of its methods to another {@link ClientCall}.
  */
 public abstract class ForwardingClientCall<ReqT, RespT>
     extends PartialForwardingClientCall<ReqT, RespT> {

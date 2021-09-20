@@ -39,13 +39,14 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingClientCall;
+import io.grpc.Grpc;
 import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
@@ -361,8 +362,9 @@ final class MeshCaCertificateProvider extends CertificateProvider {
             checkArgument(serverUri != null && !serverUri.isEmpty(), "serverUri is null/empty!");
             logger.log(Level.INFO, "Creating channel to {0}", serverUri);
 
-            ManagedChannelBuilder<?> channelBuilder = ManagedChannelBuilder.forTarget(serverUri);
-            return channelBuilder.keepAliveTime(1, TimeUnit.MINUTES).build();
+            return Grpc.newChannelBuilder(serverUri, TlsChannelCredentials.create())
+                .keepAliveTime(1, TimeUnit.MINUTES)
+                .build();
           }
         };
 

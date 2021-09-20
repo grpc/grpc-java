@@ -19,25 +19,20 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
-import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.EnvoyProtoData.Route;
 import io.grpc.xds.EnvoyProtoData.VirtualHost;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,57 +47,6 @@ import javax.annotation.Nullable;
  * are provided for each set of data needed by gRPC.
  */
 abstract class XdsClient {
-
-  /**
-   * Data class containing the results of performing a series of resource discovery RPCs via
-   * LDS/RDS/VHDS protocols. The results may include configurations for path/host rewriting,
-   * traffic mirroring, retry or hedging, default timeouts and load balancing policy that will
-   * be used to generate a service config.
-   */
-  // TODO(chengyuanzhang): delete me.
-  static final class ConfigUpdate {
-    private final List<Route> routes;
-
-    private ConfigUpdate(List<Route> routes) {
-      this.routes = routes;
-    }
-
-    List<Route> getRoutes() {
-      return routes;
-    }
-
-    @Override
-    public String toString() {
-      return
-          MoreObjects
-              .toStringHelper(this)
-              .add("routes", routes)
-              .toString();
-    }
-
-    static Builder newBuilder() {
-      return new Builder();
-    }
-
-    static final class Builder {
-      private final List<Route> routes = new ArrayList<>();
-
-      // Use ConfigUpdate.newBuilder().
-      private Builder() {
-      }
-
-
-      Builder addRoutes(Collection<Route> route) {
-        routes.addAll(route);
-        return this;
-      }
-
-      ConfigUpdate build() {
-        checkState(!routes.isEmpty(), "routes is empty");
-        return new ConfigUpdate(Collections.unmodifiableList(routes));
-      }
-    }
-  }
 
   static final class LdsUpdate implements ResourceUpdate {
     // Total number of nanoseconds to keep alive an HTTP request/response stream.
@@ -255,6 +199,8 @@ abstract class XdsClient {
     private final String lbPolicy;
     @Nullable
     private final String lrsServerName;
+    @Nullable
+    private final Long maxConcurrentRequests;
     private final UpstreamTlsContext upstreamTlsContext;
 
     private CdsUpdate(
@@ -262,11 +208,13 @@ abstract class XdsClient {
         @Nullable String edsServiceName,
         String lbPolicy,
         @Nullable String lrsServerName,
+        @Nullable Long maxConcurrentRequests,
         @Nullable UpstreamTlsContext upstreamTlsContext) {
       this.clusterName = clusterName;
       this.edsServiceName = edsServiceName;
       this.lbPolicy = lbPolicy;
       this.lrsServerName = lrsServerName;
+      this.maxConcurrentRequests = maxConcurrentRequests;
       this.upstreamTlsContext = upstreamTlsContext;
     }
 
@@ -299,6 +247,15 @@ abstract class XdsClient {
       return lrsServerName;
     }
 
+    /**
+     * Returns the maximum number of outstanding requests can be made to the upstream cluster, or
+     * {@code null} if not configured.
+     */
+    @Nullable
+    Long getMaxConcurrentRequests() {
+      return maxConcurrentRequests;
+    }
+
     /** Returns the {@link UpstreamTlsContext} for this cluster if present, else null. */
     @Nullable
     UpstreamTlsContext getUpstreamTlsContext() {
@@ -314,14 +271,15 @@ abstract class XdsClient {
               .add("edsServiceName", edsServiceName)
               .add("lbPolicy", lbPolicy)
               .add("lrsServerName", lrsServerName)
+              .add("maxConcurrentRequests", maxConcurrentRequests)
               .add("upstreamTlsContext", upstreamTlsContext)
               .toString();
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(
-          clusterName, edsServiceName, lbPolicy, lrsServerName, upstreamTlsContext);
+      return Objects.hash(clusterName, edsServiceName, lbPolicy, lrsServerName,
+          maxConcurrentRequests, upstreamTlsContext);
     }
 
     @Override
@@ -337,6 +295,7 @@ abstract class XdsClient {
           && Objects.equals(edsServiceName, that.edsServiceName)
           && Objects.equals(lbPolicy, that.lbPolicy)
           && Objects.equals(lrsServerName, that.lrsServerName)
+          && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
           && Objects.equals(upstreamTlsContext, that.upstreamTlsContext);
     }
 
@@ -351,6 +310,8 @@ abstract class XdsClient {
       private String lbPolicy;
       @Nullable
       private String lrsServerName;
+      @Nullable
+      private Long maxConcurrentRequests;
       @Nullable
       private UpstreamTlsContext upstreamTlsContext;
 
@@ -377,6 +338,11 @@ abstract class XdsClient {
         return this;
       }
 
+      Builder setMaxConcurrentRequests(long maxConcurrentRequests) {
+        this.maxConcurrentRequests = maxConcurrentRequests;
+        return this;
+      }
+
       Builder setUpstreamTlsContext(UpstreamTlsContext upstreamTlsContext) {
         this.upstreamTlsContext = upstreamTlsContext;
         return this;
@@ -386,9 +352,8 @@ abstract class XdsClient {
         checkState(clusterName != null, "clusterName is not set");
         checkState(lbPolicy != null, "lbPolicy is not set");
 
-        return
-            new CdsUpdate(
-                clusterName, edsServiceName, lbPolicy, lrsServerName, upstreamTlsContext);
+        return new CdsUpdate(clusterName, edsServiceName, lbPolicy, lrsServerName,
+            maxConcurrentRequests, upstreamTlsContext);
       }
     }
   }
@@ -577,19 +542,7 @@ abstract class XdsClient {
   }
 
   /**
-   * Config watcher interface. To be implemented by the xDS resolver.
-   */
-  // TODO(chengyuanzhang): delete me.
-  interface ConfigWatcher extends ResourceWatcher {
-
-    /**
-     * Called when receiving an update on virtual host configurations.
-     */
-    void onConfigChanged(ConfigUpdate update);
-  }
-
-  /**
-   * Listener watcher interface. To be used by {@link io.grpc.xds.internal.sds.XdsServerBuilder}.
+   * Listener watcher interface. To be used by {@link XdsServerBuilder}.
    */
   interface ListenerWatcher extends ResourceWatcher {
 
@@ -602,21 +555,7 @@ abstract class XdsClient {
   /**
    * Shutdown this {@link XdsClient} and release resources.
    */
-  abstract void shutdown();
-
-  /**
-   * Registers a watcher to receive {@link ConfigUpdate} for service with the given target
-   * authority.
-   *
-   * <p>Unlike watchers for cluster data and endpoint data, at most one ConfigWatcher can be
-   * registered. Once it is registered, it cannot be unregistered.
-   *
-   * @param targetAuthority authority of the "xds:" URI for the server name that the gRPC client
-   *     targets for.
-   * @param watcher the {@link ConfigWatcher} to receive {@link ConfigUpdate}.
-   */
-  // TODO(chengyuanzhang): delete me.
-  void watchConfigData(String targetAuthority, ConfigWatcher watcher) {
+  void shutdown() {
   }
 
   /**
@@ -674,23 +613,9 @@ abstract class XdsClient {
   }
 
   /**
-   * Starts client side load reporting via LRS. All clusters report load through one LRS stream,
-   * only the first call of this method effectively starts the LRS stream.
-   */
-  void reportClientStats() {
-  }
-
-  /**
-   * Stops client side load reporting via LRS. All clusters report load through one LRS stream,
-   * only the last call of this method effectively stops the LRS stream.
-   */
-  void cancelClientStatsReport() {
-  }
-
-  /**
    * Starts recording client load stats for the given cluster:cluster_service. Caller should use
    * the returned {@link LoadStatsStore} to record and aggregate stats for load sent to the given
-   * cluster:cluster_service. Recorded stats may be reported to a load reporting server if enabled.
+   * cluster:cluster_service. The first call of this method starts load reporting via LRS.
    */
   LoadStatsStore addClientStats(String clusterName, @Nullable String clusterServiceName) {
     throw new UnsupportedOperationException();
@@ -699,79 +624,16 @@ abstract class XdsClient {
   /**
    * Stops recording client load stats for the given cluster:cluster_service. The load reporting
    * server will no longer receive stats for the given cluster:cluster_service after this call.
+   * Load reporting may be terminated if there is no stats to be reported.
    */
   void removeClientStats(String clusterName, @Nullable String clusterServiceName) {
     throw new UnsupportedOperationException();
-  }
-
-  // TODO(chengyuanzhang): eliminate this factory
-  abstract static class XdsClientFactory {
-    abstract XdsClient createXdsClient();
-  }
-
-  /**
-   * An {@link ObjectPool} holding reference and ref-count of an {@link XdsClient} instance.
-   * Initially the instance is null and the ref-count is zero. {@link #getObject()} will create a
-   * new XdsClient instance if the ref-count is zero when calling the method. {@code #getObject()}
-   * increments the ref-count and {@link #returnObject(Object)} decrements it. Anytime when the
-   * ref-count gets back to zero, the XdsClient instance will be shutdown and de-referenced.
-   */
-  static final class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
-
-    private final XdsClientFactory xdsClientFactory;
-
-    @VisibleForTesting
-    @Nullable
-    XdsClient xdsClient;
-
-    private int refCount;
-
-    RefCountedXdsClientObjectPool(XdsClientFactory xdsClientFactory) {
-      this.xdsClientFactory = Preconditions.checkNotNull(xdsClientFactory, "xdsClientFactory");
-    }
-
-    /**
-     * See {@link RefCountedXdsClientObjectPool}.
-     */
-    @Override
-    public synchronized XdsClient getObject() {
-      if (xdsClient == null) {
-        checkState(
-            refCount == 0,
-            "Bug: refCount should be zero while xdsClient is null");
-        xdsClient = xdsClientFactory.createXdsClient();
-      }
-      refCount++;
-      return xdsClient;
-    }
-
-    /**
-     * See {@link RefCountedXdsClientObjectPool}.
-     */
-    @Override
-    public synchronized XdsClient returnObject(Object object) {
-      checkState(
-          object == xdsClient,
-          "Bug: the returned object '%s' does not match current XdsClient '%s'",
-          object,
-          xdsClient);
-
-      refCount--;
-      checkState(refCount >= 0, "Bug: refCount of XdsClient less than 0");
-      if (refCount == 0) {
-        xdsClient.shutdown();
-        xdsClient = null;
-      }
-
-      return null;
-    }
   }
 
   static final class XdsChannel {
     private final ManagedChannel managedChannel;
     private final boolean useProtocolV3;
 
-    @VisibleForTesting
     XdsChannel(ManagedChannel managedChannel, boolean useProtocolV3) {
       this.managedChannel = managedChannel;
       this.useProtocolV3 = useProtocolV3;

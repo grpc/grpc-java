@@ -65,7 +65,8 @@ public class CommonBootstrapperTestUtils {
           new Bootstrapper.BootstrapInfo(
               ImmutableList.<Bootstrapper.ServerInfo>of(),
               EnvoyProtoData.Node.newBuilder().build(),
-              certProviders);
+              certProviders,
+              "grpc/server");
       return bootstrapInfo;
     } catch (IOException e) {
       throw new AssertionError(e);

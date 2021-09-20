@@ -22,8 +22,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableList;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.testing.integration.Metrics.EmptyMessage;
 import io.grpc.testing.integration.Metrics.GaugeResponse;
 import io.grpc.testing.integration.StressTestClient.TestCaseWeightPair;
@@ -128,8 +129,8 @@ public class StressTestClientTest {
     client.runStressTest();
 
     // Connect to the metrics service
-    ManagedChannel ch = ManagedChannelBuilder.forAddress("localhost", client.getMetricServerPort())
-        .usePlaintext()
+    ManagedChannel ch = Grpc.newChannelBuilder(
+          "localhost:" + client.getMetricServerPort(), InsecureChannelCredentials.create())
         .build();
 
     MetricsServiceGrpc.MetricsServiceBlockingStub stub = MetricsServiceGrpc.newBlockingStub(ch);

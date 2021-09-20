@@ -68,6 +68,8 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
     final String edsServiceName;
     @Nullable
     final String lrsServerName;
+    @Nullable
+    final Long maxConcurrentRequests;
     final PolicySelection localityPickingPolicy;
     final PolicySelection endpointPickingPolicy;
 
@@ -75,11 +77,13 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
         String clusterName,
         @Nullable String edsServiceName,
         @Nullable String lrsServerName,
+        @Nullable Long maxConcurrentRequests,
         PolicySelection localityPickingPolicy,
         PolicySelection endpointPickingPolicy) {
       this.clusterName = checkNotNull(clusterName, "clusterName");
       this.edsServiceName = edsServiceName;
       this.lrsServerName = lrsServerName;
+      this.maxConcurrentRequests = maxConcurrentRequests;
       this.localityPickingPolicy = checkNotNull(localityPickingPolicy, "localityPickingPolicy");
       this.endpointPickingPolicy = checkNotNull(endpointPickingPolicy, "endpointPickingPolicy");
     }
@@ -90,6 +94,7 @@ public class EdsLoadBalancerProvider extends LoadBalancerProvider {
           .add("clusterName", clusterName)
           .add("edsServiceName", edsServiceName)
           .add("lrsServerName", lrsServerName)
+          .add("maxConcurrentRequests", maxConcurrentRequests)
           .add("localityPickingPolicy", localityPickingPolicy)
           .add("endpointPickingPolicy", endpointPickingPolicy)
           .toString();

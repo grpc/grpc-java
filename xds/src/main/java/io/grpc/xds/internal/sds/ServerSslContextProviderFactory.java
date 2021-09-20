@@ -52,7 +52,18 @@ final class ServerSslContextProviderFactory
     checkNotNull(
         downstreamTlsContext.getCommonTlsContext(),
         "downstreamTlsContext should have CommonTlsContext");
-    if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
+    if (CommonTlsContextUtil.hasCertProviderInstance(
+            downstreamTlsContext.getCommonTlsContext())) {
+      try {
+        Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.readBootstrap();
+        return certProviderServerSslContextProviderFactory.getProvider(
+                downstreamTlsContext,
+                bootstrapInfo.getNode().toEnvoyProtoNode(),
+                bootstrapInfo.getCertProviders());
+      } catch (XdsInitializationException e) {
+        throw new RuntimeException(e);
+      }
+    } else if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
         downstreamTlsContext.getCommonTlsContext())) {
       return SecretVolumeServerSslContextProvider.getProvider(downstreamTlsContext);
     } else if (CommonTlsContextUtil.hasAllSecretsUsingSds(
@@ -66,17 +77,6 @@ final class ServerSslContextProviderFactory
                 .setDaemon(true)
                 .build()),
             /* channelExecutor= */ null);
-      } catch (XdsInitializationException e) {
-        throw new RuntimeException(e);
-      }
-    } else if (CommonTlsContextUtil.hasCertProviderInstance(
-        downstreamTlsContext.getCommonTlsContext())) {
-      try {
-        Bootstrapper.BootstrapInfo bootstrapInfo = bootstrapper.readBootstrap();
-        return certProviderServerSslContextProviderFactory.getProvider(
-            downstreamTlsContext,
-            bootstrapInfo.getNode().toEnvoyProtoNode(),
-            bootstrapInfo.getCertProviders());
       } catch (XdsInitializationException e) {
         throw new RuntimeException(e);
       }

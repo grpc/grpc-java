@@ -529,7 +529,7 @@ public class NettyClientTransportTest {
       Throwable rootCause = getRootCause(e);
       Status status = ((StatusException) rootCause).getStatus();
       assertEquals(Status.Code.INTERNAL, status.getCode());
-      assertEquals("HTTP/2 error code: PROTOCOL_ERROR\nReceived Rst Stream",
+      assertEquals("RST_STREAM closed stream. HTTP/2 error code: PROTOCOL_ERROR",
           status.getDescription());
     }
   }
@@ -779,6 +779,7 @@ public class NettyClientTransportTest {
         DEFAULT_SERVER_KEEPALIVE_TIME_NANOS, DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS,
         MAX_CONNECTION_IDLE_NANOS_DISABLED,
         MAX_CONNECTION_AGE_NANOS_DISABLED, MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE, true, 0,
+        Attributes.EMPTY,
         channelz);
     server.start(serverListener);
     address = TestUtils.testServerAddress((InetSocketAddress) server.getListenSocketAddress());

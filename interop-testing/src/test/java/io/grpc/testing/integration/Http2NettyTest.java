@@ -20,12 +20,14 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 
 import io.grpc.ServerBuilder;
+import io.grpc.ServerCredentials;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.netty.NettySslContextServerCredentials;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import java.io.IOException;
@@ -45,15 +47,16 @@ public class Http2NettyTest extends AbstractInteropTest {
   protected ServerBuilder<?> getServerBuilder() {
     // Starts the server with HTTPS.
     try {
-      NettyServerBuilder builder = NettyServerBuilder.forPort(0)
-          .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
-          .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-          .sslContext(GrpcSslContexts
+      ServerCredentials serverCreds = NettySslContextServerCredentials.create(
+          GrpcSslContexts
               .forServer(TestUtils.loadCert("server1.pem"), TestUtils.loadCert("server1.key"))
               .clientAuth(ClientAuth.REQUIRE)
               .trustManager(TestUtils.loadCert("ca.pem"))
               .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE)
               .build());
+      NettyServerBuilder builder = NettyServerBuilder.forPort(0, serverCreds)
+          .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW)
+          .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
       // Disable the default census stats tracer, use testing tracer instead.
       InternalNettyServerBuilder.setStatsEnabled(builder, false);
       return builder.addStreamTracerFactory(createCustomCensusTracerFactory());

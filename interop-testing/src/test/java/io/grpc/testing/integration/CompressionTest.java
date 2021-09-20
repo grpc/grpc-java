@@ -35,8 +35,9 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -189,11 +190,11 @@ public class CompressionTest {
         .build()
         .start();
 
-    channel = ManagedChannelBuilder.forAddress("localhost", server.getPort())
+    channel = Grpc.newChannelBuilder(
+            "localhost:" + server.getPort(), InsecureChannelCredentials.create())
         .decompressorRegistry(clientDecompressors)
         .compressorRegistry(clientCompressors)
         .intercept(new ClientCompressorInterceptor())
-        .usePlaintext()
         .build();
     stub = TestServiceGrpc.newBlockingStub(channel);
 

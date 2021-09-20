@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The gRPC Authors
+ * Copyright 2020 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,11 @@
 
 package io.grpc;
 
-public final class InternalManagedChannelProvider {
-  public static final Iterable<Class<?>> HARDCODED_CLASSES =
-      ManagedChannelProvider.HARDCODED_CLASSES;
+/** Accesses test-only methods of {@link ManagedChannelRegistry}. */
+public final class ManagedChannelRegistryAccessor {
+  private ManagedChannelRegistryAccessor() {}
+
+  public static Iterable<Class<?>> getHardCodedClasses() {
+    return ManagedChannelRegistry.getHardCodedClasses();
+  }
 }

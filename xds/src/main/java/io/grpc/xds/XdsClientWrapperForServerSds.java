@@ -22,9 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.Internal;
-import io.grpc.InternalLogId;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
@@ -57,8 +55,8 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * Serves as a wrapper for {@link XdsClientImpl} used on the server side by {@link
- * io.grpc.xds.internal.sds.XdsServerBuilder}.
+ * Serves as a wrapper for {@link XdsClient} used on the server side by {@link
+ * XdsServerBuilder}.
  */
 @Internal
 public final class XdsClientWrapperForServerSds {
@@ -67,6 +65,10 @@ public final class XdsClientWrapperForServerSds {
 
   private static final TimeServiceResource timeServiceResource =
       new TimeServiceResource("GrpcServerXdsClient");
+
+  @VisibleForTesting
+  static boolean experimentalNewServerApiEnvVar = Boolean.parseBoolean(
+          System.getenv("GRPC_XDS_EXPERIMENTAL_NEW_SERVER_API"));
 
   private EnvoyServerProtoData.Listener curListener;
   @SuppressWarnings("unused")
@@ -83,34 +85,6 @@ public final class XdsClientWrapperForServerSds {
    */
   public XdsClientWrapperForServerSds(int port) {
     this.port = port;
-  }
-
-  private SynchronizationContext createSynchronizationContext() {
-    final InternalLogId logId =
-        InternalLogId.allocate("XdsClientWrapperForServerSds", Integer.toString(port));
-    return new SynchronizationContext(
-        new Thread.UncaughtExceptionHandler() {
-          // needed by syncContext
-          private boolean panicMode;
-
-          @Override
-          public void uncaughtException(Thread t, Throwable e) {
-            logger.log(
-                Level.SEVERE,
-                "[" + logId + "] Uncaught exception in the SynchronizationContext. Panic!",
-                e);
-            panic(e);
-          }
-
-          void panic(final Throwable t) {
-            if (panicMode) {
-              // Preserve the first panic information
-              return;
-            }
-            panicMode = true;
-            shutdown();
-          }
-        });
   }
 
   public boolean hasXdsClient() {
@@ -135,15 +109,16 @@ public final class XdsClientWrapperForServerSds {
     }
     Node node = bootstrapInfo.getNode();
     timeService = SharedResourceHolder.get(timeServiceResource);
-    XdsClientImpl xdsClientImpl =
-        new XdsClientImpl(
-            "",
+    XdsClient xdsClientImpl =
+        new ServerXdsClient(
             channel,
             node,
-            createSynchronizationContext(),
             timeService,
             new ExponentialBackoffPolicy.Provider(),
-            GrpcUtil.STOPWATCH_SUPPLIER);
+            GrpcUtil.STOPWATCH_SUPPLIER,
+            experimentalNewServerApiEnvVar,
+            "0.0.0.0",
+            bootstrapInfo.getGrpcServerResourceId());
     start(xdsClientImpl);
   }
 
