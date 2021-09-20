@@ -21,7 +21,9 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
+import io.grpc.Grpc;
 import io.grpc.Internal;
+import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
@@ -31,7 +33,6 @@ import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
-import io.grpc.xds.XdsClient.XdsChannel;
 import io.netty.channel.Channel;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
@@ -76,6 +77,7 @@ public final class XdsClientWrapperForServerSds {
   private final int port;
   private ScheduledExecutorService timeService;
   private XdsClient.ListenerWatcher listenerWatcher;
+  private boolean newServerApi;
   @VisibleForTesting final Set<ServerWatcher> serverWatchers = new HashSet<>();
 
   /**
@@ -95,23 +97,27 @@ public final class XdsClientWrapperForServerSds {
   public void createXdsClientAndStart() throws IOException {
     checkState(xdsClient == null, "start() called more than once");
     Bootstrapper.BootstrapInfo bootstrapInfo;
-    XdsChannel channel;
     try {
-      bootstrapInfo = Bootstrapper.getInstance().readBootstrap();
+      bootstrapInfo = Bootstrapper.getInstance().bootstrap();
       List<Bootstrapper.ServerInfo> serverList = bootstrapInfo.getServers();
       if (serverList.isEmpty()) {
         throw new XdsInitializationException("No management server provided by bootstrap");
       }
-      channel = XdsChannelFactory.getInstance().createChannel(serverList);
     } catch (XdsInitializationException e) {
       reportError(Status.fromThrowable(e));
       throw new IOException(e);
     }
     Node node = bootstrapInfo.getNode();
+    Bootstrapper.ServerInfo serverInfo = bootstrapInfo.getServers().get(0);  // use first server
+    ManagedChannel channel =
+        Grpc.newChannelBuilder(serverInfo.getTarget(), serverInfo.getChannelCredentials())
+            .keepAliveTime(5, TimeUnit.MINUTES).build();
     timeService = SharedResourceHolder.get(timeServiceResource);
+    newServerApi = serverInfo.isUseProtocolV3() && experimentalNewServerApiEnvVar;
     XdsClient xdsClientImpl =
         new ServerXdsClient(
             channel,
+            serverInfo.isUseProtocolV3(),
             node,
             timeService,
             new ExponentialBackoffPolicy.Provider(),
@@ -180,7 +186,8 @@ public final class XdsClientWrapperForServerSds {
       FilterChainComparator comparator = new FilterChainComparator(localInetAddr);
       FilterChain bestMatch =
           filterChains.isEmpty() ? null : Collections.max(filterChains, comparator);
-      if (bestMatch != null && comparator.isMatching(bestMatch.getFilterChainMatch())) {
+      if (bestMatch != null
+          && (newServerApi || comparator.isMatching(bestMatch.getFilterChainMatch()))) {
         return bestMatch.getDownstreamTlsContext();
       }
     }

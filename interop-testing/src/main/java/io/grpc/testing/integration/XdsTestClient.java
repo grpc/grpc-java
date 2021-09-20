@@ -33,12 +33,14 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
-import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.services.ChannelzService;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.ClientConfigureRequest;
 import io.grpc.testing.integration.Messages.ClientConfigureRequest.RpcType;
@@ -49,6 +51,7 @@ import io.grpc.testing.integration.Messages.LoadBalancerStatsRequest;
 import io.grpc.testing.integration.Messages.LoadBalancerStatsResponse;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
+import io.grpc.xds.XdsChannelCredentials;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -75,12 +78,14 @@ public final class XdsTestClient {
   private final Map<String, Integer> rpcsStartedByMethod = new HashMap<>();
   private final Map<String, Integer> rpcsFailedByMethod = new HashMap<>();
   private final Map<String, Integer> rpcsSucceededByMethod = new HashMap<>();
+  private static final int CHANNELZ_MAX_PAGE_SIZE = 100;
 
   private int numChannels = 1;
   private boolean printResponse = false;
   private int qps = 1;
   private volatile RpcConfig rpcConfig;
   private int rpcTimeoutSec = 20;
+  private boolean secureMode = false;
   private String server = "localhost:8080";
   private int statsPort = 8081;
   private Server statsServer;
@@ -147,6 +152,8 @@ public final class XdsTestClient {
         server = value;
       } else if ("stats_port".equals(key)) {
         statsPort = Integer.valueOf(value);
+      } else if ("secure_mode".equals(key)) {
+        secureMode = Boolean.valueOf(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -176,6 +183,8 @@ public final class XdsTestClient {
               + c.rpcTimeoutSec
               + "\n  --server=host:port     Address of server. Default: "
               + c.server
+              + "\n  --secure_mode=BOOLEAN  Use true to enable XdsCredentials. Default: "
+              + c.secureMode
               + "\n  --stats_port=INT       Port to expose peer distribution stats service. "
               + "Default: "
               + c.statsPort);
@@ -227,11 +236,19 @@ public final class XdsTestClient {
         NettyServerBuilder.forPort(statsPort)
             .addService(new XdsStatsImpl())
             .addService(new ConfigureUpdateServiceImpl())
+            .addService(ProtoReflectionService.newInstance())
+            .addService(ChannelzService.newInstance(CHANNELZ_MAX_PAGE_SIZE))
             .build();
     try {
       statsServer.start();
       for (int i = 0; i < numChannels; i++) {
-        channels.add(NettyChannelBuilder.forTarget(server).usePlaintext().build());
+        channels.add(
+            Grpc.newChannelBuilder(
+                    server,
+                    secureMode
+                        ? XdsChannelCredentials.create(InsecureChannelCredentials.create())
+                        : InsecureChannelCredentials.create())
+                .build());
       }
       exec = MoreExecutors.listeningDecorator(Executors.newSingleThreadScheduledExecutor());
       runQps();

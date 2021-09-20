@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import io.grpc.Context;
 import io.grpc.Contexts;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.Metadata;
 import io.grpc.Server;
 import io.grpc.ServerCall;
@@ -28,10 +29,13 @@ import io.grpc.ServerInterceptors;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.services.ChannelzService;
 import io.grpc.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
+import io.grpc.xds.XdsServerBuilder;
+import io.grpc.xds.XdsServerCredentials;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.concurrent.TimeUnit;
@@ -47,13 +51,17 @@ public final class XdsTestServer {
   private static final Context.Key<String> CALL_BEHAVIOR_KEY =
       Context.key("rpc-behavior");
   private static final String CALL_BEHAVIOR_KEEP_OPEN_VALUE = "keep-open";
+  private static final int CHANNELZ_MAX_PAGE_SIZE = 100;
 
   private static Logger logger = Logger.getLogger(XdsTestServer.class.getName());
 
   private int port = 8080;
+  private int maintenancePort = 8080;
+  private boolean secureMode = false;
   private String serverId = "java_server";
   private HealthStatusManager health;
   private Server server;
+  private Server maintenanceServer;
   private String host;
 
   /**
@@ -103,6 +111,10 @@ public final class XdsTestServer {
       String value = parts[1];
       if ("port".equals(key)) {
         port = Integer.valueOf(value);
+      } else if ("maintenance_port".equals(key)) {
+        maintenancePort = Integer.valueOf(value);
+      } else if ("secure_mode".equals(key)) {
+        secureMode = Boolean.parseBoolean(value);
       } else if ("server_id".equals(key)) {
         serverId = value;
       } else {
@@ -112,14 +124,30 @@ public final class XdsTestServer {
       }
     }
 
+    if (secureMode && (port == maintenancePort)) {
+      System.err.println(
+          "port and maintenance_port should be different for secure mode: port="
+              + port
+              + ", maintenance_port="
+              + maintenancePort);
+      usage = true;
+    }
+
     if (usage) {
       XdsTestServer s = new XdsTestServer();
       System.err.println(
           "Usage: [ARGS...]"
               + "\n"
-              + "\n  --port=INT          listening port for server."
+              + "\n  --port=INT          listening port for test server."
               + "\n                      Default: "
               + s.port
+              + "\n  --maintenance_port=INT      listening port for other servers."
+              + "\n                      Default: "
+              + s.maintenancePort
+              + "\n  --secure_mode=BOOLEAN Use true to enable XdsCredentials."
+              + " port and maintenance_port should be different for secure mode."
+              + "\n                      Default: "
+              + s.secureMode
               + "\n  --server_id=STRING  server ID for response."
               + "\n                      Default: "
               + s.serverId);
@@ -135,29 +163,59 @@ public final class XdsTestServer {
       throw new RuntimeException(e);
     }
     health = new HealthStatusManager();
-    server =
-        NettyServerBuilder.forPort(port)
-            .addService(
-                ServerInterceptors.intercept(
-                    new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
-            .addService(new XdsUpdateHealthServiceImpl(health))
-            .addService(health.getHealthService())
-            .addService(ProtoReflectionService.newInstance())
-            .build()
-            .start();
+    if (secureMode) {
+      server =
+          XdsServerBuilder.forPort(
+                  port, XdsServerCredentials.create(InsecureServerCredentials.create()))
+              .addService(
+                  ServerInterceptors.intercept(
+                      new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
+              .build()
+              .start();
+      maintenanceServer =
+          NettyServerBuilder.forPort(maintenancePort)
+              .addService(new XdsUpdateHealthServiceImpl(health))
+              .addService(health.getHealthService())
+              .addService(ProtoReflectionService.newInstance())
+              .addService(ChannelzService.newInstance(CHANNELZ_MAX_PAGE_SIZE))
+              .build()
+              .start();
+    } else {
+      server =
+          NettyServerBuilder.forPort(port)
+              .addService(
+                  ServerInterceptors.intercept(
+                      new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
+              .addService(new XdsUpdateHealthServiceImpl(health))
+              .addService(health.getHealthService())
+              .addService(ProtoReflectionService.newInstance())
+              .addService(ChannelzService.newInstance(CHANNELZ_MAX_PAGE_SIZE))
+              .build()
+              .start();
+      maintenanceServer = null;
+    }
     health.setStatus("", ServingStatus.SERVING);
   }
 
   private void stop() throws Exception {
     server.shutdownNow();
+    if (maintenanceServer != null) {
+      maintenanceServer.shutdownNow();
+    }
     if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
       System.err.println("Timed out waiting for server shutdown");
+    }
+    if (maintenanceServer != null && !maintenanceServer.awaitTermination(5, TimeUnit.SECONDS)) {
+      System.err.println("Timed out waiting for maintenanceServer shutdown");
     }
   }
 
   private void blockUntilShutdown() throws InterruptedException {
     if (server != null) {
       server.awaitTermination();
+    }
+    if (maintenanceServer != null) {
+      maintenanceServer.awaitTermination();
     }
   }
 

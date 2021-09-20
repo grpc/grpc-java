@@ -24,10 +24,16 @@ import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -43,6 +49,7 @@ import io.grpc.xds.XdsClient.LdsUpdate;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.util.Collection;
 import java.util.Collections;
@@ -86,6 +93,7 @@ final class XdsNameResolver extends NameResolver {
   private Listener2 listener;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
+  private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
 
   XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
@@ -123,6 +131,7 @@ final class XdsNameResolver extends NameResolver {
       return;
     }
     xdsClient = xdsClientPool.getObject();
+    callCounterProvider = SharedCallCounterMap.getInstance();
     resolveState = new ResolveState();
     resolveState.start();
   }
@@ -182,6 +191,7 @@ final class XdsNameResolver extends NameResolver {
     Attributes attrs =
         Attributes.newBuilder()
             .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+            .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
             .set(InternalConfigSelector.KEY, configSelector)
             .build();
     ResolutionResult result =
@@ -359,18 +369,45 @@ final class XdsNameResolver extends NameResolver {
                 "Failed to parse service config (method config)"));
       }
       final String finalCluster = cluster;
-      class SelectionCompleted implements Runnable {
+
+      class ClusterSelectionInterceptor implements ClientInterceptor {
         @Override
-        public void run() {
-          releaseCluster(finalCluster);
+        public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+            MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+          CallOptions callOptionsForCluster =
+              callOptions.withOption(CLUSTER_SELECTION_KEY, finalCluster);
+          return new SimpleForwardingClientCall<ReqT, RespT>(
+              next.newCall(method, callOptionsForCluster)) {
+            @Override
+            public void start(Listener<RespT> listener, Metadata headers) {
+              listener = new SimpleForwardingClientCallListener<RespT>(listener) {
+                boolean committed;
+
+                @Override
+                public void onHeaders(Metadata headers) {
+                  committed = true;
+                  releaseCluster(finalCluster);
+                  delegate().onHeaders(headers);
+                }
+
+                @Override
+                public void onClose(Status status, Metadata trailers) {
+                  if (!committed) {
+                    releaseCluster(finalCluster);
+                  }
+                  delegate().onClose(status, trailers);
+                }
+              };
+              delegate().start(listener, headers);
+            }
+          };
         }
       }
 
       return
           Result.newBuilder()
-              .setCallOptions(args.getCallOptions().withOption(CLUSTER_SELECTION_KEY, cluster))
               .setConfig(config)
-              .setCommittedCallback(new SelectionCompleted())
+              .setInterceptor(new ClusterSelectionInterceptor())
               .build();
     }
 

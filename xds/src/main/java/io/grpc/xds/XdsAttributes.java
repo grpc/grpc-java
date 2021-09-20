@@ -22,6 +22,7 @@ import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.LoadStatsManager.LoadStatsStore;
+import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 
 /**
@@ -39,6 +40,14 @@ public final class XdsAttributes {
   @NameResolver.ResolutionResultAttr
   static final Attributes.Key<ObjectPool<XdsClient>> XDS_CLIENT_POOL =
       Attributes.Key.create("io.grpc.xds.XdsAttributes.xdsClientPool");
+
+  /**
+   * Attribute key for obtaining the global provider that provides atomics for aggregating
+   * outstanding RPCs sent to each cluster.
+   */
+  @NameResolver.ResolutionResultAttr
+  static final Attributes.Key<CallCounterProvider> CALL_COUNTER_PROVIDER =
+      Attributes.Key.create("io.grpc.xds.XdsAttributes.callCounterProvider");
 
   // TODO (chengyuanzhang): temporary solution for migrating to LRS policy. Should access
   //   stats object via XdsClient interface.

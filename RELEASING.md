@@ -4,7 +4,7 @@ How to Create a Release of GRPC Java (for Maintainers Only)
 Build Environments
 ------------------
 We deploy GRPC to Maven Central under the following systems:
-- Ubuntu 14.04 with Docker 13.03.0 that runs CentOS 6.9
+- Ubuntu 14.04 with Docker 13.03.0 that runs CentOS 7
 - Windows 7 64-bit with Visual Studio
 - Mac OS X 10.14.6
 
@@ -86,8 +86,8 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
      $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle$" upstream/master)^
    $ git push upstream v$MAJOR.$MINOR.x
    ```
-4. Go to [Travis CI settings](https://travis-ci.org/grpc/grpc-java/settings) and
-   add a _Cron Job_:
+4. Ask a project admin to go to [Travis CI settings](https://travis-ci.org/grpc/grpc-java/settings)
+   and add a _Cron Job_:
    * Branch: `v$MAJOR.$MINOR.x`
    * Interval: `weekly`
    * Options: `Do not run if there has been a build in the last 24h`

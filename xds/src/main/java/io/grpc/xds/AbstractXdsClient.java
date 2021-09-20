@@ -24,20 +24,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.Any;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.MessageOrBuilder;
-import com.google.protobuf.TypeRegistry;
-import com.google.protobuf.util.JsonFormat;
 import com.google.rpc.Code;
-import io.envoyproxy.envoy.config.cluster.v3.Cluster;
-import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
-import io.envoyproxy.envoy.config.listener.v3.Listener;
-import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
-import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.InternalLogId;
+import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -86,10 +78,11 @@ abstract class AbstractXdsClient extends XdsClient {
           throw new AssertionError(e);
         }
       });
-  private final MessagePrinter respPrinter = new MessagePrinter();
+  private final MessagePrinter msgPrinter = new MessagePrinter();
   private final InternalLogId logId;
   private final XdsLogger logger;
-  private final XdsChannel xdsChannel;
+  private final ManagedChannel channel;
+  private final boolean useProtocolV3;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
@@ -116,9 +109,11 @@ abstract class AbstractXdsClient extends XdsClient {
   @Nullable
   private ScheduledHandle rpcRetryTimer;
 
-  AbstractXdsClient(XdsChannel channel, Node node, ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
-    this.xdsChannel = checkNotNull(channel, "channel");
+  AbstractXdsClient(ManagedChannel channel, boolean useProtocolV3, Node node,
+      ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
+      Supplier<Stopwatch> stopwatchSupplier) {
+    this.channel = checkNotNull(channel, "channel");
+    this.useProtocolV3 = useProtocolV3;
     this.node = checkNotNull(node, "node");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
@@ -184,7 +179,6 @@ abstract class AbstractXdsClient extends XdsClient {
       public void run() {
         shutdown = true;
         logger.log(XdsLogLevel.INFO, "Shutting down");
-        xdsChannel.getManagedChannel().shutdown();
         if (adsStream != null) {
           adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
         }
@@ -194,6 +188,11 @@ abstract class AbstractXdsClient extends XdsClient {
         handleShutdown();
       }
     });
+  }
+
+  @Override
+  boolean isShutDown() {
+    return shutdown;
   }
 
   @Override
@@ -304,7 +303,7 @@ abstract class AbstractXdsClient extends XdsClient {
   // Must be synchronized.
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
-    if (xdsChannel.isUseProtocolV3()) {
+    if (useProtocolV3) {
       adsStream = new AdsStreamV3();
     } else {
       adsStream = new AdsStreamV2();
@@ -568,8 +567,7 @@ abstract class AbstractXdsClient extends XdsClient {
     void start() {
       io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc
           .AggregatedDiscoveryServiceStub stub =
-          io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(
-              xdsChannel.getManagedChannel());
+          io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.newStub(channel);
       StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse> responseReaderV2 =
           new StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse>() {
             @Override
@@ -580,7 +578,7 @@ abstract class AbstractXdsClient extends XdsClient {
                   ResourceType type = ResourceType.fromTypeUrl(response.getTypeUrl());
                   if (logger.isLoggable(XdsLogLevel.DEBUG)) {
                     logger.log(XdsLogLevel.DEBUG, "Received {0} response:\n{1}",
-                        type, respPrinter.print(response));
+                        type, msgPrinter.print(response));
                   }
                   handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
                       response.getNonce());
@@ -632,7 +630,7 @@ abstract class AbstractXdsClient extends XdsClient {
       }
       io.envoyproxy.envoy.api.v2.DiscoveryRequest request = builder.build();
       requestWriter.onNext(request);
-      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", request);
+      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", msgPrinter.print(request));
     }
 
     @Override
@@ -647,7 +645,7 @@ abstract class AbstractXdsClient extends XdsClient {
     @Override
     void start() {
       AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
-          AggregatedDiscoveryServiceGrpc.newStub(xdsChannel.getManagedChannel());
+          AggregatedDiscoveryServiceGrpc.newStub(channel);
       StreamObserver<DiscoveryResponse> responseReader = new StreamObserver<DiscoveryResponse>() {
         @Override
         public void onNext(final DiscoveryResponse response) {
@@ -657,7 +655,7 @@ abstract class AbstractXdsClient extends XdsClient {
               ResourceType type = ResourceType.fromTypeUrl(response.getTypeUrl());
               if (logger.isLoggable(XdsLogLevel.DEBUG)) {
                 logger.log(XdsLogLevel.DEBUG, "Received {0} response:\n{1}",
-                    type, respPrinter.print(response));
+                    type, msgPrinter.print(response));
               }
               handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
                   response.getNonce());
@@ -709,52 +707,12 @@ abstract class AbstractXdsClient extends XdsClient {
       }
       DiscoveryRequest request = builder.build();
       requestWriter.onNext(request);
-      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", respPrinter);
+      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", msgPrinter.print(request));
     }
 
     @Override
     void sendError(Exception error) {
       requestWriter.onError(error);
-    }
-  }
-
-  /**
-   * Convert protobuf message to human readable String format. Useful for protobuf messages
-   * containing {@link com.google.protobuf.Any} fields.
-   */
-  @VisibleForTesting
-  static final class MessagePrinter {
-    private final JsonFormat.Printer printer;
-
-    @VisibleForTesting
-    MessagePrinter() {
-      TypeRegistry registry =
-          TypeRegistry.newBuilder()
-              .add(Listener.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.Listener.getDescriptor())
-              .add(HttpConnectionManager.getDescriptor())
-              .add(
-                  io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2
-                      .HttpConnectionManager.getDescriptor())
-              .add(RouteConfiguration.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.RouteConfiguration.getDescriptor())
-              .add(Cluster.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.Cluster.getDescriptor())
-              .add(ClusterLoadAssignment.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.getDescriptor())
-              .build();
-      printer = JsonFormat.printer().usingTypeRegistry(registry);
-    }
-
-    @VisibleForTesting
-    String print(MessageOrBuilder message) {
-      String res;
-      try {
-        res = printer.print(message);
-      } catch (InvalidProtocolBufferException e) {
-        res = message + " (failed to pretty-print: " + e + ")";
-      }
-      return res;
     }
   }
 }

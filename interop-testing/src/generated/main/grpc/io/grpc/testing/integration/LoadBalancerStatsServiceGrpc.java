@@ -1,19 +1,6 @@
 package io.grpc.testing.integration;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
-import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ClientCalls.asyncUnaryCall;
-import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.stub.ClientCalls.blockingUnaryCall;
-import static io.grpc.stub.ClientCalls.futureUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncBidiStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncClientStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncServerStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnaryCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;
-import static io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;
 
 /**
  * <pre>
@@ -150,7 +137,7 @@ public final class LoadBalancerStatsServiceGrpc {
      */
     public void getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerStatsResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(getGetClientStatsMethod(), responseObserver);
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getGetClientStatsMethod(), responseObserver);
     }
 
     /**
@@ -160,21 +147,21 @@ public final class LoadBalancerStatsServiceGrpc {
      */
     public void getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> responseObserver) {
-      asyncUnimplementedUnaryCall(getGetClientAccumulatedStatsMethod(), responseObserver);
+      io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall(getGetClientAccumulatedStatsMethod(), responseObserver);
     }
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
             getGetClientStatsMethod(),
-            asyncUnaryCall(
+            io.grpc.stub.ServerCalls.asyncUnaryCall(
               new MethodHandlers<
                 io.grpc.testing.integration.Messages.LoadBalancerStatsRequest,
                 io.grpc.testing.integration.Messages.LoadBalancerStatsResponse>(
                   this, METHODID_GET_CLIENT_STATS)))
           .addMethod(
             getGetClientAccumulatedStatsMethod(),
-            asyncUnaryCall(
+            io.grpc.stub.ServerCalls.asyncUnaryCall(
               new MethodHandlers<
                 io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest,
                 io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse>(
@@ -207,7 +194,7 @@ public final class LoadBalancerStatsServiceGrpc {
      */
     public void getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerStatsResponse> responseObserver) {
-      asyncUnaryCall(
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getGetClientStatsMethod(), getCallOptions()), request, responseObserver);
     }
 
@@ -218,7 +205,7 @@ public final class LoadBalancerStatsServiceGrpc {
      */
     public void getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request,
         io.grpc.stub.StreamObserver<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> responseObserver) {
-      asyncUnaryCall(
+      io.grpc.stub.ClientCalls.asyncUnaryCall(
           getChannel().newCall(getGetClientAccumulatedStatsMethod(), getCallOptions()), request, responseObserver);
     }
   }
@@ -246,7 +233,7 @@ public final class LoadBalancerStatsServiceGrpc {
      * </pre>
      */
     public io.grpc.testing.integration.Messages.LoadBalancerStatsResponse getClientStats(io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request) {
-      return blockingUnaryCall(
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetClientStatsMethod(), getCallOptions(), request);
     }
 
@@ -256,7 +243,7 @@ public final class LoadBalancerStatsServiceGrpc {
      * </pre>
      */
     public io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse getClientAccumulatedStats(io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request) {
-      return blockingUnaryCall(
+      return io.grpc.stub.ClientCalls.blockingUnaryCall(
           getChannel(), getGetClientAccumulatedStatsMethod(), getCallOptions(), request);
     }
   }
@@ -285,7 +272,7 @@ public final class LoadBalancerStatsServiceGrpc {
      */
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.LoadBalancerStatsResponse> getClientStats(
         io.grpc.testing.integration.Messages.LoadBalancerStatsRequest request) {
-      return futureUnaryCall(
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getGetClientStatsMethod(), getCallOptions()), request);
     }
 
@@ -296,7 +283,7 @@ public final class LoadBalancerStatsServiceGrpc {
      */
     public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsResponse> getClientAccumulatedStats(
         io.grpc.testing.integration.Messages.LoadBalancerAccumulatedStatsRequest request) {
-      return futureUnaryCall(
+      return io.grpc.stub.ClientCalls.futureUnaryCall(
           getChannel().newCall(getGetClientAccumulatedStatsMethod(), getCallOptions()), request);
     }
   }

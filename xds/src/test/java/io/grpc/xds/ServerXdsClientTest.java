@@ -67,7 +67,6 @@ import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsClient.ListenerUpdate;
 import io.grpc.xds.XdsClient.ListenerWatcher;
-import io.grpc.xds.XdsClient.XdsChannel;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -188,7 +187,7 @@ public class ServerXdsClientTest {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
     xdsClient =
-        new ServerXdsClient(new XdsChannel(channel, /* useProtocolV3= */ false), NODE,
+        new ServerXdsClient(channel, /* useProtocolV3= */ false, NODE,
             fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
             fakeClock.getStopwatchSupplier(), false, INSTANCE_IP, "grpc/server");
     // Only the connection to management server is established, no RPC request is sent until at
@@ -200,8 +199,8 @@ public class ServerXdsClientTest {
   @After
   public void tearDown() {
     xdsClient.shutdown();
+    channel.shutdown();
     assertThat(callEnded.get()).isTrue();
-    assertThat(channel.isShutdown()).isTrue();
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 
@@ -636,6 +635,7 @@ public class ServerXdsClientTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "",
             ResourceType.LDS.typeUrlV2(), "")));
+    verifyNoMoreInteractions(requestObserver);
 
     final FilterChain filterChainOutbound = buildFilterChain(buildFilterChainMatch(8000), null);
     final FilterChain filterChainInbound = buildFilterChain(buildFilterChainMatch(PORT,
@@ -675,6 +675,7 @@ public class ServerXdsClientTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             ResourceType.LDS.typeUrlV2(), "")));
+    verifyNoMoreInteractions(requestObserver);
 
     // Management server becomes unreachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -694,6 +695,7 @@ public class ServerXdsClientTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             ResourceType.LDS.typeUrlV2(), "")));
+    verifyNoMoreInteractions(requestObserver);
 
     // Management server is still not reachable.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -713,6 +715,7 @@ public class ServerXdsClientTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "0",
             ResourceType.LDS.typeUrlV2(), "")));
+    verifyNoMoreInteractions(requestObserver);
 
     // Management server sends back a LDS response.
     response = buildDiscoveryResponseV2("1", listeners,
@@ -736,6 +739,7 @@ public class ServerXdsClientTest {
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest(getNodeToVerify(), "1",
             ResourceType.LDS.typeUrlV2(), "")));
+    verifyNoMoreInteractions(requestObserver);
 
     // Management server becomes unreachable again.
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -756,7 +760,7 @@ public class ServerXdsClientTest {
             ResourceType.LDS.typeUrlV2(), "")));
 
     verifyNoMoreInteractions(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
-        backoffPolicy2);
+        backoffPolicy2, requestObserver);
   }
 
   static Listener buildListenerWithFilterChain(String name, int portValue, String address,

@@ -208,6 +208,9 @@ public class GrpcSslContexts {
       }
     } else if (ConscryptLoader.isConscrypt(jdkProvider)) {
       apc = ALPN;
+      // TODO: Conscrypt triggers failures in the TrustManager.
+      // https://github.com/grpc/grpc-java/issues/7765
+      builder.protocols("TLSv1.2");
     } else {
       throw new IllegalArgumentException("Unknown provider; can't configure: " + jdkProvider);
     }

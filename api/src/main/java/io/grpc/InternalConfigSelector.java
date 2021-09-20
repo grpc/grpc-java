@@ -41,16 +41,14 @@ public abstract class InternalConfigSelector {
   public static final class Result {
     private final Status status;
     private final Object config;
-    private final CallOptions callOptions;
     @Nullable
-    private final Runnable committedCallback;
+    public ClientInterceptor interceptor;
 
     private Result(
-        Status status, Object config, CallOptions callOptions, Runnable committedCallback) {
+        Status status, Object config, ClientInterceptor interceptor) {
       this.status = checkNotNull(status, "status");
       this.config = config;
-      this.callOptions = callOptions;
-      this.committedCallback = committedCallback;
+      this.interceptor = interceptor;
     }
 
     /**
@@ -58,7 +56,7 @@ public abstract class InternalConfigSelector {
      */
     public static Result forError(Status status) {
       checkArgument(!status.isOk(), "status is OK");
-      return new Result(status, null, null, null);
+      return new Result(status, null, null);
     }
 
     /**
@@ -78,18 +76,11 @@ public abstract class InternalConfigSelector {
     }
 
     /**
-     * Returns a config-selector-modified CallOptions for the RPC.
-     */
-    public CallOptions getCallOptions() {
-      return callOptions;
-    }
-
-    /**
-     * Returns a callback to be invoked when the RPC no longer needs a picker.
+     * Returns an interceptor that will be applies to calls.
      */
     @Nullable
-    public Runnable getCommittedCallback() {
-      return committedCallback;
+    public ClientInterceptor getInterceptor() {
+      return interceptor;
     }
 
     public static Builder newBuilder() {
@@ -98,8 +89,7 @@ public abstract class InternalConfigSelector {
 
     public static final class Builder {
       private Object config;
-      private CallOptions callOptions;
-      private Runnable committedCallback;
+      private ClientInterceptor interceptor;
 
       private Builder() {}
 
@@ -114,22 +104,12 @@ public abstract class InternalConfigSelector {
       }
 
       /**
-       * Sets the CallOptions. This field is required.
-       *
-       * @return this
-       */
-      public Builder setCallOptions(CallOptions callOptions) {
-        this.callOptions = checkNotNull(callOptions, "callOptions");
-        return this;
-      }
-
-      /**
        * Sets the interceptor. This field is optional.
        *
        * @return this
        */
-      public Builder setCommittedCallback(Runnable committedCallback) {
-        this.committedCallback = checkNotNull(committedCallback, "committedCallback");
+      public Builder setInterceptor(ClientInterceptor interceptor) {
+        this.interceptor = checkNotNull(interceptor, "interceptor");
         return this;
       }
 
@@ -138,8 +118,7 @@ public abstract class InternalConfigSelector {
        */
       public Result build() {
         checkState(config != null, "config is not set");
-        checkState(callOptions != null, "callOptions is not set");
-        return new Result(Status.OK, config, callOptions, committedCallback);
+        return new Result(Status.OK, config, interceptor);
       }
     }
   }

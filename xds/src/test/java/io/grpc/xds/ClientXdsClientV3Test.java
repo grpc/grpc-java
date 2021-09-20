@@ -31,6 +31,7 @@ import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers;
 import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.CustomClusterType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
@@ -62,6 +63,7 @@ import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
+import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
@@ -292,20 +294,50 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
-    protected Message buildCluster(String clusterName, @Nullable String edsServiceName,
+    protected Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
         boolean enableLrs, @Nullable Message upstreamTlsContext,
         @Nullable Message circuitBreakers) {
-      Cluster.Builder builder = Cluster.newBuilder();
-      builder.setName(clusterName);
+      Cluster.Builder builder =
+          initClusterBuilder(clusterName, enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.EDS);
       EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
       edsClusterConfigBuilder.setEdsConfig(
-          ConfigSource.newBuilder()
-              .setAds(AggregatedConfigSource.getDefaultInstance()));
+          ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()));  // ADS
       if (edsServiceName != null) {
         edsClusterConfigBuilder.setServiceName(edsServiceName);
       }
       builder.setEdsClusterConfig(edsClusterConfigBuilder);
+      return builder.build();
+    }
+
+    @Override
+    protected Message buildLogicalDnsCluster(String clusterName, boolean enableLrs,
+        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+      Cluster.Builder builder =
+          initClusterBuilder(clusterName, enableLrs, upstreamTlsContext, circuitBreakers);
+      builder.setType(DiscoveryType.LOGICAL_DNS);
+      return builder.build();
+    }
+
+    @Override
+    protected Message buildAggregateCluster(String clusterName, List<String> clusters) {
+      ClusterConfig clusterConfig = ClusterConfig.newBuilder().addAllClusters(clusters).build();
+      CustomClusterType type =
+          CustomClusterType.newBuilder()
+              .setName(ClientXdsClient.AGGREGATE_CLUSTER_TYPE_NAME)
+              .setTypedConfig(Any.pack(clusterConfig))
+              .build();
+      return Cluster.newBuilder()
+          .setName(clusterName)
+          .setLbPolicy(LbPolicy.ROUND_ROBIN)
+          .setClusterType(type)
+          .build();
+    }
+
+    private Cluster.Builder initClusterBuilder(String clusterName, boolean enableLrs,
+        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+      Cluster.Builder builder = Cluster.newBuilder();
+      builder.setName(clusterName);
       builder.setLbPolicy(LbPolicy.ROUND_ROBIN);
       if (enableLrs) {
         builder.setLrsServer(
@@ -321,7 +353,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       if (circuitBreakers != null) {
         builder.setCircuitBreakers((CircuitBreakers) circuitBreakers);
       }
-      return builder.build();
+      return builder;
     }
 
     @Override

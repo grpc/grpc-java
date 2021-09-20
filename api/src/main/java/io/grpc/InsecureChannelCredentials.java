@@ -24,4 +24,9 @@ public final class InsecureChannelCredentials extends ChannelCredentials {
   }
 
   private InsecureChannelCredentials() {}
+
+  @Override
+  public ChannelCredentials withoutBearerTokens() {
+    return this;
+  }
 }
