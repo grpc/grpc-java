@@ -515,20 +515,22 @@ final class XdsServerWrapper extends Server {
           Map<String, FilterConfig> selectedOverrideConfigs =
               new HashMap<>(virtualHost.filterConfigOverrides());
           selectedOverrideConfigs.putAll(route.filterConfigOverrides());
-          for (NamedFilterConfig namedFilterConfig : namedFilterConfigs) {
-            FilterConfig filterConfig = namedFilterConfig.filterConfig;
-            Filter filter = filterRegistry.get(filterConfig.typeUrl());
-            if (filter instanceof ServerInterceptorBuilder) {
-              ServerInterceptor interceptor =
-                  ((ServerInterceptorBuilder) filter).buildServerInterceptor(
-                      filterConfig, selectedOverrideConfigs.get(namedFilterConfig.name));
-              if (interceptor != null) {
-                filterInterceptors.add(interceptor);
+          if (namedFilterConfigs != null) {
+            for (NamedFilterConfig namedFilterConfig : namedFilterConfigs) {
+              FilterConfig filterConfig = namedFilterConfig.filterConfig;
+              Filter filter = filterRegistry.get(filterConfig.typeUrl());
+              if (filter instanceof ServerInterceptorBuilder) {
+                ServerInterceptor interceptor =
+                    ((ServerInterceptorBuilder) filter).buildServerInterceptor(
+                        filterConfig, selectedOverrideConfigs.get(namedFilterConfig.name));
+                if (interceptor != null) {
+                  filterInterceptors.add(interceptor);
+                }
+              } else {
+                logger.log(Level.WARNING, "HttpFilterConfig(type URL: "
+                    + filterConfig.typeUrl() + ") is not supported on server-side. "
+                    + "Probably a bug at ClientXdsClient verification.");
               }
-            } else {
-              logger.log(Level.WARNING, "HttpFilterConfig(type URL: "
-                  + filterConfig.typeUrl() + ") is not supported on server-side. "
-                  + "Probably a bug at ClientXdsClient verification.");
             }
           }
           ServerInterceptor interceptor = combineInterceptors(filterInterceptors);
