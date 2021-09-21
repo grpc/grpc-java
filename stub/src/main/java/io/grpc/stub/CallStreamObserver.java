@@ -49,6 +49,8 @@ import io.grpc.ExperimentalApi;
  *
  * <p>DO NOT MOCK: The API is too complex to reliably mock. Use InProcessChannelBuilder to create
  * "real" RPCs suitable for testing.
+ *
+ * @param <V> type of outbound message.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8499")
 public abstract class CallStreamObserver<V> implements StreamObserver<V> {

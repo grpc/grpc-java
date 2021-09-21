@@ -27,7 +27,7 @@ package io.grpc.stub;
  * <p>DO NOT MOCK: The API is too complex to reliably mock. Use InProcessChannelBuilder to create
  * "real" RPCs suitable for testing and interact with the server using a normal client stub.
  */
-public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> {
+public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver<RespT> {
 
   /**
    * Returns {@code true} when the call is cancelled and the server is encouraged to abort
@@ -113,9 +113,8 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    * thread will always be used to execute the {@link Runnable}, it is guaranteed that executions
    * are serialized with calls to the 'inbound' {@link StreamObserver}.
    *
-   * <p>On client-side this method may only be called during {@link
-   * ClientResponseObserver#beforeStart}. On server-side it may only be called during the initial
-   * call to the application, before the service returns its {@code StreamObserver}.
+   * <p>May only be called during the initial call to the application, before the service returns
+   * its {@code StreamObserver}.
    *
    * <p>Because there is a processing delay to deliver this notification, it is possible for
    * concurrent writes to cause {@code isReady() == false} within this callback. Handle "spurious"

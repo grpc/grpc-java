@@ -447,7 +447,7 @@ public final class ServerCalls {
    * @param methodDescriptor of method for which error will be thrown.
    * @param responseObserver on which error will be set.
    */
-  public static <T> StreamObserver<T> asyncUnimplementedStreamingCall(
+  public static <ReqT> StreamObserver<ReqT> asyncUnimplementedStreamingCall(
       MethodDescriptor<?, ?> methodDescriptor, StreamObserver<?> responseObserver) {
     // NB: For streaming call we want to do the same as for unary call. Fail-fast by setting error
     // on responseObserver and then return no-op observer.
