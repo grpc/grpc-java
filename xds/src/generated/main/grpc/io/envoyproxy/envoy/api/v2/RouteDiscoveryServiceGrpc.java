@@ -14,6 +14,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
 @javax.annotation.Generated(
     value = "by gRPC proto compiler",
     comments = "Source: envoy/api/v2/rds.proto")
+@io.grpc.stub.annotations.GrpcGenerated
 public final class RouteDiscoveryServiceGrpc {
 
   private RouteDiscoveryServiceGrpc() {}

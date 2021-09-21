@@ -17,7 +17,6 @@
 package io.grpc.xds.internal.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -56,13 +55,14 @@ public final class SslContextProviderSupplier implements Closeable {
   public synchronized void updateSslContext(final SslContextProvider.Callback callback) {
     checkNotNull(callback, "callback");
     try {
-      checkState(!shutdown, "Supplier is shutdown!");
-      if (sslContextProvider == null) {
-        sslContextProvider = getSslContextProvider();
+      if (!shutdown) {
+        if (sslContextProvider == null) {
+          sslContextProvider = getSslContextProvider();
+        }
       }
       // we want to increment the ref-count so call findOrCreate again...
       final SslContextProvider toRelease = getSslContextProvider();
-      sslContextProvider.addCallback(
+      toRelease.addCallback(
           new SslContextProvider.Callback(callback.getExecutor()) {
 
             @Override
@@ -115,6 +115,7 @@ public final class SslContextProviderSupplier implements Closeable {
         tlsContextManager.releaseServerSslContextProvider(sslContextProvider);
       }
     }
+    sslContextProvider = null;
     shutdown = true;
   }
 

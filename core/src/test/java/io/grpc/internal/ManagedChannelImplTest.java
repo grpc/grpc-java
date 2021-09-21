@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static junit.framework.TestCase.assertNotSame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -111,7 +112,6 @@ import io.grpc.StringMarshaller;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
-import io.grpc.internal.ManagedChannelImpl.ScParser;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
@@ -1038,7 +1038,7 @@ public class ManagedChannelImplTest {
     ClientStreamListener streamListener = streamListenerCaptor.getValue();
     Metadata trailers = new Metadata();
     assertEquals(0, callExecutor.numPendingTasks());
-    streamListener.closed(Status.CANCELLED, trailers);
+    streamListener.closed(Status.CANCELLED, PROCESSED, trailers);
     verify(mockCallListener, never()).onClose(same(Status.CANCELLED), same(trailers));
     assertEquals(1, callExecutor.runDueTasks());
     verify(mockCallListener).onClose(same(Status.CANCELLED), same(trailers));
@@ -3423,7 +3423,8 @@ public class ManagedChannelImplTest {
     // closing stream listener affects subchannel stats immediately
     assertEquals(0, getStats(subchannel).callsSucceeded);
     assertEquals(0, getStats(subchannel).callsFailed);
-    streamListener.closed(success ? Status.OK : Status.UNKNOWN, new Metadata());
+    streamListener.closed(
+        success ? Status.OK : Status.UNKNOWN, PROCESSED, new Metadata());
     if (success) {
       assertEquals(1, getStats(subchannel).callsSucceeded);
       assertEquals(0, getStats(subchannel).callsFailed);
@@ -3493,7 +3494,7 @@ public class ManagedChannelImplTest {
     // closing stream listener affects subchannel stats immediately
     assertEquals(0, getStats(oobSubchannel).callsSucceeded);
     assertEquals(0, getStats(oobSubchannel).callsFailed);
-    streamListener.closed(success ? Status.OK : Status.UNKNOWN, new Metadata());
+    streamListener.closed(success ? Status.OK : Status.UNKNOWN, PROCESSED, new Metadata());
     if (success) {
       assertEquals(1, getStats(oobSubchannel).callsSucceeded);
       assertEquals(0, getStats(oobSubchannel).callsFailed);
@@ -3660,7 +3661,8 @@ public class ManagedChannelImplTest {
     assertThat(timer.getPendingTasks()).isEmpty();
 
     // trigger retry
-    streamListenerCaptor.getValue().closed(Status.UNAVAILABLE, new Metadata());
+    streamListenerCaptor.getValue().closed(
+        Status.UNAVAILABLE, PROCESSED, new Metadata());
 
     // in backoff
     timer.forwardTime(5, TimeUnit.SECONDS);
@@ -3690,7 +3692,8 @@ public class ManagedChannelImplTest {
         "channel.isTerminated() is expected to be false but was true",
         channel.isTerminated());
 
-    streamListenerCaptor.getValue().closed(Status.INTERNAL, new Metadata());
+    streamListenerCaptor.getValue().closed(
+        Status.INTERNAL, PROCESSED, new Metadata());
     verify(mockLoadBalancer).shutdown();
     // simulating the shutdown of load balancer triggers the shutdown of subchannel
     shutdownSafely(helper, subchannel);
@@ -3764,7 +3767,8 @@ public class ManagedChannelImplTest {
     timer.forwardTime(5, TimeUnit.SECONDS);
     assertThat(timer.numPendingTasks()).isEqualTo(1);
     // first hedge fails
-    streamListenerCaptor.getValue().closed(Status.UNAVAILABLE, new Metadata());
+    streamListenerCaptor.getValue().closed(
+        Status.UNAVAILABLE, PROCESSED, new Metadata());
     verify(mockStream2, never()).start(any(ClientStreamListener.class));
 
     // shutdown during backoff period
@@ -3790,7 +3794,8 @@ public class ManagedChannelImplTest {
         "channel.isTerminated() is expected to be false but was true",
         channel.isTerminated());
 
-    streamListenerCaptor.getValue().closed(Status.INTERNAL, new Metadata());
+    streamListenerCaptor.getValue().closed(
+        Status.INTERNAL, PROCESSED, new Metadata());
     assertThat(timer.numPendingTasks()).isEqualTo(0);
     verify(mockLoadBalancer).shutdown();
     // simulating the shutdown of load balancer triggers the shutdown of subchannel

@@ -20,6 +20,8 @@ import static com.google.common.truth.Truth.assertThat;
 
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.common.testing.EqualsTester;
 import org.junit.Test;
@@ -45,9 +47,25 @@ public final class AndroidComponentAddressTest {
   }
 
   @Test
+  public void testAsBindIntent() {
+    Intent bindIntent =
+        new Intent()
+            .setAction("foo")
+            .setComponent(new ComponentName("pkg", "cls"))
+            .setData(Uri.EMPTY)
+            .setType("sometype")
+            .addCategory("some-category")
+            .addCategory("another-category");
+    AndroidComponentAddress addr = AndroidComponentAddress.forBindIntent(bindIntent);
+    assertThat(addr.asBindIntent().filterEquals(bindIntent)).isTrue();
+  }
+
+  @Test
   public void testEquality() {
     new EqualsTester()
         .addEqualityGroup(
+            AndroidComponentAddress.forBindIntent(
+                new Intent(ApiConstants.ACTION_BIND).setComponent(hostComponent)),
             AndroidComponentAddress.forComponent(hostComponent),
             AndroidComponentAddress.forContext(appContext),
             AndroidComponentAddress.forLocalComponent(appContext, appContext.getClass()),
@@ -56,6 +74,15 @@ public final class AndroidComponentAddressTest {
         .addEqualityGroup(
             AndroidComponentAddress.forRemoteComponent("appy.mcappface", ".McActivity"))
         .addEqualityGroup(AndroidComponentAddress.forLocalComponent(appContext, getClass()))
+        .addEqualityGroup(
+            AndroidComponentAddress.forBindIntent(
+                new Intent().setAction("custom-action").setComponent(hostComponent)))
+        .addEqualityGroup(
+            AndroidComponentAddress.forBindIntent(
+                new Intent()
+                    .setAction("custom-action")
+                    .setType("some-type")
+                    .setComponent(hostComponent)))
         .testEquals();
   }
 }

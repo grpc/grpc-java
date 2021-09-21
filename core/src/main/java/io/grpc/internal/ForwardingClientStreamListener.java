@@ -30,11 +30,6 @@ abstract class ForwardingClientStreamListener implements ClientStreamListener {
   }
 
   @Override
-  public void closed(Status status, Metadata trailers) {
-    delegate().closed(status, trailers);
-  }
-
-  @Override
   public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
     delegate().closed(status, rpcProgress, trailers);
   }

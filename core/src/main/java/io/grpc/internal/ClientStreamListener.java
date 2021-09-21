@@ -25,28 +25,13 @@ public interface ClientStreamListener extends StreamListener {
    * Called upon receiving all header information from the remote end-point. Note that transports
    * are not required to call this method if no header information is received, this would occur
    * when a stream immediately terminates with an error and only
-   * {@link #closed(io.grpc.Status, Metadata)} is called.
+   * {@link #closed(io.grpc.Status, RpcProgress, Metadata)} is called.
    *
    * <p>This method should return quickly, as the same thread may be used to process other streams.
    *
    * @param headers the fully buffered received headers.
    */
   void headersRead(Metadata headers);
-
-  /**
-   * Called when the stream is fully closed. {@link
-   * io.grpc.Status.Code#OK} is the only status code that is guaranteed
-   * to have been sent from the remote server. Any other status code may have been caused by
-   * abnormal stream termination. This is guaranteed to always be the final call on a listener. No
-   * further callbacks will be issued.
-   *
-   * <p>This method should return quickly, as the same thread may be used to process other streams.
-   *
-   * @param status details about the remote closure
-   * @param trailers trailing metadata
-   */
-  // TODO(zdapeng): remove this method in favor of the 3-arg one.
-  void closed(Status status, Metadata trailers);
 
   /**
    * Called when the stream is fully closed. {@link

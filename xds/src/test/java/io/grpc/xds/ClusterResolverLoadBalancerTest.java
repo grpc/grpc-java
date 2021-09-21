@@ -111,10 +111,7 @@ public class ClusterResolverLoadBalancerTest {
   private final Locality locality3 =
       Locality.create("test-region-3", "test-zone-3", "test-subzone-3");
   private final UpstreamTlsContext tlsContext =
-      CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
-          CommonTlsContextTestsUtil.CLIENT_KEY_FILE,
-          CommonTlsContextTestsUtil.CLIENT_PEM_FILE,
-          CommonTlsContextTestsUtil.CA_PEM_FILE);
+      CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
   private final DiscoveryMechanism edsDiscoveryMechanism1 =
       DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L, tlsContext);
   private final DiscoveryMechanism edsDiscoveryMechanism2 =

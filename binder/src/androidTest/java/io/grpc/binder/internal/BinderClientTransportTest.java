@@ -125,7 +125,7 @@ public final class BinderClientTransportTest {
     HostServices.configureService(serverAddress,
         HostServices.serviceParamsBuilder()
           .setServerFactory((service, receiver) ->
-              BinderServerBuilder.forService(service, receiver)
+              BinderServerBuilder.forAddress(serverAddress, receiver)
                 .addService(serviceDef)
                 .build())
           .build());
@@ -323,11 +323,6 @@ public final class BinderClientTransportTest {
     @Override
     public void headersRead(Metadata headers) {
       this.headers = headers;
-    }
-
-    @Override
-    public void closed(Status status, Metadata trailers) {
-      this.closedStatus = status;
     }
 
     @Override

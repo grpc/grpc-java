@@ -19,12 +19,14 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -44,12 +46,17 @@ public final class NameResolverRegistry {
   private static NameResolverRegistry instance;
 
   private final NameResolver.Factory factory = new NameResolverFactory();
+  private static final String UNKNOWN_SCHEME = "unknown";
+  @GuardedBy("this")
+  private String defaultScheme = UNKNOWN_SCHEME;
 
   @GuardedBy("this")
   private final LinkedHashSet<NameResolverProvider> allProviders = new LinkedHashSet<>();
-  /** Immutable, sorted version of {@code allProviders}. Is replaced instead of mutating. */
+  /** Generated from {@code allProviders}. Is mapping from scheme key to the highest priority
+   * {@link NameResolverProvider}. Is replaced instead of mutating. */
   @GuardedBy("this")
-  private List<NameResolverProvider> effectiveProviders = Collections.emptyList();
+  private ImmutableMap<String, NameResolverProvider> effectiveProviders = ImmutableMap.of();
+
 
   /**
    * Register a provider.
@@ -81,16 +88,23 @@ public final class NameResolverRegistry {
   }
 
   private synchronized void refreshProviders() {
-    List<NameResolverProvider> providers = new ArrayList<>(allProviders);
-    // Sort descending based on priority.
-    // sort() must be stable, as we prefer first-registered providers
-    Collections.sort(providers, Collections.reverseOrder(new Comparator<NameResolverProvider>() {
-      @Override
-      public int compare(NameResolverProvider o1, NameResolverProvider o2) {
-        return o1.priority() - o2.priority();
+    Map<String, NameResolverProvider> refreshedProviders = new HashMap<>();
+    int maxPriority = Integer.MIN_VALUE;
+    String refreshedDefaultScheme = UNKNOWN_SCHEME;
+    // We prefer first-registered providers
+    for (NameResolverProvider provider : allProviders) {
+      String scheme = provider.getScheme();
+      NameResolverProvider existing = refreshedProviders.get(scheme);
+      if (existing == null || existing.priority() < provider.priority()) {
+        refreshedProviders.put(scheme, provider);
       }
-    }));
-    effectiveProviders = Collections.unmodifiableList(providers);
+      if (maxPriority < provider.priority()) {
+        maxPriority = provider.priority();
+        refreshedDefaultScheme = provider.getScheme();
+      }
+    }
+    effectiveProviders = ImmutableMap.copyOf(refreshedProviders);
+    defaultScheme = refreshedDefaultScheme;
   }
 
   /**
@@ -120,10 +134,11 @@ public final class NameResolverRegistry {
   }
 
   /**
-   * Returns effective providers, in priority order.
+   * Returns effective providers map from scheme to the highest priority NameResolverProvider of
+   * that scheme.
    */
   @VisibleForTesting
-  synchronized List<NameResolverProvider> providers() {
+  synchronized Map<String, NameResolverProvider> providers() {
     return effectiveProviders;
   }
 
@@ -149,23 +164,15 @@ public final class NameResolverRegistry {
     @Override
     @Nullable
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-      List<NameResolverProvider> providers = providers();
-      for (NameResolverProvider provider : providers) {
-        NameResolver resolver = provider.newNameResolver(targetUri, args);
-        if (resolver != null) {
-          return resolver;
-        }
-      }
-      return null;
+      NameResolverProvider provider = providers().get(targetUri.getScheme());
+      return provider == null ? null : provider.newNameResolver(targetUri, args);
     }
 
     @Override
     public String getDefaultScheme() {
-      List<NameResolverProvider> providers = providers();
-      if (providers.isEmpty()) {
-        return "unknown";
+      synchronized (NameResolverRegistry.this) {
+        return defaultScheme;
       }
-      return providers.get(0).getDefaultScheme();
     }
   }
 
