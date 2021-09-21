@@ -246,6 +246,7 @@ public abstract class ClientXdsClientTestBase {
   private ManagedChannel channel;
   private ClientXdsClient xdsClient;
   private boolean originalEnableFaultInjection;
+  private boolean originalEnableRbac;
 
   @Before
   public void setUp() throws IOException {
@@ -258,6 +259,9 @@ public abstract class ClientXdsClientTestBase {
     // Start the server and the client.
     originalEnableFaultInjection = ClientXdsClient.enableFaultInjection;
     ClientXdsClient.enableFaultInjection = true;
+    originalEnableRbac = ClientXdsClient.enableRbac;
+    assertThat(originalEnableRbac).isFalse();
+    ClientXdsClient.enableRbac = true;
     final String serverName = InProcessServerBuilder.generateName();
     cleanupRule.register(
         InProcessServerBuilder
@@ -297,6 +301,7 @@ public abstract class ClientXdsClientTestBase {
   @After
   public void tearDown() {
     ClientXdsClient.enableFaultInjection = originalEnableFaultInjection;
+    ClientXdsClient.enableRbac = originalEnableRbac;
     xdsClient.shutdown();
     channel.shutdown();  // channel not owned by XdsClient
     assertThat(adsEnded.get()).isTrue();

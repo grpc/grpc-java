@@ -389,6 +389,44 @@ public class AdvancedTlsTest {
   }
 
   @Test
+  public void onFileLoadingKeyManagerTrustManagerTest() throws Exception {
+    // Create & start a server.
+    AdvancedTlsX509KeyManager serverKeyManager = new AdvancedTlsX509KeyManager();
+    serverKeyManager.updateIdentityCredentialsFromFile(serverKey0File, serverCert0File);
+    AdvancedTlsX509TrustManager serverTrustManager = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION)
+        .build();
+    serverTrustManager.updateTrustCredentialsFromFile(caCertFile);
+    ServerCredentials serverCredentials = TlsServerCredentials.newBuilder()
+        .keyManager(serverKeyManager).trustManager(serverTrustManager)
+        .clientAuth(ClientAuth.REQUIRE).build();
+    server = Grpc.newServerBuilderForPort(0, serverCredentials).addService(
+        new SimpleServiceImpl()).build().start();
+    // Create a client to connect.
+    AdvancedTlsX509KeyManager clientKeyManager = new AdvancedTlsX509KeyManager();
+    clientKeyManager.updateIdentityCredentialsFromFile(clientKey0File, clientCert0File);
+    AdvancedTlsX509TrustManager clientTrustManager = AdvancedTlsX509TrustManager.newBuilder()
+        .setVerification(Verification.CERTIFICATE_AND_HOST_NAME_VERIFICATION)
+        .build();
+    clientTrustManager.updateTrustCredentialsFromFile(caCertFile);
+    ChannelCredentials channelCredentials = TlsChannelCredentials.newBuilder()
+        .keyManager(clientKeyManager).trustManager(clientTrustManager).build();
+    channel = Grpc.newChannelBuilderForAddress("localhost", server.getPort(), channelCredentials)
+        .overrideAuthority("foo.test.google.com.au").build();
+    // Start the connection.
+    try {
+      SimpleServiceGrpc.SimpleServiceBlockingStub client =
+          SimpleServiceGrpc.newBlockingStub(channel);
+      // Send an actual request, via the full GRPC & network stack, and check that a proper
+      // response comes back.
+      client.unaryRpc(SimpleRequest.getDefaultInstance());
+    } catch (StatusRuntimeException e) {
+      e.printStackTrace();
+      fail("Find error: " + e.getMessage());
+    }
+  }
+
+  @Test
   public void onFileReloadingKeyManagerBadInitialContentTest() throws Exception {
     exceptionRule.expect(GeneralSecurityException.class);
     AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();

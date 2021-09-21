@@ -141,6 +141,21 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
     };
   }
 
+  /**
+   * Updates the private key and certificate chains from the local file paths.
+   *
+   * @param keyFile  the file on disk holding the private key
+   * @param certFile  the file on disk holding the certificate chain
+   */
+  public void updateIdentityCredentialsFromFile(File keyFile, File certFile) throws IOException,
+      GeneralSecurityException {
+    UpdateResult newResult = readAndUpdate(keyFile, certFile, 0, 0);
+    if (!newResult.success) {
+      throw new GeneralSecurityException(
+          "Files were unmodified before their initial update. Probably a bug.");
+    }
+  }
+
   private static class KeyInfo {
     // The private key and the cert chain we will use to send to peers to prove our identity.
     final PrivateKey key;

@@ -515,20 +515,22 @@ final class XdsServerWrapper extends Server {
           Map<String, FilterConfig> selectedOverrideConfigs =
               new HashMap<>(virtualHost.filterConfigOverrides());
           selectedOverrideConfigs.putAll(route.filterConfigOverrides());
-          for (NamedFilterConfig namedFilterConfig : namedFilterConfigs) {
-            FilterConfig filterConfig = namedFilterConfig.filterConfig;
-            Filter filter = filterRegistry.get(filterConfig.typeUrl());
-            if (filter instanceof ServerInterceptorBuilder) {
-              ServerInterceptor interceptor =
-                  ((ServerInterceptorBuilder) filter).buildServerInterceptor(
-                      filterConfig, selectedOverrideConfigs.get(namedFilterConfig.name));
-              if (interceptor != null) {
-                filterInterceptors.add(interceptor);
+          if (namedFilterConfigs != null) {
+            for (NamedFilterConfig namedFilterConfig : namedFilterConfigs) {
+              FilterConfig filterConfig = namedFilterConfig.filterConfig;
+              Filter filter = filterRegistry.get(filterConfig.typeUrl());
+              if (filter instanceof ServerInterceptorBuilder) {
+                ServerInterceptor interceptor =
+                    ((ServerInterceptorBuilder) filter).buildServerInterceptor(
+                        filterConfig, selectedOverrideConfigs.get(namedFilterConfig.name));
+                if (interceptor != null) {
+                  filterInterceptors.add(interceptor);
+                }
+              } else {
+                logger.log(Level.WARNING, "HttpFilterConfig(type URL: "
+                    + filterConfig.typeUrl() + ") is not supported on server-side. "
+                    + "Probably a bug at ClientXdsClient verification.");
               }
-            } else {
-              logger.log(Level.WARNING, "HttpFilterConfig(type URL: "
-                  + filterConfig.typeUrl() + ") is not supported on server-side. "
-                  + "Probably a bug at ClientXdsClient verification.");
             }
           }
           ServerInterceptor interceptor = combineInterceptors(filterInterceptors);
@@ -639,6 +641,9 @@ final class XdsServerWrapper extends Server {
             if (!routeDiscoveryStates.containsKey(resourceName)) {
               return;
             }
+            if (savedVirtualHosts == null && !isPending) {
+              logger.log(Level.WARNING, "Received valid Rds {0} configuration.", resourceName);
+            }
             savedVirtualHosts = ImmutableList.copyOf(update.virtualHosts);
             updateRdsRoutingConfig();
             maybeUpdateSelector();
@@ -746,8 +751,8 @@ final class XdsServerWrapper extends Server {
           virtualHosts, call.getAuthority());
       if (virtualHost == null) {
         call.close(
-                Status.UNAVAILABLE.withDescription("Could not find xDS virtual host matching RPC"),
-                new Metadata());
+            Status.UNAVAILABLE.withDescription("Could not find xDS virtual host matching RPC"),
+            new Metadata());
         return new Listener<ReqT>() {};
       }
       Route selectedRoute = null;
@@ -760,9 +765,13 @@ final class XdsServerWrapper extends Server {
         }
       }
       if (selectedRoute == null) {
-        call.close(
-            Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"),
+        call.close(Status.UNAVAILABLE.withDescription("Could not find xDS route matching RPC"),
             new Metadata());
+        return new ServerCall.Listener<ReqT>() {};
+      }
+      if (selectedRoute.routeAction() != null) {
+        call.close(Status.UNAVAILABLE.withDescription("Invalid xDS route action for matching "
+            + "route: only Route.non_forwarding_action should be allowed."), new Metadata());
         return new ServerCall.Listener<ReqT>() {};
       }
       ServerInterceptor routeInterceptor = noopInterceptor;
