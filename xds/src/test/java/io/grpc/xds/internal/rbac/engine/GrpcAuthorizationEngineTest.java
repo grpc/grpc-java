@@ -104,16 +104,16 @@ public class GrpcAuthorizationEngineTest {
   @Test
   public void ipMatcher() throws Exception {
     CidrMatcher ip1 = CidrMatcher.create(InetAddress.getByName(IP_ADDR1), 24);
-    DestinationIpMatcher destIpMatcher = new DestinationIpMatcher(ip1);
+    DestinationIpMatcher destIpMatcher = DestinationIpMatcher.create(ip1);
     CidrMatcher ip2 = CidrMatcher.create(InetAddress.getByName(IP_ADDR2), 24);
-    SourceIpMatcher sourceIpMatcher = new SourceIpMatcher(ip2);
-    DestinationPortMatcher portMatcher = new DestinationPortMatcher(PORT);
+    SourceIpMatcher sourceIpMatcher = SourceIpMatcher.create(ip2);
+    DestinationPortMatcher portMatcher = DestinationPortMatcher.create(PORT);
     OrMatcher permission = OrMatcher.create(AndMatcher.create(portMatcher, destIpMatcher));
     OrMatcher principal = OrMatcher.create(sourceIpMatcher);
-    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    PolicyMatcher policyMatcher = PolicyMatcher.create(POLICY_NAME, permission, principal);
 
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.ALLOW));
     AuthDecision decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
@@ -137,7 +137,7 @@ public class GrpcAuthorizationEngineTest {
     assertThat(decision.matchingPolicyName()).isEqualTo(null);
 
     engine = new GrpcAuthorizationEngine(
-        new AuthConfig(Collections.singletonList(policyMatcher), Action.DENY));
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.DENY));
     decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(null);
@@ -145,51 +145,51 @@ public class GrpcAuthorizationEngineTest {
 
   @Test
   public void headerMatcher() {
-    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+    AuthHeaderMatcher headerMatcher = AuthHeaderMatcher.create(Matchers.HeaderMatcher
         .forExactValue(HEADER_KEY, HEADER_VALUE, false));
     OrMatcher principal = OrMatcher.create(headerMatcher);
     OrMatcher permission = OrMatcher.create(
-        new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
-    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+        InvertMatcher.create(DestinationPortMatcher.create(PORT + 1)));
+    PolicyMatcher policyMatcher = PolicyMatcher.create(POLICY_NAME, permission, principal);
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.ALLOW));
     AuthDecision decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
 
     HEADER.put(Metadata.Key.of(HEADER_KEY, Metadata.ASCII_STRING_MARSHALLER), HEADER_VALUE);
-    headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+    headerMatcher = AuthHeaderMatcher.create(Matchers.HeaderMatcher
             .forExactValue(HEADER_KEY, HEADER_VALUE + "," + HEADER_VALUE, false));
     principal = OrMatcher.create(headerMatcher);
-    policyMatcher = new PolicyMatcher(POLICY_NAME,
+    policyMatcher = PolicyMatcher.create(POLICY_NAME,
             OrMatcher.create(AlwaysTrueMatcher.INSTANCE), principal);
     engine = new GrpcAuthorizationEngine(
-            new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+            AuthConfig.create(Collections.singletonList(policyMatcher), Action.ALLOW));
     decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.ALLOW);
 
-    headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+    headerMatcher = AuthHeaderMatcher.create(Matchers.HeaderMatcher
             .forExactValue(HEADER_KEY + Metadata.BINARY_HEADER_SUFFIX, HEADER_VALUE, false));
     principal = OrMatcher.create(headerMatcher);
-    policyMatcher = new PolicyMatcher(POLICY_NAME,
+    policyMatcher = PolicyMatcher.create(POLICY_NAME,
             OrMatcher.create(AlwaysTrueMatcher.INSTANCE), principal);
     engine = new GrpcAuthorizationEngine(
-            new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+            AuthConfig.create(Collections.singletonList(policyMatcher), Action.ALLOW));
     decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.DENY);
   }
 
   @Test
   public void headerMatcher_binaryHeader() {
-    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+    AuthHeaderMatcher headerMatcher = AuthHeaderMatcher.create(Matchers.HeaderMatcher
         .forExactValue(HEADER_KEY + Metadata.BINARY_HEADER_SUFFIX,
             BaseEncoding.base64().omitPadding().encode(HEADER_VALUE.getBytes(US_ASCII)), false));
     OrMatcher principal = OrMatcher.create(headerMatcher);
     OrMatcher permission = OrMatcher.create(
-        new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
-    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+        InvertMatcher.create(DestinationPortMatcher.create(PORT + 1)));
+    PolicyMatcher policyMatcher = PolicyMatcher.create(POLICY_NAME, permission, principal);
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.ALLOW));
     Metadata metadata = new Metadata();
     metadata.put(Metadata.Key.of(HEADER_KEY + Metadata.BINARY_HEADER_SUFFIX,
         Metadata.BINARY_BYTE_MARSHALLER), HEADER_VALUE.getBytes(US_ASCII));
@@ -200,14 +200,14 @@ public class GrpcAuthorizationEngineTest {
 
   @Test
   public void headerMatcher_hardcodePostMethod() {
-    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+    AuthHeaderMatcher headerMatcher = AuthHeaderMatcher.create(Matchers.HeaderMatcher
         .forExactValue(":method", "POST", false));
     OrMatcher principal = OrMatcher.create(headerMatcher);
     OrMatcher permission = OrMatcher.create(
-        new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
-    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+        InvertMatcher.create(DestinationPortMatcher.create(PORT + 1)));
+    PolicyMatcher policyMatcher = PolicyMatcher.create(POLICY_NAME, permission, principal);
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.ALLOW));
     AuthDecision decision = engine.evaluate(new Metadata(), serverCall);
     assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
@@ -215,14 +215,14 @@ public class GrpcAuthorizationEngineTest {
 
   @Test
   public void headerMatcher_pathHeader() {
-    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+    AuthHeaderMatcher headerMatcher = AuthHeaderMatcher.create(Matchers.HeaderMatcher
         .forExactValue(":path", "/" + PATH, false));
     OrMatcher principal = OrMatcher.create(headerMatcher);
     OrMatcher permission = OrMatcher.create(
-        new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
-    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+        InvertMatcher.create(DestinationPortMatcher.create(PORT + 1)));
+    PolicyMatcher policyMatcher = PolicyMatcher.create(POLICY_NAME, permission, principal);
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.ALLOW));
     AuthDecision decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
@@ -230,14 +230,14 @@ public class GrpcAuthorizationEngineTest {
 
   @Test
   public void headerMatcher_aliasAuthorityAndHost() {
-    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+    AuthHeaderMatcher headerMatcher = AuthHeaderMatcher.create(Matchers.HeaderMatcher
         .forExactValue("Host", "google.com", false));
     OrMatcher principal = OrMatcher.create(headerMatcher);
     OrMatcher permission = OrMatcher.create(
-        new InvertMatcher(new DestinationPortMatcher(PORT + 1)));
-    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+        InvertMatcher.create(DestinationPortMatcher.create(PORT + 1)));
+    PolicyMatcher policyMatcher = PolicyMatcher.create(POLICY_NAME, permission, principal);
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.ALLOW));
     when(serverCall.getAuthority()).thenReturn("google.com");
     AuthDecision decision = engine.evaluate(new Metadata(), serverCall);
     assertThat(decision.decision()).isEqualTo(Action.ALLOW);
@@ -246,12 +246,12 @@ public class GrpcAuthorizationEngineTest {
 
   @Test
   public void pathMatcher() {
-    PathMatcher pathMatcher = new PathMatcher(STRING_MATCHER);
+    PathMatcher pathMatcher = PathMatcher.create(STRING_MATCHER);
     OrMatcher permission = OrMatcher.create(AlwaysTrueMatcher.INSTANCE);
     OrMatcher principal = OrMatcher.create(pathMatcher);
-    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    PolicyMatcher policyMatcher = PolicyMatcher.create(POLICY_NAME, permission, principal);
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        new AuthConfig(Collections.singletonList(policyMatcher), Action.DENY));
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.DENY));
     AuthDecision decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.DENY);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
@@ -259,14 +259,14 @@ public class GrpcAuthorizationEngineTest {
 
   @Test
   public void authenticatedMatcher() throws Exception {
-    AuthenticatedMatcher authMatcher = new AuthenticatedMatcher(
+    AuthenticatedMatcher authMatcher = AuthenticatedMatcher.create(
         StringMatcher.forExact("*.test.google.fr", false));
-    PathMatcher pathMatcher = new PathMatcher(STRING_MATCHER);
+    PathMatcher pathMatcher = PathMatcher.create(STRING_MATCHER);
     OrMatcher permission = OrMatcher.create(authMatcher);
     OrMatcher principal = OrMatcher.create(pathMatcher);
-    PolicyMatcher policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    PolicyMatcher policyMatcher = PolicyMatcher.create(POLICY_NAME, permission, principal);
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        new AuthConfig(Collections.singletonList(policyMatcher), Action.ALLOW));
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.ALLOW));
     AuthDecision decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.ALLOW);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
@@ -306,11 +306,11 @@ public class GrpcAuthorizationEngineTest {
     assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.ALLOW);
 
     // match any authenticated connection if StringMatcher not set in AuthenticatedMatcher
-    permission = OrMatcher.create(new AuthenticatedMatcher(null));
-    policyMatcher = new PolicyMatcher(POLICY_NAME, permission, principal);
+    permission = OrMatcher.create(AuthenticatedMatcher.create(null));
+    policyMatcher = PolicyMatcher.create(POLICY_NAME, permission, principal);
     when(mockCert.getSubjectAlternativeNames()).thenReturn(
             Arrays.<List<?>>asList(Arrays.asList(6, "random")));
-    engine = new GrpcAuthorizationEngine(new AuthConfig(Collections.singletonList(policyMatcher),
+    engine = new GrpcAuthorizationEngine(AuthConfig.create(Collections.singletonList(policyMatcher),
             Action.ALLOW));
     assertThat(engine.evaluate(HEADER, serverCall).decision()).isEqualTo(Action.ALLOW);
 
@@ -330,29 +330,76 @@ public class GrpcAuthorizationEngineTest {
 
   @Test
   public void multiplePolicies() throws Exception {
-    AuthenticatedMatcher authMatcher = new AuthenticatedMatcher(
+    AuthenticatedMatcher authMatcher = AuthenticatedMatcher.create(
         StringMatcher.forSuffix("TEST.google.fr", true));
-    PathMatcher pathMatcher = new PathMatcher(STRING_MATCHER);
+    PathMatcher pathMatcher = PathMatcher.create(STRING_MATCHER);
     OrMatcher principal = OrMatcher.create(AndMatcher.create(authMatcher, pathMatcher));
     OrMatcher permission = OrMatcher.create(AndMatcher.create(pathMatcher,
-        new InvertMatcher(new DestinationPortMatcher(PORT + 1))));
-    PolicyMatcher policyMatcher1 = new PolicyMatcher(POLICY_NAME, permission, principal);
+        InvertMatcher.create(DestinationPortMatcher.create(PORT + 1))));
+    PolicyMatcher policyMatcher1 = PolicyMatcher.create(POLICY_NAME, permission, principal);
 
-    AuthHeaderMatcher headerMatcher = new AuthHeaderMatcher(Matchers.HeaderMatcher
+    AuthHeaderMatcher headerMatcher = AuthHeaderMatcher.create(Matchers.HeaderMatcher
         .forExactValue(HEADER_KEY, HEADER_VALUE + 1, false));
-    authMatcher = new AuthenticatedMatcher(
+    authMatcher = AuthenticatedMatcher.create(
         StringMatcher.forContains("TEST.google.fr"));
     principal = OrMatcher.create(headerMatcher, authMatcher);
     CidrMatcher ip1 = CidrMatcher.create(InetAddress.getByName(IP_ADDR1), 24);
-    DestinationIpMatcher destIpMatcher = new DestinationIpMatcher(ip1);
+    DestinationIpMatcher destIpMatcher = DestinationIpMatcher.create(ip1);
     permission = OrMatcher.create(destIpMatcher, pathMatcher);
-    PolicyMatcher policyMatcher2 = new PolicyMatcher(POLICY_NAME + "-2", permission, principal);
+    PolicyMatcher policyMatcher2 = PolicyMatcher.create(POLICY_NAME + "-2", permission, principal);
 
     GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
-        new AuthConfig(ImmutableList.of(policyMatcher1, policyMatcher2), Action.DENY));
+        AuthConfig.create(ImmutableList.of(policyMatcher1, policyMatcher2), Action.DENY));
     AuthDecision decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.DENY);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
+  }
+
+  @Test
+  public void matchersEqualHashcode() throws Exception {
+    PathMatcher pathMatcher = PathMatcher.create(STRING_MATCHER);
+    AuthHeaderMatcher headerMatcher = AuthHeaderMatcher.create(
+        Matchers.HeaderMatcher.forExactValue("foo", "bar", true));
+    DestinationIpMatcher destinationIpMatcher = DestinationIpMatcher.create(
+        CidrMatcher.create(InetAddress.getByName(IP_ADDR1), 24));
+    DestinationPortMatcher destinationPortMatcher = DestinationPortMatcher.create(PORT);
+    GrpcAuthorizationEngine.DestinationPortRangeMatcher portRangeMatcher =
+        GrpcAuthorizationEngine.DestinationPortRangeMatcher.create(PORT, PORT + 1);
+    InvertMatcher invertMatcher = InvertMatcher.create(portRangeMatcher);
+    GrpcAuthorizationEngine.RequestedServerNameMatcher requestedServerNameMatcher =
+        GrpcAuthorizationEngine.RequestedServerNameMatcher.create(STRING_MATCHER);
+    OrMatcher permission = OrMatcher.create(pathMatcher, headerMatcher, destinationIpMatcher,
+        destinationPortMatcher, invertMatcher, requestedServerNameMatcher);
+    AuthenticatedMatcher authenticatedMatcher = AuthenticatedMatcher.create(STRING_MATCHER);
+    SourceIpMatcher sourceIpMatcher1 = SourceIpMatcher.create(
+        CidrMatcher.create(InetAddress.getByName(IP_ADDR1), 24));
+    OrMatcher principal = OrMatcher.create(authenticatedMatcher,
+        AndMatcher.create(sourceIpMatcher1, AlwaysTrueMatcher.INSTANCE));
+    PolicyMatcher policyMatcher1 = PolicyMatcher.create("match", permission, principal);
+    AuthConfig config1 = AuthConfig.create(Collections.singletonList(policyMatcher1), Action.ALLOW);
+
+    PathMatcher pathMatcher2 = PathMatcher.create(STRING_MATCHER);
+    AuthHeaderMatcher headerMatcher2 = AuthHeaderMatcher.create(
+        Matchers.HeaderMatcher.forExactValue("foo", "bar", true));
+    DestinationIpMatcher destinationIpMatcher2 = DestinationIpMatcher.create(
+        CidrMatcher.create(InetAddress.getByName(IP_ADDR1), 24));
+    DestinationPortMatcher destinationPortMatcher2 = DestinationPortMatcher.create(PORT);
+    GrpcAuthorizationEngine.DestinationPortRangeMatcher portRangeMatcher2 =
+        GrpcAuthorizationEngine.DestinationPortRangeMatcher.create(PORT, PORT + 1);
+    InvertMatcher invertMatcher2 = InvertMatcher.create(portRangeMatcher2);
+    GrpcAuthorizationEngine.RequestedServerNameMatcher requestedServerNameMatcher2 =
+        GrpcAuthorizationEngine.RequestedServerNameMatcher.create(STRING_MATCHER);
+    OrMatcher permission2 = OrMatcher.create(pathMatcher2, headerMatcher2, destinationIpMatcher2,
+        destinationPortMatcher2, invertMatcher2, requestedServerNameMatcher2);
+    AuthenticatedMatcher authenticatedMatcher2 = AuthenticatedMatcher.create(STRING_MATCHER);
+    SourceIpMatcher sourceIpMatcher2 = SourceIpMatcher.create(
+        CidrMatcher.create(InetAddress.getByName(IP_ADDR1), 24));
+    OrMatcher principal2 = OrMatcher.create(authenticatedMatcher2,
+        AndMatcher.create(sourceIpMatcher2, AlwaysTrueMatcher.INSTANCE));
+    PolicyMatcher policyMatcher2 = PolicyMatcher.create("match", permission2, principal2);
+    AuthConfig config2 = AuthConfig.create(Collections.singletonList(policyMatcher2), Action.ALLOW);
+    assertThat(config1).isEqualTo(config2);
+    assertThat(config1.hashCode()).isEqualTo(config2.hashCode());
   }
 
   private MethodDescriptor.Builder<Void, Void> method() {
