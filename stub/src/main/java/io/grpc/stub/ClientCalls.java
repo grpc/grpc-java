@@ -337,9 +337,10 @@ public final class ClientCalls {
     abstract void onStart();
   }
 
-  private static final class CallToStreamObserverAdapter<T> extends ClientCallStreamObserver<T> {
+  private static final class CallToStreamObserverAdapter<ReqT>
+      extends ClientCallStreamObserver<ReqT> {
     private boolean frozen;
-    private final ClientCall<T, ?> call;
+    private final ClientCall<ReqT, ?> call;
     private final boolean streamingResponse;
     private Runnable onReadyHandler;
     private int initialRequest = 1;
@@ -348,7 +349,7 @@ public final class ClientCalls {
     private boolean completed = false;
 
     // Non private to avoid synthetic class
-    CallToStreamObserverAdapter(ClientCall<T, ?> call, boolean streamingResponse) {
+    CallToStreamObserverAdapter(ClientCall<ReqT, ?> call, boolean streamingResponse) {
       this.call = call;
       this.streamingResponse = streamingResponse;
     }
@@ -358,7 +359,7 @@ public final class ClientCalls {
     }
 
     @Override
-    public void onNext(T value) {
+    public void onNext(ReqT value) {
       checkState(!aborted, "Stream was terminated by error, no further calls are allowed");
       checkState(!completed, "Stream is already completed, no further calls are allowed");
       call.sendMessage(value);

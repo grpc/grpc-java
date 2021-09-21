@@ -108,6 +108,8 @@ public abstract class ClientCall<ReqT, RespT> {
    * an instance from multiple threads, but only one call simultaneously. A single thread may
    * interleave calls to multiple instances, so implementations using ThreadLocals must be careful
    * to avoid leaking inappropriate state (e.g., clearing the ThreadLocal before returning).
+   *
+   * @param <T> type of message received.
    */
   public abstract static class Listener<T> {
 

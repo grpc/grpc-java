@@ -29,7 +29,7 @@ import javax.annotation.Nullable;
  * <p>DO NOT MOCK: The API is too complex to reliably mock. Use InProcessChannelBuilder to create
  * "real" RPCs suitable for testing and make a fake for the server-side.
  */
-public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> {
+public abstract class ClientCallStreamObserver<ReqT> extends CallStreamObserver<ReqT> {
   /**
    * Prevent any further processing for this {@code ClientCallStreamObserver}. No further messages
    * will be received. The server is informed of cancellations, but may not stop processing the
@@ -78,9 +78,7 @@ public abstract class ClientCallStreamObserver<V> extends CallStreamObserver<V> 
    * thread will always be used to execute the {@link Runnable}, it is guaranteed that executions
    * are serialized with calls to the 'inbound' {@link StreamObserver}.
    *
-   * <p>On client-side this method may only be called during {@link
-   * ClientResponseObserver#beforeStart}. On server-side it may only be called during the initial
-   * call to the application, before the service returns its {@code StreamObserver}.
+   * <p>May only be called during {@link ClientResponseObserver#beforeStart}.
    *
    * <p>Because there is a processing delay to deliver this notification, it is possible for
    * concurrent writes to cause {@code isReady() == false} within this callback. Handle "spurious"
