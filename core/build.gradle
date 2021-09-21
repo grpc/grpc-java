@@ -1,3 +1,9 @@
+buildscript {
+    dependencies {
+        classpath 'com.google.guava:guava:30.0-android'
+    }
+}
+
 plugins {
     id "java-library"
     id "maven-publish"
@@ -6,6 +12,10 @@ plugins {
     id "me.champeau.gradle.jmh"
     id "ru.vyarus.animalsniffer"
 }
+
+import static java.nio.charset.StandardCharsets.US_ASCII;
+
+import com.google.common.primitives.Bytes;
 
 description = 'gRPC: Core'
 
@@ -53,7 +63,52 @@ animalsniffer {
 
 import net.ltgt.gradle.errorprone.CheckSeverity
 
+def replaceBytes(byte[] haystack, byte[] needle, byte[] replacement) {
+    int i = Bytes.indexOf(haystack, needle);
+    assert i != -1;
+    byte[] result = new byte[haystack.length - needle.length + replacement.length];
+    System.arraycopy(haystack, 0, result, 0, i);
+    System.arraycopy(replacement, 0, result, i, replacement.length);
+    System.arraycopy(haystack, i + needle.length, result, i + replacement.length, haystack.length - i - needle.length);
+    return result;
+}
+
+def bigEndianShortBytes(int value) {
+    return [value >> 8, value & 0xFF] as byte[];
+}
+
+def replaceConstant(File file, String needle, String replacement) {
+    // CONSTANT_Utf8_info. https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.4.7
+    byte[] needleBytes = Bytes.concat(
+        [1] as byte[], bigEndianShortBytes(needle.length()), needle.getBytes(US_ASCII));
+    byte[] replacementBytes = Bytes.concat(
+        [1] as byte[], bigEndianShortBytes(replacement.length()), replacement.getBytes(US_ASCII));
+    file.setBytes(replaceBytes(file.getBytes(), needleBytes, replacementBytes));
+}
+
 plugins.withId("java") {
+    compileJava {
+        doLast {
+            // Replace value of Signature Attribute.
+            // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.7.9
+	    //
+	    // Have new compilations compile against a public class, without breaking the internal
+	    // ABI for the moment. After giving users some time to recompile, this should be removed
+	    // and #7211 can continue. When this is removed, at the very least the generics need to
+	    // be changed to avoid <? extends io.grpc.internal.*>.
+            project.replaceConstant(
+                destinationDirectory.file(
+                    "io/grpc/internal/AbstractManagedChannelImplBuilder.class").get().getAsFile(),
+                "<T:Lio/grpc/internal/AbstractManagedChannelImplBuilder<TT;>;>Lio/grpc/ManagedChannelBuilder<TT;>;",
+                "<T:Lio/grpc/ManagedChannelBuilder<TT;>;>Lio/grpc/ManagedChannelBuilder<TT;>;");
+            project.replaceConstant(
+                destinationDirectory.file(
+                    "io/grpc/internal/AbstractServerImplBuilder.class").get().getAsFile(),
+                "<T:Lio/grpc/internal/AbstractServerImplBuilder<TT;>;>Lio/grpc/ServerBuilder<TT;>;",
+                "<T:Lio/grpc/ServerBuilder<TT;>;>Lio/grpc/ServerBuilder<TT;>;");
+        }
+    }
+
     compileJmhJava {
         // This project targets Java 7 (no method references)
         options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)

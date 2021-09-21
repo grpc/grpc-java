@@ -18,7 +18,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.35.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.36.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -60,6 +60,7 @@ subprojects {
         protobufVersion = '3.12.0'
         protocVersion = protobufVersion
         opencensusVersion = '0.28.0'
+        autovalueVersion = '1.7.4'
 
         configureProtoCompilation = {
             String generatedSourcePath = "${projectDir}/src/generated"
@@ -142,6 +143,8 @@ subprojects {
         libraries = [
             android_annotations: "com.google.android:annotations:4.1.1.4",
             animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.19",
+            autovalue: "com.google.auto.value:auto-value:${autovalueVersion}",
+            autovalue_annotation: "com.google.auto.value:auto-value-annotations:${autovalueVersion}",
             errorprone: "com.google.errorprone:error_prone_annotations:2.4.0",
             cronet_api: 'org.chromium.net:cronet-api:76.3809.111',
             cronet_embedded: 'org.chromium.net:cronet-embedded:66.3359.158',
@@ -164,7 +167,6 @@ subprojects {
             protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
             protobuf_lite: "com.google.protobuf:protobuf-javalite:${protobufVersion}",
             protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
-            lang: "org.apache.commons:commons-lang3:3.11",
 
             netty: "io.netty:netty-codec-http2:[${nettyVersion}]",
             netty_epoll: "io.netty:netty-transport-native-epoll:${nettyVersion}:linux-x86_64",

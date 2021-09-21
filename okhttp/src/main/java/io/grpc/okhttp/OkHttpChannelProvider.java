@@ -55,6 +55,6 @@ public final class OkHttpChannelProvider extends ManagedChannelProvider {
       return NewChannelBuilderResult.error(result.error);
     }
     return NewChannelBuilderResult.channelBuilder(new OkHttpChannelBuilder(
-        target, result.factory, result.callCredentials));
+        target, creds, result.callCredentials, result.factory));
   }
 }

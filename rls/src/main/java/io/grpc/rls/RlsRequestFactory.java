@@ -45,9 +45,9 @@ final class RlsRequestFactory {
    */
   private final Table<String, String, NameMatcher> keyBuilderTable;
 
-  RlsRequestFactory(RouteLookupConfig rlsConfig) {
+  RlsRequestFactory(RouteLookupConfig rlsConfig, String target) {
     checkNotNull(rlsConfig, "rlsConfig");
-    this.target = rlsConfig.getLookupService();
+    this.target = checkNotNull(target, "target");
     this.keyBuilderTable = createKeyBuilderTable(rlsConfig);
   }
 
@@ -109,7 +109,7 @@ final class RlsRequestFactory {
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
-        .add("lookupService", target)
+        .add("target", target)
         .add("keyBuilderTable", keyBuilderTable)
         .toString();
   }

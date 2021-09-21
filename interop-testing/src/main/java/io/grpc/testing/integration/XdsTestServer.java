@@ -26,6 +26,8 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
@@ -51,6 +53,7 @@ public final class XdsTestServer {
   private static final Context.Key<String> CALL_BEHAVIOR_KEY =
       Context.key("rpc-behavior");
   private static final String CALL_BEHAVIOR_KEEP_OPEN_VALUE = "keep-open";
+  private static final String CALL_BEHAVIOR_SLEEP_VALUE = "sleep-";
   private static final int CHANNELZ_MAX_PAGE_SIZE = 100;
 
   private static Logger logger = Logger.getLogger(XdsTestServer.class.getName());
@@ -286,6 +289,20 @@ public final class XdsTestServer {
         ServerCallHandler<ReqT, RespT> next) {
       String callBehavior = requestHeaders.get(CALL_BEHAVIOR_MD_KEY);
       Context newContext = Context.current().withValue(CALL_BEHAVIOR_KEY, callBehavior);
+      if (callBehavior != null && callBehavior.startsWith(CALL_BEHAVIOR_SLEEP_VALUE)) {
+        try {
+          int timeout = Integer.parseInt(
+              callBehavior.substring(CALL_BEHAVIOR_SLEEP_VALUE.length()));
+          Thread.sleep(timeout * 1000);
+        } catch (NumberFormatException e) {
+          throw new StatusRuntimeException(
+              Status.INVALID_ARGUMENT.withDescription(
+                  String.format("Invalid format for rpc-behavior header (%s)", callBehavior)));
+        } catch (InterruptedException e) {
+          throw new StatusRuntimeException(
+              Status.ABORTED.withDescription("execution of server interrupted"));
+        }
+      }
       ServerCall<ReqT, RespT> newCall = new SimpleForwardingServerCall<ReqT, RespT>(call) {
         @Override
         public void sendHeaders(Metadata responseHeaders) {

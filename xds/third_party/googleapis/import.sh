@@ -22,9 +22,10 @@ GIT_REPO="https://github.com/googleapis/googleapis.git"
 GIT_BASE_DIR=googleapis
 SOURCE_PROTO_BASE_DIR=googleapis
 TARGET_PROTO_BASE_DIR=src/main/proto
+# Sorted alphabetically.
 FILES=(
-google/api/expr/v1alpha1/syntax.proto
 google/api/expr/v1alpha1/checked.proto
+google/api/expr/v1alpha1/syntax.proto
 )
 
 pushd `git rev-parse --show-toplevel`/xds/third_party/googleapis

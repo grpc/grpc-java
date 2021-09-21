@@ -34,6 +34,7 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
@@ -356,6 +357,20 @@ public class OkHttpChannelBuilderTest {
     assertSame(socketFactory, transport.getSocketFactory());
 
     transportFactory.close();
+  }
+
+  @Test
+  public void transportFactorySupportsOkHttpChannelCreds() {
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forTarget("foo");
+    ClientTransportFactory transportFactory = builder.buildTransportFactory();
+
+    SwapChannelCredentialsResult result = transportFactory.swapChannelCredentials(
+        mock(ChannelCredentials.class));
+    assertThat(result).isNull();
+
+    result = transportFactory.swapChannelCredentials(
+        SslSocketFactoryChannelCredentials.create(mock(SSLSocketFactory.class)));
+    assertThat(result).isNotNull();
   }
 
   private static final class FakeChannelLogger extends ChannelLogger {

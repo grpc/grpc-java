@@ -186,6 +186,8 @@ public final class AltsProtocolNegotiator {
     private final ImmutableList<String> targetServiceAccounts;
     private final ObjectPool<Channel> handshakerChannelPool;
     private final SslContext sslContext;
+    @Nullable
+    private final Attributes.Key<String> clusterNameAttrKey;
 
     /**
      * Creates Negotiator Factory, which will either use the targetServiceAccounts and
@@ -194,10 +196,12 @@ public final class AltsProtocolNegotiator {
     public GoogleDefaultProtocolNegotiatorFactory(
         List<String> targetServiceAccounts,
         ObjectPool<Channel> handshakerChannelPool,
-        SslContext sslContext) {
+        SslContext sslContext,
+        @Nullable Attributes.Key<String> clusterNameAttrKey) {
       this.targetServiceAccounts = ImmutableList.copyOf(targetServiceAccounts);
       this.handshakerChannelPool = checkNotNull(handshakerChannelPool, "handshakerChannelPool");
       this.sslContext = checkNotNull(sslContext, "sslContext");
+      this.clusterNameAttrKey = clusterNameAttrKey;
     }
 
     @Override
@@ -205,7 +209,8 @@ public final class AltsProtocolNegotiator {
       return new GoogleDefaultProtocolNegotiator(
           targetServiceAccounts,
           handshakerChannelPool,
-          sslContext);
+          sslContext,
+          clusterNameAttrKey);
     }
 
     @Override
@@ -218,15 +223,19 @@ public final class AltsProtocolNegotiator {
     private final TsiHandshakerFactory handshakerFactory;
     private final LazyChannel lazyHandshakerChannel;
     private final SslContext sslContext;
+    @Nullable
+    private final Attributes.Key<String> clusterNameAttrKey;
 
     GoogleDefaultProtocolNegotiator(
         ImmutableList<String> targetServiceAccounts,
         ObjectPool<Channel> handshakerChannelPool,
-        SslContext sslContext) {
+        SslContext sslContext,
+        @Nullable Attributes.Key<String> clusterNameAttrKey) {
       this.lazyHandshakerChannel = new LazyChannel(handshakerChannelPool);
       this.handshakerFactory =
           new ClientTsiHandshakerFactory(targetServiceAccounts, lazyHandshakerChannel);
       this.sslContext = checkNotNull(sslContext, "checkNotNull");
+      this.clusterNameAttrKey = clusterNameAttrKey;
     }
 
     @Override
@@ -238,9 +247,16 @@ public final class AltsProtocolNegotiator {
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
       ChannelHandler securityHandler;
+      boolean isXdsDirectPath = false;
+      if (clusterNameAttrKey != null) {
+        String clusterName = grpcHandler.getEagAttributes().get(clusterNameAttrKey);
+        if (clusterName != null && !clusterName.equals("google_cfe")) {
+          isXdsDirectPath = true;
+        }
+      }
       if (grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY) != null
-          || grpcHandler.getEagAttributes().get(
-              GrpclbConstants.ATTR_LB_PROVIDED_BACKEND) != null) {
+          || grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND) != null
+          || isXdsDirectPath) {
         TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
         NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
         securityHandler =
@@ -318,24 +334,24 @@ public final class AltsProtocolNegotiator {
 
     @Override
     public SecurityDetails validatePeerObject(Object peerObject) throws GeneralSecurityException {
-      AltsAuthContext altsAuthContext = (AltsAuthContext) peerObject;
+      AltsInternalContext altsContext = (AltsInternalContext) peerObject;
       // Checks peer Rpc Protocol Versions in the ALTS auth context. Fails the connection if
       // Rpc Protocol Versions mismatch.
       RpcVersionsCheckResult checkResult =
           RpcProtocolVersionsUtil.checkRpcProtocolVersions(
               RpcProtocolVersionsUtil.getRpcProtocolVersions(),
-              altsAuthContext.getPeerRpcVersions());
+              altsContext.getPeerRpcVersions());
       if (!checkResult.getResult()) {
         String errorMessage =
             "Local Rpc Protocol Versions "
                 + RpcProtocolVersionsUtil.getRpcProtocolVersions()
                 + " are not compatible with peer Rpc Protocol Versions "
-                + altsAuthContext.getPeerRpcVersions();
+                + altsContext.getPeerRpcVersions();
         throw Status.UNAVAILABLE.withDescription(errorMessage).asRuntimeException();
       }
       return new SecurityDetails(
           SecurityLevel.PRIVACY_AND_INTEGRITY,
-          new Security(new OtherSecurity("alts", Any.pack(altsAuthContext.context))));
+          new Security(new OtherSecurity("alts", Any.pack(altsContext.context))));
     }
   }
 

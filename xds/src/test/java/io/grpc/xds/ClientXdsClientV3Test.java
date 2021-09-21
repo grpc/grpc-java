@@ -64,7 +64,13 @@ import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
+import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay;
+import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay.HeaderDelay;
+import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
+import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.HeaderAbort;
+import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
@@ -80,12 +86,14 @@ import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
+import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
 import org.junit.runner.RunWith;
@@ -233,8 +241,10 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
 
   private static class MessageFactoryV3 extends MessageFactory {
 
+    @SuppressWarnings("unchecked")
     @Override
-    protected Message buildListener(String name, Message routeConfiguration) {
+    protected Message buildListener(
+        String name, Message routeConfiguration, List<? extends Message> httpFilters) {
       return Listener.newBuilder()
           .setName(name)
           .setAddress(Address.getDefaultInstance())
@@ -242,7 +252,9 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
           .setApiListener(
               ApiListener.newBuilder().setApiListener(Any.pack(
                   HttpConnectionManager.newBuilder()
-                      .setRouteConfig((RouteConfiguration) routeConfiguration).build())))
+                      .setRouteConfig((RouteConfiguration) routeConfiguration)
+                      .addAllHttpFilters((List<HttpFilter>) httpFilters)
+                      .build())))
           .build();
     }
 
@@ -263,6 +275,55 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
                                       .setAds(AggregatedConfigSource.getDefaultInstance())))
                       .build())))
           .build();
+    }
+
+    @Override
+    protected Message buildHttpFilter(String name, @Nullable Any typedConfig) {
+      HttpFilter.Builder builder = HttpFilter.newBuilder().setName(name);
+      if (typedConfig != null) {
+        builder.setTypedConfig(typedConfig);
+      }
+      return builder.build();
+    }
+
+    @Override
+    protected Any buildHttpFaultTypedConfig(
+        @Nullable Long delayNanos, @Nullable Integer delayRate, String upstreamCluster,
+        List<String> downstreamNodes, @Nullable Integer maxActiveFaults, @Nullable Status status,
+        @Nullable Integer httpCode, @Nullable Integer abortRate) {
+      HTTPFault.Builder builder = HTTPFault.newBuilder();
+      if (delayRate != null) {
+        FaultDelay.Builder delayBuilder = FaultDelay.newBuilder();
+        delayBuilder.setPercentage(
+            FractionalPercent.newBuilder()
+                .setNumerator(delayRate).setDenominator(DenominatorType.MILLION));
+        if (delayNanos != null) {
+          delayBuilder.setFixedDelay(Durations.fromNanos(delayNanos));
+        } else {
+          delayBuilder.setHeaderDelay(HeaderDelay.newBuilder());
+        }
+        builder.setDelay(delayBuilder);
+      }
+      if (abortRate != null) {
+        FaultAbort.Builder abortBuilder = FaultAbort.newBuilder();
+        abortBuilder.setPercentage(
+            FractionalPercent.newBuilder()
+                .setNumerator(abortRate).setDenominator(DenominatorType.MILLION));
+        if (status != null) {
+          abortBuilder.setGrpcStatus(status.getCode().value());
+        } else if (httpCode != null) {
+          abortBuilder.setHttpStatus(httpCode);
+        } else {
+          abortBuilder.setHeaderAbort(HeaderAbort.newBuilder());
+        }
+        builder.setAbort(abortBuilder);
+      }
+      builder.setUpstreamCluster(upstreamCluster);
+      builder.addAllDownstreamNodes(downstreamNodes);
+      if (maxActiveFaults != null) {
+        builder.setMaxActiveFaults(UInt32Value.of(maxActiveFaults));
+      }
+      return Any.pack(builder.build());
     }
 
     @Override
@@ -291,6 +352,32 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
         virtualHosts.add(virtualHost);
       }
       return virtualHosts;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    protected Message buildVirtualHost(
+        List<? extends Message> routes, Map<String, Any> typedConfigMap) {
+      return VirtualHost.newBuilder()
+          .setName("do not care")
+          .addDomains("do not care")
+          .addAllRoutes((List<Route>) routes)
+          .putAllTypedPerFilterConfig(typedConfigMap)
+          .build();
+    }
+
+    @Override
+    protected List<? extends Message> buildOpaqueRoutes(int num) {
+      List<Route> routes = new ArrayList<>(num);
+      for (int i = 0; i < num; i++) {
+        Route route =
+            Route.newBuilder()
+                .setRoute(RouteAction.newBuilder().setCluster("do not care"))
+                .setMatch(RouteMatch.newBuilder().setPrefix("do not care"))
+                .build();
+        routes.add(route);
+      }
+      return routes;
     }
 
     @Override

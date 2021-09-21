@@ -25,9 +25,11 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.Message;
+import com.google.protobuf.StringValue;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.SdsSecretConfig;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
@@ -41,12 +43,12 @@ import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
-import io.grpc.xds.EnvoyProtoData.DropOverload;
-import io.grpc.xds.EnvoyProtoData.LbEndpoint;
-import io.grpc.xds.EnvoyProtoData.Locality;
-import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.Endpoints.DropOverload;
+import io.grpc.xds.Endpoints.LbEndpoint;
+import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
 import io.grpc.xds.XdsClient.CdsUpdate;
 import io.grpc.xds.XdsClient.CdsUpdate.AggregateClusterConfig;
@@ -65,6 +67,7 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -252,7 +255,7 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(NODE, "0", Collections.singletonList(LDS_RESOURCE), ResourceType.LDS,
         "0000");
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().getVirtualHosts()).hasSize(2);
+    assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(2);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -268,7 +271,7 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(NODE, "0", Collections.singletonList(LDS_RESOURCE), ResourceType.LDS,
         "0000");
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().getRdsName()).isEqualTo(RDS_RESOURCE);
+    assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -286,7 +289,7 @@ public abstract class ClientXdsClientTestBase {
     LdsResourceWatcher watcher = mock(LdsResourceWatcher.class);
     xdsClient.watchLdsResource(LDS_RESOURCE, watcher);
     verify(watcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().getRdsName()).isEqualTo(RDS_RESOURCE);
+    assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
     call.verifyNoMoreRequest();
   }
 
@@ -315,7 +318,7 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(NODE, "0", Collections.singletonList(LDS_RESOURCE), ResourceType.LDS,
         "0000");
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().getVirtualHosts()).hasSize(2);
+    assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(2);
 
     listeners = ImmutableList.of(
         Any.pack(mf.buildListenerForRds(LDS_RESOURCE, RDS_RESOURCE)));
@@ -325,7 +328,62 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(NODE, "1", Collections.singletonList(LDS_RESOURCE), ResourceType.LDS,
         "0001");
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().getRdsName()).isEqualTo(RDS_RESOURCE);
+    assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
+  }
+
+  @Test
+  public void ldsResourceUpdate_withFaultInjection() {
+    DiscoveryRpcCall call =
+        startResourceWatcher(ResourceType.LDS, LDS_RESOURCE, ldsResourceWatcher);
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(mf.buildListener(
+            LDS_RESOURCE,
+            mf.buildRouteConfiguration(
+                "do not care",
+                ImmutableList.of(
+                    mf.buildVirtualHost(
+                        mf.buildOpaqueRoutes(1),
+                        ImmutableMap.of(
+                            "irrelevant",
+                            Any.pack(StringValue.of("irrelevant")),
+                            "envoy.fault",
+                            mf.buildHttpFaultTypedConfig(
+                                300L, 1000, "cluster1", ImmutableList.<String>of(), 100, null, null,
+                                null))),
+                    mf.buildVirtualHost(
+                        mf.buildOpaqueRoutes(2),
+                        ImmutableMap.of(
+                            "envoy.fault",
+                            mf.buildHttpFaultTypedConfig(
+                                null, null, "cluster2", ImmutableList.<String>of(), 101, null, 503,
+                                2000)))
+                )),
+            ImmutableList.of(
+                mf.buildHttpFilter("irrelevant", null),
+                mf.buildHttpFilter("envoy.fault", null)
+            ))));
+    call.sendResponse("0", listeners, ResourceType.LDS, "0000");
+
+    // Client sends an ACK LDS request.
+    call.verifyRequest(NODE, "0", Collections.singletonList(LDS_RESOURCE), ResourceType.LDS,
+        "0000");
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    LdsUpdate ldsUpdate = ldsUpdateCaptor.getValue();
+    assertThat(ldsUpdate.virtualHosts).hasSize(2);
+    assertThat(ldsUpdate.hasFaultInjection).isTrue();
+    assertThat(ldsUpdate.httpFault).isNull();
+    HttpFault httpFault = ldsUpdate.virtualHosts.get(0).httpFault();
+    assertThat(httpFault.faultDelay().delayNanos()).isEqualTo(300);
+    assertThat(httpFault.faultDelay().ratePerMillion()).isEqualTo(1000);
+    assertThat(httpFault.faultAbort()).isNull();
+    assertThat(httpFault.upstreamCluster()).isEqualTo("cluster1");
+    assertThat(httpFault.maxActiveFaults()).isEqualTo(100);
+    httpFault = ldsUpdate.virtualHosts.get(1).httpFault();
+    assertThat(httpFault.faultDelay()).isNull();
+    assertThat(httpFault.faultAbort().status().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(httpFault.faultAbort().ratePerMillion()).isEqualTo(2000);
+    assertThat(httpFault.upstreamCluster()).isEqualTo("cluster2");
+    assertThat(httpFault.maxActiveFaults()).isEqualTo(101);
   }
 
   @Test
@@ -341,7 +399,7 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(NODE, "0", Collections.singletonList(LDS_RESOURCE), ResourceType.LDS,
         "0000");
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().getVirtualHosts()).hasSize(2);
+    assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(2);
 
     call.sendResponse("1", Collections.<Any>emptyList(), ResourceType.LDS, "0001");
 
@@ -374,11 +432,11 @@ public abstract class ClientXdsClientTestBase {
             mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(4)))));
     call.sendResponse("0", listeners, ResourceType.LDS, "0000");
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().getVirtualHosts()).hasSize(2);
+    assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(2);
     verify(watcher1).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().getVirtualHosts()).hasSize(4);
+    assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(4);
     verify(watcher2).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().getVirtualHosts()).hasSize(4);
+    assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(4);
   }
 
   @Test
@@ -412,7 +470,7 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(NODE, "0", Collections.singletonList(RDS_RESOURCE), ResourceType.RDS,
         "0000");
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().getVirtualHosts()).hasSize(2);
+    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(2);
     assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
   }
 
@@ -431,7 +489,7 @@ public abstract class ClientXdsClientTestBase {
     RdsResourceWatcher watcher = mock(RdsResourceWatcher.class);
     xdsClient.watchRdsResource(RDS_RESOURCE, watcher);
     verify(watcher).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().getVirtualHosts()).hasSize(2);
+    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(2);
     call.verifyNoMoreRequest();
   }
 
@@ -459,7 +517,7 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(NODE, "0", Collections.singletonList(RDS_RESOURCE), ResourceType.RDS,
         "0000");
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().getVirtualHosts()).hasSize(2);
+    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(2);
 
     routeConfigs = ImmutableList.of(
         Any.pack(mf.buildRouteConfiguration(RDS_RESOURCE, mf.buildOpaqueVirtualHosts(4))));
@@ -469,7 +527,7 @@ public abstract class ClientXdsClientTestBase {
     call.verifyRequest(NODE, "1", Collections.singletonList(RDS_RESOURCE), ResourceType.RDS,
         "0001");
     verify(rdsResourceWatcher, times(2)).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().getVirtualHosts()).hasSize(4);
+    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(4);
   }
 
   @Test
@@ -481,20 +539,20 @@ public abstract class ClientXdsClientTestBase {
         Any.pack(mf.buildListenerForRds(LDS_RESOURCE, RDS_RESOURCE)));
     call.sendResponse("0", listeners, ResourceType.LDS, "0000");
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().getRdsName()).isEqualTo(RDS_RESOURCE);
+    assertThat(ldsUpdateCaptor.getValue().rdsName).isEqualTo(RDS_RESOURCE);
 
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(mf.buildRouteConfiguration(RDS_RESOURCE, mf.buildOpaqueVirtualHosts(2))));
     call.sendResponse("0", routeConfigs, ResourceType.RDS, "0000");
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().getVirtualHosts()).hasSize(2);
+    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(2);
 
     listeners = ImmutableList.of(
         Any.pack(mf.buildListener(LDS_RESOURCE,
             mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(5)))));
     call.sendResponse("1", listeners, ResourceType.LDS, "0001");
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().getVirtualHosts()).hasSize(5);
+    assertThat(ldsUpdateCaptor.getValue().virtualHosts).hasSize(5);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
   }
 
@@ -519,7 +577,7 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse("0", routeConfigs, ResourceType.RDS, "0000");
 
     verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().getVirtualHosts()).hasSize(2);
+    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(2);
     verifyNoMoreInteractions(watcher1, watcher2);
 
     routeConfigs = ImmutableList.of(Any.pack(
@@ -527,9 +585,9 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse("2", routeConfigs, ResourceType.RDS, "0002");
 
     verify(watcher1).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().getVirtualHosts()).hasSize(4);
+    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(4);
     verify(watcher2).onChanged(rdsUpdateCaptor.capture());
-    assertThat(rdsUpdateCaptor.getValue().getVirtualHosts()).hasSize(4);
+    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(4);
     verifyNoMoreInteractions(rdsResourceWatcher);
   }
 
@@ -879,20 +937,20 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
-    assertThat(edsUpdate.getDropPolicies())
+    assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdate.dropPolicies)
         .containsExactly(
-            new DropOverload("lb", 200),
-            new DropOverload("throttle", 1000));
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+            DropOverload.create("lb", 200),
+            DropOverload.create("throttle", 1000));
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
+            Locality.create("region1", "zone1", "subzone1"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080,
+                    LbEndpoint.create("192.168.0.1", 8080,
                         2, true)), 1, 0),
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+            Locality.create("region3", "zone3", "subzone3"),
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
   }
 
   @Test
@@ -928,20 +986,20 @@ public abstract class ClientXdsClientTestBase {
     xdsClient.watchEdsResource(EDS_RESOURCE, watcher);
     verify(watcher).onChanged(edsUpdateCaptor.capture());
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
-    assertThat(edsUpdate.getDropPolicies())
+    assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdate.dropPolicies)
         .containsExactly(
-            new DropOverload("lb", 200),
-            new DropOverload("throttle", 1000));
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+            DropOverload.create("lb", 200),
+            DropOverload.create("throttle", 1000));
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
+            Locality.create("region1", "zone1", "subzone1"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080,
+                    LbEndpoint.create("192.168.0.1", 8080,
                         2, true)), 1, 0),
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+            Locality.create("region3", "zone3", "subzone3"),
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
     call.verifyNoMoreRequest();
   }
 
@@ -987,19 +1045,19 @@ public abstract class ClientXdsClientTestBase {
         "0000");
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
-    assertThat(edsUpdate.getDropPolicies())
+    assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdate.dropPolicies)
         .containsExactly(
-            new DropOverload("lb", 200),
-            new DropOverload("throttle", 1000));
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+            DropOverload.create("lb", 200),
+            DropOverload.create("throttle", 1000));
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
+            Locality.create("region1", "zone1", "subzone1"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080, 2, true)), 1, 0),
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+                    LbEndpoint.create("192.168.0.1", 8080, 2, true)), 1, 0),
+            Locality.create("region3", "zone3", "subzone3"),
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
 
     clusterLoadAssignments =
         ImmutableList.of(
@@ -1015,27 +1073,38 @@ public abstract class ClientXdsClientTestBase {
 
     verify(edsResourceWatcher, times(2)).onChanged(edsUpdateCaptor.capture());
     edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
-    assertThat(edsUpdate.getDropPolicies()).isEmpty();
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+    assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdate.dropPolicies).isEmpty();
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region2", "zone2", "subzone2"),
-            new LocalityLbEndpoints(
+            Locality.create("region2", "zone2", "subzone2"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
   }
 
   @Test
   public void edsResourceDeletedByCds() {
+    String resource = "backend-service.googleapis.com";
+    CdsResourceWatcher cdsWatcher = mock(CdsResourceWatcher.class);
+    EdsResourceWatcher edsWatcher = mock(EdsResourceWatcher.class);
+    xdsClient.watchCdsResource(resource, cdsWatcher);
+    xdsClient.watchEdsResource(resource, edsWatcher);
     xdsClient.watchCdsResource(CDS_RESOURCE, cdsResourceWatcher);
     xdsClient.watchEdsResource(EDS_RESOURCE, edsResourceWatcher);
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     List<Any> clusters = ImmutableList.of(
+        Any.pack(mf.buildEdsCluster(resource, null, true, null, null)),
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, EDS_RESOURCE, false, null, null)));
     call.sendResponse("0", clusters, ResourceType.CDS, "0000");
-    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    verify(cdsWatcher).onChanged(cdsUpdateCaptor.capture());
     EdsClusterConfig clusterConfig = (EdsClusterConfig) cdsUpdateCaptor.getValue().clusterConfig;
+    assertThat(clusterConfig.edsServiceName).isEqualTo(null);
+    assertThat(clusterConfig.lrsServerName).isEqualTo("");
+    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    clusterConfig = (EdsClusterConfig) cdsUpdateCaptor.getValue().clusterConfig;
     assertThat(clusterConfig.edsServiceName).isEqualTo(EDS_RESOURCE);
+    assertThat(clusterConfig.lrsServerName).isNull();
 
     List<Any> clusterLoadAssignments =
         ImmutableList.of(
@@ -1048,19 +1117,31 @@ public abstract class ClientXdsClientTestBase {
                             1, 0)),
                     ImmutableList.of(
                         mf.buildDropOverload("lb", 200),
-                        mf.buildDropOverload("throttle", 1000)))));
+                        mf.buildDropOverload("throttle", 1000)))),
+            Any.pack(
+                mf.buildClusterLoadAssignment(resource,
+                    ImmutableList.of(
+                        mf.buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                            ImmutableList.of(
+                                mf.buildLbEndpoint("192.168.0.2", 9090, "healthy", 3)),
+                            1, 0)),
+                    ImmutableList.of(
+                        mf.buildDropOverload("lb", 100)))));
     call.sendResponse("0", clusterLoadAssignments, ResourceType.EDS, "0000");
+    verify(edsWatcher).onChanged(edsUpdateCaptor.capture());
+    assertThat(edsUpdateCaptor.getValue().clusterName).isEqualTo(resource);
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
-    EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdateCaptor.getValue().clusterName).isEqualTo(EDS_RESOURCE);
 
     clusters = ImmutableList.of(
+        Any.pack(mf.buildEdsCluster(resource, null, true, null, null)),  // no change
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, false, null, null)));
     call.sendResponse("1", clusters, ResourceType.CDS, "0001");
     verify(cdsResourceWatcher, times(2)).onChanged(cdsUpdateCaptor.capture());
     clusterConfig = (EdsClusterConfig) cdsUpdateCaptor.getValue().clusterConfig;
     assertThat(clusterConfig.edsServiceName).isNull();
     verify(edsResourceWatcher).onResourceDoesNotExist(EDS_RESOURCE);
+    verifyNoMoreInteractions(cdsWatcher, edsWatcher);
   }
 
   @Test
@@ -1101,19 +1182,19 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse("0", clusterLoadAssignments, ResourceType.EDS, "0000");
     verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
     EdsUpdate edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(EDS_RESOURCE);
-    assertThat(edsUpdate.getDropPolicies())
+    assertThat(edsUpdate.clusterName).isEqualTo(EDS_RESOURCE);
+    assertThat(edsUpdate.dropPolicies)
         .containsExactly(
-            new DropOverload("lb", 200),
-            new DropOverload("throttle", 1000));
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+            DropOverload.create("lb", 200),
+            DropOverload.create("throttle", 1000));
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
+            Locality.create("region1", "zone1", "subzone1"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080, 2, true)), 1, 0),
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(ImmutableList.<LbEndpoint>of(), 2, 1));
+                    LbEndpoint.create("192.168.0.1", 8080, 2, true)), 1, 0),
+            Locality.create("region3", "zone3", "subzone3"),
+            LocalityLbEndpoints.create(ImmutableList.<LbEndpoint>of(), 2, 1));
     verifyNoMoreInteractions(watcher1, watcher2);
 
     clusterLoadAssignments =
@@ -1130,24 +1211,24 @@ public abstract class ClientXdsClientTestBase {
 
     verify(watcher1).onChanged(edsUpdateCaptor.capture());
     edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(edsResource);
-    assertThat(edsUpdate.getDropPolicies()).isEmpty();
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+    assertThat(edsUpdate.clusterName).isEqualTo(edsResource);
+    assertThat(edsUpdate.dropPolicies).isEmpty();
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region2", "zone2", "subzone2"),
-            new LocalityLbEndpoints(
+            Locality.create("region2", "zone2", "subzone2"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
     verify(watcher2).onChanged(edsUpdateCaptor.capture());
     edsUpdate = edsUpdateCaptor.getValue();
-    assertThat(edsUpdate.getClusterName()).isEqualTo(edsResource);
-    assertThat(edsUpdate.getDropPolicies()).isEmpty();
-    assertThat(edsUpdate.getLocalityLbEndpointsMap())
+    assertThat(edsUpdate.clusterName).isEqualTo(edsResource);
+    assertThat(edsUpdate.dropPolicies).isEmpty();
+    assertThat(edsUpdate.localityLbEndpointsMap)
         .containsExactly(
-            new Locality("region2", "zone2", "subzone2"),
-            new LocalityLbEndpoints(
+            Locality.create("region2", "zone2", "subzone2"),
+            LocalityLbEndpoints.create(
                 ImmutableList.of(
-                    new LbEndpoint("172.44.2.2", 8000, 3, true)), 2, 0));
+                    LbEndpoint.create("172.44.2.2", 8000, 3, true)), 2, 0));
     verifyNoMoreInteractions(edsResourceWatcher);
   }
 
@@ -1341,13 +1422,10 @@ public abstract class ClientXdsClientTestBase {
     assertThat(fakeClock.getPendingTasks(EDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).hasSize(1);
   }
 
-  /**
-   * Tests sending a streaming LRS RPC for each cluster to report loads for.
-   */
   @Test
   public void reportLoadStatsToServer() {
     String clusterName = "cluster-foo.googleapis.com";
-    xdsClient.addClientStats(clusterName, null);
+    ClusterDropStats dropStats = xdsClient.addClusterDropStats(clusterName, null);
     LrsRpcCall lrsCall = loadReportCalls.poll();
     lrsCall.verifyNextReportClusters(Collections.<String[]>emptyList()); // initial LRS request
 
@@ -1355,8 +1433,15 @@ public abstract class ClientXdsClientTestBase {
     fakeClock.forwardNanos(1000L);
     lrsCall.verifyNextReportClusters(Collections.singletonList(new String[] {clusterName, null}));
 
-    xdsClient.removeClientStats(clusterName, null);
+    dropStats.release();
     fakeClock.forwardNanos(1000L);
+    // In case of having unreported cluster stats, one last report will be sent after corresponding
+    // stats object released.
+    lrsCall.verifyNextReportClusters(Collections.singletonList(new String[] {clusterName, null}));
+
+    fakeClock.forwardNanos(1000L);
+    // Currently load reporting continues (with empty stats) even if all stats objects have been
+    // released.
     lrsCall.verifyNextReportClusters(Collections.<String[]>emptyList());  // no more stats reported
 
     // See more test on LoadReportClientTest.java
@@ -1422,14 +1507,32 @@ public abstract class ClientXdsClientTestBase {
 
   protected abstract static class MessageFactory {
 
-    protected abstract Message buildListener(String name, Message routeConfiguration);
+    protected final Message buildListener(String name, Message routeConfiguration) {
+      return buildListener(name, routeConfiguration, Collections.<Message>emptyList());
+    }
+
+    @SuppressWarnings("unchecked")
+    protected abstract Message buildListener(
+        String name, Message routeConfiguration, List<? extends Message> httpFilters);
 
     protected abstract Message buildListenerForRds(String name, String rdsResourceName);
+
+    protected abstract Message buildHttpFilter(String name, @Nullable Any typedConfig);
+
+    protected abstract Any buildHttpFaultTypedConfig(
+        @Nullable Long delayNanos, @Nullable Integer delayRate, String upstreamCluster,
+        List<String> downstreamNodes, @Nullable Integer maxActiveFaults, @Nullable Status status,
+        @Nullable Integer httpCode, @Nullable Integer abortRate);
 
     protected abstract Message buildRouteConfiguration(String name,
         List<Message> virtualHostList);
 
     protected abstract List<Message> buildOpaqueVirtualHosts(int num);
+
+    protected abstract Message buildVirtualHost(
+        List<? extends Message> routes, Map<String, Any> typedConfigMap);
+
+    protected abstract List<? extends Message> buildOpaqueRoutes(int num);
 
     protected abstract Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
         boolean enableLrs, @Nullable Message upstreamTlsContext,

@@ -40,7 +40,6 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Objects;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -118,13 +117,13 @@ public abstract class AbstractTransportTest {
    * Returns a new server that when started will be able to be connected to from the client. Each
    * returned instance should be new and yet be accessible by new client transports.
    */
-  protected abstract List<? extends InternalServer> newServer(
+  protected abstract InternalServer newServer(
       List<ServerStreamTracer.Factory> streamTracerFactories);
 
   /**
    * Builds a new server that is listening on the same port as the given server instance does.
    */
-  protected abstract List<? extends InternalServer> newServer(
+  protected abstract InternalServer newServer(
       int port, List<ServerStreamTracer.Factory> streamTracerFactories);
 
   /**
@@ -230,7 +229,7 @@ public abstract class AbstractTransportTest {
 
   @Before
   public void setUp() {
-    server = Iterables.getOnlyElement(newServer(Arrays.asList(serverStreamTracerFactory)));
+    server = newServer(Arrays.asList(serverStreamTracerFactory));
     callOptions = CallOptions.DEFAULT.withStreamTracerFactory(clientStreamTracerFactory);
   }
 
@@ -401,8 +400,7 @@ public abstract class AbstractTransportTest {
     if (addr instanceof InetSocketAddress) {
       port = ((InetSocketAddress) addr).getPort();
     }
-    InternalServer server2 =
-        Iterables.getOnlyElement(newServer(port, Arrays.asList(serverStreamTracerFactory)));
+    InternalServer server2 = newServer(port, Arrays.asList(serverStreamTracerFactory));
     thrown.expect(IOException.class);
     server2.start(new MockServerListener());
   }
@@ -421,7 +419,7 @@ public abstract class AbstractTransportTest {
     assumeTrue("transport is not using InetSocketAddress", port != -1);
     server.shutdown();
 
-    server = Iterables.getOnlyElement(newServer(port, Arrays.asList(serverStreamTracerFactory)));
+    server = newServer(port, Arrays.asList(serverStreamTracerFactory));
     boolean success;
     Thread.currentThread().interrupt();
     try {
@@ -473,7 +471,7 @@ public abstract class AbstractTransportTest {
     // resources. There may be cases this is impossible in the future, but for now it is a useful
     // property.
     serverListener = new MockServerListener();
-    server = Iterables.getOnlyElement(newServer(port, Arrays.asList(serverStreamTracerFactory)));
+    server = newServer(port, Arrays.asList(serverStreamTracerFactory));
     server.start(serverListener);
 
     // Try to "flush" out any listener notifications on client and server. This also ensures that

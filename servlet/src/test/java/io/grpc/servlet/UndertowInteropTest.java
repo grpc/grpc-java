@@ -20,7 +20,6 @@ import static io.undertow.servlet.Servlets.defaultContainer;
 import static io.undertow.servlet.Servlets.deployment;
 import static io.undertow.servlet.Servlets.servlet;
 
-import io.grpc.ForwardingServerBuilder;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
 import io.grpc.testing.integration.AbstractInteropTest;
@@ -67,14 +66,14 @@ public class UndertowInteropTest extends AbstractInteropTest {
   }
 
   @Override
-  protected ForwardingServerBuilder<?> getServerBuilder() {
+  protected ServletServerBuilder getServerBuilder() {
     return new ServletServerBuilder().maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
   }
 
   @Override
-  protected void startServer(ServerBuilder<?> builer) {
+  protected void startServer(ServerBuilder<?> builder) {
     GrpcServlet grpcServlet =
-        new GrpcServlet(((ServletServerBuilder) builer).buildServletAdapter());
+        new GrpcServlet(((ServletServerBuilder) builder).buildServletAdapter());
     InstanceFactory<? extends Servlet> instanceFactory =
         () -> new ImmediateInstanceHandle<>(grpcServlet);
     DeploymentInfo servletBuilder =
@@ -114,7 +113,7 @@ public class UndertowInteropTest extends AbstractInteropTest {
             .forAddress(HOST, port)
             .usePlaintext()
             .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
-    // TODO NOMERGE before this branch is finished, we need to mvoe this to interop-testing so this
+    // TODO NOMERGE before this branch is finished, we need to move this to interop-testing so this
     //              works properly
     // InternalNettyChannelBuilder.setStatsEnabled(builder, false);
     builder.intercept(createCensusStatsClientInterceptor());

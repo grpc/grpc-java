@@ -20,7 +20,6 @@ import static io.undertow.servlet.Servlets.defaultContainer;
 import static io.undertow.servlet.Servlets.deployment;
 import static io.undertow.servlet.Servlets.servlet;
 
-import com.google.common.collect.ImmutableList;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.ServerStreamTracer;
@@ -50,6 +49,7 @@ import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import javax.servlet.Servlet;
 import javax.servlet.ServletException;
 import org.junit.After;
@@ -91,11 +91,11 @@ public class UndertowTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected List<? extends InternalServer> newServer(List<ServerStreamTracer.Factory>
+  protected InternalServer newServer(List<ServerStreamTracer.Factory>
                                                                streamTracerFactories) {
-    return ImmutableList.of(new InternalServer() {
+    return new InternalServer() {
       final InternalServer delegate =
-          new ServletServerBuilder().buildTransportServers(streamTracerFactories).iterator().next();
+          new ServletServerBuilder().buildTransportServers(streamTracerFactories);
 
       @Override
       public void start(ServerListener listener) throws IOException {
@@ -155,11 +155,22 @@ public class UndertowTransportTest extends AbstractTransportTest {
       public InternalInstrumented<SocketStats> getListenSocketStats() {
         return delegate.getListenSocketStats();
       }
-    });
+
+      @Override
+      public List<? extends SocketAddress> getListenSocketAddresses() {
+        return delegate.getListenSocketAddresses();
+      }
+
+      @Nullable
+      @Override
+      public List<InternalInstrumented<SocketStats>> getListenSocketStatsList() {
+        return delegate.getListenSocketStatsList();
+      }
+    };
   }
 
   @Override
-  protected List<? extends InternalServer> newServer(int port,
+  protected InternalServer newServer(int port,
       List<ServerStreamTracer.Factory> streamTracerFactories) {
     return newServer(streamTracerFactories);
   }

@@ -25,9 +25,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link AltsAuthContext}. */
+/** Unit tests for {@link AltsInternalContext}. */
 @RunWith(JUnit4.class)
-public final class AltsAuthContextTest {
+public final class AltsInternalContextTest {
   private static final int TEST_MAX_RPC_VERSION_MAJOR = 3;
   private static final int TEST_MAX_RPC_VERSION_MINOR = 5;
   private static final int TEST_MIN_RPC_VERSION_MAJOR = 2;
@@ -75,16 +75,16 @@ public final class AltsAuthContextTest {
   }
 
   @Test
-  public void testAltsAuthContext() {
-    AltsAuthContext authContext = new AltsAuthContext(handshakerResult);
-    assertEquals(TEST_APPLICATION_PROTOCOL, authContext.getApplicationProtocol());
-    assertEquals(TEST_RECORD_PROTOCOL, authContext.getRecordProtocol());
-    assertEquals(TEST_SECURITY_LEVEL, authContext.getSecurityLevel());
-    assertEquals(TEST_PEER_SERVICE_ACCOUNT, authContext.getPeerServiceAccount());
-    assertEquals(TEST_LOCAL_SERVICE_ACCOUNT, authContext.getLocalServiceAccount());
-    assertEquals(rpcVersions, authContext.getPeerRpcVersions());
-    assertEquals(testPeerAttributes, authContext.getPeerAttributes());
-    assertEquals(TEST_PEER_ATTRIBUTES_VALUE, authContext.getPeerAttributes()
+  public void testAltsInternalContext() {
+    AltsInternalContext context = new AltsInternalContext(handshakerResult);
+    assertEquals(TEST_APPLICATION_PROTOCOL, context.getApplicationProtocol());
+    assertEquals(TEST_RECORD_PROTOCOL, context.getRecordProtocol());
+    assertEquals(TEST_SECURITY_LEVEL, context.getSecurityLevel());
+    assertEquals(TEST_PEER_SERVICE_ACCOUNT, context.getPeerServiceAccount());
+    assertEquals(TEST_LOCAL_SERVICE_ACCOUNT, context.getLocalServiceAccount());
+    assertEquals(rpcVersions, context.getPeerRpcVersions());
+    assertEquals(testPeerAttributes, context.getPeerAttributes());
+    assertEquals(TEST_PEER_ATTRIBUTES_VALUE, context.getPeerAttributes()
         .get(TEST_PEER_ATTRIBUTES_KEY));
   }
 }

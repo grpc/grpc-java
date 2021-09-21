@@ -16,9 +16,12 @@
 
 package io.grpc.inprocess;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 import static org.junit.Assert.assertSame;
+import static org.mockito.Mockito.mock;
 
+import io.grpc.ChannelCredentials;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.SharedResourceHolder;
@@ -59,5 +62,12 @@ public class InProcessChannelBuilderTest {
     assertSame(scheduledExecutorService, clientTransportFactory.getScheduledExecutorService());
 
     clientTransportFactory.close();
+  }
+
+  @Test
+  public void transportFactoryDoesNotSupportSwapChannelCreds() {
+    InProcessChannelBuilder builder = InProcessChannelBuilder.forName("foo");
+    ClientTransportFactory transportFactory = builder.buildTransportFactory();
+    assertThat(transportFactory.swapChannelCredentials(mock(ChannelCredentials.class))).isNull();
   }
 }

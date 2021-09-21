@@ -9,7 +9,7 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Base.V7.Theme.AppCompat.Light"
-        android:name="androidx.multidex.MultiDexApplication" >
+        android:name="android.support.multidex.MultiDexApplication" >
         <activity
             android:name=".TesterActivity"
             android:label="@string/app_name" >

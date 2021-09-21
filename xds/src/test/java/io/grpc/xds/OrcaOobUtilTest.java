@@ -53,7 +53,6 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
-import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -871,12 +870,6 @@ public class OrcaOobUtilTest {
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
       return fakeClock.getScheduledExecutorService();
-    }
-
-    @Deprecated
-    @Override
-    public NameResolver.Factory getNameResolverFactory() {
-      throw new AssertionError("Should not be called");
     }
 
     @Override

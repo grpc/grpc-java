@@ -41,7 +41,7 @@ import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.XdsAttributes;
+import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.XdsClientWrapperForServerSds;
 import io.grpc.xds.XdsClientWrapperForServerSdsTest;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsHandler;
@@ -183,7 +183,7 @@ public class SdsProtocolNegotiatorsTest {
     when(mockHandler.getEagAttributes())
         .thenReturn(
             Attributes.newBuilder()
-                .set(XdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                .set(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                     new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
                 .build());
     ChannelHandler newHandler = pn.newHandler(mockHandler);

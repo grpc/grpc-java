@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
@@ -46,8 +45,10 @@ import io.grpc.internal.SharedResourceHolder;
 import java.io.File;
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -122,12 +123,12 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
     return internalServer.serverListener.transportCreated(serverTransport);
   }
 
-  protected List<? extends InternalServer> buildTransportServers(
+  protected InternalServer buildTransportServers(
       List<? extends Factory> streamTracerFactories) {
     checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.streamTracerFactories = streamTracerFactories;
     internalServer = new InternalServerImpl();
-    return ImmutableList.of(internalServer);
+    return internalServer;
   }
 
   @Internal
@@ -194,6 +195,17 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
     @Override
     public InternalInstrumented<SocketStats> getListenSocketStats() {
       // sockets are managed by the servlet container, grpc is ignorant of that
+      return null;
+    }
+
+    @Override
+    public List<? extends SocketAddress> getListenSocketAddresses() {
+      return Collections.emptyList();
+    }
+
+    @Nullable
+    @Override
+    public List<InternalInstrumented<SocketStats>> getListenSocketStatsList() {
       return null;
     }
   }

@@ -21,8 +21,10 @@ import com.google.common.io.Files;
 import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.ServerBuilder;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.alts.AltsChannelCredentials;
 import io.grpc.alts.ComputeEngineChannelCredentials;
@@ -42,6 +44,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 /**
  * Application that starts a client for the {@link TestServiceGrpc.TestServiceImplBase} and runs
@@ -83,6 +86,7 @@ public class TestServiceClient {
   private String serviceAccountKeyFile;
   private String oauthScope;
   private boolean fullStreamDecompression;
+  private int localHandshakerPort = -1;
 
   private Tester tester = new Tester();
 
@@ -141,6 +145,8 @@ public class TestServiceClient {
         oauthScope = value;
       } else if ("full_stream_decompression".equals(key)) {
         fullStreamDecompression = Boolean.parseBoolean(value);
+      } else if ("local_handshaker_port".equals(key)) {
+        localHandshakerPort = Integer.parseInt(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -165,6 +171,9 @@ public class TestServiceClient {
           + "\n  --use_tls=true|false        Whether to use TLS. Default " + c.useTls
           + "\n  --use_alts=true|false       Whether to use ALTS. Enable ALTS will disable TLS."
           + "\n                              Default " + c.useAlts
+          + "\n  --local_handshaker_port=PORT"
+          + "\n                              Use local ALTS handshaker service on the specified "
+          + "\n                              port for testing. Only effective when --use_alts=true."
           + "\n  --use_upgrade=true|false    Whether to use the h2c Upgrade mechanism."
           + "\n                              Enabling h2c Upgrade will disable TLS."
           + "\n                              Default " + c.useH2cUpgrade
@@ -398,7 +407,13 @@ public class TestServiceClient {
 
       } else if (useAlts) {
         useGeneric = true; // Retain old behavior; avoids erroring if incompatible
-        channelCredentials = AltsChannelCredentials.create();
+        if (localHandshakerPort > -1) {
+          channelCredentials = AltsChannelCredentials.newBuilder()
+              .enableUntrustedAltsForTesting()
+              .setHandshakerAddressForTesting("localhost:" + localHandshakerPort).build();
+        } else {
+          channelCredentials = AltsChannelCredentials.create();
+        }
 
       } else if (useTls) {
         if (!useTestCa) {
@@ -474,6 +489,18 @@ public class TestServiceClient {
       // https://github.com/grpc/grpc-go/issues/1572
       // TODO(zhangkun83): remove this override once the said issue is fixed.
       return false;
+    }
+
+    @Override
+    @Nullable
+    protected ServerBuilder<?> getHandshakerServerBuilder() {
+      if (localHandshakerPort > -1) {
+        return Grpc.newServerBuilderForPort(localHandshakerPort,
+            InsecureServerCredentials.create())
+            .addService(new AltsHandshakerTestService());
+      } else {
+        return null;
+      }
     }
   }
 

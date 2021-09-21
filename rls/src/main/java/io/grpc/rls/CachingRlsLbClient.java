@@ -63,6 +63,8 @@ import io.grpc.rls.RlsProtoData.RouteLookupResponse;
 import io.grpc.rls.Throttler.ThrottledException;
 import io.grpc.stub.StreamObserver;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -137,11 +139,28 @@ final class CachingRlsLbClient {
             builder.evictionListener,
             scheduledExecutorService,
             timeProvider);
-    RlsRequestFactory requestFactory = new RlsRequestFactory(lbPolicyConfig.getRouteLookupConfig());
-    rlsPicker = new RlsPicker(requestFactory);
-    ManagedChannelBuilder<?> rlsChannelBuilder =
-        helper.createResolvingOobChannelBuilder(rlsConfig.getLookupService());
     logger = helper.getChannelLogger();
+    String serverHost = null;
+    try {
+      serverHost = new URI(null, helper.getAuthority(), null, null, null).getHost();
+    } catch (URISyntaxException ignore) {
+      // handled by the following null check
+    }
+    if (serverHost == null) {
+      logger.log(
+          ChannelLogLevel.DEBUG, "Can not get hostname from authority: {0}", helper.getAuthority());
+      serverHost = helper.getAuthority();
+    }
+    RlsRequestFactory requestFactory = new RlsRequestFactory(
+        lbPolicyConfig.getRouteLookupConfig(), serverHost);
+    rlsPicker = new RlsPicker(requestFactory);
+    // It is safe to use helper.getUnsafeChannelCredentials() because the client authenticates the
+    // RLS server using the same authority as the backends, even though the RLS server’s addresses
+    // will be looked up differently than the backends; overrideAuthority(helper.getAuthority()) is
+    // called to impose the authority security restrictions.
+    ManagedChannelBuilder<?> rlsChannelBuilder = helper.createResolvingOobChannelBuilder(
+        rlsConfig.getLookupService(), helper.getUnsafeChannelCredentials());
+    rlsChannelBuilder.overrideAuthority(helper.getAuthority());
     if (enableOobChannelDirectPath) {
       logger.log(
           ChannelLogLevel.DEBUG,
@@ -248,7 +267,7 @@ final class CachingRlsLbClient {
       linkedHashLruCache.close();
       // TODO(creamsoup) maybe cancel all pending requests
       pendingCallCache.clear();
-      rlsChannel.shutdown();
+      rlsChannel.shutdownNow();
       rlsPicker.close();
     }
   }

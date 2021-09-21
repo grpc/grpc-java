@@ -24,6 +24,7 @@ import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
@@ -267,6 +268,11 @@ public final class CronetChannelBuilder
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
       return timeoutService;
+    }
+
+    @Override
+    public SwapChannelCredentialsResult swapChannelCredentials(ChannelCredentials channelCreds) {
+      return null;
     }
 
     @Override

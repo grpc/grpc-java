@@ -76,7 +76,7 @@ final class ServerXdsClient extends AbstractXdsClient {
     super(channel, useProtocolV3, node, timeService, backoffPolicyProvider, stopwatchSupplier);
     this.useNewApiForListenerQuery = useProtocolV3 && useNewApiForListenerQuery;
     this.instanceIp = (instanceIp != null ? instanceIp : "0.0.0.0");
-    this.grpcServerResourceId = grpcServerResourceId != null ? grpcServerResourceId : "grpc/server";
+    this.grpcServerResourceId = grpcServerResourceId;
   }
 
   @Override

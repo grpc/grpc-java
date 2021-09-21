@@ -170,6 +170,7 @@ public abstract class AbstractInteropTest {
 
   private ScheduledExecutorService testServiceExecutor;
   private Server server;
+  private Server handshakerServer;
 
   private final LinkedBlockingQueue<ServerStreamTracerInfo> serverStreamTracers =
       new LinkedBlockingQueue<>();
@@ -244,6 +245,7 @@ public abstract class AbstractInteropTest {
   }
 
   protected void startServer(@Nullable ServerBuilder<?> builder) {
+    maybeStartHandshakerServer();
     if (builder == null) {
       server = null;
       return;
@@ -256,12 +258,26 @@ public abstract class AbstractInteropTest {
     }
   }
 
+  private void maybeStartHandshakerServer() {
+    ServerBuilder<?> handshakerServerBuilder = getHandshakerServerBuilder();
+    if (handshakerServerBuilder != null) {
+      try {
+        handshakerServer = handshakerServerBuilder.build().start();
+      } catch (IOException ex) {
+        throw new RuntimeException(ex);
+      }
+    }
+  }
+
   private void stopServer() {
     if (server != null) {
       server.shutdownNow();
     }
     if (testServiceExecutor != null) {
       testServiceExecutor.shutdown();
+    }
+    if (handshakerServer != null) {
+      handshakerServer.shutdownNow();
     }
   }
 
@@ -301,9 +317,9 @@ public abstract class AbstractInteropTest {
    */
   @Before
   public void setUp() {
-    ServerBuilder<?> builder = getServerBuilder();
-    configBuilder(builder);
-    startServer(builder);
+    ServerBuilder<?> serverBuilder = getServerBuilder();
+    configBuilder(serverBuilder);
+    startServer(serverBuilder);
     channel = createChannel();
 
     blockingStub =
@@ -352,6 +368,11 @@ public abstract class AbstractInteropTest {
    */
   @Nullable
   protected ServerBuilder<?> getServerBuilder() {
+    return null;
+  }
+
+  @Nullable
+  protected ServerBuilder<?> getHandshakerServerBuilder() {
     return null;
   }
 
