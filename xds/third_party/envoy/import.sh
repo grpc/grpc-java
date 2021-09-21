@@ -18,13 +18,14 @@
 set -e
 BRANCH=main
 # import VERSION from one of the google internal CLs
-VERSION=af17f954653afcab6a189673e3500b2e988f1aef
+VERSION=ac9a2637336decdcc52c24add5e8fc39edebb962
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
 TARGET_PROTO_BASE_DIR=src/main/proto
 # Sorted alphabetically.
 FILES=(
+envoy/admin/v3/config_dump.proto
 envoy/annotations/deprecation.proto
 envoy/annotations/resource.proto
 envoy/api/v2/auth/cert.proto
@@ -64,6 +65,7 @@ envoy/api/v2/route/route_components.proto
 envoy/api/v2/scoped_route.proto
 envoy/api/v2/srds.proto
 envoy/config/accesslog/v3/accesslog.proto
+envoy/config/bootstrap/v3/bootstrap.proto
 envoy/config/cluster/aggregate/v2alpha/cluster.proto
 envoy/config/cluster/v3/circuit_breaker.proto
 envoy/config/cluster/v3/cluster.proto
@@ -88,12 +90,15 @@ envoy/config/endpoint/v3/load_report.proto
 envoy/config/filter/accesslog/v2/accesslog.proto
 envoy/config/filter/fault/v2/fault.proto
 envoy/config/filter/http/fault/v2/fault.proto
+envoy/config/filter/http/router/v2/router.proto
 envoy/config/filter/network/http_connection_manager/v2/http_connection_manager.proto
 envoy/config/listener/v2/api_listener.proto
 envoy/config/listener/v3/api_listener.proto
 envoy/config/listener/v3/listener.proto
 envoy/config/listener/v3/listener_components.proto
 envoy/config/listener/v3/udp_listener_config.proto
+envoy/config/metrics/v3/stats.proto
+envoy/config/overload/v3/overload.proto
 envoy/config/rbac/v2/rbac.proto
 envoy/config/route/v3/route.proto
 envoy/config/route/v3/route_components.proto
@@ -117,6 +122,7 @@ envoy/config/trace/v3/zipkin.proto
 envoy/extensions/clusters/aggregate/v3/cluster.proto
 envoy/extensions/filters/common/fault/v3/fault.proto
 envoy/extensions/filters/http/fault/v3/fault.proto
+envoy/extensions/filters/http/router/v3/router.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
 envoy/extensions/transport_sockets/tls/v3/cert.proto
 envoy/extensions/transport_sockets/tls/v3/common.proto
@@ -128,6 +134,7 @@ envoy/service/discovery/v3/ads.proto
 envoy/service/discovery/v3/discovery.proto
 envoy/service/load_stats/v2/lrs.proto
 envoy/service/load_stats/v3/lrs.proto
+envoy/service/status/v3/csds.proto
 envoy/type/http.proto
 envoy/type/matcher/metadata.proto
 envoy/type/matcher/number.proto
@@ -135,9 +142,11 @@ envoy/type/matcher/path.proto
 envoy/type/matcher/regex.proto
 envoy/type/matcher/string.proto
 envoy/type/matcher/v3/metadata.proto
+envoy/type/matcher/v3/node.proto
 envoy/type/matcher/v3/number.proto
 envoy/type/matcher/v3/regex.proto
 envoy/type/matcher/v3/string.proto
+envoy/type/matcher/v3/struct.proto
 envoy/type/matcher/v3/value.proto
 envoy/type/matcher/value.proto
 envoy/type/metadata/v2/metadata.proto

@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import io.grpc.Attributes;
 import io.grpc.Channel;
+import io.grpc.ChannelLogger;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.OtherSecurity;
 import io.grpc.InternalChannelz.Security;
@@ -40,6 +41,7 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
 import java.security.GeneralSecurityException;
 import java.util.List;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
@@ -50,6 +52,10 @@ import javax.annotation.Nullable;
 // TODO(carl-mastrangelo): rename this AltsProtocolNegotiators.
 public final class AltsProtocolNegotiator {
   private static final Logger logger = Logger.getLogger(AltsProtocolNegotiator.class.getName());
+  // Avoid performing too many handshakes in parallel, as it may cause queuing in the handshake
+  // server and cause unbounded blocking on the event loop (b/168808426). This is a workaround until
+  // there is an async TSI handshaking API to avoid the blocking.
+  private static final AsyncSemaphore handshakeSemaphore = new AsyncSemaphore(32);
 
   @Grpc.TransportAttr
   public static final Attributes.Key<TsiPeer> TSI_PEER_KEY = Attributes.Key.create("TSI_PEER");
@@ -108,11 +114,14 @@ public final class AltsProtocolNegotiator {
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
+      ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
-      ChannelHandler thh =
-          new TsiHandshakeHandler(gnh, nettyHandshaker, new AltsHandshakeValidator());
-      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh);
+      ChannelHandler thh = new TsiHandshakeHandler(
+          gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore,
+          negotiationLogger);
+      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh,
+          negotiationLogger);
       return wuah;
     }
 
@@ -162,12 +171,15 @@ public final class AltsProtocolNegotiator {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+      ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       TsiHandshaker handshaker = handshakerFactory.newHandshaker(/* authority= */ null);
       NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
-      ChannelHandler thh =
-          new TsiHandshakeHandler(gnh, nettyHandshaker, new AltsHandshakeValidator());
-      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh);
+      ChannelHandler thh = new TsiHandshakeHandler(
+          gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore,
+          negotiationLogger);
+      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(thh,
+          negotiationLogger);
       return wuah;
     }
 
@@ -183,11 +195,12 @@ public final class AltsProtocolNegotiator {
    */
   public static final class GoogleDefaultProtocolNegotiatorFactory
       implements InternalProtocolNegotiator.ClientFactory {
+    @VisibleForTesting
+    @Nullable
+    static Attributes.Key<String> clusterNameAttrKey = loadClusterNameAttrKey();
     private final ImmutableList<String> targetServiceAccounts;
     private final ObjectPool<Channel> handshakerChannelPool;
     private final SslContext sslContext;
-    @Nullable
-    private final Attributes.Key<String> clusterNameAttrKey;
 
     /**
      * Creates Negotiator Factory, which will either use the targetServiceAccounts and
@@ -196,12 +209,10 @@ public final class AltsProtocolNegotiator {
     public GoogleDefaultProtocolNegotiatorFactory(
         List<String> targetServiceAccounts,
         ObjectPool<Channel> handshakerChannelPool,
-        SslContext sslContext,
-        @Nullable Attributes.Key<String> clusterNameAttrKey) {
+        SslContext sslContext) {
       this.targetServiceAccounts = ImmutableList.copyOf(targetServiceAccounts);
       this.handshakerChannelPool = checkNotNull(handshakerChannelPool, "handshakerChannelPool");
       this.sslContext = checkNotNull(sslContext, "sslContext");
-      this.clusterNameAttrKey = clusterNameAttrKey;
     }
 
     @Override
@@ -216,6 +227,26 @@ public final class AltsProtocolNegotiator {
     @Override
     public int getDefaultPort() {
       return 443;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Nullable
+    private static Attributes.Key<String> loadClusterNameAttrKey() {
+      Attributes.Key<String> key = null;
+      try {
+        Class<?> klass = Class.forName("io.grpc.xds.InternalXdsAttributes");
+        key = (Attributes.Key<String>) klass.getField("ATTR_CLUSTER_NAME").get(null);
+      } catch (ClassNotFoundException e) {
+        logger.log(Level.FINE,
+            "Unable to load xDS endpoint cluster name key, this may be expected", e);
+      } catch (NoSuchFieldException e) {
+        logger.log(Level.FINE,
+            "Unable to load xDS endpoint cluster name key, this may be expected", e);
+      } catch (IllegalAccessException e) {
+        logger.log(Level.FINE,
+            "Unable to load xDS endpoint cluster name key, this may be expected", e);
+      }
+      return key;
     }
   }
 
@@ -246,6 +277,7 @@ public final class AltsProtocolNegotiator {
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
+      ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler securityHandler;
       boolean isXdsDirectPath = false;
       if (clusterNameAttrKey != null) {
@@ -259,13 +291,15 @@ public final class AltsProtocolNegotiator {
           || isXdsDirectPath) {
         TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
         NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
-        securityHandler =
-            new TsiHandshakeHandler(gnh, nettyHandshaker, new AltsHandshakeValidator());
+        securityHandler = new TsiHandshakeHandler(
+            gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore,
+            negotiationLogger);
       } else {
         securityHandler = InternalProtocolNegotiators.clientTlsHandler(
-            gnh, sslContext, grpcHandler.getAuthority());
+            gnh, sslContext, grpcHandler.getAuthority(), negotiationLogger);
       }
-      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(securityHandler);
+      ChannelHandler wuah = InternalProtocolNegotiators.waitUntilActiveHandler(securityHandler,
+          negotiationLogger);
       return wuah;
     }
 

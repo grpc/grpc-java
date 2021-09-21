@@ -59,7 +59,9 @@ public class AbstractServerImplBuilderTest {
   @Test
   public void allBuilderMethodsReturnThis() throws Exception {
     for (Method method : ServerBuilder.class.getDeclaredMethods()) {
-      if (Modifier.isStatic(method.getModifiers()) || Modifier.isPrivate(method.getModifiers())) {
+      if (Modifier.isStatic(method.getModifiers())
+          || Modifier.isPrivate(method.getModifiers())
+          || Modifier.isFinal(method.getModifiers())) {
         continue;
       }
       if (method.getName().equals("build")) {

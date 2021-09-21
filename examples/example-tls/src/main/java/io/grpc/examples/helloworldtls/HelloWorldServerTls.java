@@ -16,19 +16,16 @@
 
 package io.grpc.examples.helloworldtls;
 
+import io.grpc.Grpc;
 import io.grpc.Server;
+import io.grpc.ServerCredentials;
+import io.grpc.TlsServerCredentials;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
-import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.SslContextBuilder;
-
 import java.io.File;
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.util.logging.Logger;
 
 /**
@@ -40,34 +37,16 @@ public class HelloWorldServerTls {
     private Server server;
 
     private final int port;
-    private final String certChainFilePath;
-    private final String privateKeyFilePath;
-    private final String trustCertCollectionFilePath;
+    private final ServerCredentials creds;
 
-    public HelloWorldServerTls(int port,
-                               String certChainFilePath,
-                               String privateKeyFilePath,
-                               String trustCertCollectionFilePath) {
+    public HelloWorldServerTls(int port, ServerCredentials creds) {
         this.port = port;
-        this.certChainFilePath = certChainFilePath;
-        this.privateKeyFilePath = privateKeyFilePath;
-        this.trustCertCollectionFilePath = trustCertCollectionFilePath;
-    }
-
-    private SslContextBuilder getSslContextBuilder() {
-        SslContextBuilder sslClientContextBuilder = SslContextBuilder.forServer(new File(certChainFilePath),
-                new File(privateKeyFilePath));
-        if (trustCertCollectionFilePath != null) {
-            sslClientContextBuilder.trustManager(new File(trustCertCollectionFilePath));
-            sslClientContextBuilder.clientAuth(ClientAuth.REQUIRE);
-        }
-        return GrpcSslContexts.configure(sslClientContextBuilder);
+        this.creds = creds;
     }
 
     private void start() throws IOException {
-        server = NettyServerBuilder.forPort(port)
+        server = Grpc.newServerBuilderForPort(port, creds)
                 .addService(new GreeterImpl())
-                .sslContext(getSslContextBuilder().build())
                 .build()
                 .start();
         logger.info("Server started, listening on " + port);
@@ -110,11 +89,16 @@ public class HelloWorldServerTls {
             System.exit(0);
         }
 
+        // If only providing a private key, you can use TlsServerCredentials.create() instead of
+        // interacting with the Builder.
+        TlsServerCredentials.Builder tlsBuilder = TlsServerCredentials.newBuilder()
+            .keyManager(new File(args[1]), new File(args[2]));
+        if (args.length == 4) {
+            tlsBuilder.trustManager(new File(args[3]));
+            tlsBuilder.clientAuth(TlsServerCredentials.ClientAuth.REQUIRE);
+        }
         final HelloWorldServerTls server = new HelloWorldServerTls(
-                Integer.parseInt(args[0]),
-                args[1],
-                args[2],
-                args.length == 4 ? args[3] : null);
+                Integer.parseInt(args[0]), tlsBuilder.build());
         server.start();
         server.blockUntilShutdown();
     }

@@ -17,6 +17,7 @@ dependencies {
     guavaDependency 'implementation'
     compileOnly libraries.javax_annotation
     testImplementation libraries.truth,
+            project(':grpc-grpclb'),
             project(':grpc-testing'),
             project(':grpc-testing-proto'),
             project(':grpc-core').sourceSets.test.output  // for FakeClock

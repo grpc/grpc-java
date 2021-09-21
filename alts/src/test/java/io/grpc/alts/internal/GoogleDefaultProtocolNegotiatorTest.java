@@ -17,12 +17,17 @@
 package io.grpc.alts.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.Channel;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ManagedChannel;
 import io.grpc.grpclb.GrpclbConstants;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -51,6 +56,7 @@ public final class GoogleDefaultProtocolNegotiatorTest {
   @RunWith(JUnit4.class)
   public abstract static class HandlerSelectionTest {
     private ProtocolNegotiator googleProtocolNegotiator;
+    private Attributes.Key<String> originalClusterNameAttrKey;
     private final ObjectPool<Channel> handshakerChannelPool = new ObjectPool<Channel>() {
 
       @Override
@@ -68,18 +74,22 @@ public final class GoogleDefaultProtocolNegotiatorTest {
     @Before
     public void setUp() throws Exception {
       SslContext sslContext = GrpcSslContexts.forClient().build();
-
+      originalClusterNameAttrKey =
+          AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory.clusterNameAttrKey;
+      AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory.clusterNameAttrKey =
+          getClusterNameAttrKey();
       googleProtocolNegotiator = new AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory(
           ImmutableList.<String>of(),
           handshakerChannelPool,
-          sslContext,
-          getClusterNameAttrKey())
+          sslContext)
           .newNegotiator();
     }
 
     @After
     public void tearDown() {
       googleProtocolNegotiator.close();
+      AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory.clusterNameAttrKey =
+          originalClusterNameAttrKey;
     }
 
     @Nullable
@@ -100,6 +110,9 @@ public final class GoogleDefaultProtocolNegotiatorTest {
     void subtest_altsHandler(Attributes eagAttributes) {
       GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
       when(mockHandler.getEagAttributes()).thenReturn(eagAttributes);
+      ChannelLogger logger = mock(ChannelLogger.class);
+      doNothing().when(logger).log(any(ChannelLogLevel.class), anyString());
+      when(mockHandler.getNegotiationLogger()).thenReturn(logger);
 
       final AtomicReference<Throwable> failure = new AtomicReference<>();
       ChannelHandler exceptionCaught = new ChannelInboundHandlerAdapter() {
@@ -125,6 +138,9 @@ public final class GoogleDefaultProtocolNegotiatorTest {
       GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
       when(mockHandler.getEagAttributes()).thenReturn(eagAttributes);
       when(mockHandler.getAuthority()).thenReturn("authority");
+      ChannelLogger logger = mock(ChannelLogger.class);
+      doNothing().when(logger).log(any(ChannelLogLevel.class), anyString());
+      when(mockHandler.getNegotiationLogger()).thenReturn(logger);
 
       ChannelHandler h = googleProtocolNegotiator.newHandler(mockHandler);
       EmbeddedChannel chan = new EmbeddedChannel(h);

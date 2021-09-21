@@ -12,6 +12,8 @@ description = "gRPC: ALTS"
 sourceCompatibility = 1.7
 targetCompatibility = 1.7
 
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
     api project(':grpc-core')
     implementation project(':grpc-auth'),
@@ -29,6 +31,7 @@ dependencies {
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
 
     testImplementation project(':grpc-testing'),
+            project(':grpc-core').sourceSets.test.output,
             project(':grpc-testing-proto'),
             libraries.guava,
             libraries.junit,
@@ -56,7 +59,10 @@ import net.ltgt.gradle.errorprone.CheckSeverity
     it.options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
 }
 
-javadoc { exclude 'io/grpc/alts/internal/**' }
+javadoc {
+    exclude 'io/grpc/alts/internal/**'
+    exclude 'io/grpc/alts/Internal*'
+}
 
 jar {
     // Must use a different classifier to avoid conflicting with shadowJar

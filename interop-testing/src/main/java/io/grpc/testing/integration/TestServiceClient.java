@@ -30,19 +30,17 @@ import io.grpc.alts.AltsChannelCredentials;
 import io.grpc.alts.ComputeEngineChannelCredentials;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.JsonParser;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.InsecureFromHttp1ChannelCredentials;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
-import io.grpc.netty.NettySslContextChannelCredentials;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
-import io.grpc.okhttp.SslSocketFactoryChannelCredentials;
-import io.grpc.okhttp.internal.Platform;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
@@ -87,11 +85,12 @@ public class TestServiceClient {
   private String oauthScope;
   private boolean fullStreamDecompression;
   private int localHandshakerPort = -1;
+  private Map<String, ?> serviceConfig = null;
 
   private Tester tester = new Tester();
 
   @VisibleForTesting
-  void parseArgs(String[] args) {
+  void parseArgs(String[] args) throws Exception {
     boolean usage = false;
     for (String arg : args) {
       if (!arg.startsWith("--")) {
@@ -147,6 +146,10 @@ public class TestServiceClient {
         fullStreamDecompression = Boolean.parseBoolean(value);
       } else if ("local_handshaker_port".equals(key)) {
         localHandshakerPort = Integer.parseInt(value);
+      } else if ("service_config_json".equals(key)) {
+        @SuppressWarnings("unchecked")
+        Map<String, ?> map = (Map<String, ?>) JsonParser.parse(value);
+        serviceConfig = map;
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -190,6 +193,9 @@ public class TestServiceClient {
           + "\n  --oauth_scope               Scope for OAuth tokens. Default " + c.oauthScope
           + "\n  --full_stream_decompression Enable full-stream decompression. Default "
             + c.fullStreamDecompression
+          + "\n --service_config_json=SERVICE_CONFIG_JSON"
+          + "\n                              Disables service config lookups and sets the provided "
+          + "\n                              string as the default service config."
       );
       System.exit(1);
     }
@@ -282,8 +288,19 @@ public class TestServiceClient {
         break;
 
       case COMPUTE_ENGINE_CHANNEL_CREDENTIALS: {
-        ManagedChannel channel = Grpc.newChannelBuilderForAddress(
-            serverHost, serverPort, ComputeEngineChannelCredentials.create()).build();
+        ManagedChannelBuilder<?> builder;
+        if (serverPort == 0) {
+          builder = Grpc.newChannelBuilder(serverHost, ComputeEngineChannelCredentials.create());
+        } else {
+          builder =
+              Grpc.newChannelBuilderForAddress(
+                  serverHost, serverPort, ComputeEngineChannelCredentials.create());
+        }
+        if (serviceConfig != null) {
+          builder.disableServiceConfigLookUp();
+          builder.defaultServiceConfig(serviceConfig);
+        }
+        ManagedChannel channel = builder.build();
         try {
           TestServiceGrpc.TestServiceBlockingStub computeEngineStub =
               TestServiceGrpc.newBlockingStub(channel);
@@ -323,8 +340,19 @@ public class TestServiceClient {
       }
 
       case GOOGLE_DEFAULT_CREDENTIALS: {
-        ManagedChannel channel = Grpc.newChannelBuilderForAddress(
-            serverHost, serverPort, GoogleDefaultChannelCredentials.create()).build();
+        ManagedChannelBuilder<?> builder;
+        if (serverPort == 0) {
+          builder = Grpc.newChannelBuilder(serverHost, GoogleDefaultChannelCredentials.create());
+        } else {
+          builder =
+              Grpc.newChannelBuilderForAddress(
+                  serverHost, serverPort, GoogleDefaultChannelCredentials.create());
+        }
+        if (serviceConfig != null) {
+          builder.disableServiceConfigLookUp();
+          builder.defaultServiceConfig(serviceConfig);
+        }
+        ManagedChannel channel = builder.build();
         try {
           TestServiceGrpc.TestServiceBlockingStub googleDefaultStub =
               TestServiceGrpc.newBlockingStub(channel);
@@ -420,15 +448,9 @@ public class TestServiceClient {
           channelCredentials = TlsChannelCredentials.create();
         } else {
           try {
-            if (useOkHttp) {
-              channelCredentials = SslSocketFactoryChannelCredentials.create(
-                  TestUtils.newSslSocketFactoryForCa(
-                      Platform.get().getProvider(), TestUtils.loadCert("ca.pem")));
-            } else {
-              channelCredentials = NettySslContextChannelCredentials.create(
-                  GrpcSslContexts.forClient().trustManager(
-                      TestUtils.loadCert("ca.pem")).build());
-            }
+            channelCredentials = TlsChannelCredentials.newBuilder()
+                .trustManager(TestUtils.loadCert("ca.pem"))
+                .build();
           } catch (Exception ex) {
             throw new RuntimeException(ex);
           }
@@ -446,17 +468,30 @@ public class TestServiceClient {
         }
       }
       if (useGeneric) {
-        ManagedChannelBuilder<?> channelBuilder =
-            Grpc.newChannelBuilderForAddress(serverHost, serverPort, channelCredentials);
+        ManagedChannelBuilder<?> channelBuilder;
+        if (serverPort == 0) {
+          channelBuilder = Grpc.newChannelBuilder(serverHost, channelCredentials);
+        } else {
+          channelBuilder =
+              Grpc.newChannelBuilderForAddress(serverHost, serverPort, channelCredentials);
+        }
         if (serverHostOverride != null) {
           channelBuilder.overrideAuthority(serverHostOverride);
+        }
+        if (serviceConfig != null) {
+          channelBuilder.disableServiceConfigLookUp();
+          channelBuilder.defaultServiceConfig(serviceConfig);
         }
         return channelBuilder;
       }
       if (!useOkHttp) {
-        NettyChannelBuilder nettyBuilder =
-            NettyChannelBuilder.forAddress(serverHost, serverPort, channelCredentials)
-                .flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW);
+        NettyChannelBuilder nettyBuilder;
+        if (serverPort == 0) {
+          nettyBuilder = NettyChannelBuilder.forTarget(serverHost, channelCredentials);
+        } else {
+          nettyBuilder = NettyChannelBuilder.forAddress(serverHost, serverPort, channelCredentials);
+        }
+        nettyBuilder.flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW);
         if (serverHostOverride != null) {
           nettyBuilder.overrideAuthority(serverHostOverride);
         }
@@ -465,11 +500,19 @@ public class TestServiceClient {
         }
         // Disable the default census stats interceptor, use testing interceptor instead.
         InternalNettyChannelBuilder.setStatsEnabled(nettyBuilder, false);
+        if (serviceConfig != null) {
+          nettyBuilder.disableServiceConfigLookUp();
+          nettyBuilder.defaultServiceConfig(serviceConfig);
+        }
         return nettyBuilder.intercept(createCensusStatsClientInterceptor());
       }
 
-      OkHttpChannelBuilder okBuilder =
-          OkHttpChannelBuilder.forAddress(serverHost, serverPort, channelCredentials);
+      OkHttpChannelBuilder okBuilder;
+      if (serverPort == 0) {
+        okBuilder = OkHttpChannelBuilder.forTarget(serverHost, channelCredentials);
+      } else {
+        okBuilder = OkHttpChannelBuilder.forAddress(serverHost, serverPort, channelCredentials);
+      }
       if (serverHostOverride != null) {
         // Force the hostname to match the cert the server uses.
         okBuilder.overrideAuthority(
@@ -480,6 +523,10 @@ public class TestServiceClient {
       }
       // Disable the default census stats interceptor, use testing interceptor instead.
       InternalOkHttpChannelBuilder.setStatsEnabled(okBuilder, false);
+      if (serviceConfig != null) {
+        okBuilder.disableServiceConfigLookUp();
+        okBuilder.defaultServiceConfig(serviceConfig);
+      }
       return okBuilder.intercept(createCensusStatsClientInterceptor());
     }
 

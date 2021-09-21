@@ -49,9 +49,14 @@ import io.grpc.okhttp.internal.CipherSuite;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.okhttp.internal.TlsVersion;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
+import java.security.KeyStore;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.EnumSet;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -59,19 +64,26 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.net.SocketFactory;
 import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.KeyManager;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.security.auth.x500.X500Principal;
 
 /** Convenience class for building channels with the OkHttp transport. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1785")
 public final class OkHttpChannelBuilder extends
     AbstractManagedChannelImplBuilder<OkHttpChannelBuilder> {
-
+  private static final Logger log = Logger.getLogger(OkHttpChannelBuilder.class.getName());
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
+
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
   private TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
@@ -526,7 +538,8 @@ public final class OkHttpChannelBuilder extends
   }
 
   private static final EnumSet<TlsChannelCredentials.Feature> understoodTlsFeatures =
-      EnumSet.noneOf(TlsChannelCredentials.Feature.class);
+      EnumSet.of(
+          TlsChannelCredentials.Feature.MTLS, TlsChannelCredentials.Feature.CUSTOM_MANAGERS);
 
   static SslSocketFactoryResult sslSocketFactoryFrom(ChannelCredentials creds) {
     if (creds instanceof TlsChannelCredentials) {
@@ -537,14 +550,32 @@ public final class OkHttpChannelBuilder extends
         return SslSocketFactoryResult.error(
             "TLS features not understood: " + incomprehensible);
       }
-      SSLSocketFactory sslSocketFactory;
+      KeyManager[] km = null;
+      if (tlsCreds.getKeyManagers() != null) {
+        km = tlsCreds.getKeyManagers().toArray(new KeyManager[0]);
+      } else if (tlsCreds.getPrivateKey() != null) {
+        return SslSocketFactoryResult.error("byte[]-based private key unsupported. Use KeyManager");
+      } // else don't have a client cert
+      TrustManager[] tm = null;
+      if (tlsCreds.getTrustManagers() != null) {
+        tm = tlsCreds.getTrustManagers().toArray(new TrustManager[0]);
+      } else if (tlsCreds.getRootCertificates() != null) {
+        try {
+          tm = createTrustManager(tlsCreds.getRootCertificates());
+        } catch (GeneralSecurityException gse) {
+          log.log(Level.FINE, "Exception loading root certificates from credential", gse);
+          return SslSocketFactoryResult.error(
+              "Unable to load root certificates: " + gse.getMessage());
+        }
+      } // else use system default
+      SSLContext sslContext;
       try {
-        SSLContext sslContext = SSLContext.getInstance("Default", Platform.get().getProvider());
-        sslSocketFactory = sslContext.getSocketFactory();
+        sslContext = SSLContext.getInstance("TLS", Platform.get().getProvider());
+        sslContext.init(km, tm, null);
       } catch (GeneralSecurityException gse) {
         throw new RuntimeException("TLS Provider failure", gse);
       }
-      return SslSocketFactoryResult.factory(sslSocketFactory);
+      return SslSocketFactoryResult.factory(sslContext.getSocketFactory());
 
     } else if (creds instanceof InsecureChannelCredentials) {
       return SslSocketFactoryResult.plaintext();
@@ -576,6 +607,30 @@ public final class OkHttpChannelBuilder extends
       return SslSocketFactoryResult.error(
           "Unsupported credential type: " + creds.getClass().getName());
     }
+  }
+
+  static TrustManager[] createTrustManager(byte[] rootCerts) throws GeneralSecurityException {
+    KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+    try {
+      ks.load(null, null);
+    } catch (IOException ex) {
+      // Shouldn't really happen, as we're not loading any data.
+      throw new GeneralSecurityException(ex);
+    }
+    CertificateFactory cf = CertificateFactory.getInstance("X.509");
+    ByteArrayInputStream in = new ByteArrayInputStream(rootCerts);
+    try {
+      X509Certificate cert = (X509Certificate) cf.generateCertificate(in);
+      X500Principal principal = cert.getSubjectX500Principal();
+      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
+    } finally {
+      GrpcUtil.closeQuietly(in);
+    }
+
+    TrustManagerFactory trustManagerFactory =
+        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+    trustManagerFactory.init(ks);
+    return trustManagerFactory.getTrustManagers();
   }
 
   static final class SslSocketFactoryResult {

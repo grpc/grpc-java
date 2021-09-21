@@ -24,6 +24,7 @@ import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.internal.ObjectPool;
 import java.net.URI;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
@@ -53,7 +54,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetUri);
       String name = targetPath.substring(1);
       return new XdsNameResolver(name, args.getServiceConfigParser(),
-          args.getSynchronizationContext());
+          args.getSynchronizationContext(), args.getScheduledExecutorService());
     }
     return null;
   }
@@ -76,7 +77,12 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
   }
 
   interface XdsClientPoolFactory {
-    ObjectPool<XdsClient> getXdsClientPool() throws XdsInitializationException;
+    void setBootstrapOverride(Map<String, ?> bootstrap);
+
+    @Nullable
+    ObjectPool<XdsClient> get();
+
+    ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException;
   }
 
   /**

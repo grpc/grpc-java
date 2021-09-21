@@ -305,16 +305,16 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
-  public void maxConcurrentRequests_appliedByLbConfig_enableCircuitBreaking() {
+  public void maxConcurrentRequests_appliedByLbConfig_disableCircuitBreaking() {
     boolean originalEnableCircuitBreaking = ClusterImplLoadBalancer.enableCircuitBreaking;
-    ClusterImplLoadBalancer.enableCircuitBreaking = true;
-    subtest_maxConcurrentRequests_appliedByLbConfig(true);
+    ClusterImplLoadBalancer.enableCircuitBreaking = false;
+    subtest_maxConcurrentRequests_appliedByLbConfig(false);
     ClusterImplLoadBalancer.enableCircuitBreaking = originalEnableCircuitBreaking;
   }
 
   @Test
-  public void maxConcurrentRequests_appliedByLbConfig_circuitBreakingDisabledByDefault() {
-    subtest_maxConcurrentRequests_appliedByLbConfig(false);
+  public void maxConcurrentRequests_appliedByLbConfig_circuitBreakingEnabledByDefault() {
+    subtest_maxConcurrentRequests_appliedByLbConfig(true);
   }
 
   private void subtest_maxConcurrentRequests_appliedByLbConfig(boolean enableCircuitBreaking) {
@@ -393,16 +393,16 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
-  public void maxConcurrentRequests_appliedWithDefaultValue_enableCircuitBreaking() {
+  public void maxConcurrentRequests_appliedWithDefaultValue_disableCircuitBreaking() {
     boolean originalEnableCircuitBreaking = ClusterImplLoadBalancer.enableCircuitBreaking;
-    ClusterImplLoadBalancer.enableCircuitBreaking = true;
-    subtest_maxConcurrentRequests_appliedWithDefaultValue(true);
+    ClusterImplLoadBalancer.enableCircuitBreaking = false;
+    subtest_maxConcurrentRequests_appliedWithDefaultValue(false);
     ClusterImplLoadBalancer.enableCircuitBreaking = originalEnableCircuitBreaking;
   }
 
   @Test
-  public void maxConcurrentRequests_appliedWithDefaultValue_circuitBreakingDisabledByDefault() {
-    subtest_maxConcurrentRequests_appliedWithDefaultValue(false);
+  public void maxConcurrentRequests_appliedWithDefaultValue_circuitBreakingEnabledByDefault() {
+    subtest_maxConcurrentRequests_appliedWithDefaultValue(true);
   }
 
   private void subtest_maxConcurrentRequests_appliedWithDefaultValue(

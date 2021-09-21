@@ -26,37 +26,37 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public final class CheckGcpEnvironmentTest {
+public final class InternalCheckGcpEnvironmentTest {
 
   @Test
   public void checkGcpLinuxPlatformData() throws Exception {
     BufferedReader reader;
     reader = new BufferedReader(new StringReader("HP Z440 Workstation"));
-    assertFalse(CheckGcpEnvironment.checkProductNameOnLinux(reader));
+    assertFalse(InternalCheckGcpEnvironment.checkProductNameOnLinux(reader));
     reader = new BufferedReader(new StringReader("Google"));
-    assertTrue(CheckGcpEnvironment.checkProductNameOnLinux(reader));
+    assertTrue(InternalCheckGcpEnvironment.checkProductNameOnLinux(reader));
     reader = new BufferedReader(new StringReader("Google Compute Engine"));
-    assertTrue(CheckGcpEnvironment.checkProductNameOnLinux(reader));
+    assertTrue(InternalCheckGcpEnvironment.checkProductNameOnLinux(reader));
     reader = new BufferedReader(new StringReader("Google Compute Engine    "));
-    assertTrue(CheckGcpEnvironment.checkProductNameOnLinux(reader));
+    assertTrue(InternalCheckGcpEnvironment.checkProductNameOnLinux(reader));
   }
 
   @Test
   public void checkGcpWindowsPlatformData() throws Exception {
     BufferedReader reader;
     reader = new BufferedReader(new StringReader("Product : Google"));
-    assertFalse(CheckGcpEnvironment.checkBiosDataOnWindows(reader));
+    assertFalse(InternalCheckGcpEnvironment.checkBiosDataOnWindows(reader));
     reader = new BufferedReader(new StringReader("Manufacturer : LENOVO"));
-    assertFalse(CheckGcpEnvironment.checkBiosDataOnWindows(reader));
+    assertFalse(InternalCheckGcpEnvironment.checkBiosDataOnWindows(reader));
     reader = new BufferedReader(new StringReader("Manufacturer : Google Compute Engine"));
-    assertFalse(CheckGcpEnvironment.checkBiosDataOnWindows(reader));
+    assertFalse(InternalCheckGcpEnvironment.checkBiosDataOnWindows(reader));
     reader = new BufferedReader(new StringReader("Manufacturer : Google"));
-    assertTrue(CheckGcpEnvironment.checkBiosDataOnWindows(reader));
+    assertTrue(InternalCheckGcpEnvironment.checkBiosDataOnWindows(reader));
     reader = new BufferedReader(new StringReader("Manufacturer:Google"));
-    assertTrue(CheckGcpEnvironment.checkBiosDataOnWindows(reader));
+    assertTrue(InternalCheckGcpEnvironment.checkBiosDataOnWindows(reader));
     reader = new BufferedReader(new StringReader("Manufacturer :   Google    "));
-    assertTrue(CheckGcpEnvironment.checkBiosDataOnWindows(reader));
+    assertTrue(InternalCheckGcpEnvironment.checkBiosDataOnWindows(reader));
     reader = new BufferedReader(new StringReader("BIOSVersion : 1.0\nManufacturer : Google\n"));
-    assertTrue(CheckGcpEnvironment.checkBiosDataOnWindows(reader));
+    assertTrue(InternalCheckGcpEnvironment.checkBiosDataOnWindows(reader));
   }
 }

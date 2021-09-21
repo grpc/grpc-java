@@ -49,7 +49,7 @@ public final class ComputeEngineChannelCredentials {
     ChannelCredentials nettyCredentials =
         InternalNettyChannelCredentials.create(createClientFactory());
     CallCredentials callCredentials;
-    if (CheckGcpEnvironment.isOnGcp()) {
+    if (InternalCheckGcpEnvironment.isOnGcp()) {
       callCredentials = MoreCallCredentials.from(ComputeEngineCredentials.create());
     } else {
       callCredentials = new FailingCallCredentials(
@@ -69,7 +69,6 @@ public final class ComputeEngineChannelCredentials {
     return new GoogleDefaultProtocolNegotiatorFactory(
         /* targetServiceAccounts= */ ImmutableList.<String>of(),
         SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
-        sslContext,
-        null);
+        sslContext);
   }
 }

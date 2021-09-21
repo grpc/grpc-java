@@ -40,8 +40,15 @@ class OkHttpReadableBuffer extends AbstractReadableBuffer {
 
   @Override
   public int readUnsignedByte() {
-    return buffer.readByte() & 0x000000FF;
+    try {
+      fakeEofExceptionMethod(); // Okio 2.x can throw EOFException from readByte()
+      return buffer.readByte() & 0x000000FF;
+    } catch (EOFException e) {
+      throw new IndexOutOfBoundsException(e.getMessage());
+    }
   }
+
+  private void fakeEofExceptionMethod() throws EOFException {}
 
   @Override
   public void skipBytes(int length) {

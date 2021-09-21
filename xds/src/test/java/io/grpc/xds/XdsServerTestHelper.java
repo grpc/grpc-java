@@ -19,12 +19,9 @@ package io.grpc.xds;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
-import com.google.common.base.Strings;
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.util.ArrayList;
 import java.util.Arrays;
-
 import org.mockito.ArgumentCaptor;
 
 /**
@@ -32,45 +29,34 @@ import org.mockito.ArgumentCaptor;
  */
 class XdsServerTestHelper {
 
-  static XdsClient.ListenerWatcher startAndGetWatcher(
+  static XdsClient.LdsResourceWatcher startAndGetWatcher(
       XdsClientWrapperForServerSds xdsClientWrapperForServerSds,
       XdsClient mockXdsClient,
       int port) {
-    xdsClientWrapperForServerSds.start(mockXdsClient);
-    ArgumentCaptor<XdsClient.ListenerWatcher> listenerWatcherCaptor = ArgumentCaptor.forClass(null);
-    verify(mockXdsClient).watchListenerData(eq(port), listenerWatcherCaptor.capture());
+    xdsClientWrapperForServerSds.start(
+        mockXdsClient, "grpc/server?udpa.resource.listening_address=%s");
+    ArgumentCaptor<XdsClient.LdsResourceWatcher> listenerWatcherCaptor = ArgumentCaptor
+        .forClass(null);
+    verify(mockXdsClient)
+        .watchLdsResource(eq("grpc/server?udpa.resource.listening_address=0.0.0.0:" + port),
+            listenerWatcherCaptor.capture());
     return listenerWatcherCaptor.getValue();
   }
 
   /**
-   * Creates a {@link XdsClient.ListenerUpdate} with maximum of 2
-   * {@link io.grpc.xds.EnvoyServerProtoData.FilterChain} each one with a destination port and an
-   * optional {@link EnvoyServerProtoData.DownstreamTlsContext}.
-   *  @param registeredWatcher the watcher on which to generate the update
-   * @param destPort if > 0 to create both the {@link EnvoyServerProtoData.FilterChain}
-   * @param tlsContext1 if non-null, used to populate the 1st filterChain
-   * @param tlsContext2 if non-null, used to populate the 2nd filterChain
+   * Creates a {@link XdsClient.LdsUpdate} with {@link
+   * io.grpc.xds.EnvoyServerProtoData.FilterChain} with a destination port and an optional {@link
+   * EnvoyServerProtoData.DownstreamTlsContext}.
+   *
+   * @param registeredWatcher the watcher on which to generate the update
+   * @param tlsContext if non-null, used to populate filterChain
    */
   static void generateListenerUpdate(
-          XdsClient.ListenerWatcher registeredWatcher,
-          int destPort,
-          EnvoyServerProtoData.DownstreamTlsContext tlsContext1,
-          EnvoyServerProtoData.DownstreamTlsContext tlsContext2) {
-    EnvoyServerProtoData.Listener listener =
-        buildTestListener(
-            "listener1",
-            "10.1.2.3",
-            destPort,
-            destPort,
-            null,
-            null,
-            null,
-            null,
-            tlsContext1,
-            tlsContext2);
-    XdsClient.ListenerUpdate listenerUpdate =
-        XdsClient.ListenerUpdate.newBuilder().setListener(listener).build();
-    registeredWatcher.onListenerChanged(listenerUpdate);
+      XdsClient.LdsResourceWatcher registeredWatcher,
+      EnvoyServerProtoData.DownstreamTlsContext tlsContext) {
+    EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3", tlsContext);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
   }
 
   static int findFreePort() throws IOException {
@@ -81,38 +67,22 @@ class XdsServerTestHelper {
   }
 
   static EnvoyServerProtoData.Listener buildTestListener(
-      String name,
-      String address,
-      int destPort1,
-      int destPort2,
-      String addressPrefix11,
-      String addressPrefix12,
-      String addressPrefix21,
-      String addressPrefix22,
-      EnvoyServerProtoData.DownstreamTlsContext tlsContext1,
-      EnvoyServerProtoData.DownstreamTlsContext tlsContext2) {
+      String name, String address, EnvoyServerProtoData.DownstreamTlsContext tlsContext) {
     EnvoyServerProtoData.FilterChainMatch filterChainMatch1 =
-        destPort1 > 0 ? buildFilterChainMatch(destPort1, addressPrefix11, addressPrefix12) : null;
-    EnvoyServerProtoData.FilterChainMatch filterChainMatch2 =
-        destPort2 > 0 ? buildFilterChainMatch(destPort2, addressPrefix21, addressPrefix22) : null;
+        new EnvoyServerProtoData.FilterChainMatch(
+            0,
+            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            Arrays.<String>asList(),
+            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            null,
+            Arrays.<Integer>asList());
     EnvoyServerProtoData.FilterChain filterChain1 =
-        new EnvoyServerProtoData.FilterChain(filterChainMatch1, tlsContext1);
-    EnvoyServerProtoData.FilterChain filterChain2 =
-        new EnvoyServerProtoData.FilterChain(filterChainMatch2, tlsContext2);
+        new EnvoyServerProtoData.FilterChain(filterChainMatch1, tlsContext);
+    EnvoyServerProtoData.FilterChain defaultFilterChain =
+        new EnvoyServerProtoData.FilterChain(null, null);
     EnvoyServerProtoData.Listener listener =
-        new EnvoyServerProtoData.Listener(name, address, Arrays.asList(filterChain1, filterChain2));
+        new EnvoyServerProtoData.Listener(
+            name, address, Arrays.asList(filterChain1), defaultFilterChain);
     return listener;
-  }
-
-  static EnvoyServerProtoData.FilterChainMatch buildFilterChainMatch(
-      int destPort, String... addressPrefix) {
-    ArrayList<EnvoyServerProtoData.CidrRange> prefixRanges = new ArrayList<>();
-    for (String address : addressPrefix) {
-      if (!Strings.isNullOrEmpty(address)) {
-        prefixRanges.add(new EnvoyServerProtoData.CidrRange(address, 32));
-      }
-    }
-    return new EnvoyServerProtoData.FilterChainMatch(
-        destPort, prefixRanges, Arrays.<String>asList());
   }
 }

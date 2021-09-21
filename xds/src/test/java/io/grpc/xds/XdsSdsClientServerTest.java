@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsServerTestHelper.buildFilterChainMatch;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_KEY_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.BAD_SERVER_KEY_FILE;
@@ -209,8 +208,7 @@ public class XdsSdsClientServerTest {
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             BAD_CLIENT_KEY_FILE, BAD_CLIENT_PEM_FILE, CA_PEM_FILE);
     try {
-      XdsClient.ListenerWatcher unused = performMtlsTestAndGetListenerWatcher(upstreamTlsContext,
-          false);
+      performMtlsTestAndGetListenerWatcher(upstreamTlsContext, false);
       fail("exception expected");
     } catch (StatusRuntimeException sre) {
       if (sre.getCause() instanceof SSLHandshakeException) {
@@ -288,13 +286,12 @@ public class XdsSdsClientServerTest {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
-    XdsClient.ListenerWatcher listenerWatcher =
+    XdsClient.LdsResourceWatcher listenerWatcher =
         performMtlsTestAndGetListenerWatcher(upstreamTlsContext, false);
     DownstreamTlsContext downstreamTlsContext =
         CommonTlsContextTestsUtil.buildDownstreamTlsContextFromFilenames(
             BAD_SERVER_KEY_FILE, BAD_SERVER_PEM_FILE, CA_PEM_FILE);
-    XdsClientWrapperForServerSdsTest.generateListenerUpdateToWatcher(
-        port, downstreamTlsContext, listenerWatcher);
+    generateListenerUpdateToWatcher(downstreamTlsContext, listenerWatcher);
     try {
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, "foo.test.google.fr");
@@ -306,7 +303,7 @@ public class XdsSdsClientServerTest {
     }
   }
 
-  private XdsClient.ListenerWatcher performMtlsTestAndGetListenerWatcher(
+  private XdsClient.LdsResourceWatcher performMtlsTestAndGetListenerWatcher(
       UpstreamTlsContext upstreamTlsContext, boolean newApi)
       throws IOException, URISyntaxException {
     DownstreamTlsContext downstreamTlsContext =
@@ -314,12 +311,12 @@ public class XdsSdsClientServerTest {
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
 
     final XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        XdsClientWrapperForServerSdsTest.createXdsClientWrapperForServerSds(
-            port, /* downstreamTlsContext= */ downstreamTlsContext);
+        createXdsClientWrapperForServerSds(port);
     buildServerWithFallbackServerCredentials(
         xdsClientWrapperForServerSds, InsecureServerCredentials.create(), downstreamTlsContext);
 
-    XdsClient.ListenerWatcher listenerWatcher = xdsClientWrapperForServerSds.getListenerWatcher();
+    XdsClient.LdsResourceWatcher listenerWatcher = xdsClientWrapperForServerSds
+        .getListenerWatcher();
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = newApi
         ? getBlockingStubNewApi(upstreamTlsContext, "foo.test.google.fr") :
@@ -339,7 +336,7 @@ public class XdsSdsClientServerTest {
     XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
         new XdsClientWrapperForServerSds(port);
-    xdsClientWrapperForServerSds.start(mockXdsClient);
+    xdsClientWrapperForServerSds.start(mockXdsClient, "grpc/server");
     buildServerWithFallbackServerCredentials(
         xdsClientWrapperForServerSds, fallbackCredentials, downstreamTlsContext);
   }
@@ -353,6 +350,22 @@ public class XdsSdsClientServerTest {
     buildServer(port, xdsCredentials, xdsClientWrapperForServerSds, downstreamTlsContext);
   }
 
+  /** Creates XdsClientWrapperForServerSds. */
+  private static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port) {
+    XdsClient mockXdsClient = mock(XdsClient.class);
+    XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
+        new XdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds.start(mockXdsClient, "grpc/server");
+    return xdsClientWrapperForServerSds;
+  }
+
+  static void generateListenerUpdateToWatcher(
+      DownstreamTlsContext tlsContext, XdsClient.LdsResourceWatcher registeredWatcher) {
+    EnvoyServerProtoData.Listener listener = buildListener("listener1", "0.0.0.0", tlsContext);
+    XdsClient.LdsUpdate listenerUpdate = new XdsClient.LdsUpdate(listener);
+    registeredWatcher.onChanged(listenerUpdate);
+  }
+
   private void buildServer(
       int port,
       ServerCredentials serverCredentials,
@@ -362,20 +375,24 @@ public class XdsSdsClientServerTest {
     XdsServerBuilder builder = XdsServerBuilder.forPort(port, serverCredentials)
         .addService(new SimpleServiceImpl());
     XdsServerTestHelper.generateListenerUpdate(
-        xdsClientWrapperForServerSds.getListenerWatcher(),
-        port,
-        downstreamTlsContext,
-        /* tlsContext2= */null);
+        xdsClientWrapperForServerSds.getListenerWatcher(), downstreamTlsContext);
     cleanupRule.register(builder.buildServer(xdsClientWrapperForServerSds)).start();
   }
 
   static EnvoyServerProtoData.Listener buildListener(
-      String name, String address, int port, DownstreamTlsContext tlsContext) {
-    EnvoyServerProtoData.FilterChainMatch filterChainMatch = buildFilterChainMatch(port, address);
-    EnvoyServerProtoData.FilterChain filterChain1 =
+      String name, String address, DownstreamTlsContext tlsContext) {
+    EnvoyServerProtoData.FilterChainMatch filterChainMatch =
+        new EnvoyServerProtoData.FilterChainMatch(
+            0,
+            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            Arrays.<String>asList(),
+            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            null,
+            Arrays.<Integer>asList());
+    EnvoyServerProtoData.FilterChain defaultFilterChain =
         new EnvoyServerProtoData.FilterChain(filterChainMatch, tlsContext);
     EnvoyServerProtoData.Listener listener =
-        new EnvoyServerProtoData.Listener(name, address, Arrays.asList(filterChain1));
+        new EnvoyServerProtoData.Listener(name, address, Arrays.asList(defaultFilterChain), null);
     return listener;
   }
 

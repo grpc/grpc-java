@@ -17,15 +17,20 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 
+import com.google.auto.value.AutoValue;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
+import com.google.common.collect.ImmutableList;
+import com.google.protobuf.Any;
 import io.grpc.Status;
+import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import java.util.ArrayList;
@@ -53,39 +58,47 @@ abstract class XdsClient {
     // The list virtual hosts that make up the route table.
     @Nullable
     final List<VirtualHost> virtualHosts;
-    // Listener contains the HttpFault filter.
-    final boolean hasFaultInjection;
-    @Nullable // Can be null even if hasFaultInjection is true.
-    final HttpFault httpFault;
+    // Filter instance names. Null if HttpFilter support is not enabled.
+    @Nullable final List<NamedFilterConfig> filterChain;
+    // Server side Listener.
+    @Nullable
+    final Listener listener;
 
     LdsUpdate(
-        long httpMaxStreamDurationNano, String rdsName, boolean hasFaultInjection,
-        @Nullable HttpFault httpFault) {
-      this(httpMaxStreamDurationNano, rdsName, null, hasFaultInjection, httpFault);
+        long httpMaxStreamDurationNano, String rdsName,
+        @Nullable List<NamedFilterConfig> filterChain) {
+      this(httpMaxStreamDurationNano, rdsName, null, filterChain);
     }
 
     LdsUpdate(
         long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts,
-        boolean hasFaultInjection, @Nullable HttpFault httpFault) {
-      this(httpMaxStreamDurationNano, null, virtualHosts, hasFaultInjection, httpFault);
+        @Nullable List<NamedFilterConfig> filterChain) {
+      this(httpMaxStreamDurationNano, null, virtualHosts, filterChain);
     }
 
     private LdsUpdate(
         long httpMaxStreamDurationNano, @Nullable String rdsName,
-        @Nullable List<VirtualHost> virtualHosts, boolean hasFaultInjection,
-        @Nullable HttpFault httpFault) {
+        @Nullable List<VirtualHost> virtualHosts, @Nullable List<NamedFilterConfig> filterChain) {
       this.httpMaxStreamDurationNano = httpMaxStreamDurationNano;
       this.rdsName = rdsName;
       this.virtualHosts = virtualHosts == null
           ? null : Collections.unmodifiableList(new ArrayList<>(virtualHosts));
-      this.hasFaultInjection = hasFaultInjection;
-      this.httpFault = httpFault;
+      this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
+      this.listener = null;
+    }
+
+    LdsUpdate(Listener listener) {
+      this.listener = listener;
+      this.httpMaxStreamDurationNano = 0L;
+      this.rdsName = null;
+      this.filterChain = null;
+      this.virtualHosts = null;
     }
 
     @Override
     public int hashCode() {
       return Objects.hash(
-          httpMaxStreamDurationNano, rdsName, virtualHosts, hasFaultInjection, httpFault);
+          httpMaxStreamDurationNano, rdsName, virtualHosts, filterChain, listener);
     }
 
     @Override
@@ -100,8 +113,8 @@ abstract class XdsClient {
       return httpMaxStreamDurationNano == that.httpMaxStreamDurationNano
           && Objects.equals(rdsName, that.rdsName)
           && Objects.equals(virtualHosts, that.virtualHosts)
-          && hasFaultInjection == that.hasFaultInjection
-          && Objects.equals(httpFault, that.httpFault);
+          && Objects.equals(filterChain, that.filterChain)
+          && Objects.equals(listener, that.listener);
     }
 
     @Override
@@ -113,12 +126,15 @@ abstract class XdsClient {
       } else {
         toStringHelper.add("virtualHosts", virtualHosts);
       }
-      if (hasFaultInjection) {
-        toStringHelper.add("faultInjectionEnabled", true)
-            .add("httpFault", httpFault);
+      if (filterChain != null) {
+        toStringHelper.add("filterChain", filterChain);
+      }
+      if (listener != null) {
+        toStringHelper.add("listener", listener);
       }
       return toStringHelper.toString();
     }
+
   }
 
   static final class RdsUpdate implements ResourceUpdate {
@@ -155,197 +171,141 @@ abstract class XdsClient {
     }
   }
 
-  static final class CdsUpdate implements ResourceUpdate {
-    final String clusterName;
-    final ClusterType clusterType;
-    final ClusterConfig clusterConfig;
+  /** xDS resource update for cluster-level configuration. */
+  @AutoValue
+  abstract static class CdsUpdate implements ResourceUpdate {
+    abstract String clusterName();
 
-    CdsUpdate(String clusterName, ClusterType clusterType, ClusterConfig clusterConfig) {
-      this.clusterName = checkNotNull(clusterName, "clusterName");
-      this.clusterType = checkNotNull(clusterType, "clusterType");
-      this.clusterConfig = checkNotNull(clusterConfig, "clusterConfig");
+    abstract ClusterType clusterType();
+
+    // Endpoint-level load balancing policy.
+    abstract String lbPolicy();
+
+    // Only valid if lbPolicy is "ring_hash".
+    abstract long minRingSize();
+
+    // Only valid if lbPolicy is "ring_hash".
+    abstract long maxRingSize();
+
+    // Alternative resource name to be used in EDS requests.
+    /// Only valid for EDS cluster.
+    @Nullable
+    abstract String edsServiceName();
+
+    // Load report server name for reporting loads via LRS.
+    // Only valid for EDS or LOGICAL_DNS cluster.
+    @Nullable
+    abstract String lrsServerName();
+
+    // Max number of concurrent requests can be sent to this cluster.
+    // Only valid for EDS or LOGICAL_DNS cluster.
+    @Nullable
+    abstract Long maxConcurrentRequests();
+
+    // TLS context used to connect to connect to this cluster.
+    // Only valid for EDS or LOGICAL_DNS cluster.
+    @Nullable
+    abstract UpstreamTlsContext upstreamTlsContext();
+
+    // List of underlying clusters making of this aggregate cluster.
+    // Only valid for AGGREGATE cluster.
+    @Nullable
+    abstract ImmutableList<String> prioritizedClusterNames();
+
+    static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
+      checkNotNull(prioritizedClusterNames, "prioritizedClusterNames");
+      return new AutoValue_XdsClient_CdsUpdate.Builder()
+          .clusterName(clusterName)
+          .clusterType(ClusterType.AGGREGATE)
+          .minRingSize(0)
+          .maxRingSize(0)
+          .prioritizedClusterNames(ImmutableList.copyOf(prioritizedClusterNames));
     }
 
-    @Override
-    public int hashCode() {
-      return Objects.hash(clusterName, clusterType, clusterConfig);
+    static Builder forEds(String clusterName, @Nullable String edsServiceName,
+        @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+        @Nullable UpstreamTlsContext upstreamTlsContext) {
+      return new AutoValue_XdsClient_CdsUpdate.Builder()
+          .clusterName(clusterName)
+          .clusterType(ClusterType.EDS)
+          .minRingSize(0)
+          .maxRingSize(0)
+          .edsServiceName(edsServiceName)
+          .lrsServerName(lrsServerName)
+          .maxConcurrentRequests(maxConcurrentRequests)
+          .upstreamTlsContext(upstreamTlsContext);
     }
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      CdsUpdate that = (CdsUpdate) o;
-      return Objects.equals(clusterName, that.clusterName)
-          && Objects.equals(clusterType, that.clusterType)
-          && Objects.equals(clusterConfig, that.clusterConfig);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("clusterName", clusterName)
-          .add("clusterType", clusterType)
-          .add("clusterConfig", clusterConfig)
-          .toString();
+    static Builder forLogicalDns(String clusterName, @Nullable String lrsServerName,
+        @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext upstreamTlsContext) {
+      return new AutoValue_XdsClient_CdsUpdate.Builder()
+          .clusterName(clusterName)
+          .clusterType(ClusterType.LOGICAL_DNS)
+          .minRingSize(0)
+          .maxRingSize(0)
+          .lrsServerName(lrsServerName)
+          .maxConcurrentRequests(maxConcurrentRequests)
+          .upstreamTlsContext(upstreamTlsContext);
     }
 
     enum ClusterType {
       EDS, LOGICAL_DNS, AGGREGATE
     }
 
-    abstract static class ClusterConfig {
-      // Endpoint level load balancing policy.
-      final String lbPolicy;
-
-      private ClusterConfig(String lbPolicy) {
-        this.lbPolicy = checkNotNull(lbPolicy, "lbPolicy");
-      }
+    // FIXME(chengyuanzhang): delete this after UpstreamTlsContext's toString() is fixed.
+    @Override
+    public final String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("clusterName", clusterName())
+          .add("clusterType", clusterType())
+          .add("lbPolicy", lbPolicy())
+          .add("minRingSize", minRingSize())
+          .add("maxRingSize", maxRingSize())
+          .add("edsServiceName", edsServiceName())
+          .add("lrsServerName", lrsServerName())
+          .add("maxConcurrentRequests", maxConcurrentRequests())
+          // Exclude upstreamTlsContext as its string representation is cumbersome.
+          .add("prioritizedClusterNames", prioritizedClusterNames())
+          .toString();
     }
 
-    static final class AggregateClusterConfig extends ClusterConfig {
-      // List of underlying clusters making of this aggregate cluster.
-      final List<String> prioritizedClusterNames;
+    @AutoValue.Builder
+    abstract static class Builder {
+      // Private do not use.
+      protected abstract Builder clusterName(String clusterName);
 
-      AggregateClusterConfig(String lbPolicy, List<String> prioritizedClusterNames) {
-        super(lbPolicy);
-        this.prioritizedClusterNames =
-            Collections.unmodifiableList(new ArrayList<>(prioritizedClusterNames));
+      // Private do not use.
+      protected abstract Builder clusterType(ClusterType clusterType);
+
+      // Private do not use.
+      protected abstract Builder lbPolicy(String lbPolicy);
+
+      Builder lbPolicy(String lbPolicy, long minRingSize, long maxRingSize) {
+        return this.lbPolicy(lbPolicy).minRingSize(minRingSize).maxRingSize(maxRingSize);
       }
 
-      @Override
-      public int hashCode() {
-        return Objects.hash(lbPolicy, prioritizedClusterNames);
-      }
+      // Private do not use.
+      protected abstract Builder minRingSize(long minRingSize);
 
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-          return false;
-        }
-        AggregateClusterConfig that = (AggregateClusterConfig) o;
-        return Objects.equals(lbPolicy, that.lbPolicy)
-            && Objects.equals(prioritizedClusterNames, that.prioritizedClusterNames);
-      }
+      // Private do not use.
+      protected abstract Builder maxRingSize(long maxRingSize);
 
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this)
-            .add("lbPolicy", lbPolicy)
-            .add("prioritizedClusterNames", prioritizedClusterNames)
-            .toString();
-      }
-    }
+      // Private do not use.
+      protected abstract Builder edsServiceName(String edsServiceName);
 
-    private abstract static class NonAggregateClusterConfig extends ClusterConfig {
-      // Load report server name for reporting loads via LRS.
-      @Nullable
-      final String lrsServerName;
-      // Max number of concurrent requests can be sent to this cluster.
-      // FIXME(chengyuanzhang): protobuf uint32 is int in Java, so this field can be Integer.
-      @Nullable
-      final Long maxConcurrentRequests;
-      // TLS context used to connect to connect to this cluster.
-      @Nullable
-      final UpstreamTlsContext upstreamTlsContext;
+      // Private do not use.
+      protected abstract Builder lrsServerName(String lrsServerName);
 
-      private NonAggregateClusterConfig(String lbPolicy, @Nullable String lrsServerName,
-          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext upstreamTlsContext) {
-        super(lbPolicy);
-        this.lrsServerName = lrsServerName;
-        this.maxConcurrentRequests = maxConcurrentRequests;
-        this.upstreamTlsContext = upstreamTlsContext;
-      }
-    }
+      // Private do not use.
+      protected abstract Builder maxConcurrentRequests(Long maxConcurrentRequests);
 
-    static final class EdsClusterConfig extends NonAggregateClusterConfig {
-      // Alternative resource name to be used in EDS requests.
-      @Nullable
-      final String edsServiceName;
+      // Private do not use.
+      protected abstract Builder upstreamTlsContext(UpstreamTlsContext upstreamTlsContext);
 
-      EdsClusterConfig(String lbPolicy, @Nullable String edsServiceName,
-          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
-          @Nullable UpstreamTlsContext upstreamTlsContext) {
-        super(lbPolicy, lrsServerName, maxConcurrentRequests, upstreamTlsContext);
-        this.edsServiceName = edsServiceName;
-      }
+      // Private do not use.
+      protected abstract Builder prioritizedClusterNames(List<String> prioritizedClusterNames);
 
-      @Override
-      public int hashCode() {
-        return Objects.hash(lbPolicy, edsServiceName, lrsServerName, maxConcurrentRequests,
-            upstreamTlsContext);
-      }
-
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-          return false;
-        }
-        EdsClusterConfig that = (EdsClusterConfig) o;
-        return Objects.equals(lbPolicy, that.lbPolicy)
-            && Objects.equals(edsServiceName, that.edsServiceName)
-            && Objects.equals(lrsServerName, that.lrsServerName)
-            && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
-            && Objects.equals(upstreamTlsContext, that.upstreamTlsContext);
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this)
-            .add("lbPolicy", lbPolicy)
-            .add("edsServiceName", edsServiceName)
-            .add("lrsServerName", lrsServerName)
-            .add("maxConcurrentRequests", maxConcurrentRequests)
-            // Exclude upstreamTlsContext as its string representation is cumbersome.
-            .toString();
-      }
-    }
-
-    static final class LogicalDnsClusterConfig extends NonAggregateClusterConfig {
-      LogicalDnsClusterConfig(String lbPolicy, @Nullable String lrsServerName,
-          @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext upstreamTlsContext) {
-        super(lbPolicy, lrsServerName, maxConcurrentRequests, upstreamTlsContext);
-      }
-
-      @Override
-      public int hashCode() {
-        return Objects.hash(lbPolicy, lrsServerName, maxConcurrentRequests, upstreamTlsContext);
-      }
-
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-          return false;
-        }
-        LogicalDnsClusterConfig that = (LogicalDnsClusterConfig) o;
-        return Objects.equals(lbPolicy, that.lbPolicy)
-            && Objects.equals(lrsServerName, that.lrsServerName)
-            && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
-            && Objects.equals(upstreamTlsContext, that.upstreamTlsContext);
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this)
-            .add("lbPolicy", lbPolicy)
-            .add("lrsServerName", lrsServerName)
-            .add("maxConcurrentRequests", maxConcurrentRequests)
-            // Exclude upstreamTlsContext as its string representation is cumbersome.
-            .toString();
-      }
+      abstract CdsUpdate build();
     }
   }
 
@@ -394,52 +354,6 @@ abstract class XdsClient {
     }
   }
 
-  /**
-   * Updates via resource discovery RPCs using LDS. Includes {@link Listener} object containing
-   * config for security, RBAC or other server side features such as rate limit.
-   */
-  static final class ListenerUpdate implements ResourceUpdate {
-    // TODO(sanjaypujare): flatten structure by moving Listener class members here.
-    private final Listener listener;
-
-    private ListenerUpdate(Listener listener) {
-      this.listener = listener;
-    }
-
-    public Listener getListener() {
-      return listener;
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("listener", listener)
-          .toString();
-    }
-
-    static Builder newBuilder() {
-      return new Builder();
-    }
-
-    static final class Builder {
-      private Listener listener;
-
-      // Use ListenerUpdate.newBuilder().
-      private Builder() {
-      }
-
-      Builder setListener(Listener listener) {
-        this.listener = listener;
-        return this;
-      }
-
-      ListenerUpdate build() {
-        checkState(listener != null, "listener is not set");
-        return new ListenerUpdate(listener);
-      }
-    }
-  }
-
   interface ResourceUpdate {
   }
 
@@ -478,14 +392,126 @@ abstract class XdsClient {
   }
 
   /**
-   * Listener watcher interface. To be used by {@link XdsServerBuilder}.
+   * The metadata of the xDS resource; used by the xDS config dump.
    */
-  interface ListenerWatcher extends ResourceWatcher {
+  static final class ResourceMetadata {
+    private final String version;
+    private final ResourceMetadataStatus status;
+    private final long updateTimeNanos;
+    @Nullable private final Any rawResource;
+    @Nullable private final UpdateFailureState errorState;
+
+    private ResourceMetadata(
+        ResourceMetadataStatus status, String version, long updateTimeNanos,
+        @Nullable Any rawResource, @Nullable UpdateFailureState errorState) {
+      this.status = checkNotNull(status, "status");
+      this.version = checkNotNull(version, "version");
+      this.updateTimeNanos = updateTimeNanos;
+      this.rawResource = rawResource;
+      this.errorState = errorState;
+    }
+
+    static ResourceMetadata newResourceMetadataUnknown() {
+      return new ResourceMetadata(ResourceMetadataStatus.UNKNOWN, "", 0, null, null);
+    }
+
+    static ResourceMetadata newResourceMetadataRequested() {
+      return new ResourceMetadata(ResourceMetadataStatus.REQUESTED, "", 0, null, null);
+    }
+
+    static ResourceMetadata newResourceMetadataDoesNotExist() {
+      return new ResourceMetadata(ResourceMetadataStatus.DOES_NOT_EXIST, "", 0, null, null);
+    }
+
+    static ResourceMetadata newResourceMetadataAcked(
+        Any rawResource, String version, long updateTimeNanos) {
+      checkNotNull(rawResource, "rawResource");
+      return new ResourceMetadata(
+          ResourceMetadataStatus.ACKED, version, updateTimeNanos, rawResource, null);
+    }
+
+    static ResourceMetadata newResourceMetadataNacked(
+        ResourceMetadata metadata, String failedVersion, long failedUpdateTime,
+        String failedDetails) {
+      checkNotNull(metadata, "metadata");
+      return new ResourceMetadata(ResourceMetadataStatus.NACKED,
+          metadata.getVersion(), metadata.getUpdateTimeNanos(), metadata.getRawResource(),
+          new UpdateFailureState(failedVersion, failedUpdateTime, failedDetails));
+    }
+
+    /** The last successfully updated version of the resource. */
+    String getVersion() {
+      return version;
+    }
+
+    /** The client status of this resource. */
+    ResourceMetadataStatus getStatus() {
+      return status;
+    }
+
+    /** The timestamp when the resource was last successfully updated. */
+    long getUpdateTimeNanos() {
+      return updateTimeNanos;
+    }
+
+    /** The last successfully updated xDS resource as it was returned by the server. */
+    @Nullable
+    Any getRawResource() {
+      return rawResource;
+    }
+
+    /** The metadata capturing the error details of the last rejected update of the resource. */
+    @Nullable
+    UpdateFailureState getErrorState() {
+      return errorState;
+    }
 
     /**
-     * Called when receiving an update on Listener configuration.
+     * Resource status from the view of a xDS client, which tells the synchronization
+     * status between the xDS client and the xDS server.
+     *
+     * <p>This is a native representation of xDS ConfigDump ClientResourceStatus, see
+     * <a href="https://github.com/envoyproxy/envoy/blob/main/api/envoy/admin/v3/config_dump.proto">
+     * config_dump.proto</a>
      */
-    void onListenerChanged(ListenerUpdate update);
+    enum ResourceMetadataStatus {
+      UNKNOWN, REQUESTED, DOES_NOT_EXIST, ACKED, NACKED
+    }
+
+    /**
+     * Captures error metadata of failed resource updates.
+     *
+     * <p>This is a native representation of xDS ConfigDump UpdateFailureState, see
+     * <a href="https://github.com/envoyproxy/envoy/blob/main/api/envoy/admin/v3/config_dump.proto">
+     * config_dump.proto</a>
+     */
+    static final class UpdateFailureState {
+      private final String failedVersion;
+      private final long failedUpdateTimeNanos;
+      private final String failedDetails;
+
+      private UpdateFailureState(
+          String failedVersion, long failedUpdateTimeNanos, String failedDetails) {
+        this.failedVersion = checkNotNull(failedVersion, "failedVersion");
+        this.failedUpdateTimeNanos = failedUpdateTimeNanos;
+        this.failedDetails = checkNotNull(failedDetails, "failedDetails");
+      }
+
+      /** The rejected version string of the last failed update attempt. */
+      String getFailedVersion() {
+        return failedVersion;
+      }
+
+      /** Details about the last failed update attempt. */
+      long getFailedUpdateTimeNanos() {
+        return failedUpdateTimeNanos;
+      }
+
+      /** Timestamp of the last failed update attempt. */
+      String getFailedDetails() {
+        return failedDetails;
+      }
+    }
   }
 
   /**
@@ -499,6 +525,24 @@ abstract class XdsClient {
    * Returns {@code true} if {@link #shutdown()} has been called.
    */
   boolean isShutDown() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Returns gRPC representation of {@link io.envoyproxy.envoy.config.core.v3.Node}.
+   */
+  Node getNode() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Returns the latest accepted version of the given resource type.
+   */
+  String getCurrentVersion(ResourceType type) {
+    throw new UnsupportedOperationException();
+  }
+
+  Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
     throw new UnsupportedOperationException();
   }
 
@@ -555,13 +599,6 @@ abstract class XdsClient {
    * Unregisters the given EDS resource watcher.
    */
   void cancelEdsResourceWatch(String resourceName, EdsResourceWatcher watcher) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Registers a watcher for a Listener with the given port.
-   */
-  void watchListenerData(int port, ListenerWatcher watcher) {
     throw new UnsupportedOperationException();
   }
 

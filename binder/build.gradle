@@ -1,0 +1,45 @@
+plugins {
+    id "maven-publish"
+    id "com.android.library"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = 'gRPC BinderChannel'
+
+android {
+    compileSdkVersion 29
+    compileOptions {
+        sourceCompatibility 1.8
+        targetCompatibility 1.8
+    }
+    defaultConfig {
+        minSdkVersion 16
+        targetSdkVersion 28
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+    lintOptions { abortOnError false }
+}
+
+repositories {
+    google()
+    jcenter()
+}
+
+dependencies {
+    api project(':grpc-core')
+    guavaDependency 'implementation'
+    implementation libraries.androidx_annotation
+    testImplementation libraries.androidx_core
+    testImplementation libraries.androidx_test
+    testImplementation libraries.junit
+    testImplementation libraries.mockito
+    testImplementation (libraries.robolectric) {
+        // Unreleased change: https://github.com/robolectric/robolectric/pull/5432
+        exclude group: 'com.google.auto.service', module: 'auto-service'
+    }
+    testImplementation libraries.truth
+}
+
+[publishMavenPublicationToMavenRepository]*.onlyIf { false }

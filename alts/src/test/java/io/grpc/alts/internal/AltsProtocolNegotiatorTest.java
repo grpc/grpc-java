@@ -37,6 +37,7 @@ import io.grpc.alts.internal.TsiPeer.Property;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.NettyChannelBuilder;
@@ -404,7 +405,7 @@ public class AltsProtocolNegotiatorTest {
         Http2ConnectionDecoder decoder,
         Http2ConnectionEncoder encoder,
         Http2Settings initialSettings) {
-      super(null, decoder, encoder, initialSettings);
+      super(null, decoder, encoder, initialSettings, new NoopChannelLogger());
     }
 
     @Override
