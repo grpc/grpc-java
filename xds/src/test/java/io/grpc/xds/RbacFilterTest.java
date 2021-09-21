@@ -246,10 +246,10 @@ public class RbacFilterTest {
             .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InetSocketAddress("1::", 20))
             .build();
     when(mockServerCall.getAttributes()).thenReturn(attr);
-    PolicyMatcher policyMatcher = new PolicyMatcher("policy-matcher",
-            OrMatcher.create(new DestinationPortMatcher(99999)),
+    PolicyMatcher policyMatcher = PolicyMatcher.create("policy-matcher",
+            OrMatcher.create(DestinationPortMatcher.create(99999)),
             OrMatcher.create(AlwaysTrueMatcher.INSTANCE));
-    AuthConfig authconfig =  new AuthConfig(Collections.singletonList(policyMatcher),
+    AuthConfig authconfig = AuthConfig.create(Collections.singletonList(policyMatcher),
             GrpcAuthorizationEngine.Action.ALLOW);
     new RbacFilter().buildServerInterceptor(RbacConfig.create(authconfig), null)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
@@ -260,7 +260,7 @@ public class RbacFilterTest {
     verify(mockServerCall).getAttributes();
     verifyNoMoreInteractions(mockServerCall);
 
-    authconfig = new AuthConfig(Collections.singletonList(policyMatcher),
+    authconfig = AuthConfig.create(Collections.singletonList(policyMatcher),
             GrpcAuthorizationEngine.Action.DENY);
     new RbacFilter().buildServerInterceptor(RbacConfig.create(authconfig), null)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
@@ -302,10 +302,10 @@ public class RbacFilterTest {
             .build();
     when(mockServerCall.getAttributes()).thenReturn(attr);
 
-    PolicyMatcher policyMatcher = new PolicyMatcher("policy-matcher",
-            OrMatcher.create(new DestinationPortMatcher(99999)),
+    PolicyMatcher policyMatcher = PolicyMatcher.create("policy-matcher",
+            OrMatcher.create(DestinationPortMatcher.create(99999)),
             OrMatcher.create(AlwaysTrueMatcher.INSTANCE));
-    AuthConfig authconfig =  new AuthConfig(Collections.singletonList(policyMatcher),
+    AuthConfig authconfig =  AuthConfig.create(Collections.singletonList(policyMatcher),
             GrpcAuthorizationEngine.Action.ALLOW);
     RbacConfig original = RbacConfig.create(authconfig);
 
@@ -316,10 +316,10 @@ public class RbacFilterTest {
     ServerInterceptor interceptor = new RbacFilter().buildServerInterceptor(original, override);
     assertThat(interceptor).isNull();
 
-    policyMatcher = new PolicyMatcher("policy-matcher-override",
-            OrMatcher.create(new DestinationPortMatcher(20)),
+    policyMatcher = PolicyMatcher.create("policy-matcher-override",
+            OrMatcher.create(DestinationPortMatcher.create(20)),
             OrMatcher.create(AlwaysTrueMatcher.INSTANCE));
-    authconfig =  new AuthConfig(Collections.singletonList(policyMatcher),
+    authconfig =  AuthConfig.create(Collections.singletonList(policyMatcher),
             GrpcAuthorizationEngine.Action.ALLOW);
     override = RbacConfig.create(authconfig);
 
