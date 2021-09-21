@@ -16,7 +16,6 @@
 
 package io.grpc.servlet;
 
-import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
@@ -76,16 +75,14 @@ public class JettyInteroptTest extends AbstractInteropTest {
     port = sc.getLocalPort();
   }
 
-
   @Override
-  protected ManagedChannel createChannel() {
+  protected ManagedChannelBuilder<?> createChannelBuilder() {
     AbstractManagedChannelImplBuilder<?> builder =
-        (AbstractManagedChannelImplBuilder<?>) ManagedChannelBuilder.forAddress(HOST, port)
-            .usePlaintext()
-            .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
-    io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder, createClientCensusStatsModule());
-    return builder.build();
+            (AbstractManagedChannelImplBuilder<?>) ManagedChannelBuilder.forAddress(HOST, port)
+                    .usePlaintext()
+                    .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+    builder.intercept(createCensusStatsClientInterceptor());
+    return builder;
   }
 
   // FIXME

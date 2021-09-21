@@ -16,14 +16,11 @@
 
 package io.grpc.servlet;
 
-import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
-import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.testing.integration.AbstractInteropTest;
 import java.io.File;
-
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
@@ -75,7 +72,7 @@ public class TomcatInteropTest extends AbstractInteropTest {
   }
 
   @Override
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
+  protected ServerBuilder<?> getServerBuilder() {
     return new ServletServerBuilder().maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
   }
 
@@ -101,14 +98,13 @@ public class TomcatInteropTest extends AbstractInteropTest {
   }
 
   @Override
-  protected ManagedChannel createChannel() {
+  protected ManagedChannelBuilder<?> createChannelBuilder() {
     AbstractManagedChannelImplBuilder<?> builder =
-        (AbstractManagedChannelImplBuilder<?>) ManagedChannelBuilder.forAddress(HOST, port)
-            .usePlaintext()
-            .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
-    io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder, createClientCensusStatsModule());
-    return builder.build();
+            (AbstractManagedChannelImplBuilder<?>) ManagedChannelBuilder.forAddress(HOST, port)
+                    .usePlaintext()
+                    .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+    builder.intercept(createCensusStatsClientInterceptor());
+    return builder;
   }
 
   @Override
