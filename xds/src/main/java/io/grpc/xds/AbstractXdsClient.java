@@ -35,7 +35,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.Collection;
 import java.util.Collections;
@@ -82,16 +81,10 @@ abstract class AbstractXdsClient extends XdsClient {
   private final InternalLogId logId;
   private final XdsLogger logger;
   private final ManagedChannel channel;
-  private final boolean useProtocolV3;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
-  // The node identifier to be included in xDS requests. Management server only requires the
-  // first request to carry the node identifier on a stream. It should be identical if present
-  // more than once.
-  // FIXME(chengyuanzhang): should immutable and invisible to child classes. Currently server side
-  //  has some protocol workaround usages.
-  protected Node node;
+  private final Bootstrapper.BootstrapInfo bootstrapInfo;
 
   // Last successfully applied version_info for each resource type. Starts with empty string.
   // A version_info is used to update management server with client's most recent knowledge of
@@ -109,12 +102,11 @@ abstract class AbstractXdsClient extends XdsClient {
   @Nullable
   private ScheduledHandle rpcRetryTimer;
 
-  AbstractXdsClient(ManagedChannel channel, boolean useProtocolV3, Node node,
+  AbstractXdsClient(ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo,
       ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     this.channel = checkNotNull(channel, "channel");
-    this.useProtocolV3 = useProtocolV3;
-    this.node = checkNotNull(node, "node");
+    this.bootstrapInfo = checkNotNull(bootstrapInfo, "bootstrapInfo");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
@@ -196,8 +188,8 @@ abstract class AbstractXdsClient extends XdsClient {
   }
 
   @Override
-  Node getNode() {
-    return node;
+  Bootstrapper.BootstrapInfo getBootstrapInfo() {
+    return bootstrapInfo;
   }
 
   @Override
@@ -308,7 +300,7 @@ abstract class AbstractXdsClient extends XdsClient {
   // Must be synchronized.
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
-    if (useProtocolV3) {
+    if (bootstrapInfo.getServers().get(0).isUseProtocolV3()) {
       adsStream = new AdsStreamV3();
     } else {
       adsStream = new AdsStreamV2();
@@ -619,7 +611,7 @@ abstract class AbstractXdsClient extends XdsClient {
       io.envoyproxy.envoy.api.v2.DiscoveryRequest.Builder builder =
           io.envoyproxy.envoy.api.v2.DiscoveryRequest.newBuilder()
               .setVersionInfo(versionInfo)
-              .setNode(node.toEnvoyProtoNodeV2())
+              .setNode(bootstrapInfo.getNode().toEnvoyProtoNodeV2())
               .addAllResourceNames(resources)
               .setTypeUrl(type.typeUrlV2())
               .setResponseNonce(nonce);
@@ -696,7 +688,7 @@ abstract class AbstractXdsClient extends XdsClient {
       DiscoveryRequest.Builder builder =
           DiscoveryRequest.newBuilder()
               .setVersionInfo(versionInfo)
-              .setNode(node.toEnvoyProtoNode())
+              .setNode(bootstrapInfo.getNode().toEnvoyProtoNode())
               .addAllResourceNames(resources)
               .setTypeUrl(type.typeUrl())
               .setResponseNonce(nonce);

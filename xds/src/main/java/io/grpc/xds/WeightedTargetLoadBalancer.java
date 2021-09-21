@@ -71,7 +71,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     for (String targetName : newTargets.keySet()) {
       WeightedPolicySelection weightedChildLbConfig = newTargets.get(targetName);
       if (!targets.containsKey(targetName)) {
-        ChildHelper childHelper = new ChildHelper();
+        ChildHelper childHelper = new ChildHelper(targetName);
         GracefulSwitchLoadBalancer childBalancer = new GracefulSwitchLoadBalancer(childHelper);
         childBalancer.switchTo(weightedChildLbConfig.policySelection.getProvider());
         childHelpers.put(targetName, childHelper);
@@ -125,6 +125,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     for (LoadBalancer childBalancer : childBalancers.values()) {
       childBalancer.shutdown();
     }
+    childBalancers.clear();
   }
 
   private void updateOverallBalancingState() {
@@ -179,8 +180,13 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   }
 
   private final class ChildHelper extends ForwardingLoadBalancerHelper {
+    String name;
     ConnectivityState currentState = CONNECTING;
     SubchannelPicker currentPicker = BUFFER_PICKER;
+
+    private ChildHelper(String name) {
+      this.name = name;
+    }
 
     @Override
     public void updateBalancingState(final ConnectivityState newState,
@@ -188,6 +194,9 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
+          if (!childBalancers.containsKey(name)) {
+            return;
+          }
           currentState = newState;
           currentPicker = newPicker;
           updateOverallBalancingState();

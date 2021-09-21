@@ -520,7 +520,7 @@ public class ClusterImplLoadBalancerTest {
       SslContextProviderSupplier supplier =
           eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
       if (enableSecurity) {
-        assertThat(supplier.getUpstreamTlsContext()).isEqualTo(upstreamTlsContext);
+        assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
       } else {
         assertThat(supplier).isNull();
       }
@@ -554,7 +554,7 @@ public class ClusterImplLoadBalancerTest {
       SslContextProviderSupplier supplier =
           eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
       if (enableSecurity) {
-        assertThat(supplier.getUpstreamTlsContext()).isEqualTo(upstreamTlsContext);
+        assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
       } else {
         assertThat(supplier).isNull();
       }

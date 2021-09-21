@@ -34,7 +34,6 @@ package io.grpc;
  * would only be used after {@code instanceof} checks (which must consider
  * {@code ChoiceChannelCredentials}!).
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
 public abstract class ChannelCredentials {
   /**
    * Returns the ChannelCredentials stripped of its CallCredentials. In the future,

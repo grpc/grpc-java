@@ -49,6 +49,7 @@ import io.envoyproxy.envoy.service.status.v3.ClientStatusRequest;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusResponse;
 import io.envoyproxy.envoy.service.status.v3.PerXdsConfig;
 import io.envoyproxy.envoy.type.matcher.v3.NodeMatcher;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
@@ -60,6 +61,7 @@ import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.XdsClient.ResourceMetadata;
 import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -74,14 +76,20 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link CsdsService}. */
 @RunWith(Enclosed.class)
 public class CsdsServiceTest {
+  private static final String SERVER_URI = "trafficdirector.googleapis.com";
   private static final String NODE_ID =
       "projects/42/networks/default/nodes/5c85b298-6f5b-4722-b74a-f7d1f0ccf5ad";
   private static final EnvoyProtoData.Node BOOTSTRAP_NODE =
       EnvoyProtoData.Node.newBuilder().setId(NODE_ID).build();
   private static final XdsClient XDS_CLIENT_NO_RESOURCES = new XdsClient() {
     @Override
-    EnvoyProtoData.Node getNode() {
-      return BOOTSTRAP_NODE;
+    Bootstrapper.BootstrapInfo getBootstrapInfo() {
+      return new Bootstrapper.BootstrapInfo(
+          Arrays.asList(
+             new Bootstrapper.ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), false)),
+          BOOTSTRAP_NODE,
+          null,
+          null);
     }
 
     @Override
@@ -686,8 +694,11 @@ public class CsdsServiceTest {
     public void getClientConfigForXdsClient_subscribedResourcesToPerXdsConfig() {
       ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(new XdsClient() {
         @Override
-        EnvoyProtoData.Node getNode() {
-          return BOOTSTRAP_NODE;
+        Bootstrapper.BootstrapInfo getBootstrapInfo() {
+          return new Bootstrapper.BootstrapInfo(Arrays.asList(
+                  new Bootstrapper.ServerInfo(
+                          SERVER_URI, InsecureChannelCredentials.create(), false)),
+                  BOOTSTRAP_NODE, null,null);
         }
 
         @Override

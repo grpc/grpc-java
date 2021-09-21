@@ -31,7 +31,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * Registry of {@link ServerProvider}s. The {@link #getDefaultRegistry default instance} loads
  * providers at runtime through the Java service provider mechanism.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7621")
+@Internal
 @ThreadSafe
 public final class ServerRegistry {
   private static final Logger logger = Logger.getLogger(ServerRegistry.class.getName());

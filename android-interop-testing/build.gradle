@@ -7,7 +7,7 @@ description = 'gRPC: Android Integration Testing'
 
 repositories {
     google()
-    jcenter()
+    mavenCentral()
 }
 
 android {
@@ -24,6 +24,10 @@ android {
                 srcDirs += "${projectDir}/../interop-testing/src/main/proto/"
             }
         }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
     compileSdkVersion 26
 

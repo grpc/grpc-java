@@ -27,7 +27,6 @@ import io.grpc.Status;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.Filter.NamedFilterConfig;
@@ -179,7 +178,7 @@ abstract class XdsClient {
     abstract ClusterType clusterType();
 
     // Endpoint-level load balancing policy.
-    abstract String lbPolicy();
+    abstract LbPolicy lbPolicy();
 
     // Only valid if lbPolicy is "ring_hash".
     abstract long minRingSize();
@@ -252,6 +251,10 @@ abstract class XdsClient {
       EDS, LOGICAL_DNS, AGGREGATE
     }
 
+    enum LbPolicy {
+      ROUND_ROBIN, RING_HASH
+    }
+
     // FIXME(chengyuanzhang): delete this after UpstreamTlsContext's toString() is fixed.
     @Override
     public final String toString() {
@@ -271,38 +274,37 @@ abstract class XdsClient {
 
     @AutoValue.Builder
     abstract static class Builder {
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder clusterName(String clusterName);
 
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder clusterType(ClusterType clusterType);
 
-      // Private do not use.
-      protected abstract Builder lbPolicy(String lbPolicy);
+      abstract Builder lbPolicy(LbPolicy lbPolicy);
 
-      Builder lbPolicy(String lbPolicy, long minRingSize, long maxRingSize) {
+      Builder lbPolicy(LbPolicy lbPolicy, long minRingSize, long maxRingSize) {
         return this.lbPolicy(lbPolicy).minRingSize(minRingSize).maxRingSize(maxRingSize);
       }
 
-      // Private do not use.
+      // Private, use lbPolicy(LbPolicy, long, long).
       protected abstract Builder minRingSize(long minRingSize);
 
-      // Private do not use.
+      // Private, use lbPolicy(.LbPolicy, long, long)
       protected abstract Builder maxRingSize(long maxRingSize);
 
-      // Private do not use.
+      // Private, use CdsUpdate.forEds() instead.
       protected abstract Builder edsServiceName(String edsServiceName);
 
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder lrsServerName(String lrsServerName);
 
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder maxConcurrentRequests(Long maxConcurrentRequests);
 
-      // Private do not use.
+      // Private, use one of the static factory methods instead.
       protected abstract Builder upstreamTlsContext(UpstreamTlsContext upstreamTlsContext);
 
-      // Private do not use.
+      // Private, use CdsUpdate.forAggregate() instead.
       protected abstract Builder prioritizedClusterNames(List<String> prioritizedClusterNames);
 
       abstract CdsUpdate build();
@@ -529,9 +531,9 @@ abstract class XdsClient {
   }
 
   /**
-   * Returns gRPC representation of {@link io.envoyproxy.envoy.config.core.v3.Node}.
+   * Returns the config used to bootstrap this XdsClient {@link Bootstrapper.BootstrapInfo}.
    */
-  Node getNode() {
+  Bootstrapper.BootstrapInfo getBootstrapInfo() {
     throw new UnsupportedOperationException();
   }
 

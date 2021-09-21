@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.CompositeChannelCredentials;
-import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import io.grpc.alts.internal.AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory;
 import io.grpc.auth.MoreCallCredentials;
@@ -37,7 +36,6 @@ import javax.net.ssl.SSLException;
  * Credentials appropriate to contact Google services. This class sets up a secure channel using
  * ALTS if applicable and uses TLS as fallback.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/7479")
 public final class GoogleDefaultChannelCredentials {
   private GoogleDefaultChannelCredentials() {}
 
@@ -52,7 +50,6 @@ public final class GoogleDefaultChannelCredentials {
     try {
       callCredentials = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
     } catch (IOException e) {
-      // TODO(ejona): Should this just throw?
       callCredentials = new FailingCallCredentials(
           Status.UNAUTHENTICATED
               .withDescription("Failed to get Google default credentials")

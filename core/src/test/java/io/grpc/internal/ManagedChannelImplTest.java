@@ -139,6 +139,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Assert;
@@ -277,6 +280,7 @@ public class ManagedChannelImplTest {
   private boolean requestConnection = true;
   private BlockingQueue<MockClientTransportInfo> transports;
   private boolean panicExpected;
+  private final List<LogRecord> logs = new ArrayList<>();
   @Captor
   private ArgumentCaptor<ResolvedAddresses> resolvedAddressCaptor;
 
@@ -328,6 +332,22 @@ public class ManagedChannelImplTest {
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
     when(balancerRpcExecutorPool.getObject())
         .thenReturn(balancerRpcExecutor.getScheduledExecutorService());
+    Handler handler = new Handler() {
+      @Override
+      public void publish(LogRecord record) {
+        logs.add(record);
+      }
+
+      @Override
+      public void flush() {
+      }
+
+      @Override
+      public void close() throws SecurityException {
+      }
+    };
+    ManagedChannelImpl.logger.addHandler(handler);
+    ManagedChannelImpl.logger.setLevel(Level.ALL);
 
     channelBuilder = new ManagedChannelImplBuilder(TARGET,
         new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
@@ -1540,6 +1560,103 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void subchannelConnectionBroken_noLbRefreshingResolver_logWarningAndTriggeRefresh() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+    FakeNameResolverFactory.FakeNameResolver resolver =
+        Iterables.getOnlyElement(nameResolverFactory.resolvers);
+    assertThat(resolver.refreshCalled).isEqualTo(0);
+
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    InternalSubchannel internalSubchannel =
+        (InternalSubchannel) subchannel.getInternalSubchannel();
+    internalSubchannel.obtainActiveTransport();
+    MockClientTransportInfo transportInfo = transports.poll();
+
+    // Break subchannel connection
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE.withDescription("unreachable"));
+    LogRecord log = Iterables.getOnlyElement(logs);
+    assertThat(log.getLevel()).isEqualTo(Level.WARNING);
+    assertThat(log.getMessage()).isEqualTo(
+        "LoadBalancer should call Helper.refreshNameResolution() to refresh name resolution if "
+            + "subchannel state becomes TRANSIENT_FAILURE or IDLE. This will no longer happen "
+            + "automatically in the future releases");
+    assertThat(resolver.refreshCalled).isEqualTo(1);
+  }
+
+  @Test
+  public void subchannelConnectionBroken_ResolverRefreshedByLb() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+    FakeNameResolverFactory.FakeNameResolver resolver =
+        Iterables.getOnlyElement(nameResolverFactory.resolvers);
+    assertThat(resolver.refreshCalled).isEqualTo(0);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+    verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
+    helper = helperCaptor.getValue();
+
+    SubchannelStateListener listener = new SubchannelStateListener() {
+      @Override
+      public void onSubchannelState(ConnectivityStateInfo newState) {
+        // Normal LoadBalancer should refresh name resolution when some subchannel enters
+        // TRANSIENT_FAILURE or IDLE
+        if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
+          helper.refreshNameResolution();
+        }
+      }
+    };
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, listener);
+    InternalSubchannel internalSubchannel =
+        (InternalSubchannel) subchannel.getInternalSubchannel();
+    internalSubchannel.obtainActiveTransport();
+    MockClientTransportInfo transportInfo = transports.poll();
+
+    // Break subchannel connection and simulate load balancer refreshing name resolution
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE.withDescription("unreachable"));
+    assertThat(logs).isEmpty();
+    assertThat(resolver.refreshCalled).isEqualTo(1);
+  }
+
+  @Test
+  public void subchannelConnectionBroken_ignoreRefreshNameResolutionCheck_noRefresh() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+    FakeNameResolverFactory.FakeNameResolver resolver =
+        Iterables.getOnlyElement(nameResolverFactory.resolvers);
+    assertThat(resolver.refreshCalled).isEqualTo(0);
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
+    verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
+    helper = helperCaptor.getValue();
+    helper.ignoreRefreshNameResolutionCheck();
+
+    Subchannel subchannel =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    InternalSubchannel internalSubchannel =
+        (InternalSubchannel) subchannel.getInternalSubchannel();
+    internalSubchannel.obtainActiveTransport();
+    MockClientTransportInfo transportInfo = transports.poll();
+
+    // Break subchannel connection
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE.withDescription("unreachable"));
+    assertThat(logs).isEmpty();
+    assertThat(resolver.refreshCalled).isEqualTo(0);
+  }
+
+  @Test
   public void subchannelStringableBeforeStart() {
     createChannel();
     Subchannel subchannel = createUnstartedSubchannel(helper, addressGroup, Attributes.EMPTY);
@@ -2096,42 +2213,25 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void refreshNameResolution_whenSubchannelConnectionFailed_notIdle() {
-    subtestNameResolutionRefreshWhenConnectionFailed(false, false);
-  }
-
-  @Test
   public void refreshNameResolution_whenOobChannelConnectionFailed_notIdle() {
-    subtestNameResolutionRefreshWhenConnectionFailed(true, false);
-  }
-
-  @Test
-  public void notRefreshNameResolution_whenSubchannelConnectionFailed_idle() {
-    subtestNameResolutionRefreshWhenConnectionFailed(false, true);
+    subtestNameResolutionRefreshWhenConnectionFailed(false);
   }
 
   @Test
   public void notRefreshNameResolution_whenOobChannelConnectionFailed_idle() {
-    subtestNameResolutionRefreshWhenConnectionFailed(true, true);
+    subtestNameResolutionRefreshWhenConnectionFailed(true);
   }
 
-  private void subtestNameResolutionRefreshWhenConnectionFailed(
-      boolean isOobChannel, boolean isIdle) {
+  private void subtestNameResolutionRefreshWhenConnectionFailed(boolean isIdle) {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
-    if (isOobChannel) {
-      OobChannel oobChannel = (OobChannel) helper.createOobChannel(
-          Collections.singletonList(addressGroup), "oobAuthority");
-      oobChannel.getSubchannel().requestConnection();
-    } else {
-      Subchannel subchannel =
-          createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
-      requestConnectionSafely(helper, subchannel);
-    }
+    OobChannel oobChannel = (OobChannel) helper.createOobChannel(
+        Collections.singletonList(addressGroup), "oobAuthority");
+    oobChannel.getSubchannel().requestConnection();
 
     MockClientTransportInfo transportInfo = transports.poll();
     assertNotNull(transportInfo);

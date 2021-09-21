@@ -111,7 +111,8 @@ Tagging the Release
 
 1. Verify there are no open issues in the release milestone. Open issues should
    either be deferred or resolved and the fix backported.
-2. For vMajor.Minor.x branch, change `README.md` to refer to the next release
+2. Ensure that Google-internal steps completed at go/grpc/java/releasing#before-tagging-a-release.
+3. For vMajor.Minor.x branch, change `README.md` to refer to the next release
    version. _Also_ update the version numbers for protoc if the protobuf library
    version was updated since the last release.
 
@@ -126,7 +127,7 @@ Tagging the Release
    $ ${EDITOR:-nano -w} examples/example-xds/README.md
    $ git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
-3. Change root build files to remove "-SNAPSHOT" for the next release version
+4. Change root build files to remove "-SNAPSHOT" for the next release version
    (e.g. `0.7.0`). Commit the result and make a tag:
 
    ```bash
@@ -137,7 +138,7 @@ Tagging the Release
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$PATCH"
    $ git tag -a v$MAJOR.$MINOR.$PATCH -m "Version $MAJOR.$MINOR.$PATCH"
    ```
-4. Change root build files to the next snapshot version (e.g. `0.7.1-SNAPSHOT`).
+5. Change root build files to the next snapshot version (e.g. `0.7.1-SNAPSHOT`).
    Commit the result:
 
    ```bash
@@ -149,7 +150,7 @@ Tagging the Release
    $ ./gradlew build
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT"
    ```
-5. Go through PR review and push the release tag and updated release branch to
+6. Go through PR review and push the release tag and updated release branch to
    GitHub:
 
    ```bash
@@ -158,7 +159,7 @@ Tagging the Release
    $ git push upstream v$MAJOR.$MINOR.x
    $ git push upstream v$MAJOR.$MINOR.$PATCH
    ```
-6. Close the release milestone.
+7. Close the release milestone.
 
 Build Artifacts
 ---------------
@@ -218,9 +219,6 @@ Finally, document and publicize the release.
 2. Post a release announcement to [grpc-io](https://groups.google.com/forum/#!forum/grpc-io)
    (`grpc-io@googlegroups.com`). The title should be something that clearly identifies
    the release (e.g.`GRPC-Java <tag> Released`).
-    1. Check if JCenter has picked up the new release (https://jcenter.bintray.com/io/grpc/)
-       and include its availability in the release announcement email. JCenter should mirror
-       everything on Maven Central, but users have reported delays.
 
 Update Hosted Javadoc
 ---------------------

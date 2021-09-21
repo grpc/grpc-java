@@ -569,20 +569,28 @@ class NettyClientHandler extends AbstractNettyHandler {
       }
       return;
     }
-    if (connection().goAwayReceived()
-        && streamId > connection().local().lastStreamKnownByPeer()) {
-      // This should only be reachable during onGoAwayReceived, as otherwise
-      // getShutdownThrowable() != null
-      command.stream().setNonExistent();
+    if (connection().goAwayReceived()) {
       Status s = abruptGoAwayStatus;
+      int maxActiveStreams = connection().local().maxActiveStreams();
+      int lastStreamId = connection().local().lastStreamKnownByPeer();
       if (s == null) {
-        // Should be impossible, but handle psuedo-gracefully
+        // Should be impossible, but handle pseudo-gracefully
         s = Status.INTERNAL.withDescription(
             "Failed due to abrupt GOAWAY, but can't find GOAWAY details");
+      } else if (streamId > lastStreamId) {
+        s = s.augmentDescription(
+            "stream id: " + streamId + ", GOAWAY Last-Stream-ID:" + lastStreamId);
+      } else if (connection().local().numActiveStreams() == maxActiveStreams) {
+        s = s.augmentDescription("At MAX_CONCURRENT_STREAMS limit. limit: " + maxActiveStreams);
       }
-      command.stream().transportReportStatus(s, RpcProgress.REFUSED, true, new Metadata());
-      promise.setFailure(s.asRuntimeException());
-      return;
+      if (streamId > lastStreamId || connection().local().numActiveStreams() == maxActiveStreams) {
+        // This should only be reachable during onGoAwayReceived, as otherwise
+        // getShutdownThrowable() != null
+        command.stream().setNonExistent();
+        command.stream().transportReportStatus(s, RpcProgress.REFUSED, true, new Metadata());
+        promise.setFailure(s.asRuntimeException());
+        return;
+      }
     }
 
     NettyClientStream.TransportState stream = command.stream();

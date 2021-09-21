@@ -32,9 +32,11 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
+import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
 import io.grpc.xds.XdsClient.CdsUpdate;
 import io.grpc.xds.XdsClient.CdsUpdate.ClusterType;
+import io.grpc.xds.XdsClient.CdsUpdate.LbPolicy;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayDeque;
@@ -181,15 +183,16 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
         return;
       }
-      String endpointPickingPolicy = root.result.lbPolicy();
-      LoadBalancerProvider localityPickingLbProvider =
-          lbRegistry.getProvider(XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME);  // hardcoded
-      LoadBalancerProvider endpointPickingLbProvider =
-          lbRegistry.getProvider(endpointPickingPolicy);
+      LoadBalancerProvider lbProvider = null;
+      Object lbConfig = null;
+      if (root.result.lbPolicy() == LbPolicy.RING_HASH) {
+        lbProvider = lbRegistry.getProvider("ring_hash");
+        lbConfig = new RingHashConfig(root.result.minRingSize(), root.result.maxRingSize());
+      } else {
+        lbProvider = lbRegistry.getProvider("round_robin");
+      }
       ClusterResolverConfig config = new ClusterResolverConfig(
-          Collections.unmodifiableList(instances),
-          new PolicySelection(localityPickingLbProvider, null /* by cluster_resolver LB policy */),
-          new PolicySelection(endpointPickingLbProvider, null));
+          Collections.unmodifiableList(instances), new PolicySelection(lbProvider, lbConfig));
       if (childLb == null) {
         childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
       }

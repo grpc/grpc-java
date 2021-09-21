@@ -333,10 +333,9 @@ public class XdsSdsClientServerTest {
   private void buildServerWithTlsContext(
       DownstreamTlsContext downstreamTlsContext, ServerCredentials fallbackCredentials)
       throws IOException {
-    XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        new XdsClientWrapperForServerSds(port);
-    xdsClientWrapperForServerSds.start(mockXdsClient, "grpc/server");
+        createXdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds.start();
     buildServerWithFallbackServerCredentials(
         xdsClientWrapperForServerSds, fallbackCredentials, downstreamTlsContext);
   }
@@ -352,10 +351,9 @@ public class XdsSdsClientServerTest {
 
   /** Creates XdsClientWrapperForServerSds. */
   private static XdsClientWrapperForServerSds createXdsClientWrapperForServerSds(int port) {
-    XdsClient mockXdsClient = mock(XdsClient.class);
     XdsClientWrapperForServerSds xdsClientWrapperForServerSds =
-        new XdsClientWrapperForServerSds(port);
-    xdsClientWrapperForServerSds.start(mockXdsClient, "grpc/server");
+        XdsServerTestHelper.createXdsClientWrapperForServerSds(port);
+    xdsClientWrapperForServerSds.start();
     return xdsClientWrapperForServerSds;
   }
 

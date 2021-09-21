@@ -22,7 +22,6 @@ import static io.grpc.xds.EnvoyServerProtoData.TRANSPORT_SOCKET_NAME_TLS;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.CaseFormat;
 import com.google.common.base.Joiner;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
@@ -58,7 +57,6 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
-import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.Filter.ConfigOrError;
 import io.grpc.xds.Filter.FilterConfig;
@@ -134,13 +132,14 @@ final class ClientXdsClient extends AbstractXdsClient {
   private boolean reportingLoad;
 
   ClientXdsClient(
-      ManagedChannel channel, boolean useProtocolV3, Node node,
+      ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo,
       ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier, TimeProvider timeProvider) {
-    super(channel, useProtocolV3, node, timeService, backoffPolicyProvider, stopwatchSupplier);
+    super(channel, bootstrapInfo, timeService, backoffPolicyProvider, stopwatchSupplier);
     loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
     this.timeProvider = timeProvider;
-    lrsClient = new LoadReportClient(loadStatsManager, channel, useProtocolV3, node,
+    lrsClient = new LoadReportClient(loadStatsManager, channel,
+        bootstrapInfo.getServers().get(0).isUseProtocolV3(), bootstrapInfo.getNode(),
         getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
   }
 
@@ -832,8 +831,6 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
 
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
-    String lbPolicy = CaseFormat.UPPER_UNDERSCORE.to(
-        CaseFormat.LOWER_UNDERSCORE, cluster.getLbPolicy().name());
 
     if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
       RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
@@ -841,10 +838,10 @@ final class ClientXdsClient extends AbstractXdsClient {
         throw new ResourceInvalidException(
             "Unsupported ring hash function: " + lbConfig.getHashFunction());
       }
-      updateBuilder.lbPolicy(lbPolicy, lbConfig.getMinimumRingSize().getValue(),
-          lbConfig.getMaximumRingSize().getValue());
+      updateBuilder.lbPolicy(CdsUpdate.LbPolicy.RING_HASH,
+          lbConfig.getMinimumRingSize().getValue(), lbConfig.getMaximumRingSize().getValue());
     } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
-      updateBuilder.lbPolicy(lbPolicy);
+      updateBuilder.lbPolicy(CdsUpdate.LbPolicy.ROUND_ROBIN);
     } else {
       throw new ResourceInvalidException("Unsupported lb policy: " + cluster.getLbPolicy());
     }

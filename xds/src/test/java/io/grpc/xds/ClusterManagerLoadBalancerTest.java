@@ -21,10 +21,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
@@ -98,6 +100,7 @@ public class ClusterManagerLoadBalancerTest {
     lbConfigInventory.put("childB", new Object());
     lbConfigInventory.put("childC", null);
     clusterManagerLoadBalancer = new ClusterManagerLoadBalancer(helper);
+    clearInvocations(helper);
   }
 
   @After
@@ -185,11 +188,26 @@ public class ClusterManagerLoadBalancerTest {
     verify(helper, never()).updateBalancingState(
         eq(ConnectivityState.READY), any(SubchannelPicker.class));
 
-    // reactivate policy_a
+    // Reactivate policy_a, balancing state update reflects the latest connectivity state and
+    // picker.
     deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
     verify(helper).updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
     assertThat(pickSubchannel(pickerCaptor.getValue(), "childA").getSubchannel())
         .isEqualTo(subchannel);
+  }
+
+  @Test
+  public void raceBetweenShutdownAndChildLbBalancingStateUpdate() {
+    deliverResolvedAddresses(ImmutableMap.of("childA", "policy_a", "childB", "policy_b"));
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
+    FakeLoadBalancer childBalancer = childBalancers.iterator().next();
+
+    // LB shutdown and subchannel state change can happen simultaneously. If shutdown runs first,
+    // any further balancing state update should be ignored.
+    clusterManagerLoadBalancer.shutdown();
+    childBalancer.deliverSubchannelState(mock(Subchannel.class), ConnectivityState.READY);
+    verifyNoMoreInteractions(helper);
   }
 
   @Test
