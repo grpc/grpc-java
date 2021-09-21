@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.BinaryLog;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
@@ -55,6 +56,7 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
 
   private static final Logger log = Logger.getLogger(ServerImplBuilder.class.getName());
 
+  @DoNotCall("ClientTransportServersBuilder is required, use a constructor")
   public static ServerBuilder<?> forPort(int port) {
     throw new UnsupportedOperationException(
         "ClientTransportServersBuilder is required, use a constructor");

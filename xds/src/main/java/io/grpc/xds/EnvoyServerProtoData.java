@@ -28,6 +28,7 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
+import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -227,6 +228,8 @@ public final class EnvoyServerProtoData {
     private final List<CidrRange> sourcePrefixRanges;
     private final ConnectionSourceType sourceType;
     private final List<Integer> sourcePorts;
+    private final List<String> serverNames;
+    private final String transportProtocol;
 
     @VisibleForTesting
     FilterChainMatch(
@@ -235,13 +238,17 @@ public final class EnvoyServerProtoData {
         List<String> applicationProtocols,
         List<CidrRange> sourcePrefixRanges,
         ConnectionSourceType sourceType,
-        List<Integer> sourcePorts) {
+        List<Integer> sourcePorts,
+        List<String> serverNames,
+        String transportProtocol) {
       this.destinationPort = destinationPort;
       this.prefixRanges = Collections.unmodifiableList(prefixRanges);
       this.applicationProtocols = Collections.unmodifiableList(applicationProtocols);
       this.sourcePrefixRanges = sourcePrefixRanges;
       this.sourceType = sourceType;
       this.sourcePorts = sourcePorts;
+      this.serverNames = Collections.unmodifiableList(serverNames);
+      this.transportProtocol = transportProtocol;
     }
 
     static FilterChainMatch fromEnvoyProtoFilterChainMatch(
@@ -273,13 +280,19 @@ public final class EnvoyServerProtoData {
         default:
           throw new InvalidProtocolBufferException("Unknown source-type:" + proto.getSourceType());
       }
+      List<String> serverNames = new ArrayList<>();
+      for (String serverName : proto.getServerNamesList()) {
+        serverNames.add(serverName);
+      }
       return new FilterChainMatch(
           proto.getDestinationPort().getValue(),
           prefixRanges,
           applicationProtocols,
           sourcePrefixRanges,
           sourceType,
-          proto.getSourcePortsList());
+          proto.getSourcePortsList(),
+          serverNames,
+          proto.getTransportProtocol());
     }
 
     public int getDestinationPort() {
@@ -306,6 +319,14 @@ public final class EnvoyServerProtoData {
       return sourcePorts;
     }
 
+    public List<String> getServerNames() {
+      return serverNames;
+    }
+
+    public String getTransportProtocol() {
+      return transportProtocol;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) {
@@ -320,7 +341,9 @@ public final class EnvoyServerProtoData {
           && Objects.equals(applicationProtocols, that.applicationProtocols)
           && Objects.equals(sourcePrefixRanges, that.sourcePrefixRanges)
           && sourceType == that.sourceType
-          && Objects.equals(sourcePorts, that.sourcePorts);
+          && Objects.equals(sourcePorts, that.sourcePorts)
+          && Objects.equals(serverNames, that.serverNames)
+          && Objects.equals(transportProtocol, that.transportProtocol);
     }
 
     @Override
@@ -331,7 +354,9 @@ public final class EnvoyServerProtoData {
           applicationProtocols,
           sourcePrefixRanges,
           sourceType,
-          sourcePorts);
+          sourcePorts,
+          serverNames,
+          transportProtocol);
     }
 
     @Override
@@ -343,6 +368,8 @@ public final class EnvoyServerProtoData {
               .add("sourcePrefixRanges", sourcePrefixRanges)
               .add("sourceType", sourceType)
               .add("sourcePorts", sourcePorts)
+              .add("serverNames", serverNames)
+              .add("transportProtocol", transportProtocol)
               .toString();
     }
   }
@@ -354,17 +381,21 @@ public final class EnvoyServerProtoData {
     // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.
     private final FilterChainMatch filterChainMatch;
     @Nullable
-    private final DownstreamTlsContext downstreamTlsContext;
+    private final SslContextProviderSupplier sslContextProviderSupplier;
 
     @VisibleForTesting
     FilterChain(
-        FilterChainMatch filterChainMatch, @Nullable DownstreamTlsContext downstreamTlsContext) {
+        FilterChainMatch filterChainMatch, @Nullable DownstreamTlsContext downstreamTlsContext,
+        TlsContextManager tlsContextManager) {
+      SslContextProviderSupplier sslContextProviderSupplier1 = downstreamTlsContext == null ? null
+          : new SslContextProviderSupplier(downstreamTlsContext, tlsContextManager);
       this.filterChainMatch = filterChainMatch;
-      this.downstreamTlsContext = downstreamTlsContext;
+      this.sslContextProviderSupplier = sslContextProviderSupplier1;
     }
 
     static FilterChain fromEnvoyProtoFilterChain(
-        io.envoyproxy.envoy.config.listener.v3.FilterChain proto, boolean isDefaultFilterChain)
+        io.envoyproxy.envoy.config.listener.v3.FilterChain proto,
+        TlsContextManager tlsContextManager, boolean isDefaultFilterChain)
         throws InvalidProtocolBufferException {
       if (!isDefaultFilterChain && proto.getFiltersList().isEmpty()) {
         throw new IllegalArgumentException(
@@ -380,7 +411,8 @@ public final class EnvoyServerProtoData {
       }
       return new FilterChain(
           FilterChainMatch.fromEnvoyProtoFilterChainMatch(proto.getFilterChainMatch()),
-          getTlsContextFromFilterChain(proto)
+          getTlsContextFromFilterChain(proto),
+          tlsContextManager
       );
     }
 
@@ -456,9 +488,8 @@ public final class EnvoyServerProtoData {
       return filterChainMatch;
     }
 
-    @Nullable
-    public DownstreamTlsContext getDownstreamTlsContext() {
-      return downstreamTlsContext;
+    public SslContextProviderSupplier getSslContextProviderSupplier() {
+      return sslContextProviderSupplier;
     }
 
     @Override
@@ -471,19 +502,19 @@ public final class EnvoyServerProtoData {
       }
       FilterChain that = (FilterChain) o;
       return java.util.Objects.equals(filterChainMatch, that.filterChainMatch)
-          && java.util.Objects.equals(downstreamTlsContext, that.downstreamTlsContext);
+          && java.util.Objects.equals(sslContextProviderSupplier, that.sslContextProviderSupplier);
     }
 
     @Override
     public int hashCode() {
-      return java.util.Objects.hash(filterChainMatch, downstreamTlsContext);
+      return java.util.Objects.hash(filterChainMatch, sslContextProviderSupplier);
     }
 
     @Override
     public String toString() {
       return "FilterChain{"
           + "filterChainMatch=" + filterChainMatch
-          + ", downstreamTlsContext=" + downstreamTlsContext
+          + ", sslContextProviderSupplier=" + sslContextProviderSupplier
           + '}';
     }
   }
@@ -524,7 +555,8 @@ public final class EnvoyServerProtoData {
       return null;
     }
 
-    static Listener fromEnvoyProtoListener(io.envoyproxy.envoy.config.listener.v3.Listener proto)
+    static Listener fromEnvoyProtoListener(io.envoyproxy.envoy.config.listener.v3.Listener proto,
+        TlsContextManager tlsContextManager)
         throws InvalidProtocolBufferException {
       if (!proto.getTrafficDirection().equals(TrafficDirection.INBOUND)) {
         throw new IllegalArgumentException("Listener " + proto.getName() + " is not INBOUND");
@@ -537,42 +569,26 @@ public final class EnvoyServerProtoData {
         throw new IllegalArgumentException(
             "Listener " + proto.getName() + " cannot have use_original_dst set to true");
       }
-      List<FilterChain> filterChains = validateAndSelectFilterChains(proto.getFilterChainsList());
+      List<FilterChain> filterChains = validateAndSelectFilterChains(proto.getFilterChainsList(),
+          tlsContextManager);
       return new Listener(
           proto.getName(),
           convertEnvoyAddressToString(proto.getAddress()),
-          filterChains, FilterChain.fromEnvoyProtoFilterChain(proto.getDefaultFilterChain(), true));
+          filterChains, FilterChain
+          .fromEnvoyProtoFilterChain(proto.getDefaultFilterChain(), tlsContextManager, true));
     }
 
     private static List<FilterChain> validateAndSelectFilterChains(
-        List<io.envoyproxy.envoy.config.listener.v3.FilterChain> inputFilterChains)
+        List<io.envoyproxy.envoy.config.listener.v3.FilterChain> inputFilterChains,
+        TlsContextManager tlsContextManager)
         throws InvalidProtocolBufferException {
       List<FilterChain> filterChains = new ArrayList<>(inputFilterChains.size());
       for (io.envoyproxy.envoy.config.listener.v3.FilterChain filterChain :
           inputFilterChains) {
-        if (isAcceptable(filterChain.getFilterChainMatch())) {
-          filterChains.add(FilterChain.fromEnvoyProtoFilterChain(filterChain, false));
-        }
+        filterChains
+            .add(FilterChain.fromEnvoyProtoFilterChain(filterChain, tlsContextManager, false));
       }
       return filterChains;
-    }
-
-    // check if a filter is acceptable for gRPC server side processing
-    private static boolean isAcceptable(
-        io.envoyproxy.envoy.config.listener.v3.FilterChainMatch filterChainMatch) {
-      // reject if filer-chain-match
-      // - has server_name
-      // - transport protocol is other than "raw_buffer"
-      // - application_protocols is non-empty
-      if (!filterChainMatch.getServerNamesList().isEmpty()) {
-        return false;
-      }
-      String transportProtocol = filterChainMatch.getTransportProtocol();
-      if (!transportProtocol.isEmpty() && !"raw_buffer".equals(transportProtocol)) {
-        return false;
-      }
-      List<String> appProtocols = filterChainMatch.getApplicationProtocolsList();
-      return appProtocols.isEmpty();
     }
 
     public String getName() {

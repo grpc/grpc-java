@@ -23,11 +23,16 @@ import static io.grpc.xds.internal.sds.CommonTlsContextTestsUtil.CLIENT_PEM_FILE
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.xds.EnvoyServerProtoData;
+import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
 import java.util.concurrent.Executor;
 import org.junit.Assert;
@@ -64,16 +69,20 @@ public class SslContextProviderSupplierTest {
     doReturn(mockSslContextProvider)
             .when(mockTlsContextManager)
             .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
+    supplier = new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager);
+  }
+
+  private void callUpdateSslContext() {
     mockCallback = mock(SslContextProvider.Callback.class);
     Executor mockExecutor = mock(Executor.class);
     doReturn(mockExecutor).when(mockCallback).getExecutor();
-    supplier = new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager);
     supplier.updateSslContext(mockCallback);
   }
 
   @Test
   public void get_updateSecret() {
     prepareSupplier();
+    callUpdateSslContext();
     verify(mockTlsContextManager, times(2))
         .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
     verify(mockTlsContextManager, times(0))
@@ -96,6 +105,7 @@ public class SslContextProviderSupplierTest {
   @Test
   public void get_onException() {
     prepareSupplier();
+    callUpdateSslContext();
     ArgumentCaptor<SslContextProvider.Callback> callbackCaptor = ArgumentCaptor.forClass(null);
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
@@ -108,15 +118,47 @@ public class SslContextProviderSupplierTest {
   @Test
   public void testClose() {
     prepareSupplier();
+    callUpdateSslContext();
     supplier.close();
     verify(mockTlsContextManager, times(1))
-            .releaseClientSslContextProvider(eq(mockSslContextProvider));
-    SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
-    try {
-      supplier.updateSslContext(mockCallback);
-      Assert.fail("no exception thrown");
-    } catch (IllegalStateException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Supplier is shutdown!");
-    }
+        .releaseClientSslContextProvider(eq(mockSslContextProvider));
+    SslContextProvider.Callback mockCallback = spy(
+        new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
+          @Override
+          public void updateSecret(SslContext sslContext) {
+            Assert.fail("unexpected call");
+          }
+
+          @Override
+          protected void onException(Throwable argument) {
+            assertThat(argument).isInstanceOf(IllegalStateException.class);
+            assertThat(argument).hasMessageThat().contains("Supplier is shutdown!");
+          }
+        });
+    supplier.updateSslContext(mockCallback);
+  }
+
+  @Test
+  public void testClose_nullSslContextProvider() {
+    prepareSupplier();
+    doThrow(new NullPointerException()).when(mockTlsContextManager)
+        .releaseClientSslContextProvider(null);
+    supplier.close();
+    verify(mockTlsContextManager, never())
+        .releaseClientSslContextProvider(eq(mockSslContextProvider));
+    SslContextProvider.Callback mockCallback = spy(
+        new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
+          @Override
+          public void updateSecret(SslContext sslContext) {
+            Assert.fail("unexpected call");
+          }
+
+          @Override
+          protected void onException(Throwable argument) {
+            assertThat(argument).isInstanceOf(IllegalStateException.class);
+            assertThat(argument).hasMessageThat().contains("Supplier is shutdown!");
+          }
+        });
+    supplier.updateSslContext(mockCallback);
   }
 }

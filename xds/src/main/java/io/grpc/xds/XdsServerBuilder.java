@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
@@ -69,6 +70,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   /**
    * Unsupported call. Users should only use {@link #forPort(int, ServerCredentials)}.
    */
+  @DoNotCall("Unsupported. Use forPort(int, ServerCredentials) instead")
   public static ServerBuilder<?> forPort(int port) {
     throw new UnsupportedOperationException(
         "Unsupported call - use forPort(int, ServerCredentials)");

@@ -55,6 +55,8 @@ import io.grpc.ChannelLogger;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.Context;
+import io.grpc.Context.CancellableContext;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -229,6 +231,7 @@ public class GrpclbLoadBalancerTest {
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     balancer = new GrpclbLoadBalancer(
         helper,
+        Context.ROOT,
         subchannelPool,
         fakeClock.getTimeProvider(),
         fakeClock.getStopwatchSupplier().get(),
@@ -1449,8 +1452,11 @@ public class GrpclbLoadBalancerTest {
   public void grpclbFallback_noBalancerAddress() {
     InOrder inOrder = inOrder(helper, subchannelPool);
 
-    // Create just backend addresses
-    List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
+    // Create 5 distinct backends
+    List<EquivalentAddressGroup> backends = createResolvedBackendAddresses(5);
+
+    // Name resolver gives the first two backend addresses
+    List<EquivalentAddressGroup> backendList = backends.subList(0, 2);
     deliverResolvedAddresses(backendList, Collections.<EquivalentAddressGroup>emptyList());
 
     assertThat(logs).containsAtLeast(
@@ -1469,6 +1475,28 @@ public class GrpclbLoadBalancerTest {
     assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
     verify(helper, never())
         .createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>anyList(), anyString());
+    logs.clear();
+
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // Name resolver sends new resolution results with new backend addr but no balancer addr
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // Name resolver then gives the last three backends
+    backendList = backends.subList(2, 5);
+    deliverResolvedAddresses(backendList, Collections.<EquivalentAddressGroup>emptyList());
+
+    assertThat(logs).containsAtLeast(
+        "INFO: [grpclb-<api.google.com>] Using fallback backends",
+        "INFO: [grpclb-<api.google.com>] "
+            + "Using RR list=[[[FakeSocketAddress-fake-address-2]/{}], "
+            + "[[FakeSocketAddress-fake-address-3]/{}], "
+            + "[[FakeSocketAddress-fake-address-4]/{}]], drop=[null, null, null]",
+        "INFO: [grpclb-<api.google.com>] "
+            + "Update balancing state to CONNECTING: picks=[BUFFER_ENTRY], "
+            + "drops=[null, null, null]")
+        .inOrder();
+
+    // Shift to use updated backends
+    fallbackTestVerifyUseOfFallbackBackendLists(inOrder, backendList);
     logs.clear();
 
     ///////////////////////////////////////////////////////////////////////////////////////
@@ -2681,6 +2709,39 @@ public class GrpclbLoadBalancerTest {
         new BackendEntry(subchannel3, getLoadRecorder(), "token1001"),
         new BackendEntry(subchannel4, getLoadRecorder(), "token1002"))
         .inOrder();
+  }
+
+  @Test
+  public void useIndependentRpcContext() {
+    // Simulates making RPCs within the context of an inbound RPC.
+    CancellableContext cancellableContext = Context.current().withCancellation();
+    Context prevContext = cancellableContext.attach();
+    try {
+      List<EquivalentAddressGroup> backendList = createResolvedBackendAddresses(2);
+      List<EquivalentAddressGroup> grpclbBalancerList = createResolvedBalancerAddresses(2);
+      deliverResolvedAddresses(backendList, grpclbBalancerList);
+
+      verify(helper).createOobChannel(eq(xattr(grpclbBalancerList)),
+          eq(lbAuthority(0) + NO_USE_AUTHORITY_SUFFIX));
+      verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+      StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+      assertEquals(1, lbRequestObservers.size());
+      StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+      verify(lbRequestObserver).onNext(
+          eq(LoadBalanceRequest.newBuilder()
+              .setInitialRequest(
+                  InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+              .build()));
+      lbResponseObserver.onNext(buildInitialResponse());
+
+      // The inbound RPC finishes and closes its context. The outbound RPC's control plane RPC
+      // should not be impacted (no retry).
+      cancellableContext.close();
+      assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+      verifyNoMoreInteractions(mockLbService);
+    } finally {
+      cancellableContext.detach(prevContext);
+    }
   }
 
   private void deliverSubchannelState(

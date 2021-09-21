@@ -191,6 +191,12 @@ abstract class XdsClient {
     @Nullable
     abstract String edsServiceName();
 
+    // Corresponding DNS name to be used if upstream endpoints of the cluster is resolvable
+    // via DNS.
+    // Only valid for LOGICAL_DNS cluster.
+    @Nullable
+    abstract String dnsHostName();
+
     // Load report server name for reporting loads via LRS.
     // Only valid for EDS or LOGICAL_DNS cluster.
     @Nullable
@@ -235,13 +241,15 @@ abstract class XdsClient {
           .upstreamTlsContext(upstreamTlsContext);
     }
 
-    static Builder forLogicalDns(String clusterName, @Nullable String lrsServerName,
-        @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext upstreamTlsContext) {
+    static Builder forLogicalDns(String clusterName, String dnsHostName,
+        @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+        @Nullable UpstreamTlsContext upstreamTlsContext) {
       return new AutoValue_XdsClient_CdsUpdate.Builder()
           .clusterName(clusterName)
           .clusterType(ClusterType.LOGICAL_DNS)
           .minRingSize(0)
           .maxRingSize(0)
+          .dnsHostName(dnsHostName)
           .lrsServerName(lrsServerName)
           .maxConcurrentRequests(maxConcurrentRequests)
           .upstreamTlsContext(upstreamTlsContext);
@@ -265,6 +273,7 @@ abstract class XdsClient {
           .add("minRingSize", minRingSize())
           .add("maxRingSize", maxRingSize())
           .add("edsServiceName", edsServiceName())
+          .add("dnsHostName", dnsHostName())
           .add("lrsServerName", lrsServerName())
           .add("maxConcurrentRequests", maxConcurrentRequests())
           // Exclude upstreamTlsContext as its string representation is cumbersome.
@@ -280,20 +289,28 @@ abstract class XdsClient {
       // Private, use one of the static factory methods instead.
       protected abstract Builder clusterType(ClusterType clusterType);
 
-      abstract Builder lbPolicy(LbPolicy lbPolicy);
+      // Private, use roundRobinLbPolicy() or ringHashLbPolicy(long, long).
+      protected abstract Builder lbPolicy(LbPolicy lbPolicy);
 
-      Builder lbPolicy(LbPolicy lbPolicy, long minRingSize, long maxRingSize) {
-        return this.lbPolicy(lbPolicy).minRingSize(minRingSize).maxRingSize(maxRingSize);
+      Builder roundRobinLbPolicy() {
+        return this.lbPolicy(LbPolicy.ROUND_ROBIN);
       }
 
-      // Private, use lbPolicy(LbPolicy, long, long).
+      Builder ringHashLbPolicy(long minRingSize, long maxRingSize) {
+        return this.lbPolicy(LbPolicy.RING_HASH).minRingSize(minRingSize).maxRingSize(maxRingSize);
+      }
+
+      // Private, use ringHashLbPolicy(long, long).
       protected abstract Builder minRingSize(long minRingSize);
 
-      // Private, use lbPolicy(.LbPolicy, long, long)
+      // Private, use ringHashLbPolicy(long, long).
       protected abstract Builder maxRingSize(long maxRingSize);
 
       // Private, use CdsUpdate.forEds() instead.
       protected abstract Builder edsServiceName(String edsServiceName);
+
+      // Private, use CdsUpdate.forLogicalDns() instead.
+      protected abstract Builder dnsHostName(String dnsHostName);
 
       // Private, use one of the static factory methods instead.
       protected abstract Builder lrsServerName(String lrsServerName);
@@ -534,6 +551,13 @@ abstract class XdsClient {
    * Returns the config used to bootstrap this XdsClient {@link Bootstrapper.BootstrapInfo}.
    */
   Bootstrapper.BootstrapInfo getBootstrapInfo() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Returns the {@link TlsContextManager} used in this XdsClient.
+   */
+  TlsContextManager getTlsContextManager() {
     throw new UnsupportedOperationException();
   }
 

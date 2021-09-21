@@ -46,6 +46,7 @@ final class RlsProtoConverters {
   static final class RouteLookupRequestConverter
       extends Converter<RouteLookupRequest, RlsProtoData.RouteLookupRequest> {
 
+    @SuppressWarnings("deprecation")
     @Override
     protected RlsProtoData.RouteLookupRequest doForward(RouteLookupRequest routeLookupRequest) {
       return
@@ -56,6 +57,7 @@ final class RlsProtoConverters {
               routeLookupRequest.getKeyMapMap());
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     protected RouteLookupRequest doBackward(RlsProtoData.RouteLookupRequest routeLookupRequest) {
       return

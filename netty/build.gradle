@@ -18,9 +18,10 @@ evaluationDependsOn(project(':grpc-core').path)
 dependencies {
     api project(':grpc-core'),
             libraries.netty
-    implementation libraries.netty_proxy_handler
-    guavaDependency 'implementation'
-    perfmarkDependency 'implementation'
+    implementation libraries.netty_proxy_handler,
+            libraries.guava,
+            libraries.errorprone,
+            libraries.perfmark
 
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,

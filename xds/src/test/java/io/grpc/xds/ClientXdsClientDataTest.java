@@ -23,9 +23,18 @@ import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.StringValue;
 import com.google.protobuf.UInt32Value;
+import com.google.protobuf.UInt64Value;
 import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig.HashFunction;
 import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
+import io.envoyproxy.envoy.config.core.v3.ConfigSource;
 import io.envoyproxy.envoy.config.core.v3.ExtensionConfigSource;
 import io.envoyproxy.envoy.config.core.v3.Locality;
 import io.envoyproxy.envoy.config.core.v3.RuntimeFractionalPercent;
@@ -58,30 +67,39 @@ import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.envoyproxy.envoy.type.v3.Int64Range;
 import io.grpc.Status.Code;
+import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.ClientXdsClient.StructOrError;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.Filter.FilterConfig;
-import io.grpc.xds.Matchers.FractionMatcher;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import io.grpc.xds.Matchers.PathMatcher;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
+import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsClient.CdsUpdate;
+import io.grpc.xds.internal.Matchers.FractionMatcher;
+import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class ClientXdsClientDataTest {
+
+  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
+  @Rule
+  public final ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void parseRoute_withRouteAction() {
@@ -681,6 +699,80 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  public void parseCluster_ringHashLbPolicy_defaultLbConfig() throws ResourceInvalidException {
+    Cluster cluster = Cluster.newBuilder()
+        .setName("cluster-foo.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder()
+                        .setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-foo.googleapis.com"))
+        .setLbPolicy(LbPolicy.RING_HASH)
+        .build();
+
+    CdsUpdate update = ClientXdsClient.parseCluster(cluster, new HashSet<String>());
+    assertThat(update.lbPolicy()).isEqualTo(CdsUpdate.LbPolicy.RING_HASH);
+    assertThat(update.minRingSize())
+        .isEqualTo(ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE);
+    assertThat(update.maxRingSize())
+        .isEqualTo(ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE);
+  }
+
+  @Test
+  public void parseCluster_ringHashLbPolicy_invalidRingSizeConfig_minGreaterThanMax()
+      throws ResourceInvalidException {
+    Cluster cluster = Cluster.newBuilder()
+        .setName("cluster-foo.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder()
+                        .setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-foo.googleapis.com"))
+        .setLbPolicy(LbPolicy.RING_HASH)
+        .setRingHashLbConfig(
+            RingHashLbConfig.newBuilder()
+                .setHashFunction(HashFunction.XX_HASH)
+                .setMinimumRingSize(UInt64Value.newBuilder().setValue(1000L))
+                .setMaximumRingSize(UInt64Value.newBuilder().setValue(100L)))
+        .build();
+
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
+    ClientXdsClient.parseCluster(cluster, new HashSet<String>());
+  }
+
+  @Test
+  public void parseCluster_ringHashLbPolicy_invalidRingSizeConfig_tooLargeRingSize()
+      throws ResourceInvalidException {
+    Cluster cluster = Cluster.newBuilder()
+        .setName("cluster-foo.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder()
+                        .setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-foo.googleapis.com"))
+        .setLbPolicy(LbPolicy.RING_HASH)
+        .setRingHashLbConfig(
+            RingHashLbConfig.newBuilder()
+                .setHashFunction(HashFunction.XX_HASH)
+                .setMinimumRingSize(UInt64Value.newBuilder().setValue(1000L))
+                .setMaximumRingSize(
+                    UInt64Value.newBuilder()
+                        .setValue(ClientXdsClient.MAX_RING_HASH_LB_POLICY_RING_SIZE + 1)))
+        .build();
+
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
+    ClientXdsClient.parseCluster(cluster, new HashSet<String>());
+  }
+
+  @Test
   public void parseServerSideListener_invalidTrafficDirection() {
     Listener listener =
         Listener.newBuilder()
@@ -688,7 +780,7 @@ public class ClientXdsClientDataTest {
             .setTrafficDirection(TrafficDirection.OUTBOUND)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail()).isEqualTo("Listener listener1 is not INBOUND");
   }
 
@@ -701,7 +793,7 @@ public class ClientXdsClientDataTest {
             .addListenerFilters(ListenerFilter.newBuilder().build())
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("Listener listener1 cannot have listener_filters");
   }
@@ -715,7 +807,7 @@ public class ClientXdsClientDataTest {
             .setUseOriginalDst(BoolValue.of(true))
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("Listener listener1 cannot have use_original_dst set to true");
   }
@@ -729,7 +821,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(FilterChain.newBuilder().build())
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("filerChain  has to have envoy.http_connection_manager");
   }
@@ -753,7 +845,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("filerChain  has non-unique filter name:envoy.http_connection_manager");
   }
@@ -773,7 +865,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("filter envoy.http_connection_manager with config_discovery not supported");
   }
@@ -789,7 +881,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("filter envoy.http_connection_manager expected to have typed_config");
   }
@@ -809,7 +901,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo(
             "filter envoy.http_connection_manager with unsupported typed_config type:badTypeUrl");
@@ -830,7 +922,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo("http-connection-manager has non-unique http-filter name:hf");
   }
@@ -852,7 +944,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo(
             "http-connection-manager http-filter envoy.router uses "
@@ -877,7 +969,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo(
             "http-connection-manager http-filter envoy.router has unsupported typed-config type:"
@@ -898,7 +990,7 @@ public class ClientXdsClientDataTest {
             .addFilterChains(filterChain)
             .build();
     StructOrError<io.grpc.xds.EnvoyServerProtoData.Listener> struct =
-        ClientXdsClient.parseServerSideListener(listener);
+        ClientXdsClient.parseServerSideListener(listener, null);
     assertThat(struct.getErrorDetail())
         .isEqualTo(
             "http-connection-manager http-filter envoy.filters.http.router should have "

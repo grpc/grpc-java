@@ -11,7 +11,7 @@ dependencies {
     compile project(':grpc-core')
     compileOnly 'javax.servlet:javax.servlet-api:4.0.1',
             libraries.javax_annotation // java 9, 10 needs it
-    guavaDependency 'implementation'
+    implementation libraries.guava
 
     testCompile project(':grpc-stub'),
             project(':grpc-protobuf'),

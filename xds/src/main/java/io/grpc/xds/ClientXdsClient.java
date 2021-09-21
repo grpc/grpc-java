@@ -41,6 +41,8 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress.PortSpecifierCase;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
@@ -48,6 +50,7 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
+import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -63,15 +66,15 @@ import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
-import io.grpc.xds.Matchers.FractionMatcher;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import io.grpc.xds.Matchers.PathMatcher;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
+import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.Matchers.FractionMatcher;
+import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -94,6 +97,12 @@ final class ClientXdsClient extends AbstractXdsClient {
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
+  @VisibleForTesting
+  static final long DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE = 1024L;
+  @VisibleForTesting
+  static final long DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE = 8 * 1024 * 1024L;
+  @VisibleForTesting
+  static final long MAX_RING_HASH_LB_POLICY_RING_SIZE = 8 * 1024 * 1024L;
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   @VisibleForTesting
@@ -130,15 +139,18 @@ final class ClientXdsClient extends AbstractXdsClient {
   private final LoadReportClient lrsClient;
   private final TimeProvider timeProvider;
   private boolean reportingLoad;
+  private final TlsContextManager tlsContextManager;
 
   ClientXdsClient(
-      ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo,
+      ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo, Context context,
       ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier, TimeProvider timeProvider) {
-    super(channel, bootstrapInfo, timeService, backoffPolicyProvider, stopwatchSupplier);
+      Supplier<Stopwatch> stopwatchSupplier, TimeProvider timeProvider,
+      TlsContextManager tlsContextManager) {
+    super(channel, bootstrapInfo, context, timeService, backoffPolicyProvider, stopwatchSupplier);
     loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
     this.timeProvider = timeProvider;
-    lrsClient = new LoadReportClient(loadStatsManager, channel,
+    this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
+    lrsClient = new LoadReportClient(loadStatsManager, channel, context,
         bootstrapInfo.getServers().get(0).isUseProtocolV3(), bootstrapInfo.getNode(),
         getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
   }
@@ -281,10 +293,10 @@ final class ClientXdsClient extends AbstractXdsClient {
         "HttpConnectionManager neither has inlined route_config nor RDS.");
   }
 
-  private static LdsUpdate processServerSideListener(Listener listener)
+  private LdsUpdate processServerSideListener(Listener listener)
       throws ResourceInvalidException {
     StructOrError<EnvoyServerProtoData.Listener> convertedListener =
-        parseServerSideListener(listener);
+        parseServerSideListener(listener, tlsContextManager);
     if (convertedListener.getErrorDetail() != null) {
       throw new ResourceInvalidException(convertedListener.getErrorDetail());
     }
@@ -363,10 +375,10 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @VisibleForTesting static StructOrError<EnvoyServerProtoData.Listener> parseServerSideListener(
-      Listener listener) {
+      Listener listener, TlsContextManager tlsContextManager) {
     try {
       return StructOrError.fromStruct(
-          EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener));
+          EnvoyServerProtoData.Listener.fromEnvoyProtoListener(listener, tlsContextManager));
     } catch (InvalidProtocolBufferException e) {
       return StructOrError.fromError(
           "Failed to unpack Listener " + listener.getName() + ":" + e.getMessage());
@@ -784,7 +796,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       // Process Cluster into CdsUpdate.
       CdsUpdate cdsUpdate;
       try {
-        cdsUpdate = processCluster(cluster, retainedEdsResources);
+        cdsUpdate = parseCluster(cluster, retainedEdsResources);
       } catch (ResourceInvalidException e) {
         errors.add(
             "CDS response Cluster '" + clusterName + "' validation error: " + e.getMessage());
@@ -812,7 +824,8 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static CdsUpdate processCluster(Cluster cluster, Set<String> retainedEdsResources)
+  @VisibleForTesting
+  static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources)
       throws ResourceInvalidException {
     StructOrError<CdsUpdate.Builder> structOrError;
     switch (cluster.getClusterDiscoveryTypeCase()) {
@@ -824,26 +837,36 @@ final class ClientXdsClient extends AbstractXdsClient {
         break;
       case CLUSTERDISCOVERYTYPE_NOT_SET:
       default:
-        throw new ResourceInvalidException("Unspecified cluster discovery type");
+        throw new ResourceInvalidException(
+            "Cluster " + cluster.getName() + ": unspecified cluster discovery type");
     }
     if (structOrError.getErrorDetail() != null) {
       throw new ResourceInvalidException(structOrError.getErrorDetail());
     }
-
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
 
     if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
       RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
-      if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH) {
+      long minRingSize =
+          lbConfig.hasMinimumRingSize()
+              ? lbConfig.getMinimumRingSize().getValue()
+              : DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE;
+      long maxRingSize =
+          lbConfig.hasMaximumRingSize()
+              ? lbConfig.getMaximumRingSize().getValue()
+              : DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE;
+      if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH
+          || minRingSize > maxRingSize
+          || maxRingSize > MAX_RING_HASH_LB_POLICY_RING_SIZE) {
         throw new ResourceInvalidException(
-            "Unsupported ring hash function: " + lbConfig.getHashFunction());
+            "Cluster " + cluster.getName() + ": invalid ring_hash_lb_config: " + lbConfig);
       }
-      updateBuilder.lbPolicy(CdsUpdate.LbPolicy.RING_HASH,
-          lbConfig.getMinimumRingSize().getValue(), lbConfig.getMaximumRingSize().getValue());
+      updateBuilder.ringHashLbPolicy(minRingSize, maxRingSize);
     } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
-      updateBuilder.lbPolicy(CdsUpdate.LbPolicy.ROUND_ROBIN);
+      updateBuilder.roundRobinLbPolicy();
     } else {
-      throw new ResourceInvalidException("Unsupported lb policy: " + cluster.getLbPolicy());
+      throw new ResourceInvalidException(
+          "Cluster " + cluster.getName() + ": unsupported lb policy: " + cluster.getLbPolicy());
     }
 
     return updateBuilder.build();
@@ -925,8 +948,40 @@ final class ClientXdsClient extends AbstractXdsClient {
       return StructOrError.fromStruct(CdsUpdate.forEds(
           clusterName, edsServiceName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
     } else if (type.equals(DiscoveryType.LOGICAL_DNS)) {
+      if (!cluster.hasLoadAssignment()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": LOGICAL_DNS clusters must have a single host");
+      }
+      ClusterLoadAssignment assignment = cluster.getLoadAssignment();
+      if (assignment.getEndpointsCount() != 1
+          || assignment.getEndpoints(0).getLbEndpointsCount() != 1) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": LOGICAL_DNS clusters must have a single "
+                + "locality_lb_endpoint and a single lb_endpoint");
+      }
+      io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint lbEndpoint =
+          assignment.getEndpoints(0).getLbEndpoints(0);
+      if (!lbEndpoint.hasEndpoint() || !lbEndpoint.getEndpoint().hasAddress()
+          || !lbEndpoint.getEndpoint().getAddress().hasSocketAddress()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": LOGICAL_DNS clusters must have an endpoint with address and socket_address");
+      }
+      SocketAddress socketAddress = lbEndpoint.getEndpoint().getAddress().getSocketAddress();
+      if (!socketAddress.getResolverName().isEmpty()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": LOGICAL DNS clusters must NOT have a custom resolver name set");
+      }
+      if (socketAddress.getPortSpecifierCase() != PortSpecifierCase.PORT_VALUE) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName
+                + ": LOGICAL DNS clusters socket_address must have port_value");
+      }
+      String dnsHostName =
+          String.format("%s:%d", socketAddress.getAddress(), socketAddress.getPortValue());
       return StructOrError.fromStruct(CdsUpdate.forLogicalDns(
-          clusterName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
+          clusterName, dnsHostName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
     }
     return StructOrError.fromError(
         "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);
@@ -1178,6 +1233,11 @@ final class ClientXdsClient extends AbstractXdsClient {
       metadataMap.put(entry.getKey(), entry.getValue().metadata);
     }
     return metadataMap;
+  }
+
+  @Override
+  TlsContextManager getTlsContextManager() {
+    return tlsContextManager;
   }
 
   @Override
@@ -1567,14 +1627,15 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private static final class ResourceInvalidException extends Exception {
+  @VisibleForTesting
+  static final class ResourceInvalidException extends Exception {
     private static final long serialVersionUID = 0L;
 
-    public ResourceInvalidException(String message) {
+    private ResourceInvalidException(String message) {
       super(message, null, false, false);
     }
 
-    public ResourceInvalidException(String message, Throwable cause) {
+    private ResourceInvalidException(String message, Throwable cause) {
       super(cause != null ? message + ": " + cause.getMessage() : message, cause, false, false);
     }
   }

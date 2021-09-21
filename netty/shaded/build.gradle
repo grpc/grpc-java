@@ -1,3 +1,19 @@
+import com.github.jengelman.gradle.plugins.shadow.transformers.Transformer
+import com.github.jengelman.gradle.plugins.shadow.transformers.TransformerContext
+import org.gradle.api.file.FileTreeElement
+import shadow.org.apache.tools.zip.ZipOutputStream
+import shadow.org.apache.tools.zip.ZipEntry
+
+
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath "com.github.jengelman.gradle.plugins:shadow:6.1.0"
+    }
+}
+
 plugins {
     id "java"
     id "maven-publish"
@@ -17,7 +33,9 @@ dependencies {
             project(':grpc-testing-proto'),
             project(':grpc-testing'),
             libraries.truth
-    shadow project(':grpc-core')
+    shadow project(':grpc-netty').configurations.runtimeClasspath.allDependencies.matching {
+        it.group != 'io.netty'
+    }
 }
 
 jar {
@@ -31,6 +49,7 @@ shadowJar {
         include(project(':grpc-netty'))
         include(dependency('io.netty:'))
     }
+    exclude 'META-INF/maven/**'
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
     // We have to be careful with these replacements as they must not match any
@@ -38,27 +57,25 @@ shadowJar {
     // this includes concatenation of string literals and constants.
     relocate 'META-INF/native/libnetty', 'META-INF/native/libio_grpc_netty_shaded_netty'
     relocate 'META-INF/native/netty', 'META-INF/native/io_grpc_netty_shaded_netty'
+    transform(NettyResourceTransformer.class)
     mergeServiceFiles()
 }
 
 publishing {
     publications {
         maven(MavenPublication) {
-            // Ideally swap to project.shadow.component(it) when it isn't broken for project deps
-            artifact shadowJar
+            project.shadow.component(it)
+
             // Empty jars are not published via withJavadocJar() and withSourcesJar()
             artifact javadocJar
             artifact sourcesJar
 
+            // shadow.component() is run after the main build.gradle's withXml
             pom.withXml {
-                def dependencies = asNode().appendNode('dependencies')
-                project.configurations.shadow.allDependencies.each { dep ->
-                    def dependencyNode = dependencies.appendNode('dependency')
-                    dependencyNode.appendNode('groupId', dep.group)
-                    dependencyNode.appendNode('artifactId', dep.name)
-                    def version = (dep.name == 'grpc-core') ? '[' + dep.version + ']' : dep.version
-                    dependencyNode.appendNode('version', version)
-                    dependencyNode.appendNode('scope', 'compile')
+                asNode().dependencies.'*'.findAll() { dep ->
+                    dep.artifactId.text() in ['grpc-api', 'grpc-core']
+                }.each() { core ->
+                    core.version*.value = "[" + core.version.text() + "]"
                 }
             }
         }
@@ -73,3 +90,41 @@ compileTestShadowJava.options.compilerArgs = compileTestJava.options.compilerArg
 compileTestShadowJava.options.encoding = compileTestJava.options.encoding
 
 test.dependsOn testShadow
+
+/**
+ * A Transformer which updates the Netty JAR META-INF/ resources to accurately
+ * reference shaded class names.
+ */
+class NettyResourceTransformer implements Transformer {
+
+    // A map of resource file paths to be modified
+    private Map<String, String> resources = [:]
+
+    @Override
+    boolean canTransformResource(FileTreeElement fileTreeElement) {
+        fileTreeElement.name.startsWith("META-INF/native-image/io.netty")
+    }
+
+    @Override
+    void transform(TransformerContext context) {
+        String updatedContent = context.is.getText().replace("io.netty", "io.grpc.netty.shaded.io.netty")
+        resources.put(context.path, updatedContent)
+    }
+
+    @Override
+    boolean hasTransformedResource() {
+        resources.size() > 0
+    }
+
+    @Override
+    void modifyOutputStream(ZipOutputStream outputStream, boolean preserveFileTimestamps) {
+        for (resourceEntry in resources) {
+            ZipEntry entry = new ZipEntry(resourceEntry.key)
+            entry.time = TransformerContext.getEntryTimestamp(preserveFileTimestamps, entry.time)
+
+            outputStream.putNextEntry(entry)
+            outputStream.write(resourceEntry.value.getBytes())
+            outputStream.closeEntry()
+        }
+    }
+}

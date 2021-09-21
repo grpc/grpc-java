@@ -128,6 +128,23 @@ public final class NettyChannelBuilder extends
   }
 
   /**
+   * Creates a new builder with the given server address. This factory method is primarily intended
+   * for using Netty Channel types other than SocketChannel.
+   * {@link #forAddress(String, int, ChannelCredentials)} should generally be preferred over this
+   * method, since that API permits delaying DNS lookups and noticing changes to DNS. If an
+   * unresolved InetSocketAddress is passed in, then it will remain unresolved.
+   */
+  @CheckReturnValue
+  public static NettyChannelBuilder forAddress(SocketAddress serverAddress,
+      ChannelCredentials creds) {
+    FromChannelCredentialsResult result = ProtocolNegotiators.from(creds);
+    if (result.error != null) {
+      throw new IllegalArgumentException(result.error);
+    }
+    return new NettyChannelBuilder(serverAddress, creds, result.callCredentials, result.negotiator);
+  }
+
+  /**
    * Creates a new builder with the given host and port.
    */
   @CheckReturnValue
@@ -205,6 +222,18 @@ public final class NettyChannelBuilder extends
         new NettyChannelTransportFactoryBuilder(),
         new NettyChannelDefaultPortProvider());
     this.freezeProtocolNegotiatorFactory = false;
+  }
+
+  NettyChannelBuilder(
+      SocketAddress address, ChannelCredentials channelCreds, CallCredentials callCreds,
+      ProtocolNegotiator.ClientFactory negotiator) {
+    managedChannelImplBuilder = new ManagedChannelImplBuilder(address,
+        getAuthorityFromAddress(address),
+        channelCreds, callCreds,
+        new NettyChannelTransportFactoryBuilder(),
+        new NettyChannelDefaultPortProvider());
+    this.protocolNegotiatorFactory = checkNotNull(negotiator, "negotiator");
+    this.freezeProtocolNegotiatorFactory = true;
   }
 
   @Internal

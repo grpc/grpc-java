@@ -58,7 +58,6 @@ import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.sds.SslContextProvider;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
-import io.grpc.xds.internal.sds.TlsContextManager;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -134,12 +133,14 @@ public class ClusterImplLoadBalancerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    loadBalancer = new ClusterImplLoadBalancer(helper, mockRandom, tlsContextManager);
+    loadBalancer = new ClusterImplLoadBalancer(helper, mockRandom);
   }
 
   @After
   public void tearDown() {
-    loadBalancer.shutdown();
+    if (loadBalancer != null) {
+      loadBalancer.shutdown();
+    }
     assertThat(xdsClientRefs).isEqualTo(0);
     assertThat(downstreamBalancers).isEmpty();
   }
@@ -554,11 +555,21 @@ public class ClusterImplLoadBalancerTest {
       SslContextProviderSupplier supplier =
           eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
       if (enableSecurity) {
+        assertThat(supplier.isShutdown()).isFalse();
         assertThat(supplier.getTlsContext()).isEqualTo(upstreamTlsContext);
       } else {
         assertThat(supplier).isNull();
       }
     }
+    loadBalancer.shutdown();
+    for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
+      SslContextProviderSupplier supplier =
+              eag.getAttributes().get(InternalXdsAttributes.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER);
+      if (enableSecurity) {
+        assertThat(supplier.isShutdown()).isTrue();
+      }
+    }
+    loadBalancer = null;
   }
 
   private void deliverAddressesAndConfig(List<EquivalentAddressGroup> addresses,
@@ -764,6 +775,11 @@ public class ClusterImplLoadBalancerTest {
     ClusterLocalityStats addClusterLocalityStats(String clusterName,
         @Nullable String edsServiceName, Locality locality) {
       return loadStatsManager.getClusterLocalityStats(clusterName, edsServiceName, locality);
+    }
+
+    @Override
+    TlsContextManager getTlsContextManager() {
+      return tlsContextManager;
     }
   }
 

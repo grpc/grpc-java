@@ -42,6 +42,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
+import io.grpc.Deadline;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalConfigSelector.Result;
 import io.grpc.Metadata;
@@ -66,18 +67,17 @@ import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
-import io.grpc.xds.Matchers.HeaderMatcher;
-import io.grpc.xds.Matchers.PathMatcher;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
+import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -449,7 +449,38 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void resolved_rpcHashingByHeader() {
+  public void resolved_rpcHashingByHeader_withoutSubstitution() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(
+        Collections.singletonList(
+            Route.create(
+                RouteMatch.withPathExactOnly(
+                    "/" + TestMethodDescriptors.voidMethod().getFullMethodName()),
+                RouteAction.forCluster(cluster1, Collections.singletonList(HashPolicy.forHeader(
+                    false, "custom-key", null, null)),
+                    null),
+                ImmutableMap.<String, FilterConfig>of())));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    InternalConfigSelector configSelector =
+        resolutionResultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY);
+
+    // First call, with header "custom-key": "custom-value".
+    startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
+        ImmutableMap.of("custom-key", "custom-value"), CallOptions.DEFAULT);
+    long hash1 = testCall.callOptions.getOption(XdsNameResolver.RPC_HASH_KEY);
+
+    // Second call, with header "custom-key": "custom-val".
+    startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
+        ImmutableMap.of("custom-key", "custom-val"),
+        CallOptions.DEFAULT);
+    long hash2 = testCall.callOptions.getOption(XdsNameResolver.RPC_HASH_KEY);
+
+    assertThat(hash2).isNotEqualTo(hash1);
+  }
+
+  @Test
+  public void resolved_rpcHashingByHeader_withSubstitution() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
@@ -1151,6 +1182,36 @@ public class XdsNameResolverTest {
   }
 
   @Test
+  public void resolved_faultDelayInLdsUpdate_callWithEarlyDeadline() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    when(mockRandom.nextInt(1000_000)).thenReturn(500_000); // 50%
+
+    FaultConfig httpFilterFaultConfig = FaultConfig.create(
+        FaultDelay.forFixedDelay(5000L, FaultConfig.FractionalPercent.perMillion(1000_000)),
+        null,
+        null);
+    xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+
+    Deadline.Ticker fakeTicker = new Deadline.Ticker() {
+      @Override
+      public long nanoTime() {
+        return fakeClock.getTicker().read();
+      }
+    };
+    ClientCall.Listener<Void> observer = startNewCall(TestMethodDescriptors.voidMethod(),
+        configSelector, Collections.<String, String>emptyMap(), CallOptions.DEFAULT.withDeadline(
+            Deadline.after(4000, TimeUnit.NANOSECONDS, fakeTicker)));
+    assertThat(testCall).isNull();
+    verifyRpcDelayedThenAborted(observer, 4000L, Status.DEADLINE_EXCEEDED.withDescription(
+        "Deadline exceeded after up to 5000 ns of fault-injected delay:"
+            + " Deadline exceeded after 0.000004000s. "));
+  }
+
+  @Test
   public void resolved_withNoRouterFilter() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
@@ -1320,7 +1381,7 @@ public class XdsNameResolverTest {
 
   @Test
   public void routeMatching_pathOnly() {
-    Map<String, String> headers = Collections.emptyMap();
+    Metadata headers = new Metadata();
     ThreadSafeRandom random = mock(ThreadSafeRandom.class);
 
     RouteMatch routeMatch1 =
@@ -1352,13 +1413,35 @@ public class XdsNameResolverTest {
   }
 
   @Test
+  public void routeMatching_pathOnly_caseInsensitive() {
+    Metadata headers = new Metadata();
+    ThreadSafeRandom random = mock(ThreadSafeRandom.class);
+
+    RouteMatch routeMatch1 =
+        RouteMatch.create(
+            PathMatcher.fromPath("/FooService/barMethod", false),
+            Collections.<HeaderMatcher>emptyList(), null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch1, "/fooservice/barmethod", headers, random))
+        .isTrue();
+
+    RouteMatch routeMatch2 =
+        RouteMatch.create(
+            PathMatcher.fromPrefix("/FooService", false),
+            Collections.<HeaderMatcher>emptyList(), null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch2, "/fooservice/barmethod", headers, random))
+        .isTrue();
+  }
+
+  @Test
   public void routeMatching_withHeaders() {
-    Map<String, String> headers = new HashMap<>();
-    headers.put("authority", "foo.googleapis.com");
-    headers.put("grpc-encoding", "gzip");
-    headers.put("user-agent", "gRPC-Java");
-    headers.put("content-length", "1000");
-    headers.put("custom-key", "custom-value1,custom-value2");
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("authority", Metadata.ASCII_STRING_MARSHALLER),
+        "foo.googleapis.com");
+    headers.put(Metadata.Key.of("grpc-encoding", Metadata.ASCII_STRING_MARSHALLER), "gzip");
+    headers.put(Metadata.Key.of("user-agent", Metadata.ASCII_STRING_MARSHALLER), "gRPC-Java");
+    headers.put(Metadata.Key.of("content-length", Metadata.ASCII_STRING_MARSHALLER), "1000");
+    headers.put(Metadata.Key.of("custom-key", Metadata.ASCII_STRING_MARSHALLER), "custom-value1");
+    headers.put(Metadata.Key.of("custom-key", Metadata.ASCII_STRING_MARSHALLER), "custom-value2");
     ThreadSafeRandom random = mock(ThreadSafeRandom.class);
 
     PathMatcher pathMatcher = PathMatcher.fromPath("/FooService/barMethod", true);
@@ -1419,15 +1502,22 @@ public class XdsNameResolverTest {
         null);
     assertThat(XdsNameResolver.matchRoute(routeMatch7, "/FooService/barMethod", headers, random))
         .isTrue();
-  }
 
-  @Test
-  public void pathMatching_caseInsensitive() {
-    PathMatcher pathMatcher1 = PathMatcher.fromPath("/FooService/barMethod", false);
-    assertThat(XdsNameResolver.matchPath(pathMatcher1, "/fooservice/barmethod")).isTrue();
+    RouteMatch routeMatch8 = RouteMatch.create(
+        pathMatcher,
+        Collections.singletonList(
+            HeaderMatcher.forExactValue("content-type", "application/grpc", false)),
+        null);
+    assertThat(XdsNameResolver.matchRoute(
+        routeMatch8, "/FooService/barMethod", new Metadata(), random)).isTrue();
 
-    PathMatcher pathMatcher2 = PathMatcher.fromPrefix("/FooService", false);
-    assertThat(XdsNameResolver.matchPath(pathMatcher2, "/fooservice/barmethod")).isTrue();
+    RouteMatch routeMatch9 = RouteMatch.create(
+        pathMatcher,
+        Collections.singletonList(
+            HeaderMatcher.forExactValue("custom-key!", "custom-value1,custom-value2", false)),
+        null);
+    assertThat(XdsNameResolver.matchRoute(routeMatch9, "/FooService/barMethod", headers, random))
+        .isFalse();
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {

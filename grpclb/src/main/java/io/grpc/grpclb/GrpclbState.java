@@ -35,6 +35,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -132,6 +133,7 @@ final class GrpclbState {
 
   private final String serviceName;
   private final Helper helper;
+  private final Context context;
   private final SynchronizationContext syncContext;
   @Nullable
   private final SubchannelPool subchannelPool;
@@ -182,12 +184,14 @@ final class GrpclbState {
   GrpclbState(
       GrpclbConfig config,
       Helper helper,
+      Context context,
       SubchannelPool subchannelPool,
       TimeProvider time,
       Stopwatch stopwatch,
       BackoffPolicy.Provider backoffPolicyProvider) {
     this.config = checkNotNull(config, "config");
     this.helper = checkNotNull(helper, "helper");
+    this.context = checkNotNull(context, "context");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     if (config.getMode() == Mode.ROUND_ROBIN) {
       this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
@@ -255,11 +259,19 @@ final class GrpclbState {
         serviceName,
         newLbAddressGroups,
         newBackendServers);
+    fallbackBackendList = newBackendServers;
     if (newLbAddressGroups.isEmpty()) {
-      // No balancer address: close existing balancer connection and enter fallback mode
-      // immediately.
+      // No balancer address: close existing balancer connection and prepare to enter fallback
+      // mode. If there is no successful backend connection, it enters fallback mode immediately.
+      // Otherwise, fallback does not happen until backend connections are lost. This behavior
+      // might be different from other languages (e.g., existing balancer connection is not
+      // closed in C-core), but we aren't changing it at this time.
       shutdownLbComm();
-      syncContext.execute(new FallbackModeTask(NO_LB_ADDRESS_PROVIDED_STATUS));
+      if (!usingFallbackBackends) {
+        fallbackReason = NO_LB_ADDRESS_PROVIDED_STATUS;
+        cancelFallbackTimer();
+        maybeUseFallbackBackends();
+      }
     } else {
       startLbComm(newLbAddressGroups);
       // Avoid creating a new RPC just because the addresses were updated, as it can cause a
@@ -277,7 +289,6 @@ final class GrpclbState {
             TimeUnit.MILLISECONDS, timerService);
       }
     }
-    fallbackBackendList = newBackendServers;
     if (usingFallbackBackends) {
       // Populate the new fallback backends to round-robin list.
       useFallbackBackends();
@@ -368,7 +379,12 @@ final class GrpclbState {
     checkState(lbStream == null, "previous lbStream has not been cleared yet");
     LoadBalancerGrpc.LoadBalancerStub stub = LoadBalancerGrpc.newStub(lbCommChannel);
     lbStream = new LbStream(stub);
-    lbStream.start();
+    Context prevContext = context.attach();
+    try {
+      lbStream.start();
+    } finally {
+      context.detach(prevContext);
+    }
     stopwatch.reset().start();
 
     LoadBalanceRequest initRequest = LoadBalanceRequest.newBuilder()

@@ -604,7 +604,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               stream.getAuthority()));
       ServerCallHandler<ReqT, RespT> handler = methodDef.getServerCallHandler();
       for (ServerInterceptor interceptor : interceptors) {
-        handler = InternalServerInterceptors.interceptCallHandler(interceptor, handler);
+        handler = InternalServerInterceptors.interceptCallHandlerCreate(interceptor, handler);
       }
       ServerMethodDefinition<ReqT, RespT> interceptedDef = methodDef.withServerCallHandler(handler);
       ServerMethodDefinition<?, ?> wMethodDef = binlog == null
