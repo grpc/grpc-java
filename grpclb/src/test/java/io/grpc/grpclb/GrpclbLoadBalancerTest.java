@@ -794,12 +794,10 @@ public class GrpclbLoadBalancerTest {
     Status error = Status.NOT_FOUND.withDescription("www.google.com not found");
     deliverNameResolutionError(error);
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertThat(logs).containsExactly(
-        "INFO: [grpclb-<api.google.com>] Created",
-        "DEBUG: [grpclb-<api.google.com>] Error: " + error,
-        "INFO: [grpclb-<api.google.com>] Update balancing state to TRANSIENT_FAILURE: picks="
-            + "[Status{code=UNAVAILABLE, description=www.google.com not found, cause=null}],"
-            + " drops=[]")
+    assertThat(logs)
+        .containsExactly(
+            "INFO: [grpclb-<api.google.com>] Created",
+            "DEBUG: [grpclb-<api.google.com>] Error: " + error)
         .inOrder();
     logs.clear();
 
@@ -964,24 +962,13 @@ public class GrpclbLoadBalancerTest {
     inOrder.verifyNoMoreInteractions();
 
     assertThat(logs).containsExactly(
-            "DEBUG: [grpclb-<api.google.com>] Got an LB response: " + buildLbResponse(backends1),
-            "INFO: [grpclb-<api.google.com>] Using RR list="
-                + "[[[/127.0.0.1:2000]/{io.grpc.grpclb.lbProvidedBackend=true}](token0001),"
-                + " [[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}](token0002)],"
-                + " drop=[null, null]",
-            "INFO: [grpclb-<api.google.com>]"
-                + " Update balancing state to CONNECTING: picks=[BUFFER_ENTRY], drops=[null, null]")
+        "DEBUG: [grpclb-<api.google.com>] Got an LB response: " + buildLbResponse(backends1))
         .inOrder();
     logs.clear();
 
     // Let subchannels be connected
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(logs).containsExactly(
-        "INFO: [grpclb-<api.google.com>] Update balancing state to READY: picks="
-            + "[[[[[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}]](token0002)]],"
-            + " drops=[null, null]");
-    logs.clear();
 
     RoundRobinPicker picker1 = (RoundRobinPicker) pickerCaptor.getValue();
 
@@ -991,12 +978,6 @@ public class GrpclbLoadBalancerTest {
 
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(logs).containsExactly(
-        "INFO: [grpclb-<api.google.com>] Update balancing state to READY: picks="
-            + "[[[[[/127.0.0.1:2000]/{io.grpc.grpclb.lbProvidedBackend=true}]](token0001)],"
-            + " [[[[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}]](token0002)]],"
-            + " drops=[null, null]");
-    logs.clear();
 
     RoundRobinPicker picker2 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker2.dropList).containsExactly(null, null);
@@ -1011,11 +992,6 @@ public class GrpclbLoadBalancerTest {
     verify(subchannel1, times(2)).requestConnection();
     inOrder.verify(helper).refreshNameResolution();
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(logs).containsExactly(
-        "INFO: [grpclb-<api.google.com>] Update balancing state to READY: picks="
-            + "[[[[[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}]](token0002)]],"
-            + " drops=[null, null]");
-    logs.clear();
 
     RoundRobinPicker picker3 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker3.dropList).containsExactly(null, null);
@@ -1037,10 +1013,6 @@ public class GrpclbLoadBalancerTest {
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(IDLE));
     verify(subchannel2, times(2)).requestConnection();
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    assertThat(logs).containsExactly(
-        "INFO: [grpclb-<api.google.com>] "
-            + "Update balancing state to CONNECTING: picks=[BUFFER_ENTRY], drops=[null, null]");
-    logs.clear();
 
     RoundRobinPicker picker4 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker4.dropList).containsExactly(null, null);
@@ -1059,15 +1031,7 @@ public class GrpclbLoadBalancerTest {
 
     lbResponseObserver.onNext(buildLbResponse(backends2));
     assertThat(logs).containsExactly(
-            "DEBUG: [grpclb-<api.google.com>] Got an LB response: " + buildLbResponse(backends2),
-            "INFO: [grpclb-<api.google.com>] Using RR list="
-                + "[[[/127.0.0.1:2030]/{io.grpc.grpclb.lbProvidedBackend=true}](token0003),"
-                + " [[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}](token0004),"
-                + " [[/127.0.0.1:2030]/{io.grpc.grpclb.lbProvidedBackend=true}](token0005)],"
-                + " drop=[null, drop(token0003), null, null, drop(token0006)]",
-            "INFO: [grpclb-<api.google.com>]"
-                + " Update balancing state to CONNECTING: picks=[BUFFER_ENTRY],"
-                + " drops=[null, drop(token0003), null, null, drop(token0006)]")
+        "DEBUG: [grpclb-<api.google.com>] Got an LB response: " + buildLbResponse(backends2))
         .inOrder();
     logs.clear();
 
@@ -1267,14 +1231,8 @@ public class GrpclbLoadBalancerTest {
       fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
 
       assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
-      assertThat(logs).containsExactly(
-              "INFO: [grpclb-<api.google.com>] Using fallback backends",
-              "INFO: [grpclb-<api.google.com>]"
-                  + " Using RR list=[[[FakeSocketAddress-fake-address-0]/{}], "
-                  + "[[FakeSocketAddress-fake-address-1]/{}]], drop=[null, null]",
-              "INFO: [grpclb-<api.google.com>] "
-                  + "Update balancing state to CONNECTING: picks=[BUFFER_ENTRY], "
-                  + "drops=[null, null]")
+      assertThat(logs)
+          .containsExactly("INFO: [grpclb-<api.google.com>] Using fallback backends")
           .inOrder();
 
       // Fall back to the backends from resolver
@@ -1462,14 +1420,7 @@ public class GrpclbLoadBalancerTest {
     List<EquivalentAddressGroup> backendList = backends.subList(0, 2);
     deliverResolvedAddresses(backendList, Collections.<EquivalentAddressGroup>emptyList());
 
-    assertThat(logs).containsAtLeast(
-            "INFO: [grpclb-<api.google.com>] Using fallback backends",
-            "INFO: [grpclb-<api.google.com>] "
-                + "Using RR list=[[[FakeSocketAddress-fake-address-0]/{}], "
-                + "[[FakeSocketAddress-fake-address-1]/{}]], drop=[null, null]",
-            "INFO: [grpclb-<api.google.com>] "
-                + "Update balancing state to CONNECTING: picks=[BUFFER_ENTRY], drops=[null, null]")
-        .inOrder();
+    assertThat(logs).contains("INFO: [grpclb-<api.google.com>] Using fallback backends");
 
     // Fall back to the backends from resolver
     fallbackTestVerifyUseOfFallbackBackendLists(inOrder, backendList);
@@ -1487,16 +1438,7 @@ public class GrpclbLoadBalancerTest {
     backendList = backends.subList(2, 5);
     deliverResolvedAddresses(backendList, Collections.<EquivalentAddressGroup>emptyList());
 
-    assertThat(logs).containsAtLeast(
-        "INFO: [grpclb-<api.google.com>] Using fallback backends",
-        "INFO: [grpclb-<api.google.com>] "
-            + "Using RR list=[[[FakeSocketAddress-fake-address-2]/{}], "
-            + "[[FakeSocketAddress-fake-address-3]/{}], "
-            + "[[FakeSocketAddress-fake-address-4]/{}]], drop=[null, null, null]",
-        "INFO: [grpclb-<api.google.com>] "
-            + "Update balancing state to CONNECTING: picks=[BUFFER_ENTRY], "
-            + "drops=[null, null, null]")
-        .inOrder();
+    assertThat(logs).contains("INFO: [grpclb-<api.google.com>] Using fallback backends");
 
     // Shift to use updated backends
     fallbackTestVerifyUseOfFallbackBackendLists(inOrder, backendList);
@@ -2558,25 +2500,15 @@ public class GrpclbLoadBalancerTest {
     assertThat(picker0.pickList).containsExactly(BUFFER_ENTRY);
     inOrder.verifyNoMoreInteractions();
 
-    assertThat(logs).containsExactly(
-            "DEBUG: [grpclb-<api.google.com>] Got an LB response: " + buildLbResponse(backends1),
-            "INFO: [grpclb-<api.google.com>] Using RR list="
-                + "[[[/127.0.0.1:2000]/{io.grpc.grpclb.lbProvidedBackend=true}](token0001),"
-                + " [[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}](token0002)],"
-                + " drop=[null, null]",
-            "INFO: [grpclb-<api.google.com>] "
-                + "Update balancing state to CONNECTING: picks=[BUFFER_ENTRY], drops=[null, null]")
+    assertThat(logs)
+        .containsExactly(
+            "DEBUG: [grpclb-<api.google.com>] Got an LB response: " + buildLbResponse(backends1))
         .inOrder();
     logs.clear();
 
     // Let subchannels be connected
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(logs).containsExactly(
-        "INFO: [grpclb-<api.google.com>] Update balancing state to READY: picks="
-            + "[[[[[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}]](token0002)]],"
-            + " drops=[null, null]");
-    logs.clear();
 
     RoundRobinPicker picker1 = (RoundRobinPicker) pickerCaptor.getValue();
 
@@ -2586,12 +2518,6 @@ public class GrpclbLoadBalancerTest {
 
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(logs).containsExactly(
-        "INFO: [grpclb-<api.google.com>] Update balancing state to READY: picks="
-            + "[[[[[/127.0.0.1:2000]/{io.grpc.grpclb.lbProvidedBackend=true}]](token0001)],"
-            + " [[[[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}]](token0002)]],"
-            + " drops=[null, null]");
-    logs.clear();
 
     RoundRobinPicker picker2 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker2.dropList).containsExactly(null, null);
@@ -2672,25 +2598,15 @@ public class GrpclbLoadBalancerTest {
     assertThat(picker6.pickList).containsExactly(BUFFER_ENTRY);
     inOrder.verifyNoMoreInteractions();
 
-    assertThat(logs).containsExactly(
-            "DEBUG: [grpclb-<api.google.com>] Got an LB response: " + buildLbResponse(backends2),
-            "INFO: [grpclb-<api.google.com>] Using RR list="
-                + "[[[/127.0.0.1:8000]/{io.grpc.grpclb.lbProvidedBackend=true}](token1001),"
-                + " [[/127.0.0.1:8010]/{io.grpc.grpclb.lbProvidedBackend=true}](token1002)],"
-                + " drop=[null, null]",
-            "INFO: [grpclb-<api.google.com>] "
-                + "Update balancing state to CONNECTING: picks=[BUFFER_ENTRY], drops=[null, null]")
+    assertThat(logs)
+        .containsExactly(
+            "DEBUG: [grpclb-<api.google.com>] Got an LB response: " + buildLbResponse(backends2))
         .inOrder();
     logs.clear();
 
     // Let new subchannels be connected
     deliverSubchannelState(subchannel3, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(logs).containsExactly(
-        "INFO: [grpclb-<api.google.com>] Update balancing state to READY: picks="
-            + "[[[[[/127.0.0.1:8000]/{io.grpc.grpclb.lbProvidedBackend=true}]](token1001)]],"
-            + " drops=[null, null]");
-    logs.clear();
 
     RoundRobinPicker picker3 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker3.dropList).containsExactly(null, null);
@@ -2699,12 +2615,6 @@ public class GrpclbLoadBalancerTest {
 
     deliverSubchannelState(subchannel4, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(logs).containsExactly(
-        "INFO: [grpclb-<api.google.com>] Update balancing state to READY: picks="
-            + "[[[[[/127.0.0.1:8000]/{io.grpc.grpclb.lbProvidedBackend=true}]](token1001)],"
-            + " [[[[/127.0.0.1:8010]/{io.grpc.grpclb.lbProvidedBackend=true}]](token1002)]],"
-            + " drops=[null, null]");
-    logs.clear();
 
     RoundRobinPicker picker4 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker4.dropList).containsExactly(null, null);
