@@ -49,9 +49,12 @@ dependencies {
 
     implementation libraries.androidx_annotation
     implementation libraries.androidx_core
+    implementation libraries.androidx_lifecycle_common
     implementation libraries.guava
     testImplementation libraries.androidx_core
     testImplementation libraries.androidx_test
+    testImplementation libraries.androidx_lifecycle_common
+    testImplementation libraries.androidx_lifecycle_service
     testImplementation libraries.junit
     testImplementation libraries.mockito
     testImplementation (libraries.robolectric) {
