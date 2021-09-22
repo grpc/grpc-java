@@ -198,7 +198,7 @@ public abstract class BinderTransport
 
   @Nullable private IBinder outgoingBinder;
 
-  private final FlowController flowController = new FlowController(TRANSACTION_BYTES_WINDOW);
+  private final FlowController flowController;
 
   /** The number of incoming bytes we've received. */
   private final AtomicLong numIncomingBytes;
@@ -216,6 +216,7 @@ public abstract class BinderTransport
     scheduledExecutorService = executorServicePool.getObject();
     incomingBinder = new LeakSafeOneWayBinder(this);
     ongoingCalls = new ConcurrentHashMap<>();
+    flowController = new FlowController(TRANSACTION_BYTES_WINDOW);
     numIncomingBytes = new AtomicLong();
   }
 
