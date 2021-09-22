@@ -44,15 +44,20 @@ public final class ComputeEngineChannelCredentials {
    * if applicable and using TLS as fallback.
    */
   public static ChannelCredentials create() {
+    return create(null);
+  }
+
+  public static ChannelCredentials create(CallCredentials callCredentials) {
     ChannelCredentials nettyCredentials =
         InternalNettyChannelCredentials.create(createClientFactory());
-    CallCredentials callCredentials;
-    if (InternalCheckGcpEnvironment.isOnGcp()) {
+    if (!InternalCheckGcpEnvironment.isOnGcp()) {
+      callCredentials =
+          new FailingCallCredentials(
+              Status.INTERNAL.withDescription(
+                  "Compute Engine Credentials can only be used on Google Cloud Platform"));
+    }
+    if (callCredentials == null) {
       callCredentials = MoreCallCredentials.from(ComputeEngineCredentials.create());
-    } else {
-      callCredentials = new FailingCallCredentials(
-          Status.INTERNAL.withDescription(
-              "Compute Engine Credentials can only be used on Google Cloud Platform"));
     }
     return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
   }
