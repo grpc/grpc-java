@@ -13,8 +13,6 @@ android {
                 srcDirs += "${projectDir}/../core/src/test/java/"
                 setIncludes(["io/grpc/internal/FakeClock.java",
                              "io/grpc/binder/**"])
-                exclude 'io/grpc/binder/ServerSecurityPolicyTest.java'
-                exclude 'io/grpc/binder/SecurityPoliciesTest.java'
             }
         }
         androidTest {
