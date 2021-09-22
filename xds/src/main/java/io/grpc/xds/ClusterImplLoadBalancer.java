@@ -124,7 +124,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         if (config.lrsServerName.isEmpty()) {
           dropStats = xdsClient.addClusterDropStats(cluster, edsServiceName);
         } else {
-          logger.log(XdsLogLevel.WARNING, "Can only report load to the same management server");
+          logger.log(XdsLogLevel.WARNING, "Can only report load to the same management server. "
+              + "Config lrsServerName {0} should be empty. ", config.lrsServerName);
         }
       }
     }

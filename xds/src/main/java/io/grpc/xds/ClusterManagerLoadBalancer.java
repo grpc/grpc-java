@@ -149,7 +149,8 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
           if (delegate == null) {
             return
                 PickResult.withError(
-                    Status.UNAVAILABLE.withDescription("Unable to find cluster " + clusterName));
+                    Status.UNAVAILABLE.withDescription("CDS encountered error: unable to find "
+                        + "available subchannel for cluster " + clusterName));
           }
           return delegate.pickSubchannel(args);
         }
