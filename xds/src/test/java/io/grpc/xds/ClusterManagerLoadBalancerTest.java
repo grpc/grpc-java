@@ -138,7 +138,8 @@ public class ClusterManagerLoadBalancerTest {
     assertThat(pickSubchannel(picker, "childC")).isEqualTo(PickResult.withNoResult());
     Status status = pickSubchannel(picker, "childB").getStatus();
     assertThat(status.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(status.getDescription()).isEqualTo("Unable to find cluster childB");
+    assertThat(status.getDescription()).isEqualTo(
+        "CDS encountered error: unable to find available subchannel for cluster childB");
     assertThat(fakeClock.numPendingTasks())
         .isEqualTo(1);  // (delayed) shutdown because "childB" is removed
     assertThat(childBalancer1.shutdown).isFalse();

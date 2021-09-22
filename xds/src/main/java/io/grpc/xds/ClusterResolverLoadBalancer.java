@@ -501,8 +501,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         }
         resolver = nameResolverFactory.newNameResolver(uri, nameResolverArgs);
         if (resolver == null) {
-          status = Status.INTERNAL.withDescription("Xds cluster resolver lb for logical DNS " +
-              "cluster [" + name + "] cannot find DNS resolver with uri:" + uri);
+          status = Status.INTERNAL.withDescription("Xds cluster resolver lb for logical DNS "
+              + "cluster [" + name + "] cannot find DNS resolver with uri:" + uri);
           handleEndpointResolutionError();
           return;
         }

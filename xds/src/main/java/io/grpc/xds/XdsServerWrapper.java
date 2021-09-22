@@ -476,7 +476,7 @@ final class XdsServerWrapper extends Server {
           defaultFilterChain == null ? new AtomicReference<ServerRoutingConfig>() :
               generateRoutingConfig(defaultFilterChain));
       List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
-      logger.log(Level.FINEST, "updating selector {0}", selector);
+      logger.log(Level.FINEST, "Updating selector {0}", selector);
       filterChainSelectorManager.updateSelector(selector);
       for (SslContextProviderSupplier e: toRelease) {
         e.close();
@@ -699,7 +699,7 @@ final class XdsServerWrapper extends Server {
               updatedRoutingConfig = ServerRoutingConfig.create(savedVirtualHosts,
                   updatedInterceptors);
             }
-            logger.log(Level.FINEST, "updating filter chain {0} rds routing config: {1}",
+            logger.log(Level.FINEST, "Updating filter chain {0} rds routing config: {1}",
                 new Object[]{filterChain.getName(), updatedRoutingConfig});
             savedRdsRoutingConfigRef.get(filterChain).set(updatedRoutingConfig);
           }
