@@ -117,7 +117,8 @@ Tagging the Release
    $ git checkout v$MAJOR.$MINOR.x
    $ git pull upstream v$MAJOR.$MINOR.x
    $ git checkout -b release
-   # Bump documented versions. Don't forget protobuf version
+   # Bump documented gRPC versions.
+   # Also update protoc version to match protocVersion in build.gradle.
    $ ${EDITOR:-nano -w} README.md
    $ ${EDITOR:-nano -w} documentation/android-channel-builder.md
    $ ${EDITOR:-nano -w} cronet/README.md
