@@ -48,8 +48,8 @@ public final class ComputeEngineChannelCredentials {
   }
 
   /**
-   * Creates credentials based on a CallCredentials for Google Compute Engine. This class sets up a secure channel using ALTS
-   * if applicable and using TLS as fallback.
+   * Creates credentials based on a CallCredentials for Google Compute Engine. This class sets up a
+   * secure channel using ALTS if applicable and using TLS as fallback.
    */
   public static ChannelCredentials create(CallCredentials callCredentials) {
     ChannelCredentials nettyCredentials =
