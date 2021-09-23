@@ -26,6 +26,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.protobuf.ByteString;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import org.junit.Before;
@@ -71,8 +72,9 @@ public class AltsTsiHandshakerTest {
   public void setUp() throws Exception {
     mockClient = mock(AltsHandshakerClient.class);
     mockServer = mock(AltsHandshakerClient.class);
-    handshakerClient = new AltsTsiHandshaker(true, mockClient);
-    handshakerServer = new AltsTsiHandshaker(false, mockServer);
+    NoopChannelLogger channelLogger = new NoopChannelLogger();
+    handshakerClient = new AltsTsiHandshaker(true, mockClient, channelLogger);
+    handshakerServer = new AltsTsiHandshaker(false, mockServer, channelLogger);
   }
 
   private HandshakerResult getHandshakerResult(boolean isClient) {

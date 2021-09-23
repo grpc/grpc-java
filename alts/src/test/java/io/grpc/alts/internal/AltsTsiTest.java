@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import com.google.common.testing.GcFinalization;
 import io.grpc.alts.internal.ByteBufTestUtils.RegisterRef;
 import io.grpc.alts.internal.TsiTest.Handshakers;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.netty.buffer.ByteBuf;
 import io.netty.util.ReferenceCounted;
 import io.netty.util.ResourceLeakDetector;
@@ -61,8 +62,9 @@ public class AltsTsiTest {
     AltsHandshakerOptions handshakerOptions = new AltsHandshakerOptions(null);
     MockAltsHandshakerStub clientStub = new MockAltsHandshakerStub();
     MockAltsHandshakerStub serverStub = new MockAltsHandshakerStub();
-    client = new AltsHandshakerClient(clientStub, handshakerOptions);
-    server = new AltsHandshakerClient(serverStub, handshakerOptions);
+    NoopChannelLogger channelLogger = new NoopChannelLogger();
+    client = new AltsHandshakerClient(clientStub, handshakerOptions, channelLogger);
+    server = new AltsHandshakerClient(serverStub, handshakerOptions, channelLogger);
   }
 
   @After
@@ -76,8 +78,9 @@ public class AltsTsiTest {
   }
 
   private Handshakers newHandshakers() {
-    TsiHandshaker clientHandshaker = new AltsTsiHandshaker(true, client);
-    TsiHandshaker serverHandshaker = new AltsTsiHandshaker(false, server);
+    NoopChannelLogger channelLogger = new NoopChannelLogger();
+    TsiHandshaker clientHandshaker = new AltsTsiHandshaker(true, client, channelLogger);
+    TsiHandshaker serverHandshaker = new AltsTsiHandshaker(false, server, channelLogger);
     return new Handshakers(clientHandshaker, serverHandshaker);
   }
 

@@ -26,6 +26,7 @@ import static org.junit.Assert.assertTrue;
 
 import io.grpc.Attributes;
 import io.grpc.Channel;
+import io.grpc.ChannelLogger;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
 import io.grpc.ManagedChannel;
@@ -131,8 +132,8 @@ public class AltsProtocolNegotiatorTest {
     TsiHandshakerFactory handshakerFactory =
         new DelegatingTsiHandshakerFactory(FakeTsiHandshaker.clientHandshakerFactory()) {
           @Override
-          public TsiHandshaker newHandshaker(String authority) {
-            return new DelegatingTsiHandshaker(super.newHandshaker(authority)) {
+          public TsiHandshaker newHandshaker(String authority, ChannelLogger logger) {
+            return new DelegatingTsiHandshaker(super.newHandshaker(authority, logger)) {
               @Override
               public TsiPeer extractPeer() throws GeneralSecurityException {
                 return mockedTsiPeer;
@@ -427,8 +428,8 @@ public class AltsProtocolNegotiatorTest {
     }
 
     @Override
-    public TsiHandshaker newHandshaker(String authority) {
-      return delegate.newHandshaker(authority);
+    public TsiHandshaker newHandshaker(String authority, ChannelLogger logger) {
+      return delegate.newHandshaker(authority, logger);
     }
   }
 
