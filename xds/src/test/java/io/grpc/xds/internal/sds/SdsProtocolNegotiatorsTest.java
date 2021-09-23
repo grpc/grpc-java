@@ -38,6 +38,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
@@ -50,6 +51,7 @@ import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.TlsContextManager;
+import io.grpc.xds.internal.certprovider.CommonCertProviderTestUtils;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsHandler;
 import io.grpc.xds.internal.sds.SdsProtocolNegotiators.ClientSdsProtocolNegotiator;
 import io.netty.channel.ChannelHandler;
@@ -142,6 +144,8 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void clientSdsHandler_addLast()
       throws InterruptedException, TimeoutException, ExecutionException {
+    FakeClock executor = new FakeClock();
+    CommonCertProviderTestUtils.register(executor);
     Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
             CA_PEM_FILE, null, null, null, null);
@@ -173,6 +177,7 @@ public class SdsProtocolNegotiatorsTest {
             future.set(throwable);
           }
         });
+    assertThat(executor.runDueTasks()).isEqualTo(1);
     channel.runPendingTasks();
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
     assertThat(fromFuture).isInstanceOf(SslContext.class);
@@ -186,11 +191,14 @@ public class SdsProtocolNegotiatorsTest {
     // ProtocolNegotiators.ClientTlsHandler.class not accessible, get canonical name
     assertThat(iterator.next().getValue().getClass().getCanonicalName())
         .contains("ProtocolNegotiators.ClientTlsHandler");
+    CommonCertProviderTestUtils.register0();
   }
 
   @Test
   public void serverSdsHandler_addLast()
       throws InterruptedException, TimeoutException, ExecutionException {
+    FakeClock executor = new FakeClock();
+    CommonCertProviderTestUtils.register(executor);
     // we need InetSocketAddress instead of EmbeddedSocketAddress as localAddress for this test
     channel =
         new EmbeddedChannel() {
@@ -247,6 +255,7 @@ public class SdsProtocolNegotiatorsTest {
           }
         });
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
+    assertThat(executor.runDueTasks()).isEqualTo(1);
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
     assertThat(fromFuture).isInstanceOf(SslContext.class);
     channel.runPendingTasks();
@@ -259,6 +268,7 @@ public class SdsProtocolNegotiatorsTest {
     // ProtocolNegotiators.ServerTlsHandler.class is not accessible, get canonical name
     assertThat(iterator.next().getValue().getClass().getCanonicalName())
         .contains("ProtocolNegotiators.ServerTlsHandler");
+    CommonCertProviderTestUtils.register0();
   }
 
   @Test
@@ -346,6 +356,8 @@ public class SdsProtocolNegotiatorsTest {
   @Test
   public void clientSdsProtocolNegotiatorNewHandler_fireProtocolNegotiationEvent()
           throws InterruptedException, TimeoutException, ExecutionException {
+    FakeClock executor = new FakeClock();
+    CommonCertProviderTestUtils.register(executor);
     Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
             CA_PEM_FILE, null, null, null, null);
@@ -378,6 +390,7 @@ public class SdsProtocolNegotiatorsTest {
             future.set(throwable);
           }
         });
+    executor.runDueTasks();
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     Object fromFuture = future.get(5, TimeUnit.SECONDS);
     assertThat(fromFuture).isInstanceOf(SslContext.class);
@@ -389,6 +402,7 @@ public class SdsProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(sslEvent);
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     assertTrue(channel.isOpen());
+    CommonCertProviderTestUtils.register0();
   }
 
   private static final class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
