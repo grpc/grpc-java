@@ -566,7 +566,8 @@ final class ClientXdsClient extends AbstractXdsClient {
       List<FilterChainMatch> crossProduct = getCrossProduct(filterChainMatch);
       for (FilterChainMatch cur : crossProduct) {
         if (!uniqueSet.add(cur)) {
-          throw new ResourceInvalidException("Found duplicate matcher: " + cur);
+          throw new ResourceInvalidException("FilterChainMatch must be unique. "
+              + "Found duplicate: " + cur);
         }
       }
     }

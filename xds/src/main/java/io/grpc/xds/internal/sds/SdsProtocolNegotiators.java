@@ -281,6 +281,9 @@ public final class SdsProtocolNegotiators {
         SslContextProviderSupplier sslContextProviderSupplier = InternalProtocolNegotiationEvent
                 .getAttributes(pne).get(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER);
         if (sslContextProviderSupplier == null) {
+          logger.log(Level.INFO, "No sslContextProviderSupplier found in filterChainMatch "
+              + "for connection from {0} to {1}",
+              new Object[]{ctx.channel().remoteAddress(), ctx.channel().localAddress()});
           if (fallbackProtocolNegotiator == null) {
             ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
             return;

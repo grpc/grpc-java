@@ -177,9 +177,11 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
                 final ServerCall<ReqT, RespT> call,
                 final Metadata headers, ServerCallHandler<ReqT, RespT> next) {
           AuthDecision authResult = authEngine.evaluate(headers, call);
-          logger.log(Level.FINE,
-                  "Authorization result for serverCall {0}: {1}, matching policy: {2}.",
-                  new Object[]{call, authResult.decision(), authResult.matchingPolicyName()});
+          if (logger.isLoggable(Level.FINER)) {
+            logger.log(Level.FINER,
+                "Authorization result for serverCall {0}: {1}, matching policy: {2}.",
+                new Object[]{call, authResult.decision(), authResult.matchingPolicyName()});
+          }
           if (GrpcAuthorizationEngine.Action.DENY.equals(authResult.decision())) {
             Status status = Status.UNAUTHENTICATED.withDescription(
                     "Access Denied, matching policy: " + authResult.matchingPolicyName());
