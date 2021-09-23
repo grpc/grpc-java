@@ -20,6 +20,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.testing.integration.AbstractInteropTest;
+import org.eclipse.jetty.http2.parser.RateControl;
 import org.eclipse.jetty.http2.server.HTTP2CServerConnectionFactory;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.Server;
@@ -59,7 +60,9 @@ public class JettyInteroptTest extends AbstractInteropTest {
         new GrpcServlet(((ServletServerBuilder) builer).buildServletAdapter());
     server = new Server(0);
     ServerConnector sc = (ServerConnector)server.getConnectors()[0];
-    sc.addConnectionFactory(new HTTP2CServerConnectionFactory(new HttpConfiguration()));
+    HTTP2CServerConnectionFactory factory = new HTTP2CServerConnectionFactory(new HttpConfiguration());
+    factory.setRateControlFactory(new RateControl.Factory() {});
+    sc.addConnectionFactory(factory);
     ServletContextHandler context =
         new ServletContextHandler(ServletContextHandler.SESSIONS);
     context.setContextPath(MYAPP);
