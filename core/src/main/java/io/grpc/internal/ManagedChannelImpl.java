@@ -1473,7 +1473,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           if (LbHelperImpl.this != lbHelper) {
             return;
           }
-          updateSubchannelPicker(newPicker);
           // It's not appropriate to report SHUTDOWN state from lb.
           // Ignore the case of newState == SHUTDOWN for now.
           if (newState != SHUTDOWN) {
@@ -1481,6 +1480,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 ChannelLogLevel.INFO, "Entering {0} state with picker: {1}", newState, newPicker);
             channelStateManager.gotoState(newState);
           }
+          updateSubchannelPicker(newPicker);
         }
       }
 
