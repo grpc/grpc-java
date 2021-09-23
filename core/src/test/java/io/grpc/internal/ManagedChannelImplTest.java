@@ -355,6 +355,7 @@ public class ManagedChannelImplTest {
 
     channelBuilder = new ManagedChannelImplBuilder(TARGET,
         new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
+    channelBuilder.disableRetry();
     configureBuilder(channelBuilder);
   }
 
@@ -1881,6 +1882,7 @@ public class ManagedChannelImplTest {
         TARGET, InsecureChannelCredentials.create(),
         new FakeCallCredentials(metadataKey, channelCredValue),
         new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
+    channelBuilder.disableRetry();
     configureBuilder(channelBuilder);
     createChannel();
 
@@ -1933,6 +1935,7 @@ public class ManagedChannelImplTest {
             new FakeNameResolverFactory.Builder(URI.create("oobauthority")).build())
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
+        .disableRetry() // irrelevant to what we test, disable retry to make verification easy
         .build();
     oob.getState(true);
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
@@ -1980,6 +1983,7 @@ public class ManagedChannelImplTest {
         TARGET, InsecureChannelCredentials.create(),
         new FakeCallCredentials(metadataKey, channelCredValue),
         new UnsupportedClientTransportFactoryBuilder(), new FixedPortProvider(DEFAULT_PORT));
+    channelBuilder.disableRetry();
     configureBuilder(channelBuilder);
     createChannel();
 
@@ -2017,6 +2021,7 @@ public class ManagedChannelImplTest {
             new FakeNameResolverFactory.Builder(URI.create("fake://oobauthority/")).build())
         .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
         .idleTimeout(ManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
+        .disableRetry() // irrelevant to what we test, disable retry to make verification easy
         .build();
     oob.getState(true);
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);

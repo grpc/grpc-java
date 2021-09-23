@@ -16,8 +16,11 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.xds.InternalXdsAttributes.ATTR_DRAIN_GRACE_NANOS;
+import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_MANAGER;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.DoNotCall;
@@ -29,9 +32,12 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.netty.InternalNettyServerBuilder;
+import io.grpc.netty.InternalNettyServerCredentials;
+import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.NettyServerBuilder;
-import io.grpc.xds.internal.sds.SdsProtocolNegotiators;
-import io.grpc.xds.internal.sds.ServerWrapperForXds;
+import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingNegotiatorServerFactory;
+import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
@@ -40,11 +46,17 @@ import java.util.logging.Logger;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7514")
 public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBuilder> {
+  private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000);
 
   private final NettyServerBuilder delegate;
   private final int port;
   private XdsServingStatusListener xdsServingStatusListener;
   private AtomicBoolean isServerBuilt = new AtomicBoolean(false);
+  private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
+  private XdsClientPoolFactory xdsClientPoolFactory =
+          SharedXdsClientPoolProvider.getDefaultProvider();
+  private long drainGraceTime = 10;
+  private TimeUnit drainGraceTimeUnit = TimeUnit.MINUTES;
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
@@ -68,36 +80,60 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   }
 
   /**
-   * Unsupported call. Users should only use {@link #forPort(int, ServerCredentials)}.
+   * Sets the grace time when draining connections with outdated configuration. When an xDS config
+   * update changes connection configuration, pre-existing connections stop accepting new RPCs to be
+   * replaced by new connections. RPCs on those pre-existing connections have the grace time to
+   * complete. RPCs that do not complete in time will be cancelled, allowing the connection to
+   * terminate. {@code Long.MAX_VALUE} nano seconds or an unreasonably large value are considered
+   * infinite. The default is 10 minutes.
    */
+  public XdsServerBuilder drainGraceTime(long drainGraceTime, TimeUnit drainGraceTimeUnit) {
+    checkArgument(drainGraceTime >= 0, "drain grace time must be non-negative: %s",
+        drainGraceTime);
+    checkNotNull(drainGraceTimeUnit, "drainGraceTimeUnit");
+    if (drainGraceTimeUnit.toNanos(drainGraceTime) >= AS_LARGE_AS_INFINITE) {
+      drainGraceTimeUnit = null;
+    }
+    this.drainGraceTime = drainGraceTime;
+    this.drainGraceTimeUnit = drainGraceTimeUnit;
+    return this;
+  }
+
   @DoNotCall("Unsupported. Use forPort(int, ServerCredentials) instead")
   public static ServerBuilder<?> forPort(int port) {
     throw new UnsupportedOperationException(
-        "Unsupported call - use forPort(int, ServerCredentials)");
+            "Unsupported call - use forPort(int, ServerCredentials)");
   }
 
   /** Creates a gRPC server builder for the given port. */
   public static XdsServerBuilder forPort(int port, ServerCredentials serverCredentials) {
-    NettyServerBuilder nettyDelegate = NettyServerBuilder.forPort(port, serverCredentials);
+    checkNotNull(serverCredentials, "serverCredentials");
+    InternalProtocolNegotiator.ServerFactory originalNegotiatorFactory =
+            InternalNettyServerCredentials.toNegotiator(serverCredentials);
+    ServerCredentials wrappedCredentials = InternalNettyServerCredentials.create(
+            new FilterChainMatchingNegotiatorServerFactory(originalNegotiatorFactory));
+    NettyServerBuilder nettyDelegate = NettyServerBuilder.forPort(port, wrappedCredentials);
     return new XdsServerBuilder(nettyDelegate, port);
   }
 
   @Override
   public Server build() {
-    return buildServer(new XdsClientWrapperForServerSds(port));
+    checkState(isServerBuilt.compareAndSet(false, true), "Server already built!");
+    FilterChainSelectorManager filterChainSelectorManager = new FilterChainSelectorManager();
+    Attributes.Builder builder = Attributes.newBuilder()
+            .set(ATTR_FILTER_CHAIN_SELECTOR_MANAGER, filterChainSelectorManager);
+    if (drainGraceTimeUnit != null) {
+      builder.set(ATTR_DRAIN_GRACE_NANOS, drainGraceTimeUnit.toNanos(drainGraceTime));
+    }
+    InternalNettyServerBuilder.eagAttributes(delegate, builder.build());
+    return new XdsServerWrapper("0.0.0.0:" + port, delegate, xdsServingStatusListener,
+            filterChainSelectorManager, xdsClientPoolFactory, filterRegistry);
   }
 
-  /**
-   * Creates a Server using the given xdsClient.
-   */
   @VisibleForTesting
-  ServerWrapperForXds buildServer(
-      XdsClientWrapperForServerSds xdsClient) {
-    checkState(isServerBuilt.compareAndSet(false, true), "Server already built!");
-    InternalNettyServerBuilder.eagAttributes(delegate, Attributes.newBuilder()
-        .set(SdsProtocolNegotiators.SERVER_XDS_CLIENT, xdsClient)
-        .build());
-    return new ServerWrapperForXds(delegate, xdsClient, xdsServingStatusListener);
+  XdsServerBuilder xdsClientPoolFactory(XdsClientPoolFactory xdsClientPoolFactory) {
+    this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    return this;
   }
 
   /**

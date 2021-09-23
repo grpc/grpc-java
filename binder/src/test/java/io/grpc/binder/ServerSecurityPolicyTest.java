@@ -18,13 +18,12 @@ package io.grpc.binder;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import android.os.Process;
 import com.google.common.base.Function;
 import io.grpc.Status;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.shadows.ShadowProcess;
 
 @RunWith(RobolectricTestRunner.class)
 public final class ServerSecurityPolicyTest {
@@ -33,15 +32,10 @@ public final class ServerSecurityPolicyTest {
   private static final String SERVICE2 = "service_two";
   private static final String SERVICE3 = "service_three";
 
-  private static final int MY_UID = 1234;
+  private static final int MY_UID = Process.myUid();
   private static final int OTHER_UID = MY_UID + 1;
 
   ServerSecurityPolicy policy;
-
-  @Before
-  public void setUp() {
-    ShadowProcess.setUid(MY_UID);
-  }
 
   @Test
   public void testDefaultInternalOnly() {

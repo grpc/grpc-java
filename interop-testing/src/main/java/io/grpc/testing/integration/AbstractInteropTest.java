@@ -92,6 +92,9 @@ import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
+import io.opencensus.stats.Measure;
+import io.opencensus.stats.Measure.MeasureDouble;
+import io.opencensus.stats.Measure.MeasureLong;
 import io.opencensus.tags.TagKey;
 import io.opencensus.tags.TagValue;
 import io.opencensus.trace.Span;
@@ -124,6 +127,7 @@ import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
+import org.HdrHistogram.Histogram;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
@@ -152,6 +156,15 @@ public abstract class AbstractInteropTest {
    * SETTINGS/WINDOW_UPDATE exchange.
    */
   public static final int TEST_FLOW_CONTROL_WINDOW = 65 * 1024;
+  private static final MeasureLong RETRIES_PER_CALL =
+      Measure.MeasureLong.create(
+          "grpc.io/client/retries_per_call", "Number of retries per call", "1");
+  private static final MeasureLong TRANSPARENT_RETRIES_PER_CALL =
+      Measure.MeasureLong.create(
+          "grpc.io/client/transparent_retries_per_call", "Transparent retries per call", "1");
+  private static final MeasureDouble RETRY_DELAY_PER_CALL =
+      Measure.MeasureDouble.create(
+          "grpc.io/client/retry_delay_per_call", "Retry delay per call", "ms");
 
   private static final FakeTagger tagger = new FakeTagger();
   private static final FakeTagContextBinarySerializer tagContextBinarySerializer =
@@ -376,7 +389,8 @@ public abstract class AbstractInteropTest {
                 tagger, tagContextBinarySerializer, clientStatsRecorder,
                 GrpcUtil.STOPWATCH_SUPPLIER,
                 true, true, true,
-                /* recordRealTimeMetrics= */ false);
+                /* recordRealTimeMetrics= */ false,
+                /* recordRetryMetrics= */ true);
   }
 
   protected final ServerStreamTracer.Factory createCustomCensusTracerFactory() {
@@ -1043,19 +1057,18 @@ public abstract class AbstractInteropTest {
 
   @Test
   public void exchangeMetadataUnaryCall() throws Exception {
-    TestServiceGrpc.TestServiceBlockingStub stub = blockingStub;
-
     // Capture the metadata exchange
     Metadata fixedHeaders = new Metadata();
     // Send a context proto (as it's in the default extension registry)
     Messages.SimpleContext contextValue =
         Messages.SimpleContext.newBuilder().setValue("dog").build();
     fixedHeaders.put(Util.METADATA_KEY, contextValue);
-    stub = MetadataUtils.attachHeaders(stub, fixedHeaders);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
-    stub = MetadataUtils.captureMetadata(stub, headersCapture, trailersCapture);
+    TestServiceGrpc.TestServiceBlockingStub stub = blockingStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(fixedHeaders),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
 
     assertNotNull(stub.emptyCall(EMPTY));
 
@@ -1066,19 +1079,18 @@ public abstract class AbstractInteropTest {
 
   @Test
   public void exchangeMetadataStreamingCall() throws Exception {
-    TestServiceGrpc.TestServiceStub stub = asyncStub;
-
     // Capture the metadata exchange
     Metadata fixedHeaders = new Metadata();
     // Send a context proto (as it's in the default extension registry)
     Messages.SimpleContext contextValue =
         Messages.SimpleContext.newBuilder().setValue("dog").build();
     fixedHeaders.put(Util.METADATA_KEY, contextValue);
-    stub = MetadataUtils.attachHeaders(stub, fixedHeaders);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
-    stub = MetadataUtils.captureMetadata(stub, headersCapture, trailersCapture);
+    TestServiceGrpc.TestServiceStub stub = asyncStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(fixedHeaders),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
 
     List<Integer> responseSizes = Arrays.asList(50, 100, 150, 200);
     Messages.StreamingOutputCallRequest.Builder streamingOutputBuilder =
@@ -1236,6 +1248,7 @@ public abstract class AbstractInteropTest {
       checkEndTags(
           clientEndRecord, "grpc.testing.TestService/EmptyCall",
           Status.DEADLINE_EXCEEDED.getCode(), true);
+      assertZeroRetryRecorded();
     }
 
     // warm up the channel
@@ -1245,6 +1258,7 @@ public abstract class AbstractInteropTest {
       clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
       // clientEndRecord
       clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
+      assertZeroRetryRecorded();
     }
     try {
       blockingStub
@@ -1263,6 +1277,7 @@ public abstract class AbstractInteropTest {
       checkEndTags(
           clientEndRecord, "grpc.testing.TestService/EmptyCall",
           Status.DEADLINE_EXCEEDED.getCode(), true);
+      assertZeroRetryRecorded();
     }
   }
 
@@ -1490,11 +1505,11 @@ public abstract class AbstractInteropTest {
     Metadata metadata = new Metadata();
     metadata.put(Util.ECHO_INITIAL_METADATA_KEY, "test_initial_metadata_value");
     metadata.put(Util.ECHO_TRAILING_METADATA_KEY, trailingBytes);
-    TestServiceGrpc.TestServiceBlockingStub blockingStub = this.blockingStub;
-    blockingStub = MetadataUtils.attachHeaders(blockingStub, metadata);
     AtomicReference<Metadata> headersCapture = new AtomicReference<>();
     AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
-    blockingStub = MetadataUtils.captureMetadata(blockingStub, headersCapture, trailersCapture);
+    TestServiceGrpc.TestServiceBlockingStub blockingStub = this.blockingStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(metadata),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
     SimpleResponse response = blockingStub.unaryCall(request);
 
     assertResponse(goldenResponse, response);
@@ -1509,11 +1524,11 @@ public abstract class AbstractInteropTest {
     metadata = new Metadata();
     metadata.put(Util.ECHO_INITIAL_METADATA_KEY, "test_initial_metadata_value");
     metadata.put(Util.ECHO_TRAILING_METADATA_KEY, trailingBytes);
-    TestServiceGrpc.TestServiceStub stub = asyncStub;
-    stub = MetadataUtils.attachHeaders(stub, metadata);
     headersCapture = new AtomicReference<>();
     trailersCapture = new AtomicReference<>();
-    stub = MetadataUtils.captureMetadata(stub, headersCapture, trailersCapture);
+    TestServiceGrpc.TestServiceStub stub = asyncStub.withInterceptors(
+        MetadataUtils.newAttachHeadersInterceptor(metadata),
+        MetadataUtils.newCaptureMetadataInterceptor(headersCapture, trailersCapture));
 
     StreamRecorder<Messages.StreamingOutputCallResponse> recorder = StreamRecorder.create();
     StreamObserver<Messages.StreamingOutputCallRequest> requestStream =
@@ -1873,6 +1888,128 @@ public abstract class AbstractInteropTest {
     assertResponse(goldenResponse, response);
   }
 
+  private static class SoakIterationResult {
+    public SoakIterationResult(long latencyMs, Status status) {
+      this.latencyMs = latencyMs;
+      this.status = status;
+    }
+
+    public long getLatencyMs() {
+      return latencyMs;
+    }
+
+    public Status getStatus() {
+      return status;
+    }
+
+    private long latencyMs = -1;
+    private Status status = Status.OK;
+  }
+
+  private SoakIterationResult performOneSoakIteration(boolean resetChannel) throws Exception {
+    long startNs = System.nanoTime();
+    Status status = Status.OK;
+    ManagedChannel soakChannel = channel;
+    TestServiceGrpc.TestServiceBlockingStub soakStub = blockingStub;
+    if (resetChannel) {
+      soakChannel = createChannel();
+      soakStub = TestServiceGrpc.newBlockingStub(soakChannel);
+    }
+    try {
+      final SimpleRequest request =
+          SimpleRequest.newBuilder()
+              .setResponseSize(314159)
+              .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[271828])))
+              .build();
+      final SimpleResponse goldenResponse =
+          SimpleResponse.newBuilder()
+              .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[314159])))
+              .build();
+      assertResponse(goldenResponse, soakStub.unaryCall(request));
+    } catch (StatusRuntimeException e) {
+      status = e.getStatus();
+    }
+    long elapsedNs = System.nanoTime() - startNs;
+    if (resetChannel) {
+      soakChannel.shutdownNow();
+      soakChannel.awaitTermination(10, TimeUnit.SECONDS);
+    }
+    return new SoakIterationResult(TimeUnit.NANOSECONDS.toMillis(elapsedNs), status);
+  }
+
+  /**
+    * Runs large unary RPCs in a loop with configurable failure thresholds
+    * and channel creation behavior.
+   */
+  public void performSoakTest(
+      boolean resetChannelPerIteration,
+      int soakIterations,
+      int maxFailures,
+      int maxAcceptablePerIterationLatencyMs,
+      int overallTimeoutSeconds)
+      throws Exception {
+    int iterationsDone = 0;
+    int totalFailures = 0;
+    Histogram latencies = new Histogram(4 /* number of significant value digits */);
+    long startNs = System.nanoTime();
+    for (int i = 0; i < soakIterations; i++) {
+      if (System.nanoTime() - startNs >= TimeUnit.SECONDS.toNanos(overallTimeoutSeconds)) {
+        break;
+      }
+      SoakIterationResult result = performOneSoakIteration(resetChannelPerIteration);
+      System.err.print(
+          String.format(
+              "soak iteration: %d elapsed: %d ms", i, result.getLatencyMs()));
+      if (!result.getStatus().equals(Status.OK)) {
+        totalFailures++;
+        System.err.println(String.format(" failed: %s", result.getStatus()));
+      } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
+        totalFailures++;
+        System.err.println(
+            String.format(
+                " exceeds max acceptable latency: %d", maxAcceptablePerIterationLatencyMs));
+      } else {
+        System.err.println(" succeeded");
+      }
+      iterationsDone++;
+      latencies.recordValue(result.getLatencyMs());
+    }
+    System.err.println(
+        String.format(
+            "soak test ran: %d / %d iterations\n"
+                + "total failures: %d\n"
+                + "max failures threshold: %d\n"
+                + "max acceptable per iteration latency ms: %d\n"
+                + " p50 soak iteration latency: %d ms\n"
+                + " p90 soak iteration latency: %d ms\n"
+                + "p100 soak iteration latency: %d ms\n"
+                + "See breakdown above for which iterations succeeded, failed, and "
+                + "why for more info.",
+            iterationsDone,
+            soakIterations,
+            totalFailures,
+            maxFailures,
+            maxAcceptablePerIterationLatencyMs,
+            latencies.getValueAtPercentile(50),
+            latencies.getValueAtPercentile(90),
+            latencies.getValueAtPercentile(100)));
+    // check if we timed out
+    String timeoutErrorMessage =
+        String.format(
+            "soak test consumed all %d seconds of time and quit early, only "
+                + "having ran %d out of desired %d iterations.",
+            overallTimeoutSeconds,
+            iterationsDone,
+            soakIterations);
+    assertEquals(timeoutErrorMessage, iterationsDone, soakIterations);
+    // check if we had too many failures
+    String tooManyFailuresErrorMessage =
+        String.format(
+            "soak test total failures: %d exceeds max failures threshold: %d.",
+            totalFailures, maxFailures);
+    assertTrue(tooManyFailuresErrorMessage, totalFailures <= maxFailures);
+  }
+
   protected static void assertSuccess(StreamRecorder<?> recorder) {
     if (recorder.getError() != null) {
       throw new AssertionError(recorder.getError());
@@ -1980,6 +2117,13 @@ public abstract class AbstractInteropTest {
     assertStatsTrace(method, status, null, null);
   }
 
+  private void assertZeroRetryRecorded() {
+    MetricsRecord retryRecord = clientStatsRecorder.pollRecord();
+    assertThat(retryRecord.getMetric(RETRIES_PER_CALL)).isEqualTo(0);
+    assertThat(retryRecord.getMetric(TRANSPARENT_RETRIES_PER_CALL)).isEqualTo(0);
+    assertThat(retryRecord.getMetric(RETRY_DELAY_PER_CALL)).isEqualTo(0D);
+  }
+
   private void assertClientStatsTrace(String method, Status.Code code,
       Collection<? extends MessageLite> requests, Collection<? extends MessageLite> responses) {
     // Tracer-based stats
@@ -2009,6 +2153,7 @@ public abstract class AbstractInteropTest {
       if (requests != null && responses != null) {
         checkCensus(clientEndRecord, false, requests, responses);
       }
+      assertZeroRetryRecorded();
     }
   }
 

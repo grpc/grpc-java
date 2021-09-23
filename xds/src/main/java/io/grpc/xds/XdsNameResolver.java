@@ -23,7 +23,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.protobuf.util.Durations;
@@ -95,8 +94,6 @@ final class XdsNameResolver extends NameResolver {
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
   static final CallOptions.Key<Long> RPC_HASH_KEY =
       CallOptions.Key.create("io.grpc.xds.RPC_HASH_KEY");
-  private static final NamedFilterConfig LAME_FILTER =
-      new NamedFilterConfig(null, LameFilter.LAME_CONFIG);
   @VisibleForTesting
   static boolean enableTimeout =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_TIMEOUT"))
@@ -124,22 +121,25 @@ final class XdsNameResolver extends NameResolver {
   private ResolveState resolveState;
 
   XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
-      SynchronizationContext syncContext, ScheduledExecutorService scheduler) {
+      SynchronizationContext syncContext, ScheduledExecutorService scheduler,
+      @Nullable Map<String, ?> bootstrapOverride) {
     this(name, serviceConfigParser, syncContext, scheduler,
         SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance,
-        FilterRegistry.getDefaultRegistry());
+        FilterRegistry.getDefaultRegistry(), bootstrapOverride);
   }
 
   @VisibleForTesting
   XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
-      FilterRegistry filterRegistry) {
+      FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
     authority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
-    this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    this.xdsClientPoolFactory = bootstrapOverride == null ? checkNotNull(xdsClientPoolFactory,
+            "xdsClientPoolFactory") : new SharedXdsClientPoolProvider();
+    this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
     logId = InternalLogId.allocate("xds-resolver", name);
@@ -182,13 +182,14 @@ final class XdsNameResolver extends NameResolver {
   @VisibleForTesting
   static Map<String, ?> generateServiceConfigWithMethodConfig(
       @Nullable Long timeoutNano, @Nullable RetryPolicy retryPolicy) {
-    if (timeoutNano == null && retryPolicy == null) {
+    if (timeoutNano == null
+        && (retryPolicy == null || retryPolicy.retryableStatusCodes().isEmpty())) {
       return Collections.emptyMap();
     }
     ImmutableMap.Builder<String, Object> methodConfig = ImmutableMap.builder();
     methodConfig.put(
         "name", Collections.singletonList(Collections.emptyMap()));
-    if (retryPolicy != null) {
+    if (retryPolicy != null && !retryPolicy.retryableStatusCodes().isEmpty()) {
       ImmutableMap.Builder<String, Object> rawRetryPolicy = ImmutableMap.builder();
       rawRetryPolicy.put("maxAttempts", (double) retryPolicy.maxAttempts());
       rawRetryPolicy.put("initialBackoff", Durations.toString(retryPolicy.initialBackoff()));
@@ -371,10 +372,6 @@ final class XdsNameResolver extends NameResolver {
       do {
         routingCfg = routingConfig;
         selectedOverrideConfigs = new HashMap<>(routingCfg.virtualHostOverrideConfig);
-        if (routingCfg.filterChain != null
-            && Iterables.getLast(routingCfg.filterChain).equals(LAME_FILTER)) {
-          break;
-        }
         for (Route route : routingCfg.routes) {
           if (matchRoute(route.routeMatch(), "/" + args.getMethodDescriptor().getFullMethodName(),
               headers, random)) {
@@ -439,12 +436,7 @@ final class XdsNameResolver extends NameResolver {
       if (routingCfg.filterChain != null) {
         for (NamedFilterConfig namedFilter : routingCfg.filterChain) {
           FilterConfig filterConfig = namedFilter.filterConfig;
-          Filter filter;
-          if (namedFilter.equals(LAME_FILTER)) {
-            filter = LameFilter.INSTANCE;
-          } else {
-            filter = filterRegistry.get(filterConfig.typeUrl());
-          }
+          Filter filter = filterRegistry.get(filterConfig.typeUrl());
           if (filter instanceof ClientInterceptorBuilder) {
             ClientInterceptor interceptor = ((ClientInterceptorBuilder) filter)
                 .buildClientInterceptor(
@@ -454,12 +446,6 @@ final class XdsNameResolver extends NameResolver {
               filterInterceptors.add(interceptor);
             }
           }
-        }
-        if (Iterables.getLast(routingCfg.filterChain).equals(LAME_FILTER)) {
-          return Result.newBuilder()
-              .setConfig(config)
-              .setInterceptor(combineInterceptors(filterInterceptors))
-              .build();
         }
       }
       final String finalCluster = cluster;
@@ -591,7 +577,7 @@ final class XdsNameResolver extends NameResolver {
       return false;
     }
     for (HeaderMatcher headerMatcher : routeMatch.headerMatchers()) {
-      if (!matchHeader(headerMatcher, getHeaderValue(headers, headerMatcher.name()))) {
+      if (!headerMatcher.matches(getHeaderValue(headers, headerMatcher.name()))) {
         return false;
       }
     }
@@ -610,36 +596,6 @@ final class XdsNameResolver extends NameResolver {
           : fullMethodName.toLowerCase().startsWith(pathMatcher.prefix().toLowerCase());
     }
     return pathMatcher.regEx().matches(fullMethodName);
-  }
-
-  // TODO(zivy): consider reuse Matchers.HeaderMatcher.matches()
-  private static boolean matchHeader(HeaderMatcher headerMatcher, @Nullable String value) {
-    if (headerMatcher.present() != null) {
-      return (value == null) == headerMatcher.present().equals(headerMatcher.inverted());
-    }
-    if (value == null) {
-      return false;
-    }
-    boolean baseMatch;
-    if (headerMatcher.exactValue() != null) {
-      baseMatch = headerMatcher.exactValue().equals(value);
-    } else if (headerMatcher.safeRegEx() != null) {
-      baseMatch = headerMatcher.safeRegEx().matches(value);
-    } else if (headerMatcher.range() != null) {
-      long numValue;
-      try {
-        numValue = Long.parseLong(value);
-        baseMatch = numValue >= headerMatcher.range().start()
-            && numValue <= headerMatcher.range().end();
-      } catch (NumberFormatException ignored) {
-        baseMatch = false;
-      }
-    } else if (headerMatcher.prefix() != null) {
-      baseMatch = value.startsWith(headerMatcher.prefix());
-    } else {
-      baseMatch = value.endsWith(headerMatcher.suffix());
-    }
-    return baseMatch != headerMatcher.inverted();
   }
 
   @Nullable
@@ -751,27 +707,7 @@ final class XdsNameResolver extends NameResolver {
         return;
       }
 
-      // A router filter is required for request routing. For backward compatibility, routing
-      // is always enabled for gRPC clients without HttpFilter support.
       List<Route> routes = virtualHost.routes();
-      List<NamedFilterConfig> filterChain = null;
-      if (filterConfigs != null) {
-        boolean hasRouter = false;
-        filterChain = new ArrayList<>(filterConfigs.size());
-        for (NamedFilterConfig namedFilter : filterConfigs) {
-          filterChain.add(namedFilter);
-          if (namedFilter.filterConfig.equals(RouterFilter.ROUTER_CONFIG)) {
-            hasRouter = true;
-            break;
-          }
-        }
-        if (!hasRouter) {
-          // Fail all RPCs if a router filter is not present. Reference counts for all currently
-          // selectable clusters should be reclaimed.
-          filterChain.add(LAME_FILTER);
-          routes = Collections.emptyList();
-        }
-      }
 
       // Populate all clusters to which requests can be routed to through the virtual host.
       Set<String> clusters = new HashSet<>();
@@ -812,7 +748,7 @@ final class XdsNameResolver extends NameResolver {
       // selectable.
       routingConfig =
           new RoutingConfig(
-              httpMaxStreamDurationNano, routes, filterChain,
+              httpMaxStreamDurationNano, routes, filterConfigs,
               virtualHost.filterConfigOverrides());
       shouldUpdateResult = false;
       for (String cluster : deletedClusters) {

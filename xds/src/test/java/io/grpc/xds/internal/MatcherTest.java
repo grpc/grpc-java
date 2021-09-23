@@ -127,45 +127,58 @@ public class MatcherTest {
     HeaderMatcher matcher = HeaderMatcher.forExactValue("version", "v1", false);
     assertThat(matcher.matches("v1")).isTrue();
     assertThat(matcher.matches("v2")).isFalse();
+    assertThat(matcher.matches(null)).isFalse();
 
     matcher = HeaderMatcher.forExactValue("version", "v1", true);
     assertThat(matcher.matches("v1")).isFalse();
     assertThat(matcher.matches( "v2")).isTrue();
+    assertThat(matcher.matches(null)).isFalse();
 
     matcher = HeaderMatcher.forPresent("version", true, false);
     assertThat(matcher.matches("any")).isTrue();
     assertThat(matcher.matches(null)).isFalse();
     matcher = HeaderMatcher.forPresent("version", true, true);
     assertThat(matcher.matches("version")).isFalse();
+    assertThat(matcher.matches(null)).isTrue();
     matcher = HeaderMatcher.forPresent("version", false, true);
     assertThat(matcher.matches("tag")).isTrue();
+    assertThat(matcher.matches(null)).isFalse();
     matcher = HeaderMatcher.forPresent("version", false, false);
     assertThat(matcher.matches("tag")).isFalse();
+    assertThat(matcher.matches(null)).isTrue();
 
     matcher = HeaderMatcher.forPrefix("version", "v2", false);
     assertThat(matcher.matches("v22")).isTrue();
+    assertThat(matcher.matches(null)).isFalse();
     matcher = HeaderMatcher.forPrefix("version", "v2", true);
     assertThat(matcher.matches("v22")).isFalse();
+    assertThat(matcher.matches(null)).isFalse();
 
     matcher = HeaderMatcher.forSuffix("version", "v1", false);
     assertThat(matcher.matches("xv1")).isTrue();
     assertThat(matcher.matches("v1x")).isFalse();
+    assertThat(matcher.matches(null)).isFalse();
     matcher = HeaderMatcher.forSuffix("version", "v2", true);
     assertThat(matcher.matches("xv1")).isTrue();
     assertThat(matcher.matches("1v2")).isFalse();
+    assertThat(matcher.matches(null)).isFalse();
 
     matcher = HeaderMatcher.forSafeRegEx("version", Pattern.compile("v2.*"), false);
     assertThat(matcher.matches("v2..")).isTrue();
     assertThat(matcher.matches("v1")).isFalse();
+    assertThat(matcher.matches(null)).isFalse();
     matcher = HeaderMatcher.forSafeRegEx("version", Pattern.compile("v1\\..*"), true);
     assertThat(matcher.matches("v1.43")).isFalse();
     assertThat(matcher.matches("v2")).isTrue();
+    assertThat(matcher.matches(null)).isFalse();
 
     matcher = HeaderMatcher.forRange("version", Range.create(8080L, 8090L), false);
     assertThat(matcher.matches("8080")).isTrue();
     assertThat(matcher.matches("1")).isFalse();
+    assertThat(matcher.matches(null)).isFalse();
     matcher = HeaderMatcher.forRange("version", Range.create(8080L, 8090L), true);
     assertThat(matcher.matches("1")).isTrue();
     assertThat(matcher.matches("8080")).isFalse();
+    assertThat(matcher.matches(null)).isFalse();
   }
 }

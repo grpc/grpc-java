@@ -89,6 +89,11 @@ final class GrpclbState {
   private static final Attributes LB_PROVIDED_BACKEND_ATTRS =
       Attributes.newBuilder().set(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND, true).build();
 
+  // Temporary workaround to reduce log spam for a grpclb server that incessantly sends updates
+  // Tracked by b/198440401
+  static final boolean SHOULD_LOG_SERVER_LISTS =
+      Boolean.parseBoolean(System.getProperty("io.grpc.grpclb.LogServerLists", "true"));
+
   @VisibleForTesting
   static final PickResult DROP_PICK_RESULT =
       PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped as requested by balancer"));
@@ -469,12 +474,6 @@ final class GrpclbState {
   private void updateServerList(
       List<DropEntry> newDropList, List<BackendAddressGroup> newBackendAddrList,
       @Nullable GrpclbClientLoadRecorder loadRecorder) {
-    logger.log(
-        ChannelLogLevel.INFO,
-        "[grpclb-<{0}>] Using RR list={1}, drop={2}",
-        serviceName,
-        newBackendAddrList,
-        newDropList);
     HashMap<List<EquivalentAddressGroup>, Subchannel> newSubchannelMap =
         new HashMap<>();
     List<BackendEntry> newBackendList = new ArrayList<>();
@@ -710,9 +709,12 @@ final class GrpclbState {
         scheduleNextLoadReport();
         return;
       }
-
-      logger.log(
-          ChannelLogLevel.DEBUG, "[grpclb-<{0}>] Got an LB response: {1}", serviceName, response);
+      if (SHOULD_LOG_SERVER_LISTS) {
+        logger.log(
+            ChannelLogLevel.DEBUG, "[grpclb-<{0}>] Got an LB response: {1}", serviceName, response);
+      } else {
+        logger.log(ChannelLogLevel.DEBUG, "[grpclb-<{0}>] Got an LB response", serviceName);
+      }
 
       if (typeCase == LoadBalanceResponseTypeCase.FALLBACK_RESPONSE) {
         // Force entering fallback requested by balancer.
@@ -926,13 +928,6 @@ final class GrpclbState {
       return;
     }
     currentPicker = picker;
-    logger.log(
-        ChannelLogLevel.INFO,
-        "[grpclb-<{0}>] Update balancing state to {1}: picks={2}, drops={3}",
-        serviceName,
-        state,
-        picker.pickList,
-        picker.dropList);
     helper.updateBalancingState(state, picker);
   }
 
@@ -1179,10 +1174,13 @@ final class GrpclbState {
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(RoundRobinPicker.class)
-          .add("dropList", dropList)
-          .add("pickList", pickList)
-          .toString();
+      if (SHOULD_LOG_SERVER_LISTS) {
+        return MoreObjects.toStringHelper(RoundRobinPicker.class)
+            .add("dropList", dropList)
+            .add("pickList", pickList)
+            .toString();
+      }
+      return MoreObjects.toStringHelper(RoundRobinPicker.class).toString();
     }
   }
 }

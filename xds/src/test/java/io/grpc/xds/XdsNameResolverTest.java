@@ -153,7 +153,7 @@ public class XdsNameResolverTest {
         new FaultFilter(mockRandom, new AtomicLong()),
         RouterFilter.INSTANCE);
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, filterRegistry);
+        xdsClientPoolFactory, mockRandom, filterRegistry, null);
   }
 
   @After
@@ -172,7 +172,6 @@ public class XdsNameResolverTest {
     XdsClientPoolFactory xdsClientPoolFactory = new XdsClientPoolFactory() {
       @Override
       public void setBootstrapOverride(Map<String, ?> bootstrap) {
-        throw new UnsupportedOperationException("Should not be called");
       }
 
       @Override
@@ -187,7 +186,7 @@ public class XdsNameResolverTest {
       }
     };
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry());
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
@@ -437,7 +436,7 @@ public class XdsNameResolverTest {
     ServiceConfigParser realParser = new ScParser(
         true, 5, 5, new AutoConfiguredLoadBalancerFactory("pick-first"));
     resolver = new XdsNameResolver(AUTHORITY, realParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry());
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     RetryPolicy retryPolicy = RetryPolicy.create(
@@ -640,7 +639,7 @@ public class XdsNameResolverTest {
     resolver.shutdown();
     reset(mockListener);
     resolver = new XdsNameResolver(AUTHORITY, serviceConfigParser, syncContext, scheduler,
-        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry());
+        xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
     resolver.start(mockListener);
     xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
@@ -989,6 +988,8 @@ public class XdsNameResolverTest {
     RetryPolicy retryPolicy = RetryPolicy.create(
         4, ImmutableList.of(Code.UNAVAILABLE, Code.CANCELLED), Durations.fromMillis(100),
         Durations.fromMillis(200), null);
+    RetryPolicy retryPolicyWithEmptyStatusCodes = RetryPolicy.create(
+        4, ImmutableList.<Code>of(), Durations.fromMillis(100), Durations.fromMillis(200), null);
 
     // timeout only
     String expectedServiceConfigJson = "{\n"
@@ -1000,6 +1001,11 @@ public class XdsNameResolverTest {
     Map<String, ?> expectedServiceConfig =
         (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(timeoutNano, null))
+        .isEqualTo(expectedServiceConfig);
+
+    // timeout and retry with empty retriable status codes
+    assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(
+            timeoutNano, retryPolicyWithEmptyStatusCodes))
         .isEqualTo(expectedServiceConfig);
 
     // retry only
@@ -1021,6 +1027,7 @@ public class XdsNameResolverTest {
         (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(null, retryPolicy))
         .isEqualTo(expectedServiceConfig);
+
 
     // timeout and retry
     expectedServiceConfigJson = "{\n"
@@ -1044,11 +1051,15 @@ public class XdsNameResolverTest {
         .isEqualTo(expectedServiceConfig);
 
     // no timeout and no retry
-    // timeout and retry
     expectedServiceConfigJson = "{}";
     expectedServiceConfig =
         (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(null, null))
+        .isEqualTo(expectedServiceConfig);
+
+    // retry with emtry retriable status codes only
+    assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(
+            null, retryPolicyWithEmptyStatusCodes))
         .isEqualTo(expectedServiceConfig);
   }
 
@@ -1386,20 +1397,6 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void resolved_withNoRouterFilter() {
-    resolver.start(mockListener);
-    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    xdsClient.deliverLdsUpdateWithNoRouterFilter();
-    verify(mockListener).onResult(resolutionResultCaptor.capture());
-    ResolutionResult result = resolutionResultCaptor.getValue();
-    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
-    ClientCall.Listener<Void> observer = startNewCall(
-        TestMethodDescriptors.voidMethod(), configSelector, Collections.<String, String>emptyMap(),
-        CallOptions.DEFAULT);
-    verifyRpcFailed(observer, Status.UNAVAILABLE.withDescription("No router filter"));
-  }
-
-  @Test
   public void resolved_faultAbortAndDelayInLdsUpdateInLdsUpdate() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
@@ -1701,10 +1698,8 @@ public class XdsNameResolverTest {
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
-
     @Override
     public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      throw new UnsupportedOperationException("Should not be called");
     }
 
     @Override
@@ -1827,16 +1822,6 @@ public class XdsNameResolverTest {
           overrideConfig);
       ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
           0L, Collections.singletonList(virtualHost), filterChain)));
-    }
-
-    void deliverLdsUpdateWithNoRouterFilter() {
-      VirtualHost virtualHost = VirtualHost.create(
-          "virtual-host",
-          Collections.singletonList(AUTHORITY),
-          Collections.<Route>emptyList(),
-          Collections.<String, FilterConfig>emptyMap());
-      ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-          0L, Collections.singletonList(virtualHost), ImmutableList.<NamedFilterConfig>of())));
     }
 
     void deliverLdsUpdateForRdsNameWithFaultInjection(

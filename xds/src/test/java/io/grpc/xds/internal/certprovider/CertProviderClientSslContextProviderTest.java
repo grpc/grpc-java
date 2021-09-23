@@ -87,6 +87,27 @@ public class CertProviderClientSslContextProviderTest {
         bootstrapInfo.getCertProviders());
   }
 
+  /** Helper method to build CertProviderClientSslContextProvider. */
+  private CertProviderClientSslContextProvider getNewSslContextProvider(
+          String certInstanceName,
+          String rootInstanceName,
+          Bootstrapper.BootstrapInfo bootstrapInfo,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext) {
+    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
+            CommonTlsContextTestsUtil.buildNewUpstreamTlsContextForCertProviderInstance(
+                    certInstanceName,
+                    "cert-default",
+                    rootInstanceName,
+                    "root-default",
+                    alpnProtocols,
+                    staticCertValidationContext);
+    return certProviderClientSslContextProviderFactory.getProvider(
+            upstreamTlsContext,
+            bootstrapInfo.getNode().toEnvoyProtoNode(),
+            bootstrapInfo.getCertProviders());
+  }
+
   @Test
   public void testProviderForClient_mtls() throws Exception {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
@@ -142,6 +163,69 @@ public class CertProviderClientSslContextProviderTest {
     watcherCaptor[0].updateCertificate(
         CommonCertProviderTestUtils.getPrivateKey(SERVER_1_KEY_FILE),
         ImmutableList.of(getCertFromResourceName(SERVER_1_PEM_FILE)));
+    assertThat(provider.savedKey).isNull();
+    assertThat(provider.savedCertChain).isNull();
+    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.getSslContext()).isNotNull();
+    testCallback1 = CommonTlsContextTestsUtil.getValueThruCallback(provider);
+    assertThat(testCallback1.updatedSslContext).isNotSameInstanceAs(testCallback.updatedSslContext);
+  }
+
+  @Test
+  public void testProviderForClient_mtls_newXds() throws Exception {
+    final CertificateProvider.DistributorWatcher[] watcherCaptor =
+            new CertificateProvider.DistributorWatcher[1];
+    TestCertificateProvider.createAndRegisterProviderProvider(
+            certificateProviderRegistry, watcherCaptor, "testca", 0);
+    CertProviderClientSslContextProvider provider =
+            getNewSslContextProvider(
+                    "gcp_id",
+                    "gcp_id",
+                    CommonBootstrapperTestUtils.getTestBootstrapInfo(),
+                    /* alpnProtocols= */ null,
+                    /* staticCertValidationContext= */ null);
+
+    assertThat(provider.savedKey).isNull();
+    assertThat(provider.savedCertChain).isNull();
+    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.getSslContext()).isNull();
+
+    // now generate cert update
+    watcherCaptor[0].updateCertificate(
+            CommonCertProviderTestUtils.getPrivateKey(CLIENT_KEY_FILE),
+            ImmutableList.of(getCertFromResourceName(CLIENT_PEM_FILE)));
+    assertThat(provider.savedKey).isNotNull();
+    assertThat(provider.savedCertChain).isNotNull();
+    assertThat(provider.getSslContext()).isNull();
+
+    // now generate root cert update
+    watcherCaptor[0].updateTrustedRoots(ImmutableList.of(getCertFromResourceName(CA_PEM_FILE)));
+    assertThat(provider.getSslContext()).isNotNull();
+    assertThat(provider.savedKey).isNull();
+    assertThat(provider.savedCertChain).isNull();
+    assertThat(provider.savedTrustedRoots).isNull();
+
+    TestCallback testCallback =
+            CommonTlsContextTestsUtil.getValueThruCallback(provider);
+
+    doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
+    TestCallback testCallback1 =
+            CommonTlsContextTestsUtil.getValueThruCallback(provider);
+    assertThat(testCallback1.updatedSslContext).isSameInstanceAs(testCallback.updatedSslContext);
+
+    // just do root cert update: sslContext should still be the same
+    watcherCaptor[0].updateTrustedRoots(
+            ImmutableList.of(getCertFromResourceName(SERVER_0_PEM_FILE)));
+    assertThat(provider.savedKey).isNull();
+    assertThat(provider.savedCertChain).isNull();
+    assertThat(provider.savedTrustedRoots).isNotNull();
+    testCallback1 = CommonTlsContextTestsUtil.getValueThruCallback(provider);
+    assertThat(testCallback1.updatedSslContext).isSameInstanceAs(testCallback.updatedSslContext);
+
+    // now update id cert: sslContext should be updated i.e.different from the previous one
+    watcherCaptor[0].updateCertificate(
+            CommonCertProviderTestUtils.getPrivateKey(SERVER_1_KEY_FILE),
+            ImmutableList.of(getCertFromResourceName(SERVER_1_PEM_FILE)));
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNull();

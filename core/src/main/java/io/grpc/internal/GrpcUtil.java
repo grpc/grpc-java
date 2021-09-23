@@ -65,7 +65,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -109,6 +108,9 @@ public final class GrpcUtil {
    */
   public static final Metadata.Key<byte[]> CONTENT_ACCEPT_ENCODING_KEY =
       InternalMetadata.keyOf(GrpcUtil.CONTENT_ACCEPT_ENCODING, new AcceptEncodingMarshaller());
+
+  static final Metadata.Key<String> CONTENT_LENGTH_KEY =
+      Metadata.Key.of("content-length", Metadata.ASCII_STRING_MARSHALLER);
 
   private static final class AcceptEncodingMarshaller implements TrustedAsciiMarshaller<byte[]> {
     @Override
@@ -203,7 +205,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.41.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  private static final String IMPLEMENTATION_VERSION = "1.42.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -758,11 +760,12 @@ public final class GrpcUtil {
 
   /** Gets stream tracers based on CallOptions. */
   public static ClientStreamTracer[] getClientStreamTracers(
-      CallOptions callOptions, Metadata headers, boolean isTransparentRetry) {
+      CallOptions callOptions, Metadata headers, int previousAttempts, boolean isTransparentRetry) {
     List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
     ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
     StreamInfo streamInfo = StreamInfo.newBuilder()
         .setCallOptions(callOptions)
+        .setPreviousAttempts(previousAttempts)
         .setIsTransparentRetry(isTransparentRetry)
         .build();
     for (int i = 0; i < factories.size(); i++) {
@@ -785,15 +788,22 @@ public final class GrpcUtil {
     } else {
       streamTracer = new ForwardingClientStreamTracer() {
         final ClientStreamTracer noop = new ClientStreamTracer() {};
-        AtomicReference<ClientStreamTracer> delegate = new AtomicReference<>(noop);
+        volatile ClientStreamTracer delegate = noop;
 
         void maybeInit(StreamInfo info, Metadata headers) {
-          delegate.compareAndSet(noop, streamTracerFactory.newClientStreamTracer(info, headers));
+          if (delegate != noop) {
+            return;
+          }
+          synchronized (this) {
+            if (delegate == noop) {
+              delegate = streamTracerFactory.newClientStreamTracer(info, headers);
+            }
+          }
         }
 
         @Override
         protected ClientStreamTracer delegate() {
-          return delegate.get();
+          return delegate;
         }
 
         @SuppressWarnings("deprecation")

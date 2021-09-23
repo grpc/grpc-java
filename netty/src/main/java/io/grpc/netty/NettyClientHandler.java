@@ -62,7 +62,6 @@ import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
-import io.netty.handler.codec.http2.Http2FlowController;
 import io.netty.handler.codec.http2.Http2FrameAdapter;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2FrameReader;
@@ -217,17 +216,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
         frameReader);
 
-    transportTracer.setFlowControlWindowReader(new TransportTracer.FlowControlReader() {
-      final Http2FlowController local = connection.local().flowController();
-      final Http2FlowController remote = connection.remote().flowController();
-
-      @Override
-      public TransportTracer.FlowControlWindows read() {
-        return new TransportTracer.FlowControlWindows(
-            local.windowSize(connection.connectionStream()),
-            remote.windowSize(connection.connectionStream()));
-      }
-    });
+    transportTracer.setFlowControlWindowReader(new Utils.FlowControlReader(connection));
 
     Http2Settings settings = new Http2Settings();
     settings.pushEnabled(false);

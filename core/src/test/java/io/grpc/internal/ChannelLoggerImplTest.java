@@ -100,7 +100,7 @@ public class ChannelLoggerImplTest {
         .setTimestampNanos(200)
         .build();
     assertThat(stats.channelTrace.events).containsExactly(event);
-    assertThat(logs).contains("FINER: " + logPrefix + "Warning message");
+    assertThat(logs).contains("FINE: " + logPrefix + "Warning message");
 
     clock.forwardNanos(100);
     logger.log(ChannelLogLevel.INFO, "Info message");
@@ -112,7 +112,7 @@ public class ChannelLoggerImplTest {
         .setTimestampNanos(300)
         .build();
     assertThat(stats.channelTrace.events).containsExactly(event);
-    assertThat(logs).contains("FINEST: " + logPrefix + "Info message");
+    assertThat(logs).contains("FINER: " + logPrefix + "Info message");
 
     clock.forwardNanos(100);
     logger.log(ChannelLogLevel.DEBUG, "Debug message");
@@ -154,7 +154,7 @@ public class ChannelLoggerImplTest {
         .setTimestampNanos(200)
         .build();
     assertThat(stats.channelTrace.events).containsExactly(event);
-    assertThat(logs).contains("FINER: " + logPrefix + "Warning message foo, bar");
+    assertThat(logs).contains("FINE: " + logPrefix + "Warning message foo, bar");
 
     clock.forwardNanos(100);
     logger.log(ChannelLogLevel.INFO, "Info message {0}", "bar");
@@ -166,7 +166,7 @@ public class ChannelLoggerImplTest {
         .setTimestampNanos(300)
         .build();
     assertThat(stats.channelTrace.events).containsExactly(event);
-    assertThat(logs).contains("FINEST: " + logPrefix + "Info message bar");
+    assertThat(logs).contains("FINER: " + logPrefix + "Info message bar");
 
     clock.forwardNanos(100);
     logger.log(ChannelLogLevel.DEBUG, "Debug message {0}", "foo");

@@ -28,6 +28,7 @@ import io.envoyproxy.envoy.config.rbac.v3.Policy;
 import io.envoyproxy.envoy.config.rbac.v3.Principal;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC;
 import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBACPerRoute;
+import io.envoyproxy.envoy.type.v3.Int32Range;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
@@ -45,6 +46,7 @@ import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthHeaderMatche
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthenticatedMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.DestinationIpMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.DestinationPortMatcher;
+import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.DestinationPortRangeMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.InvertMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.Matcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.OrMatcher;
@@ -124,14 +126,15 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
           return ConfigOrError.fromError(
                   "Policy.condition and Policy.checked_condition must not set: " + entry.getKey());
         }
-        policyMatchers.add(new PolicyMatcher(entry.getKey(),
+        policyMatchers.add(PolicyMatcher.create(entry.getKey(),
                 parsePermissionList(policy.getPermissionsList()),
                 parsePrincipalList(policy.getPrincipalsList())));
       } catch (Exception e) {
         return ConfigOrError.fromError("Encountered error parsing policy: " + e);
       }
     }
-    return ConfigOrError.fromConfig(RbacConfig.create(new AuthConfig(policyMatchers, authAction)));
+    return ConfigOrError.fromConfig(RbacConfig.create(
+        AuthConfig.create(policyMatchers, authAction)));
   }
 
   @Override
@@ -193,7 +196,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
     for (Permission permission : permissions) {
       anyMatch.add(parsePermission(permission));
     }
-    return new OrMatcher(anyMatch);
+    return OrMatcher.create(anyMatch);
   }
 
   private static Matcher parsePermission(Permission permission) {
@@ -203,7 +206,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
         for (Permission p : permission.getAndRules().getRulesList()) {
           andMatch.add(parsePermission(p));
         }
-        return new AndMatcher(andMatch);
+        return AndMatcher.create(andMatch);
       case OR_RULES:
         return parsePermissionList(permission.getOrRules().getRulesList());
       case ANY:
@@ -216,10 +219,12 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
         return createDestinationIpMatcher(permission.getDestinationIp());
       case DESTINATION_PORT:
         return createDestinationPortMatcher(permission.getDestinationPort());
+      case DESTINATION_PORT_RANGE:
+        return parseDestinationPortRangeMatcher(permission.getDestinationPortRange());
       case NOT_RULE:
-        return new InvertMatcher(parsePermission(permission.getNotRule()));
+        return InvertMatcher.create(parsePermission(permission.getNotRule()));
       case METADATA: // hard coded, never match.
-        return new InvertMatcher(AlwaysTrueMatcher.INSTANCE);
+        return InvertMatcher.create(AlwaysTrueMatcher.INSTANCE);
       case REQUESTED_SERVER_NAME:
         return parseRequestedServerNameMatcher(permission.getRequestedServerName());
       case RULE_NOT_SET:
@@ -234,7 +239,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
     for (Principal principal: principals) {
       anyMatch.add(parsePrincipal(principal));
     }
-    return new OrMatcher(anyMatch);
+    return OrMatcher.create(anyMatch);
   }
 
   private static Matcher parsePrincipal(Principal principal) {
@@ -246,7 +251,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
         for (Principal next : principal.getAndIds().getIdsList()) {
           nextMatchers.add(parsePrincipal(next));
         }
-        return new AndMatcher(nextMatchers);
+        return AndMatcher.create(nextMatchers);
       case ANY:
         return AlwaysTrueMatcher.INSTANCE;
       case AUTHENTICATED:
@@ -260,11 +265,11 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
       case HEADER:
         return parseHeaderMatcher(principal.getHeader());
       case NOT_ID:
-        return new InvertMatcher(parsePrincipal(principal.getNotId()));
+        return InvertMatcher.create(parsePrincipal(principal.getNotId()));
       case URL_PATH:
         return parsePathMatcher(principal.getUrlPath());
       case METADATA: // hard coded, never match.
-        return new InvertMatcher(AlwaysTrueMatcher.INSTANCE);
+        return InvertMatcher.create(AlwaysTrueMatcher.INSTANCE);
       case IDENTIFIER_NOT_SET:
       default:
         throw new IllegalArgumentException(
@@ -276,7 +281,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
           io.envoyproxy.envoy.type.matcher.v3.PathMatcher proto) {
     switch (proto.getRuleCase()) {
       case PATH:
-        return new PathMatcher(MatcherParser.parseStringMatcher(proto.getPath()));
+        return PathMatcher.create(MatcherParser.parseStringMatcher(proto.getPath()));
       case RULE_NOT_SET:
       default:
         throw new IllegalArgumentException(
@@ -286,31 +291,43 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
 
   private static RequestedServerNameMatcher parseRequestedServerNameMatcher(
           io.envoyproxy.envoy.type.matcher.v3.StringMatcher proto) {
-    return new RequestedServerNameMatcher(MatcherParser.parseStringMatcher(proto));
+    return RequestedServerNameMatcher.create(MatcherParser.parseStringMatcher(proto));
   }
 
   private static AuthHeaderMatcher parseHeaderMatcher(
           io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
-    return new AuthHeaderMatcher(MatcherParser.parseHeaderMatcher(proto));
+    if (proto.getName().startsWith("grpc-")) {
+      throw new IllegalArgumentException("Invalid header matcher config: [grpc-] prefixed "
+          + "header name is not allowed.");
+    }
+    if (":scheme".equals(proto.getName())) {
+      throw new IllegalArgumentException("Invalid header matcher config: header name [:scheme] "
+          + "is not allowed.");
+    }
+    return AuthHeaderMatcher.create(MatcherParser.parseHeaderMatcher(proto));
   }
 
   private static AuthenticatedMatcher parseAuthenticatedMatcher(
           Principal.Authenticated proto) {
     Matchers.StringMatcher matcher = MatcherParser.parseStringMatcher(proto.getPrincipalName());
-    return new AuthenticatedMatcher(matcher);
+    return AuthenticatedMatcher.create(matcher);
   }
 
   private static DestinationPortMatcher createDestinationPortMatcher(int port) {
-    return new DestinationPortMatcher(port);
+    return DestinationPortMatcher.create(port);
+  }
+
+  private static DestinationPortRangeMatcher parseDestinationPortRangeMatcher(Int32Range range) {
+    return DestinationPortRangeMatcher.create(range.getStart(), range.getEnd());
   }
 
   private static DestinationIpMatcher createDestinationIpMatcher(CidrRange cidrRange) {
-    return new DestinationIpMatcher(Matchers.CidrMatcher.create(
+    return DestinationIpMatcher.create(Matchers.CidrMatcher.create(
             resolve(cidrRange), cidrRange.getPrefixLen().getValue()));
   }
 
   private static SourceIpMatcher createSourceIpMatcher(CidrRange cidrRange) {
-    return new SourceIpMatcher(Matchers.CidrMatcher.create(
+    return SourceIpMatcher.create(Matchers.CidrMatcher.create(
             resolve(cidrRange), cidrRange.getPrefixLen().getValue()));
   }
 

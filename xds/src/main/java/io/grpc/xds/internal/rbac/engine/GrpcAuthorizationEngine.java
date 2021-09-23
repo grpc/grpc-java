@@ -20,6 +20,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableList;
+import com.google.common.io.BaseEncoding;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -35,6 +37,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -65,14 +68,14 @@ public final class GrpcAuthorizationEngine {
     checkNotNull(serverCall, "serverCall");
     String firstMatch = null;
     EvaluateArgs args = new EvaluateArgs(metadata, serverCall);
-    for (PolicyMatcher policyMatcher : authConfig.policies) {
+    for (PolicyMatcher policyMatcher : authConfig.policies()) {
       if (policyMatcher.matches(args)) {
-        firstMatch = policyMatcher.name;
+        firstMatch = policyMatcher.name();
         break;
       }
     }
     Action decisionType = Action.DENY;
-    if (Action.DENY.equals(authConfig.action) == (firstMatch == null)) {
+    if (Action.DENY.equals(authConfig.action()) == (firstMatch == null)) {
       decisionType = Action.ALLOW;
     }
     log.log(Level.FINER, "RBAC decision: {0}, policy match: {1}.",
@@ -101,13 +104,15 @@ public final class GrpcAuthorizationEngine {
   }
 
   /** Represents authorization config policy that the engine will evaluate against. */
-  public static final class AuthConfig {
-    private final List<PolicyMatcher> policies;
-    private final Action action;
+  @AutoValue
+  public abstract static class AuthConfig {
+    public abstract ImmutableList<PolicyMatcher> policies();
 
-    public AuthConfig(List<PolicyMatcher> policies, Action action) {
-      this.policies = Collections.unmodifiableList(new ArrayList<>(policies));
-      this.action = action;
+    public abstract Action action();
+
+    public static AuthConfig create(List<PolicyMatcher> policies, Action action) {
+      return new AutoValue_GrpcAuthorizationEngine_AuthConfig(
+          ImmutableList.copyOf(policies), action);
     }
   }
 
@@ -119,33 +124,36 @@ public final class GrpcAuthorizationEngine {
    * <p>Currently we only support matching some of the request fields. Those unsupported fields are
    * considered not match until we stop ignoring them.
    */
-  public static final class PolicyMatcher implements Matcher {
-    private final OrMatcher permissions;
-    private final OrMatcher principals;
-    private final String name;
+  @AutoValue
+  public abstract static class PolicyMatcher implements Matcher {
+    public abstract String name();
+
+    public abstract OrMatcher permissions();
+
+    public abstract OrMatcher principals();
 
     /** Constructs a matcher for one RBAC policy. */
-    public PolicyMatcher(String name, OrMatcher permissions, OrMatcher principals) {
-      this.name = name;
-      this.permissions = permissions;
-      this.principals = principals;
+    public static PolicyMatcher create(String name, OrMatcher permissions, OrMatcher principals) {
+      return new AutoValue_GrpcAuthorizationEngine_PolicyMatcher(name, permissions, principals);
     }
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return permissions.matches(args) && principals.matches(args);
+      return permissions().matches(args) && principals().matches(args);
     }
   }
 
-  public static final class AuthenticatedMatcher implements Matcher {
-    private final Matchers.StringMatcher delegate;
+  @AutoValue
+  public abstract static class AuthenticatedMatcher implements Matcher {
+    @Nullable
+    public abstract Matchers.StringMatcher delegate();
 
     /**
      * Passing in null will match all authenticated user, i.e. SSL session is present.
      * https://github.com/envoyproxy/envoy/blob/main/api/envoy/config/rbac/v3/rbac.proto#L240
      * */
-    public AuthenticatedMatcher(@Nullable Matchers.StringMatcher delegate) {
-      this.delegate = delegate;
+    public static AuthenticatedMatcher create(@Nullable Matchers.StringMatcher delegate) {
+      return new AutoValue_GrpcAuthorizationEngine_AuthenticatedMatcher(delegate);
     }
 
     @Override
@@ -157,11 +165,11 @@ public final class GrpcAuthorizationEngine {
         return false;
       }
       // Connection is authenticated, so returns match when delegated string matcher is not present.
-      if (delegate == null) {
+      if (delegate() == null) {
         return true;
       }
       for (String name : principalNames) {
-        if (delegate.matches(name)) {
+        if (delegate().matches(name)) {
           return true;
         }
       }
@@ -169,81 +177,105 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  public static final class DestinationIpMatcher implements Matcher {
-    private final Matchers.CidrMatcher delegate;
+  @AutoValue
+  public abstract static class DestinationIpMatcher implements Matcher {
+    public abstract Matchers.CidrMatcher delegate();
 
-    public DestinationIpMatcher(Matchers.CidrMatcher delegate) {
-      this.delegate = checkNotNull(delegate, "delegate");
+    public static DestinationIpMatcher create(Matchers.CidrMatcher delegate) {
+      return new AutoValue_GrpcAuthorizationEngine_DestinationIpMatcher(delegate);
     }
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return delegate.matches(args.getDestinationIp());
+      return delegate().matches(args.getDestinationIp());
     }
   }
 
-  public static final class SourceIpMatcher implements Matcher {
-    private final Matchers.CidrMatcher delegate;
+  @AutoValue
+  public abstract static class SourceIpMatcher implements Matcher {
+    public abstract Matchers.CidrMatcher delegate();
 
-    public SourceIpMatcher(Matchers.CidrMatcher delegate) {
-      this.delegate = checkNotNull(delegate, "delegate");
+    public static SourceIpMatcher create(Matchers.CidrMatcher delegate) {
+      return new AutoValue_GrpcAuthorizationEngine_SourceIpMatcher(delegate);
     }
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return delegate.matches(args.getSourceIp());
+      return delegate().matches(args.getSourceIp());
     }
   }
 
-  public static final class PathMatcher implements Matcher {
-    private final Matchers.StringMatcher delegate;
+  @AutoValue
+  public abstract static class PathMatcher implements Matcher {
+    public abstract Matchers.StringMatcher delegate();
 
-    public PathMatcher(Matchers.StringMatcher delegate) {
-      this.delegate = checkNotNull(delegate, "delegate");
+    public static PathMatcher create(Matchers.StringMatcher delegate) {
+      return new AutoValue_GrpcAuthorizationEngine_PathMatcher(delegate);
     }
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return delegate.matches(args.getPath());
+      return delegate().matches(args.getPath());
     }
   }
 
-  public static final class AuthHeaderMatcher implements Matcher {
-    private final Matchers.HeaderMatcher delegate;
+  @AutoValue
+  public abstract static class AuthHeaderMatcher implements Matcher {
+    public abstract Matchers.HeaderMatcher delegate();
 
-    public AuthHeaderMatcher(Matchers.HeaderMatcher delegate) {
-      this.delegate = checkNotNull(delegate, "delegate");
+    public static AuthHeaderMatcher create(Matchers.HeaderMatcher delegate) {
+      return new AutoValue_GrpcAuthorizationEngine_AuthHeaderMatcher(delegate);
     }
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return delegate.matches(args.getHeader(delegate.name()));
+      return delegate().matches(args.getHeader(delegate().name()));
     }
   }
 
-  public static final class DestinationPortMatcher implements Matcher {
-    private final int port;
+  @AutoValue
+  public abstract static class DestinationPortMatcher implements Matcher {
+    public abstract int port();
 
-    public DestinationPortMatcher(int port) {
-      this.port = port;
+    public static DestinationPortMatcher create(int port) {
+      return new AutoValue_GrpcAuthorizationEngine_DestinationPortMatcher(port);
     }
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return port == args.getDestinationPort();
+      return port() == args.getDestinationPort();
     }
   }
 
-  public static final class RequestedServerNameMatcher implements Matcher {
-    private final Matchers.StringMatcher delegate;
+  @AutoValue
+  public abstract static class DestinationPortRangeMatcher implements Matcher {
+    public abstract int start();
 
-    public RequestedServerNameMatcher(Matchers.StringMatcher delegate) {
-      this.delegate = checkNotNull(delegate, "delegate");
+    public abstract int end();
+
+    /** Start of the range is inclusive. End of the range is exclusive.*/
+    public static DestinationPortRangeMatcher create(int start, int end) {
+      return new AutoValue_GrpcAuthorizationEngine_DestinationPortRangeMatcher(start, end);
     }
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return delegate.matches(args.getRequestedServerName());
+      int port = args.getDestinationPort();
+      return  port >= start() && port < end();
+    }
+  }
+
+  @AutoValue
+  public abstract static class RequestedServerNameMatcher implements Matcher {
+    public abstract Matchers.StringMatcher delegate();
+
+    public static RequestedServerNameMatcher create(Matchers.StringMatcher delegate) {
+      return new AutoValue_GrpcAuthorizationEngine_RequestedServerNameMatcher(delegate);
+    }
+
+    @Override
+    public boolean matches(EvaluateArgs args) {
+      return delegate().matches(args.getRequestedServerName());
     }
   }
 
@@ -316,8 +348,43 @@ public final class GrpcAuthorizationEngine {
 
     @Nullable
     private String getHeader(String headerName) {
-      if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+      headerName = headerName.toLowerCase(Locale.ROOT);
+      if ("te".equals(headerName)) {
         return null;
+      }
+      if (":authority".equals(headerName)) {
+        headerName = "host";
+      }
+      if ("host".equals(headerName)) {
+        return serverCall.getAuthority();
+      }
+      if (":path".equals(headerName)) {
+        return getPath();
+      }
+      if (":method".equals(headerName)) {
+        return "POST";
+      }
+      return deserializeHeader(headerName);
+    }
+
+    @Nullable
+    private String deserializeHeader(String headerName) {
+      if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+        Metadata.Key<byte[]> key;
+        try {
+          key = Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER);
+        } catch (IllegalArgumentException e) {
+          return null;
+        }
+        Iterable<byte[]> values = metadata.getAll(key);
+        if (values == null) {
+          return null;
+        }
+        List<String> encoded = new ArrayList<>();
+        for (byte[] v : values) {
+          encoded.add(BaseEncoding.base64().omitPadding().encode(v));
+        }
+        return Joiner.on(",").join(encoded);
       }
       Metadata.Key<String> key;
       try {
@@ -353,25 +420,26 @@ public final class GrpcAuthorizationEngine {
     boolean matches(EvaluateArgs args);
   }
 
-  public static final class OrMatcher implements Matcher {
-    private final List<? extends Matcher> anyMatch;
+  @AutoValue
+  public abstract static class OrMatcher implements Matcher {
+    public abstract ImmutableList<? extends Matcher> anyMatch();
 
     /** Matches when any of the matcher matches. */
-    public OrMatcher(List<? extends Matcher> matchers) {
+    public static OrMatcher create(List<? extends Matcher> matchers) {
       checkNotNull(matchers, "matchers");
       for (Matcher matcher : matchers) {
         checkNotNull(matcher, "matcher");
       }
-      this.anyMatch = Collections.unmodifiableList(new ArrayList<>(matchers));
+      return new AutoValue_GrpcAuthorizationEngine_OrMatcher(ImmutableList.copyOf(matchers));
     }
 
     public static OrMatcher create(Matcher...matchers) {
-      return new OrMatcher(Arrays.asList(matchers));
+      return OrMatcher.create(Arrays.asList(matchers));
     }
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      for (Matcher m : anyMatch) {
+      for (Matcher m : anyMatch()) {
         if (m.matches(args)) {
           return true;
         }
@@ -380,25 +448,26 @@ public final class GrpcAuthorizationEngine {
     }
   }
 
-  public static final class AndMatcher implements Matcher {
-    private final List<? extends Matcher> allMatch;
+  @AutoValue
+  public abstract static class AndMatcher implements Matcher {
+    public abstract ImmutableList<? extends Matcher> allMatch();
 
     /** Matches when all of the matchers match. */
-    public AndMatcher(List<? extends Matcher> matchers) {
+    public static AndMatcher create(List<? extends Matcher> matchers) {
       checkNotNull(matchers, "matchers");
       for (Matcher matcher : matchers) {
         checkNotNull(matcher, "matcher");
       }
-      this.allMatch = Collections.unmodifiableList(new ArrayList<>(matchers));
+      return new AutoValue_GrpcAuthorizationEngine_AndMatcher(ImmutableList.copyOf(matchers));
     }
 
     public static AndMatcher create(Matcher...matchers) {
-      return new AndMatcher(Arrays.asList(matchers));
+      return AndMatcher.create(Arrays.asList(matchers));
     }
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      for (Matcher m : allMatch) {
+      for (Matcher m : allMatch()) {
         if (!m.matches(args)) {
           return false;
         }
@@ -408,8 +477,10 @@ public final class GrpcAuthorizationEngine {
   }
 
   /** Always true matcher.*/
-  public static final class AlwaysTrueMatcher implements Matcher {
-    public static AlwaysTrueMatcher INSTANCE = new AlwaysTrueMatcher();
+  @AutoValue
+  public abstract static class AlwaysTrueMatcher implements Matcher {
+    public static AlwaysTrueMatcher INSTANCE =
+        new AutoValue_GrpcAuthorizationEngine_AlwaysTrueMatcher();
 
     @Override
     public boolean matches(EvaluateArgs args) {
@@ -418,16 +489,17 @@ public final class GrpcAuthorizationEngine {
   }
 
   /** Negate matcher.*/
-  public static final class InvertMatcher implements Matcher {
-    private final Matcher toInvertMatcher;
+  @AutoValue
+  public abstract static class InvertMatcher implements Matcher {
+    public abstract Matcher toInvertMatcher();
 
-    public InvertMatcher(Matcher matcher) {
-      this.toInvertMatcher = checkNotNull(matcher, "matcher");
+    public static InvertMatcher create(Matcher matcher) {
+      return new AutoValue_GrpcAuthorizationEngine_InvertMatcher(matcher);
     }
 
     @Override
     public boolean matches(EvaluateArgs args) {
-      return !toInvertMatcher.matches(args);
+      return !toInvertMatcher().matches(args);
     }
   }
 }

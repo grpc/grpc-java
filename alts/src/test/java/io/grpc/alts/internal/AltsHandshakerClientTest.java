@@ -29,6 +29,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.ByteString;
+import io.grpc.internal.TestUtils.NoopChannelLogger;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
@@ -60,7 +61,8 @@ public class AltsHandshakerClientTest {
             .setTargetName(TEST_TARGET_NAME)
             .setTargetServiceAccounts(ImmutableList.of(TEST_TARGET_SERVICE_ACCOUNT))
             .build();
-    handshaker = new AltsHandshakerClient(mockStub, clientOptions);
+    NoopChannelLogger channelLogger = new NoopChannelLogger();
+    handshaker = new AltsHandshakerClient(mockStub, clientOptions, channelLogger);
   }
 
   @Test
@@ -266,7 +268,8 @@ public class AltsHandshakerClientTest {
             .setTargetServiceAccounts(ImmutableList.of(TEST_TARGET_SERVICE_ACCOUNT))
             .setRpcProtocolVersions(rpcVersions)
             .build();
-    handshaker = new AltsHandshakerClient(mockStub, clientOptions);
+    NoopChannelLogger channelLogger = new NoopChannelLogger();
+    handshaker = new AltsHandshakerClient(mockStub, clientOptions, channelLogger);
 
     handshaker.startClientHandshake();
 

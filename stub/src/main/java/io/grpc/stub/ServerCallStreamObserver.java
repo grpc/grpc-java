@@ -16,9 +16,12 @@
 
 package io.grpc.stub;
 
+import io.grpc.ExperimentalApi;
+
 /**
  * A refinement of {@link CallStreamObserver} to allows for interaction with call
- * cancellation events on the server side.
+ * cancellation events on the server side. An instance of this class is obtained by casting the
+ * {@code StreamObserver} passed as an argument to service implementations.
  *
  * <p>Like {@code StreamObserver}, implementations are not required to be thread-safe; if multiple
  * threads will be writing to an instance concurrently, the application must synchronize its calls.
@@ -26,7 +29,7 @@ package io.grpc.stub;
  * <p>DO NOT MOCK: The API is too complex to reliably mock. Use InProcessChannelBuilder to create
  * "real" RPCs suitable for testing and interact with the server using a normal client stub.
  */
-public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> {
+public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver<RespT> {
 
   /**
    * Returns {@code true} when the call is cancelled and the server is encouraged to abort
@@ -53,7 +56,9 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    * service returns its {@code StreamObserver}.
    *
    * <p>Setting the onCancelHandler will suppress the on-cancel exception thrown by
-   * {@link #onNext}.
+   * {@link #onNext}. If the caller is already handling cancellation via polling or cannot
+   * substantially benefit from observing cancellation, using a no-op {@code onCancelHandler} is
+   * useful just to suppress the {@code onNext()} exception.
    *
    * @param onCancelHandler to call when client has cancelled the call.
    */
@@ -110,9 +115,8 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    * thread will always be used to execute the {@link Runnable}, it is guaranteed that executions
    * are serialized with calls to the 'inbound' {@link StreamObserver}.
    *
-   * <p>On client-side this method may only be called during {@link
-   * ClientResponseObserver#beforeStart}. On server-side it may only be called during the initial
-   * call to the application, before the service returns its {@code StreamObserver}.
+   * <p>May only be called during the initial call to the application, before the service returns
+   * its {@code StreamObserver}.
    *
    * <p>Because there is a processing delay to deliver this notification, it is possible for
    * concurrent writes to cause {@code isReady() == false} within this callback. Handle "spurious"
@@ -143,4 +147,26 @@ public abstract class ServerCallStreamObserver<V> extends CallStreamObserver<V> 
    */
   @Override
   public abstract void setMessageCompression(boolean enable);
+
+  /**
+   * Sets a {@link Runnable} to be executed when the call is closed cleanly from the server's
+   * point of view: either {@link #onCompleted()} or {@link #onError(Throwable)} has been called,
+   * all the messages and trailing metadata have been sent and the stream has been closed. Note
+   * however that the client still may have not received all the messages due to network delay,
+   * client crashes, and cancellation races.
+   *
+   * <p>Exactly one of {@code onCloseHandler} and {@code onCancelHandler} is guaranteed to be called
+   * when the RPC terminates.</p>
+   *
+   * <p>It is guaranteed that execution of {@code onCloseHandler} is serialized with calls to
+   * the 'inbound' {@link StreamObserver}. That also means that the callback will be delayed if
+   * other callbacks are running.</p>
+   *
+   * <p>This method may only be called during the initial call to the application, before the
+   * service returns its {@link StreamObserver request observer}.</p>
+   *
+   * @param onCloseHandler to execute when the call has been closed cleanly.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8467")
+  public abstract void setOnCloseHandler(Runnable onCloseHandler);
 }

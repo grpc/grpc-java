@@ -33,7 +33,7 @@ android {
 protobuf {
     protoc { artifact = 'com.google.protobuf:protoc:3.17.2' }
     plugins {
-        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.41.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.42.0-SNAPSHOT' // CURRENT_GRPC_VERSION
         }
     }
     generateProtoTasks {
@@ -53,8 +53,8 @@ dependencies {
     implementation 'com.android.support:appcompat-v7:28.0.0'
 
     // You need to build grpc-java to obtain these libraries below.
-    implementation 'io.grpc:grpc-okhttp:1.41.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    implementation 'io.grpc:grpc-protobuf-lite:1.41.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    implementation 'io.grpc:grpc-stub:1.41.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-okhttp:1.42.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-protobuf-lite:1.42.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-stub:1.42.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     implementation 'org.apache.tomcat:annotations-api:6.0.53'
 }

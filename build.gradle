@@ -18,7 +18,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.41.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.42.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -54,7 +54,7 @@ subprojects {
         protocPluginBaseName = 'protoc-gen-grpc-java'
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
-        nettyVersion = '4.1.52.Final'
+        nettyVersion = '4.1.63.Final'
         guavaVersion = '30.1-android'
         googleauthVersion = '0.22.2'
         protobufVersion = '3.17.2'
@@ -145,9 +145,9 @@ subprojects {
             animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.19",
             autovalue: "com.google.auto.value:auto-value:${autovalueVersion}",
             autovalue_annotation: "com.google.auto.value:auto-value-annotations:${autovalueVersion}",
-            errorprone: "com.google.errorprone:error_prone_annotations:2.4.0",
-            cronet_api: 'org.chromium.net:cronet-api:76.3809.111',
-            cronet_embedded: 'org.chromium.net:cronet-embedded:66.3359.158',
+            errorprone: "com.google.errorprone:error_prone_annotations:2.9.0",
+            cronet_api: 'org.chromium.net:cronet-api:92.4515.131',
+            cronet_embedded: 'org.chromium.net:cronet-embedded:92.4515.131',
             gson: "com.google.code.gson:gson:2.8.6",
             guava: "com.google.guava:guava:${guavaVersion}",
             javax_annotation: 'org.apache.tomcat:annotations-api:6.0.53',
@@ -176,7 +176,7 @@ subprojects {
             // SECURITY.md (multiple occurrences)
             // examples/example-tls/build.gradle
             // examples/example-tls/pom.xml
-            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.34.Final',
+            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.38.Final',
 
             conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:2.5.1',
             re2j: 'com.google.re2j:re2j:1.5',

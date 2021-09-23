@@ -52,7 +52,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private final AtomicReference<Map<String, ?>> bootstrapOverride = new AtomicReference<>();
   private volatile ObjectPool<XdsClient> xdsClientPool;
 
-  private SharedXdsClientPoolProvider() {
+  SharedXdsClientPoolProvider() {
     this(new BootstrapperImpl());
   }
 
