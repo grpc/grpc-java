@@ -288,8 +288,7 @@ public final class SdsProtocolNegotiators {
             ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
             return;
           }
-          logger.log(Level.FINE, "Using fallback sslContextProviderSupplier for connection "
-              + "from {0} to {1}",
+          logger.log(Level.FINE, "Using fallback credentials for connection from {0} to {1}",
               new Object[]{ctx.channel().remoteAddress(), ctx.channel().localAddress()});
           ctx.pipeline()
               .replace(
