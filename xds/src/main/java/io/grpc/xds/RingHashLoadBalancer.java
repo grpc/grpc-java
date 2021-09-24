@@ -56,7 +56,8 @@ final class RingHashLoadBalancer extends LoadBalancer {
   private static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
   private static final Status RPC_HASH_NOT_FOUND =
-      Status.INTERNAL.withDescription("RPC hash not found");
+      Status.INTERNAL.withDescription("RPC hash not found. Probably a bug because xds resolver"
+          + " config selector always generates a hash.");
   private static final XxHash64 hashFunc = XxHash64.INSTANCE;
 
   private final XdsLogger logger;
@@ -79,7 +80,8 @@ final class RingHashLoadBalancer extends LoadBalancer {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     List<EquivalentAddressGroup> addrList = resolvedAddresses.getAddresses();
     if (addrList.isEmpty()) {
-      handleNameResolutionError(Status.UNAVAILABLE.withDescription("No server addresses found"));
+      handleNameResolutionError(Status.UNAVAILABLE.withDescription("Ring hash lb error: EDS "
+          + "resolution was successful, but returned server addresses are empty."));
       return;
     }
     Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(addrList);

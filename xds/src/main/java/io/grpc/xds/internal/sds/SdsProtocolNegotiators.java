@@ -281,11 +281,16 @@ public final class SdsProtocolNegotiators {
         SslContextProviderSupplier sslContextProviderSupplier = InternalProtocolNegotiationEvent
                 .getAttributes(pne).get(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER);
         if (sslContextProviderSupplier == null) {
+          logger.log(Level.FINE, "No sslContextProviderSupplier found in filterChainMatch "
+              + "for connection from {0} to {1}",
+              new Object[]{ctx.channel().remoteAddress(), ctx.channel().localAddress()});
           if (fallbackProtocolNegotiator == null) {
             ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
             return;
           }
-          logger.log(Level.INFO, "Using fallback for {0}", ctx.channel().localAddress());
+          logger.log(Level.FINE, "Using fallback sslContextProviderSupplier for connection "
+              + "from {0} to {1}",
+              new Object[]{ctx.channel().remoteAddress(), ctx.channel().localAddress()});
           ctx.pipeline()
               .replace(
                   this,

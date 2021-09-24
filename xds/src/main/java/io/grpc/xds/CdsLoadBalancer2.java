@@ -179,7 +179,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           childLb = null;
         }
         Status unavailable =
-            Status.UNAVAILABLE.withDescription("Cluster " + root.name + " unusable");
+            Status.UNAVAILABLE.withDescription("CDS error: found 0 leaf (logical DNS or EDS) "
+                + "clusters for root cluster " + root.name);
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
         return;
       }
