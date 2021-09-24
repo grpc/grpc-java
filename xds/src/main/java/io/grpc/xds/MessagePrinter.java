@@ -26,6 +26,8 @@ import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
+import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBAC;
+import io.envoyproxy.envoy.extensions.filters.http.rbac.v3.RBACPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
@@ -48,6 +50,8 @@ final class MessagePrinter {
                 .HttpConnectionManager.getDescriptor())
             .add(HTTPFault.getDescriptor())
             .add(io.envoyproxy.envoy.config.filter.http.fault.v2.HTTPFault.getDescriptor())
+            .add(RBAC.getDescriptor())
+            .add(RBACPerRoute.getDescriptor())
             .add(Router.getDescriptor())
             .add(io.envoyproxy.envoy.config.filter.http.router.v2.Router.getDescriptor())
             // UpstreamTlsContext and DownstreamTlsContext in v3 are not transitively imported
