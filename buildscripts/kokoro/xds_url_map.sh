@@ -132,6 +132,7 @@ run_test() {
 #######################################
 main() {
   local script_dir
+  script_dir="$(dirname "$0")"
 
   # Clone the test driver from the master branch using an external script.
   source "${script_dir}/xds_k8s_clone_driver_repo.sh"
