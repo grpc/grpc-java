@@ -31,7 +31,7 @@ import org.junit.After;
 import org.junit.Ignore;
 import org.junit.Test;
 
-public class JettyInteroptTest extends AbstractInteropTest {
+public class JettyInteropTest extends AbstractInteropTest {
 
   private static final String HOST = "localhost";
   private static final String MYAPP = "/grpc.testing.TestService";
