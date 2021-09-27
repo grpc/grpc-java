@@ -8,10 +8,6 @@ readonly SERVER_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-server"
 readonly CLIENT_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-client"
 readonly FORCE_IMAGE_BUILD="${FORCE_IMAGE_BUILD:-0}"
 readonly BUILD_APP_PATH="interop-testing/build/install/grpc-interop-testing"
-# Test driver
-readonly TEST_DRIVER_REPO_URL="https://github.com/${TEST_DRIVER_REPO_OWNER:-grpc}/grpc.git"
-readonly TEST_DRIVER_BRANCH="${TEST_DRIVER_BRANCH:-master}"
-readonly TEST_DRIVER_INSTALL_LIB_PATH="tools/internal_ci/linux/grpc_xds_k8s_install_test_driver.sh"
 
 #######################################
 # Builds the test app using gradle and smoke-checks its binaries
@@ -101,35 +97,6 @@ build_docker_images_if_needed() {
 }
 
 #######################################
-# Ensure the source code of the test driver is present at TEST_DRIVER_REPO_DIR.
-#
-# If TEST_DRIVER_REPO_DIR is set, this method only confirms that this directory exists.
-# In this case, TEST_DRIVER_BRANCH is not used.
-#
-# Otherwise, clone branch TEST_DRIVER_BRANCH of the test driver from TEST_DRIVER_REPO_URL repo to
-# a temporary folder, and export the path in TEST_DRIVER_REPO_DIR global variable.
-#
-# Globals:
-#   TEST_DRIVER_REPO_DIR: path to the repo containing the test driver.
-#   TEST_DRIVER_REPO_URL: the repo with the source code of test driver to clone
-#   TEST_DRIVER_BRANCH: (if the repo is cloned from TEST_DRIVER_REPO_URL) the branch to checkout
-# Arguments:
-#   None
-# Outputs:
-#   Writes the output of `git` command to stdout, stderr
-#   Writes driver source code to $TEST_DRIVER_REPO_DIR
-#######################################
-get_test_driver() {
-  if [[ -d "${TEST_DRIVER_REPO_DIR}" ]]; then
-    echo "Using existing driver directory: ${TEST_DRIVER_REPO_DIR}"
-  else
-    readonly TEST_DRIVER_REPO_DIR="$(mktemp -d)/xds-k8s-driver-repo"
-    echo "Cloning driver to ${TEST_DRIVER_REPO_URL} branch ${TEST_DRIVER_BRANCH} to ${TEST_DRIVER_REPO_DIR}"
-    git clone -b "${TEST_DRIVER_BRANCH}" --depth=1 "${TEST_DRIVER_REPO_URL}" "${TEST_DRIVER_REPO_DIR}"
-  fi
-}
-
-#######################################
 # Executes the test case
 # Globals:
 #   TEST_DRIVER_FLAGFILE: Relative path to test driver flagfile
@@ -182,10 +149,13 @@ run_test() {
 main() {
   local script_dir
   script_dir="$(dirname "$0")"
-  # shellcheck source=buildscripts/kokoro/xds-k8s-install-test-driver.sh
 
-  get_test_driver
-  source "${TEST_DRIVER_REPO_DIR}/${TEST_DRIVER_INSTALL_LIB_PATH}"
+  # Clone the test driver from the master branch using an external script.
+  source "${script_dir}/grpc_xds_k8s_clone_driver_repo.sh"
+  clone_test_driver
+
+  activate_gke_cluster GKE_CLUSTER_PSM_SECURITY
+
   set -x
   if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
     kokoro_setup_test_driver "${GITHUB_REPOSITORY_NAME}"
