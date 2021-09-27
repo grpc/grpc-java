@@ -22,6 +22,8 @@ import static io.undertow.servlet.Servlets.servlet;
 
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
+import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.testing.integration.AbstractInteropTest;
 import io.undertow.Handlers;
 import io.undertow.Undertow;
@@ -109,13 +111,11 @@ public class UndertowInteropTest extends AbstractInteropTest {
 
   @Override
   protected ManagedChannelBuilder<?> createChannelBuilder() {
-    ManagedChannelBuilder<?> builder = ManagedChannelBuilder
+    NettyChannelBuilder builder = (NettyChannelBuilder) ManagedChannelBuilder
             .forAddress(HOST, port)
             .usePlaintext()
             .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
-    // TODO NOMERGE before this branch is finished, we need to move this to interop-testing so this
-    //              works properly
-    // InternalNettyChannelBuilder.setStatsEnabled(builder, false);
+    InternalNettyChannelBuilder.setStatsEnabled(builder, false);
     builder.intercept(createCensusStatsClientInterceptor());
     return builder;
   }

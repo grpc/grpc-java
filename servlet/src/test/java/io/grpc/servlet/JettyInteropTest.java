@@ -18,7 +18,8 @@ package io.grpc.servlet;
 
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
-import io.grpc.internal.AbstractManagedChannelImplBuilder;
+import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.testing.integration.AbstractInteropTest;
 import org.eclipse.jetty.http2.parser.RateControl;
 import org.eclipse.jetty.http2.server.HTTP2CServerConnectionFactory;
@@ -81,10 +82,11 @@ public class JettyInteropTest extends AbstractInteropTest {
 
   @Override
   protected ManagedChannelBuilder<?> createChannelBuilder() {
-    AbstractManagedChannelImplBuilder<?> builder =
-            (AbstractManagedChannelImplBuilder<?>) ManagedChannelBuilder.forAddress(HOST, port)
+    NettyChannelBuilder builder =
+            (NettyChannelBuilder) ManagedChannelBuilder.forAddress(HOST, port)
                     .usePlaintext()
                     .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+    InternalNettyChannelBuilder.setStatsEnabled(builder, false);
     builder.intercept(createCensusStatsClientInterceptor());
     return builder;
   }

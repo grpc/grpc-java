@@ -89,10 +89,14 @@ dependencies {
             project(':grpc-netty'),
             project(':grpc-testing'),
             project(':grpc-auth'),
-            project(':grpc-interop-testing'),
             project(':grpc-core').sourceSets.test.output,
             project(':grpc-netty').sourceSets.test.output,
             libraries.junit
+    testCompile(project(':grpc-interop-testing')) {
+        // Avoid grpc-netty-shaded dependency
+        exclude group: 'io.grpc', module: 'grpc-alts'
+        exclude group: 'io.grpc', module: 'grpc-xds'
+    }
 
     undertowTestCompile 'io.undertow:undertow-servlet:2.2.10.Final'
 

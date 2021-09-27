@@ -18,7 +18,8 @@ package io.grpc.servlet;
 
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
-import io.grpc.internal.AbstractManagedChannelImplBuilder;
+import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.testing.integration.AbstractInteropTest;
 import java.io.File;
 import java.util.logging.Handler;
@@ -101,10 +102,11 @@ public class TomcatInteropTest extends AbstractInteropTest {
 
   @Override
   protected ManagedChannelBuilder<?> createChannelBuilder() {
-    AbstractManagedChannelImplBuilder<?> builder =
-            (AbstractManagedChannelImplBuilder<?>) ManagedChannelBuilder.forAddress(HOST, port)
+    NettyChannelBuilder builder =
+            (NettyChannelBuilder) ManagedChannelBuilder.forAddress(HOST, port)
                     .usePlaintext()
                     .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
+    InternalNettyChannelBuilder.setStatsEnabled(builder, false);
     builder.intercept(createCensusStatsClientInterceptor());
     return builder;
   }
