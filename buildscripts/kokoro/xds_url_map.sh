@@ -134,7 +134,7 @@ main() {
   local script_dir
 
   # Clone the test driver from the master branch using an external script.
-  source "${script_dir}/grpc_xds_k8s_clone_driver_repo.sh"
+  source "${script_dir}/xds_k8s_clone_driver_repo.sh"
   clone_test_driver
 
   activate_gke_cluster GKE_CLUSTER_PSM_BASIC
