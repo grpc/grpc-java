@@ -1,5 +1,5 @@
 plugins {
-    id "java"
+    id "java-library"
     id "maven-publish"
 }
 
@@ -12,11 +12,11 @@ def jetty10Version = '10.0.6'
 def jetty11Version = '11.0.6';//TODO offer a grpc-servlet-jakarta build
 
 configurations {
-    undertowTestCompile.extendsFrom(testCompile)
-    tomcatTestCompile.extendsFrom(testCompile)
-    jetty9TestCompile.extendsFrom(testCompile)
-    jetty10TestCompile.extendsFrom(testCompile)
-    jetty11TestCompile.extendsFrom(testCompile)
+    undertowTestCompile.extendsFrom(testImplementation)
+    tomcatTestCompile.extendsFrom(testImplementation)
+    jetty9TestCompile.extendsFrom(testImplementation)
+    jetty10TestCompile.extendsFrom(testImplementation)
+    jetty11TestCompile.extendsFrom(testImplementation)
 }
 
 sourceSets {
@@ -73,7 +73,7 @@ sourceSets {
 }
 
 dependencies {
-    compile project(':grpc-core')
+    api project(':grpc-core')
     compileOnly 'javax.servlet:javax.servlet-api:4.0.1',
             libraries.javax_annotation // java 9, 10 needs it
 
@@ -83,7 +83,7 @@ dependencies {
 
     implementation libraries.guava
 
-    testCompile project(':grpc-stub'),
+    testImplementation project(':grpc-stub'),
             project(':grpc-protobuf'),
             project(':grpc-servlet'),
             project(':grpc-netty'),
@@ -92,7 +92,7 @@ dependencies {
             project(':grpc-core').sourceSets.test.output,
             project(':grpc-netty').sourceSets.test.output,
             libraries.junit
-    testCompile(project(':grpc-interop-testing')) {
+    testImplementation(project(':grpc-interop-testing')) {
         // Avoid grpc-netty-shaded dependency
         exclude group: 'io.grpc', module: 'grpc-alts'
         exclude group: 'io.grpc', module: 'grpc-xds'
@@ -111,6 +111,10 @@ dependencies {
 
     jetty11TestCompile "org.eclipse.jetty:jetty-servlet:${jetty11Version}",
             "org.eclipse.jetty.http2:http2-server:${jetty11Version}"
+}
+
+javadoc {
+    exclude 'io/grpc/servlet/jetty/*'
 }
 
 // Set up individual classpaths for each test, to avoid any mismatch,
