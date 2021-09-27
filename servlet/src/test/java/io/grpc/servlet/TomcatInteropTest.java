@@ -143,4 +143,8 @@ public class TomcatInteropTest extends AbstractInteropTest {
   @org.junit.Ignore("Tomcat is not able to send trailer only")
   @org.junit.Test
   public void emptyStream() {}
+
+  // Fails intermittently
+  //@Override
+  //public void exchangeMetadataStreamingCall() {}
 }

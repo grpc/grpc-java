@@ -118,6 +118,13 @@ check.dependsOn(tasks.register('undertowTest', Test) {
 check.dependsOn(tasks.register('tomcatTest', Test) {
     classpath = sourceSets.tomcatTest.runtimeClasspath
     testClassesDirs = sourceSets.tomcatTest.output.classesDirs
+
+    // Provide a temporary directory for tomcat to be deleted after test finishes
+    def tomcatTempDir = "$buildDir/tomcat_catalina_base"
+    systemProperty 'catalina.base', tomcatTempDir
+    doLast {
+        file(tomcatTempDir).deleteDir()
+    }
 })
 check.dependsOn(tasks.register('jetty9Test', Test) {
     classpath = sourceSets.jetty9Test.runtimeClasspath
