@@ -555,6 +555,22 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *
    * <p>If null is passed, then there will be no default service config.
    *
+   * <p>Your preferred JSON parser may not produce results in the format expected. For such cases,
+   * you can convert its output. For example, if your parser produces Integers and other Numbers
+   * in addition to Double:
+   *
+   * <pre>{@code @SuppressWarnings("unchecked")
+   * private static Object convertNumbers(Object o) {
+   *   if (o instanceof Map) {
+   *     ((Map) o).replaceAll((k,v) -> convertNumbers(v));
+   *   } else if (o instanceof List) {
+   *     ((List) o).replaceAll(YourClass::convertNumbers);
+   *   } else if (o instanceof Number && !(o instanceof Double)) {
+   *     o = ((Number) o).doubleValue();
+   *   }
+   *   return o;
+   * }}</pre>
+   *
    * @throws IllegalArgumentException When the given serviceConfig is invalid or the current version
    *         of grpc library can not parse it gracefully. The state of the builder is unchanged if
    *         an exception is thrown.
