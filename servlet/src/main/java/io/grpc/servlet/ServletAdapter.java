@@ -35,6 +35,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ReadableBuffers;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
+import io.grpc.servlet.jetty.JettyHttpServletResponse;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -116,6 +117,9 @@ public final class ServletAdapter {
 
     InternalLogId logId = InternalLogId.allocate(ServletAdapter.class, null);
     logger.log(FINE, "[{0}] RPC started", logId);
+
+    // Detect, work around Jetty 9.4.x not having setTrailerFields implemented for servlet 4.0
+    resp = JettyHttpServletResponse.wrap(resp);
 
     AsyncContext asyncCtx = req.startAsync(req, resp);
 

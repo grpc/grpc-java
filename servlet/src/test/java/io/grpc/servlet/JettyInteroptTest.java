@@ -60,7 +60,8 @@ public class JettyInteroptTest extends AbstractInteropTest {
         new GrpcServlet(((ServletServerBuilder) builer).buildServletAdapter());
     server = new Server(0);
     ServerConnector sc = (ServerConnector)server.getConnectors()[0];
-    HTTP2CServerConnectionFactory factory = new HTTP2CServerConnectionFactory(new HttpConfiguration());
+    HTTP2CServerConnectionFactory factory =
+            new HTTP2CServerConnectionFactory(new HttpConfiguration());
     factory.setRateControlFactory(new RateControl.Factory() {});
     sc.addConnectionFactory(factory);
     ServletContextHandler context =

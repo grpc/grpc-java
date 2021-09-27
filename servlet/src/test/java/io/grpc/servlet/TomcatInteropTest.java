@@ -87,7 +87,9 @@ public class TomcatInteropTest extends AbstractInteropTest {
             new GrpcServlet(((ServletServerBuilder) builer).buildServletAdapter()))
         .setAsyncSupported(true);
     ctx.addServletMappingDecoded("/*", "TomcatInteropTest");
-    server.getConnector().addUpgradeProtocol(new Http2Protocol());
+    Http2Protocol http2Protocol = new Http2Protocol();
+    http2Protocol.setOverheadCountFactor(0);
+    server.getConnector().addUpgradeProtocol(http2Protocol);
     try {
       server.start();
     } catch (LifecycleException e) {
@@ -135,4 +137,10 @@ public class TomcatInteropTest extends AbstractInteropTest {
   @org.junit.Ignore("Tomcat is not able to send trailer only")
   @org.junit.Test
   public void statusCodeAndMessage() {}
+
+  // FIXME
+  @Override
+  @org.junit.Ignore("Tomcat is not able to send trailer only")
+  @org.junit.Test
+  public void emptyStream() {}
 }
