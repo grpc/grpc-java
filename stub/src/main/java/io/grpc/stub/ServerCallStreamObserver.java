@@ -168,5 +168,7 @@ public abstract class ServerCallStreamObserver<RespT> extends CallStreamObserver
    * @param onCloseHandler to execute when the call has been closed cleanly.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8467")
-  public abstract void setOnCloseHandler(Runnable onCloseHandler);
+  public void setOnCloseHandler(Runnable onCloseHandler) {
+    throw new UnsupportedOperationException();
+  }
 }
