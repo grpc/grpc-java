@@ -40,7 +40,7 @@ gcloud firebase test android run \
   --device model=Nexus6,version=21,locale=en,orientation=portrait
 
 # Build and run binderchannel instrumentation tests on Firebase Test Lab
-cd binder
+cd ../binder
 ../gradlew assembleDebugAndroidTest
 gcloud firebase test android run \
   --type instrumentation \
