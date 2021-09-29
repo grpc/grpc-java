@@ -1023,6 +1023,24 @@ public class ClientCallImplTest {
   }
 
   @Test
+  public void halfClosedShouldNotBeReady() {
+    when(stream.isReady()).thenReturn(true);
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
+        method,
+        MoreExecutors.directExecutor(),
+        baseCallOptions,
+        clientStreamProvider,
+        deadlineCancellationExecutor,
+        channelCallTracer, configSelector);
+
+    call.start(callListener, new Metadata());
+    assertThat(call.isReady()).isTrue();
+
+    call.halfClose();
+    assertThat(call.isReady()).isFalse();
+  }
+
+  @Test
   public void startAddsMaxSize() {
     CallOptions callOptions =
         baseCallOptions.withMaxInboundMessageSize(1).withMaxOutboundMessageSize(2);
