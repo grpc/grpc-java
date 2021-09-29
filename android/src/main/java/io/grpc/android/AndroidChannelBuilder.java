@@ -150,7 +150,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
   /**
    * Wraps an OkHttp channel and handles invoking the appropriate methods (e.g., {@link
-   * ManagedChannel#enterIdle) when the device network state changes.
+   * ManagedChannel#enterIdle}) when the device network state changes.
    */
   @VisibleForTesting
   static final class AndroidChannel extends ManagedChannel {
