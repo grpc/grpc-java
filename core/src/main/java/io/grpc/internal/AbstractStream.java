@@ -91,9 +91,6 @@ public abstract class AbstractStream implements Stream {
 
   @Override
   public boolean isReady() {
-    if (framer().isClosed()) {
-      return false;
-    }
     return transportState().isReady();
   }
 

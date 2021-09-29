@@ -334,6 +334,8 @@ public class ServerCallImplTest {
     when(stream.isReady()).thenReturn(true);
 
     assertTrue(call.isReady());
+    call.close(Status.OK, new Metadata());
+    assertFalse(call.isReady());
   }
 
   @Test

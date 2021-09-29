@@ -544,6 +544,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public boolean isReady() {
+    if (halfCloseCalled) {
+      return false;
+    }
     return stream.isReady();
   }
 
