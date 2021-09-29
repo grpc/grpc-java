@@ -1,0 +1,31 @@
+plugins {
+    id 'base'
+    id "org.hibernate.jakarta-transformer"
+}
+repositories {
+    mavenCentral()
+}
+evaluationDependsOn ':grpc-servlet'
+
+description = "gRPC: Jakarta Servlet"
+
+ext {
+    servlet = 'javax.servlet:javax.servlet-api:4.0.1'
+    jakartaServlet = 'jakarta.servlet:jakarta.servlet-api:5.0.0'
+}
+
+jakartaTransformation {
+    renameRules file('rules/jakarta-renames.properties')
+    versionRules file('rules/jakarta-versions.properties')
+
+    dependencyResolutions {
+        dependencySubstitution {
+            substitute module(project.servlet) with module(project.jakartaServlet)
+        }
+    }
+    shadow(project(':grpc-servlet')) {
+        withSources()
+        withJavadoc()
+    }
+}
+
