@@ -167,7 +167,7 @@ main() {
   # Run tests
   cd "${TEST_DRIVER_FULL_DIR}"
   run_test baseline_test
-  # run_test security_test
+  run_test security_test
 }
 
 main "$@"
