@@ -19,6 +19,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- To support tests under binder, which need Android services -->
+        <service android:name="io.grpc.binder.HostServices$HostService1"/>
+        <service android:name="io.grpc.binder.HostServices$HostService2"/>
     </application>
 
 </manifest>
