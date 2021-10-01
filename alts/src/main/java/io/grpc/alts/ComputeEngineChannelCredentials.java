@@ -75,7 +75,8 @@ public final class ComputeEngineChannelCredentials {
                     "Compute Engine Credentials can only be used on Google Cloud Platform"));
       }
       if (callCredentials == null) {
-        callCredentials = MoreCallCredentials.from(ComputeEngineCredentials.create());
+        return CompositeChannelCredentials.create(
+            nettyCredentials, MoreCallCredentials.from(ComputeEngineCredentials.create()));
       }
       return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
     }
