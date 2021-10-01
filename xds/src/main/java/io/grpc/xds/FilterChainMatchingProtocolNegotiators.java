@@ -23,6 +23,7 @@ import static io.grpc.xds.XdsServerWrapper.ATTR_SERVER_ROUTING_CONFIG;
 import static io.grpc.xds.internal.sds.SdsProtocolNegotiators.ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Strings;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.UInt32Value;
@@ -141,12 +142,11 @@ final class FilterChainMatchingProtocolNegotiators {
       private final Map<FilterChain, AtomicReference<ServerRoutingConfig>> routingConfigs;
       @Nullable
       private final SslContextProviderSupplier defaultSslContextProviderSupplier;
-      @Nullable
       private final AtomicReference<ServerRoutingConfig> defaultRoutingConfig;
 
       FilterChainSelector(Map<FilterChain, AtomicReference<ServerRoutingConfig>> routingConfigs,
                           @Nullable SslContextProviderSupplier defaultSslContextProviderSupplier,
-                          @Nullable AtomicReference<ServerRoutingConfig> defaultRoutingConfig) {
+                          AtomicReference<ServerRoutingConfig> defaultRoutingConfig) {
         this.routingConfigs = checkNotNull(routingConfigs, "routingConfigs");
         this.defaultSslContextProviderSupplier = defaultSslContextProviderSupplier;
         this.defaultRoutingConfig = checkNotNull(defaultRoutingConfig, "defaultRoutingConfig");
@@ -349,6 +349,15 @@ final class FilterChainMatchingProtocolNegotiators {
           }
         }
         return topOnes;
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("routingConfigs", routingConfigs)
+            .add("defaultSslContextProviderSupplier", defaultSslContextProviderSupplier)
+            .add("defaultRoutingConfig", defaultRoutingConfig)
+            .toString();
       }
     }
   }

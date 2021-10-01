@@ -115,8 +115,9 @@ public final class AltsProtocolNegotiator {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
       ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
+      TsiHandshaker handshaker =
+          handshakerFactory.newHandshaker(grpcHandler.getAuthority(), negotiationLogger);
       NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
       ChannelHandler thh = new TsiHandshakeHandler(
@@ -142,11 +143,13 @@ public final class AltsProtocolNegotiator {
     final class ServerTsiHandshakerFactory implements TsiHandshakerFactory {
 
       @Override
-      public TsiHandshaker newHandshaker(@Nullable String authority) {
+      public TsiHandshaker newHandshaker(
+          @Nullable String authority, ChannelLogger negotiationLogger) {
         assert authority == null;
         return AltsTsiHandshaker.newServer(
             HandshakerServiceGrpc.newStub(lazyHandshakerChannel.get()),
-            new AltsHandshakerOptions(RpcProtocolVersionsUtil.getRpcProtocolVersions()));
+            new AltsHandshakerOptions(RpcProtocolVersionsUtil.getRpcProtocolVersions()),
+            negotiationLogger);
       }
     }
 
@@ -174,7 +177,8 @@ public final class AltsProtocolNegotiator {
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
-      TsiHandshaker handshaker = handshakerFactory.newHandshaker(/* authority= */ null);
+      TsiHandshaker handshaker =
+          handshakerFactory.newHandshaker(/* authority= */ null, negotiationLogger);
       NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
       ChannelHandler gnh = InternalProtocolNegotiators.grpcNegotiationHandler(grpcHandler);
       ChannelHandler thh = new TsiHandshakeHandler(
@@ -292,7 +296,8 @@ public final class AltsProtocolNegotiator {
       if (grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY) != null
           || grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND) != null
           || isXdsDirectPath) {
-        TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
+        TsiHandshaker handshaker =
+            handshakerFactory.newHandshaker(grpcHandler.getAuthority(), negotiationLogger); 
         NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);
         securityHandler = new TsiHandshakeHandler(
             gnh, nettyHandshaker, new AltsHandshakeValidator(), handshakeSemaphore,
@@ -325,7 +330,8 @@ public final class AltsProtocolNegotiator {
     }
 
     @Override
-    public TsiHandshaker newHandshaker(@Nullable String authority) {
+    public TsiHandshaker newHandshaker(
+        @Nullable String authority, ChannelLogger negotiationLogger) {
       AltsClientOptions handshakerOptions =
           new AltsClientOptions.Builder()
               .setRpcProtocolVersions(RpcProtocolVersionsUtil.getRpcProtocolVersions())
@@ -333,7 +339,9 @@ public final class AltsProtocolNegotiator {
               .setTargetName(authority)
               .build();
       return AltsTsiHandshaker.newClient(
-          HandshakerServiceGrpc.newStub(lazyHandshakerChannel.get()), handshakerOptions);
+          HandshakerServiceGrpc.newStub(lazyHandshakerChannel.get()),
+          handshakerOptions,
+          negotiationLogger);
     }
   }
 

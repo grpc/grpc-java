@@ -1407,7 +1407,7 @@ public class ClientXdsClientDataTest {
             .addAllFilterChains(Arrays.asList(filterChain1, filterChain2))
             .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Found duplicate matcher:");
+    thrown.expectMessage("FilterChainMatch must be unique. Found duplicate:");
     ClientXdsClient.parseServerSideListener(
         listener, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }
@@ -1456,7 +1456,7 @@ public class ClientXdsClientDataTest {
             .addAllFilterChains(Arrays.asList(filterChain1, filterChain2))
             .build();
     thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Found duplicate matcher:");
+    thrown.expectMessage("FilterChainMatch must be unique. Found duplicate:");
     ClientXdsClient.parseServerSideListener(
         listener, new HashSet<String>(), null, filterRegistry, null, true /* does not matter */);
   }

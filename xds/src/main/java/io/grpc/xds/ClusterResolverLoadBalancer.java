@@ -501,7 +501,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         }
         resolver = nameResolverFactory.newNameResolver(uri, nameResolverArgs);
         if (resolver == null) {
-          status = Status.INTERNAL.withDescription("Cannot find DNS resolver");
+          status = Status.INTERNAL.withDescription("Xds cluster resolver lb for logical DNS "
+              + "cluster [" + name + "] cannot find DNS resolver with uri:" + uri);
           handleEndpointResolutionError();
           return;
         }
@@ -607,7 +608,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               }
               long delayNanos = backoffPolicy.nextBackoffNanos();
               logger.log(XdsLogLevel.DEBUG,
-                  "Scheduling DNS resolution backoff for {0} ns", delayNanos);
+                  "Logical DNS resolver for cluster {0} encountered name resolution "
+                      + "error: {1}, scheduling DNS resolution backoff for {2} ns",
+                  name, error, delayNanos);
               scheduledRefresh =
                   syncContext.schedule(
                       new DelayedNameResolverRefresh(), delayNanos, TimeUnit.NANOSECONDS,

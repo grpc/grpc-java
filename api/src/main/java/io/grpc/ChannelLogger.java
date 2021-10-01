@@ -36,8 +36,8 @@ public abstract class ChannelLogger {
    * | ChannelLogger Level | Channelz Severity | Java Logger Level |
    * +---------------------+-------------------+-------------------+
    * | DEBUG               | N/A               | FINEST            |
-   * | INFO                | CT_INFO           | FINEST            |
-   * | WARNING             | CT_WARNING        | FINER             |
+   * | INFO                | CT_INFO           | FINER             |
+   * | WARNING             | CT_WARNING        | FINE             |
    * | ERROR               | CT_ERROR          | FINE              |
    * +---------------------+-------------------+-------------------+
    * </pre>

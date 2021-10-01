@@ -19,7 +19,10 @@ package io.grpc.xds.internal.certprovider;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.io.CharStreams;
+import io.grpc.internal.FakeClock;
+import io.grpc.internal.TimeProvider;
 import io.grpc.internal.testing.TestUtils;
+import io.grpc.xds.internal.certprovider.FileWatcherCertificateProviderProvider.ScheduledExecutorServiceFactory;
 import io.grpc.xds.internal.sds.trust.CertificateUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -29,6 +32,7 @@ import java.io.Reader;
 import java.security.PrivateKey;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.concurrent.ScheduledExecutorService;
 
 public class CommonCertProviderTestUtils {
 
@@ -51,5 +55,26 @@ public class CommonCertProviderTestUtils {
       text = CharStreams.toString(reader);
     }
     return text;
+  }
+
+  /** Allow tests to register a provider using test clock.
+  */
+  public static void register(final FakeClock fakeClock) {
+    FileWatcherCertificateProviderProvider tmp = new FileWatcherCertificateProviderProvider(
+        FileWatcherCertificateProvider.Factory.getInstance(),
+        new ScheduledExecutorServiceFactory() {
+
+            @Override
+            ScheduledExecutorService create() {
+              return fakeClock.getScheduledExecutorService();
+            }
+          },
+          TimeProvider.SYSTEM_TIME_PROVIDER);
+    CertificateProviderRegistry.getInstance().register(tmp);
+  }
+
+  public static void register0() {
+    CertificateProviderRegistry.getInstance().register(
+            new FileWatcherCertificateProviderProvider());
   }
 }

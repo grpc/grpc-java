@@ -78,8 +78,6 @@ public final class GrpcAuthorizationEngine {
     if (Action.DENY.equals(authConfig.action()) == (firstMatch == null)) {
       decisionType = Action.ALLOW;
     }
-    log.log(Level.FINER, "RBAC decision: {0}, policy match: {1}.",
-            new Object[]{decisionType, firstMatch});
     return AuthDecision.create(decisionType, firstMatch);
   }
 

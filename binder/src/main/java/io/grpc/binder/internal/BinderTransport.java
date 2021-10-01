@@ -111,7 +111,8 @@ public abstract class BinderTransport
 
   /** The authority of the server. */
   @Internal
-  public static final Attributes.Key<String> SERVER_AUTHORITY = Attributes.Key.create("server-authority");
+  public static final Attributes.Key<String> SERVER_AUTHORITY =
+      Attributes.Key.create("server-authority");
 
   /** A transport attribute to hold the {@link InboundParcelablePolicy}. */
   @Internal
@@ -197,23 +198,13 @@ public abstract class BinderTransport
 
   @Nullable private IBinder outgoingBinder;
 
-  /** The number of outgoing bytes we've transmitted. */
-  private final AtomicLong numOutgoingBytes;
+  private final FlowController flowController;
 
   /** The number of incoming bytes we've received. */
   private final AtomicLong numIncomingBytes;
 
-  /** The number of our outgoing bytes our peer has told us it received. */
-  private long acknowledgedOutgoingBytes;
-
   /** The number of incoming bytes we've told our peer we've received. */
   private long acknowledgedIncomingBytes;
-
-  /**
-   * Whether there are too many unacknowledged outgoing bytes to allow more RPCs right now. This is
-   * volatile because it'll be read without holding the lock.
-   */
-  private volatile boolean transmitWindowFull;
 
   private BinderTransport(
       ObjectPool<ScheduledExecutorService> executorServicePool,
@@ -225,7 +216,7 @@ public abstract class BinderTransport
     scheduledExecutorService = executorServicePool.getObject();
     incomingBinder = new LeakSafeOneWayBinder(this);
     ongoingCalls = new ConcurrentHashMap<>();
-    numOutgoingBytes = new AtomicLong();
+    flowController = new FlowController(TRANSACTION_BYTES_WINDOW);
     numIncomingBytes = new AtomicLong();
   }
 
@@ -254,7 +245,7 @@ public abstract class BinderTransport
    * since this will be called while Outbound is held.
    */
   final boolean isReady() {
-    return !transmitWindowFull;
+    return !flowController.isTransmitWindowFull();
   }
 
   abstract void notifyShutdown(Status shutdownStatus);
@@ -410,11 +401,8 @@ public abstract class BinderTransport
     } catch (RemoteException re) {
       throw statusFromRemoteException(re).asException();
     }
-    long nob = numOutgoingBytes.addAndGet(dataSize);
-    if ((nob - acknowledgedOutgoingBytes) > TRANSACTION_BYTES_WINDOW) {
-      logger.log(Level.FINE, "transmist window full. Outgoing=" + nob + " Ack'd Outgoing=" +
-          acknowledgedOutgoingBytes + " " + this);
-      transmitWindowFull = true;
+    if (flowController.notifyBytesSent(dataSize)) {
+      logger.log(Level.FINE, "transmit window now full " + this);
     }
   }
 
@@ -531,23 +519,15 @@ public abstract class BinderTransport
 
   @GuardedBy("this")
   final void handleAcknowledgedBytes(long numBytes) {
-    // The remote side has acknowledged reception of rpc data.
-    // (update with Math.max in case transactions are delivered out of order).
-    acknowledgedOutgoingBytes = wrapAwareMax(acknowledgedOutgoingBytes, numBytes);
-    if ((numOutgoingBytes.get() - acknowledgedOutgoingBytes) < TRANSACTION_BYTES_WINDOW
-        && transmitWindowFull) {
-      logger.log(Level.FINE, 
+    if (flowController.handleAcknowledgedBytes(numBytes)) {
+      logger.log(
+          Level.FINE,
           "handleAcknowledgedBytes: Transmit Window No-Longer Full. Unblock calls: " + this);
       // We're ready again, and need to poke any waiting transactions.
-      transmitWindowFull = false;
       for (Inbound<?> inbound : ongoingCalls.values()) {
         inbound.onTransportReady();
       }
     }
-  }
-
-  private static final long wrapAwareMax(long a, long b) {
-    return a - b < 0 ? b : a;
   }
 
   /** Concrete client-side transport implementation. */

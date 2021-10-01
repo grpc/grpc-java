@@ -38,3 +38,18 @@ gcloud firebase test android run \
   --device model=Nexus6P,version=23,locale=en,orientation=portrait \
   --device model=Nexus6,version=22,locale=en,orientation=portrait \
   --device model=Nexus6,version=21,locale=en,orientation=portrait
+
+# Build and run binderchannel instrumentation tests on Firebase Test Lab
+cd ../binder
+../gradlew assembleDebugAndroidTest
+gcloud firebase test android run \
+  --type instrumentation \
+  --app ../android-interop-testing/build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
+  --test build/outputs/apk/androidTest/debug/grpc-binder-debug-androidTest.apk \
+  --device model=Nexus6P,version=27,locale=en,orientation=portrait \
+  --device model=Nexus6P,version=26,locale=en,orientation=portrait \
+  --device model=Nexus6P,version=25,locale=en,orientation=portrait \
+  --device model=Nexus6P,version=24,locale=en,orientation=portrait \
+  --device model=Nexus6P,version=23,locale=en,orientation=portrait \
+  --device model=Nexus6,version=22,locale=en,orientation=portrait \
+  --device model=Nexus6,version=21,locale=en,orientation=portrait

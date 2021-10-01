@@ -179,7 +179,8 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverResourceNotExist(CLUSTER);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status unavailable = Status.UNAVAILABLE.withDescription("Cluster " + CLUSTER + " unusable");
+    Status unavailable = Status.UNAVAILABLE.withDescription(
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancers).isEmpty();
   }
@@ -221,7 +222,8 @@ public class CdsLoadBalancer2Test {
 
     xdsClient.deliverResourceNotExist(CLUSTER);
     assertThat(childBalancer.shutdown).isTrue();
-    Status unavailable = Status.UNAVAILABLE.withDescription("Cluster " + CLUSTER + " unusable");
+    Status unavailable = Status.UNAVAILABLE.withDescription(
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     assertPicker(pickerCaptor.getValue(), unavailable, null);
@@ -295,7 +297,8 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverResourceNotExist(cluster1);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status unavailable = Status.UNAVAILABLE.withDescription("Cluster " + CLUSTER + " unusable");
+    Status unavailable = Status.UNAVAILABLE.withDescription(
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancers).isEmpty();
   }
@@ -341,7 +344,8 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverResourceNotExist(cluster2);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status unavailable = Status.UNAVAILABLE.withDescription("Cluster " + CLUSTER + " unusable");
+    Status unavailable = Status.UNAVAILABLE.withDescription(
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancer.shutdown).isTrue();
     assertThat(childBalancers).isEmpty();
@@ -379,7 +383,8 @@ public class CdsLoadBalancer2Test {
         .containsExactly(CLUSTER);  // subscription to all descendant clusters cancelled
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status unavailable = Status.UNAVAILABLE.withDescription("Cluster " + CLUSTER + " unusable");
+    Status unavailable = Status.UNAVAILABLE.withDescription(
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancer.shutdown).isTrue();
     assertThat(childBalancers).isEmpty();
@@ -427,7 +432,8 @@ public class CdsLoadBalancer2Test {
         .containsExactly(CLUSTER, cluster2);  // cancelled subscription to cluster3
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status unavailable = Status.UNAVAILABLE.withDescription("Cluster " + CLUSTER + " unusable");
+    Status unavailable = Status.UNAVAILABLE.withDescription(
+        "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster " + CLUSTER);
     assertPicker(pickerCaptor.getValue(), unavailable, null);
     assertThat(childBalancer.shutdown).isTrue();
     assertThat(childBalancers).isEmpty();

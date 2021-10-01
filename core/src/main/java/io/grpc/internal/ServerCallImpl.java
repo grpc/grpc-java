@@ -194,6 +194,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public boolean isReady() {
+    if (closeCalled) {
+      return false;
+    }
     return stream.isReady();
   }
 
