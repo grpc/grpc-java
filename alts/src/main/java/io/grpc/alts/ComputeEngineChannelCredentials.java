@@ -44,38 +44,52 @@ public final class ComputeEngineChannelCredentials {
    * if applicable and using TLS as fallback.
    */
   public static ChannelCredentials create() {
-    return create(null);
+    return newBuilder().build();
   }
 
-  /**
-   * Creates credentials based on a CallCredentials for Google Compute Engine. This class sets up a
-   * secure channel using ALTS if applicable and using TLS as fallback.
-   */
-  public static ChannelCredentials create(CallCredentials callCredentials) {
-    ChannelCredentials nettyCredentials =
-        InternalNettyChannelCredentials.create(createClientFactory());
-    if (!InternalCheckGcpEnvironment.isOnGcp()) {
-      callCredentials =
-          new FailingCallCredentials(
-              Status.INTERNAL.withDescription(
-                  "Compute Engine Credentials can only be used on Google Cloud Platform"));
-    }
-    if (callCredentials == null) {
-      callCredentials = MoreCallCredentials.from(ComputeEngineCredentials.create());
-    }
-    return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
+  public static Builder newBuilder() {
+    return new Builder();
   }
 
-  private static InternalProtocolNegotiator.ClientFactory createClientFactory() {
-    SslContext sslContext;
-    try {
-      sslContext = GrpcSslContexts.forClient().build();
-    } catch (SSLException e) {
-      throw new RuntimeException(e);
+  /** Builder for {@link ComputeEngineChannelCredentials} instances. */
+  public static final class Builder {
+    private CallCredentials callCredentials;
+
+    /**
+     * Receives a call credential so that ComputeEngineChannelCredentials can support non-default
+     * service account.
+     */
+    public Builder setCallCredentials(CallCredentials callCreds) {
+      callCredentials = callCreds;
+      return this;
     }
-    return new GoogleDefaultProtocolNegotiatorFactory(
-        /* targetServiceAccounts= */ ImmutableList.<String>of(),
-        SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
-        sslContext);
+
+    public ChannelCredentials build() {
+      ChannelCredentials nettyCredentials =
+          InternalNettyChannelCredentials.create(createClientFactory());
+      if (!InternalCheckGcpEnvironment.isOnGcp()) {
+        callCredentials =
+            new FailingCallCredentials(
+                Status.INTERNAL.withDescription(
+                    "Compute Engine Credentials can only be used on Google Cloud Platform"));
+      }
+      if (callCredentials == null) {
+        callCredentials = MoreCallCredentials.from(ComputeEngineCredentials.create());
+      }
+      return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
+    }
+
+    private static InternalProtocolNegotiator.ClientFactory createClientFactory() {
+      SslContext sslContext;
+      try {
+        sslContext = GrpcSslContexts.forClient().build();
+      } catch (SSLException e) {
+        throw new RuntimeException(e);
+      }
+      return new GoogleDefaultProtocolNegotiatorFactory(
+          /* targetServiceAccounts= */ ImmutableList.<String>of(),
+          SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
+          sslContext);
+    }
   }
 }
