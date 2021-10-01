@@ -64,6 +64,7 @@ public final class ComputeEngineChannelCredentials {
       return this;
     }
 
+    /** Build a ComputeEngineChannelCredentials instance. */
     public ChannelCredentials build() {
       ChannelCredentials nettyCredentials =
           InternalNettyChannelCredentials.create(createClientFactory());
