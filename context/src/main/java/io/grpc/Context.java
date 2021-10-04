@@ -57,26 +57,13 @@ import java.util.logging.Logger;
  * </pre>
  *
  * <p>Contexts are also used to represent a scoped unit of work. When the unit of work is done the
- * context can be cancelled. This cancellation will also cascade to all descendant contexts. You can
+ * context must be cancelled. This cancellation will cascade to all descendant contexts. You can
  * add a {@link CancellationListener} to a context to be notified when it or one of its ancestors
  * has been cancelled. Cancellation does not release the state stored by a context and it's
  * perfectly valid to {@link #attach()} an already cancelled context to make it current. To cancel a
  * context (and its descendants) you first create a {@link CancellableContext} and when you need to
  * signal cancellation call {@link CancellableContext#cancel} or {@link
- * CancellableContext#detachAndCancel}. For example:
- * <pre>
- *   CancellableContext withCancellation = Context.current().withCancellation();
- *   try {
- *     withCancellation.run(new Runnable() {
- *       public void run() {
- *         while (waitingForData() &amp;&amp; !Context.current().isCancelled()) {}
- *       }
- *     });
- *     doSomeWork();
- *   } catch (Throwable t) {
- *      withCancellation.cancel(t);
- *   }
- * </pre>
+ * CancellableContext#detachAndCancel}.
  *
  * <p>Contexts can also be created with a timeout relative to the system nano clock which will
  * cause it to automatically cancel at the desired time.
