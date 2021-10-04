@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.xds.InternalXdsAttributes.ATTR_DRAIN_GRACE_NANOS;
 import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_MANAGER;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
@@ -133,8 +132,11 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
             filterChainSelectorManager, xdsClientPoolFactory, filterRegistry);
   }
 
-  @VisibleForTesting
-  XdsServerBuilder xdsClientPoolFactory(@Nullable XdsClientPoolFactory xdsClientPoolFactory,
+  /**
+   * Allows injecting {@link XdsClientPoolFactory} and/or overriding bootstrap configuration, useful
+   * for testing.
+   */
+  public XdsServerBuilder xdsClientPoolFactory(@Nullable XdsClientPoolFactory xdsClientPoolFactory,
                                         @Nullable Map<String, ?> bootstrapOverride) {
     if (xdsClientPoolFactory != null) {
       this.xdsClientPoolFactory = xdsClientPoolFactory;
