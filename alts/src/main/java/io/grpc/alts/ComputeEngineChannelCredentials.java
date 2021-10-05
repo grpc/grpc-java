@@ -50,10 +50,9 @@ public final class ComputeEngineChannelCredentials {
     if (InternalCheckGcpEnvironment.isOnGcp()) {
       callCredentials = MoreCallCredentials.from(ComputeEngineCredentials.create());
     } else {
-      callCredentials =
-          new FailingCallCredentials(
-              Status.INTERNAL.withDescription(
-                  "Compute Engine Credentials can only be used on Google Cloud Platform"));
+      callCredentials = new FailingCallCredentials(
+          Status.INTERNAL.withDescription(
+              "Compute Engine Credentials can only be used on Google Cloud Platform"));
     }
     return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
   }
