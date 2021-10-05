@@ -177,6 +177,51 @@ public class CallCredentialsApplyingTest {
   }
 
   @Test
+  public void parameterPropagation_transportSetSecurityLevel() {
+    Attributes transportAttrs = Attributes.newBuilder()
+            .set(ATTR_KEY, ATTR_VALUE)
+            .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.INTEGRITY)
+            .build();
+    when(mockTransport.getAttributes()).thenReturn(transportAttrs);
+
+    transport.newStream(method, origHeaders, callOptions, tracers);
+
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    verify(mockCreds).applyRequestMetadata(
+            infoCaptor.capture(), same(mockExecutor),
+            any(io.grpc.CallCredentials.MetadataApplier.class));
+    RequestInfo info = infoCaptor.getValue();
+    assertSame(method, info.getMethodDescriptor());
+    assertSame(ATTR_VALUE, info.getTransportAttrs().get(ATTR_KEY));
+    assertSame(AUTHORITY, info.getAuthority());
+    assertSame(SecurityLevel.INTEGRITY, info.getSecurityLevel());
+  }
+
+  @Test
+  public void parameterPropagation_callOptionsSetAuthority() {
+    Attributes transportAttrs = Attributes.newBuilder()
+            .set(ATTR_KEY, ATTR_VALUE)
+            .build();
+    when(mockTransport.getAttributes()).thenReturn(transportAttrs);
+    Executor anotherExecutor = mock(Executor.class);
+
+    transport.newStream(
+            method, origHeaders,
+            callOptions.withAuthority("calloptions-authority").withExecutor(anotherExecutor),
+            tracers);
+
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    verify(mockCreds).applyRequestMetadata(
+            infoCaptor.capture(), same(anotherExecutor),
+            any(io.grpc.CallCredentials.MetadataApplier.class));
+    RequestInfo info = infoCaptor.getValue();
+    assertSame(method, info.getMethodDescriptor());
+    assertSame(ATTR_VALUE, info.getTransportAttrs().get(ATTR_KEY));
+    assertEquals("calloptions-authority", info.getAuthority());
+    assertSame(SecurityLevel.NONE, info.getSecurityLevel());
+  }
+
+  @Test
   public void credentialThrows() {
     final RuntimeException ex = new RuntimeException();
     when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
