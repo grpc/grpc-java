@@ -44,54 +44,30 @@ public final class ComputeEngineChannelCredentials {
    * if applicable and using TLS as fallback.
    */
   public static ChannelCredentials create() {
-    return newBuilder().build();
+    ChannelCredentials nettyCredentials =
+        InternalNettyChannelCredentials.create(createClientFactory());
+    CallCredentials callCredentials;
+    if (InternalCheckGcpEnvironment.isOnGcp()) {
+      callCredentials = MoreCallCredentials.from(ComputeEngineCredentials.create());
+    } else {
+      callCredentials =
+          new FailingCallCredentials(
+              Status.INTERNAL.withDescription(
+                  "Compute Engine Credentials can only be used on Google Cloud Platform"));
+    }
+    return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
   }
 
-  public static Builder newBuilder() {
-    return new Builder();
-  }
-
-  /** Builder for {@link ComputeEngineChannelCredentials} instances. */
-  public static final class Builder {
-    private CallCredentials callCredentials;
-
-    /**
-     * Receives a call credential so that ComputeEngineChannelCredentials can support non-default
-     * service account.
-     */
-    public Builder setCallCredentials(CallCredentials callCreds) {
-      callCredentials = callCreds;
-      return this;
+  private static InternalProtocolNegotiator.ClientFactory createClientFactory() {
+    SslContext sslContext;
+    try {
+      sslContext = GrpcSslContexts.forClient().build();
+    } catch (SSLException e) {
+      throw new RuntimeException(e);
     }
-
-    /** Build a ComputeEngineChannelCredentials instance. */
-    public ChannelCredentials build() {
-      ChannelCredentials nettyCredentials =
-          InternalNettyChannelCredentials.create(createClientFactory());
-      if (!InternalCheckGcpEnvironment.isOnGcp()) {
-        callCredentials =
-            new FailingCallCredentials(
-                Status.INTERNAL.withDescription(
-                    "Compute Engine Credentials can only be used on Google Cloud Platform"));
-      }
-      if (callCredentials == null) {
-        return CompositeChannelCredentials.create(
-            nettyCredentials, MoreCallCredentials.from(ComputeEngineCredentials.create()));
-      }
-      return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
-    }
-
-    private static InternalProtocolNegotiator.ClientFactory createClientFactory() {
-      SslContext sslContext;
-      try {
-        sslContext = GrpcSslContexts.forClient().build();
-      } catch (SSLException e) {
-        throw new RuntimeException(e);
-      }
-      return new GoogleDefaultProtocolNegotiatorFactory(
-          /* targetServiceAccounts= */ ImmutableList.<String>of(),
-          SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
-          sslContext);
-    }
+    return new GoogleDefaultProtocolNegotiatorFactory(
+        /* targetServiceAccounts= */ ImmutableList.<String>of(),
+        SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
+        sslContext);
   }
 }
