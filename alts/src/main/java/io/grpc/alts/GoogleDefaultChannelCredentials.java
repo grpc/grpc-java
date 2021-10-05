@@ -56,7 +56,7 @@ public final class GoogleDefaultChannelCredentials {
     private CallCredentials callCredentials;
 
     /** Construct GoogleDefaultChannelCredentials with a given call credential. */
-    public Builder setCallCredentials(CallCredentials callCreds) {
+    public Builder callCredentials(CallCredentials callCreds) {
       callCredentials = callCreds;
       return this;
     }
@@ -65,20 +65,20 @@ public final class GoogleDefaultChannelCredentials {
     public ChannelCredentials build() {
       ChannelCredentials nettyCredentials =
           InternalNettyChannelCredentials.create(createClientFactory());
-      if (callCredentials == null) {
-        CallCredentials callCreds;
-        try {
-          callCreds = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
-        } catch (IOException e) {
-          callCreds =
-              new FailingCallCredentials(
-                  Status.UNAUTHENTICATED
-                      .withDescription("Failed to get Google default credentials")
-                      .withCause(e));
-        }
-        return CompositeChannelCredentials.create(nettyCredentials, callCreds);
+      if (callCredentials != null) {
+        return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
       }
-      return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
+      CallCredentials callCreds;
+      try {
+        callCreds = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
+      } catch (IOException e) {
+        callCreds =
+            new FailingCallCredentials(
+                Status.UNAUTHENTICATED
+                    .withDescription("Failed to get Google default credentials")
+                    .withCause(e));
+      }
+      return CompositeChannelCredentials.create(nettyCredentials, callCreds);
     }
 
     private static InternalProtocolNegotiator.ClientFactory createClientFactory() {
