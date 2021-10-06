@@ -183,7 +183,7 @@ final class RbacFilter implements Filter, ServerInterceptorBuilder {
                 new Object[]{call, authResult.decision(), authResult.matchingPolicyName()});
           }
           if (GrpcAuthorizationEngine.Action.DENY.equals(authResult.decision())) {
-            Status status = Status.PERMISSION_DENIED.withDescription("Access Denied.");
+            Status status = Status.PERMISSION_DENIED.withDescription("Access Denied");
             call.close(status, new Metadata());
             return new ServerCall.Listener<ReqT>(){};
           }
