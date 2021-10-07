@@ -503,7 +503,12 @@ public class ClientInterceptorsTest {
     intercepted.enterIdle();
     intercepted.getState(true);
     intercepted.isShutdown();
-    intercepted.notifyWhenStateChanged(ConnectivityState.CONNECTING, () -> {});
+    intercepted.notifyWhenStateChanged(
+        ConnectivityState.CONNECTING,
+        new Runnable() {
+          @Override
+          public void run() {}
+        });
     intercepted.resetConnectBackoff();
     intercepted.shutdown();
     intercepted.shutdownNow();
