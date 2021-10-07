@@ -433,6 +433,7 @@ public class ClientInterceptorsTest {
 
           @Override
           public String authority() {
+            managedChannelMethods.add("authority");
             return null;
           }
 
@@ -499,10 +500,12 @@ public class ClientInterceptorsTest {
     ManagedChannel intercepted = ClientInterceptors.intercept(channel, interceptor);
     assertSame(call, intercepted.newCall(method, CallOptions.DEFAULT));
 
+    intercepted.authority();
     intercepted.awaitTermination(123, SECONDS);
     intercepted.enterIdle();
     intercepted.getState(true);
     intercepted.isShutdown();
+    intercepted.isTerminated();
     intercepted.notifyWhenStateChanged(
         ConnectivityState.CONNECTING,
         new Runnable() {
@@ -516,10 +519,12 @@ public class ClientInterceptorsTest {
     assertThat(order).containsExactly("interceptor", "channel").inOrder();
     assertThat(managedChannelMethods)
         .containsExactly(
+            "authority",
             "awaitTermination",
             "enterIdle",
             "getState",
             "isShutdown",
+            "isTerminated",
             "notifyWhenStateChanged",
             "resetConnectBackoff",
             "shutdown",
