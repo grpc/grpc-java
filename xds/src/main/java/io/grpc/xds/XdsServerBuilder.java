@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.xds.InternalXdsAttributes.ATTR_DRAIN_GRACE_NANOS;
 import static io.grpc.xds.InternalXdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_MANAGER;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
@@ -40,7 +41,6 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 
 /**
  * A version of {@link ServerBuilder} to create xDS managed servers.
@@ -131,18 +131,18 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
             filterChainSelectorManager, xdsClientPoolFactory, filterRegistry);
   }
 
+  @VisibleForTesting
+  XdsServerBuilder xdsClientPoolFactory(XdsClientPoolFactory xdsClientPoolFactory) {
+    this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    return this;
+  }
+
   /**
-   * Allows injecting {@link XdsClientPoolFactory} and/or overriding bootstrap configuration, useful
-   * for testing.
+   * Allows providing bootstrap override, useful for testing.
    */
-  XdsServerBuilder xdsClientPoolFactoryForTest(@Nullable XdsClientPoolFactory xdsClientPoolFactory,
-                                        @Nullable Map<String, ?> bootstrapOverride) {
-    if (xdsClientPoolFactory != null) {
-      this.xdsClientPoolFactory = xdsClientPoolFactory;
-    }
-    if (bootstrapOverride != null) {
-      this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
-    }
+  public XdsServerBuilder overrideBootstrapForTest(Map<String, ?> bootstrapOverride) {
+    this.xdsClientPoolFactory.setBootstrapOverride(
+        checkNotNull(bootstrapOverride, "bootstrapOverride"));
     return this;
   }
 

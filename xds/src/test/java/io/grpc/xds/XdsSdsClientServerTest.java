@@ -337,7 +337,7 @@ public class XdsSdsClientServerTest {
       throws Exception {
     ServerCredentials xdsCredentials = XdsServerCredentials.create(fallbackCredentials);
     XdsServerBuilder builder = XdsServerBuilder.forPort(0, xdsCredentials)
-            .xdsClientPoolFactoryForTest(fakePoolFactory, null)
+            .xdsClientPoolFactory(fakePoolFactory)
             .addService(new SimpleServiceImpl());
     buildServer(builder, downstreamTlsContext);
   }

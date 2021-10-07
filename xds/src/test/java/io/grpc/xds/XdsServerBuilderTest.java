@@ -77,7 +77,7 @@ public class XdsServerBuilderTest {
     builder =
         XdsServerBuilder.forPort(
             port, XdsServerCredentials.create(InsecureServerCredentials.create()));
-    builder.xdsClientPoolFactoryForTest(new FakeXdsClientPoolFactory(xdsClient), null);
+    builder.xdsClientPoolFactory(new FakeXdsClientPoolFactory(xdsClient));
     if (xdsServingStatusListener != null) {
       builder.xdsServingStatusListener(xdsServingStatusListener);
     }
