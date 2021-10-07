@@ -36,7 +36,6 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingNegotiatorServerFactory;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
-
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -136,7 +135,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
    * Allows injecting {@link XdsClientPoolFactory} and/or overriding bootstrap configuration, useful
    * for testing.
    */
-  public XdsServerBuilder xdsClientPoolFactory(@Nullable XdsClientPoolFactory xdsClientPoolFactory,
+  XdsServerBuilder xdsClientPoolFactoryForTest(@Nullable XdsClientPoolFactory xdsClientPoolFactory,
                                         @Nullable Map<String, ?> bootstrapOverride) {
     if (xdsClientPoolFactory != null) {
       this.xdsClientPoolFactory = xdsClientPoolFactory;
