@@ -113,6 +113,7 @@ public class XdsServerTestHelper {
         implements XdsNameResolverProvider.XdsClientPoolFactory {
 
     private XdsClient xdsClient;
+    Map<String, ?> savedBootstrap;
 
     FakeXdsClientPoolFactory(XdsClient xdsClient) {
       this.xdsClient = xdsClient;
@@ -120,7 +121,7 @@ public class XdsServerTestHelper {
 
     @Override
     public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      throw new UnsupportedOperationException("Should not be called");
+      this.savedBootstrap = bootstrap;
     }
 
     @Override
