@@ -18,6 +18,7 @@ package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
@@ -40,6 +41,7 @@ import io.grpc.testing.TestMethodDescriptors;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -415,6 +417,111 @@ public class ClientInterceptorsTest {
     assertSame("value", passedOptions.getValue().getOption(customOption));
   }
 
+  @Test
+  public void managedChannel() throws Exception {
+    final List<String> order = new ArrayList<>();
+    final List<String> managedChannelMethods = new ArrayList<>();
+    ManagedChannel channel =
+        new ManagedChannel() {
+          @SuppressWarnings("unchecked")
+          @Override
+          public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
+              MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
+            order.add("channel");
+            return (ClientCall<ReqT, RespT>) call;
+          }
+
+          @Override
+          public String authority() {
+            return null;
+          }
+
+          @Override
+          public ManagedChannel shutdown() {
+            managedChannelMethods.add("shutdown");
+            return this;
+          }
+
+          @Override
+          public boolean isShutdown() {
+            managedChannelMethods.add("isShutdown");
+            return false;
+          }
+
+          @Override
+          public boolean isTerminated() {
+            managedChannelMethods.add("isTerminated");
+            return false;
+          }
+
+          @Override
+          public ManagedChannel shutdownNow() {
+            managedChannelMethods.add("shutdownNow");
+            return this;
+          }
+
+          @Override
+          public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+            managedChannelMethods.add("awaitTermination");
+            return true;
+          }
+
+          @Override
+          public ConnectivityState getState(boolean requestConnection) {
+            managedChannelMethods.add("getState");
+            return null;
+          }
+
+          @Override
+          public void notifyWhenStateChanged(ConnectivityState source, Runnable callback) {
+            managedChannelMethods.add("notifyWhenStateChanged");
+          }
+
+          @Override
+          public void resetConnectBackoff() {
+            managedChannelMethods.add("resetConnectBackoff");
+          }
+
+          @Override
+          public void enterIdle() {
+            managedChannelMethods.add("enterIdle");
+          }
+        };
+    ClientInterceptor interceptor =
+        new ClientInterceptor() {
+          @Override
+          public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+              MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+            order.add("interceptor");
+            return next.newCall(method, callOptions);
+          }
+        };
+    ManagedChannel intercepted = ClientInterceptors.intercept(channel, interceptor);
+    assertSame(call, intercepted.newCall(method, CallOptions.DEFAULT));
+
+    intercepted.awaitTermination(123, SECONDS);
+    intercepted.enterIdle();
+    intercepted.getState(true);
+    intercepted.isShutdown();
+    intercepted.notifyWhenStateChanged(ConnectivityState.CONNECTING, () -> {});
+    intercepted.resetConnectBackoff();
+    intercepted.shutdown();
+    intercepted.shutdownNow();
+
+    assertThat(order).containsExactly("interceptor", "channel").inOrder();
+    assertThat(managedChannelMethods)
+        .containsExactly(
+            "awaitTermination",
+            "enterIdle",
+            "getState",
+            "isShutdown",
+            "notifyWhenStateChanged",
+            "resetConnectBackoff",
+            "shutdown",
+            "shutdownNow")
+        .inOrder();
+  }
+
   private static class NoopInterceptor implements ClientInterceptor {
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
@@ -479,3 +586,4 @@ public class ClientInterceptorsTest {
     }
   }
 }
+

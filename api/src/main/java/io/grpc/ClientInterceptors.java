@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Utility methods for working with {@link ClientInterceptor}s.
@@ -46,6 +47,20 @@ public class ClientInterceptors {
   }
 
   /**
+   * Create a new {@link ManagedChannel} that will call {@code interceptors} before starting a call
+   * on the given channel. The first interceptor will have its {@link
+   * ClientInterceptor#interceptCall} called first.
+   *
+   * @param channel the underlying channel to intercept.
+   * @param interceptors array of interceptors to bind to {@code channel}.
+   * @return a new channel instance with the interceptors applied.
+   */
+  public static ManagedChannel interceptForward(
+      ManagedChannel channel, ClientInterceptor... interceptors) {
+    return interceptForward(channel, Arrays.asList(interceptors));
+  }
+
+  /**
    * Create a new {@link Channel} that will call {@code interceptors} before starting a call on the
    * given channel. The first interceptor will have its {@link ClientInterceptor#interceptCall}
    * called first.
@@ -56,6 +71,22 @@ public class ClientInterceptors {
    */
   public static Channel interceptForward(Channel channel,
                                          List<? extends ClientInterceptor> interceptors) {
+    List<? extends ClientInterceptor> copy = new ArrayList<>(interceptors);
+    Collections.reverse(copy);
+    return intercept(channel, copy);
+  }
+
+  /**
+   * Create a new {@link ManagedChannel} that will call {@code interceptors} before starting a call
+   * on the given channel. The first interceptor will have its {@link
+   * ClientInterceptor#interceptCall} called first.
+   *
+   * @param channel the underlying channel to intercept.
+   * @param interceptors a list of interceptors to bind to {@code channel}.
+   * @return a new channel instance with the interceptors applied.
+   */
+  public static ManagedChannel interceptForward(
+      ManagedChannel channel, List<? extends ClientInterceptor> interceptors) {
     List<? extends ClientInterceptor> copy = new ArrayList<>(interceptors);
     Collections.reverse(copy);
     return intercept(channel, copy);
@@ -75,6 +106,20 @@ public class ClientInterceptors {
   }
 
   /**
+   * Create a new {@link ManagedChannel} that will call {@code interceptors} before starting a call
+   * on the given channel. The last interceptor will have its {@link
+   * ClientInterceptor#interceptCall} called first.
+   *
+   * @param channel the underlying channel to intercept.
+   * @param interceptors array of interceptors to bind to {@code channel}.
+   * @return a new channel instance with the interceptors applied.
+   */
+  public static ManagedChannel intercept(
+      ManagedChannel channel, ClientInterceptor... interceptors) {
+    return intercept(channel, Arrays.asList(interceptors));
+  }
+
+  /**
    * Create a new {@link Channel} that will call {@code interceptors} before starting a call on the
    * given channel. The last interceptor will have its {@link ClientInterceptor#interceptCall}
    * called first.
@@ -87,6 +132,24 @@ public class ClientInterceptors {
     Preconditions.checkNotNull(channel, "channel");
     for (ClientInterceptor interceptor : interceptors) {
       channel = new InterceptorChannel(channel, interceptor);
+    }
+    return channel;
+  }
+
+  /**
+   * Create a new {@link ManagedChannel} that will call {@code interceptors} before starting a call
+   * on the given channel. The last interceptor will have its {@link
+   * ClientInterceptor#interceptCall} called first.
+   *
+   * @param channel the underlying channel to intercept.
+   * @param interceptors a list of interceptors to bind to {@code channel}.
+   * @return a new channel instance with the interceptors applied.
+   */
+  public static ManagedChannel intercept(
+      ManagedChannel channel, List<? extends ClientInterceptor> interceptors) {
+    Preconditions.checkNotNull(channel, "channel");
+    for (ClientInterceptor interceptor : interceptors) {
+      channel = new ManagedInterceptorChannel(channel, interceptor);
     }
     return channel;
   }
@@ -159,6 +222,72 @@ public class ClientInterceptors {
     @Override
     public String authority() {
       return channel.authority();
+    }
+  }
+
+  private static final class ManagedInterceptorChannel extends ManagedChannel {
+    private final ManagedChannel channel;
+    private final ClientInterceptor interceptor;
+
+    private ManagedInterceptorChannel(ManagedChannel channel, ClientInterceptor interceptor) {
+      this.channel = channel;
+      this.interceptor = Preconditions.checkNotNull(interceptor, "interceptor");
+    }
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(
+        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
+      return interceptor.interceptCall(method, callOptions, channel);
+    }
+
+    @Override
+    public String authority() {
+      return channel.authority();
+    }
+
+    @Override
+    public ManagedChannel shutdown() {
+      return channel.shutdown();
+    }
+
+    @Override
+    public boolean isShutdown() {
+      return channel.isShutdown();
+    }
+
+    @Override
+    public boolean isTerminated() {
+      return channel.isTerminated();
+    }
+
+    @Override
+    public ManagedChannel shutdownNow() {
+      return channel.shutdownNow();
+    }
+
+    @Override
+    public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+      return channel.awaitTermination(timeout, unit);
+    }
+
+    @Override
+    public ConnectivityState getState(boolean requestConnection) {
+      return channel.getState(requestConnection);
+    }
+
+    @Override
+    public void notifyWhenStateChanged(ConnectivityState source, Runnable callback) {
+      channel.notifyWhenStateChanged(source, callback);
+    }
+
+    @Override
+    public void resetConnectBackoff() {
+      channel.resetConnectBackoff();
+    }
+
+    @Override
+    public void enterIdle() {
+      channel.enterIdle();
     }
   }
 
@@ -241,3 +370,4 @@ public class ClientInterceptors {
     }
   }
 }
+
