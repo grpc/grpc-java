@@ -3,9 +3,7 @@ set -eo pipefail
 
 # Constants
 readonly GITHUB_REPOSITORY_NAME="grpc-java"
-# GKE Cluster
-readonly GKE_CLUSTER_NAME="interop-test-psm-basic"
-readonly GKE_CLUSTER_ZONE="us-central1-c"
+readonly TEST_DRIVER_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/${TEST_DRIVER_REPO_OWNER:-grpc}/grpc/${TEST_DRIVER_BRANCH:-master}/tools/internal_ci/linux/grpc_xds_k8s_install_test_driver.sh"
 ## xDS test client Docker images
 readonly SERVER_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-server"
 readonly CLIENT_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-client"
@@ -151,8 +149,13 @@ run_test() {
 main() {
   local script_dir
   script_dir="$(dirname "$0")"
-  # shellcheck source=buildscripts/kokoro/xds-k8s-install-test-driver.sh
-  source "${script_dir}/xds-k8s-install-test-driver.sh"
+
+  # Source the test driver from the master branch.
+  echo "Sourcing test driver install script from: ${TEST_DRIVER_INSTALL_SCRIPT_URL}"
+  source /dev/stdin <<< "$(curl -s "${TEST_DRIVER_INSTALL_SCRIPT_URL}")"
+
+  activate_gke_cluster GKE_CLUSTER_PSM_BASIC
+
   set -x
   if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
     kokoro_setup_test_driver "${GITHUB_REPOSITORY_NAME}"
