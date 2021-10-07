@@ -141,8 +141,11 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
    * Allows providing bootstrap override, useful for testing.
    */
   public XdsServerBuilder overrideBootstrapForTest(Map<String, ?> bootstrapOverride) {
-    this.xdsClientPoolFactory.setBootstrapOverride(
-        checkNotNull(bootstrapOverride, "bootstrapOverride"));
+    checkNotNull(bootstrapOverride, "bootstrapOverride");
+    if (this.xdsClientPoolFactory == SharedXdsClientPoolProvider.getDefaultProvider()) {
+      this.xdsClientPoolFactory = new SharedXdsClientPoolProvider();
+    }
+    this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
     return this;
   }
 
