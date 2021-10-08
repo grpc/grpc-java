@@ -219,6 +219,7 @@ abstract class Outbound {
   }
 
   @GuardedBy("this")
+  @SuppressWarnings("fallthrough")
   protected final void sendInternal() throws StatusException {
     Parcel parcel = Parcel.obtain();
     int flags = 0;
