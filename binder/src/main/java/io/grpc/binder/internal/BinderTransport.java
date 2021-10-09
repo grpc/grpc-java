@@ -87,7 +87,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * need to call into this class to send a transaction (possibly waiting for the transport to become
  * ready).
  *
- * <p>The split between Outbound & Inbound helps reduce this risk, but not entirely remove it.
+ * <p>The split between Outbound &amp; Inbound helps reduce this risk, but not entirely remove it.
  *
  * <p>For this reason, while most state within this class is guarded by this instance, methods
  * exposed to individual stream instances need to use atomic or volatile types, since those calls

@@ -35,7 +35,7 @@ import javax.annotation.CheckReturnValue;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8022")
 public abstract class SecurityPolicy {
 
-  public SecurityPolicy() {}
+  protected SecurityPolicy() {}
 
   /**
    * Decides whether the given Android UID is authorized. (Validity is implementation dependent).
