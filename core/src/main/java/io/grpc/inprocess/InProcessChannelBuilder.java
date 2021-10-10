@@ -19,7 +19,6 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
@@ -55,33 +54,37 @@ public final class InProcessChannelBuilder extends
    * @return a new builder
    */
   public static InProcessChannelBuilder forName(String name) {
-    return new InProcessChannelBuilder(name);
+    return forAddress(new InProcessSocketAddress(checkNotNull(name, "name")));
   }
 
   /**
-   * Always fails.  Call {@link #forName} instead.
+   * Create a channel builder that will connect to the server referenced by the given target URI.
+   * Only intended for use with a custom name resolver.
+   *
+   * @param target the identity of the server to connect to
+   * @return a new builder
    */
-  @DoNotCall("Unsupported. Use forName() instead")
   public static InProcessChannelBuilder forTarget(String target) {
-    throw new UnsupportedOperationException("call forName() instead");
+    return new InProcessChannelBuilder(null, checkNotNull(target, "target"));
   }
 
   /**
-   * Always fails.  Call {@link #forName} instead.
+   * Create a channel builder that will connect to the server referenced by the given address.
+   *
+   * @param address the address of the server to connect to
+   * @return a new builder
    */
-  @DoNotCall("Unsupported. Use forName() instead")
-  public static InProcessChannelBuilder forAddress(String name, int port) {
-    throw new UnsupportedOperationException("call forName() instead");
+  public static InProcessChannelBuilder forAddress(InProcessSocketAddress address) {
+    return new InProcessChannelBuilder(checkNotNull(address, "address"), null);
   }
 
   private final ManagedChannelImplBuilder managedChannelImplBuilder;
-  private final String name;
   private ScheduledExecutorService scheduledExecutorService;
   private int maxInboundMetadataSize = Integer.MAX_VALUE;
   private boolean transportIncludeStatusCause = false;
 
-  private InProcessChannelBuilder(String name) {
-    this.name = checkNotNull(name, "name");
+  private InProcessChannelBuilder(
+      @Nullable InProcessSocketAddress directAddress, @Nullable String target) {
 
     final class InProcessChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
       @Override
@@ -90,8 +93,13 @@ public final class InProcessChannelBuilder extends
       }
     }
 
-    managedChannelImplBuilder = new ManagedChannelImplBuilder(new InProcessSocketAddress(name),
-        "localhost", new InProcessChannelTransportFactoryBuilder(), null);
+    if (directAddress != null) {
+      managedChannelImplBuilder = new ManagedChannelImplBuilder(directAddress, "localhost",
+          new InProcessChannelTransportFactoryBuilder(), null);
+    } else {
+      managedChannelImplBuilder = new ManagedChannelImplBuilder(target,
+          new InProcessChannelTransportFactoryBuilder(), null);
+    }
 
     // In-process transport should not record its traffic to the stats module.
     // https://github.com/grpc/grpc-java/issues/2284
@@ -204,7 +212,7 @@ public final class InProcessChannelBuilder extends
 
   ClientTransportFactory buildTransportFactory() {
     return new InProcessClientTransportFactory(
-        name, scheduledExecutorService, maxInboundMetadataSize, transportIncludeStatusCause);
+        scheduledExecutorService, maxInboundMetadataSize, transportIncludeStatusCause);
   }
 
   void setStatsEnabled(boolean value) {
@@ -215,7 +223,6 @@ public final class InProcessChannelBuilder extends
    * Creates InProcess transports. Exposed for internal use, as it should be private.
    */
   static final class InProcessClientTransportFactory implements ClientTransportFactory {
-    private final String name;
     private final ScheduledExecutorService timerService;
     private final boolean useSharedTimer;
     private final int maxInboundMetadataSize;
@@ -223,10 +230,8 @@ public final class InProcessChannelBuilder extends
     private final boolean includeCauseWithStatus;
 
     private InProcessClientTransportFactory(
-        String name,
         @Nullable ScheduledExecutorService scheduledExecutorService,
         int maxInboundMetadataSize, boolean includeCauseWithStatus) {
-      this.name = name;
       useSharedTimer = scheduledExecutorService == null;
       timerService = useSharedTimer
           ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : scheduledExecutorService;
@@ -242,7 +247,7 @@ public final class InProcessChannelBuilder extends
       }
       // TODO(carl-mastrangelo): Pass channelLogger in.
       return new InProcessTransport(
-          name, maxInboundMetadataSize, options.getAuthority(), options.getUserAgent(),
+          addr, maxInboundMetadataSize, options.getAuthority(), options.getUserAgent(),
           options.getEagAttributes(), includeCauseWithStatus);
     }
 

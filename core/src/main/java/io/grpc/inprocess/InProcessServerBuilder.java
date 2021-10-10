@@ -81,7 +81,18 @@ public final class InProcessServerBuilder extends
    * @return a new builder
    */
   public static InProcessServerBuilder forName(String name) {
-    return new InProcessServerBuilder(name);
+    return new InProcessServerBuilder(name, false);
+  }
+
+  /**
+   * Create a server builder for an anonymous in-process server.
+   * Anonymouns servers can only be connected to via their listen address,
+   * and can't be referenced by name.
+   * @param name a server identifier used for logging purposes only.
+   * @return a new builder
+   */
+  public static InProcessServerBuilder anonymous(String name) {
+    return new InProcessServerBuilder("anon:" + name, true);
   }
 
   /**
@@ -101,12 +112,14 @@ public final class InProcessServerBuilder extends
 
   private final ServerImplBuilder serverImplBuilder;
   final String name;
+  final boolean anonymous;
   int maxInboundMetadataSize = Integer.MAX_VALUE;
   ObjectPool<ScheduledExecutorService> schedulerPool =
       SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
 
-  private InProcessServerBuilder(String name) {
+  private InProcessServerBuilder(String name, boolean anonymous) {
     this.name = Preconditions.checkNotNull(name, "name");
+    this.anonymous = anonymous;
 
     final class InProcessClientTransportServersBuilder implements ClientTransportServersBuilder {
       @Override

@@ -40,11 +40,20 @@ final class InProcessServer implements InternalServer {
   private static final ConcurrentMap<String, InProcessServer> registry
       = new ConcurrentHashMap<>();
 
-  static InProcessServer findServer(String name) {
-    return registry.get(name);
+  static InProcessServer findServer(SocketAddress addr) {
+    if (addr instanceof InProcessSocketAddress) {
+      InProcessSocketAddress inProcessAddress = (InProcessSocketAddress) addr;
+      if (inProcessAddress.getServer() != null) {
+        return inProcessAddress.getServer();
+      } else {
+        return registry.get(inProcessAddress.getName());
+      }
+    }
+    return null;
   }
 
   private final String name;
+  private final boolean anonymous;
   private final int maxInboundMetadataSize;
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
   private ServerListener listener;
@@ -61,6 +70,7 @@ final class InProcessServer implements InternalServer {
       InProcessServerBuilder builder,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
     this.name = builder.name;
+    this.anonymous = builder.anonymous;
     this.schedulerPool = builder.schedulerPool;
     this.maxInboundMetadataSize = builder.maxInboundMetadataSize;
     this.streamTracerFactories =
@@ -71,15 +81,17 @@ final class InProcessServer implements InternalServer {
   public void start(ServerListener serverListener) throws IOException {
     this.listener = serverListener;
     this.scheduler = schedulerPool.getObject();
-    // Must be last, as channels can start connecting after this point.
-    if (registry.putIfAbsent(name, this) != null) {
-      throw new IOException("name already registered: " + name);
+    if (!anonymous) {
+      // Must be last, as channels can start connecting after this point.
+      if (registry.putIfAbsent(name, this) != null) {
+        throw new IOException("name already registered: " + name);
+      }
     }
   }
 
   @Override
   public SocketAddress getListenSocketAddress() {
-    return new InProcessSocketAddress(name);
+    return new InProcessSocketAddress(name, anonymous ? this : null);
   }
 
   @Override
