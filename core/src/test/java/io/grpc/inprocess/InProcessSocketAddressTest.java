@@ -19,6 +19,8 @@ package io.grpc.inprocess;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.testing.EqualsTester;
+import io.grpc.ServerStreamTracer;
+import java.util.Collections;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -43,8 +45,33 @@ public class InProcessSocketAddressTest {
   }
 
   @Test
+  public void equalAnonymousServer() {
+    InProcessServer anonServer = createAnonymousServer();
+    InProcessSocketAddress anonAddr = new InProcessSocketAddress("a", anonServer);
+    new EqualsTester()
+        .addEqualityGroup(
+            anonAddr,
+            anonAddr)
+        .addEqualityGroup(
+            new InProcessSocketAddress("a"))
+        .addEqualityGroup(
+            new InProcessSocketAddress("a", anonServer))
+        .testEquals();
+  }
+
+  @Test
   public void hash() {
     assertThat(new InProcessSocketAddress("a").hashCode())
         .isEqualTo(new InProcessSocketAddress(new String("a")).hashCode());
+
+    InProcessServer anonServer = createAnonymousServer();
+    assertThat(new InProcessSocketAddress("a", anonServer).hashCode())
+        .isNotEqualTo(new InProcessSocketAddress("a", anonServer).hashCode());
+  }
+
+
+  private InProcessServer createAnonymousServer() {
+    InProcessServerBuilder builder = InProcessServerBuilder.anonymous("anon");
+    return new InProcessServer(builder, Collections.<ServerStreamTracer.Factory>emptyList());
   }
 }
