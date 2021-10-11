@@ -111,8 +111,10 @@ final class InProcessServer implements InternalServer {
 
   @Override
   public void shutdown() {
-    if (!registry.remove(name, this)) {
-      throw new AssertionError();
+    if (!anonymous) {
+      if (!registry.remove(name, this)) {
+        throw new AssertionError();
+      }
     }
     scheduler = schedulerPool.returnObject(scheduler);
     synchronized (this) {
