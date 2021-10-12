@@ -9,14 +9,12 @@ targetCompatibility = 1.8
 
 def jetty9Version = '9.4.43.v20210629'
 def jetty10Version = '10.0.6'
-def jetty11Version = '11.0.6';//TODO offer a grpc-servlet-jakarta build
 
 configurations {
-    undertowTestCompile.extendsFrom(testImplementation)
-    tomcatTestCompile.extendsFrom(testImplementation)
-    jetty9TestCompile.extendsFrom(testImplementation)
-    jetty10TestCompile.extendsFrom(testImplementation)
-    jetty11TestCompile.extendsFrom(testImplementation)
+    undertowTestImplementation.extendsFrom(testImplementation)
+    tomcat9TestImplementation.extendsFrom(testImplementation)
+    jetty9TestImplementation.extendsFrom(testImplementation)
+    jetty10TestImplementation.extendsFrom(testImplementation)
 }
 
 sourceSets {
@@ -32,43 +30,25 @@ sourceSets {
             srcDir 'src/test/java'
             include '**/Undertow*.java'
         }
-        compileClasspath = sourceSets.main.output + configurations.undertowTestCompile
-        runtimeClasspath = sourceSets.main.output + configurations.testRuntimeClasspath + configurations.undertowTestCompile + sourceSets.undertowTest.output
     }
-    tomcatTest {
+    tomcat9Test {
         java {
             srcDir 'src/test/java'
             include '**/Tomcat*.java'
         }
-        compileClasspath = sourceSets.main.output + configurations.tomcatTestCompile
-        runtimeClasspath = sourceSets.main.output + configurations.testRuntimeClasspath + configurations.tomcatTestCompile + sourceSets.tomcatTest.output
     }
     jetty9Test {
         java {
             srcDir 'src/test/java'
             include '**/Jetty*.java'
-            compileClasspath = sourceSets.main.output + configurations.jetty9TestCompile
-            runtimeClasspath = sourceSets.main.output + configurations.testRuntimeClasspath + configurations.jetty9TestCompile + sourceSets.jetty9Test.output
         }
     }
 
-    if (JavaVersion.current().isJava11Compatible()) {
-        jetty10Test {
-            java {
-                srcDir 'src/test/java'
-                include '**/Jetty*.java'
-            }
-            compileClasspath = sourceSets.main.output + configurations.jetty10TestCompile
-            runtimeClasspath = sourceSets.main.output + configurations.testRuntimeClasspath + configurations.jetty10TestCompile + sourceSets.jetty10Test.output
+    jetty10Test {
+        java {
+            srcDir 'src/test/java'
+            include '**/Jetty*.java'
         }
-//        jetty11Test {
-//            java {
-//                srcDir 'src/test/java'
-//                include '**/Jetty*.java'
-//            }
-//            compileClasspath = sourceSets.main.output + configurations.jetty11TestCompile
-//            runtimeClasspath = sourceSets.main.output + configurations.testRuntimeClasspath + configurations.jetty11TestCompile + sourceSets.jetty11Test.output
-//        }
     }
 }
 
@@ -98,19 +78,16 @@ dependencies {
         exclude group: 'io.grpc', module: 'grpc-xds'
     }
 
-    undertowTestCompile 'io.undertow:undertow-servlet:2.2.10.Final'
+    undertowTestImplementation 'io.undertow:undertow-servlet:2.2.10.Final'
 
-    tomcatTestCompile 'org.apache.tomcat.embed:tomcat-embed-core:9.0.53'
+    tomcat9TestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:9.0.53'
 
-    jetty9TestCompile "org.eclipse.jetty:jetty-servlet:${jetty9Version}",
+    jetty9TestImplementation "org.eclipse.jetty:jetty-servlet:${jetty9Version}",
             "org.eclipse.jetty.http2:http2-server:${jetty9Version}",
             'javax.servlet:javax.servlet-api:4.0.1'// jetty9 only supports servlet 3, force servlet4
 
-    jetty10TestCompile "org.eclipse.jetty:jetty-servlet:${jetty10Version}",
+    jetty10TestImplementation "org.eclipse.jetty:jetty-servlet:${jetty10Version}",
             "org.eclipse.jetty.http2:http2-server:${jetty10Version}"
-
-    jetty11TestCompile "org.eclipse.jetty:jetty-servlet:${jetty11Version}",
-            "org.eclipse.jetty.http2:http2-server:${jetty11Version}"
 }
 
 javadoc {
@@ -123,9 +100,9 @@ check.dependsOn(tasks.register('undertowTest', Test) {
     classpath = sourceSets.undertowTest.runtimeClasspath
     testClassesDirs = sourceSets.undertowTest.output.classesDirs
 })
-check.dependsOn(tasks.register('tomcatTest', Test) {
-    classpath = sourceSets.tomcatTest.runtimeClasspath
-    testClassesDirs = sourceSets.tomcatTest.output.classesDirs
+check.dependsOn(tasks.register('tomcat9Test', Test) {
+    classpath = sourceSets.tomcat9Test.runtimeClasspath
+    testClassesDirs = sourceSets.tomcat9Test.output.classesDirs
 
     // Provide a temporary directory for tomcat to be deleted after test finishes
     def tomcatTempDir = "$buildDir/tomcat_catalina_base"
@@ -145,8 +122,4 @@ if (JavaVersion.current().isJava11Compatible()) {
         classpath = sourceSets.jetty10Test.runtimeClasspath
         testClassesDirs = sourceSets.jetty10Test.output.classesDirs
     })
-    //check.dependsOn(tasks.register('jetty11Test', Test) {
-    //    classpath = sourceSets.jetty11Test.runtimeClasspath
-    //    testClassesDirs = sourceSets.jetty11Test.output.classesDirs
-    //})
 }
