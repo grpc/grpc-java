@@ -9,6 +9,7 @@ evaluationDependsOn ':grpc-servlet'
 
 description = "gRPC: Jakarta Servlet"
 
+// Repackage and shade grpc-servlet to support jakarta
 ext {
     servlet = 'javax.servlet:javax.servlet-api:4.0.1'
     jakartaServlet = 'jakarta.servlet:jakarta.servlet-api:5.0.0'
@@ -29,3 +30,54 @@ jakartaTransformation {
     }
 }
 
+// Set up classpaths and source directories for different servlet implementation tests
+configurations {
+    jetty11TestImplementation.extendsFrom(testImplementation)
+    tomcat10TestImplementation.extendsFrom(testImplementation)
+    undertowTestImplementation.extendsFrom(testImplementation)
+}
+
+dependencies {
+    testImplementation project(':grpc-stub'),
+            project(':grpc-protobuf'),
+            project(':grpc-servlet'),
+            project(':grpc-netty'),
+            project(':grpc-testing'),
+            project(':grpc-auth'),
+            project(':grpc-core').sourceSets.test.output,
+            project(':grpc-netty').sourceSets.test.output,
+            libraries.junit
+    testImplementation(project(':grpc-interop-testing')) {
+        // Avoid grpc-netty-shaded dependency
+        exclude group: 'io.grpc', module: 'grpc-alts'
+        exclude group: 'io.grpc', module: 'grpc-xds'
+    }
+
+    tomcat10TestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:10.0.11'
+
+    jetty11TestImplementation "org.eclipse.jetty:jetty-servlet:11.0.6",
+            "org.eclipse.jetty.http2:http2-server:11.0.6"
+
+    undertowTestImplementation 'io.undertow:undertow-servlet-jakartaee9:2.2.10.Final'
+}
+
+sourceSets {
+    undertowTest {
+        java {
+            srcDir '../src/test/java'
+            include '**/Undertow*.java'
+        }
+    }
+}
+
+tasks.withType(JavaCompile) {
+    sourceCompatibility = 1.8
+    targetCompatibility = 1.8
+}
+
+// Set up individual classpaths for each test, to avoid any mismatch,
+// and ensure they are only used when supported by the current jvm
+check.dependsOn(tasks.register('undertowTest', Test) {
+    classpath = sourceSets.undertowTest.runtimeClasspath
+    testClassesDirs = sourceSets.undertowTest.output.classesDirs
+})
