@@ -61,8 +61,8 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
       certHandle = certProviderInstanceConfig == null ? null
           : certificateProviderStore.createOrGetProvider(
               certInstance.getCertificateName(),
-              certProviderInstanceConfig.getPluginName(),
-              certProviderInstanceConfig.getConfig(),
+              certProviderInstanceConfig.pluginName(),
+              certProviderInstanceConfig.config(),
               this,
               true);
     } else {
@@ -76,8 +76,8 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
       rootCertHandle = certProviderInstanceConfig == null ? null
           : certificateProviderStore.createOrGetProvider(
               rootCertInstance.getCertificateName(),
-              certProviderInstanceConfig.getPluginName(),
-              certProviderInstanceConfig.getConfig(),
+              certProviderInstanceConfig.pluginName(),
+              certProviderInstanceConfig.config(),
               this,
               true);
     } else {

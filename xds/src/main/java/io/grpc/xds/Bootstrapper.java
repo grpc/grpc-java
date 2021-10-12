@@ -16,13 +16,13 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
+import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.xds.EnvoyProtoData.Node;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -49,29 +49,19 @@ public abstract class Bootstrapper {
    * Data class containing xDS server information, such as server URI and channel credentials
    * to be used for communication.
    */
+  @AutoValue
   @Internal
-  static class ServerInfo {
-    private final String target;
-    private final ChannelCredentials channelCredentials;
-    private final boolean useProtocolV3;
+  abstract static class ServerInfo {
+    abstract String target();
+
+    abstract ChannelCredentials channelCredentials();
+
+    abstract boolean useProtocolV3();
 
     @VisibleForTesting
-    ServerInfo(String target, ChannelCredentials channelCredentials, boolean useProtocolV3) {
-      this.target = checkNotNull(target, "target");
-      this.channelCredentials = checkNotNull(channelCredentials, "channelCredentials");
-      this.useProtocolV3 = useProtocolV3;
-    }
-
-    String getTarget() {
-      return target;
-    }
-
-    ChannelCredentials getChannelCredentials() {
-      return channelCredentials;
-    }
-
-    boolean isUseProtocolV3() {
-      return useProtocolV3;
+    static ServerInfo create(
+        String target, ChannelCredentials channelCredentials, boolean useProtocolV3) {
+      return new AutoValue_Bootstrapper_ServerInfo(target, channelCredentials, useProtocolV3);
     }
   }
 
@@ -79,71 +69,57 @@ public abstract class Bootstrapper {
    * Data class containing Certificate provider information: the plugin-name and an opaque
    * Map that represents the config for that plugin.
    */
+  @AutoValue
   @Internal
-  public static class CertificateProviderInfo {
-    private final String pluginName;
-    private final Map<String, ?> config;
+  public abstract static class CertificateProviderInfo {
+    public abstract String pluginName();
+
+    public abstract ImmutableMap<String, ?> config();
 
     @VisibleForTesting
-    public CertificateProviderInfo(String pluginName, Map<String, ?> config) {
-      this.pluginName = checkNotNull(pluginName, "pluginName");
-      this.config = checkNotNull(config, "config");
-    }
-
-    public String getPluginName() {
-      return pluginName;
-    }
-
-    public Map<String, ?> getConfig() {
-      return config;
+    public static CertificateProviderInfo create(String pluginName, Map<String, ?> config) {
+      return new AutoValue_Bootstrapper_CertificateProviderInfo(
+          pluginName, ImmutableMap.copyOf(config));
     }
   }
 
   /**
    * Data class containing the results of reading bootstrap.
    */
+  @AutoValue
   @Internal
-  public static class BootstrapInfo {
-    private List<ServerInfo> servers;
-    private final Node node;
-    @Nullable private final Map<String, CertificateProviderInfo> certProviders;
-    @Nullable private final String serverListenerResourceNameTemplate;
+  public abstract static class BootstrapInfo {
+    /** Returns the list of xDS servers to be connected to. */
+    abstract ImmutableList<ServerInfo> servers();
 
-    @VisibleForTesting
-    BootstrapInfo(
-        List<ServerInfo> servers,
-        Node node,
-        Map<String, CertificateProviderInfo> certProviders,
-        String serverListenerResourceNameTemplate) {
-      this.servers = servers;
-      this.node = node;
-      this.certProviders = certProviders;
-      this.serverListenerResourceNameTemplate = serverListenerResourceNameTemplate;
-    }
-
-    /**
-     * Returns the list of xDS servers to be connected to.
-     */
-    List<ServerInfo> getServers() {
-      return Collections.unmodifiableList(servers);
-    }
-
-    /**
-     * Returns the node identifier to be included in xDS requests.
-     */
-    public Node getNode() {
-      return node;
-    }
+    /** Returns the node identifier to be included in xDS requests. */
+    public abstract Node node();
 
     /** Returns the cert-providers config map. */
     @Nullable
-    public Map<String, CertificateProviderInfo> getCertProviders() {
-      return certProviders == null ? null : Collections.unmodifiableMap(certProviders);
-    }
+    public abstract ImmutableMap<String, CertificateProviderInfo> certProviders();
 
     @Nullable
-    public String getServerListenerResourceNameTemplate() {
-      return serverListenerResourceNameTemplate;
+    public abstract String serverListenerResourceNameTemplate();
+
+    @VisibleForTesting
+    static Builder builder() {
+      return new AutoValue_Bootstrapper_BootstrapInfo.Builder();
+    }
+
+    @AutoValue.Builder
+    @VisibleForTesting
+    abstract static class Builder {
+      abstract Builder servers(List<ServerInfo> servers);
+
+      abstract Builder node(Node node);
+
+      abstract Builder certProviders(@Nullable Map<String, CertificateProviderInfo> certProviders);
+
+      abstract Builder serverListenerResourceNameTemplate(
+          @Nullable String serverListenerResourceNameTemplate);
+
+      abstract BootstrapInfo build();
     }
   }
 }

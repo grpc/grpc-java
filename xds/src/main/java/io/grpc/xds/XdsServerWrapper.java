@@ -181,8 +181,8 @@ final class XdsServerWrapper extends Server {
       return;
     }
     xdsClient = xdsClientPool.getObject();
-    boolean useProtocolV3 = xdsClient.getBootstrapInfo().getServers().get(0).isUseProtocolV3();
-    String listenerTemplate = xdsClient.getBootstrapInfo().getServerListenerResourceNameTemplate();
+    boolean useProtocolV3 = xdsClient.getBootstrapInfo().servers().get(0).useProtocolV3();
+    String listenerTemplate = xdsClient.getBootstrapInfo().serverListenerResourceNameTemplate();
     if (!useProtocolV3 || listenerTemplate == null) {
       StatusException statusException =
           Status.UNAVAILABLE.withDescription(

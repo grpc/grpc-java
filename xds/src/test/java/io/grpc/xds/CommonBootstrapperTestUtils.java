@@ -19,6 +19,7 @@ package io.grpc.xds;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.JsonParser;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.util.HashMap;
@@ -57,19 +58,20 @@ public class CommonBootstrapperTestUtils {
   public static Bootstrapper.BootstrapInfo getTestBootstrapInfo() {
     try {
       Bootstrapper.CertificateProviderInfo gcpId =
-          new Bootstrapper.CertificateProviderInfo(
+          Bootstrapper.CertificateProviderInfo.create(
               "testca", (Map<String, ?>) JsonParser.parse(MESHCA_CONFIG));
       Bootstrapper.CertificateProviderInfo fileProvider =
-          new Bootstrapper.CertificateProviderInfo(
+          Bootstrapper.CertificateProviderInfo.create(
               "file_watcher", (Map<String, ?>) JsonParser.parse(FILE_WATCHER_CONFIG));
       Map<String, Bootstrapper.CertificateProviderInfo> certProviders =
           ImmutableMap.of("gcp_id", gcpId, "file_provider", fileProvider);
       Bootstrapper.BootstrapInfo bootstrapInfo =
-          new Bootstrapper.BootstrapInfo(
-              ImmutableList.<Bootstrapper.ServerInfo>of(),
-              EnvoyProtoData.Node.newBuilder().build(),
-              certProviders,
-              "grpc/server");
+          Bootstrapper.BootstrapInfo.builder()
+              .servers(ImmutableList.<Bootstrapper.ServerInfo>of())
+              .node(EnvoyProtoData.Node.newBuilder().build())
+              .certProviders(certProviders)
+              .serverListenerResourceNameTemplate("grpc/server")
+              .build();
       return bootstrapInfo;
     } catch (IOException e) {
       throw new AssertionError(e);
@@ -113,7 +115,7 @@ public class CommonBootstrapperTestUtils {
     config.put("private_key_file", privateKey1);
     config.put("ca_certificate_file", trustCa1);
     Bootstrapper.CertificateProviderInfo certificateProviderInfo =
-        new Bootstrapper.CertificateProviderInfo("file_watcher", config);
+        Bootstrapper.CertificateProviderInfo.create("file_watcher", config);
     HashMap<String, Bootstrapper.CertificateProviderInfo> certProviders =
         new HashMap<>();
     certProviders.put(certInstanceName1, certificateProviderInfo);
@@ -123,10 +125,13 @@ public class CommonBootstrapperTestUtils {
       config.put("private_key_file", privateKey2);
       config.put("ca_certificate_file", trustCa2);
       certificateProviderInfo =
-          new Bootstrapper.CertificateProviderInfo("file_watcher", config);
+          Bootstrapper.CertificateProviderInfo.create("file_watcher", config);
       certProviders.put(certInstanceName2, certificateProviderInfo);
     }
-    return new Bootstrapper.BootstrapInfo(null, EnvoyProtoData.Node.newBuilder().build(),
-        certProviders, null);
+    return Bootstrapper.BootstrapInfo.builder()
+        .servers(ImmutableList.<ServerInfo>of())
+        .node(EnvoyProtoData.Node.newBuilder().build())
+        .certProviders(certProviders)
+        .build();
   }
 }

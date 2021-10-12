@@ -84,12 +84,12 @@ public class CsdsServiceTest {
   private static final XdsClient XDS_CLIENT_NO_RESOURCES = new XdsClient() {
     @Override
     Bootstrapper.BootstrapInfo getBootstrapInfo() {
-      return new Bootstrapper.BootstrapInfo(
-          Arrays.asList(
-             new Bootstrapper.ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), false)),
-          BOOTSTRAP_NODE,
-          null,
-          null);
+      return Bootstrapper.BootstrapInfo.builder()
+          .servers(Arrays.asList(
+              Bootstrapper.ServerInfo.create(
+                  SERVER_URI, InsecureChannelCredentials.create(), false)))
+          .node(BOOTSTRAP_NODE)
+          .build();
     }
 
     @Override
@@ -695,10 +695,12 @@ public class CsdsServiceTest {
       ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(new XdsClient() {
         @Override
         Bootstrapper.BootstrapInfo getBootstrapInfo() {
-          return new Bootstrapper.BootstrapInfo(Arrays.asList(
-                  new Bootstrapper.ServerInfo(
-                          SERVER_URI, InsecureChannelCredentials.create(), false)),
-                  BOOTSTRAP_NODE, null,null);
+          return Bootstrapper.BootstrapInfo.builder()
+              .servers(Arrays.asList(
+                  Bootstrapper.ServerInfo.create(
+                          SERVER_URI, InsecureChannelCredentials.create(), false)))
+              .node(BOOTSTRAP_NODE)
+              .build();
         }
 
         @Override

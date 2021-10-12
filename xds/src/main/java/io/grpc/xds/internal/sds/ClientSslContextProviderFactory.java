@@ -52,8 +52,8 @@ final class ClientSslContextProviderFactory
         upstreamTlsContext.getCommonTlsContext())) {
       return certProviderClientSslContextProviderFactory.getProvider(
           upstreamTlsContext,
-          bootstrapInfo.getNode().toEnvoyProtoNode(),
-          bootstrapInfo.getCertProviders());
+          bootstrapInfo.node().toEnvoyProtoNode(),
+          bootstrapInfo.certProviders());
     }
     throw new UnsupportedOperationException("Unsupported configurations in UpstreamTlsContext!");
   }

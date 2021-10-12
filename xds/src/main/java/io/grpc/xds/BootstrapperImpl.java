@@ -154,7 +154,7 @@ public class BootstrapperImpl extends Bootstrapper {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
         useProtocolV3 = serverFeatures.contains(XDS_V3_SERVER_FEATURE);
       }
-      servers.add(new ServerInfo(serverUri, channelCredentials, useProtocolV3));
+      servers.add(ServerInfo.create(serverUri, channelCredentials, useProtocolV3));
     }
 
     Node.Builder nodeBuilder = Node.newBuilder();
@@ -211,13 +211,18 @@ public class BootstrapperImpl extends Bootstrapper {
             checkForNull(JsonUtil.getString(valueMap, "plugin_name"), "plugin_name");
         Map<String, ?> config = checkForNull(JsonUtil.getObject(valueMap, "config"), "config");
         CertificateProviderInfo certificateProviderInfo =
-            new CertificateProviderInfo(pluginName, config);
+            CertificateProviderInfo.create(pluginName, config);
         certProviders.put(name, certificateProviderInfo);
       }
     }
     String grpcServerResourceId =
         JsonUtil.getString(rawData, "server_listener_resource_name_template");
-    return new BootstrapInfo(servers, nodeBuilder.build(), certProviders, grpcServerResourceId);
+    return BootstrapInfo.builder()
+        .servers(servers)
+        .node(nodeBuilder.build())
+        .certProviders(certProviders)
+        .serverListenerResourceNameTemplate(grpcServerResourceId)
+        .build();
   }
 
   @VisibleForTesting
