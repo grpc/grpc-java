@@ -201,6 +201,7 @@ public final class NettyChannelBuilder extends
     managedChannelImplBuilder = new ManagedChannelImplBuilder(target,
         new NettyChannelTransportFactoryBuilder(),
         new NettyChannelDefaultPortProvider());
+    managedChannelImplBuilder.emulateAbstractManagedChannelImplBuilder(new OldBuilderEmulator());
     this.freezeProtocolNegotiatorFactory = false;
   }
 
@@ -211,6 +212,7 @@ public final class NettyChannelBuilder extends
         target, channelCreds, callCreds,
         new NettyChannelTransportFactoryBuilder(),
         new NettyChannelDefaultPortProvider());
+    managedChannelImplBuilder.emulateAbstractManagedChannelImplBuilder(new OldBuilderEmulator());
     this.protocolNegotiatorFactory = checkNotNull(negotiator, "negotiator");
     this.freezeProtocolNegotiatorFactory = true;
   }
@@ -221,6 +223,7 @@ public final class NettyChannelBuilder extends
         getAuthorityFromAddress(address),
         new NettyChannelTransportFactoryBuilder(),
         new NettyChannelDefaultPortProvider());
+    managedChannelImplBuilder.emulateAbstractManagedChannelImplBuilder(new OldBuilderEmulator());
     this.freezeProtocolNegotiatorFactory = false;
   }
 
@@ -232,6 +235,7 @@ public final class NettyChannelBuilder extends
         channelCreds, callCreds,
         new NettyChannelTransportFactoryBuilder(),
         new NettyChannelDefaultPortProvider());
+    managedChannelImplBuilder.emulateAbstractManagedChannelImplBuilder(new OldBuilderEmulator());
     this.protocolNegotiatorFactory = checkNotNull(negotiator, "negotiator");
     this.freezeProtocolNegotiatorFactory = true;
   }
@@ -762,6 +766,13 @@ public final class NettyChannelBuilder extends
 
       protocolNegotiator.close();
       groupPool.returnObject(group);
+    }
+  }
+
+  private final class OldBuilderEmulator implements
+      ManagedChannelImplBuilder.AbstractManagedChannelImplBuilderEmulator {
+    @Override public void maxInboundMessageSize(int max) {
+      NettyChannelBuilder.this.maxInboundMessageSize(max);
     }
   }
 }

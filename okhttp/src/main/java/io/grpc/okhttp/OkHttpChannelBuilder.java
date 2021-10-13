@@ -191,6 +191,7 @@ public final class OkHttpChannelBuilder extends
     managedChannelImplBuilder = new ManagedChannelImplBuilder(target,
         new OkHttpChannelTransportFactoryBuilder(),
         new OkHttpChannelDefaultPortProvider());
+    managedChannelImplBuilder.emulateAbstractManagedChannelImplBuilder(new OldBuilderEmulator());
     this.freezeSecurityConfiguration = false;
   }
 
@@ -201,6 +202,7 @@ public final class OkHttpChannelBuilder extends
         target, channelCreds, callCreds,
         new OkHttpChannelTransportFactoryBuilder(),
         new OkHttpChannelDefaultPortProvider());
+    managedChannelImplBuilder.emulateAbstractManagedChannelImplBuilder(new OldBuilderEmulator());
     this.sslSocketFactory = factory;
     this.negotiationType = factory == null ? NegotiationType.PLAINTEXT : NegotiationType.TLS;
     this.freezeSecurityConfiguration = true;
@@ -828,6 +830,13 @@ public final class OkHttpChannelBuilder extends
       if (usingSharedExecutor) {
         SharedResourceHolder.release(SHARED_EXECUTOR, executor);
       }
+    }
+  }
+
+  private final class OldBuilderEmulator implements
+      ManagedChannelImplBuilder.AbstractManagedChannelImplBuilderEmulator {
+    @Override public void maxInboundMessageSize(int max) {
+      OkHttpChannelBuilder.this.maxInboundMessageSize(max);
     }
   }
 }

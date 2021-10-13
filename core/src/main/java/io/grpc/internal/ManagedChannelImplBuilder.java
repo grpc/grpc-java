@@ -707,6 +707,28 @@ public final class ManagedChannelImplBuilder
     return channelBuilderDefaultPortProvider.getDefaultPort();
   }
 
+  // Remove this emulation when we delete AbstractManagedChannelImplBuilder
+  private AbstractManagedChannelImplBuilderEmulator abstractManagedChannelImplBuilderEmulator;
+
+  public interface AbstractManagedChannelImplBuilderEmulator {
+    void maxInboundMessageSize(int max);
+  }
+
+  public void emulateAbstractManagedChannelImplBuilder(
+      AbstractManagedChannelImplBuilderEmulator abstractManagedChannelImplBuilderEmulator) {
+    this.abstractManagedChannelImplBuilderEmulator = abstractManagedChannelImplBuilderEmulator;
+  }
+
+  @Override
+  public ManagedChannelImplBuilder maxInboundMessageSize(int max) {
+    if (abstractManagedChannelImplBuilderEmulator != null) {
+      abstractManagedChannelImplBuilderEmulator.maxInboundMessageSize(max);
+      return this;
+    } else {
+      return super.maxInboundMessageSize(max); // noop
+    }
+  }
+
   private static class DirectAddressNameResolverFactory extends NameResolver.Factory {
     final SocketAddress address;
     final String authority;
