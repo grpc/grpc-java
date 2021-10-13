@@ -147,6 +147,18 @@ public class TomcatInteropTest extends AbstractInteropTest {
   public void emptyStream() {}
 
   // Fails intermittently
+  //@org.junit.Ignore
+  //@Test
   //@Override
   //public void exchangeMetadataStreamingCall() {}
+
+
+  // Fails intermittently:
+  // RESOURCE_EXHAUSTED: Connection closed after GOAWAY. HTTP/2 error code: ENHANCE_YOUR_CALM
+  // (Bandwidth exhausted), debug data: Connection [12], Too much overhead so the connection
+  // will be closed
+  @Override
+  @org.junit.Ignore("Tomcat 10 doesn't seem to handle overheadCountFactor=0 consistently?")
+  @org.junit.Test
+  public void fullDuplexCallShouldSucceed() {}
 }
