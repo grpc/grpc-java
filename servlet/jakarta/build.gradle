@@ -25,15 +25,18 @@ sourceSets {
             include '**/Tomcat*.java'
         }
     }
-    jetty11Test {
-        java {
-            include '**/Jetty*.java'
+    // Only run these tests if java 11+ is being used
+    if (JavaVersion.current().isJava11Compatible()) {
+        jetty11Test {
+            java {
+                include '**/Jetty*.java'
+            }
         }
     }
 }
 
 // Mechanically transform sources from grpc-servlet to use the corrected packages
-def migrate(String name, String inputDir, SourceSet... sourceSets) {
+def migrate(String name, String inputDir, Collection<SourceSet> sourceSets) {
     def outputDir = layout.buildDirectory.dir('generated/sources/jakarta-' + name)
     sourceSets.each { it.java.srcDir outputDir }
     return tasks.register('migrateSources' + name.capitalize(), Sync) { task ->
@@ -50,11 +53,18 @@ def migrate(String name, String inputDir, SourceSet... sourceSets) {
     }
 }
 
-compileJava.dependsOn migrate('main', '../src/main/java', sourceSets.main);
-def migrateTests = migrate('test', '../src/test/java', sourceSets.undertowTest, sourceSets.tomcat10Test, sourceSets.jetty11Test)
-compileUndertowTestJava.dependsOn migrateTests;
-compileTomcat10TestJava.dependsOn migrateTests;
-compileJetty11TestJava.dependsOn migrateTests;
+compileJava.dependsOn migrate('main', '../src/main/java', [sourceSets.main])
+
+// Build the set of sourceSets and classpaths to modify, since Jetty 11 requires Java 11
+// and must be skipped
+def sourceSetsToMigrate = [sourceSets.undertowTest, sourceSets.tomcat10Test];
+def compileTasks = [compileUndertowTestJava, compileTomcat10TestJava]
+if (JavaVersion.current().isJava11Compatible()) {
+    sourceSetsToMigrate += sourceSets.jetty11Test
+    compileTasks += compileJetty11TestJava
+}
+def migrateTests = migrate('test', '../src/test/java', sourceSetsToMigrate)
+compileTasks.each { it.dependsOn migrateTests}
 
 // Disable checkstyle for this project, since it consists only of generated code
 checkstyle.ignoreFailures = true
@@ -106,7 +116,10 @@ check.dependsOn(tasks.register('tomcat10Test', Test) {
         file(tomcatTempDir).deleteDir()
     }
 })
-check.dependsOn(tasks.register('jetty11Test', Test) {
-    classpath = sourceSets.jetty11Test.runtimeClasspath
-    testClassesDirs = sourceSets.jetty11Test.output.classesDirs
-})
+// Only run these tests if java 11+ is being used
+if (JavaVersion.current().isJava11Compatible()) {
+    check.dependsOn(tasks.register('jetty11Test', Test) {
+        classpath = sourceSets.jetty11Test.runtimeClasspath
+        testClassesDirs = sourceSets.jetty11Test.output.classesDirs
+    })
+}

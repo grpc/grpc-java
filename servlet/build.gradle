@@ -44,10 +44,13 @@ sourceSets {
         }
     }
 
-    jetty10Test {
-        java {
-            srcDir 'src/test/java'
-            include '**/Jetty*.java'
+    // Only compile these tests if java 11+ is being used
+    if (JavaVersion.current().isJava11Compatible()) {
+        jetty10Test {
+            java {
+                srcDir 'src/test/java'
+                include '**/Jetty*.java'
+            }
         }
     }
 }
