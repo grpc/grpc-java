@@ -34,6 +34,8 @@ import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Test;
 
 /**
  * Interop test for Tomcat server and Netty client.
@@ -118,36 +120,36 @@ public class TomcatInteropTest extends AbstractInteropTest {
 
   // FIXME
   @Override
-  @org.junit.Ignore("Tomcat is broken on client GOAWAY")
-  @org.junit.Test
+  @Ignore("Tomcat is broken on client GOAWAY")
+  @Test
   public void gracefulShutdown() {}
 
   // FIXME
   @Override
-  @org.junit.Ignore("Tomcat is not able to send trailer only")
-  @org.junit.Test
+  @Ignore("Tomcat is not able to send trailer only")
+  @Test
   public void specialStatusMessage() {}
 
   // FIXME
   @Override
-  @org.junit.Ignore("Tomcat is not able to send trailer only")
-  @org.junit.Test
+  @Ignore("Tomcat is not able to send trailer only")
+  @Test
   public void unimplementedMethod() {}
 
   // FIXME
   @Override
-  @org.junit.Ignore("Tomcat is not able to send trailer only")
-  @org.junit.Test
+  @Ignore("Tomcat is not able to send trailer only")
+  @Test
   public void statusCodeAndMessage() {}
 
   // FIXME
   @Override
-  @org.junit.Ignore("Tomcat is not able to send trailer only")
-  @org.junit.Test
+  @Ignore("Tomcat is not able to send trailer only")
+  @Test
   public void emptyStream() {}
 
   // Fails intermittently
-  //@org.junit.Ignore
+  //@Ignore
   //@Test
   //@Override
   //public void exchangeMetadataStreamingCall() {}
@@ -158,7 +160,7 @@ public class TomcatInteropTest extends AbstractInteropTest {
   // (Bandwidth exhausted), debug data: Connection [12], Too much overhead so the connection
   // will be closed
   @Override
-  @org.junit.Ignore("Tomcat 10 doesn't seem to handle overheadCountFactor=0 consistently?")
-  @org.junit.Test
+  @Ignore("Tomcat 10 doesn't seem to handle overheadCountFactor=0 consistently?")
+  @Test
   public void fullDuplexCallShouldSucceed() {}
 }
