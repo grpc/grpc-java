@@ -19,6 +19,7 @@ package io.grpc.census;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -31,6 +32,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.StreamTracer;
+import io.opencensus.trace.AttributeValue;
 import io.opencensus.trace.BlankSpan;
 import io.opencensus.trace.EndSpanOptions;
 import io.opencensus.trace.MessageEvent;
@@ -59,7 +61,8 @@ import javax.annotation.Nullable;
 final class CensusTracingModule {
   private static final Logger logger = Logger.getLogger(CensusTracingModule.class.getName());
 
-  @Nullable private static final AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater;
+  @Nullable
+  private static final AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> callEndedUpdater;
 
   @Nullable private static final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater;
 
@@ -69,11 +72,11 @@ final class CensusTracingModule {
    * (potentially racy) direct updates of the volatile variables.
    */
   static {
-    AtomicIntegerFieldUpdater<ClientCallTracer> tmpCallEndedUpdater;
+    AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> tmpCallEndedUpdater;
     AtomicIntegerFieldUpdater<ServerTracer> tmpStreamClosedUpdater;
     try {
       tmpCallEndedUpdater =
-          AtomicIntegerFieldUpdater.newUpdater(ClientCallTracer.class, "callEnded");
+          AtomicIntegerFieldUpdater.newUpdater(CallAttemptsTracerFactory.class, "callEnded");
       tmpStreamClosedUpdater =
           AtomicIntegerFieldUpdater.newUpdater(ServerTracer.class, "streamClosed");
     } catch (Throwable t) {
@@ -115,11 +118,12 @@ final class CensusTracingModule {
   }
 
   /**
-   * Creates a {@link ClientCallTracer} for a new call.
+   * Creates a {@link CallAttemptsTracerFactory} for a new call.
    */
   @VisibleForTesting
-  ClientCallTracer newClientCallTracer(@Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
-    return new ClientCallTracer(parentSpan, method);
+  CallAttemptsTracerFactory newClientCallTracer(
+      @Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
+    return new CallAttemptsTracerFactory(parentSpan, method);
   }
 
   /**
@@ -222,19 +226,21 @@ final class CensusTracingModule {
   }
 
   @VisibleForTesting
-  final class ClientCallTracer extends ClientStreamTracer.Factory {
+  final class CallAttemptsTracerFactory extends ClientStreamTracer.InternalLimitedInfoFactory {
     volatile int callEnded;
 
     private final boolean isSampledToLocalTracing;
     private final Span span;
+    private final String fullMethodName;
 
-    ClientCallTracer(@Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
+    CallAttemptsTracerFactory(@Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
       checkNotNull(method, "method");
       this.isSampledToLocalTracing = method.isSampledToLocalTracing();
+      this.fullMethodName = method.getFullMethodName();
       this.span =
           censusTracer
               .spanBuilderWithExplicitParent(
-                  generateTraceSpanName(false, method.getFullMethodName()),
+                  generateTraceSpanName(false, fullMethodName),
                   parentSpan)
               .setRecordEvents(true)
               .startSpan();
@@ -243,11 +249,17 @@ final class CensusTracingModule {
     @Override
     public ClientStreamTracer newClientStreamTracer(
         ClientStreamTracer.StreamInfo info, Metadata headers) {
-      if (span != BlankSpan.INSTANCE) {
-        headers.discardAll(tracingHeader);
-        headers.put(tracingHeader, span.getContext());
-      }
-      return new ClientTracer(span);
+      Span attemptSpan = censusTracer
+          .spanBuilderWithExplicitParent(
+              "Attempt." + fullMethodName.replace('/', '.'),
+              span)
+          .setRecordEvents(true)
+          .startSpan();
+      attemptSpan.putAttribute(
+          "previous-rpc-attempts", AttributeValue.longAttributeValue(info.getPreviousAttempts()));
+      attemptSpan.putAttribute(
+          "transparent-retry", AttributeValue.booleanAttributeValue(info.isTransparentRetry()));
+      return new ClientTracer(attemptSpan, tracingHeader, isSampledToLocalTracing);
     }
 
     /**
@@ -273,9 +285,22 @@ final class CensusTracingModule {
 
   private static final class ClientTracer extends ClientStreamTracer {
     private final Span span;
+    final Metadata.Key<SpanContext> tracingHeader;
+    final boolean isSampledToLocalTracing;
 
-    ClientTracer(Span span) {
+    ClientTracer(
+        Span span, Metadata.Key<SpanContext> tracingHeader, boolean isSampledToLocalTracing) {
       this.span = checkNotNull(span, "span");
+      this.tracingHeader = tracingHeader;
+      this.isSampledToLocalTracing = isSampledToLocalTracing;
+    }
+
+    @Override
+    public void streamCreated(Attributes transportAtts, Metadata headers) {
+      if (span != BlankSpan.INSTANCE) {
+        headers.discardAll(tracingHeader);
+        headers.put(tracingHeader, span.getContext());
+      }
     }
 
     @Override
@@ -290,6 +315,11 @@ final class CensusTracingModule {
         int seqNo, long optionalWireSize, long optionalUncompressedSize) {
       recordMessageEvent(
           span, MessageEvent.Type.RECEIVED, seqNo, optionalWireSize, optionalUncompressedSize);
+    }
+
+    @Override
+    public void streamClosed(io.grpc.Status status) {
+      span.end(createEndSpanOptions(status, isSampledToLocalTracing));
     }
   }
 
@@ -381,7 +411,7 @@ final class CensusTracingModule {
       // Safe usage of the unsafe trace API because CONTEXT_SPAN_KEY.get() returns the same value
       // as Tracer.getCurrentSpan() except when no value available when the return value is null
       // for the direct access and BlankSpan when Tracer API is used.
-      final ClientCallTracer tracerFactory =
+      final CallAttemptsTracerFactory tracerFactory =
           newClientCallTracer(ContextUtils.getValue(Context.current()), method);
       ClientCall<ReqT, RespT> call =
           next.newCall(

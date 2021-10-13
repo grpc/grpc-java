@@ -258,6 +258,7 @@ public class ClientSslContextProviderFactoryTest {
         .isSameInstanceAs(sslContextProvider);
   }
 
+  @SuppressWarnings("deprecation")
   static CommonTlsContext.Builder addFilenames(
       CommonTlsContext.Builder builder, String certChain, String privateKey, String trustCa) {
     TlsCertificate tlsCert =

@@ -37,6 +37,7 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
@@ -47,6 +48,7 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Codec;
 import io.grpc.Context;
 import io.grpc.Deadline;
@@ -143,6 +145,8 @@ public class ClientCallImplTest {
             any(Metadata.class),
             any(Context.class)))
         .thenReturn(stream);
+    when(streamTracerFactory.newClientStreamTracer(any(StreamInfo.class), any(Metadata.class)))
+        .thenReturn(new ClientStreamTracer() {});
     doAnswer(new Answer<Void>() {
         @Override
         public Void answer(InvocationOnMock in) {
@@ -156,7 +160,7 @@ public class ClientCallImplTest {
 
   @After
   public void tearDown() {
-    verifyNoInteractions(streamTracerFactory);
+    verifyNoMoreInteractions(streamTracerFactory);
   }
 
   @Test
@@ -466,6 +470,15 @@ public class ClientCallImplTest {
   }
 
   @Test
+  public void prepareHeaders_ignoreContentLength() {
+    Metadata m = new Metadata();
+    m.put(GrpcUtil.CONTENT_LENGTH_KEY, "123");
+    ClientCallImpl.prepareHeaders(m, decompressorRegistry, Codec.Identity.NONE, false);
+
+    assertNull(m.get(GrpcUtil.CONTENT_LENGTH_KEY));
+  }
+
+  @Test
   public void prepareHeaders_acceptedMessageEncodingsAdded() {
     Metadata m = new Metadata();
     DecompressorRegistry customRegistry = DecompressorRegistry.emptyInstance()
@@ -763,6 +776,7 @@ public class ClientCallImplTest {
         channelCallTracer, configSelector)
             .setDecompressorRegistry(decompressorRegistry);
     call.start(callListener, new Metadata());
+    verify(streamTracerFactory).newClientStreamTracer(any(StreamInfo.class), any(Metadata.class));
     verify(clientStreamProvider, never())
         .newStream(
             (MethodDescriptor<?, ?>) any(MethodDescriptor.class),
@@ -1006,6 +1020,24 @@ public class ClientCallImplTest {
     assertEquals(Status.CANCELLED.getCode(), status.getCode());
     assertEquals("foo", status.getDescription());
     assertSame(cause, status.getCause());
+  }
+
+  @Test
+  public void halfClosedShouldNotBeReady() {
+    when(stream.isReady()).thenReturn(true);
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
+        method,
+        MoreExecutors.directExecutor(),
+        baseCallOptions,
+        clientStreamProvider,
+        deadlineCancellationExecutor,
+        channelCallTracer, configSelector);
+
+    call.start(callListener, new Metadata());
+    assertThat(call.isReady()).isTrue();
+
+    call.halfClose();
+    assertThat(call.isReady()).isFalse();
   }
 
   @Test

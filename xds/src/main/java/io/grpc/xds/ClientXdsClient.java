@@ -134,8 +134,12 @@ final class ClientXdsClient extends AbstractXdsClient {
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_FAULT_INJECTION"));
   @VisibleForTesting
   static boolean enableRetry =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"))
-          && Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"));
+      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"))
+          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"));
+  @VisibleForTesting
+  static boolean enableRbac =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"))
+          && Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"));
 
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
@@ -190,6 +194,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   protected void handleLdsResponse(String versionInfo, List<Any> resources, String nonce) {
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
+    Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
     Set<String> retainedRdsResources = new HashSet<>();
 
@@ -217,11 +222,12 @@ final class ClientXdsClient extends AbstractXdsClient {
               listener, retainedRdsResources, enableFaultInjection && isResourceV3);
         } else {
           ldsUpdate = processServerSideListener(
-              listener, retainedRdsResources, enableFaultInjection && isResourceV3);
+              listener, retainedRdsResources, enableRbac && isResourceV3);
         }
       } catch (ResourceInvalidException e) {
         errors.add(
             "LDS response Listener '" + listenerName + "' validation error: " + e.getMessage());
+        invalidResources.add(listenerName);
         continue;
       }
 
@@ -231,19 +237,9 @@ final class ClientXdsClient extends AbstractXdsClient {
     getLogger().log(XdsLogLevel.INFO,
         "Received LDS Response version {0} nonce {1}. Parsed resources: {2}",
         versionInfo, nonce, unpackedResources);
-
-    if (!errors.isEmpty()) {
-      handleResourcesRejected(ResourceType.LDS, unpackedResources, versionInfo, nonce, errors);
-      return;
-    }
-
-    handleResourcesAccepted(ResourceType.LDS, parsedResources, versionInfo, nonce);
-    for (String resource : rdsResourceSubscribers.keySet()) {
-      if (!retainedRdsResources.contains(resource)) {
-        ResourceSubscriber subscriber = rdsResourceSubscribers.get(resource);
-        subscriber.onAbsent();
-      }
-    }
+    handleResourceUpdate(
+        ResourceType.LDS, parsedResources, invalidResources, retainedRdsResources, versionInfo,
+        nonce, errors);
   }
 
   private LdsUpdate processClientSideListener(
@@ -266,14 +262,20 @@ final class ClientXdsClient extends AbstractXdsClient {
   private LdsUpdate processServerSideListener(
       Listener proto, Set<String> rdsResources, boolean parseHttpFilter)
       throws ResourceInvalidException {
+    Set<String> certProviderInstances = null;
+    if (getBootstrapInfo() != null && getBootstrapInfo().getCertProviders() != null) {
+      certProviderInstances = getBootstrapInfo().getCertProviders().keySet();
+    }
     return LdsUpdate.forTcpListener(parseServerSideListener(
-        proto, rdsResources, tlsContextManager, filterRegistry, parseHttpFilter));
+        proto, rdsResources, tlsContextManager, filterRegistry, certProviderInstances,
+        parseHttpFilter));
   }
 
   @VisibleForTesting
   static EnvoyServerProtoData.Listener parseServerSideListener(
       Listener proto, Set<String> rdsResources, TlsContextManager tlsContextManager,
-      FilterRegistry filterRegistry, boolean parseHttpFilter) throws ResourceInvalidException {
+      FilterRegistry filterRegistry, Set<String> certProviderInstances, boolean parseHttpFilter)
+      throws ResourceInvalidException {
     if (!proto.getTrafficDirection().equals(TrafficDirection.INBOUND)) {
       throw new ResourceInvalidException(
           "Listener " + proto.getName() + " with invalid traffic direction: "
@@ -309,13 +311,13 @@ final class ClientXdsClient extends AbstractXdsClient {
     for (io.envoyproxy.envoy.config.listener.v3.FilterChain fc : proto.getFilterChainsList()) {
       filterChains.add(
           parseFilterChain(fc, rdsResources, tlsContextManager, filterRegistry, uniqueSet,
-              parseHttpFilter));
+              certProviderInstances, parseHttpFilter));
     }
     FilterChain defaultFilterChain = null;
     if (proto.hasDefaultFilterChain()) {
       defaultFilterChain = parseFilterChain(
           proto.getDefaultFilterChain(), rdsResources, tlsContextManager, filterRegistry,
-          null, parseHttpFilter);
+          null, certProviderInstances, parseHttpFilter);
     }
 
     return new EnvoyServerProtoData.Listener(
@@ -326,43 +328,34 @@ final class ClientXdsClient extends AbstractXdsClient {
   static FilterChain parseFilterChain(
       io.envoyproxy.envoy.config.listener.v3.FilterChain proto, Set<String> rdsResources,
       TlsContextManager tlsContextManager, FilterRegistry filterRegistry,
-      Set<FilterChainMatch> uniqueSet, boolean parseHttpFilters)
+      Set<FilterChainMatch> uniqueSet, Set<String> certProviderInstances, boolean parseHttpFilters)
       throws ResourceInvalidException {
-    io.grpc.xds.HttpConnectionManager httpConnectionManager = null;
-    HashSet<String> uniqueNames = new HashSet<>();
-    for (io.envoyproxy.envoy.config.listener.v3.Filter filter : proto.getFiltersList()) {
-      if (!uniqueNames.add(filter.getName())) {
-        throw new ResourceInvalidException(
-            "FilterChain " + proto.getName() + " with duplicated filter: " + filter.getName());
-      }
-      if (!filter.hasTypedConfig()) {
-        throw new ResourceInvalidException(
-            "FilterChain " + proto.getName() + " contains filter " + filter.getName()
-                + " without typed_config");
-      }
-      Any any = filter.getTypedConfig();
-      // HttpConnectionManager is the only supported network filter at the moment.
-      if (!any.getTypeUrl().equals(TYPE_URL_HTTP_CONNECTION_MANAGER)) {
-        throw new ResourceInvalidException(
-            "FilterChain " + proto.getName() + " contains filter " + filter.getName()
-                + " with unsupported typed_config type " + any.getTypeUrl());
-      }
-      if (httpConnectionManager == null) {
-        HttpConnectionManager hcmProto;
-        try {
-          hcmProto = any.unpack(HttpConnectionManager.class);
-        } catch (InvalidProtocolBufferException e) {
-          throw new ResourceInvalidException("FilterChain " + proto.getName() + " with filter "
-              + filter.getName() + " failed to unpack message", e);
-        }
-        httpConnectionManager = parseHttpConnectionManager(
-            hcmProto, rdsResources, filterRegistry, parseHttpFilters, false /* isForClient */);
-      }
-    }
-    if (httpConnectionManager == null) {
+    if (proto.getFiltersCount() != 1) {
       throw new ResourceInvalidException("FilterChain " + proto.getName()
-          + " missing required HttpConnectionManager filter");
+              + " should contain exact one HttpConnectionManager filter");
     }
+    io.envoyproxy.envoy.config.listener.v3.Filter filter = proto.getFiltersList().get(0);
+    if (!filter.hasTypedConfig()) {
+      throw new ResourceInvalidException(
+          "FilterChain " + proto.getName() + " contains filter " + filter.getName()
+              + " without typed_config");
+    }
+    Any any = filter.getTypedConfig();
+    // HttpConnectionManager is the only supported network filter at the moment.
+    if (!any.getTypeUrl().equals(TYPE_URL_HTTP_CONNECTION_MANAGER)) {
+      throw new ResourceInvalidException(
+          "FilterChain " + proto.getName() + " contains filter " + filter.getName()
+              + " with unsupported typed_config type " + any.getTypeUrl());
+    }
+    HttpConnectionManager hcmProto;
+    try {
+      hcmProto = any.unpack(HttpConnectionManager.class);
+    } catch (InvalidProtocolBufferException e) {
+      throw new ResourceInvalidException("FilterChain " + proto.getName() + " with filter "
+          + filter.getName() + " failed to unpack message", e);
+    }
+    io.grpc.xds.HttpConnectionManager httpConnectionManager = parseHttpConnectionManager(
+            hcmProto, rdsResources, filterRegistry, parseHttpFilters, false /* isForClient */);
 
     EnvoyServerProtoData.DownstreamTlsContext downstreamTlsContext = null;
     if (proto.hasTransportSocket()) {
@@ -380,7 +373,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       downstreamTlsContext =
           EnvoyServerProtoData.DownstreamTlsContext.fromEnvoyProtoDownstreamTlsContext(
-              validateDownstreamTlsContext(downstreamTlsContextProto));
+              validateDownstreamTlsContext(downstreamTlsContextProto, certProviderInstances));
     }
 
     String name = proto.getName();
@@ -399,13 +392,12 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @VisibleForTesting
-  static io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
-      validateDownstreamTlsContext(
-      io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
-          downstreamTlsContext)
+  static DownstreamTlsContext validateDownstreamTlsContext(
+      DownstreamTlsContext downstreamTlsContext, Set<String> certProviderInstances)
       throws ResourceInvalidException {
     if (downstreamTlsContext.hasCommonTlsContext()) {
-      validateCommonTlsContext(downstreamTlsContext.getCommonTlsContext(), true);
+      validateCommonTlsContext(downstreamTlsContext.getCommonTlsContext(), certProviderInstances,
+          true);
     } else {
       throw new ResourceInvalidException(
           "common-tls-context is required in downstream-tls-context");
@@ -413,22 +405,6 @@ final class ClientXdsClient extends AbstractXdsClient {
     if (downstreamTlsContext.hasRequireSni()) {
       throw new ResourceInvalidException(
           "downstream-tls-context with require-sni is not supported");
-    }
-    if (downstreamTlsContext.hasSessionTicketKeys()) {
-      throw new ResourceInvalidException(
-          "downstream-tls-context with session_ticket_keys is not supported");
-    }
-    if (downstreamTlsContext.hasSessionTicketKeysSdsSecretConfig()) {
-      throw new ResourceInvalidException(
-          "downstream-tls-context with session_ticket_keys_sds_secret_config is not supported");
-    }
-    if (downstreamTlsContext.hasDisableStatelessSessionResumption()) {
-      throw new ResourceInvalidException(
-          "downstream-tls-context with disable_stateless_session_resumption is not supported");
-    }
-    if (downstreamTlsContext.hasSessionTimeout()) {
-      throw new ResourceInvalidException(
-          "downstream-tls-context with session_timeout is not supported");
     }
     DownstreamTlsContext.OcspStaplePolicy ocspStaplePolicy = downstreamTlsContext
         .getOcspStaplePolicy();
@@ -444,40 +420,28 @@ final class ClientXdsClient extends AbstractXdsClient {
   @VisibleForTesting
   static io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
       validateUpstreamTlsContext(
-      io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext upstreamTlsContext)
+      io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext upstreamTlsContext,
+      Set<String> certProviderInstances)
       throws ResourceInvalidException {
     if (upstreamTlsContext.hasCommonTlsContext()) {
-      validateCommonTlsContext(upstreamTlsContext.getCommonTlsContext(), false);
+      validateCommonTlsContext(upstreamTlsContext.getCommonTlsContext(), certProviderInstances,
+          false);
     } else {
       throw new ResourceInvalidException("common-tls-context is required in upstream-tls-context");
-    }
-    if (!Strings.isNullOrEmpty(upstreamTlsContext.getSni())) {
-      throw new ResourceInvalidException("upstream-tls-context with sni is not supported");
-    }
-    if (upstreamTlsContext.getAllowRenegotiation()) {
-      throw new ResourceInvalidException(
-          "upstream-tls-context with allow_renegotiation is not supported");
-    }
-    if (upstreamTlsContext.hasMaxSessionKeys()) {
-      throw new ResourceInvalidException(
-          "upstream-tls-context with max_session_keys is not supported");
     }
     return upstreamTlsContext;
   }
 
   @VisibleForTesting
   static void validateCommonTlsContext(
-      CommonTlsContext commonTlsContext, boolean server) throws ResourceInvalidException {
+      CommonTlsContext commonTlsContext, Set<String> certProviderInstances, boolean server)
+      throws ResourceInvalidException {
     if (commonTlsContext.hasCustomHandshaker()) {
       throw new ResourceInvalidException(
           "common-tls-context with custom_handshaker is not supported");
     }
     if (commonTlsContext.hasTlsParams()) {
       throw new ResourceInvalidException("common-tls-context with tls_params is not supported");
-    }
-    if (commonTlsContext.hasValidationContext()) {
-      throw new ResourceInvalidException(
-          "common-tls-context with validation_context is not supported");
     }
     if (commonTlsContext.hasValidationContextSdsSecretConfig()) {
       throw new ResourceInvalidException(
@@ -492,51 +456,53 @@ final class ClientXdsClient extends AbstractXdsClient {
           "common-tls-context with validation_context_certificate_provider_instance is not"
               + " supported");
     }
-    if (!commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
+    String certInstanceName = getIdentityCertInstanceName(commonTlsContext);
+    if (certInstanceName == null) {
       if (server) {
         throw new ResourceInvalidException(
-            "tls_certificate_certificate_provider_instance is required in downstream-tls-context");
+            "tls_certificate_provider_instance is required in downstream-tls-context");
       }
       if (commonTlsContext.getTlsCertificatesCount() > 0) {
         throw new ResourceInvalidException(
-            "common-tls-context with tls_certificates is not supported");
+            "tls_certificate_provider_instance is unset");
       }
       if (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() > 0) {
         throw new ResourceInvalidException(
-            "common-tls-context with tls_certificate_sds_secret_configs is not supported");
+            "tls_certificate_provider_instance is unset");
       }
       if (commonTlsContext.hasTlsCertificateCertificateProvider()) {
         throw new ResourceInvalidException(
-            "common-tls-context with tls_certificate_certificate_provider is not supported");
+            "tls_certificate_provider_instance is unset");
       }
+    } else if (certProviderInstances == null || !certProviderInstances.contains(certInstanceName)) {
+      throw new ResourceInvalidException(
+          "CertificateProvider instance name '" + certInstanceName
+              + "' not defined in the bootstrap file.");
     }
-    if (!commonTlsContext.hasCombinedValidationContext()) {
+    String rootCaInstanceName = getRootCertInstanceName(commonTlsContext);
+    if (rootCaInstanceName == null) {
       if (!server) {
         throw new ResourceInvalidException(
-            "combined_validation_context is required in upstream-tls-context");
+            "ca_certificate_provider_instance is required in upstream-tls-context");
       }
     } else {
-      CommonTlsContext.CombinedCertificateValidationContext combinedCertificateValidationContext
-          = commonTlsContext.getCombinedValidationContext();
-      if (!combinedCertificateValidationContext.hasValidationContextCertificateProviderInstance()) {
+      if (certProviderInstances == null || !certProviderInstances.contains(rootCaInstanceName)) {
         throw new ResourceInvalidException(
-            "validation_context_certificate_provider_instance is required in"
-                + " combined_validation_context");
+                "ca_certificate_provider_instance name '" + rootCaInstanceName
+                        + "' not defined in the bootstrap file.");
       }
-      if (combinedCertificateValidationContext.hasDefaultValidationContext()) {
-        CertificateValidationContext certificateValidationContext
-            = combinedCertificateValidationContext.getDefaultValidationContext();
+      CertificateValidationContext certificateValidationContext = null;
+      if (commonTlsContext.hasValidationContext()) {
+        certificateValidationContext = commonTlsContext.getValidationContext();
+      } else if (commonTlsContext.hasCombinedValidationContext() && commonTlsContext
+          .getCombinedValidationContext().hasDefaultValidationContext()) {
+        certificateValidationContext = commonTlsContext.getCombinedValidationContext()
+            .getDefaultValidationContext();
+      }
+      if (certificateValidationContext != null) {
         if (certificateValidationContext.getMatchSubjectAltNamesCount() > 0 && server) {
           throw new ResourceInvalidException(
               "match_subject_alt_names only allowed in upstream_tls_context");
-        }
-        if (certificateValidationContext.hasTrustedCa()) {
-          throw new ResourceInvalidException(
-              "trusted_ca in default_validation_context is not supported");
-        }
-        if (certificateValidationContext.hasWatchedDirectory()) {
-          throw new ResourceInvalidException(
-              "watched_directory in default_validation_context is not supported");
         }
         if (certificateValidationContext.getVerifyCertificateSpkiCount() > 0) {
           throw new ResourceInvalidException(
@@ -554,17 +520,6 @@ final class ClientXdsClient extends AbstractXdsClient {
         if (certificateValidationContext.hasCrl()) {
           throw new ResourceInvalidException("crl in default_validation_context is not supported");
         }
-        if (certificateValidationContext.getAllowExpiredCertificate()) {
-          throw new ResourceInvalidException(
-              "allow_expired_certificate in default_validation_context is not supported");
-        }
-        CertificateValidationContext.TrustChainVerification trustChainVerification
-            = certificateValidationContext.getTrustChainVerification();
-        if (trustChainVerification
-            != CertificateValidationContext.TrustChainVerification.VERIFY_TRUST_CHAIN) {
-          throw new ResourceInvalidException(
-              "Only VERIFY_TRUST_CHAIN for trust_chain_verification supported");
-        }
         if (certificateValidationContext.hasCustomValidatorConfig()) {
           throw new ResourceInvalidException(
               "custom_validator_config in default_validation_context is not supported");
@@ -573,13 +528,46 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
+  private static String getIdentityCertInstanceName(CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasTlsCertificateProviderInstance()) {
+      return commonTlsContext.getTlsCertificateProviderInstance().getInstanceName();
+    } else if (commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
+      return commonTlsContext.getTlsCertificateCertificateProviderInstance().getInstanceName();
+    }
+    return null;
+  }
+
+  private static String getRootCertInstanceName(CommonTlsContext commonTlsContext) {
+    if (commonTlsContext.hasValidationContext()) {
+      if (commonTlsContext.getValidationContext().hasCaCertificateProviderInstance()) {
+        return commonTlsContext.getValidationContext().getCaCertificateProviderInstance()
+            .getInstanceName();
+      }
+    } else if (commonTlsContext.hasCombinedValidationContext()) {
+      CommonTlsContext.CombinedCertificateValidationContext combinedCertificateValidationContext
+          = commonTlsContext.getCombinedValidationContext();
+      if (combinedCertificateValidationContext.hasDefaultValidationContext()
+          && combinedCertificateValidationContext.getDefaultValidationContext()
+          .hasCaCertificateProviderInstance()) {
+        return combinedCertificateValidationContext.getDefaultValidationContext()
+            .getCaCertificateProviderInstance().getInstanceName();
+      } else if (combinedCertificateValidationContext
+          .hasValidationContextCertificateProviderInstance()) {
+        return combinedCertificateValidationContext
+            .getValidationContextCertificateProviderInstance().getInstanceName();
+      }
+    }
+    return null;
+  }
+
   private static void checkForUniqueness(Set<FilterChainMatch> uniqueSet,
       FilterChainMatch filterChainMatch) throws ResourceInvalidException {
     if (uniqueSet != null) {
       List<FilterChainMatch> crossProduct = getCrossProduct(filterChainMatch);
       for (FilterChainMatch cur : crossProduct) {
         if (!uniqueSet.add(cur)) {
-          throw new ResourceInvalidException("Found duplicate matcher: " + cur);
+          throw new ResourceInvalidException("FilterChainMatch must be unique. "
+              + "Found duplicate: " + cur);
         }
       }
     }
@@ -746,9 +734,13 @@ final class ClientXdsClient extends AbstractXdsClient {
   static io.grpc.xds.HttpConnectionManager parseHttpConnectionManager(
       HttpConnectionManager proto, Set<String> rdsResources, FilterRegistry filterRegistry,
       boolean parseHttpFilter, boolean isForClient) throws ResourceInvalidException {
-    if (proto.getXffNumTrustedHops() != 0) {
+    if (enableRbac && proto.getXffNumTrustedHops() != 0) {
       throw new ResourceInvalidException(
           "HttpConnectionManager with xff_num_trusted_hops unsupported");
+    }
+    if (enableRbac && !proto.getOriginalIpDetectionExtensionsList().isEmpty()) {
+      throw new ResourceInvalidException("HttpConnectionManager with "
+          + "original_ip_detection_extensions unsupported");
     }
     // Obtain max_stream_duration from Http Protocol Options.
     long maxStreamDuration = 0;
@@ -762,10 +754,14 @@ final class ClientXdsClient extends AbstractXdsClient {
     // Parse http filters.
     List<NamedFilterConfig> filterConfigs = null;
     if (parseHttpFilter) {
+      if (proto.getHttpFiltersList().isEmpty()) {
+        throw new ResourceInvalidException("Missing HttpFilter in HttpConnectionManager.");
+      }
       filterConfigs = new ArrayList<>();
       Set<String> names = new HashSet<>();
-      for (io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
-               httpFilter : proto.getHttpFiltersList()) {
+      for (int i = 0; i < proto.getHttpFiltersCount(); i++) {
+        io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
+                httpFilter = proto.getHttpFiltersList().get(i);
         String filterName = httpFilter.getName();
         if (!names.add(filterName)) {
           throw new ResourceInvalidException(
@@ -773,6 +769,11 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
         StructOrError<FilterConfig> filterConfig =
             parseHttpFilter(httpFilter, filterRegistry, isForClient);
+        if ((i == proto.getHttpFiltersCount() - 1)
+                && (filterConfig == null || !isTerminalFilter(filterConfig.struct))) {
+          throw new ResourceInvalidException("The last HttpFilter must be a terminal filter: "
+                  + filterName);
+        }
         if (filterConfig == null) {
           continue;
         }
@@ -780,6 +781,10 @@ final class ClientXdsClient extends AbstractXdsClient {
           throw new ResourceInvalidException(
               "HttpConnectionManager contains invalid HttpFilter: "
                   + filterConfig.getErrorDetail());
+        }
+        if ((i < proto.getHttpFiltersCount() - 1) && isTerminalFilter(filterConfig.getStruct())) {
+          throw new ResourceInvalidException("A terminal HttpFilter must be the last filter: "
+                  + filterName);
         }
         filterConfigs.add(new NamedFilterConfig(filterName, filterConfig.struct));
       }
@@ -819,6 +824,11 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
     throw new ResourceInvalidException(
         "HttpConnectionManager neither has inlined route_config nor RDS");
+  }
+
+  // hard-coded: currently router config is the only terminal filter.
+  private static boolean isTerminalFilter(FilterConfig filterConfig) {
+    return RouterFilter.ROUTER_CONFIG.equals(filterConfig);
   }
 
   @VisibleForTesting
@@ -1254,32 +1264,28 @@ final class ClientXdsClient extends AbstractXdsClient {
         maxBackoff = Durations.fromNanos(Durations.toNanos(initialBackoff) * 10);
       }
     }
-    Iterable<String> retryOns = Splitter.on(',').split(retryPolicyProto.getRetryOn());
+    Iterable<String> retryOns =
+        Splitter.on(',').omitEmptyStrings().trimResults().split(retryPolicyProto.getRetryOn());
     ImmutableList.Builder<Code> retryableStatusCodesBuilder = ImmutableList.builder();
     for (String retryOn : retryOns) {
       Code code;
       try {
         code = Code.valueOf(retryOn.toUpperCase(Locale.US).replace('-', '_'));
       } catch (IllegalArgumentException e) {
-        // TODO(zdapeng): TBD
         // unsupported value, such as "5xx"
-        return null;
+        continue;
       }
       if (!SUPPORTED_RETRYABLE_CODES.contains(code)) {
-        // TODO(zdapeng): TBD
         // unsupported value
-        return null;
+        continue;
       }
       retryableStatusCodesBuilder.add(code);
     }
     List<Code> retryableStatusCodes = retryableStatusCodesBuilder.build();
-    if (!retryableStatusCodes.isEmpty()) {
-      return StructOrError.fromStruct(
-          RetryPolicy.create(
-              maxAttempts, retryableStatusCodes, initialBackoff, maxBackoff,
-              /* perAttemptRecvTimeout= */ null));
-    }
-    return null;
+    return StructOrError.fromStruct(
+        RetryPolicy.create(
+            maxAttempts, retryableStatusCodes, initialBackoff, maxBackoff,
+            /* perAttemptRecvTimeout= */ null));
   }
 
   @VisibleForTesting
@@ -1305,6 +1311,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   protected void handleRdsResponse(String versionInfo, List<Any> resources, String nonce) {
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
+    Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
 
     for (int i = 0; i < resources.size(); i++) {
@@ -1332,6 +1339,7 @@ final class ClientXdsClient extends AbstractXdsClient {
         errors.add(
             "RDS response RouteConfiguration '" + routeConfigName + "' validation error: " + e
                 .getMessage());
+        invalidResources.add(routeConfigName);
         continue;
       }
 
@@ -1340,12 +1348,9 @@ final class ClientXdsClient extends AbstractXdsClient {
     getLogger().log(XdsLogLevel.INFO,
         "Received RDS Response version {0} nonce {1}. Parsed resources: {2}",
         versionInfo, nonce, unpackedResources);
-
-    if (!errors.isEmpty()) {
-      handleResourcesRejected(ResourceType.RDS, unpackedResources, versionInfo, nonce, errors);
-    } else {
-      handleResourcesAccepted(ResourceType.RDS, parsedResources, versionInfo, nonce);
-    }
+    handleResourceUpdate(
+        ResourceType.RDS, parsedResources, invalidResources, Collections.<String>emptySet(),
+        versionInfo, nonce, errors);
   }
 
   private static RdsUpdate processRouteConfiguration(
@@ -1369,6 +1374,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   protected void handleCdsResponse(String versionInfo, List<Any> resources, String nonce) {
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
+    Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
     Set<String> retainedEdsResources = new HashSet<>();
 
@@ -1397,10 +1403,15 @@ final class ClientXdsClient extends AbstractXdsClient {
       // Process Cluster into CdsUpdate.
       CdsUpdate cdsUpdate;
       try {
-        cdsUpdate = parseCluster(cluster, retainedEdsResources);
+        Set<String> certProviderInstances = null;
+        if (getBootstrapInfo() != null && getBootstrapInfo().getCertProviders() != null) {
+          certProviderInstances = getBootstrapInfo().getCertProviders().keySet();
+        }
+        cdsUpdate = parseCluster(cluster, retainedEdsResources, certProviderInstances);
       } catch (ResourceInvalidException e) {
         errors.add(
             "CDS response Cluster '" + clusterName + "' validation error: " + e.getMessage());
+        invalidResources.add(clusterName);
         continue;
       }
       parsedResources.put(clusterName, new ParsedResource(cdsUpdate, resource));
@@ -1408,30 +1419,20 @@ final class ClientXdsClient extends AbstractXdsClient {
     getLogger().log(XdsLogLevel.INFO,
         "Received CDS Response version {0} nonce {1}. Parsed resources: {2}",
         versionInfo, nonce, unpackedResources);
-
-    if (!errors.isEmpty()) {
-      handleResourcesRejected(ResourceType.CDS, unpackedResources, versionInfo, nonce, errors);
-      return;
-    }
-
-    handleResourcesAccepted(ResourceType.CDS, parsedResources, versionInfo, nonce);
-    // CDS responses represents the state of the world, EDS resources not referenced in CDS
-    // resources should be deleted.
-    for (String resource : edsResourceSubscribers.keySet()) {
-      ResourceSubscriber subscriber = edsResourceSubscribers.get(resource);
-      if (!retainedEdsResources.contains(resource)) {
-        subscriber.onAbsent();
-      }
-    }
+    handleResourceUpdate(
+        ResourceType.CDS, parsedResources, invalidResources, retainedEdsResources, versionInfo,
+        nonce, errors);
   }
 
   @VisibleForTesting
-  static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources)
+  static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources,
+      Set<String> certProviderInstances)
       throws ResourceInvalidException {
     StructOrError<CdsUpdate.Builder> structOrError;
     switch (cluster.getClusterDiscoveryTypeCase()) {
       case TYPE:
-        structOrError = parseNonAggregateCluster(cluster, retainedEdsResources);
+        structOrError = parseNonAggregateCluster(cluster, retainedEdsResources,
+            certProviderInstances);
         break;
       case CLUSTER_TYPE:
         structOrError = parseAggregateCluster(cluster);
@@ -1494,7 +1495,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   private static StructOrError<CdsUpdate.Builder> parseNonAggregateCluster(
-      Cluster cluster, Set<String> edsResources) {
+      Cluster cluster, Set<String> edsResources, Set<String> certProviderInstances) {
     String clusterName = cluster.getName();
     String lrsServerName = null;
     Long maxConcurrentRequests = null;
@@ -1517,6 +1518,10 @@ final class ClientXdsClient extends AbstractXdsClient {
         }
       }
     }
+    if (cluster.getTransportSocketMatchesCount() > 0) {
+      return StructOrError.fromError("Cluster " + clusterName
+          + ": transport-socket-matches not supported.");
+    }
     if (cluster.hasTransportSocket()) {
       if (!TRANSPORT_SOCKET_NAME_TLS.equals(cluster.getTransportSocket().getName())) {
         return StructOrError.fromError("transport-socket with name "
@@ -1527,7 +1532,8 @@ final class ClientXdsClient extends AbstractXdsClient {
                 validateUpstreamTlsContext(
             unpackCompatibleType(cluster.getTransportSocket().getTypedConfig(),
                 io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext.class,
-                TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2)));
+                TYPE_URL_UPSTREAM_TLS_CONTEXT, TYPE_URL_UPSTREAM_TLS_CONTEXT_V2),
+                certProviderInstances));
       } catch (InvalidProtocolBufferException | ResourceInvalidException e) {
         return StructOrError.fromError(
             "Cluster " + clusterName + ": malformed UpstreamTlsContext: " + e);
@@ -1596,6 +1602,7 @@ final class ClientXdsClient extends AbstractXdsClient {
   protected void handleEdsResponse(String versionInfo, List<Any> resources, String nonce) {
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
+    Set<String> invalidResources = new HashSet<>();
     List<String> errors = new ArrayList<>();
 
     for (int i = 0; i < resources.size(); i++) {
@@ -1630,16 +1637,17 @@ final class ClientXdsClient extends AbstractXdsClient {
       } catch (ResourceInvalidException e) {
         errors.add("EDS response ClusterLoadAssignment '" + clusterName
             + "' validation error: " + e.getMessage());
+        invalidResources.add(clusterName);
         continue;
       }
       parsedResources.put(clusterName, new ParsedResource(edsUpdate, resource));
     }
-
-    if (!errors.isEmpty()) {
-      handleResourcesRejected(ResourceType.EDS, unpackedResources, versionInfo, nonce, errors);
-    } else {
-      handleResourcesAccepted(ResourceType.EDS, parsedResources, versionInfo, nonce);
-    }
+    getLogger().log(
+        XdsLogLevel.INFO, "Received EDS Response version {0} nonce {1}. Parsed resources: {2}",
+        versionInfo, nonce, unpackedResources);
+    handleResourceUpdate(
+        ResourceType.EDS, parsedResources, invalidResources, Collections.<String>emptySet(),
+        versionInfo, nonce, errors);
   }
 
   private static EdsUpdate processClusterLoadAssignment(ClusterLoadAssignment assignment)
@@ -2029,43 +2037,67 @@ final class ClientXdsClient extends AbstractXdsClient {
     }
   }
 
-  private void handleResourcesAccepted(
-      ResourceType type, Map<String, ParsedResource> parsedResources, String version,
-      String nonce) {
-    ackResponse(type, version, nonce);
-
+  private void handleResourceUpdate(
+      ResourceType type, Map<String, ParsedResource> parsedResources, Set<String> invalidResources,
+      Set<String> retainedResources, String version, String nonce, List<String> errors) {
+    String errorDetail = null;
+    if (errors.isEmpty()) {
+      checkArgument(invalidResources.isEmpty(), "found invalid resources but missing errors");
+      ackResponse(type, version, nonce);
+    } else {
+      errorDetail = Joiner.on('\n').join(errors);
+      getLogger().log(XdsLogLevel.WARNING,
+          "Failed processing {0} Response version {1} nonce {2}. Errors:\n{3}",
+          type, version, nonce, errorDetail);
+      nackResponse(type, nonce, errorDetail);
+    }
     long updateTime = timeProvider.currentTimeNanos();
     for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
       String resourceName = entry.getKey();
       ResourceSubscriber subscriber = entry.getValue();
+      // Attach error details to the subscribed resources that included in the ADS update.
+      if (invalidResources.contains(resourceName)) {
+        subscriber.onRejected(version, updateTime, errorDetail);
+      }
       // Notify the watchers.
       if (parsedResources.containsKey(resourceName)) {
         subscriber.onData(parsedResources.get(resourceName), version, updateTime);
       } else if (type == ResourceType.LDS || type == ResourceType.CDS) {
+        if (subscriber.data != null && invalidResources.contains(resourceName)) {
+          // Update is rejected but keep using the cached data.
+          if (type == ResourceType.LDS) {
+            LdsUpdate ldsUpdate = (LdsUpdate) subscriber.data;
+            io.grpc.xds.HttpConnectionManager hcm = ldsUpdate.httpConnectionManager();
+            if (hcm != null) {
+              String rdsName = hcm.rdsName();
+              if (rdsName != null) {
+                retainedResources.add(rdsName);
+              }
+            }
+          } else {
+            CdsUpdate cdsUpdate = (CdsUpdate) subscriber.data;
+            String edsName = cdsUpdate.edsServiceName();
+            if (edsName == null) {
+              edsName = cdsUpdate.clusterName();
+            }
+            retainedResources.add(edsName);
+          }
+          continue;
+        }
         // For State of the World services, notify watchers when their watched resource is missing
         // from the ADS update.
         subscriber.onAbsent();
       }
     }
-  }
-
-  private void handleResourcesRejected(
-      ResourceType type, Set<String> unpackedResourceNames, String version,
-      String nonce, List<String> errors) {
-    String errorDetail = Joiner.on('\n').join(errors);
-    getLogger().log(XdsLogLevel.WARNING,
-        "Failed processing {0} Response version {1} nonce {2}. Errors:\n{3}",
-        type, version, nonce, errorDetail);
-    nackResponse(type, nonce, errorDetail);
-
-    long updateTime = timeProvider.currentTimeNanos();
-    for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
-      String resourceName = entry.getKey();
-      ResourceSubscriber subscriber = entry.getValue();
-
-      // Attach error details to the subscribed resources that included in the ADS update.
-      if (unpackedResourceNames.contains(resourceName)) {
-        subscriber.onRejected(version, updateTime, errorDetail);
+    // LDS/CDS responses represents the state of the world, RDS/EDS resources not referenced in
+    // LDS/CDS resources should be deleted.
+    if (type == ResourceType.LDS || type == ResourceType.CDS) {
+      Map<String, ResourceSubscriber> dependentSubscribers =
+          type == ResourceType.LDS ? rdsResourceSubscribers : edsResourceSubscribers;
+      for (String resource : dependentSubscribers.keySet()) {
+        if (!retainedResources.contains(resource)) {
+          dependentSubscribers.get(resource).onAbsent();
+        }
       }
     }
   }

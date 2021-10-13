@@ -369,7 +369,7 @@ public final class XdsTestClient {
                 @Override
                 public void onError(Throwable t) {
                   if (printResponse) {
-                    logger.log(Level.WARNING, "Rpc failed: {0}", t);
+                    logger.log(Level.WARNING, "Rpc failed", t);
                   }
                   handleRpcError(requestId, config.rpcType, Status.fromThrowable(t),
                       savedWatchers);

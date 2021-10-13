@@ -26,7 +26,9 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.atMostOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -285,6 +287,35 @@ public class ManagedChannelImplIdlenessTest {
   }
 
   @Test
+  public void pendingCallExitsIdleAfterEnter() throws Exception {
+    // Create a pending call without starting it.
+    channel.newCall(method, CallOptions.DEFAULT);
+
+    channel.enterIdle();
+
+    // Just the existence of a non-started, pending call means the channel cannot stay
+    // in idle mode because the expectation is that the pending call will also need to
+    // be handled.
+    verify(mockNameResolver, times(2)).start(any(NameResolver.Listener2.class));
+  }
+
+  @Test
+  public void delayedTransportExitsIdleAfterEnter() throws Exception {
+    // Start a new call that will go to the delayed transport
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+    deliverResolutionResult();
+
+    channel.enterIdle();
+
+    // Since we have a call in delayed transport, the call to enterIdle() should have resulted in
+    // the channel going to idle mode and then immediately exiting. We confirm this by verifying
+    // that the name resolver was started up twice - once when the call was first created and a
+    // second time after exiting idle mode.
+    verify(mockNameResolver, times(2)).start(any(NameResolver.Listener2.class));
+  }
+
+  @Test
   public void realTransportsHoldsOffIdleness() throws Exception {
     final EquivalentAddressGroup addressGroup = servers.get(1);
 
@@ -330,6 +361,50 @@ public class ManagedChannelImplIdlenessTest {
     verify(mockLoadBalancer, never()).shutdown();
     timer.forwardTime(1, TimeUnit.SECONDS);
     verify(mockLoadBalancer).shutdown();
+  }
+
+  @Test
+  public void enterIdleWhileRealTransportInProgress() {
+    final EquivalentAddressGroup addressGroup = servers.get(1);
+
+    // Start a call, which goes to delayed transport
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+
+    // Verify that we have exited the idle mode
+    ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
+    verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
+    deliverResolutionResult();
+    Helper helper = helperCaptor.getValue();
+
+    // Create a subchannel for the real transport to happen on.
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
+    requestConnectionSafely(helper, subchannel);
+    MockClientTransportInfo t0 = newTransports.poll();
+    t0.listener.transportReady();
+
+    SubchannelPicker mockPicker = mock(SubchannelPicker.class);
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+            .thenReturn(PickResult.withSubchannel(subchannel));
+    updateBalancingStateSafely(helper, READY, mockPicker);
+
+    // Delayed transport creates real streams in the app executor
+    executor.runDueTasks();
+
+    // Move transport to the in-use state
+    t0.listener.transportInUse(true);
+
+    // Now we enter Idle mode while real transport is happening
+    channel.enterIdle();
+
+    // Verify that the name resolver and the load balance were shut down.
+    verify(mockNameResolver).shutdown();
+    verify(mockLoadBalancer).shutdown();
+
+    // When there are no pending streams, the call to enterIdle() should stick and
+    // we remain in idle mode. We verify this by making sure that the name resolver
+    // was not started up more than once (the initial startup).
+    verify(mockNameResolver, atMostOnce()).start(isA(NameResolver.Listener2.class));
   }
 
   @Test

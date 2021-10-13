@@ -179,7 +179,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           childLb = null;
         }
         Status unavailable =
-            Status.UNAVAILABLE.withDescription("Cluster " + root.name + " unusable");
+            Status.UNAVAILABLE.withDescription("CDS error: found 0 leaf (logical DNS or EDS) "
+                + "clusters for root cluster " + root.name);
         helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(unavailable));
         return;
       }
@@ -188,8 +189,10 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       if (root.result.lbPolicy() == LbPolicy.RING_HASH) {
         lbProvider = lbRegistry.getProvider("ring_hash");
         lbConfig = new RingHashConfig(root.result.minRingSize(), root.result.maxRingSize());
-      } else {
+      }
+      if (lbProvider == null) {
         lbProvider = lbRegistry.getProvider("round_robin");
+        lbConfig = null;
       }
       ClusterResolverConfig config = new ClusterResolverConfig(
           Collections.unmodifiableList(instances), new PolicySelection(lbProvider, lbConfig));

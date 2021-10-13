@@ -20,6 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
@@ -133,7 +134,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
    */
   @Override
   public final ClientStream newStream(
-      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+      MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions,
+      ClientStreamTracer[] tracers) {
     try {
       PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
       SubchannelPicker picker = null;
@@ -141,14 +143,14 @@ final class DelayedClientTransport implements ManagedClientTransport {
       while (true) {
         synchronized (lock) {
           if (shutdownStatus != null) {
-            return new FailingClientStream(shutdownStatus);
+            return new FailingClientStream(shutdownStatus, tracers);
           }
           if (lastPicker == null) {
-            return createPendingStream(args);
+            return createPendingStream(args, tracers);
           }
           // Check for second time through the loop, and whether anything changed
           if (picker != null && pickerVersion == lastPickerVersion) {
-            return createPendingStream(args);
+            return createPendingStream(args, tracers);
           }
           picker = lastPicker;
           pickerVersion = lastPickerVersion;
@@ -158,7 +160,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
             callOptions.isWaitForReady());
         if (transport != null) {
           return transport.newStream(
-              args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions());
+              args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions(),
+              tracers);
         }
         // This picker's conclusion is "buffer".  If there hasn't been a newer picker set (possible
         // race with reprocess()), we will buffer it.  Otherwise, will try with the new picker.
@@ -173,8 +176,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
    * schedule tasks on syncContext.
    */
   @GuardedBy("lock")
-  private PendingStream createPendingStream(PickSubchannelArgs args) {
-    PendingStream pendingStream = new PendingStream(args);
+  private PendingStream createPendingStream(
+      PickSubchannelArgs args, ClientStreamTracer[] tracers) {
+    PendingStream pendingStream = new PendingStream(args, tracers);
     pendingStreams.add(pendingStream);
     if (getPendingStreamsCount() == 1) {
       syncContext.executeLater(reportTransportInUse);
@@ -239,7 +243,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
     if (savedReportTransportTerminated != null) {
       for (PendingStream stream : savedPendingStreams) {
-        Runnable runnable = stream.setStream(new FailingClientStream(status, RpcProgress.REFUSED));
+        Runnable runnable = stream.setStream(
+            new FailingClientStream(status, RpcProgress.REFUSED, stream.tracers));
         if (runnable != null) {
           // Drain in-line instead of using an executor as failing stream just throws everything
           // away. This is essentially the same behavior as DelayedStream.cancel() but can be done
@@ -346,9 +351,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
   private class PendingStream extends DelayedStream {
     private final PickSubchannelArgs args;
     private final Context context = Context.current();
+    private final ClientStreamTracer[] tracers;
 
-    private PendingStream(PickSubchannelArgs args) {
+    private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers) {
       this.args = args;
+      this.tracers = tracers;
     }
 
     /** Runnable may be null. */
@@ -357,7 +364,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
       Context origContext = context.attach();
       try {
         realStream = transport.newStream(
-            args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions());
+            args.getMethodDescriptor(), args.getHeaders(), args.getCallOptions(),
+            tracers);
       } finally {
         context.detach(origContext);
       }
@@ -380,6 +388,13 @@ final class DelayedClientTransport implements ManagedClientTransport {
         }
       }
       syncContext.drain();
+    }
+
+    @Override
+    protected void onEarlyCancellation(Status reason) {
+      for (ClientStreamTracer tracer : tracers) {
+        tracer.streamClosed(reason);
+      }
     }
 
     @Override

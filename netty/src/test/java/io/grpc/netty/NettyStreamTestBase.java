@@ -139,13 +139,6 @@ public abstract class NettyStreamTestBase<T extends Stream> {
   }
 
   @Test
-  public void closedShouldNotBeReady() throws IOException {
-    assertTrue(stream.isReady());
-    closeStream();
-    assertFalse(stream.isReady());
-  }
-
-  @Test
   public void notifiedOnReadyAfterWriteCompletes() throws IOException {
     sendHeadersIfServer();
     assertTrue(stream.isReady());

@@ -2,6 +2,7 @@ plugins {
     id "maven-publish"
     id "com.android.library"
     id "ru.vyarus.animalsniffer"
+    id "digital.wup.android-maven-publish"
 }
 
 description = 'gRPC BinderChannel'
@@ -29,7 +30,7 @@ android {
         targetCompatibility 1.8
     }
     defaultConfig {
-        minSdkVersion 16
+        minSdkVersion 19
         targetSdkVersion 29
         versionCode 1
         versionName "1.0"
@@ -49,9 +50,12 @@ dependencies {
 
     implementation libraries.androidx_annotation
     implementation libraries.androidx_core
+    implementation libraries.androidx_lifecycle_common
     implementation libraries.guava
     testImplementation libraries.androidx_core
     testImplementation libraries.androidx_test
+    testImplementation libraries.androidx_lifecycle_common
+    testImplementation libraries.androidx_lifecycle_service
     testImplementation libraries.junit
     testImplementation libraries.mockito
     testImplementation (libraries.robolectric) {
@@ -91,4 +95,39 @@ tasks.withType(JavaCompile) {
     options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
 }
 
-[publishMavenPublicationToMavenRepository]*.onlyIf { false }
+task javadocs(type: Javadoc) {
+    source = android.sourceSets.main.java.srcDirs
+    classpath += files(android.getBootClasspath())
+    classpath += files({
+        android.libraryVariants.collect { variant ->
+            variant.javaCompileProvider.get().classpath
+        }
+    })
+    options {
+        // Disable JavaDoc doclint on Java 8.
+        if (JavaVersion.current().isJava8Compatible()) {
+            addStringOption('Xdoclint:none', '-quiet')
+        }
+    }
+}
+
+task javadocJar(type: Jar, dependsOn: javadocs) {
+    classifier = 'javadoc'
+    from javadocs.destinationDir
+}
+
+task sourcesJar(type: Jar) {
+    classifier = 'sources'
+    from android.sourceSets.main.java.srcDirs
+}
+
+publishing {
+    publications {
+        maven {
+            from components.android
+
+            artifact javadocJar
+            artifact sourcesJar
+        }
+    }
+}

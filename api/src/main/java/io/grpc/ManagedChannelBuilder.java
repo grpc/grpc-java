@@ -467,7 +467,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.11.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
   public T disableRetry() {
     throw new UnsupportedOperationException();
   }
@@ -479,13 +478,9 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * transparent retries, which are safe for non-idempotent RPCs. Service config is ideally provided
    * by the name resolver, but may also be specified via {@link #defaultServiceConfig}.
    *
-   * <p>For the current release, this method may have a side effect that disables Census stats and
-   * tracing.
-   *
    * @return this
    * @since 1.11.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/3982")
   public T enableRetry() {
     throw new UnsupportedOperationException();
   }
@@ -559,6 +554,22 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *        </table>
    *
    * <p>If null is passed, then there will be no default service config.
+   *
+   * <p>Your preferred JSON parser may not produce results in the format expected. For such cases,
+   * you can convert its output. For example, if your parser produces Integers and other Numbers
+   * in addition to Double:
+   *
+   * <pre>{@code @SuppressWarnings("unchecked")
+   * private static Object convertNumbers(Object o) {
+   *   if (o instanceof Map) {
+   *     ((Map) o).replaceAll((k,v) -> convertNumbers(v));
+   *   } else if (o instanceof List) {
+   *     ((List) o).replaceAll(YourClass::convertNumbers);
+   *   } else if (o instanceof Number && !(o instanceof Double)) {
+   *     o = ((Number) o).doubleValue();
+   *   }
+   *   return o;
+   * }}</pre>
    *
    * @throws IllegalArgumentException When the given serviceConfig is invalid or the current version
    *         of grpc library can not parse it gracefully. The state of the builder is unchanged if

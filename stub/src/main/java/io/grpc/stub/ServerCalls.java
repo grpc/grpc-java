@@ -206,6 +206,13 @@ public final class ServerCalls {
           responseObserver.onReadyHandler.run();
         }
       }
+
+      @Override
+      public void onComplete() {
+        if (responseObserver.onCloseHandler != null) {
+          responseObserver.onCloseHandler.run();
+        }
+      }
     }
   }
 
@@ -291,6 +298,13 @@ public final class ServerCalls {
           responseObserver.onReadyHandler.run();
         }
       }
+
+      @Override
+      public void onComplete() {
+        if (responseObserver.onCloseHandler != null) {
+          responseObserver.onCloseHandler.run();
+        }
+      }
     }
   }
 
@@ -320,6 +334,7 @@ public final class ServerCalls {
     private Runnable onCancelHandler;
     private boolean aborted = false;
     private boolean completed = false;
+    private Runnable onCloseHandler;
 
     // Non private to avoid synthetic class
     ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call, boolean serverStreamingOrBidi) {
@@ -423,6 +438,14 @@ public final class ServerCalls {
     public void request(int count) {
       call.request(count);
     }
+
+    @Override
+    public void setOnCloseHandler(Runnable onCloseHandler) {
+      checkState(!frozen, "Cannot alter onCloseHandler after initialization. May only be called "
+          + "during the initial call to the application, before the service returns its "
+          + "StreamObserver");
+      this.onCloseHandler = onCloseHandler;
+    }
   }
 
   /**
@@ -447,7 +470,7 @@ public final class ServerCalls {
    * @param methodDescriptor of method for which error will be thrown.
    * @param responseObserver on which error will be set.
    */
-  public static <T> StreamObserver<T> asyncUnimplementedStreamingCall(
+  public static <ReqT> StreamObserver<ReqT> asyncUnimplementedStreamingCall(
       MethodDescriptor<?, ?> methodDescriptor, StreamObserver<?> responseObserver) {
     // NB: For streaming call we want to do the same as for unary call. Fail-fast by setting error
     // on responseObserver and then return no-op observer.

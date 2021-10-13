@@ -26,7 +26,10 @@ import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
 import static io.grpc.netty.Utils.HTTP_METHOD;
 import static io.grpc.netty.Utils.TE_HEADER;
 import static io.grpc.netty.Utils.TE_TRAILERS;
+import static io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
+import static io.netty.handler.codec.http.HttpHeaderNames.HOST;
 import static io.netty.handler.codec.http2.DefaultHttp2LocalFlowController.DEFAULT_WINDOW_UPDATE_RATIO;
+import static io.netty.handler.codec.http2.Http2Headers.PseudoHeaderName.AUTHORITY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -69,7 +72,6 @@ import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Error;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Exception.StreamException;
-import io.netty.handler.codec.http2.Http2FlowController;
 import io.netty.handler.codec.http2.Http2FrameAdapter;
 import io.netty.handler.codec.http2.Http2FrameLogger;
 import io.netty.handler.codec.http2.Http2FrameReader;
@@ -367,23 +369,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       keepAliveManager.onTransportStarted();
     }
 
-
-    if (transportTracer != null) {
-      assert encoder().connection().equals(decoder().connection());
-      final Http2Connection connection = encoder().connection();
-      transportTracer.setFlowControlWindowReader(new TransportTracer.FlowControlReader() {
-        private final Http2FlowController local = connection.local().flowController();
-        private final Http2FlowController remote = connection.remote().flowController();
-
-        @Override
-        public TransportTracer.FlowControlWindows read() {
-          assert ctx.executor().inEventLoop();
-          return new TransportTracer.FlowControlWindows(
-              local.windowSize(connection.connectionStream()),
-              remote.windowSize(connection.connectionStream()));
-        }
-      });
-    }
+    assert encoder().connection().equals(decoder().connection());
+    transportTracer.setFlowControlWindowReader(new Utils.FlowControlReader(encoder().connection()));
 
     super.handlerAdded(ctx);
   }
@@ -391,6 +378,26 @@ class NettyServerHandler extends AbstractNettyHandler {
   private void onHeadersRead(ChannelHandlerContext ctx, int streamId, Http2Headers headers)
       throws Http2Exception {
     try {
+      // Connection-specific header fields makes a request malformed. Ideally this would be handled
+      // by Netty. RFC 7540 section 8.1.2.2
+      if (headers.contains(CONNECTION)) {
+        resetStream(ctx, streamId, Http2Error.PROTOCOL_ERROR.code(), ctx.newPromise());
+        return;
+      }
+
+      if (headers.authority() == null) {
+        List<CharSequence> hosts = headers.getAll(HOST);
+        if (hosts.size() > 1) {
+          // RFC 7230 section 5.4
+          respondWithHttpError(ctx, streamId, 400, Status.Code.INTERNAL,
+              "Multiple host headers");
+          return;
+        }
+        if (!hosts.isEmpty()) {
+          headers.add(AUTHORITY.value(), hosts.get(0));
+        }
+      }
+      headers.remove(HOST);
 
       // Remove the leading slash of the path and get the fully qualified method name
       CharSequence path = headers.path();
@@ -634,6 +641,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       sendResponseHeaders(ctx, (SendResponseHeadersCommand) msg, promise);
     } else if (msg instanceof CancelServerStreamCommand) {
       cancelStream(ctx, (CancelServerStreamCommand) msg, promise);
+    } else if (msg instanceof GracefulServerCloseCommand) {
+      gracefulClose(ctx, (GracefulServerCloseCommand) msg, promise);
     } else if (msg instanceof ForcefulCloseCommand) {
       forcefulClose(ctx, (ForcefulCloseCommand) msg, promise);
     } else {
@@ -647,11 +656,8 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   @Override
   public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-    if (gracefulShutdown == null) {
-      gracefulShutdown = new GracefulShutdown("app_requested", null);
-      gracefulShutdown.start(ctx);
-      ctx.flush();
-    }
+    gracefulClose(ctx, new GracefulServerCloseCommand("app_requested"), promise);
+    ctx.flush();
   }
 
   /**
@@ -730,6 +736,21 @@ class NettyServerHandler extends AbstractNettyHandler {
     } finally {
       PerfMark.stopTask("NettyServerHandler.cancelStream", cmd.stream().tag());
     }
+  }
+
+  private void gracefulClose(final ChannelHandlerContext ctx, final GracefulServerCloseCommand msg,
+      ChannelPromise promise) throws Exception {
+    // Ideally we'd adjust a pre-existing graceful shutdown's grace period to at least what is
+    // requested here. But that's an edge case and seems bug-prone.
+    if (gracefulShutdown == null) {
+      Long graceTimeInNanos = null;
+      if (msg.getGraceTimeUnit() != null) {
+        graceTimeInNanos = msg.getGraceTimeUnit().toNanos(msg.getGraceTime());
+      }
+      gracefulShutdown = new GracefulShutdown(msg.getGoAwayDebugString(), graceTimeInNanos);
+      gracefulShutdown.start(ctx);
+    }
+    promise.setSuccess();
   }
 
   private void forcefulClose(final ChannelHandlerContext ctx, final ForcefulCloseCommand msg,
@@ -895,16 +916,14 @@ class NettyServerHandler extends AbstractNettyHandler {
       ChannelFuture pingFuture = encoder().writePing(
           ctx, false /* isAck */, KEEPALIVE_PING, ctx.newPromise());
       ctx.flush();
-      if (transportTracer != null) {
-        pingFuture.addListener(new ChannelFutureListener() {
-          @Override
-          public void operationComplete(ChannelFuture future) throws Exception {
-            if (future.isSuccess()) {
-              transportTracer.reportKeepAliveSent();
-            }
+      pingFuture.addListener(new ChannelFutureListener() {
+        @Override
+        public void operationComplete(ChannelFuture future) throws Exception {
+          if (future.isSuccess()) {
+            transportTracer.reportKeepAliveSent();
           }
-        });
-      }
+        }
+      });
     }
 
     @Override

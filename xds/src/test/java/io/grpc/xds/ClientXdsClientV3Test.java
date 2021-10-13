@@ -74,9 +74,12 @@ import io.envoyproxy.envoy.extensions.filters.common.fault.v3.FaultDelay.HeaderD
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort.HeaderAbort;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.HTTPFault;
+import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
@@ -275,6 +278,15 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
+    protected Message buildListenerWithApiListener(String name, Message routeConfiguration) {
+      return buildListenerWithApiListener(name, routeConfiguration, Arrays.asList(
+              HttpFilter.newBuilder()
+                      .setName("terminal")
+                      .setTypedConfig(Any.pack(Router.newBuilder().build())).build()
+      ));
+    }
+
+    @Override
     protected Message buildListenerWithApiListenerForRds(String name, String rdsResourceName) {
       return Listener.newBuilder()
           .setName(name)
@@ -289,6 +301,10 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
                               .setConfigSource(
                                   ConfigSource.newBuilder()
                                       .setAds(AggregatedConfigSource.getDefaultInstance())))
+                      .addHttpFilters(
+                          HttpFilter.newBuilder()
+                               .setName("terminal")
+                               .setTypedConfig(Any.pack(Router.newBuilder().build())))
                       .build())))
           .build();
     }
@@ -535,6 +551,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     protected Message buildUpstreamTlsContext(String instanceName, String certName) {
       CommonTlsContext.Builder commonTlsContextBuilder = CommonTlsContext.newBuilder();
       if (instanceName != null && certName != null) {
@@ -548,6 +565,20 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
                 .setValidationContextCertificateProviderInstance(providerInstance)
                 .build();
         commonTlsContextBuilder.setCombinedValidationContext(combined);
+      }
+      return UpstreamTlsContext.newBuilder()
+          .setCommonTlsContext(commonTlsContextBuilder)
+          .build();
+    }
+
+    @Override
+    protected Message buildNewUpstreamTlsContext(String instanceName, String certName) {
+      CommonTlsContext.Builder commonTlsContextBuilder = CommonTlsContext.newBuilder();
+      if (instanceName != null && certName != null) {
+        commonTlsContextBuilder.setValidationContext(CertificateValidationContext.newBuilder()
+            .setCaCertificateProviderInstance(
+                CertificateProviderPluginInstance.newBuilder().setInstanceName(instanceName)
+                    .setCertificateName(certName).build()));
       }
       return UpstreamTlsContext.newBuilder()
           .setCommonTlsContext(commonTlsContextBuilder)
@@ -724,6 +755,13 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
           .setTypedConfig(
               Any.pack(hcmBuilder.build(), "type.googleapis.com"))
           .build();
+    }
+
+    @Override
+    protected Message buildTerminalFilter() {
+      return HttpFilter.newBuilder()
+          .setName("terminal")
+          .setTypedConfig(Any.pack(Router.newBuilder().build())).build();
     }
   }
 

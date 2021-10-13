@@ -3,9 +3,7 @@ set -eo pipefail
 
 # Constants
 readonly GITHUB_REPOSITORY_NAME="grpc-java"
-# GKE Cluster
-readonly GKE_CLUSTER_NAME="interop-test-psm-sec-v2-us-central1-a"
-readonly GKE_CLUSTER_ZONE="us-central1-a"
+readonly TEST_DRIVER_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/${TEST_DRIVER_REPO_OWNER:-grpc}/grpc/${TEST_DRIVER_BRANCH:-master}/tools/internal_ci/linux/grpc_xds_k8s_install_test_driver.sh"
 ## xDS test server/client Docker images
 readonly SERVER_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-server"
 readonly CLIENT_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-client"
@@ -54,10 +52,16 @@ build_test_app_docker_images() {
   cp -v "${docker_dir}/"*.Dockerfile "${build_dir}"
   cp -v "${docker_dir}/"*.properties "${build_dir}"
   cp -rv "${SRC_DIR}/${BUILD_APP_PATH}" "${build_dir}"
+  # Pick a branch name for the built image
+  if [[ -n $KOKORO_JOB_NAME ]]; then
+    branch_name=$(echo "$KOKORO_JOB_NAME" | sed -E 's|^grpc/java/([^/]+)/.*|\1|')
+  else
+    branch_name='experimental'
+  fi
   # Run Google Cloud Build
   gcloud builds submit "${build_dir}" \
     --config "${docker_dir}/cloudbuild.yaml" \
-    --substitutions "_SERVER_IMAGE_NAME=${SERVER_IMAGE_NAME},_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT}"
+    --substitutions "_SERVER_IMAGE_NAME=${SERVER_IMAGE_NAME},_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT},BRANCH_NAME=${branch_name}"
   # TODO(sergiitk): extra "cosmetic" tags for versioned branches, e.g. v1.34.x
   # TODO(sergiitk): do this when adding support for custom configs per version
 }
@@ -146,8 +150,13 @@ run_test() {
 main() {
   local script_dir
   script_dir="$(dirname "$0")"
-  # shellcheck source=buildscripts/kokoro/xds-k8s-install-test-driver.sh
-  source "${script_dir}/xds-k8s-install-test-driver.sh"
+
+  # Source the test driver from the master branch.
+  echo "Sourcing test driver install script from: ${TEST_DRIVER_INSTALL_SCRIPT_URL}"
+  source /dev/stdin <<< "$(curl -s "${TEST_DRIVER_INSTALL_SCRIPT_URL}")"
+
+  activate_gke_cluster GKE_CLUSTER_PSM_SECURITY
+
   set -x
   if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
     kokoro_setup_test_driver "${GITHUB_REPOSITORY_NAME}"

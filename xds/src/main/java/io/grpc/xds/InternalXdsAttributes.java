@@ -75,5 +75,18 @@ public final class InternalXdsAttributes {
   static final Attributes.Key<Long> ATTR_SERVER_WEIGHT =
       Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.serverWeight");
 
+  /**
+   * Filter chain match for network filters.
+   */
+  @Grpc.TransportAttr
+  static final Attributes.Key<FilterChainSelectorManager>
+          ATTR_FILTER_CHAIN_SELECTOR_MANAGER = Attributes.Key.create(
+          "io.grpc.xds.InternalXdsAttributes.filterChainSelectorManager");
+
+  /** Grace time to use when draining. Null for an infinite grace time. */
+  @Grpc.TransportAttr
+  static final Attributes.Key<Long> ATTR_DRAIN_GRACE_NANOS =
+      Attributes.Key.create("io.grpc.xds.InternalXdsAttributes.drainGraceTime");
+
   private InternalXdsAttributes() {}
 }

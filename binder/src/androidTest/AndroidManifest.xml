@@ -1,8 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="io.grpc.binder">
 
-    <application>
-      <service android:name="io.grpc.binder.HostServices$HostService1"/>
-      <service android:name="io.grpc.binder.HostServices$HostService2"/>
-    </application>
+  <instrumentation
+      android:name="androidx.test.runner.AndroidJUnitRunner"
+      android:targetPackage="io.grpc.binder" />
+
+  <application android:debuggable="true">
+    <uses-library android:name="android.test.runner" />
+
+    <service android:name="io.grpc.binder.HostServices$HostService1" />
+    <service android:name="io.grpc.binder.HostServices$HostService2" />
+  </application>
 </manifest>

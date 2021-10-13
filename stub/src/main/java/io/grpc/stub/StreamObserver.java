@@ -31,6 +31,16 @@ package io.grpc.stub;
  * not need to be synchronized together; incoming and outgoing directions are independent.
  * Since individual {@code StreamObserver}s are not thread-safe, if multiple threads will be
  * writing to a {@code StreamObserver} concurrently, the application must synchronize calls.
+ *
+ * <p>This API is asynchronous, so methods may return before the operation completes. The API
+ * provides no guarantees for how quickly an operation will complete, so utilizing flow control via
+ * {@link ClientCallStreamObserver} and {@link ServerCallStreamObserver} to avoid excessive
+ * buffering is recommended for streaming RPCs. gRPC's implementation of {@code onError()} on
+ * client-side causes the RPC to be cancelled and discards all messages, so completes quickly.
+ *
+ * <p>gRPC guarantees it does not block on I/O in its implementation, but applications are allowed
+ * to perform blocking operations in their implementations. However, doing so will delay other
+ * callbacks because the methods cannot be called concurrently.
  */
 public interface StreamObserver<V>  {
   /**

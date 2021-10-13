@@ -33,7 +33,7 @@ android {
 
     defaultConfig {
         applicationId "io.grpc.android.integrationtest"
-        minSdkVersion 16
+        minSdkVersion 19
         targetSdkVersion 26
         versionCode 1
         versionName "1.0"
@@ -62,6 +62,7 @@ dependencies {
             project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
             project(':grpc-testing'),
+            libraries.hdrhistogram,
             libraries.junit,
             libraries.truth,
             libraries.opencensus_contrib_grpc_metrics

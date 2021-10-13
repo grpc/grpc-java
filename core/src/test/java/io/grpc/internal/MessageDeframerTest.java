@@ -378,7 +378,7 @@ public class MessageDeframerTest {
 
       try {
         thrown.expect(StatusRuntimeException.class);
-        thrown.expectMessage("RESOURCE_EXHAUSTED: Compressed gRPC message exceeds");
+        thrown.expectMessage("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds");
 
         while (stream.read() != -1) {
         }
@@ -424,7 +424,7 @@ public class MessageDeframerTest {
 
       try {
         thrown.expect(StatusRuntimeException.class);
-        thrown.expectMessage("RESOURCE_EXHAUSTED: Compressed gRPC message exceeds");
+        thrown.expectMessage("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds");
 
         stream.read(buf, 0, buf.length);
       } finally {
@@ -467,7 +467,7 @@ public class MessageDeframerTest {
 
       try {
         thrown.expect(StatusRuntimeException.class);
-        thrown.expectMessage("RESOURCE_EXHAUSTED: Compressed gRPC message exceeds");
+        thrown.expectMessage("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds");
 
         stream.skip(4);
       } finally {

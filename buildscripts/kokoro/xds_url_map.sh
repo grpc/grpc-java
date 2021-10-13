@@ -3,10 +3,9 @@ set -eo pipefail
 
 # Constants
 readonly GITHUB_REPOSITORY_NAME="grpc-java"
-# GKE Cluster
-readonly GKE_CLUSTER_NAME="interop-test-psm-sec-v2-us-central1-a"
-readonly GKE_CLUSTER_ZONE="us-central1-a"
+readonly TEST_DRIVER_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/${TEST_DRIVER_REPO_OWNER:-grpc}/grpc/${TEST_DRIVER_BRANCH:-master}/tools/internal_ci/linux/grpc_xds_k8s_install_test_driver.sh"
 ## xDS test client Docker images
+readonly SERVER_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-server"
 readonly CLIENT_IMAGE_NAME="gcr.io/grpc-testing/xds-interop/java-client"
 readonly FORCE_IMAGE_BUILD="${FORCE_IMAGE_BUILD:-0}"
 readonly BUILD_APP_PATH="interop-testing/build/install/grpc-interop-testing"
@@ -19,7 +18,7 @@ readonly BUILD_APP_PATH="interop-testing/build/install/grpc-interop-testing"
 # Arguments:
 #   None
 # Outputs:
-#   Writes the output of xds-test-client --help to stderr
+#   Writes the output of xds-test-client and xds-test-server --help to stderr
 #######################################
 build_java_test_app() {
   echo "Building Java test app"
@@ -29,12 +28,14 @@ build_java_test_app() {
 
   # Test-run binaries
   run_ignore_exit_code "${SRC_DIR}/${BUILD_APP_PATH}/bin/xds-test-client" --help
+  run_ignore_exit_code "${SRC_DIR}/${BUILD_APP_PATH}/bin/xds-test-server" --help
 }
 
 #######################################
 # Builds test app Docker images and pushes them to GCR
 # Globals:
 #   BUILD_APP_PATH
+#   SERVER_IMAGE_NAME: Test server Docker image name
 #   CLIENT_IMAGE_NAME: Test client Docker image name
 #   GIT_COMMIT: SHA-1 of git commit being built
 # Arguments:
@@ -51,10 +52,16 @@ build_test_app_docker_images() {
   cp -v "${docker_dir}/"*.Dockerfile "${build_dir}"
   cp -v "${docker_dir}/"*.properties "${build_dir}"
   cp -rv "${SRC_DIR}/${BUILD_APP_PATH}" "${build_dir}"
+  # Pick a branch name for the built image
+  if [[ -n $KOKORO_JOB_NAME ]]; then
+    branch_name="$(echo "$KOKORO_JOB_NAME" | sed -E 's|^grpc/java/([^/]+)/.*|\1|')"
+  else
+    branch_name='experimental'
+  fi
   # Run Google Cloud Build
   gcloud builds submit "${build_dir}" \
     --config "${docker_dir}/cloudbuild.yaml" \
-    --substitutions "_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT}"
+    --substitutions "_SERVER_IMAGE_NAME=${SERVER_IMAGE_NAME},_CLIENT_IMAGE_NAME=${CLIENT_IMAGE_NAME},COMMIT_SHA=${GIT_COMMIT},BRANCH_NAME=${branch_name}"
   # TODO(sergiitk): extra "cosmetic" tags for versioned branches, e.g. v1.34.x
   # TODO(sergiitk): do this when adding support for custom configs per version
 }
@@ -62,6 +69,7 @@ build_test_app_docker_images() {
 #######################################
 # Builds test app and its docker images unless they already exist
 # Globals:
+#   SERVER_IMAGE_NAME: Test server Docker image name
 #   CLIENT_IMAGE_NAME: Test client Docker image name
 #   GIT_COMMIT: SHA-1 of git commit being built
 #   FORCE_IMAGE_BUILD
@@ -72,12 +80,16 @@ build_test_app_docker_images() {
 #######################################
 build_docker_images_if_needed() {
   # Check if images already exist
+  server_tags="$(gcloud_gcr_list_image_tags "${SERVER_IMAGE_NAME}" "${GIT_COMMIT}")"
+  printf "Server image: %s:%s\n" "${SERVER_IMAGE_NAME}" "${GIT_COMMIT}"
+  echo "${server_tags:-Server image not found}"
+
   client_tags="$(gcloud_gcr_list_image_tags "${CLIENT_IMAGE_NAME}" "${GIT_COMMIT}")"
   printf "Client image: %s:%s\n" "${CLIENT_IMAGE_NAME}" "${GIT_COMMIT}"
   echo "${client_tags:-Client image not found}"
 
   # Build if any of the images are missing, or FORCE_IMAGE_BUILD=1
-  if [[ "${FORCE_IMAGE_BUILD}" == "1" || -z "${client_tags}" ]]; then
+  if [[ "${FORCE_IMAGE_BUILD}" == "1" || -z "${server_tags}" || -z "${client_tags}" ]]; then
     build_java_test_app
     build_test_app_docker_images
   else
@@ -108,6 +120,7 @@ run_test() {
     --flagfile="${TEST_DRIVER_FLAGFILE}" \
     --kube_context="${KUBE_CONTEXT}" \
     --client_image="${CLIENT_IMAGE_NAME}:${GIT_COMMIT}" \
+    --testing_version="$(echo "$KOKORO_JOB_NAME" | sed -E 's|^grpc/java/([^/]+)/.*|\1|')" \
     --xml_output_file="${TEST_XML_OUTPUT_DIR}/${test_name}/sponge_log.xml" \
     --flagfile="config/url-map.cfg"
   set +x
@@ -136,8 +149,13 @@ run_test() {
 main() {
   local script_dir
   script_dir="$(dirname "$0")"
-  # shellcheck source=buildscripts/kokoro/xds-k8s-install-test-driver.sh
-  source "${script_dir}/xds-k8s-install-test-driver.sh"
+
+  # Source the test driver from the master branch.
+  echo "Sourcing test driver install script from: ${TEST_DRIVER_INSTALL_SCRIPT_URL}"
+  source /dev/stdin <<< "$(curl -s "${TEST_DRIVER_INSTALL_SCRIPT_URL}")"
+
+  activate_gke_cluster GKE_CLUSTER_PSM_BASIC
+
   set -x
   if [[ -n "${KOKORO_ARTIFACTS_DIR}" ]]; then
     kokoro_setup_test_driver "${GITHUB_REPOSITORY_NAME}"

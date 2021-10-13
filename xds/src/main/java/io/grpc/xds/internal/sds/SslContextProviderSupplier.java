@@ -128,15 +128,13 @@ public final class SslContextProviderSupplier implements Closeable {
       return false;
     }
     SslContextProviderSupplier that = (SslContextProviderSupplier) o;
-    return shutdown == that.shutdown
-        && Objects.equals(tlsContext, that.tlsContext)
-        && Objects.equals(tlsContextManager, that.tlsContextManager)
-        && Objects.equals(sslContextProvider, that.sslContextProvider);
+    return Objects.equals(tlsContext, that.tlsContext)
+        && Objects.equals(tlsContextManager, that.tlsContextManager);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(tlsContext, tlsContextManager, sslContextProvider, shutdown);
+    return Objects.hash(tlsContext, tlsContextManager);
   }
 
   @Override

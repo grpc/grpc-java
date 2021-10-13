@@ -40,6 +40,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -54,6 +56,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 public final class Metadata {
+  private static final Logger logger = Logger.getLogger(Metadata.class.getName());
 
   /**
    * All binary headers should have this suffix in their names. Vice versa.
@@ -733,6 +736,15 @@ public final class Metadata {
     private static String validateName(String n, boolean pseudo) {
       checkNotNull(n, "name");
       checkArgument(!n.isEmpty(), "token must have at least 1 tchar");
+      if (n.equals("connection")) {
+        logger.log(
+            Level.WARNING,
+            "Metadata key is 'Connection', which should not be used. That is used by HTTP/1 for "
+            + "connection-specific headers which are not to be forwarded. There is probably an "
+            + "HTTP/1 conversion bug. Simply removing the Connection header is not enough; you "
+            + "should remove all headers it references as well. See RFC 7230 section 6.1",
+            new RuntimeException("exception to show backtrace"));
+      }
       for (int i = 0; i < n.length(); i++) {
         char tChar = n.charAt(i);
         if (pseudo && tChar == ':' && i == 0) {

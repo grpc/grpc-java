@@ -17,7 +17,9 @@
 package io.grpc.internal;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static io.grpc.internal.GrpcUtil.CONTENT_LENGTH_KEY;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -148,6 +150,16 @@ public class ServerCallImplTest {
     call.sendHeaders(headers);
 
     verify(stream).writeHeaders(headers);
+  }
+
+  @Test
+  public void sendHeader_contentLengthDiscarded() {
+    Metadata headers = new Metadata();
+    headers.put(CONTENT_LENGTH_KEY, "123");
+    call.sendHeaders(headers);
+
+    verify(stream).writeHeaders(headers);
+    assertNull(headers.get(CONTENT_LENGTH_KEY));
   }
 
   @Test
@@ -322,6 +334,8 @@ public class ServerCallImplTest {
     when(stream.isReady()).thenReturn(true);
 
     assertTrue(call.isReady());
+    call.close(Status.OK, new Metadata());
+    assertFalse(call.isReady());
   }
 
   @Test
@@ -378,6 +392,9 @@ public class ServerCallImplTest {
     verify(callListener).onComplete();
     assertTrue(context.isCancelled());
     assertNull(context.cancellationCause());
+    // The call considers cancellation to be an exceptional situation so it should
+    // not be cancelled with an OK status.
+    assertFalse(call.isCancelled());
   }
 
   @Test

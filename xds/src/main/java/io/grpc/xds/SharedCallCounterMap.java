@@ -58,8 +58,14 @@ final class SharedCallCounterMap implements CallCounterProvider {
       counters.put(cluster, clusterCounters);
     }
     CounterReference ref = clusterCounters.get(edsServiceName);
-    AtomicLong counter;
-    if (ref == null || (counter = ref.get()) == null) {
+    AtomicLong counter = null;
+    if (ref != null) {
+      counter = ref.get();
+      if (counter == null) {
+        ref.enqueue();
+      }
+    }
+    if (counter == null) {
       counter = new AtomicLong();
       ref = new CounterReference(counter, refQueue, cluster, edsServiceName);
       clusterCounters.put(edsServiceName, ref);
@@ -73,6 +79,9 @@ final class SharedCallCounterMap implements CallCounterProvider {
     CounterReference ref;
     while ((ref = (CounterReference) refQueue.poll()) != null) {
       Map<String, CounterReference> clusterCounter = counters.get(ref.cluster);
+      if (clusterCounter.get(ref.edsServiceName) != ref) {
+        continue;
+      }
       clusterCounter.remove(ref.edsServiceName);
       if (clusterCounter.isEmpty()) {
         counters.remove(ref.cluster);

@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyListOf;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -38,6 +37,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentMatchers;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
@@ -158,7 +158,7 @@ public class CertificateProviderStoreTest {
     assertThat(distWatcher.downstreamWatchers).hasSize(1);
     testCertificateProvider.getWatcher().updateCertificate(testKey, testList);
     verify(mockWatcher1, never())
-        .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
+        .updateCertificate(any(PrivateKey.class), ArgumentMatchers.<X509Certificate>anyList());
     verify(mockWatcher2, times(1)).updateCertificate(eq(testKey), eq(testList));
     testCertificateProvider.getWatcher().updateTrustedRoots(testList);
     verify(mockWatcher2, times(1)).updateTrustedRoots(eq(testList));
@@ -199,8 +199,8 @@ public class CertificateProviderStoreTest {
     verify(mockWatcher2, never()).onError(eq(Status.CANCELLED));
     // and none to first one
     verify(mockWatcher1, never())
-            .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
-    verify(mockWatcher1, never()).updateTrustedRoots(anyListOf(X509Certificate.class));
+            .updateCertificate(any(PrivateKey.class), ArgumentMatchers.<X509Certificate>anyList());
+    verify(mockWatcher1, never()).updateTrustedRoots(ArgumentMatchers.<X509Certificate>anyList());
     verify(mockWatcher1, never()).onError(any(Status.class));
   }
 
@@ -302,7 +302,7 @@ public class CertificateProviderStoreTest {
     testCertificateProvider1.getWatcher().updateCertificate(testKey1, testList1);
     verify(mockWatcher1, times(1)).updateCertificate(eq(testKey1), eq(testList1));
     verify(mockWatcher2, never())
-        .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
+        .updateCertificate(any(PrivateKey.class), ArgumentMatchers.<X509Certificate>anyList());
     reset(mockWatcher1);
 
     PrivateKey testKey2 = mock(PrivateKey.class);
@@ -311,7 +311,7 @@ public class CertificateProviderStoreTest {
     testCertificateProvider2.getWatcher().updateCertificate(testKey2, testList2);
     verify(mockWatcher2, times(1)).updateCertificate(eq(testKey2), eq(testList2));
     verify(mockWatcher1, never())
-        .updateCertificate(any(PrivateKey.class), anyListOf(X509Certificate.class));
+        .updateCertificate(any(PrivateKey.class), ArgumentMatchers.<X509Certificate>anyList());
     assertThat(testCertificateProvider1.startCalled).isEqualTo(1);
     assertThat(testCertificateProvider2.startCalled).isEqualTo(1);
     handle2.close();

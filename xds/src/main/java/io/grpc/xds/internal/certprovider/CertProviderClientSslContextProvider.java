@@ -22,7 +22,6 @@ import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CombinedCertificateValidationContext;
 import io.grpc.Internal;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
@@ -32,6 +31,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import java.security.cert.CertStoreException;
 import java.security.cert.X509Certificate;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 /** A client SslContext provider using CertificateProviderInstance to fetch secrets. */
 @Internal
@@ -39,7 +39,7 @@ public final class CertProviderClientSslContextProvider extends CertProviderSslC
 
   private CertProviderClientSslContextProvider(
       Node node,
-      Map<String, CertificateProviderInfo> certProviders,
+      @Nullable Map<String, CertificateProviderInfo> certProviders,
       CommonTlsContext.CertificateProviderInstance certInstance,
       CommonTlsContext.CertificateProviderInstance rootCertInstance,
       CertificateValidationContext staticCertValidationContext,
@@ -90,30 +90,15 @@ public final class CertProviderClientSslContextProvider extends CertProviderSslC
     public CertProviderClientSslContextProvider getProvider(
         UpstreamTlsContext upstreamTlsContext,
         Node node,
-        Map<String, CertificateProviderInfo> certProviders) {
+        @Nullable Map<String, CertificateProviderInfo> certProviders) {
       checkNotNull(upstreamTlsContext, "upstreamTlsContext");
       CommonTlsContext commonTlsContext = upstreamTlsContext.getCommonTlsContext();
-      CommonTlsContext.CertificateProviderInstance rootCertInstance = null;
-      CertificateValidationContext staticCertValidationContext = null;
-      if (commonTlsContext.hasCombinedValidationContext()) {
-        CombinedCertificateValidationContext combinedValidationContext =
-            commonTlsContext.getCombinedValidationContext();
-        if (combinedValidationContext.hasValidationContextCertificateProviderInstance()) {
-          rootCertInstance =
-              combinedValidationContext.getValidationContextCertificateProviderInstance();
-        }
-        if (combinedValidationContext.hasDefaultValidationContext()) {
-          staticCertValidationContext = combinedValidationContext.getDefaultValidationContext();
-        }
-      } else if (commonTlsContext.hasValidationContextCertificateProviderInstance()) {
-        rootCertInstance = commonTlsContext.getValidationContextCertificateProviderInstance();
-      } else if (commonTlsContext.hasValidationContext()) {
-        staticCertValidationContext = commonTlsContext.getValidationContext();
-      }
-      CommonTlsContext.CertificateProviderInstance certInstance = null;
-      if (commonTlsContext.hasTlsCertificateCertificateProviderInstance()) {
-        certInstance = commonTlsContext.getTlsCertificateCertificateProviderInstance();
-      }
+      CertificateValidationContext staticCertValidationContext = getStaticValidationContext(
+          commonTlsContext);
+      CommonTlsContext.CertificateProviderInstance rootCertInstance = getRootCertProviderInstance(
+          commonTlsContext);
+      CommonTlsContext.CertificateProviderInstance certInstance = getCertProviderInstance(
+          commonTlsContext);
       return new CertProviderClientSslContextProvider(
           node,
           certProviders,

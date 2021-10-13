@@ -32,6 +32,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.InternalChannelz.SocketStats;
@@ -86,7 +87,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * need to call into this class to send a transaction (possibly waiting for the transport to become
  * ready).
  *
- * <p>The split between Outbound & Inbound helps reduce this risk, but not entirely remove it.
+ * <p>The split between Outbound &amp; Inbound helps reduce this risk, but not entirely remove it.
  *
  * <p>For this reason, while most state within this class is guarded by this instance, methods
  * exposed to individual stream instances need to use atomic or volatile types, since those calls
@@ -110,7 +111,8 @@ public abstract class BinderTransport
 
   /** The authority of the server. */
   @Internal
-  public static final Attributes.Key<String> SERVER_AUTHORITY = Attributes.Key.create("server-authority");
+  public static final Attributes.Key<String> SERVER_AUTHORITY =
+      Attributes.Key.create("server-authority");
 
   /** A transport attribute to hold the {@link InboundParcelablePolicy}. */
   @Internal
@@ -196,23 +198,13 @@ public abstract class BinderTransport
 
   @Nullable private IBinder outgoingBinder;
 
-  /** The number of outgoing bytes we've transmitted. */
-  private final AtomicLong numOutgoingBytes;
+  private final FlowController flowController;
 
   /** The number of incoming bytes we've received. */
   private final AtomicLong numIncomingBytes;
 
-  /** The number of our outgoing bytes our peer has told us it received. */
-  private long acknowledgedOutgoingBytes;
-
   /** The number of incoming bytes we've told our peer we've received. */
   private long acknowledgedIncomingBytes;
-
-  /**
-   * Whether there are too many unacknowledged outgoing bytes to allow more RPCs right now. This is
-   * volatile because it'll be read without holding the lock.
-   */
-  private volatile boolean transmitWindowFull;
 
   private BinderTransport(
       ObjectPool<ScheduledExecutorService> executorServicePool,
@@ -224,7 +216,7 @@ public abstract class BinderTransport
     scheduledExecutorService = executorServicePool.getObject();
     incomingBinder = new LeakSafeOneWayBinder(this);
     ongoingCalls = new ConcurrentHashMap<>();
-    numOutgoingBytes = new AtomicLong();
+    flowController = new FlowController(TRANSACTION_BYTES_WINDOW);
     numIncomingBytes = new AtomicLong();
   }
 
@@ -253,7 +245,7 @@ public abstract class BinderTransport
    * since this will be called while Outbound is held.
    */
   final boolean isReady() {
-    return !transmitWindowFull;
+    return !flowController.isTransmitWindowFull();
   }
 
   abstract void notifyShutdown(Status shutdownStatus);
@@ -409,11 +401,8 @@ public abstract class BinderTransport
     } catch (RemoteException re) {
       throw statusFromRemoteException(re).asException();
     }
-    long nob = numOutgoingBytes.addAndGet(dataSize);
-    if ((nob - acknowledgedOutgoingBytes) > TRANSACTION_BYTES_WINDOW) {
-      logger.log(Level.FINE, "transmist window full. Outgoing=" + nob + " Ack'd Outgoing=" +
-          acknowledgedOutgoingBytes + " " + this);
-      transmitWindowFull = true;
+    if (flowController.notifyBytesSent(dataSize)) {
+      logger.log(Level.FINE, "transmit window now full " + this);
     }
   }
 
@@ -530,23 +519,15 @@ public abstract class BinderTransport
 
   @GuardedBy("this")
   final void handleAcknowledgedBytes(long numBytes) {
-    // The remote side has acknowledged reception of rpc data.
-    // (update with Math.max in case transactions are delivered out of order).
-    acknowledgedOutgoingBytes = wrapAwareMax(acknowledgedOutgoingBytes, numBytes);
-    if ((numOutgoingBytes.get() - acknowledgedOutgoingBytes) < TRANSACTION_BYTES_WINDOW
-        && transmitWindowFull) {
-      logger.log(Level.FINE, 
+    if (flowController.handleAcknowledgedBytes(numBytes)) {
+      logger.log(
+          Level.FINE,
           "handleAcknowledgedBytes: Transmit Window No-Longer Full. Unblock calls: " + this);
       // We're ready again, and need to poke any waiting transactions.
-      transmitWindowFull = false;
       for (Inbound<?> inbound : ongoingCalls.values()) {
         inbound.onTransportReady();
       }
     }
-  }
-
-  private static final long wrapAwareMax(long a, long b) {
-    return a - b < 0 ? b : a;
   }
 
   /** Concrete client-side transport implementation. */
@@ -632,28 +613,28 @@ public abstract class BinderTransport
     public synchronized ClientStream newStream(
         final MethodDescriptor<?, ?> method,
         final Metadata headers,
-        final CallOptions callOptions) {
+        final CallOptions callOptions,
+        ClientStreamTracer[] tracers) {
       if (isShutdown()) {
-        return newFailingClientStream(shutdownStatus, callOptions, attributes, headers);
+        return newFailingClientStream(shutdownStatus, attributes, headers, tracers);
       } else {
         int callId = latestCallId++;
         if (latestCallId == LAST_CALL_ID) {
           latestCallId = FIRST_CALL_ID;
         }
+        StatsTraceContext statsTraceContext =
+            StatsTraceContext.newClientContext(tracers, attributes, headers);
         Inbound.ClientInbound inbound =
             new Inbound.ClientInbound(
                 this, attributes, callId, GrpcUtil.shouldBeCountedForInUse(callOptions));
         if (ongoingCalls.putIfAbsent(callId, inbound) != null) {
           Status failure = Status.INTERNAL.withDescription("Clashing call IDs");
           shutdownInternal(failure, true);
-          return newFailingClientStream(failure, callOptions, attributes, headers);
+          return newFailingClientStream(failure, attributes, headers, tracers);
         } else {
           if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
             clientTransportListener.transportInUse(true);
           }
-          StatsTraceContext statsTraceContext =
-              StatsTraceContext.newClientContext(callOptions, attributes, headers);
-
           Outbound.ClientOutbound outbound =
               new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
           if (method.getType().clientSendsOneMessage()) {
@@ -763,12 +744,12 @@ public abstract class BinderTransport
     }
 
     private static ClientStream newFailingClientStream(
-        Status failure, CallOptions callOptions, Attributes attributes, Metadata headers) {
+        Status failure, Attributes attributes, Metadata headers,
+        ClientStreamTracer[] tracers) {
       StatsTraceContext statsTraceContext =
-          StatsTraceContext.newClientContext(callOptions, attributes, headers);
+          StatsTraceContext.newClientContext(tracers, attributes, headers);
       statsTraceContext.clientOutboundHeaders();
-      statsTraceContext.streamClosed(failure);
-      return new FailingClientStream(failure);
+      return new FailingClientStream(failure, tracers);
     }
 
     private static InternalLogId buildLogId(

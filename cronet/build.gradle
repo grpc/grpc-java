@@ -15,7 +15,7 @@ repositories {
 android {
     compileSdkVersion 29
     defaultConfig {
-        minSdkVersion 16
+        minSdkVersion 19
         targetSdkVersion 29
         versionCode 1
         versionName "1.0"
@@ -27,6 +27,10 @@ android {
             minifyEnabled false
             consumerProguardFiles 'proguard-rules.pro'
         }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
     testOptions { unitTests { includeAndroidResources = true } }
     lintOptions { disable 'InvalidPackage' }

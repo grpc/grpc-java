@@ -82,7 +82,9 @@ final class RlsLoadBalancer extends LoadBalancer {
 
   @Override
   public void requestConnection() {
-    routeLookupClient.requestConnection();
+    if (routeLookupClient != null) {
+      routeLookupClient.requestConnection();
+    }
   }
 
   @Override

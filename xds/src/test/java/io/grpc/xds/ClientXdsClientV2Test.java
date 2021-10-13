@@ -516,6 +516,12 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     @Override
+    protected Message buildNewUpstreamTlsContext(String instanceName, String certName) {
+      return buildUpstreamTlsContext(instanceName, certName);
+    }
+
+
+    @Override
     protected Message buildCircuitBreakers(int highPriorityMaxRequests,
         int defaultPriorityMaxRequests) {
       return CircuitBreakers.newBuilder()
@@ -633,6 +639,11 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     @Override
     protected Message buildHttpConnectionManagerFilter(
         @Nullable String rdsName, @Nullable Message routeConfig, List<Message> httpFilters) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected Message buildTerminalFilter() {
       throw new UnsupportedOperationException();
     }
   }
