@@ -1,6 +1,6 @@
 plugins {
-    // ASSUMES GRADLE 2.12 OR HIGHER. Use plugin version 0.7.5 with earlier gradle versions
-    id 'com.google.protobuf' version '0.8.8'
+    // ASSUMES GRADLE 5.6 OR HIGHER. Use plugin version 0.8.10 with earlier gradle versions
+    id 'com.google.protobuf' version '0.8.17'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
     id 'war'
@@ -8,15 +8,15 @@ plugins {
 
 repositories {
     maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
+        url "https://maven-central.storage-download.googleapis.com/maven2/" }
     mavenLocal()
 }
 
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
-def grpcVersion = '1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.9.0'
+def grpcVersion = '1.42.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protocVersion = '3.17.2'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}",

@@ -4,11 +4,13 @@ plugins {
 }
 
 description = "gRPC: Servlet"
+
+// javax.servlet-api 4.0 requires a minimum of Java 8, so we might as well use that source level
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
-def jetty9Version = '9.4.43.v20210629'
-def jetty10Version = '10.0.6'
+def jetty9Version = '9.4.44.v20210927'
+def jetty10Version = '10.0.7'
 
 configurations {
     undertowTestImplementation.extendsFrom(testImplementation)
@@ -81,9 +83,9 @@ dependencies {
         exclude group: 'io.grpc', module: 'grpc-xds'
     }
 
-    undertowTestImplementation 'io.undertow:undertow-servlet:2.2.10.Final'
+    undertowTestImplementation 'io.undertow:undertow-servlet:2.2.12.Final'
 
-    tomcat9TestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:9.0.53'
+    tomcat9TestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:9.0.54'
 
     jetty9TestImplementation "org.eclipse.jetty:jetty-servlet:${jetty9Version}",
             "org.eclipse.jetty.http2:http2-server:${jetty9Version}",
