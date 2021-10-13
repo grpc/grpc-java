@@ -1,46 +1,74 @@
 plugins {
-    id 'base'
-    id "org.hibernate.jakarta-transformer"
+    id "java-library"
+    id "maven-publish"
 }
-repositories {
-    mavenCentral()
-}
-evaluationDependsOn ':grpc-servlet'
 
 description = "gRPC: Jakarta Servlet"
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
 
-// Repackage and shade grpc-servlet to support jakarta
-ext {
-    servlet = 'javax.servlet:javax.servlet-api:4.0.1'
-    jakartaServlet = 'jakarta.servlet:jakarta.servlet-api:5.0.0'
-}
-
-jakartaTransformation {
-    renameRules file('rules/jakarta-renames.properties')
-    versionRules file('rules/jakarta-versions.properties')
-
-    dependencyResolutions {
-        dependencySubstitution {
-            substitute module(project.servlet) with module(project.jakartaServlet)
-        }
-    }
-    shadow(project(':grpc-servlet')) {
-        withSources()
-        withJavadoc()
-    }
-}
-
-// Set up classpaths and source directories for different servlet implementation tests
+// Set up classpaths and source directories for different servlet tests
 configurations {
     jetty11TestImplementation.extendsFrom(testImplementation)
     tomcat10TestImplementation.extendsFrom(testImplementation)
     undertowTestImplementation.extendsFrom(testImplementation)
 }
 
+sourceSets {
+    undertowTest {
+        java {
+            include '**/Undertow*.java'
+        }
+    }
+    tomcat10Test {
+        java {
+            include '**/Tomcat*.java'
+        }
+    }
+    jetty11Test {
+        java {
+            include '**/Jetty*.java'
+        }
+    }
+}
+
+// Mechanically transform sources from grpc-servlet to use the corrected packages
+def migrate(String name, String inputDir, SourceSet... sourceSets) {
+    def outputDir = layout.buildDirectory.dir('generated/sources/jakarta-' + name)
+    sourceSets.each { it.java.srcDir outputDir }
+    return tasks.register('migrateSources' + name.capitalize(), Sync) { task ->
+        from(inputDir)
+        into(outputDir)
+        exclude '**/jetty/*'
+        filter { String line ->
+            // if in the main sources, remove all Jetty lines - must be skipped for tests
+            if (name.equals('main') && line.contains('Jetty')) {
+                return ''
+            }
+            return line.replaceAll('javax\\.servlet', 'jakarta.servlet')
+        }
+    }
+}
+
+compileJava.dependsOn migrate('main', '../src/main/java', sourceSets.main);
+def migrateTests = migrate('test', '../src/test/java', sourceSets.undertowTest, sourceSets.tomcat10Test, sourceSets.jetty11Test)
+compileUndertowTestJava.dependsOn migrateTests;
+compileTomcat10TestJava.dependsOn migrateTests;
+compileJetty11TestJava.dependsOn migrateTests;
+
+// Disable checkstyle for this project, since it consists only of generated code
+checkstyle.ignoreFailures = true
+
 dependencies {
+    api project(':grpc-core')
+    compileOnly 'jakarta.servlet:jakarta.servlet-api:5.0.0',
+            libraries.javax_annotation
+
+    implementation libraries.guava
+
     testImplementation project(':grpc-stub'),
             project(':grpc-protobuf'),
-            project(':grpc-servlet'),
+            project(':grpc-servlet-jakarta'),
             project(':grpc-netty'),
             project(':grpc-testing'),
             project(':grpc-auth'),
@@ -61,23 +89,24 @@ dependencies {
     undertowTestImplementation 'io.undertow:undertow-servlet-jakartaee9:2.2.10.Final'
 }
 
-sourceSets {
-    undertowTest {
-        java {
-            srcDir '../src/test/java'
-            include '**/Undertow*.java'
-        }
-    }
-}
-
-tasks.withType(JavaCompile) {
-    sourceCompatibility = 1.8
-    targetCompatibility = 1.8
-}
-
 // Set up individual classpaths for each test, to avoid any mismatch,
 // and ensure they are only used when supported by the current jvm
 check.dependsOn(tasks.register('undertowTest', Test) {
     classpath = sourceSets.undertowTest.runtimeClasspath
     testClassesDirs = sourceSets.undertowTest.output.classesDirs
+})
+check.dependsOn(tasks.register('tomcat10Test', Test) {
+    classpath = sourceSets.tomcat10Test.runtimeClasspath
+    testClassesDirs = sourceSets.tomcat10Test.output.classesDirs
+
+    // Provide a temporary directory for tomcat to be deleted after test finishes
+    def tomcatTempDir = "$buildDir/tomcat_catalina_base"
+    systemProperty 'catalina.base', tomcatTempDir
+    doLast {
+        file(tomcatTempDir).deleteDir()
+    }
+})
+check.dependsOn(tasks.register('jetty11Test', Test) {
+    classpath = sourceSets.jetty11Test.runtimeClasspath
+    testClassesDirs = sourceSets.jetty11Test.output.classesDirs
 })
