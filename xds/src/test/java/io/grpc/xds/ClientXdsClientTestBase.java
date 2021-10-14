@@ -274,14 +274,14 @@ public abstract class ClientXdsClientTestBase {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
     Bootstrapper.BootstrapInfo bootstrapInfo =
-        new Bootstrapper.BootstrapInfo(
-            Arrays.asList(
-                new Bootstrapper.ServerInfo(
-                    SERVER_URI, InsecureChannelCredentials.create(), useProtocolV3())),
-            EnvoyProtoData.Node.newBuilder().build(),
-            ImmutableMap.of("cert-instance-name",
-                new CertificateProviderInfo("file-watcher", ImmutableMap.<String, Object>of())),
-            null);
+        Bootstrapper.BootstrapInfo.builder()
+            .servers(Arrays.asList(
+                Bootstrapper.ServerInfo.create(
+                    SERVER_URI, InsecureChannelCredentials.create(), useProtocolV3())))
+            .node(EnvoyProtoData.Node.newBuilder().build())
+            .certProviders(ImmutableMap.of("cert-instance-name",
+                CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
+            .build();
     xdsClient =
         new ClientXdsClient(
             channel,
