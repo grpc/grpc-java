@@ -56,6 +56,7 @@ final class InProcessServer implements InternalServer {
   private final boolean anonymous;
   private final int maxInboundMetadataSize;
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
+  private final InProcessSocketAddress listenAddress;
   private ServerListener listener;
   private boolean shutdown;
   /** Defaults to be a SharedResourcePool. */
@@ -75,6 +76,7 @@ final class InProcessServer implements InternalServer {
     this.maxInboundMetadataSize = builder.maxInboundMetadataSize;
     this.streamTracerFactories =
         Collections.unmodifiableList(checkNotNull(streamTracerFactories, "streamTracerFactories"));
+    this.listenAddress = new InProcessSocketAddress(name, anonymous ? this : null);
   }
 
   @Override
@@ -91,7 +93,7 @@ final class InProcessServer implements InternalServer {
 
   @Override
   public SocketAddress getListenSocketAddress() {
-    return new InProcessSocketAddress(name, anonymous ? this : null);
+    return listenAddress;
   }
 
   @Override

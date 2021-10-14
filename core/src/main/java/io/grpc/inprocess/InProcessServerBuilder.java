@@ -86,13 +86,12 @@ public final class InProcessServerBuilder extends
 
   /**
    * Create a server builder for an anonymous in-process server.
-   * Anonymouns servers can only be connected to via their listen address,
+   * Anonymous servers can only be connected to via their listen address,
    * and can't be referenced by name.
-   * @param name a server identifier used for logging purposes only.
    * @return a new builder
    */
-  public static InProcessServerBuilder anonymous(String name) {
-    return new InProcessServerBuilder("anon:" + name, true);
+  public static InProcessServerBuilder anonymous() {
+    return new InProcessServerBuilder("anonymous", true);
   }
 
   /**

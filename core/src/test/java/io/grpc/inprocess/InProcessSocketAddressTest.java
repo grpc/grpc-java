@@ -71,7 +71,7 @@ public class InProcessSocketAddressTest {
 
 
   private InProcessServer createAnonymousServer() {
-    InProcessServerBuilder builder = InProcessServerBuilder.anonymous("anon");
+    InProcessServerBuilder builder = InProcessServerBuilder.anonymous();
     return new InProcessServer(builder, Collections.<ServerStreamTracer.Factory>emptyList());
   }
 }

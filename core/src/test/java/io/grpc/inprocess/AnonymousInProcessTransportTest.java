@@ -34,7 +34,7 @@ public final class AnonymousInProcessTransportTest extends InProcessTransportTes
   protected InternalServer newServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
     InProcessServerBuilder builder = InProcessServerBuilder
-        .anonymous(TRANSPORT_NAME)
+        .anonymous()
         .maxInboundMetadataSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE);
     return new InProcessServer(builder, streamTracerFactories);
   }
