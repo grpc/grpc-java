@@ -141,6 +141,7 @@ final class RlsProtoData {
   static final class RouteLookupConfig {
 
     private static final long MAX_AGE_MILLIS = TimeUnit.MINUTES.toMillis(5);
+    private static final long MAX_CACHE_SIZE = 5 * 1024 * 1024;
 
     private final ImmutableList<GrpcKeyBuilder> grpcKeyBuilders;
 
@@ -194,7 +195,7 @@ final class RlsProtoData {
       this.maxAgeInMillis = Math.min(maxAgeInMillis, MAX_AGE_MILLIS);
       this.staleAgeInMillis = Math.min(staleAgeInMillis, this.maxAgeInMillis);
       checkArgument(cacheSizeBytes > 0, "cacheSize must be positive");
-      this.cacheSizeBytes = cacheSizeBytes;
+      this.cacheSizeBytes = Math.min(cacheSizeBytes, MAX_CACHE_SIZE);
       this.validTargets = ImmutableList.copyOf(checkNotNull(validTargets, "validTargets"));
       this.defaultTarget = defaultTarget;
     }
