@@ -260,8 +260,7 @@ public abstract class ClientXdsClientTestBase {
     originalEnableFaultInjection = ClientXdsClient.enableFaultInjection;
     ClientXdsClient.enableFaultInjection = true;
     originalEnableRbac = ClientXdsClient.enableRbac;
-    assertThat(originalEnableRbac).isFalse();
-    ClientXdsClient.enableRbac = true;
+    assertThat(originalEnableRbac).isTrue();
     final String serverName = InProcessServerBuilder.generateName();
     cleanupRule.register(
         InProcessServerBuilder

@@ -138,8 +138,7 @@ public class ClientXdsClientDataTest {
     originalEnableRetry = ClientXdsClient.enableRetry;
     assertThat(originalEnableRetry).isTrue();
     originalEnableRbac = ClientXdsClient.enableRbac;
-    assertThat(originalEnableRbac).isFalse();
-    ClientXdsClient.enableRbac = true;
+    assertThat(originalEnableRbac).isTrue();
   }
 
   @After
