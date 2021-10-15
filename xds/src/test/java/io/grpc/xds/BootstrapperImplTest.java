@@ -27,6 +27,7 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
+import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Node;
@@ -675,6 +676,101 @@ public class BootstrapperImplTest {
     BootstrapperImpl.bootstrapConfigFromSysProp = rawData;
     bootstrapper.setFileReader(mock(BootstrapperImpl.FileReader.class));
     bootstrapper.bootstrap();
+  }
+
+  @Test
+  public void parseClientDefaultListenerResourceNameTemplate() throws Exception {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.clientDefaultListenerResourceNameTemplate()).isEqualTo("%s");
+
+    rawData = "{\n"
+        + "  \"client_default_listener_resource_name_template\": \"xdstp://a.com/faketype/%s\",\n"
+        + "  \"xds_servers\": [\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    info = bootstrapper.bootstrap();
+    assertThat(info.clientDefaultListenerResourceNameTemplate())
+        .isEqualTo("xdstp://a.com/faketype/%s");
+  }
+
+  @Test
+  public void parseAuthorities() throws Exception {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.authorities()).isEmpty();
+
+    rawData = "{\n"
+        + "  \"authorities\": {\n"
+        + "    \"a.com\": {\n"
+        + "      \"client_listener_resource_name_template\": \"xdstp://a.com/v1.Listener/id-%s\"\n"
+        + "    }\n"
+        + "  },\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    info = bootstrapper.bootstrap();
+    assertThat(info.authorities()).hasSize(1);
+    AuthorityInfo authorityInfo = info.authorities().get("a.com");
+    assertThat(authorityInfo.clientListenerResourceNameTemplate())
+        .isEqualTo("xdstp://a.com/v1.Listener/id-%s");
+    // Defaults to top-level servers.
+    assertThat(authorityInfo.xdsServers()).hasSize(1);
+    assertThat(authorityInfo.xdsServers().get(0).target()).isEqualTo(SERVER_URI);
+
+    rawData = "{\n"
+        + "  \"authorities\": {\n"
+        + "    \"a.com\": {\n"
+        + "      \"xds_servers\": [\n"
+        + "        {\n"
+        + "          \"server_uri\": \"td2.googleapis.com:443\",\n"
+        + "          \"channel_creds\": [\n"
+        + "            {\"type\": \"insecure\"}\n"
+        + "          ]\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  },\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    info = bootstrapper.bootstrap();
+    assertThat(info.authorities()).hasSize(1);
+    authorityInfo = info.authorities().get("a.com");
+    // Defaults to "xdstp://<authority_name>>/envoy.config.listener.v3.Listener/%s"
+    assertThat(authorityInfo.clientListenerResourceNameTemplate())
+        .isEqualTo("xdstp://a.com/envoy.config.listener.v3.Listener/%s");
+    assertThat(authorityInfo.xdsServers()).hasSize(1);
+    assertThat(authorityInfo.xdsServers().get(0).target()).isEqualTo("td2.googleapis.com:443");
   }
 
   private static BootstrapperImpl.FileReader createFileReader(
