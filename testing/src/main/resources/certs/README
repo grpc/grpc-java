@@ -62,6 +62,11 @@ common name which is set to *.test.google.com.
 $ openssl x509 -req -CA ca.pem -CAkey ca.key -CAcreateserial -in server1.csr \
   -out server1.pem -extensions req_ext -extfile server1-openssl.cnf -days 3650
 
+ecdsa.key is used to test keys with algorithm other than RSA:
+----------------------------------------------------------------------------
+$ openssl ecparam -name secp256k1 -genkey -noout -out ecdsa.pem
+$ openssl pkcs8 -topk8 -in ecdsa.pem -out ecdsa.key -nocrypt
+
 Clean up:
 ---------
 $ rm *.rsa
