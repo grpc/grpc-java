@@ -99,7 +99,6 @@ public final class NettyChannelBuilder extends
   private ObjectPool<? extends EventLoopGroup> eventLoopGroupPool = DEFAULT_EVENT_LOOP_GROUP_POOL;
   private boolean autoFlowControl = DEFAULT_AUTO_FLOW_CONTROL;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
-  private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
