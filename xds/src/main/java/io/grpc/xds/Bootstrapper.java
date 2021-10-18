@@ -83,6 +83,38 @@ public abstract class Bootstrapper {
     }
   }
 
+  @AutoValue
+  abstract static class AuthorityInfo {
+
+    /**
+     * A template for the name of the Listener resource to subscribe to for a gRPC client
+     * channel. Used only when the channel is created using an "xds:" URI with this authority
+     * name.
+     *
+     * <p>The token "%s", if present in this string, will be replaced with %-encoded
+     * service authority (i.e., the path part of the target URI used to create the gRPC channel).
+     *
+     * <p>Return value must start with {@code "xdstp://<authority_name>/"}.
+     */
+    abstract String clientListenerResourceNameTemplate();
+
+    /**
+     * Ordered list of xDS servers to contact for this authority.
+     *
+     * <p>If the same server is listed in multiple authorities, the entries will be de-duped (i.e.,
+     * resources for both authorities will be fetched on the same ADS stream).
+     *
+     * <p>If empty, the top-level server list {@link BootstrapInfo#servers()} will be used.
+     */
+    abstract ImmutableList<ServerInfo> xdsServers();
+
+    static AuthorityInfo create(
+        String clientListenerResourceNameTemplate, List<ServerInfo> xdsServers) {
+      return new AutoValue_Bootstrapper_AuthorityInfo(
+          clientListenerResourceNameTemplate, ImmutableList.copyOf(xdsServers));
+    }
+  }
+
   /**
    * Data class containing the results of reading bootstrap.
    */
@@ -99,17 +131,71 @@ public abstract class Bootstrapper {
     @Nullable
     public abstract ImmutableMap<String, CertificateProviderInfo> certProviders();
 
+    /**
+     * A template for the name of the Listener resource to subscribe to for a gRPC server.
+     *
+     * <p>If starts with "xdstp:", will be interpreted as a new-style name, in which case the
+     * authority of the URI will be used to select the relevant configuration in the
+     * "authorities" map. The token "%s", if present in this string, will be replaced with
+     * the IP and port on which the server is listening. If the template starts with "xdstp:",
+     * the replaced string will be %-encoded.
+     *
+     * <p>There is no default; if unset, xDS-based server creation fails.
+     */
     @Nullable
     public abstract String serverListenerResourceNameTemplate();
 
+    /**
+     * A template for the name of the Listener resource to subscribe to for a gRPC client channel.
+     * Used only when the channel is created with an "xds:" URI with no authority.
+     *
+     * <p>If starts with "xdstp:", will be interpreted as a new-style name, in which case the
+     * authority of the URI will be used to select the relevant configuration in the "authorities"
+     * map.
+     *
+     * <p>The token "%s", if present in this string, will be replaced with the service authority
+     * (i.e., the path part of the target URI used to create the gRPC channel). If the template
+     * starts with "xdstp:", the replaced string will be %-encoded.
+     *
+     * <p>Defaults to {@code "%s"}.
+     */
+    abstract String clientDefaultListenerResourceNameTemplate();
+
+    /**
+     * A map of authority name to corresponding configuration.
+     *
+     * <p>This is used in the following cases:
+     *
+     * <ul>
+     * <li>A gRPC client channel is created using an "xds:" URI that includes  an
+     * authority.</li>
+     *
+     * <li>A gRPC client channel is created using an "xds:" URI with no authority,
+     * but the "client_default_listener_resource_name_template" field above turns it into an
+     * "xdstp:" URI.</li>
+     *
+     * <li>A gRPC server is created and the "server_listener_resource_name_template" field is an
+     * "xdstp:" URI.</li>
+     * </ul>
+     *
+     * <p>In any of those cases, it is an error if the specified authority is not present in this
+     * map.
+     *
+     * <p>Defaults to an empty map.
+     */
+    abstract ImmutableMap<String, AuthorityInfo> authorities();
+
     @VisibleForTesting
     static Builder builder() {
-      return new AutoValue_Bootstrapper_BootstrapInfo.Builder();
+      return new AutoValue_Bootstrapper_BootstrapInfo.Builder()
+          .clientDefaultListenerResourceNameTemplate("%s")
+          .authorities(ImmutableMap.<String, AuthorityInfo>of());
     }
 
     @AutoValue.Builder
     @VisibleForTesting
     abstract static class Builder {
+
       abstract Builder servers(List<ServerInfo> servers);
 
       abstract Builder node(Node node);
@@ -118,6 +204,11 @@ public abstract class Bootstrapper {
 
       abstract Builder serverListenerResourceNameTemplate(
           @Nullable String serverListenerResourceNameTemplate);
+
+      abstract Builder clientDefaultListenerResourceNameTemplate(
+          String clientDefaultListenerResourceNameTemplate);
+
+      abstract Builder authorities(Map<String, AuthorityInfo> authorities);
 
       abstract BootstrapInfo build();
     }

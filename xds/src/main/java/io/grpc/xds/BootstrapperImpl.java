@@ -17,6 +17,8 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Internal;
@@ -33,7 +35,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -121,41 +122,14 @@ public class BootstrapperImpl extends Bootstrapper {
 
   @Override
   BootstrapInfo bootstrap(Map<String, ?> rawData) throws XdsInitializationException {
-    List<ServerInfo> servers = new ArrayList<>();
+    BootstrapInfo.Builder builder = BootstrapInfo.builder();
+
     List<?> rawServerConfigs = JsonUtil.getList(rawData, "xds_servers");
     if (rawServerConfigs == null) {
       throw new XdsInitializationException("Invalid bootstrap: 'xds_servers' does not exist.");
     }
-    logger.log(XdsLogLevel.INFO, "Configured with {0} xDS servers", rawServerConfigs.size());
-    // TODO(chengyuanzhang): require at least one server URI.
-    List<Map<String, ?>> serverConfigList = JsonUtil.checkObjectList(rawServerConfigs);
-    for (Map<String, ?> serverConfig : serverConfigList) {
-      String serverUri = JsonUtil.getString(serverConfig, "server_uri");
-      if (serverUri == null) {
-        throw new XdsInitializationException("Invalid bootstrap: missing 'server_uri'");
-      }
-      logger.log(XdsLogLevel.INFO, "xDS server URI: {0}", serverUri);
-
-      List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
-      if (rawChannelCredsList == null || rawChannelCredsList.isEmpty()) {
-        throw new XdsInitializationException(
-            "Invalid bootstrap: server " + serverUri + " 'channel_creds' required");
-      }
-      ChannelCredentials channelCredentials =
-          parseChannelCredentials(JsonUtil.checkObjectList(rawChannelCredsList), serverUri);
-      if (channelCredentials == null) {
-        throw new XdsInitializationException(
-            "Server " + serverUri + ": no supported channel credentials found");
-      }
-
-      boolean useProtocolV3 = false;
-      List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
-      if (serverFeatures != null) {
-        logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
-        useProtocolV3 = serverFeatures.contains(XDS_V3_SERVER_FEATURE);
-      }
-      servers.add(ServerInfo.create(serverUri, channelCredentials, useProtocolV3));
-    }
+    List<ServerInfo> servers = parseServerInfos(rawServerConfigs, logger);
+    builder.servers(servers);
 
     Node.Builder nodeBuilder = Node.newBuilder();
     Map<String, ?> rawNode = JsonUtil.getObject(rawData, "node");
@@ -200,29 +174,110 @@ public class BootstrapperImpl extends Bootstrapper {
     nodeBuilder.setUserAgentName(buildVersion.getUserAgent());
     nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
     nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
+    builder.node(nodeBuilder.build());
 
     Map<String, ?> certProvidersBlob = JsonUtil.getObject(rawData, "certificate_providers");
-    Map<String, CertificateProviderInfo> certProviders = null;
     if (certProvidersBlob != null) {
-      certProviders = new HashMap<>(certProvidersBlob.size());
+      logger.log(XdsLogLevel.INFO, "Configured with {0} cert providers", certProvidersBlob.size());
+      Map<String, CertificateProviderInfo> certProviders = new HashMap<>(certProvidersBlob.size());
       for (String name : certProvidersBlob.keySet()) {
         Map<String, ?> valueMap = JsonUtil.getObject(certProvidersBlob, name);
         String pluginName =
             checkForNull(JsonUtil.getString(valueMap, "plugin_name"), "plugin_name");
+        logger.log(XdsLogLevel.INFO, "cert provider: {0}, plugin name: {1}", name, pluginName);
         Map<String, ?> config = checkForNull(JsonUtil.getObject(valueMap, "config"), "config");
         CertificateProviderInfo certificateProviderInfo =
             CertificateProviderInfo.create(pluginName, config);
         certProviders.put(name, certificateProviderInfo);
       }
+      builder.certProviders(certProviders);
     }
+
     String grpcServerResourceId =
         JsonUtil.getString(rawData, "server_listener_resource_name_template");
-    return BootstrapInfo.builder()
-        .servers(servers)
-        .node(nodeBuilder.build())
-        .certProviders(certProviders)
-        .serverListenerResourceNameTemplate(grpcServerResourceId)
-        .build();
+    logger.log(
+        XdsLogLevel.INFO, "server_listener_resource_name_template: {0}", grpcServerResourceId);
+    builder.serverListenerResourceNameTemplate(grpcServerResourceId);
+
+    String grpcClientDefaultListener =
+        JsonUtil.getString(rawData, "client_default_listener_resource_name_template");
+    logger.log(
+        XdsLogLevel.INFO, "client_default_listener_resource_name_template: {0}",
+        grpcClientDefaultListener);
+    if (grpcClientDefaultListener != null) {
+      builder.clientDefaultListenerResourceNameTemplate(grpcClientDefaultListener);
+    }
+
+    Map<String, ?> rawAuthoritiesMap =
+        JsonUtil.getObject(rawData, "authorities");
+    ImmutableMap.Builder<String, AuthorityInfo> authorityInfoMapBuilder = ImmutableMap.builder();
+    if (rawAuthoritiesMap != null) {
+      logger.log(
+          XdsLogLevel.INFO, "Configured with {0} xDS server authorities", rawAuthoritiesMap.size());
+      for (String authorityName : rawAuthoritiesMap.keySet()) {
+        logger.log(XdsLogLevel.INFO, "xDS server authority: {0}", authorityName);
+        Map<String, ?> rawAuthority = JsonUtil.getObject(rawAuthoritiesMap, authorityName);
+        String clientListnerTemplate =
+            JsonUtil.getString(rawAuthority, "client_listener_resource_name_template");
+        logger.log(
+            XdsLogLevel.INFO, "client_listener_resource_name_template: {0}", clientListnerTemplate);
+        String prefix = "xdstp://" + authorityName + "/";
+        if (clientListnerTemplate == null) {
+          clientListnerTemplate = prefix + "envoy.config.listener.v3.Listener/%s";
+        } else if (!clientListnerTemplate.startsWith(prefix)) {
+          throw new XdsInitializationException(
+              "client_listener_resource_name_template: '" + clientListnerTemplate
+                  + "' does not start with " + prefix);
+        }
+        List<?> rawAuthorityServers = JsonUtil.getList(rawAuthority, "xds_servers");
+        List<ServerInfo> authorityServers;
+        if (rawAuthorityServers == null || rawAuthorityServers.isEmpty()) {
+          authorityServers = servers;
+        } else {
+          authorityServers = parseServerInfos(rawAuthorityServers, logger);
+        }
+        authorityInfoMapBuilder.put(
+            authorityName, AuthorityInfo.create(clientListnerTemplate, authorityServers));
+      }
+      builder.authorities(authorityInfoMapBuilder.build());
+    }
+
+    return builder.build();
+  }
+
+  private static List<ServerInfo> parseServerInfos(List<?> rawServerConfigs, XdsLogger logger)
+      throws XdsInitializationException {
+    logger.log(XdsLogLevel.INFO, "Configured with {0} xDS servers", rawServerConfigs.size());
+    ImmutableList.Builder<ServerInfo> servers = ImmutableList.builder();
+    List<Map<String, ?>> serverConfigList = JsonUtil.checkObjectList(rawServerConfigs);
+    for (Map<String, ?> serverConfig : serverConfigList) {
+      String serverUri = JsonUtil.getString(serverConfig, "server_uri");
+      if (serverUri == null) {
+        throw new XdsInitializationException("Invalid bootstrap: missing 'server_uri'");
+      }
+      logger.log(XdsLogLevel.INFO, "xDS server URI: {0}", serverUri);
+
+      List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
+      if (rawChannelCredsList == null || rawChannelCredsList.isEmpty()) {
+        throw new XdsInitializationException(
+            "Invalid bootstrap: server " + serverUri + " 'channel_creds' required");
+      }
+      ChannelCredentials channelCredentials =
+          parseChannelCredentials(JsonUtil.checkObjectList(rawChannelCredsList), serverUri);
+      if (channelCredentials == null) {
+        throw new XdsInitializationException(
+            "Server " + serverUri + ": no supported channel credentials found");
+      }
+
+      boolean useProtocolV3 = false;
+      List<String> serverFeatures = JsonUtil.getListOfStrings(serverConfig, "server_features");
+      if (serverFeatures != null) {
+        logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
+        useProtocolV3 = serverFeatures.contains(XDS_V3_SERVER_FEATURE);
+      }
+      servers.add(ServerInfo.create(serverUri, channelCredentials, useProtocolV3));
+    }
+    return servers.build();
   }
 
   @VisibleForTesting
