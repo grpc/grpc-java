@@ -47,21 +47,32 @@ public final class GoogleDefaultChannelCredentials {
     return newBuilder().build();
   }
 
+  /**
+   * Returns a new instance of {@link Builder}.
+   *
+   * @since 1.42.0
+   */
   public static Builder newBuilder() {
     return new Builder();
   }
 
-  /** Builder for {@link GoogleDefaultChannelCredentials} instances. */
+  /**
+   * Builder for {@link GoogleDefaultChannelCredentials} instances.
+   *
+   * @since 1.42.0
+   */
   public static final class Builder {
     private CallCredentials callCredentials;
 
-    /** Construct GoogleDefaultChannelCredentials with a given call credential. */
+    private Builder() {}
+
+    /** Constructs GoogleDefaultChannelCredentials with a given call credential. */
     public Builder callCredentials(CallCredentials callCreds) {
       callCredentials = callCreds;
       return this;
     }
 
-    /** Build a GoogleDefaultChannelCredentials instance. */
+    /** Builds a GoogleDefaultChannelCredentials instance. */
     public ChannelCredentials build() {
       ChannelCredentials nettyCredentials =
           InternalNettyChannelCredentials.create(createClientFactory());
