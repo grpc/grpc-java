@@ -57,7 +57,7 @@ public class SharedXdsClientPoolProviderTest {
   @Test
   public void noServer() throws XdsInitializationException {
     BootstrapInfo bootstrapInfo =
-        new BootstrapInfo(Collections.<ServerInfo>emptyList(), node, null, null);
+        BootstrapInfo.builder().servers(Collections.<ServerInfo>emptyList()).node(node).build();
     when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
     SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider(bootstrapper);
     thrown.expect(XdsInitializationException.class);
@@ -68,9 +68,9 @@ public class SharedXdsClientPoolProviderTest {
 
   @Test
   public void sharedXdsClientObjectPool() throws XdsInitializationException {
-    ServerInfo server = new ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), false);
+    ServerInfo server = ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create(), false);
     BootstrapInfo bootstrapInfo =
-        new BootstrapInfo(Collections.singletonList(server), node, null, null);
+        BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
 
     SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider(bootstrapper);
@@ -85,9 +85,9 @@ public class SharedXdsClientPoolProviderTest {
 
   @Test
   public void refCountedXdsClientObjectPool_delayedCreation() {
-    ServerInfo server = new ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), false);
+    ServerInfo server = ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create(), false);
     BootstrapInfo bootstrapInfo =
-        new BootstrapInfo(Collections.singletonList(server), node, null, null);
+        BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     RefCountedXdsClientObjectPool xdsClientPool = new RefCountedXdsClientObjectPool(bootstrapInfo);
     assertThat(xdsClientPool.getXdsClientForTest()).isNull();
     assertThat(xdsClientPool.getChannelForTest()).isNull();
@@ -98,9 +98,9 @@ public class SharedXdsClientPoolProviderTest {
 
   @Test
   public void refCountedXdsClientObjectPool_refCounted() {
-    ServerInfo server = new ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), false);
+    ServerInfo server = ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create(), false);
     BootstrapInfo bootstrapInfo =
-        new BootstrapInfo(Collections.singletonList(server), node, null, null);
+        BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     RefCountedXdsClientObjectPool xdsClientPool = new RefCountedXdsClientObjectPool(bootstrapInfo);
     // getObject once
     XdsClient xdsClient = xdsClientPool.getObject();
@@ -118,9 +118,9 @@ public class SharedXdsClientPoolProviderTest {
 
   @Test
   public void refCountedXdsClientObjectPool_getObjectCreatesNewInstanceIfAlreadyShutdown() {
-    ServerInfo server = new ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), false);
+    ServerInfo server = ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create(), false);
     BootstrapInfo bootstrapInfo =
-        new BootstrapInfo(Collections.singletonList(server), node, null, null);
+        BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     RefCountedXdsClientObjectPool xdsClientPool = new RefCountedXdsClientObjectPool(bootstrapInfo);
     XdsClient xdsClient1 = xdsClientPool.getObject();
     ManagedChannel channel1 = xdsClientPool.getChannelForTest();

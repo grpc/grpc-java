@@ -2,7 +2,6 @@
 
 _JavaRpcToolchainInfo = provider(
     fields = [
-        "host_javabase",
         "java_toolchain",
         "plugin",
         "plugin_arg",
@@ -14,7 +13,6 @@ _JavaRpcToolchainInfo = provider(
 def _java_rpc_toolchain_impl(ctx):
     return [
         _JavaRpcToolchainInfo(
-            host_javabase = ctx.attr._host_javabase,
             java_toolchain = ctx.attr._java_toolchain,
             plugin = ctx.executable.plugin,
             plugin_arg = ctx.attr.plugin_arg,
@@ -43,10 +41,6 @@ java_rpc_toolchain = rule(
         ),
         "_java_toolchain": attr.label(
             default = Label("@bazel_tools//tools/jdk:current_java_toolchain"),
-        ),
-        "_host_javabase": attr.label(
-            cfg = "host",
-            default = Label("@bazel_tools//tools/jdk:current_java_runtime"),
         ),
     },
     provides = [
@@ -106,7 +100,6 @@ def _java_rpc_library_impl(ctx):
     java_info = java_common.compile(
         ctx,
         java_toolchain = toolchain.java_toolchain[java_common.JavaToolchainInfo],
-        host_javabase = toolchain.host_javabase[java_common.JavaRuntimeInfo],
         source_jars = [srcjar],
         output = ctx.outputs.jar,
         output_source_jar = ctx.outputs.srcjar,

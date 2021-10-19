@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.BinaryLog;
 import io.grpc.ClientInterceptor;
@@ -41,6 +42,14 @@ import javax.annotation.Nullable;
  */
 public abstract class AbstractManagedChannelImplBuilder
     <T extends AbstractManagedChannelImplBuilder<T>> extends ManagedChannelBuilder<T> {
+
+  /**
+   * Added for ABI compatibility.
+   *
+   * <p>See details in {@link #maxInboundMessageSize(int)}.
+   * TODO(sergiitk): move back to concrete classes as a private field, when this class is removed.
+   */
+  protected int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
   /**
    * The default constructor.
@@ -161,7 +170,31 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public T maxInboundMessageSize(int max) {
-    delegate().maxInboundMessageSize(max);
+    /*
+     Why this method is not delegating, as the rest of the methods?
+
+     In refactoring described in #7211, the implementation of #maxInboundMessageSize(int)
+     (and its corresponding field) was pulled down from internal AbstractManagedChannelImplBuilder
+     to concrete classes that actually enforce this setting. For the same reason, it wasn't ported
+     to ManagedChannelImplBuilder (the #delegate()).
+
+     Then AbstractManagedChannelImplBuilder was brought back to fix ABI backward compatibility,
+     and temporarily turned into a ForwardingChannelBuilder, ref PR #7564. Eventually it will
+     be deleted, after a period with "bridge" ABI solution introduced in #7834.
+
+     However, restoring AbstractManagedChannelImplBuilder unintentionally made ABI of
+     #maxInboundMessageSize(int) implemented by the concrete classes backward incompatible:
+     pre-refactoring builds expect it to be a method of AbstractManagedChannelImplBuilder,
+     and not concrete classes, ref #8313.
+
+     The end goal is to keep #maxInboundMessageSize(int) only in concrete classes that enforce it.
+     To fix method's ABI, we temporary reintroduce it to the original layer it was removed from:
+     AbstractManagedChannelImplBuilder. This class' only intention is to provide short-term
+     ABI compatibility. Once we move forward with dropping the ABI, both fixes are no longer
+     necessary, and both will perish with removing AbstractManagedChannelImplBuilder.
+    */
+    Preconditions.checkArgument(max >= 0, "negative max");
+    maxInboundMessageSize = max;
     return thisT();
   }
 

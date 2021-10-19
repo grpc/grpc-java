@@ -49,12 +49,13 @@ public class XdsServerTestHelper {
   private static final EnvoyProtoData.Node BOOTSTRAP_NODE =
       EnvoyProtoData.Node.newBuilder().setId(NODE_ID).build();
   static final Bootstrapper.BootstrapInfo BOOTSTRAP_INFO =
-      new Bootstrapper.BootstrapInfo(
-          Arrays.asList(
-              new Bootstrapper.ServerInfo(SERVER_URI, InsecureChannelCredentials.create(), true)),
-          BOOTSTRAP_NODE,
-          null,
-          "grpc/server?udpa.resource.listening_address=%s");
+      Bootstrapper.BootstrapInfo.builder()
+          .servers(Arrays.asList(
+              Bootstrapper.ServerInfo.create(
+                  SERVER_URI, InsecureChannelCredentials.create(), true)))
+          .node(BOOTSTRAP_NODE)
+          .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
+          .build();
 
   static void generateListenerUpdate(FakeXdsClient xdsClient,
                                      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
@@ -113,6 +114,7 @@ public class XdsServerTestHelper {
         implements XdsNameResolverProvider.XdsClientPoolFactory {
 
     private XdsClient xdsClient;
+    Map<String, ?> savedBootstrap;
 
     FakeXdsClientPoolFactory(XdsClient xdsClient) {
       this.xdsClient = xdsClient;
@@ -120,7 +122,7 @@ public class XdsServerTestHelper {
 
     @Override
     public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      throw new UnsupportedOperationException("Should not be called");
+      this.savedBootstrap = bootstrap;
     }
 
     @Override

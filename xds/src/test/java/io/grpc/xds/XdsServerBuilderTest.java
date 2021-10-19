@@ -40,7 +40,9 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketAddress;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -65,6 +67,7 @@ public class XdsServerBuilderTest {
   private int port;
   private TlsContextManager tlsContextManager;
   private FakeXdsClient xdsClient = new FakeXdsClient();
+  private FakeXdsClientPoolFactory xdsClientPoolFactory = new FakeXdsClientPoolFactory(xdsClient);
 
   private void buildServer(XdsServerBuilder.XdsServingStatusListener xdsServingStatusListener)
       throws IOException {
@@ -77,7 +80,7 @@ public class XdsServerBuilderTest {
     builder =
         XdsServerBuilder.forPort(
             port, XdsServerCredentials.create(InsecureServerCredentials.create()));
-    builder.xdsClientPoolFactory(new FakeXdsClientPoolFactory(xdsClient));
+    builder.xdsClientPoolFactory(xdsClientPoolFactory);
     if (xdsServingStatusListener != null) {
       builder.xdsServingStatusListener(xdsServingStatusListener);
     }
@@ -291,5 +294,13 @@ public class XdsServerBuilderTest {
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().contains("drain grace time");
     }
+  }
+
+  @Test
+  public void testOverrideBootstrap() throws Exception {
+    Map<String, Object> b = new HashMap<>();
+    buildBuilder(null);
+    builder.overrideBootstrapForTest(b);
+    assertThat(xdsClientPoolFactory.savedBootstrap).isEqualTo(b);
   }
 }

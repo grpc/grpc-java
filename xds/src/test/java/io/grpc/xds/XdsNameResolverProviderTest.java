@@ -164,7 +164,7 @@ public class XdsNameResolverProviderTest {
             .newNameResolver(URI.create("no-scheme:///localhost"), args);
     resolver.start(mock(NameResolver.Listener2.class));
     assertThat(resolver).isInstanceOf(XdsNameResolver.class);
-    assertThat(((XdsNameResolver)resolver).getXdsClient().getBootstrapInfo().getNode().getId())
+    assertThat(((XdsNameResolver)resolver).getXdsClient().getBootstrapInfo().node().getId())
             .isEqualTo("ENVOY_NODE_ID");
     resolver.shutdown();
     registry.deregister(provider);

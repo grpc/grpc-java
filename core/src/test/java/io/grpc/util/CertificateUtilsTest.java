@@ -43,6 +43,7 @@ public class CertificateUtilsTest {
   public static final String BAD_PEM_CONTENT = "----BEGIN PRIVATE KEY-----\n"
       + "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDvdzKDTYvRgjBO\n"
       + "-----END PRIVATE KEY-----";
+  public static final String ECDSA_KEY_FILE = "ecdsa.key";
 
   @Test
   public void readPemCertFile() throws CertificateException, IOException {
@@ -99,6 +100,15 @@ public class CertificateUtilsTest {
       // The error messages for OpenJDK 11 and 8 are different, and for Windows it will generate a
       // different exception, so we only check if a general exception is thrown.
     }
+  }
+
+  @Test
+  public void readEcdsaKeyFile() throws Exception {
+    InputStream in = TestUtils.class.getResourceAsStream("/certs/" + ECDSA_KEY_FILE);
+    PrivateKey key = CertificateUtils.getPrivateKey(in);
+    // Checks some information on the test key.
+    assertThat(key.getAlgorithm()).isEqualTo("EC");
+    assertThat(key.getFormat()).isEqualTo("PKCS#8");
   }
 
 }

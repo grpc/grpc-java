@@ -31,7 +31,7 @@ import java.io.InputStream;
 import javax.annotation.Nullable;
 
 /**
- * Helper class for reading & writing metadata to parcels.
+ * Helper class for reading &amp; writing metadata to parcels.
  *
  * <p>Metadata is written to a parcel as a single int for the number of name/value pairs, followed
  * by the following pattern for each pair.

@@ -256,7 +256,8 @@ public class RbacFilterTest {
     verify(mockHandler, never()).startCall(eq(mockServerCall), any(Metadata.class));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(mockServerCall).close(captor.capture(), any(Metadata.class));
-    assertThat(captor.getValue().getCode()).isEqualTo(Status.UNAUTHENTICATED.getCode());
+    assertThat(captor.getValue().getCode()).isEqualTo(Status.PERMISSION_DENIED.getCode());
+    assertThat(captor.getValue().getDescription()).isEqualTo("Access Denied");
     verify(mockServerCall).getAttributes();
     verifyNoMoreInteractions(mockServerCall);
 

@@ -90,7 +90,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           } else {
             bootstrapInfo = bootstrapper.bootstrap();
           }
-          if (bootstrapInfo.getServers().isEmpty()) {
+          if (bootstrapInfo.servers().isEmpty()) {
             throw new XdsInitializationException("No xDS server provided");
           }
           ref = xdsClientPool = new RefCountedXdsClientObjectPool(bootstrapInfo);
@@ -128,9 +128,9 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     public XdsClient getObject() {
       synchronized (lock) {
         if (refCount == 0) {
-          ServerInfo serverInfo = bootstrapInfo.getServers().get(0);  // use first server
-          String target = serverInfo.getTarget();
-          ChannelCredentials channelCredentials = serverInfo.getChannelCredentials();
+          ServerInfo serverInfo = bootstrapInfo.servers().get(0);  // use first server
+          String target = serverInfo.target();
+          ChannelCredentials channelCredentials = serverInfo.channelCredentials();
           channel = Grpc.newChannelBuilder(target, channelCredentials)
               .keepAliveTime(5, TimeUnit.MINUTES)
               .build();
