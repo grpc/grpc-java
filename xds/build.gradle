@@ -39,6 +39,7 @@ dependencies {
             libraries.autovalue_annotation,
             libraries.opencensus_proto,
             libraries.protobuf_util
+    implementation project(path: ':grpc-rls')
     def nettyDependency = implementation project(':grpc-netty')
 
     testImplementation project(':grpc-core').sourceSets.test.output

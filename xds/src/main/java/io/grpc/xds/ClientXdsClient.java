@@ -73,7 +73,6 @@ import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
-import io.grpc.xds.Filter.ConfigOrError;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.Filter.ServerInterceptorBuilder;
