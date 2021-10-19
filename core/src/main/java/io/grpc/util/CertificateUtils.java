@@ -56,8 +56,7 @@ public final class CertificateUtils {
 
   /**
    * Generates a {@link PrivateKey} from a PEM file.
-   * The key should be PKCS #8 formatted. The key algorithm should be "RSA", "DiffieHellman",
-   * "DSA", or "EC".
+   * The key should be PKCS #8 formatted. The key algorithm should be "RSA" or "EC".
    * The PEM file should contain one item in Base64 encoding, with plain-text headers and footers
    * (e.g. -----BEGIN PRIVATE KEY----- and -----END PRIVATE KEY-----).
    *
@@ -86,13 +85,9 @@ public final class CertificateUtils {
       return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
     } catch (InvalidKeySpecException ignore) {
       try {
-        return KeyFactory.getInstance("DSA").generatePrivate(keySpec);
-      } catch (InvalidKeySpecException ignore2) {
-        try {
-          return KeyFactory.getInstance("EC").generatePrivate(keySpec);
-        } catch (InvalidKeySpecException e) {
-          throw new InvalidKeySpecException("Neither RSA, DSA nor EC worked", e);
-        }
+        return KeyFactory.getInstance("EC").generatePrivate(keySpec);
+      } catch (InvalidKeySpecException e) {
+        throw new InvalidKeySpecException("Neither RSA nor EC worked", e);
       }
     }
   }
