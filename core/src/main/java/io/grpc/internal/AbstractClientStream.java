@@ -217,7 +217,7 @@ public abstract class AbstractClientStream extends AbstractStream
     return transportTracer;
   }
 
-  /** This should only called from the transport thread. */
+  /** This should only be called from the transport thread. */
   protected abstract static class TransportState extends AbstractStream.TransportState {
     /** Whether listener.closed() has been called. */
     private final StatsTraceContext statsTraceCtx;

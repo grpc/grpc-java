@@ -164,7 +164,7 @@ class NettyServerStream extends AbstractServerStream {
     }
   }
 
-  /** This should only called from the transport thread. */
+  /** This should only be called from the transport thread. */
   public static class TransportState extends AbstractServerStream.TransportState
       implements StreamIdHolder {
     private final Http2Stream http2Stream;

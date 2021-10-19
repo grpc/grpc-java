@@ -171,7 +171,7 @@ public abstract class AbstractServerStream extends AbstractStream
   }
 
   /**
-   * This should only called from the transport thread (except for private interactions with
+   * This should only be called from the transport thread (except for private interactions with
    * {@code AbstractServerStream}).
    */
   protected abstract static class TransportState extends AbstractStream.TransportState {

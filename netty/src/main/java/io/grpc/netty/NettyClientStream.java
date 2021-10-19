@@ -219,7 +219,7 @@ class NettyClientStream extends AbstractClientStream {
     }
   }
 
-  /** This should only called from the transport thread. */
+  /** This should only be called from the transport thread. */
   public abstract static class TransportState extends Http2ClientStreamTransportState
       implements StreamIdHolder {
     private static final int NON_EXISTENT_ID = -1;
