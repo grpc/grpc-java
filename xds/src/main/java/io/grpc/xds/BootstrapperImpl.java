@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelCredentials;
@@ -62,6 +63,10 @@ public class BootstrapperImpl extends Bootstrapper {
   @VisibleForTesting
   static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
       "envoy.lb.does_not_support_overprovisioning";
+  @VisibleForTesting
+  static boolean enableFederation =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
+          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
 
   private final XdsLogger logger;
   private FileReader reader = LocalFileReader.INSTANCE;
@@ -199,6 +204,9 @@ public class BootstrapperImpl extends Bootstrapper {
         XdsLogLevel.INFO, "server_listener_resource_name_template: {0}", grpcServerResourceId);
     builder.serverListenerResourceNameTemplate(grpcServerResourceId);
 
+    if (!enableFederation) {
+      return builder.build();
+    }
     String grpcClientDefaultListener =
         JsonUtil.getString(rawData, "client_default_listener_resource_name_template");
     logger.log(
