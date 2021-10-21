@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import com.google.auto.value.AutoValue;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -111,19 +112,20 @@ final class RlsClusterSpecifierPlugin implements ClusterSpecifierPlugin {
           configProto.getCacheSizeBytes(),
           configProto.getValidTargetsList(),
           configProto.getDefaultTarget());
-      return ConfigOrError.fromConfig(new RlsPluginConfig(config));
+      return ConfigOrError.fromConfig(RlsPluginConfig.create(config));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
           "Error parsing RouteLookupConfig: \n" + configProto + "\n reason: " + e);
     }
   }
 
-  static class RlsPluginConfig implements PluginConfig {
+  @AutoValue
+  abstract static class RlsPluginConfig implements PluginConfig {
 
-    final RlsProtoData.RouteLookupConfig config;
+    abstract RlsProtoData.RouteLookupConfig config();
 
-    RlsPluginConfig(RlsProtoData.RouteLookupConfig config) {
-      this.config = config;
+    static RlsPluginConfig create(RlsProtoData.RouteLookupConfig config) {
+      return new AutoValue_RlsClusterSpecifierPlugin_RlsPluginConfig(config);
     }
 
     @Override

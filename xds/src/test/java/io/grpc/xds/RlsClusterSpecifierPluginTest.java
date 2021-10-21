@@ -60,7 +60,7 @@ public class RlsClusterSpecifierPluginTest {
     RlsPluginConfig config =
         RlsClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(routeLookupConfig)).config;
     assertThat(config.typeUrl()).isEqualTo("type.googleapis.com/grpc.lookup.v1.RouteLookupConfig");
-    assertThat(config.config).isEqualTo(
+    assertThat(config.config()).isEqualTo(
         new RlsProtoData.RouteLookupConfig(
             ImmutableList.of(
                 new RlsProtoData.GrpcKeyBuilder(
@@ -98,7 +98,7 @@ public class RlsClusterSpecifierPluginTest {
     RlsPluginConfig config =
         RlsClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(routeLookupConfig)).config;
     assertThat(config.typeUrl()).isEqualTo("type.googleapis.com/grpc.lookup.v1.RouteLookupConfig");
-    assertThat(config.config).isEqualTo(
+    assertThat(config.config()).isEqualTo(
         new RlsProtoData.RouteLookupConfig(
             ImmutableList.of(
                 new RlsProtoData.GrpcKeyBuilder(
