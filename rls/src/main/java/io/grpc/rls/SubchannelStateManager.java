@@ -16,6 +16,7 @@
 
 package io.grpc.rls;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ConnectivityState;
 import javax.annotation.Nullable;
 
@@ -35,6 +36,7 @@ interface SubchannelStateManager {
    * {@code null}.
    */
   @Nullable
+  @VisibleForTesting
   ConnectivityState getState(String name);
 
   /** Returns representative subchannel status from all registered subchannels. */

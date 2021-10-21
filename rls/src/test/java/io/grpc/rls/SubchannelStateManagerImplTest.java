@@ -90,5 +90,13 @@ public class SubchannelStateManagerImplTest {
 
     assertThat(subchannelStateManager.getAggregatedState())
         .isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
+
+    subchannelStateManager.updateState("channel1", ConnectivityState.CONNECTING);
+    assertThat(subchannelStateManager.getAggregatedState())
+        .isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
+
+    subchannelStateManager.updateState("channel1", ConnectivityState.READY);
+    assertThat(subchannelStateManager.getAggregatedState())
+        .isEqualTo(ConnectivityState.READY);
   }
 }
