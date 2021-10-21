@@ -16,7 +16,6 @@
 
 package io.grpc.inprocess;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import java.io.IOException;
