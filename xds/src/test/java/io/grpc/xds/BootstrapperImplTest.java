@@ -798,7 +798,7 @@ public class BootstrapperImplTest {
         + "}";
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     try {
-      BootstrapInfo info = bootstrapper.bootstrap();
+      bootstrapper.bootstrap();
       fail("should fail");
     } catch (XdsInitializationException e) {
       assertThat(e).hasMessageThat().isEqualTo(
