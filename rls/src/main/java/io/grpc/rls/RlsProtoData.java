@@ -343,6 +343,7 @@ public final class RlsProtoData {
 
     private final boolean optional;
 
+    /** Constructor. */
     public NameMatcher(String key, List<String> names, @Nullable Boolean optional) {
       this.key = checkNotNull(key, "key");
       this.names = ImmutableList.copyOf(checkNotNull(names, "names"));
@@ -404,6 +405,7 @@ public final class RlsProtoData {
     private final ExtraKeys extraKeys;
     private final ImmutableMap<String, String> constantKeys;
 
+    /** Constructor. All args should be nonnull. Headers should head unique keys. */
     public GrpcKeyBuilder(
         List<Name> names, List<NameMatcher> headers, ExtraKeys extraKeys,
         Map<String, String> constantKeys) {
@@ -493,6 +495,7 @@ public final class RlsProtoData {
         this(service, "*");
       }
 
+      /** The primary constructor. */
       public Name(String service, String method) {
         checkState(
             !checkNotNull(service, "service").isEmpty(),
