@@ -135,7 +135,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, address)
         .build();
     this.optionalServerListener = optionalServerListener;
-    logId = InternalLogId.allocate(getClass(), getServerName(address));
+    logId = InternalLogId.allocate(getClass(), address.toString());
     this.includeCauseWithStatus = includeCauseWithStatus;
   }
 
@@ -177,8 +177,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
     }
     if (serverTransportListener == null) {
-      shutdownStatus =
-          Status.UNAVAILABLE.withDescription("Could not find server: " + getServerName(address));
+      shutdownStatus = Status.UNAVAILABLE.withDescription("Could not find server: " + address);
       final Status localShutdownStatus = shutdownStatus;
       return new Runnable() {
         @Override
@@ -309,7 +308,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   public String toString() {
     return MoreObjects.toStringHelper(this)
         .add("logId", logId.getId())
-        .add("name", getServerName(address))
+        .add("address", address)
         .toString();
   }
 
@@ -882,14 +881,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       clientStatus = clientStatus.withCause(status.getCause());
     }
     return clientStatus;
-  }
-
-  private static String getServerName(SocketAddress addr) {
-    if (addr instanceof InProcessSocketAddress) {
-      return ((InProcessSocketAddress) addr).getName();
-    } else {
-      return "Bad Server Address: " + addr;
-    }
   }
 
   private static class SingleMessageProducer implements StreamListener.MessageProducer {

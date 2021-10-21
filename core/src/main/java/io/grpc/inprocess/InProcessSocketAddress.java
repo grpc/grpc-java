@@ -19,7 +19,6 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import java.net.SocketAddress;
-import javax.annotation.Nullable;
 
 /**
  * Custom SocketAddress class for {@link InProcessTransport}.
@@ -28,25 +27,13 @@ public final class InProcessSocketAddress extends SocketAddress {
   private static final long serialVersionUID = -2803441206326023474L;
 
   private final String name;
-  @Nullable
-  private final InProcessServer server;
 
   /**
    * @param name - The name of the inprocess channel or server.
    * @since 1.0.0
    */
   public InProcessSocketAddress(String name) {
-    this(name, null);
-  }
-
-  /**
-   * @param name - The name of the inprocess channel or server.
-   * @param server - The concrete {@link InProcessServer} instance, Will be present on the listen
-   *     address of an anonymous server.
-   */
-  InProcessSocketAddress(String name, @Nullable InProcessServer server) {
     this.name = checkNotNull(name, "name");
-    this.server = server;
   }
 
   /**
@@ -56,11 +43,6 @@ public final class InProcessSocketAddress extends SocketAddress {
    */
   public String getName() {
     return name;
-  }
-
-  @Nullable
-  InProcessServer getServer() {
-    return server;
   }
 
   /**
@@ -76,13 +58,7 @@ public final class InProcessSocketAddress extends SocketAddress {
    */
   @Override
   public int hashCode() {
-    if (server != null) {
-      // Since there's a single canonical InProcessSocketAddress instance for
-      // an anonymous inprocess server, we can just use identity equality.
-      return super.hashCode();
-    } else {
-      return name.hashCode();
-    }
+    return name.hashCode();
   }
 
   /**
@@ -93,13 +69,6 @@ public final class InProcessSocketAddress extends SocketAddress {
     if (!(obj instanceof InProcessSocketAddress)) {
       return false;
     }
-    InProcessSocketAddress addr = (InProcessSocketAddress) obj;
-    if (server == null && addr.server == null) {
-      return name.equals(addr.name);
-    } else {
-      // Since there's a single canonical InProcessSocketAddress instance for
-      // an anonymous inprocess server, we can just use identity equality.
-      return addr == this;
-    }
+    return name.equals(((InProcessSocketAddress) obj).name);
   }
 }

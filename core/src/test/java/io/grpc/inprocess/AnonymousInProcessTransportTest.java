@@ -21,6 +21,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import java.util.List;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -30,11 +31,19 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public final class AnonymousInProcessTransportTest extends InProcessTransportTest {
 
+  private AnonymousInProcessSocketAddress address;
+
+  @Before
+  @Override
+  public void setUp() {
+    address = new AnonymousInProcessSocketAddress();
+    super.setUp();
+  }
+
   @Override
   protected InternalServer newServer(
       List<ServerStreamTracer.Factory> streamTracerFactories) {
-    InProcessServerBuilder builder = InProcessServerBuilder
-        .anonymous()
+    InProcessServerBuilder builder = InProcessServerBuilder.forAddress(address)
         .maxInboundMetadataSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE);
     return new InProcessServer(builder, streamTracerFactories);
   }
@@ -42,15 +51,7 @@ public final class AnonymousInProcessTransportTest extends InProcessTransportTes
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     return new InProcessTransport(
-        server.getListenSocketAddress(), GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        address, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
         testAuthority(server), USER_AGENT, eagAttrs(), false);
   }
-
-  @Test
-  @Ignore("This test isn't appropriate for anonymous servers.")
-  @Override
-  public void serverAlreadyListening() throws Exception {
-    // Since anonymous servers aren't registered anywhere, they can never clash with each other.
-  }
-
 }

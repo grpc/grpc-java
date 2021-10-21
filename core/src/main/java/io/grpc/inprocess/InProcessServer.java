@@ -42,21 +42,16 @@ final class InProcessServer implements InternalServer {
 
   static InProcessServer findServer(SocketAddress addr) {
     if (addr instanceof InProcessSocketAddress) {
-      InProcessSocketAddress inProcessAddress = (InProcessSocketAddress) addr;
-      if (inProcessAddress.getServer() != null) {
-        return inProcessAddress.getServer();
-      } else {
-        return registry.get(inProcessAddress.getName());
-      }
+      return registry.get(((InProcessSocketAddress) addr).getName());
+    } else if (addr instanceof AnonymousInProcessSocketAddress) {
+      return ((AnonymousInProcessSocketAddress) addr).getServer();
     }
     return null;
   }
 
-  private final String name;
-  private final boolean anonymous;
+  private final SocketAddress listenAddress;
   private final int maxInboundMetadataSize;
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
-  private final InProcessSocketAddress listenAddress;
   private ServerListener listener;
   private boolean shutdown;
   /** Defaults to be a SharedResourcePool. */
@@ -70,24 +65,29 @@ final class InProcessServer implements InternalServer {
   InProcessServer(
       InProcessServerBuilder builder,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-    this.name = builder.name;
-    this.anonymous = builder.anonymous;
+    this.listenAddress = builder.listenAddress;
     this.schedulerPool = builder.schedulerPool;
     this.maxInboundMetadataSize = builder.maxInboundMetadataSize;
     this.streamTracerFactories =
         Collections.unmodifiableList(checkNotNull(streamTracerFactories, "streamTracerFactories"));
-    this.listenAddress = new InProcessSocketAddress(name, anonymous ? this : null);
   }
 
   @Override
   public void start(ServerListener serverListener) throws IOException {
     this.listener = serverListener;
     this.scheduler = schedulerPool.getObject();
-    if (!anonymous) {
-      // Must be last, as channels can start connecting after this point.
+    // Must be last, as channels can start connecting after this point.
+    registerInstance();
+  }
+
+  private void registerInstance() throws IOException {
+    if (listenAddress instanceof InProcessSocketAddress) {
+      String name = ((InProcessSocketAddress) listenAddress).getName();
       if (registry.putIfAbsent(name, this) != null) {
         throw new IOException("name already registered: " + name);
       }
+    } else if (listenAddress instanceof AnonymousInProcessSocketAddress) {
+      ((AnonymousInProcessSocketAddress) listenAddress).setServer(this);
     }
   }
 
@@ -113,11 +113,7 @@ final class InProcessServer implements InternalServer {
 
   @Override
   public void shutdown() {
-    if (!anonymous) {
-      if (!registry.remove(name, this)) {
-        throw new AssertionError();
-      }
-    }
+    unregisterInstance();
     scheduler = schedulerPool.returnObject(scheduler);
     synchronized (this) {
       shutdown = true;
@@ -125,9 +121,20 @@ final class InProcessServer implements InternalServer {
     }
   }
 
+  private void unregisterInstance() {
+    if (listenAddress instanceof InProcessSocketAddress) {
+      String name = ((InProcessSocketAddress) listenAddress).getName();
+      if (!registry.remove(name, this)) {
+        throw new AssertionError();
+      }
+    } else if (listenAddress instanceof AnonymousInProcessSocketAddress) {
+      ((AnonymousInProcessSocketAddress) listenAddress).clearServer(this);
+    }
+  }
+
   @Override
   public String toString() {
-    return MoreObjects.toStringHelper(this).add("name", name).toString();
+    return MoreObjects.toStringHelper(this).add("listenAddress", listenAddress).toString();
   }
 
   synchronized ServerTransportListener register(InProcessTransport transport) {
