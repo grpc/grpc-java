@@ -164,6 +164,7 @@ public final class RlsProtoData {
     @Nullable
     private final String defaultTarget;
 
+    /** Constructor. */
     public RouteLookupConfig(
         List<GrpcKeyBuilder> grpcKeyBuilders,
         String lookupService,
