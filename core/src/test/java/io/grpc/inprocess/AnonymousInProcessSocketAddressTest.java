@@ -18,7 +18,6 @@ package io.grpc.inprocess;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.mock;
 
 import com.google.common.testing.EqualsTester;
 import io.grpc.ServerStreamTracer;
