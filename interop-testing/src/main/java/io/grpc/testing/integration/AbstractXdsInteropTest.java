@@ -37,14 +37,19 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * Abstract base class for end-to-end xds tests.
+ * A local control plane is implemented in {@link XdsTestControlPlaneService}.
+ * Test cases can inject xds configs to the control plane for testing.
+ */
 public abstract class AbstractXdsInteropTest {
   private static final Logger logger = Logger.getLogger(AbstractXdsInteropTest.class.getName());
 
-  protected static int testServerPort = 8080;
+  protected static final int testServerPort = 8080;
   private static final int controlPlaneServicePort = 443;
   private Server server;
   private Server controlPlane;
-  protected ManagedChannel channel;
+  protected TestServiceGrpc.TestServiceBlockingStub blockingStub;
   private ScheduledExecutorService executor;
   private XdsNameResolverProvider nameResolverProvider;
   private static final String scheme = "test-xds";
@@ -67,6 +72,10 @@ public abstract class AbstractXdsInteropTest {
       )
   );
 
+  /**
+   * Provides default client bootstrap.
+   * A subclass test case should override this method if it tests client bootstrap.
+   */
   protected Map<String, ?> getClientBootstrapOverride() {
     return defaultClientBootstrapOverride;
   }
@@ -86,6 +95,10 @@ public abstract class AbstractXdsInteropTest {
       "server_listener_resource_name_template", SERVER_LISTENER_TEMPLATE
   );
 
+  /**
+   * Provides default server bootstrap.
+   * A subclass test case should override this method if it tests server bootstrap.
+   */
   protected Map<String, ?> getServerBootstrapOverride() {
     return defaultServerBootstrapOverride;
   }
@@ -93,17 +106,18 @@ public abstract class AbstractXdsInteropTest {
   protected void setUp() {
     startControlPlane();
     startServer();
-    nameResolverProvider = XdsNameResolverProvider.createForTest(
-        scheme, getClientBootstrapOverride());
+    nameResolverProvider = XdsNameResolverProvider.createForTest(scheme,
+        getClientBootstrapOverride());
     NameResolverRegistry.getDefaultRegistry().register(nameResolverProvider);
-    channel = Grpc.newChannelBuilder(scheme + ":///" + serverHostName,
+    ManagedChannel channel = Grpc.newChannelBuilder(scheme + ":///" + serverHostName,
         InsecureChannelCredentials.create()).build();
+    blockingStub = TestServiceGrpc.newBlockingStub(channel);
   }
 
   protected void tearDown() throws Exception {
     if (server != null) {
       server.shutdownNow();
-      if (!server.awaitTermination(10, TimeUnit.SECONDS)) {
+      if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
         logger.log(Level.SEVERE, "Timed out waiting for server shutdown");
       }
     }
@@ -132,7 +146,12 @@ public abstract class AbstractXdsInteropTest {
     }
   }
 
-  XdsTestControlPlaneService.XdsTestControlPlaneConfig getControlPlaneConfig() {
+  /**
+   * Provides default control plane xds configs.
+   * A subclass test case should override this method to inject control plane xds configs to verify
+   * end-to-end behavior.
+   */
+  protected XdsTestControlPlaneService.XdsTestControlPlaneConfig getControlPlaneConfig() {
     String tcpListenerName = SERVER_LISTENER_TEMPLATE.replaceAll("%s", serverHostName);
     return new XdsTestControlPlaneService.XdsTestControlPlaneConfig(
         XdsTestControlPlaneService.serverListener(tcpListenerName, serverHostName),
@@ -159,5 +178,8 @@ public abstract class AbstractXdsInteropTest {
     }
   }
 
+  /**
+   * A subclass test case should override this method to verify end-to-end behaviour.
+   */
   abstract void run();
 }

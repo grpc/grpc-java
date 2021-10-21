@@ -16,14 +16,14 @@
 
 package io.grpc.testing.integration;
 
-import static io.grpc.testing.integration.AbstractInteropTest.EMPTY;
 import static org.junit.Assert.assertEquals;
 
+import com.google.protobuf.ByteString;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class XdsInteropTest {
-  private final static Logger logger = Logger.getLogger(XdsInteropTest.class.getName());
+  private static final Logger logger = Logger.getLogger(XdsInteropTest.class.getName());
 
   /**
    * The main application to run test cases.
@@ -41,8 +41,16 @@ public class XdsInteropTest {
   private static class PingPong extends AbstractXdsInteropTest {
     @Override
     void run() {
-      TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel);
-      assertEquals(EMPTY, stub.emptyCall(EmptyProtos.Empty.getDefaultInstance()));
+      Messages.SimpleRequest request = Messages.SimpleRequest.newBuilder()
+          .setResponseSize(3141)
+          .setPayload(Messages.Payload.newBuilder()
+              .setBody(ByteString.copyFrom(new byte[2728])))
+          .build();
+      Messages.SimpleResponse goldenResponse = Messages.SimpleResponse.newBuilder()
+          .setPayload(Messages.Payload.newBuilder()
+              .setBody(ByteString.copyFrom(new byte[3141])))
+          .build();
+      assertEquals(goldenResponse.getPayload(), blockingStub.unaryCall(request).getPayload());
       logger.log(Level.INFO, "success");
     }
   }

@@ -84,16 +84,20 @@ public class XdsTestControlPlaneService extends
   private static final String clusterName = "cluster0";
   private static final String edsName = "eds-service-0";
   private final ImmutableMap<String, Listener> ldsResources;
-  private final XdsTestControlPlaneConfig config;
+  private final ImmutableMap<String, RouteConfiguration> rdsResources;
+  private final ImmutableMap<String, Cluster> cdsResources;
+  private final ImmutableMap<String, ClusterLoadAssignment> edsResources;
   private int versionNo = 0;
 
   /**
    * Create a control plane service for testing, with static xds configurations.
    */
   public XdsTestControlPlaneService(XdsTestControlPlaneConfig config) {
-    this.config = config;
     this.ldsResources = ImmutableMap.of(config.apiListener.getName(), config.apiListener,
         config.tcpListener.getName(), config.tcpListener);
+    this.rdsResources = ImmutableMap.of(rdsName, config.rds);
+    this.cdsResources = ImmutableMap.of(clusterName, config.cds);
+    this.edsResources = ImmutableMap.of(edsName, config.eds);
   }
 
   public static class XdsTestControlPlaneConfig {
@@ -128,66 +132,81 @@ public class XdsTestControlPlaneService extends
           public void run() {
             logger.log(Level.FINEST, "control plane received request {0}", value);
             if (!value.getResponseNonce().isEmpty()) {
-              logger.log(Level.FINEST, "received ack for resource:  {0}",
+              logger.log(Level.FINEST, "control plane received ack for resource:  {0}",
                   value.getResourceNamesList());
               return;
             }
             if (value.hasErrorDetail()) {
-              logger.log(Level.FINE, "received nack resource {0}, error {1}",
+              logger.log(Level.FINE, "control plane received nack resource {0}, error {1}",
                   new Object[]{value.getResourceNamesList(), value.getErrorDetail()});
+              return;
+            }
+            if (value.getResourceNamesCount() <= 0) {
               return;
             }
             switch (value.getTypeUrl()) {
               case ADS_TYPE_URL_LDS:
-                DiscoveryResponse response = DiscoveryResponse.newBuilder()
+                DiscoveryResponse.Builder responseBuilder = DiscoveryResponse.newBuilder()
                     .setTypeUrl(ADS_TYPE_URL_LDS)
                     .setVersionInfo(String.valueOf(versionNo++))
-                    .setNonce("0")
-                    .addResources(Any.pack(
-                        ldsResources.get(value.getResourceNames(0)),
+                    .setNonce("0");
+                for (String ldsName: value.getResourceNamesList()) {
+                  if (ldsResources.containsKey(ldsName)) {
+                    responseBuilder.addResources(Any.pack(
+                        ldsResources.get(ldsName),
                         ADS_TYPE_URL_LDS
-                    ))
-                    .build();
-                responseObserver.onNext(response);
+                    ));
+                  }
+                }
+                responseObserver.onNext(responseBuilder.build());
                 break;
               case ADS_TYPE_URL_RDS:
-                response = DiscoveryResponse.newBuilder()
+                responseBuilder = DiscoveryResponse.newBuilder()
                     .setTypeUrl(ADS_TYPE_URL_RDS)
                     .setVersionInfo(String.valueOf(versionNo++))
-                    .setNonce("0")
-                    .addResources(Any.pack(
-                        config.rds,
+                    .setNonce("0");
+                for (String rdsName: value.getResourceNamesList()) {
+                  if (rdsResources.containsKey(rdsName)) {
+                    responseBuilder.addResources(Any.pack(
+                        rdsResources.get(rdsName),
                         ADS_TYPE_URL_RDS
-                    ))
-                    .build();
-                responseObserver.onNext(response);
+                    ));
+                  }
+                }
+                responseObserver.onNext(responseBuilder.build());
                 break;
               case ADS_TYPE_URL_CDS:
-                response = DiscoveryResponse.newBuilder()
+                responseBuilder = DiscoveryResponse.newBuilder()
                     .setTypeUrl(ADS_TYPE_URL_CDS)
                     .setVersionInfo(String.valueOf(versionNo++))
-                    .setNonce("0")
-                    .addResources(Any.pack(
-                        config.cds,
+                    .setNonce("0");
+                for (String cdsName: value.getResourceNamesList()) {
+                  if (cdsResources.containsKey(cdsName)) {
+                    responseBuilder.addResources(Any.pack(
+                        cdsResources.get(cdsName),
                         ADS_TYPE_URL_CDS
-                    ))
-                    .build();
-                responseObserver.onNext(response);
+                    ));
+                  }
+                }
+                responseObserver.onNext(responseBuilder.build());
                 break;
               case ADS_TYPE_URL_EDS:
-                response = DiscoveryResponse.newBuilder()
+                responseBuilder = DiscoveryResponse.newBuilder()
                     .setTypeUrl(ADS_TYPE_URL_EDS)
                     .setVersionInfo(String.valueOf(versionNo++))
-                    .setNonce("0")
-                    .addResources(Any.pack(
-                        config.eds,
-                        ADS_TYPE_URL_EDS
-                    ))
-                    .build();
-                responseObserver.onNext(response);
+                    .setNonce("0");
+                for (String edsName: value.getResourceNamesList()) {
+                  if (edsResources.containsKey(edsName)) {
+                    responseBuilder.addResources(Any.pack(
+                            edsResources.get(value.getResourceNames(0)),
+                            ADS_TYPE_URL_EDS
+                    ));
+                  }
+                }
+                responseObserver.onNext(responseBuilder.build());
                 break;
               default:
-                logger.log(Level.WARNING, "unrecognized typeUrl in discoveryRequest: {0]",
+                logger.log(Level.WARNING, "unrecognized typeUrl in discoveryRequest: {0}",
                     value.getTypeUrl());
             }
           }
@@ -208,8 +227,11 @@ public class XdsTestControlPlaneService extends
   }
 
   static Listener clientListener(String name) {
-    HttpFilter httpFilter = HttpFilter.newBuilder().setName("http-filter-1").setTypedConfig(
-        Any.pack(Router.newBuilder().build())).setIsOptional(true).build();
+    HttpFilter httpFilter = HttpFilter.newBuilder()
+        .setName("terminal-filter")
+        .setTypedConfig(Any.pack(Router.newBuilder().build()))
+        .setIsOptional(true)
+        .build();
     ApiListener apiListener = ApiListener.newBuilder().setApiListener(Any.pack(
         HttpConnectionManager.newBuilder()
             .setRds(
@@ -229,21 +251,26 @@ public class XdsTestControlPlaneService extends
   }
 
   static Listener serverListener(String name, String authority) {
-    HttpFilter routerFilter = HttpFilter.newBuilder().setName("terminal-filter").setTypedConfig(
-        Any.pack(Router.newBuilder().build())).setIsOptional(true).build();
+    HttpFilter routerFilter = HttpFilter.newBuilder()
+        .setName("terminal-filter")
+        .setTypedConfig(
+            Any.pack(Router.newBuilder().build()))
+        .setIsOptional(true)
+        .build();
     VirtualHost virtualHost = VirtualHost.newBuilder()
         .setName("virtual-host-0")
         .addDomains(authority)
         .addRoutes(
             Route.newBuilder()
                 .setMatch(
-                    RouteMatch.newBuilder().setPath("/grpc.testing.TestService/EmptyCall").build()
+                    RouteMatch.newBuilder().setPrefix("/").build()
                 )
                 .setNonForwardingAction(NonForwardingAction.newBuilder().build())
                 .build()
         ).build();
     RouteConfiguration routeConfig = RouteConfiguration.newBuilder()
-        .addVirtualHosts(virtualHost).build();
+        .addVirtualHosts(virtualHost)
+        .build();
     Filter filter = Filter.newBuilder()
         .setName("network-filter-0")
         .setTypedConfig(
@@ -254,16 +281,14 @@ public class XdsTestControlPlaneService extends
                     .build()
             )
         ).build();
-    FilterChainMatch filterChainMatch =
-        FilterChainMatch.newBuilder()
-            .setSourceType(FilterChainMatch.ConnectionSourceType.ANY)
-            .build();
-    FilterChain filterChain =
-        FilterChain.newBuilder()
-            .setName("filter-chain-0")
-            .setFilterChainMatch(filterChainMatch)
-            .addFilters(filter)
-            .build();
+    FilterChainMatch filterChainMatch = FilterChainMatch.newBuilder()
+        .setSourceType(FilterChainMatch.ConnectionSourceType.ANY)
+        .build();
+    FilterChain filterChain = FilterChain.newBuilder()
+        .setName("filter-chain-0")
+        .setFilterChainMatch(filterChainMatch)
+        .addFilters(filter)
+        .build();
     return Listener.newBuilder()
         .setName(name)
         .setTrafficDirection(TrafficDirection.INBOUND)
@@ -277,7 +302,7 @@ public class XdsTestControlPlaneService extends
         .addRoutes(
             Route.newBuilder()
                 .setMatch(
-                    RouteMatch.newBuilder().setPath("/grpc.testing.TestService/EmptyCall").build()
+                    RouteMatch.newBuilder().setPrefix("/").build()
                 )
                 .setRoute(
                     RouteAction.newBuilder().setCluster(clusterName).build()
@@ -323,6 +348,7 @@ public class XdsTestControlPlaneService extends
         .build();
     return ClusterLoadAssignment.newBuilder()
         .setClusterName(edsName)
-        .addEndpoints(endpoints).build();
+        .addEndpoints(endpoints)
+        .build();
   }
 }
