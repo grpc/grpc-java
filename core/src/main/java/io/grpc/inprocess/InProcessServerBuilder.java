@@ -87,7 +87,7 @@ public final class InProcessServerBuilder extends
 
   /**
    * Create a server builder which listens on the given address.
-   * @param address The SocketAddres this server will listen on.
+   * @param listenAddress The SocketAddress this server will listen on.
    * @return a new builder
    */
   public static InProcessServerBuilder forAddress(SocketAddress listenAddress) {

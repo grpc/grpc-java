@@ -75,7 +75,7 @@ public final class InProcessChannelBuilder extends
    * @param address the address of the server to connect to
    * @return a new builder
    */
-  public static InProcessChannelBuilder forAddress(InProcessSocketAddress address) {
+  public static InProcessChannelBuilder forAddress(SocketAddress address) {
     return new InProcessChannelBuilder(checkNotNull(address, "address"), null);
   }
 
@@ -92,8 +92,7 @@ public final class InProcessChannelBuilder extends
   private int maxInboundMetadataSize = Integer.MAX_VALUE;
   private boolean transportIncludeStatusCause = false;
 
-  private InProcessChannelBuilder(
-      @Nullable InProcessSocketAddress directAddress, @Nullable String target) {
+  private InProcessChannelBuilder(@Nullable SocketAddress directAddress, @Nullable String target) {
 
     final class InProcessChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
       @Override
