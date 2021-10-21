@@ -57,6 +57,7 @@ public class BootstrapperImplTest {
   private String originalBootstrapPathFromSysProp;
   private String originalBootstrapConfigFromEnvVar;
   private String originalBootstrapConfigFromSysProp;
+  private boolean originalEnableFederation;
 
   @Before
   public void setUp() {
@@ -69,6 +70,7 @@ public class BootstrapperImplTest {
     originalBootstrapPathFromSysProp = BootstrapperImpl.bootstrapPathFromSysProp;
     originalBootstrapConfigFromEnvVar = BootstrapperImpl.bootstrapConfigFromEnvVar;
     originalBootstrapConfigFromSysProp = BootstrapperImpl.bootstrapConfigFromSysProp;
+    originalEnableFederation = BootstrapperImpl.enableFederation;
   }
 
   @After
@@ -77,6 +79,7 @@ public class BootstrapperImplTest {
     BootstrapperImpl.bootstrapPathFromSysProp = originalBootstrapPathFromSysProp;
     BootstrapperImpl.bootstrapConfigFromEnvVar = originalBootstrapConfigFromEnvVar;
     BootstrapperImpl.bootstrapConfigFromSysProp = originalBootstrapConfigFromSysProp;
+    BootstrapperImpl.enableFederation = originalEnableFederation;
   }
 
   @Test
@@ -680,6 +683,7 @@ public class BootstrapperImplTest {
 
   @Test
   public void parseClientDefaultListenerResourceNameTemplate() throws Exception {
+    BootstrapperImpl.enableFederation = true;
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "  ]\n"
@@ -701,6 +705,7 @@ public class BootstrapperImplTest {
 
   @Test
   public void parseAuthorities() throws Exception {
+    BootstrapperImpl.enableFederation = true;
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
@@ -771,6 +776,37 @@ public class BootstrapperImplTest {
         .isEqualTo("xdstp://a.com/envoy.config.listener.v3.Listener/%s");
     assertThat(authorityInfo.xdsServers()).hasSize(1);
     assertThat(authorityInfo.xdsServers().get(0).target()).isEqualTo("td2.googleapis.com:443");
+  }
+
+  @Test
+  public void badFederationConfig() throws Exception {
+    BootstrapperImpl.enableFederation = true;
+    String rawData = "{\n"
+        + "  \"authorities\": {\n"
+        + "    \"a.com\": {\n"
+        + "      \"client_listener_resource_name_template\": \"xdstp://wrong/\"\n"
+        + "    }\n"
+        + "  },\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    try {
+      bootstrapper.bootstrap();
+      fail("should fail");
+    } catch (XdsInitializationException e) {
+      assertThat(e).hasMessageThat().isEqualTo(
+          "client_listener_resource_name_template: 'xdstp://wrong/' does not start with "
+              + "xdstp://a.com/");
+    }
+    BootstrapperImpl.enableFederation = false;
+    bootstrapper.bootstrap();
   }
 
   private static BootstrapperImpl.FileReader createFileReader(
