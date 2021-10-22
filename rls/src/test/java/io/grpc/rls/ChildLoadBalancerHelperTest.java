@@ -57,7 +57,7 @@ public class ChildLoadBalancerHelperTest {
         .isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
 
     childLbHelper2.updateBalancingState(ConnectivityState.CONNECTING, picker2);
-    inOrder.verify(helper).updateBalancingState(ConnectivityState.CONNECTING, picker);
+    inOrder.verify(helper).updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, picker);
     assertThat(subchannelStateManager.getState(target2)).isEqualTo(ConnectivityState.CONNECTING);
 
     childLbHelper1.updateBalancingState(ConnectivityState.READY, picker1);
