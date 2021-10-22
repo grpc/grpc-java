@@ -18,6 +18,7 @@ package io.grpc.inprocess;
 
 import static com.google.common.base.Preconditions.checkState;
 
+import io.grpc.ExperimentalApi;
 import java.io.IOException;
 import java.net.SocketAddress;
 import javax.annotation.Nullable;
@@ -27,6 +28,7 @@ import javax.annotation.concurrent.GuardedBy;
  * Custom SocketAddress class for {@link InProcessTransport}, for 
  * a server which can only be referenced via this address instance.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8626")
 public final class AnonymousInProcessSocketAddress extends SocketAddress {
   private static final long serialVersionUID = -8567592561863414695L;
 
@@ -52,21 +54,5 @@ public final class AnonymousInProcessSocketAddress extends SocketAddress {
   synchronized void clearServer(InProcessServer server) {
     checkState(this.server == server);
     this.server = null;
-  }
-
-  @Override
-  public synchronized int hashCode() {
-    return server == null ? 0 : server.hashCode();
-  }
-
-  @Override
-  public boolean equals(Object obj) {
-    if (!(obj instanceof AnonymousInProcessSocketAddress)) {
-      return false;
-    }
-    InProcessServer otherServer = ((AnonymousInProcessSocketAddress) obj).getServer();
-    synchronized (this) {
-      return otherServer == server;
-    }
   }
 }

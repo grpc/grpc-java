@@ -41,10 +41,10 @@ final class InProcessServer implements InternalServer {
       = new ConcurrentHashMap<>();
 
   static InProcessServer findServer(SocketAddress addr) {
-    if (addr instanceof InProcessSocketAddress) {
-      return registry.get(((InProcessSocketAddress) addr).getName());
-    } else if (addr instanceof AnonymousInProcessSocketAddress) {
+    if (addr instanceof AnonymousInProcessSocketAddress) {
       return ((AnonymousInProcessSocketAddress) addr).getServer();
+    } else if (addr instanceof InProcessSocketAddress) {
+      return registry.get(((InProcessSocketAddress) addr).getName());
     }
     return null;
   }
@@ -81,13 +81,13 @@ final class InProcessServer implements InternalServer {
   }
 
   private void registerInstance() throws IOException {
-    if (listenAddress instanceof InProcessSocketAddress) {
+    if (listenAddress instanceof AnonymousInProcessSocketAddress) {
+      ((AnonymousInProcessSocketAddress) listenAddress).setServer(this);
+    } else if (listenAddress instanceof InProcessSocketAddress) {
       String name = ((InProcessSocketAddress) listenAddress).getName();
       if (registry.putIfAbsent(name, this) != null) {
         throw new IOException("name already registered: " + name);
       }
-    } else if (listenAddress instanceof AnonymousInProcessSocketAddress) {
-      ((AnonymousInProcessSocketAddress) listenAddress).setServer(this);
     }
   }
 
@@ -122,13 +122,13 @@ final class InProcessServer implements InternalServer {
   }
 
   private void unregisterInstance() {
-    if (listenAddress instanceof InProcessSocketAddress) {
+    if (listenAddress instanceof AnonymousInProcessSocketAddress) {
+      ((AnonymousInProcessSocketAddress) listenAddress).clearServer(this);
+    } else if (listenAddress instanceof InProcessSocketAddress) {
       String name = ((InProcessSocketAddress) listenAddress).getName();
       if (!registry.remove(name, this)) {
         throw new AssertionError();
       }
-    } else if (listenAddress instanceof AnonymousInProcessSocketAddress) {
-      ((AnonymousInProcessSocketAddress) listenAddress).clearServer(this);
     }
   }
 

@@ -52,8 +52,8 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link InProcessTransport}. */
 @RunWith(JUnit4.class)
 public class InProcessTransportTest extends AbstractTransportTest {
-  protected static final String TRANSPORT_NAME = "perfect-for-testing";
-  protected static final String AUTHORITY = "a-testing-authority";
+  private static final String TRANSPORT_NAME = "perfect-for-testing";
+  private static final String AUTHORITY = "a-testing-authority";
   protected static final String USER_AGENT = "a-testing-user-agent";
 
   @Rule

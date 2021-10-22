@@ -86,10 +86,12 @@ public class AnonymousInProcessSocketAddressTest {
     AnonymousInProcessSocketAddress addrC = new AnonymousInProcessSocketAddress();
     InProcessServer server = createAnonymousServer();
 
+    // Ensure two addresses with the same server are still distinct from each other.
     addrA.setServer(server);
     addrB.setServer(server);
     new EqualsTester()
-        .addEqualityGroup(addrA, addrB)
+        .addEqualityGroup(addrA)
+        .addEqualityGroup(addrB)
         .addEqualityGroup(addrC)
         .testEquals();
   }

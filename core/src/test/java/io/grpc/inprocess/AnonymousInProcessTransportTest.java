@@ -16,12 +16,14 @@
 
 package io.grpc.inprocess;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import java.util.List;
-import org.junit.Before;
+import org.junit.After;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -29,13 +31,13 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public final class AnonymousInProcessTransportTest extends InProcessTransportTest {
 
-  private AnonymousInProcessSocketAddress address;
+  private AnonymousInProcessSocketAddress address = new AnonymousInProcessSocketAddress();
 
-  @Before
+  @After
   @Override
-  public void setUp() {
-    address = new AnonymousInProcessSocketAddress();
-    super.setUp();
+  public void tearDown() throws InterruptedException {
+    super.tearDown();
+    assertThat(address.getServer()).isNull();
   }
 
   @Override
