@@ -88,6 +88,8 @@ final class InProcessServer implements InternalServer {
       if (registry.putIfAbsent(name, this) != null) {
         throw new IOException("name already registered: " + name);
       }
+    } else {
+      throw new AssertionError();
     }
   }
 
@@ -129,6 +131,8 @@ final class InProcessServer implements InternalServer {
       if (!registry.remove(name, this)) {
         throw new AssertionError();
       }
+    } else {
+      throw new AssertionError();
     }
   }
 
