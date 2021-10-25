@@ -61,7 +61,11 @@ convention of `v<major>.<minor>.x`, while the tags include the patch version
 `v<major>.<minor>.<patch>`. For example, the same branch `v1.7.x`
 would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
 
-1. For `master`, change root build files to the next minor snapshot (e.g.
+1. Review the issues in the current release [milestone](https://github.com/grpc/grpc-java/milestones)
+   for issues that won't make the cut. Check if any of them can be
+   closed. Be aware of the issues with the 'release blocker' label.
+   Consider reaching out to the assignee for the status update.
+2. For `master`, change root build files to the next minor snapshot (e.g.
    ``1.8.0-SNAPSHOT``).
 
    ```bash
@@ -74,8 +78,8 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
    $ ./gradlew build
    $ git commit -a -m "Start $MAJOR.$((MINOR+1)).0 development cycle"
    ```
-2. Go through PR review and submit.
-3. Create the release branch starting just before your commit and push it to GitHub:
+3. Go through PR review and submit.
+4. Create the release branch starting just before your commit and push it to GitHub:
 
    ```bash
    $ git fetch upstream
@@ -83,12 +87,6 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
      $(git log --pretty=format:%H --grep "^Start $MAJOR.$((MINOR+1)).0 development cycle$" upstream/master)^
    $ git push upstream v$MAJOR.$MINOR.x
    ```
-4. Ask a project admin to go to [Travis CI settings](https://travis-ci.org/grpc/grpc-java/settings)
-   and add a _Cron Job_:
-   * Branch: `v$MAJOR.$MINOR.x`
-   * Interval: `weekly`
-   * Options: `Do not run if there has been a build in the last 24h`
-   * Click _Add_ button
 5. Continue with Google-internal steps at go/grpc/java/releasing.
 6. Create a milestone for the next release.
 7. Move items out of the release milestone that didn't make the cut. Issues that
