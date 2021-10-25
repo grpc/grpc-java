@@ -34,6 +34,7 @@ import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
 import io.grpc.internal.SharedResourcePool;
 import java.io.File;
+import java.net.SocketAddress;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
@@ -81,7 +82,16 @@ public final class InProcessServerBuilder extends
    * @return a new builder
    */
   public static InProcessServerBuilder forName(String name) {
-    return new InProcessServerBuilder(name);
+    return forAddress(new InProcessSocketAddress(checkNotNull(name, "name")));
+  }
+
+  /**
+   * Create a server builder which listens on the given address.
+   * @param listenAddress The SocketAddress this server will listen on.
+   * @return a new builder
+   */
+  public static InProcessServerBuilder forAddress(SocketAddress listenAddress) {
+    return new InProcessServerBuilder(listenAddress);
   }
 
   /**
@@ -100,13 +110,13 @@ public final class InProcessServerBuilder extends
   }
 
   private final ServerImplBuilder serverImplBuilder;
-  final String name;
+  final SocketAddress listenAddress;
   int maxInboundMetadataSize = Integer.MAX_VALUE;
   ObjectPool<ScheduledExecutorService> schedulerPool =
       SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
 
-  private InProcessServerBuilder(String name) {
-    this.name = Preconditions.checkNotNull(name, "name");
+  private InProcessServerBuilder(SocketAddress listenAddress) {
+    this.listenAddress = checkNotNull(listenAddress, "listenAddress");
 
     final class InProcessClientTransportServersBuilder implements ClientTransportServersBuilder {
       @Override

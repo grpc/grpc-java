@@ -54,7 +54,7 @@ import org.junit.runners.JUnit4;
 public class InProcessTransportTest extends AbstractTransportTest {
   private static final String TRANSPORT_NAME = "perfect-for-testing";
   private static final String AUTHORITY = "a-testing-authority";
-  private static final String USER_AGENT = "a-testing-user-agent";
+  protected static final String USER_AGENT = "a-testing-user-agent";
 
   @Rule
   public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
@@ -82,8 +82,8 @@ public class InProcessTransportTest extends AbstractTransportTest {
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     return new InProcessTransport(
-        TRANSPORT_NAME, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, testAuthority(server), USER_AGENT,
-        eagAttrs(), false);
+        new InProcessSocketAddress(TRANSPORT_NAME), GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        testAuthority(server), USER_AGENT, eagAttrs(), false);
   }
 
   @Override
