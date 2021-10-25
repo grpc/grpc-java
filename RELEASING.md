@@ -61,8 +61,10 @@ convention of `v<major>.<minor>.x`, while the tags include the patch version
 `v<major>.<minor>.<patch>`. For example, the same branch `v1.7.x`
 would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
 
-1. Check current release's [milestone](https://github.com/grpc/grpc-java/milestones)
-   for any potential blockers for the branch cut.
+1. Review the issues in the current release [milestone](https://github.com/grpc/grpc-java/milestones)
+   for issues that won't make the cut. Check if any of them can be
+   closed. Be aware of the issues with the 'release blocker' label.
+   Consider reaching out to the assignee for the status update.
 2. For `master`, change root build files to the next minor snapshot (e.g.
    ``1.8.0-SNAPSHOT``).
 
