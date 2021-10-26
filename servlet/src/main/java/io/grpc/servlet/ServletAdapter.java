@@ -166,6 +166,9 @@ public final class ServletAdapter {
     asyncCtx.addListener(new GrpcAsyncListener(stream, logId));
   }
 
+  // This method must use Enumeration and its members, since that is the only way to read headers
+  // from the servlet api.
+  @SuppressWarnings("JdkObsolete")
   private static Metadata getHeaders(HttpServletRequest req) {
     Enumeration<String> headerNames = req.getHeaderNames();
     checkNotNull(
@@ -193,7 +196,7 @@ public final class ServletAdapter {
 
   private static String getAuthority(HttpServletRequest req) {
     try {
-      return new URI(req.getRequestURL().toString()).getAuthority();
+      return new URI(req.getRequestURI()).getAuthority();
     } catch (URISyntaxException e) {
       logger.log(FINE, "Error getting authority from the request URL {0}" + req.getRequestURL());
       return req.getServerName() + ":" + req.getServerPort();
