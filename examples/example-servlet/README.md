@@ -7,7 +7,7 @@ tag, since these builds will already be available.
 ```bash
 git checkout v<major>.<minor>.<patch>
 ```
-Otherwise, you must follow [COMPILING](../COMPILING.md).
+Otherwise, you must follow [COMPILING](../../COMPILING.md).
 
 To build the example,
 
