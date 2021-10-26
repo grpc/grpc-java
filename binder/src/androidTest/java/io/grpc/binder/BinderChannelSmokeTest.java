@@ -44,6 +44,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.FakeNameResolverProvider;
 import io.grpc.testing.TestUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -117,7 +118,7 @@ public final class BinderChannelSmokeTest {
                 .build(),
             TestUtils.recordRequestHeadersInterceptor(headersCapture));
 
-    AndroidComponentAddress serverAddress = HostServices.allocateService(appContext);
+    serverAddress = HostServices.allocateService(appContext);
     HostServices.configureService(serverAddress,
         HostServices.serviceParamsBuilder()
           .setServerFactory((service, receiver) ->
@@ -190,6 +191,14 @@ public final class BinderChannelSmokeTest {
     streamObserver.onCompleted();
     assertThat(withTestTimeout(responseStreamObserver.getAllStreamElements()).get()).isEmpty();
     assertThat(headersCapture.get().get(GrpcUtil.TIMEOUT_KEY)).isGreaterThan(0);
+  }
+
+  @Test
+  public void testConnectViaTargetUri() throws Exception {
+    String targetUri = "fake://server";
+    FakeNameResolverProvider.register(targetUri, serverAddress);
+    channel = BinderChannelBuilder.forTarget(targetUri, appContext).build();
+    assertThat(doCall("Hello").get()).isEqualTo("Hello");
   }
 
   private static String createLargeString(int size) {

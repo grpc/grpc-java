@@ -67,13 +67,35 @@ public final class BinderChannelBuilder
    * <p>You the caller are responsible for managing the lifecycle of any channels built by the
    * resulting builder. They will not be shut down automatically.
    *
-   * @param targetAddress the {@link AndroidComponentAddress} referencing the service to bind to.
+   * @param directAddress the {@link AndroidComponentAddress} referencing the service to bind to.
    * @param sourceContext the context to bind from (e.g. The current Activity or Application).
    * @return a new builder
    */
   public static BinderChannelBuilder forAddress(
-      AndroidComponentAddress targetAddress, Context sourceContext) {
-    return new BinderChannelBuilder(targetAddress, sourceContext);
+      AndroidComponentAddress directAddress, Context sourceContext) {
+    return new BinderChannelBuilder(
+        checkNotNull(directAddress, "directAddress"), null, sourceContext);
+  }
+
+  /**
+   * Creates a channel builder that will bind to a remote Android service, via a string
+   * target name which will be resolved.
+   *
+   * <p>The underlying Android binding will be torn down when the channel becomes idle. This happens
+   * after 30 minutes without use by default but can be configured via {@link
+   * ManagedChannelBuilder#idleTimeout(long, TimeUnit)} or triggered manually with {@link
+   * ManagedChannel#enterIdle()}.
+   *
+   * <p>You the caller are responsible for managing the lifecycle of any channels built by the
+   * resulting builder. They will not be shut down automatically.
+   *
+   * @param target A target uri which should resolve into an {@link AndroidComponentAddress}
+   * referencing the service to bind to.
+   * @param sourceContext the context to bind from (e.g. The current Activity or Application).
+   * @return a new builder
+   */
+  public static BinderChannelBuilder forTarget(String target, Context sourceContext) {
+    return new BinderChannelBuilder(null, checkNotNull(target, "target"), sourceContext);
   }
 
   /**
@@ -88,7 +110,7 @@ public final class BinderChannelBuilder
   /**
    * Always fails. Call {@link #forAddress(AndroidComponentAddress, Context)} instead.
    */
-  @DoNotCall("Unsupported. Use forAddress(AndroidComponentAddress, Context) instead")
+  @DoNotCall("Unsupported. Use forTarget(String, Context) instead")
   public static BinderChannelBuilder forTarget(String target) {
     throw new UnsupportedOperationException(
         "call forAddress(AndroidComponentAddress, Context) instead");
@@ -104,9 +126,11 @@ public final class BinderChannelBuilder
   private BindServiceFlags bindServiceFlags;
 
   private BinderChannelBuilder(
-      AndroidComponentAddress targetAddress,
+      @Nullable AndroidComponentAddress directAddress,
+      @Nullable String target,
       Context sourceContext) {
-    mainThreadExecutor = ContextCompat.getMainExecutor(sourceContext);
+    mainThreadExecutor =
+        ContextCompat.getMainExecutor(checkNotNull(sourceContext, "sourceContext"));
     securityPolicy = SecurityPolicies.internalOnly();
     inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     bindServiceFlags = BindServiceFlags.DEFAULTS;
@@ -126,12 +150,20 @@ public final class BinderChannelBuilder
       }
     }
 
-    managedChannelImplBuilder =
-        new ManagedChannelImplBuilder(
-            targetAddress,
-            targetAddress.getAuthority(),
-            new BinderChannelTransportFactoryBuilder(),
-            null);
+    if (directAddress != null) {
+      managedChannelImplBuilder =
+          new ManagedChannelImplBuilder(
+              directAddress,
+              directAddress.getAuthority(),
+              new BinderChannelTransportFactoryBuilder(),
+              null);
+    } else {
+      managedChannelImplBuilder =
+          new ManagedChannelImplBuilder(
+              target,
+              new BinderChannelTransportFactoryBuilder(),
+              null);
+    }
   }
 
   @Override
