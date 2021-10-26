@@ -260,7 +260,7 @@ public class UndertowTransportTest extends AbstractTransportTest {
 
   // FIXME
   @Override
-  @Ignore("Undertow flow control not implemented yet")
+  @Ignore("Servlet flow control not implemented yet")
   @Test
   public void flowControlPushBack() {}
 

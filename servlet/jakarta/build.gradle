@@ -9,8 +9,8 @@ targetCompatibility = 1.8
 
 // Set up classpaths and source directories for different servlet tests
 configurations {
-    jetty11TestImplementation.extendsFrom(testImplementation)
-    tomcat10TestImplementation.extendsFrom(testImplementation)
+    jettyTestImplementation.extendsFrom(testImplementation)
+    tomcatTestImplementation.extendsFrom(testImplementation)
     undertowTestImplementation.extendsFrom(testImplementation)
 }
 
@@ -20,14 +20,14 @@ sourceSets {
             include '**/Undertow*.java'
         }
     }
-    tomcat10Test {
+    tomcatTest {
         java {
             include '**/Tomcat*.java'
         }
     }
     // Only run these tests if java 11+ is being used
     if (JavaVersion.current().isJava11Compatible()) {
-        jetty11Test {
+        jettyTest {
             java {
                 include '**/Jetty*.java'
             }
@@ -36,9 +36,9 @@ sourceSets {
 }
 
 // Mechanically transform sources from grpc-servlet to use the corrected packages
-def migrate(String name, String inputDir, Collection<SourceSet> sourceSets) {
+def migrate(String name, String inputDir, SourceSet sourceSet) {
     def outputDir = layout.buildDirectory.dir('generated/sources/jakarta-' + name)
-    sourceSets.each { it.java.srcDir outputDir }
+    sourceSet.java.srcDir outputDir
     return tasks.register('migrateSources' + name.capitalize(), Sync) { task ->
         from(inputDir)
         into(outputDir)
@@ -53,18 +53,15 @@ def migrate(String name, String inputDir, Collection<SourceSet> sourceSets) {
     }
 }
 
-compileJava.dependsOn migrate('main', '../src/main/java', [sourceSets.main])
+compileJava.dependsOn migrate('main', '../src/main/java', sourceSets.main)
 
 // Build the set of sourceSets and classpaths to modify, since Jetty 11 requires Java 11
 // and must be skipped
-def sourceSetsToMigrate = [sourceSets.undertowTest, sourceSets.tomcat10Test];
-def compileTasks = [compileUndertowTestJava, compileTomcat10TestJava]
+compileUndertowTestJava.dependsOn(migrate('undertowTest', '../src/undertowTest/java', sourceSets.undertowTest))
+compileTomcatTestJava.dependsOn(migrate('tomcatTest', '../src/tomcatTest/java', sourceSets.tomcatTest))
 if (JavaVersion.current().isJava11Compatible()) {
-    sourceSetsToMigrate += sourceSets.jetty11Test
-    compileTasks += compileJetty11TestJava
+    compileJettyTestJava.dependsOn(migrate('jettyTest', '../src/jettyTest/java', sourceSets.jettyTest))
 }
-def migrateTests = migrate('test', '../src/test/java', sourceSetsToMigrate)
-compileTasks.each { it.dependsOn migrateTests}
 
 // Disable checkstyle for this project, since it consists only of generated code
 checkstyle.ignoreFailures = true
@@ -91,9 +88,9 @@ dependencies {
         exclude group: 'io.grpc', module: 'grpc-xds'
     }
 
-    tomcat10TestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:10.0.12'
+    tomcatTestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:10.0.12'
 
-    jetty11TestImplementation "org.eclipse.jetty:jetty-servlet:11.0.7",
+    jettyTestImplementation "org.eclipse.jetty:jetty-servlet:11.0.7",
             "org.eclipse.jetty.http2:http2-server:11.0.7"
 
     undertowTestImplementation 'io.undertow:undertow-servlet-jakartaee9:2.2.12.Final'
@@ -106,8 +103,8 @@ check.dependsOn(tasks.register('undertowTest', Test) {
     testClassesDirs = sourceSets.undertowTest.output.classesDirs
 })
 check.dependsOn(tasks.register('tomcat10Test', Test) {
-    classpath = sourceSets.tomcat10Test.runtimeClasspath
-    testClassesDirs = sourceSets.tomcat10Test.output.classesDirs
+    classpath = sourceSets.tomcatTest.runtimeClasspath
+    testClassesDirs = sourceSets.tomcatTest.output.classesDirs
 
     // Provide a temporary directory for tomcat to be deleted after test finishes
     def tomcatTempDir = "$buildDir/tomcat_catalina_base"
@@ -119,7 +116,7 @@ check.dependsOn(tasks.register('tomcat10Test', Test) {
 // Only run these tests if java 11+ is being used
 if (JavaVersion.current().isJava11Compatible()) {
     check.dependsOn(tasks.register('jetty11Test', Test) {
-        classpath = sourceSets.jetty11Test.runtimeClasspath
-        testClassesDirs = sourceSets.jetty11Test.output.classesDirs
+        classpath = sourceSets.jettyTest.runtimeClasspath
+        testClassesDirs = sourceSets.jettyTest.output.classesDirs
     })
 }
