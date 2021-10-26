@@ -303,7 +303,7 @@ abstract class AbstractXdsClient extends XdsClient {
   // Must be synchronized.
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
-    if (bootstrapInfo.getServers().get(0).isUseProtocolV3()) {
+    if (bootstrapInfo.servers().get(0).useProtocolV3()) {
       adsStream = new AdsStreamV3();
     } else {
       adsStream = new AdsStreamV2();
@@ -619,7 +619,7 @@ abstract class AbstractXdsClient extends XdsClient {
       io.envoyproxy.envoy.api.v2.DiscoveryRequest.Builder builder =
           io.envoyproxy.envoy.api.v2.DiscoveryRequest.newBuilder()
               .setVersionInfo(versionInfo)
-              .setNode(bootstrapInfo.getNode().toEnvoyProtoNodeV2())
+              .setNode(bootstrapInfo.node().toEnvoyProtoNodeV2())
               .addAllResourceNames(resources)
               .setTypeUrl(type.typeUrlV2())
               .setResponseNonce(nonce);
@@ -696,7 +696,7 @@ abstract class AbstractXdsClient extends XdsClient {
       DiscoveryRequest.Builder builder =
           DiscoveryRequest.newBuilder()
               .setVersionInfo(versionInfo)
-              .setNode(bootstrapInfo.getNode().toEnvoyProtoNode())
+              .setNode(bootstrapInfo.node().toEnvoyProtoNode())
               .addAllResourceNames(resources)
               .setTypeUrl(type.typeUrl())
               .setResponseNonce(nonce);

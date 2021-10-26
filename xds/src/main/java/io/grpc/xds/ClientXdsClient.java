@@ -138,8 +138,8 @@ final class ClientXdsClient extends AbstractXdsClient {
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RETRY"));
   @VisibleForTesting
   static boolean enableRbac =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"))
-          && Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"));
+      Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"))
+          || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"));
 
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
@@ -186,7 +186,7 @@ final class ClientXdsClient extends AbstractXdsClient {
     this.timeProvider = timeProvider;
     this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
     lrsClient = new LoadReportClient(loadStatsManager, channel, context,
-        bootstrapInfo.getServers().get(0).isUseProtocolV3(), bootstrapInfo.getNode(),
+        bootstrapInfo.servers().get(0).useProtocolV3(), bootstrapInfo.node(),
         getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
   }
 
@@ -263,8 +263,8 @@ final class ClientXdsClient extends AbstractXdsClient {
       Listener proto, Set<String> rdsResources, boolean parseHttpFilter)
       throws ResourceInvalidException {
     Set<String> certProviderInstances = null;
-    if (getBootstrapInfo() != null && getBootstrapInfo().getCertProviders() != null) {
-      certProviderInstances = getBootstrapInfo().getCertProviders().keySet();
+    if (getBootstrapInfo() != null && getBootstrapInfo().certProviders() != null) {
+      certProviderInstances = getBootstrapInfo().certProviders().keySet();
     }
     return LdsUpdate.forTcpListener(parseServerSideListener(
         proto, rdsResources, tlsContextManager, filterRegistry, certProviderInstances,
@@ -1404,8 +1404,8 @@ final class ClientXdsClient extends AbstractXdsClient {
       CdsUpdate cdsUpdate;
       try {
         Set<String> certProviderInstances = null;
-        if (getBootstrapInfo() != null && getBootstrapInfo().getCertProviders() != null) {
-          certProviderInstances = getBootstrapInfo().getCertProviders().keySet();
+        if (getBootstrapInfo() != null && getBootstrapInfo().certProviders() != null) {
+          certProviderInstances = getBootstrapInfo().certProviders().keySet();
         }
         cdsUpdate = parseCluster(cluster, retainedEdsResources, certProviderInstances);
       } catch (ResourceInvalidException e) {

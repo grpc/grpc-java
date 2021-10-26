@@ -56,7 +56,7 @@ public final class CertificateUtils {
 
   /**
    * Generates a {@link PrivateKey} from a PEM file.
-   * The key should be PKCS #8 formatted.
+   * The key should be PKCS #8 formatted. The key algorithm should be "RSA" or "EC".
    * The PEM file should contain one item in Base64 encoding, with plain-text headers and footers
    * (e.g. -----BEGIN PRIVATE KEY----- and -----END PRIVATE KEY-----).
    *
@@ -80,9 +80,16 @@ public final class CertificateUtils {
       keyContent.append(line);
     }
     byte[] decodedKeyBytes = BaseEncoding.base64().decode(keyContent.toString());
-    KeyFactory keyFactory = KeyFactory.getInstance("RSA");
     PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decodedKeyBytes);
-    return keyFactory.generatePrivate(keySpec);
+    try {
+      return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
+    } catch (InvalidKeySpecException ignore) {
+      try {
+        return KeyFactory.getInstance("EC").generatePrivate(keySpec);
+      } catch (InvalidKeySpecException e) {
+        throw new InvalidKeySpecException("Neither RSA nor EC worked", e);
+      }
+    }
   }
 }
 

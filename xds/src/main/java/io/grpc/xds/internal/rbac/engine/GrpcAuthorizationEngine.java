@@ -148,7 +148,7 @@ public final class GrpcAuthorizationEngine {
 
     /**
      * Passing in null will match all authenticated user, i.e. SSL session is present.
-     * https://github.com/envoyproxy/envoy/blob/main/api/envoy/config/rbac/v3/rbac.proto#L240
+     * https://github.com/envoyproxy/envoy/blob/3975bf5dadb43421907bbc52df57c0e8539c9a06/api/envoy/config/rbac/v3/rbac.proto#L253
      * */
     public static AuthenticatedMatcher create(@Nullable Matchers.StringMatcher delegate) {
       return new AutoValue_GrpcAuthorizationEngine_AuthenticatedMatcher(delegate);
