@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The gRPC Authors
+ * Copyright 2021 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@
 
 package io.grpc.servlet;
 
-import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalChannelz;
 import io.grpc.InternalInstrumented;
-import io.grpc.ServerStreamTracer.Factory;
+import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
@@ -29,8 +29,6 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
-import io.grpc.servlet.ServletServerBuilder.ServerTransportImpl;
-import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -38,66 +36,69 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-import org.apache.catalina.Context;
-import org.apache.catalina.LifecycleException;
-import org.apache.catalina.startup.Tomcat;
-import org.apache.coyote.http2.Http2Protocol;
-import org.junit.After;
+import org.eclipse.jetty.http2.parser.RateControl;
+import org.eclipse.jetty.http2.server.HTTP2CServerConnectionFactory;
+import org.eclipse.jetty.server.HttpConfiguration;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.ServerConnector;
+import org.eclipse.jetty.servlet.ServletContextHandler;
+import org.eclipse.jetty.servlet.ServletHolder;
 import org.junit.Ignore;
 import org.junit.Test;
 
-/**
- * Transport test for Tomcat server and Netty client.
- */
-public class TomcatTransportTest extends AbstractTransportTest {
+
+public class JettyTransportTest extends AbstractTransportTest {
   private static final String MYAPP = "/service";
 
   private final FakeClock fakeClock = new FakeClock();
-
-  private Tomcat server;
+  private Server jettyServer;
   private int port;
 
-  @After
-  @Override
-  public void tearDown() throws InterruptedException {
-    super.tearDown();
-    try {
-      server.stop();
-    } catch (LifecycleException e) {
-      throw new AssertionError(e);
-    }
-  }
 
   @Override
-  protected InternalServer newServer(List<Factory> streamTracerFactories) {
+  protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
     return new InternalServer() {
       final InternalServer delegate =
-          new ServletServerBuilder().buildTransportServers(streamTracerFactories);
+              new ServletServerBuilder().buildTransportServers(streamTracerFactories);
 
       @Override
       public void start(ServerListener listener) throws IOException {
         delegate.start(listener);
         ScheduledExecutorService scheduler = fakeClock.getScheduledExecutorService();
         ServerTransportListener serverTransportListener =
-            listener.transportCreated(new ServerTransportImpl(scheduler, true));
+                listener.transportCreated(new ServletServerBuilder.ServerTransportImpl(scheduler,
+                        true));
         ServletAdapter adapter =
-            new ServletAdapter(serverTransportListener, streamTracerFactories, Integer.MAX_VALUE);
+                new ServletAdapter(serverTransportListener, streamTracerFactories,
+                        Integer.MAX_VALUE);
         GrpcServlet grpcServlet = new GrpcServlet(adapter);
 
-        server = new Tomcat();
-        server.setPort(0);
-        Context ctx = server.addContext(MYAPP, new File("build/tmp").getAbsolutePath());
-        Tomcat.addServlet(ctx, "TomcatTransportTest", grpcServlet)
-            .setAsyncSupported(true);
-        ctx.addServletMappingDecoded("/*", "TomcatTransportTest");
-        server.getConnector().addUpgradeProtocol(new Http2Protocol());
+        jettyServer = new Server(0);
+        ServerConnector sc = (ServerConnector) jettyServer.getConnectors()[0];
+        HttpConfiguration httpConfiguration = new HttpConfiguration();
+
+        // Must be set for several tests to pass, so that the request handling can begin before
+        // content arrives.
+        httpConfiguration.setDelayDispatchUntilContent(false);
+
+        HTTP2CServerConnectionFactory factory =
+                new HTTP2CServerConnectionFactory(httpConfiguration);
+        factory.setRateControlFactory(new RateControl.Factory() {
+        });
+        sc.addConnectionFactory(factory);
+        ServletContextHandler context =
+                new ServletContextHandler(ServletContextHandler.SESSIONS);
+        context.setContextPath(MYAPP);
+        context.addServlet(new ServletHolder(grpcServlet), "/*");
+        jettyServer.setHandler(context);
+
         try {
-          server.start();
-        } catch (LifecycleException e) {
-          throw new RuntimeException(e);
+          jettyServer.start();
+        } catch (Exception e) {
+          throw new AssertionError(e);
         }
 
-        port = server.getConnector().getLocalPort();
+        port = sc.getLocalPort();
       }
 
       @Override
@@ -111,7 +112,7 @@ public class TomcatTransportTest extends AbstractTransportTest {
       }
 
       @Override
-      public InternalInstrumented<SocketStats> getListenSocketStats() {
+      public InternalInstrumented<InternalChannelz.SocketStats> getListenSocketStats() {
         return delegate.getListenSocketStats();
       }
 
@@ -122,7 +123,7 @@ public class TomcatTransportTest extends AbstractTransportTest {
 
       @Nullable
       @Override
-      public List<InternalInstrumented<SocketStats>> getListenSocketStatsList() {
+      public List<InternalInstrumented<InternalChannelz.SocketStats>> getListenSocketStatsList() {
         return delegate.getListenSocketStatsList();
       }
     };
@@ -130,27 +131,27 @@ public class TomcatTransportTest extends AbstractTransportTest {
 
   @Override
   protected InternalServer newServer(int port,
-      List<Factory> streamTracerFactories) {
+                                     List<ServerStreamTracer.Factory> streamTracerFactories) {
     return newServer(streamTracerFactories);
   }
 
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     NettyChannelBuilder nettyChannelBuilder = NettyChannelBuilder
-        // Although specified here, address is ignored because we never call build.
-        .forAddress("localhost", 0)
-        .flowControlWindow(65 * 1024)
-        .negotiationType(NegotiationType.PLAINTEXT);
+            // Although specified here, address is ignored because we never call build.
+            .forAddress("localhost", 0)
+            .flowControlWindow(65 * 1024)
+            .negotiationType(NegotiationType.PLAINTEXT);
     InternalNettyChannelBuilder
-        .setTransportTracerFactory(nettyChannelBuilder, fakeClockTransportTracer);
+            .setTransportTracerFactory(nettyChannelBuilder, fakeClockTransportTracer);
     ClientTransportFactory clientFactory =
-        InternalNettyChannelBuilder.buildTransportFactory(nettyChannelBuilder);
+            InternalNettyChannelBuilder.buildTransportFactory(nettyChannelBuilder);
     return clientFactory.newClientTransport(
-        new InetSocketAddress("localhost", port),
-        new ClientTransportFactory.ClientTransportOptions()
-            .setAuthority(testAuthority(server))
-            .setEagAttributes(eagAttrs()),
-        transportLogger());
+            new InetSocketAddress("localhost", port),
+            new ClientTransportFactory.ClientTransportOptions()
+                    .setAuthority(testAuthority(server))
+                    .setEagAttributes(eagAttrs()),
+            transportLogger());
   }
 
   @Override
@@ -171,95 +172,74 @@ public class TomcatTransportTest extends AbstractTransportTest {
   @Override
   @Ignore("Skip the test, server lifecycle is managed by the container")
   @Test
-  public void serverAlreadyListening() {}
+  public void serverAlreadyListening() {
+  }
 
   @Override
   @Ignore("Skip the test, server lifecycle is managed by the container")
   @Test
-  public void openStreamPreventsTermination() {}
+  public void openStreamPreventsTermination() {
+  }
 
   @Override
   @Ignore("Skip the test, server lifecycle is managed by the container")
   @Test
-  public void shutdownNowKillsServerStream() {}
+  public void shutdownNowKillsServerStream() {
+  }
 
   @Override
   @Ignore("Skip the test, server lifecycle is managed by the container")
   @Test
-  public void serverNotListening() {}
+  public void serverNotListening() {
+  }
 
   // FIXME
   @Override
-  @Ignore("Tomcat is broken on client GOAWAY")
+  @Ignore("Servlet flow control not implemented yet")
   @Test
-  public void newStream_duringShutdown() {}
+  public void flowControlPushBack() {
+  }
 
   // FIXME
   @Override
-  @Ignore("Tomcat is broken on client GOAWAY")
+  @Ignore("Jetty is broken on client RST_STREAM")
   @Test
-  public void ping_duringShutdown() {}
-
-  // FIXME
-  @Override
-  @Ignore("Tomcat is broken on client RST_STREAM")
-  @Test
-  public void frameAfterRstStreamShouldNotBreakClientChannel() {}
-
-  // FIXME
-  @Override
-  @Ignore("Tomcat is broken on client RST_STREAM")
-  @Test
-  public void shutdownNowKillsClientStream() {}
-
-  // FIXME
-  @Override
-  @Ignore("Tomcat flow control not implemented yet")
-  @Test
-  public void flowControlPushBack() {}
+  public void shutdownNowKillsClientStream() {
+  }
 
   @Override
   @Ignore("Server side sockets are managed by the servlet container")
   @Test
-  public void socketStats() {}
+  public void socketStats() {
+  }
 
   @Override
   @Ignore("serverTransportListener will not terminate")
   @Test
-  public void clientStartAndStopOnceConnected() {}
+  public void clientStartAndStopOnceConnected() {
+  }
 
   @Override
   @Ignore("clientStreamTracer1.getInboundTrailers() is not null; listeners.poll() doesn't apply")
   @Test
-  public void serverCancel() {}
+  public void serverCancel() {
+  }
 
   @Override
   @Ignore("THis doesn't apply: Ensure that for a closed ServerStream, interactions are noops")
   @Test
-  public void interactionsAfterServerStreamCloseAreNoops() {}
+  public void interactionsAfterServerStreamCloseAreNoops() {
+  }
 
   @Override
   @Ignore("listeners.poll() doesn't apply")
   @Test
-  public void interactionsAfterClientStreamCancelAreNoops() {}
+  public void interactionsAfterClientStreamCancelAreNoops() {
+  }
 
   @Override
   @Ignore("assertNull(serverStatus.getCause()) isn't true")
   @Test
-  public void clientCancel() {}
-
-  @Override
-  @Ignore("Tomcat does not support trailers only")
-  @Test
-  public void earlyServerClose_noServerHeaders() {}
-
-  @Override
-  @Ignore("Tomcat does not support trailers only")
-  @Test
-  public void earlyServerClose_serverFailure() {}
-
-  @Override
-  @Ignore("Tomcat does not support trailers only")
-  @Test
-  public void earlyServerClose_serverFailure_withClientCancelOnListenerClosed() {}
+  public void clientCancel() {
+  }
 }

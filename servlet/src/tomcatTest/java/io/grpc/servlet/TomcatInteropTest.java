@@ -86,10 +86,10 @@ public class TomcatInteropTest extends AbstractInteropTest {
     Context ctx = server.addContext(MYAPP, new File("build/tmp").getAbsolutePath());
     Tomcat
         .addServlet(
-            ctx, "TomcatInteropTest",
+            ctx, "io.grpc.servlet.TomcatInteropTest",
             new GrpcServlet(((ServletServerBuilder) builer).buildServletAdapter()))
         .setAsyncSupported(true);
-    ctx.addServletMappingDecoded("/*", "TomcatInteropTest");
+    ctx.addServletMappingDecoded("/*", "io.grpc.servlet.TomcatInteropTest");
     Http2Protocol http2Protocol = new Http2Protocol();
     http2Protocol.setOverheadCountFactor(0);
     server.getConnector().addUpgradeProtocol(http2Protocol);

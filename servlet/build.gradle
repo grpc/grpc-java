@@ -14,8 +14,8 @@ def jetty10Version = '10.0.7'
 
 configurations {
     undertowTestImplementation.extendsFrom(testImplementation)
-    tomcat9TestImplementation.extendsFrom(testImplementation)
-    jetty9TestImplementation.extendsFrom(testImplementation)
+    tomcatTestImplementation.extendsFrom(testImplementation)
+    jettyTestImplementation.extendsFrom(testImplementation)
     jetty10TestImplementation.extendsFrom(testImplementation)
 }
 
@@ -27,31 +27,17 @@ sourceSets {
         }
     }
     // Create a test sourceset for each classpath - could be simplified if we made new test directories
-    undertowTest {
-        java {
-            srcDir 'src/test/java'
-            include '**/Undertow*.java'
-        }
-    }
-    tomcat9Test {
-        java {
-            srcDir 'src/test/java'
-            include '**/Tomcat*.java'
-        }
-    }
-    jetty9Test {
-        java {
-            srcDir 'src/test/java'
-            include '**/Jetty*.java'
-        }
+    undertowTest {}
+    tomcatTest {}
+
+    jettyTest {
     }
 
     // Only compile these tests if java 11+ is being used
     if (JavaVersion.current().isJava11Compatible()) {
         jetty10Test {
             java {
-                srcDir 'src/test/java'
-                include '**/Jetty*.java'
+                srcDir 'src/jetty/java'
             }
         }
     }
@@ -85,9 +71,9 @@ dependencies {
 
     undertowTestImplementation 'io.undertow:undertow-servlet:2.2.12.Final'
 
-    tomcat9TestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:9.0.54'
+    tomcatTestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:9.0.54'
 
-    jetty9TestImplementation "org.eclipse.jetty:jetty-servlet:${jetty9Version}",
+    jettyTestImplementation "org.eclipse.jetty:jetty-servlet:${jetty9Version}",
             "org.eclipse.jetty.http2:http2-server:${jetty9Version}",
             'javax.servlet:javax.servlet-api:4.0.1'// jetty9 only supports servlet 3, force servlet4
 
@@ -106,8 +92,8 @@ check.dependsOn(tasks.register('undertowTest', Test) {
     testClassesDirs = sourceSets.undertowTest.output.classesDirs
 })
 check.dependsOn(tasks.register('tomcat9Test', Test) {
-    classpath = sourceSets.tomcat9Test.runtimeClasspath
-    testClassesDirs = sourceSets.tomcat9Test.output.classesDirs
+    classpath = sourceSets.tomcatTest.runtimeClasspath
+    testClassesDirs = sourceSets.tomcatTest.output.classesDirs
 
     // Provide a temporary directory for tomcat to be deleted after test finishes
     def tomcatTempDir = "$buildDir/tomcat_catalina_base"
@@ -117,8 +103,8 @@ check.dependsOn(tasks.register('tomcat9Test', Test) {
     }
 })
 check.dependsOn(tasks.register('jetty9Test', Test) {
-    classpath = sourceSets.jetty9Test.runtimeClasspath
-    testClassesDirs = sourceSets.jetty9Test.output.classesDirs
+    classpath = sourceSets.jettyTest.runtimeClasspath
+    testClassesDirs = sourceSets.jettyTest.output.classesDirs
 })
 
 // Only run these tests if java 11+ is being used
