@@ -31,19 +31,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** The ClusterSpecifierPlugin for RouteLookup policy. */
-final class RlsClusterSpecifierPlugin implements ClusterSpecifierPlugin {
+final class RouteLookupServiceClusterSpecifierPlugin implements ClusterSpecifierPlugin {
 
-  static final RlsClusterSpecifierPlugin INSTANCE = new RlsClusterSpecifierPlugin();
+  static final RouteLookupServiceClusterSpecifierPlugin INSTANCE =
+      new RouteLookupServiceClusterSpecifierPlugin();
 
   private static final String TYPE_URL =
       "type.googleapis.com/grpc.lookup.v1.RouteLookupConfig";
 
-  private RlsClusterSpecifierPlugin() {}
+  private RouteLookupServiceClusterSpecifierPlugin() {}
 
   @Override
   public String[] typeUrls() {
     return new String[] {
-        TYPE_URL
+        TYPE_URL,
     };
   }
 
@@ -125,7 +126,7 @@ final class RlsClusterSpecifierPlugin implements ClusterSpecifierPlugin {
     abstract RlsProtoData.RouteLookupConfig config();
 
     static RlsPluginConfig create(RlsProtoData.RouteLookupConfig config) {
-      return new AutoValue_RlsClusterSpecifierPlugin_RlsPluginConfig(config);
+      return new AutoValue_RouteLookupServiceClusterSpecifierPlugin_RlsPluginConfig(config);
     }
 
     @Override

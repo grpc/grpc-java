@@ -29,7 +29,7 @@ final class ClusterSpecifierPluginRegistry {
 
   static synchronized ClusterSpecifierPluginRegistry getDefaultRegistry() {
     if (instance == null) {
-      instance = newRegistry().register(RlsClusterSpecifierPlugin.INSTANCE);
+      instance = newRegistry().register(RouteLookupServiceClusterSpecifierPlugin.INSTANCE);
     }
     return instance;
   }

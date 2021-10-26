@@ -28,14 +28,14 @@ import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
 import io.grpc.lookup.v1.NameMatcher;
 import io.grpc.lookup.v1.RouteLookupConfig;
 import io.grpc.rls.RlsProtoData;
-import io.grpc.xds.RlsClusterSpecifierPlugin.RlsPluginConfig;
+import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Tests for {@link RlsClusterSpecifierPlugin}. */
+/** Tests for {@link RouteLookupServiceClusterSpecifierPlugin}. */
 @RunWith(JUnit4.class)
-public class RlsClusterSpecifierPluginTest {
+public class RouteLookupServiceClusterSpecifierPluginTest {
   @Test
   public void parseConfigWithAllFieldsGiven() {
     RouteLookupConfig routeLookupConfig = RouteLookupConfig.newBuilder()
@@ -58,7 +58,8 @@ public class RlsClusterSpecifierPluginTest {
         .setDefaultTarget("default-target")
         .build();
     RlsPluginConfig config =
-        RlsClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(routeLookupConfig)).config;
+        RouteLookupServiceClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(routeLookupConfig))
+            .config;
     assertThat(config.typeUrl()).isEqualTo("type.googleapis.com/grpc.lookup.v1.RouteLookupConfig");
     assertThat(config.config()).isEqualTo(
         new RlsProtoData.RouteLookupConfig(
@@ -96,7 +97,8 @@ public class RlsClusterSpecifierPluginTest {
         .addValidTargets("valid-target")
         .build();
     RlsPluginConfig config =
-        RlsClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(routeLookupConfig)).config;
+        RouteLookupServiceClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(routeLookupConfig))
+            .config;
     assertThat(config.typeUrl()).isEqualTo("type.googleapis.com/grpc.lookup.v1.RouteLookupConfig");
     assertThat(config.config()).isEqualTo(
         new RlsProtoData.RouteLookupConfig(
@@ -117,5 +119,24 @@ public class RlsClusterSpecifierPluginTest {
             5000,
             ImmutableList.of("valid-target"),
             null));
+  }
+
+  @Test
+  public void parseInvalidConfig() {
+    RouteLookupConfig routeLookupConfig = RouteLookupConfig.newBuilder()
+        .addGrpcKeybuilders(
+            GrpcKeyBuilder.newBuilder()
+                .addNames(Name.newBuilder().setService("service1"))
+                .addNames(Name.newBuilder().setService("service2"))
+                .addHeaders(
+                    NameMatcher.newBuilder().setKey("key1").addNames("v1").setRequiredMatch(true)))
+        .setLookupService("rls-cbt.googleapis.com")
+        .setLookupServiceTimeout(Durations.fromMillis(1234))
+        .setCacheSizeBytes(-5000) // negative
+        .addValidTargets("valid-target")
+        .build();
+    ConfigOrError<RlsPluginConfig> configOrError =
+        RouteLookupServiceClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(routeLookupConfig));
+    assertThat(configOrError.errorDetail).contains("cacheSize must be positive");
   }
 }
