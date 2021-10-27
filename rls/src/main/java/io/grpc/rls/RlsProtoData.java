@@ -25,6 +25,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.Internal;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import java.util.HashSet;
 import java.util.List;
@@ -35,7 +36,10 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /** RlsProtoData is a collection of internal representation of RouteLookupService proto messages. */
-final class RlsProtoData {
+@Internal
+public final class RlsProtoData {
+
+  private RlsProtoData() {}
 
   /** A request object sent to route lookup service. */
   @Immutable
@@ -138,7 +142,7 @@ final class RlsProtoData {
 
   /** A config object for gRPC RouteLookupService. */
   @Immutable
-  static final class RouteLookupConfig {
+  public static final class RouteLookupConfig {
 
     private static final long MAX_AGE_MILLIS = TimeUnit.MINUTES.toMillis(5);
     private static final long MAX_CACHE_SIZE = 5 * 1024 * 1024;
@@ -160,7 +164,8 @@ final class RlsProtoData {
     @Nullable
     private final String defaultTarget;
 
-    RouteLookupConfig(
+    /** Constructor. */
+    public RouteLookupConfig(
         List<GrpcKeyBuilder> grpcKeyBuilders,
         String lookupService,
         long lookupServiceTimeoutInMillis,
@@ -197,6 +202,9 @@ final class RlsProtoData {
       checkArgument(cacheSizeBytes > 0, "cacheSize must be positive");
       this.cacheSizeBytes = Math.min(cacheSizeBytes, MAX_CACHE_SIZE);
       this.validTargets = ImmutableList.copyOf(checkNotNull(validTargets, "validTargets"));
+      if (defaultTarget != null && defaultTarget.isEmpty()) {
+        defaultTarget = null;
+      }
       this.defaultTarget = defaultTarget;
     }
 
@@ -328,7 +336,7 @@ final class RlsProtoData {
    * is true, one of the specified names must be present for the keybuilder to match.
    */
   @Immutable
-  static final class NameMatcher {
+  public static final class NameMatcher {
 
     private final String key;
 
@@ -336,7 +344,8 @@ final class RlsProtoData {
 
     private final boolean optional;
 
-    NameMatcher(String key, List<String> names, @Nullable Boolean optional) {
+    /** Constructor. */
+    public NameMatcher(String key, List<String> names, @Nullable Boolean optional) {
       this.key = checkNotNull(key, "key");
       this.names = ImmutableList.copyOf(checkNotNull(names, "names"));
       this.optional = optional != null ? optional : true;
@@ -389,7 +398,7 @@ final class RlsProtoData {
   }
 
   /** GrpcKeyBuilder is a configuration to construct headers consumed by route lookup service. */
-  static final class GrpcKeyBuilder {
+  public static final class GrpcKeyBuilder {
 
     private final ImmutableList<Name> names;
 
@@ -397,6 +406,7 @@ final class RlsProtoData {
     private final ExtraKeys extraKeys;
     private final ImmutableMap<String, String> constantKeys;
 
+    /** Constructor. All args should be nonnull. Headers should head unique keys. */
     public GrpcKeyBuilder(
         List<Name> names, List<NameMatcher> headers, ExtraKeys extraKeys,
         Map<String, String> constantKeys) {
@@ -476,17 +486,18 @@ final class RlsProtoData {
      * required and includes the proto package name. The method name may be omitted, in which case
      * any method on the given service is matched.
      */
-    static final class Name {
+    public static final class Name {
 
       private final String service;
 
       private final String method;
 
-      Name(String service) {
+      public Name(String service) {
         this(service, "*");
       }
 
-      Name(String service, String method) {
+      /** The primary constructor. */
+      public Name(String service, String method) {
         checkState(
             !checkNotNull(service, "service").isEmpty(),
             "service must not be empty or null");
@@ -531,7 +542,7 @@ final class RlsProtoData {
   }
 
   @AutoValue
-  abstract static class ExtraKeys {
+  public abstract static class ExtraKeys {
     static final ExtraKeys DEFAULT = create(null, null, null);
 
     @Nullable abstract String host();
@@ -540,7 +551,7 @@ final class RlsProtoData {
 
     @Nullable abstract String method();
 
-    static ExtraKeys create(
+    public static ExtraKeys create(
         @Nullable String host, @Nullable String service, @Nullable String method) {
       return new AutoValue_RlsProtoData_ExtraKeys(host, service, method);
     }
