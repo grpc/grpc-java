@@ -126,7 +126,7 @@ final class AbstractXdsClient {
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
-    logId = InternalLogId.allocate("xds-client", null);
+    logId = InternalLogId.allocate("xds-client", serverInfo.target());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
   }
