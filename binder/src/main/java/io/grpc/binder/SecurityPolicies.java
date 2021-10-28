@@ -29,6 +29,7 @@ import com.google.common.hash.Hashing;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import javax.annotation.CheckReturnValue;
 
@@ -97,12 +98,16 @@ public final class SecurityPolicies {
   public static SecurityPolicy oneOfSignatureSha256Hash(
       PackageManager packageManager,
       String packageName,
-      ImmutableList<byte[]> requiredSignatureSha256Hashes) {
-    Preconditions.checkNotNull(packageManager);
-    Preconditions.checkNotNull(packageName);
-    Preconditions.checkNotNull(requiredSignatureSha256Hashes);
-    Preconditions.checkArgument(!requiredSignatureSha256Hashes.isEmpty());
-    for (byte[] requiredSignatureSha256Hash : requiredSignatureSha256Hashes) {
+      Collection<byte[]> requiredSignatureSha256Hashes) {
+    Preconditions.checkNotNull(packageManager, "packageManager");
+    Preconditions.checkNotNull(packageName, "packageName");
+    Preconditions.checkNotNull(requiredSignatureSha256Hashes, "requiredSignatureSha256Hashes");
+    Preconditions.checkArgument(!requiredSignatureSha256Hashes.isEmpty(),
+        "requiredSignatureSha256Hashes");
+    ImmutableList<byte[]> requiredSignatureSha256HashesImmutable =
+        ImmutableList.copyOf(requiredSignatureSha256Hashes);
+
+    for (byte[] requiredSignatureSha256Hash : requiredSignatureSha256HashesImmutable) {
       Preconditions.checkNotNull(requiredSignatureSha256Hash);
       Preconditions.checkArgument(requiredSignatureSha256Hash.length == SHA_256_BYTES_LENGTH);
     }
@@ -111,7 +116,7 @@ public final class SecurityPolicies {
       @Override
       public Status checkAuthorization(int uid) {
         return checkUidSignatureSha256(
-            packageManager, uid, packageName, requiredSignatureSha256Hashes);
+            packageManager, uid, packageName, requiredSignatureSha256HashesImmutable);
       }
     };
   }
@@ -151,6 +156,7 @@ public final class SecurityPolicies {
    * @param requiredSignatureSha256Hashes a list of hashes.
    * @return {@code true} if {@code packageName} has a signature matches one of the hashes.
    */
+  @SuppressWarnings("deprecation") // For PackageInfo.signatures
   @SuppressLint("PackageManagerGetSignatures") // We only allow 1 signature.
   private static boolean checkPackageSignatureSha256(
       PackageManager packageManager,
