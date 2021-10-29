@@ -105,15 +105,21 @@ public final class OkHttpChannelBuilder extends
       new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
           .cipherSuites(
               // The following items should be sync with Netty's Http2SecurityUtil.CIPHERS.
-              CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
               CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-              CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
               CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-              CipherSuite.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-              CipherSuite.TLS_DHE_DSS_WITH_AES_128_GCM_SHA256,
-              CipherSuite.TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
-              CipherSuite.TLS_DHE_DSS_WITH_AES_256_GCM_SHA384)
-          .tlsVersions(TlsVersion.TLS_1_2)
+              CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+              CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+              CipherSuite.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+              CipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256)
+
+              // TLS 1.3 does not work so far. See issues:
+              // https://github.com/grpc/grpc-java/issues/7765
+              //
+              // TLS 1.3
+              //CipherSuite.TLS_AES_128_GCM_SHA256,
+              //CipherSuite.TLS_AES_256_GCM_SHA384,
+              //CipherSuite.TLS_CHACHA20_POLY1305_SHA256
+          .tlsVersions(/*TlsVersion.TLS_1_3,*/ TlsVersion.TLS_1_2)
           .supportsTlsExtensions(true)
           .build();
 
@@ -393,6 +399,55 @@ public final class OkHttpChannelBuilder extends
         "Cannot change security when using ChannelCredentials");
     Preconditions.checkArgument(connectionSpec.isTls(), "plaintext ConnectionSpec is not accepted");
     this.connectionSpec = Utils.convertSpec(connectionSpec);
+    return this;
+  }
+
+  /**
+   * Sets the connection specification used for secure connections.
+   *
+   * <p>By default a modern, HTTP/2-compatible spec will be used.
+   *
+   * <p>This method is only used when building a secure connection. For plaintext
+   * connection, use {@link #usePlaintext()} instead.
+   *
+   * @param tlsVersions List of tls versions.
+   * @param cipherSuites List of cipher suites.
+   * @param supportsTlsExtensions Support of TLS extensions.
+   */
+  public OkHttpChannelBuilder tlsConnectionSpec(
+          String[] tlsVersions, String[] cipherSuites,
+          boolean supportsTlsExtensions) {
+    Preconditions.checkState(!freezeSecurityConfiguration,
+            "Cannot change security when using ChannelCredentials");
+    Preconditions.checkNotNull(tlsVersions, "tls versions must not null");
+    Preconditions.checkNotNull(cipherSuites, "ciphers must not null");
+
+      this.connectionSpec = new ConnectionSpec.Builder(true)
+            .supportsTlsExtensions(supportsTlsExtensions)
+            .tlsVersions(tlsVersions)
+            .cipherSuites(cipherSuites)
+            .build();
+    return this;
+  }
+
+  /**
+   * For secure connection, provides a ConnectionSpec to specify Cipher suite and
+   * TLS versions.
+   *
+   * <p>By default a modern, HTTP/2-compatible spec will be used.
+   *
+   * <p>This method is only used when building a secure connection. For plaintext
+   * connection, use {@link #usePlaintext()} instead.
+   *
+   * @throws IllegalArgumentException
+   *         If {@code connectionSpec} is not with TLS
+   */
+  public OkHttpChannelBuilder internalConnectionSpec(
+          io.grpc.okhttp.internal.ConnectionSpec connectionSpec) {
+    Preconditions.checkState(!freezeSecurityConfiguration,
+            "Cannot change security when using ChannelCredentials");
+    Preconditions.checkArgument(connectionSpec.isTls(), "plaintext ConnectionSpec is not accepted");
+    this.connectionSpec = connectionSpec;
     return this;
   }
 
