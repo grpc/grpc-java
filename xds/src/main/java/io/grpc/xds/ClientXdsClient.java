@@ -1892,22 +1892,25 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   @Override
   void shutdown() {
-    isShutdown = true;
-    for (AbstractXdsClient xdsChannel : serverChannelMap.values()) {
-      xdsChannel.shutdown();
-    }
-    if (reportingLoad) {
-      for (final LoadReportClient lrsClient : serverLrsClientMap.values()) {
-        syncContext.execute(
-            new Runnable() {
-              @Override
-              public void run() {
+    syncContext.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            if (isShutdown) {
+              return;
+            }
+            isShutdown = true;
+            for (AbstractXdsClient xdsChannel : serverChannelMap.values()) {
+              xdsChannel.shutdown();
+            }
+            if (reportingLoad) {
+              for (final LoadReportClient lrsClient : serverLrsClientMap.values()) {
                 lrsClient.stopLoadReporting();
               }
-            });
-      }
-    }
-    cleanUpResourceTimers();
+            }
+            cleanUpResourceTimers();
+          }
+        });
   }
 
   @Override
