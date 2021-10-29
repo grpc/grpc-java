@@ -18,6 +18,7 @@ package io.grpc.testing;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.ExperimentalApi;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
@@ -26,6 +27,7 @@ import java.net.SocketAddress;
 import java.net.URI;
 
 /** A name resolver to always resolve the given URI into the given address. */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8636")
 public final class FakeNameResolverProvider extends NameResolverProvider {
 
   /**
