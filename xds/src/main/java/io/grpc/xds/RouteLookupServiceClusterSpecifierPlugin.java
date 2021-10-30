@@ -17,18 +17,14 @@
 package io.grpc.xds;
 
 import com.google.auto.value.AutoValue;
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
-import com.google.protobuf.util.Durations;
-import io.grpc.lookup.v1.GrpcKeyBuilder;
-import io.grpc.lookup.v1.GrpcKeyBuilder.ExtraKeys;
-import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
-import io.grpc.lookup.v1.NameMatcher;
-import io.grpc.lookup.v1.RouteLookupConfig;
-import io.grpc.rls.RlsProtoData;
-import java.util.ArrayList;
-import java.util.List;
+import io.grpc.internal.JsonParser;
+import io.grpc.internal.JsonUtil;
+import java.io.IOException;
+import java.util.Map;
 
 /** The ClusterSpecifierPlugin for RouteLookup policy. */
 final class RouteLookupServiceClusterSpecifierPlugin implements ClusterSpecifierPlugin {
@@ -49,84 +45,49 @@ final class RouteLookupServiceClusterSpecifierPlugin implements ClusterSpecifier
   }
 
   @Override
+  @SuppressWarnings("unchecked")
   public ConfigOrError<RlsPluginConfig> parsePlugin(Message rawProtoMessage) {
     if (!(rawProtoMessage instanceof Any)) {
       return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
     }
-
-    Any anyMessage = (Any) rawProtoMessage;
-    RouteLookupConfig configProto;
     try {
-      configProto = anyMessage.unpack(RouteLookupConfig.class);
-    } catch (InvalidProtocolBufferException e) {
-      return ConfigOrError.fromError("Invalid proto: " + e);
-    }
-    try {
-      List<GrpcKeyBuilder> keyBuildersProto = configProto.getGrpcKeybuildersList();
-      List<RlsProtoData.GrpcKeyBuilder> keyBuilders =
-          new ArrayList<>(keyBuildersProto.size());
-      for (GrpcKeyBuilder keyBuilderProto : keyBuildersProto) {
-        List<Name> namesProto = keyBuilderProto.getNamesList();
-        List<RlsProtoData.GrpcKeyBuilder.Name> names = new ArrayList<>(namesProto.size());
-        for (Name nameProto : namesProto) {
-          if (nameProto.getMethod().isEmpty()) {
-            names.add(new RlsProtoData.GrpcKeyBuilder.Name(nameProto.getService()));
-          } else {
-            names.add(
-                new RlsProtoData.GrpcKeyBuilder.Name(
-                    nameProto.getService(), nameProto.getMethod()));
-          }
-        }
-
-        List<NameMatcher> headersProto = keyBuilderProto.getHeadersList();
-        List<RlsProtoData.NameMatcher> headers = new ArrayList<>(headersProto.size());
-        for (NameMatcher headerProto : headersProto) {
-          headers.add(
-              new RlsProtoData.NameMatcher(
-                  headerProto.getKey(), headerProto.getNamesList(),
-                  headerProto.getRequiredMatch()));
-        }
-
-        String host = null;
-        String service = null;
-        String method = null;
-        if (keyBuilderProto.hasExtraKeys()) {
-          ExtraKeys extraKeysProto = keyBuilderProto.getExtraKeys();
-          host = extraKeysProto.getHost();
-          service = extraKeysProto.getService();
-          method = extraKeysProto.getMethod();
-        }
-        RlsProtoData.ExtraKeys extraKeys =
-            RlsProtoData.ExtraKeys.create(host, service, method);
-
-        RlsProtoData.GrpcKeyBuilder keyBuilder =
-            new RlsProtoData.GrpcKeyBuilder(
-                names, headers, extraKeys, keyBuilderProto.getConstantKeysMap());
-        keyBuilders.add(keyBuilder);
+      Any anyMessage = (Any) rawProtoMessage;
+      Class<? extends Message> protoClass;
+      try {
+        protoClass =
+            (Class<? extends Message>)
+                Class.forName("io.grpc.lookup.v1.RouteLookupClusterSpecifier");
+      } catch (ClassNotFoundException e) {
+        return ConfigOrError.fromError("Dependency for 'io.grpc:grpc-rls' is missing: " + e);
       }
-      RlsProtoData.RouteLookupConfig config = new RlsProtoData.RouteLookupConfig(
-          keyBuilders,
-          configProto.getLookupService(),
-          Durations.toMillis(configProto.getLookupServiceTimeout()),
-          configProto.hasMaxAge() ? Durations.toMillis(configProto.getMaxAge()) : null,
-          configProto.hasStaleAge() ? Durations.toMillis(configProto.getStaleAge()) : null,
-          configProto.getCacheSizeBytes(),
-          configProto.getValidTargetsList(),
-          configProto.getDefaultTarget());
-      return ConfigOrError.fromConfig(RlsPluginConfig.create(config));
+      Message configProto;
+      try {
+        configProto = anyMessage.unpack(protoClass);
+      } catch (InvalidProtocolBufferException e) {
+        return ConfigOrError.fromError("Invalid proto: " + e);
+      }
+      String jsonString = MessagePrinter.print(configProto);
+      try {
+        Map<String, ?> jsonMap = (Map<String, ?>) JsonParser.parse(jsonString);
+        Map<String, ?> config = JsonUtil.getObject(jsonMap, "routeLookupConfig");
+        return ConfigOrError.fromConfig(RlsPluginConfig.create(config));
+      } catch (IOException e) {
+        return ConfigOrError.fromError(
+            "Unable to parse RouteLookupClusterSpecifier: " + jsonString);
+      }
     } catch (RuntimeException e) {
-      return ConfigOrError.fromError(
-          "Error parsing RouteLookupConfig: \n" + configProto + "\n reason: " + e);
+      return ConfigOrError.fromError("Error parsing RouteLookupConfig: " + e);
     }
   }
 
   @AutoValue
   abstract static class RlsPluginConfig implements PluginConfig {
 
-    abstract RlsProtoData.RouteLookupConfig config();
+    abstract ImmutableMap<String, ?> config();
 
-    static RlsPluginConfig create(RlsProtoData.RouteLookupConfig config) {
-      return new AutoValue_RouteLookupServiceClusterSpecifierPlugin_RlsPluginConfig(config);
+    static RlsPluginConfig create(Map<String, ?> config) {
+      return new AutoValue_RouteLookupServiceClusterSpecifierPlugin_RlsPluginConfig(
+          ImmutableMap.copyOf(config));
     }
 
     @Override
