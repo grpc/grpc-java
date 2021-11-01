@@ -103,7 +103,7 @@ public abstract class AbstractXdsInteropTest {
     return defaultServerBootstrapOverride;
   }
 
-  protected void setUp() {
+  protected void setUp() throws Exception {
     startControlPlane();
     startServer();
     nameResolverProvider = XdsNameResolverProvider.createForTest(scheme,
@@ -133,17 +133,13 @@ public abstract class AbstractXdsInteropTest {
     NameResolverRegistry.getDefaultRegistry().deregister(nameResolverProvider);
   }
 
-  protected void startServer() {
+  protected void startServer() throws Exception {
     executor = Executors.newSingleThreadScheduledExecutor();
     XdsServerBuilder serverBuilder = XdsServerBuilder.forPort(
         testServerPort, InsecureServerCredentials.create())
         .addService(new TestServiceImpl(executor))
         .overrideBootstrapForTest(getServerBootstrapOverride());
-    try {
-      server = serverBuilder.build().start();
-    } catch (Exception ex) {
-      throw new RuntimeException(ex);
-    }
+    server = serverBuilder.build().start();
   }
 
   /**
@@ -163,7 +159,7 @@ public abstract class AbstractXdsInteropTest {
     );
   }
 
-  private void startControlPlane() {
+  private void startControlPlane() throws Exception {
     XdsTestControlPlaneService.XdsTestControlPlaneConfig controlPlaneConfig =
         getControlPlaneConfig();
     logger.log(Level.FINER, "Starting control plane with config: {0}", controlPlaneConfig);
@@ -172,11 +168,7 @@ public abstract class AbstractXdsInteropTest {
     NettyServerBuilder controlPlaneServerBuilder =
         NettyServerBuilder.forPort(controlPlaneServicePort)
         .addService(controlPlaneService);
-    try {
-      controlPlane = controlPlaneServerBuilder.build().start();
-    } catch (Exception ex) {
-      throw new RuntimeException(ex);
-    }
+    controlPlane = controlPlaneServerBuilder.build().start();
   }
 
   /**
