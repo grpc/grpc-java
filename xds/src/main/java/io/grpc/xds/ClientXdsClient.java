@@ -27,6 +27,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.Any;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -56,14 +57,20 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
+import io.grpc.ChannelCredentials;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Grpc;
+import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
+import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -85,6 +92,8 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteAction.RetryPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsClient.ResourceStore;
+import io.grpc.xds.XdsClient.XdsResponseHandler;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
@@ -111,7 +120,7 @@ import javax.annotation.Nullable;
 /**
  * XdsClient implementation for client side usages.
  */
-final class ClientXdsClient extends AbstractXdsClient {
+final class ClientXdsClient extends XdsClient implements XdsResponseHandler, ResourceStore {
 
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
@@ -164,33 +173,90 @@ final class ClientXdsClient extends AbstractXdsClient {
           Code.CANCELLED, Code.DEADLINE_EXCEEDED, Code.INTERNAL, Code.RESOURCE_EXHAUSTED,
           Code.UNAVAILABLE));
 
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          logger.log(
+              XdsLogLevel.ERROR,
+              "Uncaught exception in XdsClient SynchronizationContext. Panic!",
+              e);
+          // TODO(chengyuanzhang): better error handling.
+          throw new AssertionError(e);
+        }
+      });
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
+  private final Map<ServerInfo, AbstractXdsClient> serverChannelMap = new HashMap<>();
   private final Map<String, ResourceSubscriber> ldsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> rdsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> cdsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> edsResourceSubscribers = new HashMap<>();
   private final LoadStatsManager2 loadStatsManager;
-  private final LoadReportClient lrsClient;
+  private final Map<ServerInfo, LoadReportClient> serverLrsClientMap = new HashMap<>();
+  private final XdsChannelFactory xdsChannelFactory;
+  private final Bootstrapper.BootstrapInfo bootstrapInfo;
+  private final Context context;
+  private final ScheduledExecutorService timeService;
+  private final BackoffPolicy.Provider backoffPolicyProvider;
+  private final Supplier<Stopwatch> stopwatchSupplier;
   private final TimeProvider timeProvider;
   private boolean reportingLoad;
   private final TlsContextManager tlsContextManager;
+  private final InternalLogId logId;
+  private final XdsLogger logger;
+  private volatile boolean isShutdown;
 
+  // TODO(zdapeng): rename to XdsClientImpl
   ClientXdsClient(
-      ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo, Context context,
-      ScheduledExecutorService timeService, BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier, TimeProvider timeProvider,
+      XdsChannelFactory xdsChannelFactory,
+      Bootstrapper.BootstrapInfo bootstrapInfo,
+      Context context,
+      ScheduledExecutorService timeService,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      Supplier<Stopwatch> stopwatchSupplier,
+      TimeProvider timeProvider,
       TlsContextManager tlsContextManager) {
-    super(channel, bootstrapInfo, context, timeService, backoffPolicyProvider, stopwatchSupplier);
+    this.xdsChannelFactory = xdsChannelFactory;
+    this.bootstrapInfo = bootstrapInfo;
+    this.context = context;
+    this.timeService = timeService;
     loadStatsManager = new LoadStatsManager2(stopwatchSupplier);
+    this.backoffPolicyProvider = backoffPolicyProvider;
+    this.stopwatchSupplier = stopwatchSupplier;
     this.timeProvider = timeProvider;
     this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
-    lrsClient = new LoadReportClient(loadStatsManager, channel, context,
-        bootstrapInfo.servers().get(0).useProtocolV3(), bootstrapInfo.node(),
-        getSyncContext(), timeService, backoffPolicyProvider, stopwatchSupplier);
+    logId = InternalLogId.allocate("xds-client", null);
+    logger = XdsLogger.withLogId(logId);
+    logger.log(XdsLogLevel.INFO, "Created");
+  }
+
+  private void maybeCreateXdsChannelWithLrs(ServerInfo serverInfo) {
+    syncContext.throwIfNotInThisSynchronizationContext();
+    if (serverChannelMap.containsKey(serverInfo)) {
+      return;
+    }
+    AbstractXdsClient xdsChannel = new AbstractXdsClient(
+        xdsChannelFactory,
+        serverInfo,
+        bootstrapInfo.node(),
+        this,
+        this,
+        context,
+        timeService,
+        syncContext,
+        backoffPolicyProvider,
+        stopwatchSupplier);
+    LoadReportClient lrsClient = new LoadReportClient(
+        loadStatsManager, xdsChannel.channel(), context, serverInfo.useProtocolV3(),
+        bootstrapInfo.node(), syncContext, timeService, backoffPolicyProvider, stopwatchSupplier);
+    serverChannelMap.put(serverInfo, xdsChannel);
+    serverLrsClientMap.put(serverInfo, lrsClient);
   }
 
   @Override
-  protected void handleLdsResponse(String versionInfo, List<Any> resources, String nonce) {
+  public void handleLdsResponse(
+      ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce) {
+    syncContext.throwIfNotInThisSynchronizationContext();
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
     Set<String> invalidResources = new HashSet<>();
@@ -233,12 +299,12 @@ final class ClientXdsClient extends AbstractXdsClient {
       // LdsUpdate parsed successfully.
       parsedResources.put(listenerName, new ParsedResource(ldsUpdate, resource));
     }
-    getLogger().log(XdsLogLevel.INFO,
+    logger.log(XdsLogLevel.INFO,
         "Received LDS Response version {0} nonce {1}. Parsed resources: {2}",
         versionInfo, nonce, unpackedResources);
     handleResourceUpdate(
-        ResourceType.LDS, parsedResources, invalidResources, retainedRdsResources, versionInfo,
-        nonce, errors);
+        serverInfo, ResourceType.LDS, parsedResources, invalidResources, retainedRdsResources,
+        versionInfo, nonce, errors);
   }
 
   private LdsUpdate processClientSideListener(
@@ -1307,7 +1373,9 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  protected void handleRdsResponse(String versionInfo, List<Any> resources, String nonce) {
+  public void handleRdsResponse(
+      ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce) {
+    syncContext.throwIfNotInThisSynchronizationContext();
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
     Set<String> invalidResources = new HashSet<>();
@@ -1344,12 +1412,12 @@ final class ClientXdsClient extends AbstractXdsClient {
 
       parsedResources.put(routeConfigName, new ParsedResource(rdsUpdate, resource));
     }
-    getLogger().log(XdsLogLevel.INFO,
+    logger.log(XdsLogLevel.INFO,
         "Received RDS Response version {0} nonce {1}. Parsed resources: {2}",
         versionInfo, nonce, unpackedResources);
     handleResourceUpdate(
-        ResourceType.RDS, parsedResources, invalidResources, Collections.<String>emptySet(),
-        versionInfo, nonce, errors);
+        serverInfo, ResourceType.RDS, parsedResources, invalidResources,
+        Collections.<String>emptySet(), versionInfo, nonce, errors);
   }
 
   private static RdsUpdate processRouteConfiguration(
@@ -1370,7 +1438,9 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  protected void handleCdsResponse(String versionInfo, List<Any> resources, String nonce) {
+  public void handleCdsResponse(
+      ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce) {
+    syncContext.throwIfNotInThisSynchronizationContext();
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
     Set<String> invalidResources = new HashSet<>();
@@ -1415,12 +1485,12 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       parsedResources.put(clusterName, new ParsedResource(cdsUpdate, resource));
     }
-    getLogger().log(XdsLogLevel.INFO,
+    logger.log(XdsLogLevel.INFO,
         "Received CDS Response version {0} nonce {1}. Parsed resources: {2}",
         versionInfo, nonce, unpackedResources);
     handleResourceUpdate(
-        ResourceType.CDS, parsedResources, invalidResources, retainedEdsResources, versionInfo,
-        nonce, errors);
+        serverInfo, ResourceType.CDS, parsedResources, invalidResources, retainedEdsResources,
+        versionInfo, nonce, errors);
   }
 
   @VisibleForTesting
@@ -1598,7 +1668,9 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  protected void handleEdsResponse(String versionInfo, List<Any> resources, String nonce) {
+  public void handleEdsResponse(
+      ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce) {
+    syncContext.throwIfNotInThisSynchronizationContext();
     Map<String, ParsedResource> parsedResources = new HashMap<>(resources.size());
     Set<String> unpackedResources = new HashSet<>(resources.size());
     Set<String> invalidResources = new HashSet<>();
@@ -1641,12 +1713,12 @@ final class ClientXdsClient extends AbstractXdsClient {
       }
       parsedResources.put(clusterName, new ParsedResource(edsUpdate, resource));
     }
-    getLogger().log(
+    logger.log(
         XdsLogLevel.INFO, "Received EDS Response version {0} nonce {1}. Parsed resources: {2}",
         versionInfo, nonce, unpackedResources);
     handleResourceUpdate(
-        ResourceType.EDS, parsedResources, invalidResources, Collections.<String>emptySet(),
-        versionInfo, nonce, errors);
+        serverInfo, ResourceType.EDS, parsedResources, invalidResources,
+        Collections.<String>emptySet(), versionInfo, nonce, errors);
   }
 
   private static EdsUpdate processClusterLoadAssignment(ClusterLoadAssignment assignment)
@@ -1775,7 +1847,8 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  protected void handleStreamClosed(Status error) {
+  public void handleStreamClosed(Status error) {
+    syncContext.throwIfNotInThisSynchronizationContext();
     cleanUpResourceTimers();
     for (ResourceSubscriber subscriber : ldsResourceSubscribers.values()) {
       subscriber.onError(error);
@@ -1792,27 +1865,56 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  protected void handleStreamRestarted() {
+  public void handleStreamRestarted(ServerInfo serverInfo) {
+    syncContext.throwIfNotInThisSynchronizationContext();
     for (ResourceSubscriber subscriber : ldsResourceSubscribers.values()) {
-      subscriber.restartTimer();
+      if (subscriber.serverInfo.equals(serverInfo)) {
+        subscriber.restartTimer();
+      }
     }
     for (ResourceSubscriber subscriber : rdsResourceSubscribers.values()) {
-      subscriber.restartTimer();
+      if (subscriber.serverInfo.equals(serverInfo)) {
+        subscriber.restartTimer();
+      }
     }
     for (ResourceSubscriber subscriber : cdsResourceSubscribers.values()) {
-      subscriber.restartTimer();
+      if (subscriber.serverInfo.equals(serverInfo)) {
+        subscriber.restartTimer();
+      }
     }
     for (ResourceSubscriber subscriber : edsResourceSubscribers.values()) {
-      subscriber.restartTimer();
+      if (subscriber.serverInfo.equals(serverInfo)) {
+        subscriber.restartTimer();
+      }
     }
   }
 
   @Override
-  protected void handleShutdown() {
-    if (reportingLoad) {
-      lrsClient.stopLoadReporting();
-    }
-    cleanUpResourceTimers();
+  void shutdown() {
+    syncContext.execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            if (isShutdown) {
+              return;
+            }
+            isShutdown = true;
+            for (AbstractXdsClient xdsChannel : serverChannelMap.values()) {
+              xdsChannel.shutdown();
+            }
+            if (reportingLoad) {
+              for (final LoadReportClient lrsClient : serverLrsClientMap.values()) {
+                lrsClient.stopLoadReporting();
+              }
+            }
+            cleanUpResourceTimers();
+          }
+        });
+  }
+
+  @Override
+  boolean isShutDown() {
+    return isShutdown;
   }
 
   private Map<String, ResourceSubscriber> getSubscribedResourcesMap(ResourceType type) {
@@ -1833,9 +1935,16 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @Nullable
   @Override
-  Collection<String> getSubscribedResources(ResourceType type) {
+  public Collection<String> getSubscribedResources(ServerInfo serverInfo, ResourceType type) {
     Map<String, ResourceSubscriber> resources = getSubscribedResourcesMap(type);
-    return resources.isEmpty() ? null : resources.keySet();
+    ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+    for (String key : resources.keySet()) {
+      if (resources.get(key).serverInfo.equals(serverInfo)) {
+        builder.add(key);
+      }
+    }
+    Collection<String> retVal = builder.build();
+    return retVal.isEmpty() ? null : retVal;
   }
 
   @Override
@@ -1854,15 +1963,15 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @Override
   void watchLdsResource(final String resourceName, final LdsResourceWatcher watcher) {
-    getSyncContext().execute(new Runnable() {
+    syncContext.execute(new Runnable() {
       @Override
       public void run() {
         ResourceSubscriber subscriber = ldsResourceSubscribers.get(resourceName);
         if (subscriber == null) {
-          getLogger().log(XdsLogLevel.INFO, "Subscribe LDS resource {0}", resourceName);
+          logger.log(XdsLogLevel.INFO, "Subscribe LDS resource {0}", resourceName);
           subscriber = new ResourceSubscriber(ResourceType.LDS, resourceName);
           ldsResourceSubscribers.put(resourceName, subscriber);
-          adjustResourceSubscription(ResourceType.LDS);
+          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.LDS);
         }
         subscriber.addWatcher(watcher);
       }
@@ -1871,16 +1980,16 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @Override
   void cancelLdsResourceWatch(final String resourceName, final LdsResourceWatcher watcher) {
-    getSyncContext().execute(new Runnable() {
+    syncContext.execute(new Runnable() {
       @Override
       public void run() {
         ResourceSubscriber subscriber = ldsResourceSubscribers.get(resourceName);
         subscriber.removeWatcher(watcher);
         if (!subscriber.isWatched()) {
           subscriber.stopTimer();
-          getLogger().log(XdsLogLevel.INFO, "Unsubscribe LDS resource {0}", resourceName);
+          logger.log(XdsLogLevel.INFO, "Unsubscribe LDS resource {0}", resourceName);
           ldsResourceSubscribers.remove(resourceName);
-          adjustResourceSubscription(ResourceType.LDS);
+          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.LDS);
         }
       }
     });
@@ -1888,15 +1997,15 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @Override
   void watchRdsResource(final String resourceName, final RdsResourceWatcher watcher) {
-    getSyncContext().execute(new Runnable() {
+    syncContext.execute(new Runnable() {
       @Override
       public void run() {
         ResourceSubscriber subscriber = rdsResourceSubscribers.get(resourceName);
         if (subscriber == null) {
-          getLogger().log(XdsLogLevel.INFO, "Subscribe RDS resource {0}", resourceName);
+          logger.log(XdsLogLevel.INFO, "Subscribe RDS resource {0}", resourceName);
           subscriber = new ResourceSubscriber(ResourceType.RDS, resourceName);
           rdsResourceSubscribers.put(resourceName, subscriber);
-          adjustResourceSubscription(ResourceType.RDS);
+          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.RDS);
         }
         subscriber.addWatcher(watcher);
       }
@@ -1905,16 +2014,16 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @Override
   void cancelRdsResourceWatch(final String resourceName, final RdsResourceWatcher watcher) {
-    getSyncContext().execute(new Runnable() {
+    syncContext.execute(new Runnable() {
       @Override
       public void run() {
         ResourceSubscriber subscriber = rdsResourceSubscribers.get(resourceName);
         subscriber.removeWatcher(watcher);
         if (!subscriber.isWatched()) {
           subscriber.stopTimer();
-          getLogger().log(XdsLogLevel.INFO, "Unsubscribe RDS resource {0}", resourceName);
+          logger.log(XdsLogLevel.INFO, "Unsubscribe RDS resource {0}", resourceName);
           rdsResourceSubscribers.remove(resourceName);
-          adjustResourceSubscription(ResourceType.RDS);
+          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.RDS);
         }
       }
     });
@@ -1922,15 +2031,15 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @Override
   void watchCdsResource(final String resourceName, final CdsResourceWatcher watcher) {
-    getSyncContext().execute(new Runnable() {
+    syncContext.execute(new Runnable() {
       @Override
       public void run() {
         ResourceSubscriber subscriber = cdsResourceSubscribers.get(resourceName);
         if (subscriber == null) {
-          getLogger().log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
+          logger.log(XdsLogLevel.INFO, "Subscribe CDS resource {0}", resourceName);
           subscriber = new ResourceSubscriber(ResourceType.CDS, resourceName);
           cdsResourceSubscribers.put(resourceName, subscriber);
-          adjustResourceSubscription(ResourceType.CDS);
+          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.CDS);
         }
         subscriber.addWatcher(watcher);
       }
@@ -1939,16 +2048,16 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @Override
   void cancelCdsResourceWatch(final String resourceName, final CdsResourceWatcher watcher) {
-    getSyncContext().execute(new Runnable() {
+    syncContext.execute(new Runnable() {
       @Override
       public void run() {
         ResourceSubscriber subscriber = cdsResourceSubscribers.get(resourceName);
         subscriber.removeWatcher(watcher);
         if (!subscriber.isWatched()) {
           subscriber.stopTimer();
-          getLogger().log(XdsLogLevel.INFO, "Unsubscribe CDS resource {0}", resourceName);
+          logger.log(XdsLogLevel.INFO, "Unsubscribe CDS resource {0}", resourceName);
           cdsResourceSubscribers.remove(resourceName);
-          adjustResourceSubscription(ResourceType.CDS);
+          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.CDS);
         }
       }
     });
@@ -1956,15 +2065,15 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @Override
   void watchEdsResource(final String resourceName, final EdsResourceWatcher watcher) {
-    getSyncContext().execute(new Runnable() {
+    syncContext.execute(new Runnable() {
       @Override
       public void run() {
         ResourceSubscriber subscriber = edsResourceSubscribers.get(resourceName);
         if (subscriber == null) {
-          getLogger().log(XdsLogLevel.INFO, "Subscribe EDS resource {0}", resourceName);
+          logger.log(XdsLogLevel.INFO, "Subscribe EDS resource {0}", resourceName);
           subscriber = new ResourceSubscriber(ResourceType.EDS, resourceName);
           edsResourceSubscribers.put(resourceName, subscriber);
-          adjustResourceSubscription(ResourceType.EDS);
+          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.EDS);
         }
         subscriber.addWatcher(watcher);
       }
@@ -1973,30 +2082,32 @@ final class ClientXdsClient extends AbstractXdsClient {
 
   @Override
   void cancelEdsResourceWatch(final String resourceName, final EdsResourceWatcher watcher) {
-    getSyncContext().execute(new Runnable() {
+    syncContext.execute(new Runnable() {
       @Override
       public void run() {
         ResourceSubscriber subscriber = edsResourceSubscribers.get(resourceName);
         subscriber.removeWatcher(watcher);
         if (!subscriber.isWatched()) {
           subscriber.stopTimer();
-          getLogger().log(XdsLogLevel.INFO, "Unsubscribe EDS resource {0}", resourceName);
+          logger.log(XdsLogLevel.INFO, "Unsubscribe EDS resource {0}", resourceName);
           edsResourceSubscribers.remove(resourceName);
-          adjustResourceSubscription(ResourceType.EDS);
+          subscriber.xdsChannel.adjustResourceSubscription(ResourceType.EDS);
         }
       }
     });
   }
 
   @Override
-  ClusterDropStats addClusterDropStats(String clusterName, @Nullable String edsServiceName) {
+  ClusterDropStats addClusterDropStats(
+      String clusterName, @Nullable String edsServiceName) {
     ClusterDropStats dropCounter =
         loadStatsManager.getClusterDropStats(clusterName, edsServiceName);
-    getSyncContext().execute(new Runnable() {
+    syncContext.execute(new Runnable() {
       @Override
       public void run() {
         if (!reportingLoad) {
-          lrsClient.startLoadReporting();
+          // TODO(https://github.com/grpc/grpc-java/issues/8628): consume ServerInfo arg.
+          serverLrsClientMap.values().iterator().next().startLoadReporting();
           reportingLoad = true;
         }
       }
@@ -2005,20 +2116,41 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   @Override
-  ClusterLocalityStats addClusterLocalityStats(String clusterName,
-      @Nullable String edsServiceName, Locality locality) {
+  ClusterLocalityStats addClusterLocalityStats(
+      String clusterName, @Nullable String edsServiceName,
+      Locality locality) {
     ClusterLocalityStats loadCounter =
         loadStatsManager.getClusterLocalityStats(clusterName, edsServiceName, locality);
-    getSyncContext().execute(new Runnable() {
+    syncContext.execute(new Runnable() {
       @Override
       public void run() {
         if (!reportingLoad) {
-          lrsClient.startLoadReporting();
+          // TODO(https://github.com/grpc/grpc-java/issues/8628): consume ServerInfo arg.
+          serverLrsClientMap.values().iterator().next().startLoadReporting();
           reportingLoad = true;
         }
       }
     });
     return loadCounter;
+  }
+
+  @Override
+  Bootstrapper.BootstrapInfo getBootstrapInfo() {
+    return bootstrapInfo;
+  }
+
+  // TODO(https://github.com/grpc/grpc-java/issues/8629): remove this
+  @Override
+  String getCurrentVersion(ResourceType type) {
+    if (serverChannelMap.isEmpty()) {
+      return "";
+    }
+    return serverChannelMap.values().iterator().next().getCurrentVersion(type);
+  }
+  
+  @Override
+  public String toString() {
+    return logId.toString();
   }
 
   private void cleanUpResourceTimers() {
@@ -2037,18 +2169,19 @@ final class ClientXdsClient extends AbstractXdsClient {
   }
 
   private void handleResourceUpdate(
-      ResourceType type, Map<String, ParsedResource> parsedResources, Set<String> invalidResources,
-      Set<String> retainedResources, String version, String nonce, List<String> errors) {
+      ServerInfo serverInfo, ResourceType type, Map<String, ParsedResource> parsedResources,
+      Set<String> invalidResources, Set<String> retainedResources, String version, String nonce,
+      List<String> errors) {
     String errorDetail = null;
     if (errors.isEmpty()) {
       checkArgument(invalidResources.isEmpty(), "found invalid resources but missing errors");
-      ackResponse(type, version, nonce);
+      serverChannelMap.get(serverInfo).ackResponse(type, version, nonce);
     } else {
       errorDetail = Joiner.on('\n').join(errors);
-      getLogger().log(XdsLogLevel.WARNING,
+      logger.log(XdsLogLevel.WARNING,
           "Failed processing {0} Response version {1} nonce {2}. Errors:\n{3}",
           type, version, nonce, errorDetail);
-      nackResponse(type, nonce, errorDetail);
+      serverChannelMap.get(serverInfo).nackResponse(type, nonce, errorDetail);
     }
     long updateTime = timeProvider.currentTimeNanos();
     for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
@@ -2123,6 +2256,8 @@ final class ClientXdsClient extends AbstractXdsClient {
    * Tracks a single subscribed resource.
    */
   private final class ResourceSubscriber {
+    private final ServerInfo serverInfo;
+    private final AbstractXdsClient xdsChannel;
     private final ResourceType type;
     private final String resource;
     private final Set<ResourceWatcher> watchers = new HashSet<>();
@@ -2132,15 +2267,24 @@ final class ClientXdsClient extends AbstractXdsClient {
     private ResourceMetadata metadata;
 
     ResourceSubscriber(ResourceType type, String resource) {
+      syncContext.throwIfNotInThisSynchronizationContext();
       this.type = type;
       this.resource = resource;
+      this.serverInfo = getServerInfo();
       // Initialize metadata in UNKNOWN state to cover the case when resource subscriber,
       // is created but not yet requested because the client is in backoff.
       this.metadata = ResourceMetadata.newResourceMetadataUnknown();
-      if (isInBackoff()) {
+      maybeCreateXdsChannelWithLrs(serverInfo);
+      this.xdsChannel = serverChannelMap.get(serverInfo);
+      if (xdsChannel.isInBackoff()) {
         return;
       }
       restartTimer();
+    }
+
+    // TODO(zdapeng): add resourceName arg and support xdstp:// resources
+    private ServerInfo getServerInfo() {
+      return bootstrapInfo.servers().get(0); // use first server
     }
 
     void addWatcher(ResourceWatcher watcher) {
@@ -2165,7 +2309,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       class ResourceNotFound implements Runnable {
         @Override
         public void run() {
-          getLogger().log(XdsLogLevel.INFO, "{0} resource {1} initial fetch timeout",
+          logger.log(XdsLogLevel.INFO, "{0} resource {1} initial fetch timeout",
               type, resource);
           respTimer = null;
           onAbsent();
@@ -2179,9 +2323,9 @@ final class ClientXdsClient extends AbstractXdsClient {
 
       // Initial fetch scheduled or rescheduled, transition metadata state to REQUESTED.
       metadata = ResourceMetadata.newResourceMetadataRequested();
-      respTimer = getSyncContext().schedule(
+      respTimer = syncContext.schedule(
           new ResourceNotFound(), INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS,
-          getTimeService());
+          timeService);
     }
 
     void stopTimer() {
@@ -2216,7 +2360,7 @@ final class ClientXdsClient extends AbstractXdsClient {
       if (respTimer != null && respTimer.isPending()) {  // too early to conclude absence
         return;
       }
-      getLogger().log(XdsLogLevel.INFO, "Conclude {0} resource {1} not exist", type, resource);
+      logger.log(XdsLogLevel.INFO, "Conclude {0} resource {1} not exist", type, resource);
       if (!absent) {
         data = null;
         absent = true;
@@ -2323,5 +2467,20 @@ final class ClientXdsClient extends AbstractXdsClient {
     String getErrorDetail() {
       return errorDetail;
     }
+  }
+
+  abstract static class XdsChannelFactory {
+    static final XdsChannelFactory DEFAULT_XDS_CHANNEL_FACTORY = new XdsChannelFactory() {
+      @Override
+      ManagedChannel create(ServerInfo serverInfo) {
+        String target = serverInfo.target();
+        ChannelCredentials channelCredentials = serverInfo.channelCredentials();
+        return Grpc.newChannelBuilder(target, channelCredentials)
+            .keepAliveTime(5, TimeUnit.MINUTES)
+            .build();
+      }
+    };
+
+    abstract ManagedChannel create(ServerInfo serverInfo);
   }
 }

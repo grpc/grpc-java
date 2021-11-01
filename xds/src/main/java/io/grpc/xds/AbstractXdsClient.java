@@ -28,6 +28,7 @@ import com.google.rpc.Code;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
+import io.grpc.Channel;
 import io.grpc.Context;
 import io.grpc.InternalLogId;
 import io.grpc.ManagedChannel;
@@ -36,6 +37,11 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.ClientXdsClient.XdsChannelFactory;
+import io.grpc.xds.EnvoyProtoData.Node;
+import io.grpc.xds.XdsClient.ResourceStore;
+import io.grpc.xds.XdsClient.XdsResponseHandler;
 import io.grpc.xds.XdsLogger.XdsLogLevel;
 import java.util.Collection;
 import java.util.Collections;
@@ -48,7 +54,7 @@ import javax.annotation.Nullable;
  * Common base type for XdsClient implementations, which encapsulates the layer abstraction of
  * the xDS RPC stream.
  */
-abstract class AbstractXdsClient extends XdsClient {
+final class AbstractXdsClient {
 
   private static final String ADS_TYPE_URL_LDS_V2 = "type.googleapis.com/envoy.api.v2.Listener";
   private static final String ADS_TYPE_URL_LDS =
@@ -66,26 +72,18 @@ abstract class AbstractXdsClient extends XdsClient {
   private static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
-  private final SynchronizationContext syncContext = new SynchronizationContext(
-      new Thread.UncaughtExceptionHandler() {
-        @Override
-        public void uncaughtException(Thread t, Throwable e) {
-          getLogger().log(
-              XdsLogLevel.ERROR,
-              "Uncaught exception in XdsClient SynchronizationContext. Panic!",
-              e);
-          // TODO(chengyuanzhang): better error handling.
-          throw new AssertionError(e);
-        }
-      });
+  private final SynchronizationContext syncContext;
   private final InternalLogId logId;
   private final XdsLogger logger;
+  private final ServerInfo serverInfo;
   private final ManagedChannel channel;
+  private final XdsResponseHandler xdsResponseHandler;
+  private final ResourceStore resourceStore;
   private final Context context;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
-  private final Bootstrapper.BootstrapInfo bootstrapInfo;
+  private final Node bootstrapNode;
 
   // Last successfully applied version_info for each resource type. Starts with empty string.
   // A version_info is used to update management server with client's most recent knowledge of
@@ -103,71 +101,42 @@ abstract class AbstractXdsClient extends XdsClient {
   @Nullable
   private ScheduledHandle rpcRetryTimer;
 
-  AbstractXdsClient(ManagedChannel channel, Bootstrapper.BootstrapInfo bootstrapInfo,
-      Context context, ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
-    this.channel = checkNotNull(channel, "channel");
-    this.bootstrapInfo = checkNotNull(bootstrapInfo, "bootstrapInfo");
+  /** An entity that manages ADS RPCs over a single channel. */
+  // TODO: rename to XdsChannel
+  AbstractXdsClient(
+      XdsChannelFactory xdsChannelFactory,
+      ServerInfo serverInfo,
+      Node bootstrapNode,
+      XdsResponseHandler xdsResponseHandler,
+      ResourceStore resourceStore,
+      Context context,
+      ScheduledExecutorService
+      timeService,
+      SynchronizationContext syncContext,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      Supplier<Stopwatch> stopwatchSupplier) {
+    this.serverInfo = checkNotNull(serverInfo, "serverInfo");
+    this.channel = checkNotNull(xdsChannelFactory, "xdsChannelFactory").create(serverInfo);
+    this.xdsResponseHandler = checkNotNull(xdsResponseHandler, "xdsResponseHandler");
+    this.resourceStore = checkNotNull(resourceStore, "resourcesSubscriber");
+    this.bootstrapNode = checkNotNull(bootstrapNode, "bootstrapNode");
     this.context = checkNotNull(context, "context");
     this.timeService = checkNotNull(timeService, "timeService");
+    this.syncContext = checkNotNull(syncContext, "syncContext");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
-    logId = InternalLogId.allocate("xds-client", null);
+    logId = InternalLogId.allocate("xds-client", serverInfo.target());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
   }
 
-  /**
-   * Called when an LDS response is received.
-   */
-  // Must be synchronized.
-  protected void handleLdsResponse(String versionInfo, List<Any> resources, String nonce) {
+  /** The underlying channel. */
+  // Currently, only externally used for LrsClient.
+  Channel channel() {
+    return channel;
   }
 
-  /**
-   * Called when a RDS response is received.
-   */
-  // Must be synchronized.
-  protected void handleRdsResponse(String versionInfo, List<Any> resources, String nonce) {
-  }
-
-  /**
-   * Called when a CDS response is received.
-   */
-  // Must be synchronized.
-  protected void handleCdsResponse(String versionInfo, List<Any> resources, String nonce) {
-  }
-
-  /**
-   * Called when an EDS response is received.
-   */
-  // Must be synchronized.
-  protected void handleEdsResponse(String versionInfo, List<Any> resources, String nonce) {
-  }
-
-  /**
-   * Called when the ADS stream is closed passively.
-   */
-  // Must be synchronized.
-  protected void handleStreamClosed(Status error) {
-  }
-
-  /**
-   * Called when the ADS stream has been recreated.
-   */
-  // Must be synchronized.
-  protected void handleStreamRestarted() {
-  }
-
-  /**
-   * Called when being shut down.
-   */
-  // Must be synchronized.
-  protected void handleShutdown() {
-  }
-
-  @Override
-  final void shutdown() {
+  void shutdown() {
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
@@ -179,19 +148,9 @@ abstract class AbstractXdsClient extends XdsClient {
         if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
           rpcRetryTimer.cancel();
         }
-        handleShutdown();
+        channel.shutdown();
       }
     });
-  }
-
-  @Override
-  boolean isShutDown() {
-    return shutdown;
-  }
-
-  @Override
-  Bootstrapper.BootstrapInfo getBootstrapInfo() {
-    return bootstrapInfo;
   }
 
   @Override
@@ -200,28 +159,17 @@ abstract class AbstractXdsClient extends XdsClient {
   }
 
   /**
-   * Returns the collection of resources currently subscribing to or {@code null} if not
-   * subscribing to any resources for the given type.
-   *
-   * <p>Note an empty collection indicates subscribing to resources of the given type with
-   * wildcard mode.
-   */
-  // Must be synchronized.
-  @Nullable
-  abstract Collection<String> getSubscribedResources(ResourceType type);
-
-  /**
    * Updates the resource subscription for the given resource type.
    */
   // Must be synchronized.
-  protected final void adjustResourceSubscription(ResourceType type) {
+  void adjustResourceSubscription(ResourceType type) {
     if (isInBackoff()) {
       return;
     }
     if (adsStream == null) {
       startRpcStream();
     }
-    Collection<String> resources = getSubscribedResources(type);
+    Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
     if (resources != null) {
       adsStream.sendDiscoveryRequest(type, resources);
     }
@@ -232,7 +180,7 @@ abstract class AbstractXdsClient extends XdsClient {
    * and sends an ACK request to the management server.
    */
   // Must be synchronized.
-  protected final void ackResponse(ResourceType type, String versionInfo, String nonce) {
+  void ackResponse(ResourceType type, String versionInfo, String nonce) {
     switch (type) {
       case LDS:
         ldsVersion = versionInfo;
@@ -252,7 +200,7 @@ abstract class AbstractXdsClient extends XdsClient {
     }
     logger.log(XdsLogLevel.INFO, "Sending ACK for {0} update, nonce: {1}, current version: {2}",
         type, nonce, versionInfo);
-    Collection<String> resources = getSubscribedResources(type);
+    Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
     if (resources == null) {
       resources = Collections.emptyList();
     }
@@ -264,34 +212,22 @@ abstract class AbstractXdsClient extends XdsClient {
    * accepted version) to the management server.
    */
   // Must be synchronized.
-  protected final void nackResponse(ResourceType type, String nonce, String errorDetail) {
+  void nackResponse(ResourceType type, String nonce, String errorDetail) {
     String versionInfo = getCurrentVersion(type);
     logger.log(XdsLogLevel.INFO, "Sending NACK for {0} update, nonce: {1}, current version: {2}",
         type, nonce, versionInfo);
-    Collection<String> resources = getSubscribedResources(type);
+    Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
     if (resources == null) {
       resources = Collections.emptyList();
     }
     adsStream.sendDiscoveryRequest(type, versionInfo, resources, nonce, errorDetail);
   }
 
-  protected final SynchronizationContext getSyncContext() {
-    return syncContext;
-  }
-
-  protected final ScheduledExecutorService getTimeService() {
-    return timeService;
-  }
-
-  protected final XdsLogger getLogger() {
-    return logger;
-  }
-
   /**
    * Returns {@code true} if the resource discovery is currently in backoff.
    */
   // Must be synchronized.
-  protected final boolean isInBackoff() {
+  boolean isInBackoff() {
     return rpcRetryTimer != null && rpcRetryTimer.isPending();
   }
 
@@ -302,7 +238,7 @@ abstract class AbstractXdsClient extends XdsClient {
   // Must be synchronized.
   private void startRpcStream() {
     checkState(adsStream == null, "Previous adsStream has not been cleared yet");
-    if (bootstrapInfo.servers().get(0).useProtocolV3()) {
+    if (serverInfo.useProtocolV3()) {
       adsStream = new AdsStreamV3();
     } else {
       adsStream = new AdsStreamV2();
@@ -317,8 +253,8 @@ abstract class AbstractXdsClient extends XdsClient {
     stopwatch.reset().start();
   }
 
+  /** Returns the latest accepted version of the given resource type. */
   // Must be synchronized.
-  @Override
   String getCurrentVersion(ResourceType type) {
     String version;
     switch (type) {
@@ -353,16 +289,16 @@ abstract class AbstractXdsClient extends XdsClient {
         if (type == ResourceType.UNKNOWN) {
           continue;
         }
-        Collection<String> resources = getSubscribedResources(type);
+        Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, type);
         if (resources != null) {
           adsStream.sendDiscoveryRequest(type, resources);
         }
       }
-      handleStreamRestarted();
+      xdsResponseHandler.handleStreamRestarted(serverInfo);
     }
   }
 
-  protected enum ResourceType {
+  enum ResourceType {
     UNKNOWN, LDS, RDS, CDS, EDS;
 
     String typeUrl() {
@@ -488,19 +424,19 @@ abstract class AbstractXdsClient extends XdsClient {
       switch (type) {
         case LDS:
           ldsRespNonce = nonce;
-          handleLdsResponse(versionInfo, resources, nonce);
+          xdsResponseHandler.handleLdsResponse(serverInfo, versionInfo, resources, nonce);
           break;
         case RDS:
           rdsRespNonce = nonce;
-          handleRdsResponse(versionInfo, resources, nonce);
+          xdsResponseHandler.handleRdsResponse(serverInfo, versionInfo, resources, nonce);
           break;
         case CDS:
           cdsRespNonce = nonce;
-          handleCdsResponse(versionInfo, resources, nonce);
+          xdsResponseHandler.handleCdsResponse(serverInfo, versionInfo, resources, nonce);
           break;
         case EDS:
           edsRespNonce = nonce;
-          handleEdsResponse(versionInfo, resources, nonce);
+          xdsResponseHandler.handleEdsResponse(serverInfo, versionInfo, resources, nonce);
           break;
         case UNKNOWN:
         default:
@@ -526,7 +462,7 @@ abstract class AbstractXdsClient extends XdsClient {
           "ADS stream closed with status {0}: {1}. Cause: {2}",
           error.getCode(), error.getDescription(), error.getCause());
       closed = true;
-      handleStreamClosed(error);
+      xdsResponseHandler.handleStreamClosed(error);
       cleanUp();
       if (responseReceived || retryBackoffPolicy == null) {
         // Reset the backoff sequence if had received a response, or backoff sequence
@@ -619,7 +555,7 @@ abstract class AbstractXdsClient extends XdsClient {
       io.envoyproxy.envoy.api.v2.DiscoveryRequest.Builder builder =
           io.envoyproxy.envoy.api.v2.DiscoveryRequest.newBuilder()
               .setVersionInfo(versionInfo)
-              .setNode(bootstrapInfo.node().toEnvoyProtoNodeV2())
+              .setNode(bootstrapNode.toEnvoyProtoNodeV2())
               .addAllResourceNames(resources)
               .setTypeUrl(type.typeUrlV2())
               .setResponseNonce(nonce);
@@ -699,7 +635,7 @@ abstract class AbstractXdsClient extends XdsClient {
       DiscoveryRequest.Builder builder =
           DiscoveryRequest.newBuilder()
               .setVersionInfo(versionInfo)
-              .setNode(bootstrapInfo.node().toEnvoyProtoNode())
+              .setNode(bootstrapNode.toEnvoyProtoNode())
               .addAllResourceNames(resources)
               .setTypeUrl(type.typeUrl())
               .setResponseNonce(nonce);

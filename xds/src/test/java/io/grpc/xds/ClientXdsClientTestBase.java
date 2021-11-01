@@ -59,6 +59,8 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
+import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.ClientXdsClient.XdsChannelFactory;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -272,6 +274,12 @@ public abstract class ClientXdsClientTestBase {
             .start());
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
+    XdsChannelFactory xdsChannelFactory = new XdsChannelFactory() {
+      @Override
+      ManagedChannel create(ServerInfo serverInfo) {
+        return channel;
+      }
+    };
 
     Bootstrapper.BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
@@ -284,7 +292,7 @@ public abstract class ClientXdsClientTestBase {
             .build();
     xdsClient =
         new ClientXdsClient(
-            channel,
+            xdsChannelFactory,
             bootstrapInfo,
             Context.ROOT,
             fakeClock.getScheduledExecutorService(),
@@ -2325,6 +2333,7 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void reportLoadStatsToServer() {
+    xdsClient.watchLdsResource(LDS_RESOURCE, ldsResourceWatcher);
     String clusterName = "cluster-foo.googleapis.com";
     ClusterDropStats dropStats = xdsClient.addClusterDropStats(clusterName, null);
     LrsRpcCall lrsCall = loadReportCalls.poll();
