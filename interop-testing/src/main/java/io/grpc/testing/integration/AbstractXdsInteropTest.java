@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The gRPC Authors
+ * Copyright 2021 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -154,11 +154,12 @@ public abstract class AbstractXdsInteropTest {
   protected XdsTestControlPlaneService.XdsTestControlPlaneConfig getControlPlaneConfig() {
     String tcpListenerName = SERVER_LISTENER_TEMPLATE.replaceAll("%s", serverHostName);
     return new XdsTestControlPlaneService.XdsTestControlPlaneConfig(
-        XdsTestControlPlaneService.serverListener(tcpListenerName, serverHostName),
-        XdsTestControlPlaneService.clientListener(serverHostName),
-        XdsTestControlPlaneService.rds(serverHostName),
-        XdsTestControlPlaneService.cds(),
-        XdsTestControlPlaneService.eds(testServerPort)
+        Collections.singletonList(
+            XdsTestControlPlaneService.serverListener(tcpListenerName, serverHostName)),
+        Collections.singletonList(XdsTestControlPlaneService.clientListener(serverHostName)),
+        Collections.singletonList(XdsTestControlPlaneService.rds(serverHostName)),
+        Collections.singletonList(XdsTestControlPlaneService.cds()),
+        Collections.singletonList(XdsTestControlPlaneService.eds(testServerPort))
     );
   }
 
