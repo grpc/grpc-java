@@ -16,8 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.base.MoreObjects;
 import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
@@ -70,37 +68,6 @@ interface Filter {
     @Nullable
     ServerInterceptor buildServerInterceptor(
         FilterConfig config, @Nullable FilterConfig overrideConfig);
-  }
-
-  // TODO(zdapeng): Unify with ClientXdsClient.StructOrError, or just have parseFilterConfig() throw
-  //     certain types of Exception.
-  final class ConfigOrError<T> {
-    /**
-     * Returns a {@link ConfigOrError} for the successfully converted data object.
-     */
-    static <T> ConfigOrError<T> fromConfig(T config) {
-      return new ConfigOrError<>(config);
-    }
-
-    /**
-     * Returns a {@link ConfigOrError} for the failure to convert the data object.
-     */
-    static <T> ConfigOrError<T> fromError(String errorDetail) {
-      return new ConfigOrError<>(errorDetail);
-    }
-
-    final String errorDetail;
-    final T config;
-
-    private ConfigOrError(T config) {
-      this.config = checkNotNull(config, "config");
-      this.errorDetail = null;
-    }
-
-    private ConfigOrError(String errorDetail) {
-      this.config = null;
-      this.errorDetail = checkNotNull(errorDetail, "errorDetail");
-    }
   }
 
   /** Filter config with instance name. */

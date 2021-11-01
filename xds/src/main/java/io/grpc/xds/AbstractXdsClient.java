@@ -73,7 +73,6 @@ final class AbstractXdsClient {
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
   private final SynchronizationContext syncContext;
-  private final MessagePrinter msgPrinter = new MessagePrinter();
   private final InternalLogId logId;
   private final XdsLogger logger;
   private final ServerInfo serverInfo;
@@ -516,8 +515,9 @@ final class AbstractXdsClient {
                 public void run() {
                   ResourceType type = ResourceType.fromTypeUrl(response.getTypeUrl());
                   if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-                    logger.log(XdsLogLevel.DEBUG, "Received {0} response:\n{1}",
-                        type, msgPrinter.print(response));
+                    logger.log(
+                        XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
+                        MessagePrinter.print(response));
                   }
                   handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
                       response.getNonce());
@@ -569,7 +569,9 @@ final class AbstractXdsClient {
       }
       io.envoyproxy.envoy.api.v2.DiscoveryRequest request = builder.build();
       requestWriter.onNext(request);
-      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", msgPrinter.print(request));
+      if (logger.isLoggable(XdsLogLevel.DEBUG)) {
+        logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", MessagePrinter.print(request));
+      }
     }
 
     @Override
@@ -593,8 +595,9 @@ final class AbstractXdsClient {
             public void run() {
               ResourceType type = ResourceType.fromTypeUrl(response.getTypeUrl());
               if (logger.isLoggable(XdsLogLevel.DEBUG)) {
-                logger.log(XdsLogLevel.DEBUG, "Received {0} response:\n{1}",
-                    type, msgPrinter.print(response));
+                logger.log(
+                    XdsLogLevel.DEBUG, "Received {0} response:\n{1}", type,
+                    MessagePrinter.print(response));
               }
               handleRpcResponse(type, response.getVersionInfo(), response.getResourcesList(),
                   response.getNonce());
@@ -646,7 +649,9 @@ final class AbstractXdsClient {
       }
       DiscoveryRequest request = builder.build();
       requestWriter.onNext(request);
-      logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", msgPrinter.print(request));
+      if (logger.isLoggable(XdsLogLevel.DEBUG)) {
+        logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", MessagePrinter.print(request));
+      }
     }
 
     @Override
