@@ -14,38 +14,24 @@
  * limitations under the License.
  */
 
-package io.grpc.testing;
+package io.grpc.internal.testing;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.ExperimentalApi;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
-import io.grpc.NameResolverRegistry;
 import io.grpc.Status;
 import java.net.SocketAddress;
 import java.net.URI;
 
 /** A name resolver to always resolve the given URI into the given address. */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8636")
 public final class FakeNameResolverProvider extends NameResolverProvider {
-
-  /**
-   * Register a new resolver.
-   *
-   * @param targetUri The URI to resolve when requested.
-   * @param address The address to return for the target URI.
-   */
-  public static final void register(String targetUri, SocketAddress address) {
-    NameResolverRegistry.getDefaultRegistry().register(
-        new FakeNameResolverProvider(URI.create(targetUri), address));
-  }
 
   private final URI targetUri;
   private final SocketAddress address;
 
-  private FakeNameResolverProvider(URI targetUri, SocketAddress address) {
-    this.targetUri = targetUri;
+  public FakeNameResolverProvider(String targetUri, SocketAddress address) {
+    this.targetUri = URI.create(targetUri);
     this.address = address;
   }
 
