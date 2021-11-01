@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import io.grpc.Status;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
@@ -31,6 +32,7 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -495,6 +497,7 @@ abstract class XdsClient {
   /**
    * Returns the latest accepted version of the given resource type.
    */
+  // TODO(https://github.com/grpc/grpc-java/issues/8629): remove this
   String getCurrentVersion(ResourceType type) {
     throw new UnsupportedOperationException();
   }
@@ -566,6 +569,7 @@ abstract class XdsClient {
    * use {@link ClusterDropStats#release} to release its <i>hard</i> reference when it is safe to
    * stop reporting dropped RPCs for the specified cluster in the future.
    */
+  // TODO(https://github.com/grpc/grpc-java/issues/8628): add ServerInfo arg
   ClusterDropStats addClusterDropStats(String clusterName, @Nullable String edsServiceName) {
     throw new UnsupportedOperationException();
   }
@@ -578,8 +582,48 @@ abstract class XdsClient {
    * reference when it is safe to stop reporting RPC loads for the specified locality in the
    * future.
    */
+  // TODO(https://github.com/grpc/grpc-java/issues/8628): add ServerInfo arg
   ClusterLocalityStats addClusterLocalityStats(
       String clusterName, @Nullable String edsServiceName, Locality locality) {
     throw new UnsupportedOperationException();
+  }
+
+  interface XdsResponseHandler {
+    /** Called when an LDS response is received. */
+    void handleLdsResponse(
+        ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce);
+
+    /** Called when an RDS response is received. */
+    void handleRdsResponse(
+        ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce);
+
+    /** Called when an CDS response is received. */
+    void handleCdsResponse(
+        ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce);
+
+    /** Called when an EDS response is received. */
+    void handleEdsResponse(
+        ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce);
+
+    /** Called when the ADS stream is closed passively. */
+    // Must be synchronized.
+    void handleStreamClosed(Status error);
+
+    /** Called when the ADS stream has been recreated. */
+    // Must be synchronized.
+    void handleStreamRestarted(ServerInfo serverInfo);
+  }
+
+  interface ResourceStore {
+    /**
+     * Returns the collection of resources currently subscribing to or {@code null} if not
+     * subscribing to any resources for the given type.
+     *
+     * <p>Note an empty collection indicates subscribing to resources of the given type with
+     * wildcard mode.
+     */
+    // Must be synchronized.
+    @Nullable
+    Collection<String> getSubscribedResources(ServerInfo serverInfo, ResourceType type);
   }
 }

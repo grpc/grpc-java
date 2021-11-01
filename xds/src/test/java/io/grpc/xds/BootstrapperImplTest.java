@@ -27,6 +27,7 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
+import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.Node;
@@ -56,6 +57,7 @@ public class BootstrapperImplTest {
   private String originalBootstrapPathFromSysProp;
   private String originalBootstrapConfigFromEnvVar;
   private String originalBootstrapConfigFromSysProp;
+  private boolean originalEnableFederation;
 
   @Before
   public void setUp() {
@@ -68,6 +70,7 @@ public class BootstrapperImplTest {
     originalBootstrapPathFromSysProp = BootstrapperImpl.bootstrapPathFromSysProp;
     originalBootstrapConfigFromEnvVar = BootstrapperImpl.bootstrapConfigFromEnvVar;
     originalBootstrapConfigFromSysProp = BootstrapperImpl.bootstrapConfigFromSysProp;
+    originalEnableFederation = BootstrapperImpl.enableFederation;
   }
 
   @After
@@ -76,6 +79,7 @@ public class BootstrapperImplTest {
     BootstrapperImpl.bootstrapPathFromSysProp = originalBootstrapPathFromSysProp;
     BootstrapperImpl.bootstrapConfigFromEnvVar = originalBootstrapConfigFromEnvVar;
     BootstrapperImpl.bootstrapConfigFromSysProp = originalBootstrapConfigFromSysProp;
+    BootstrapperImpl.enableFederation = originalEnableFederation;
   }
 
   @Test
@@ -106,11 +110,11 @@ public class BootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    assertThat(info.getServers()).hasSize(1);
-    ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
-    assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
-    assertThat(info.getNode()).isEqualTo(
+    assertThat(info.servers()).hasSize(1);
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
@@ -158,17 +162,17 @@ public class BootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    assertThat(info.getServers()).hasSize(2);
-    List<ServerInfo> serverInfoList = info.getServers();
-    assertThat(serverInfoList.get(0).getTarget())
+    assertThat(info.servers()).hasSize(2);
+    List<ServerInfo> serverInfoList = info.servers();
+    assertThat(serverInfoList.get(0).target())
         .isEqualTo("trafficdirector-foo.googleapis.com:443");
-    assertThat(serverInfoList.get(0).getChannelCredentials())
+    assertThat(serverInfoList.get(0).channelCredentials())
         .isInstanceOf(TlsChannelCredentials.class);
-    assertThat(serverInfoList.get(1).getTarget())
+    assertThat(serverInfoList.get(1).target())
         .isEqualTo("trafficdirector-bar.googleapis.com:443");
-    assertThat(serverInfoList.get(1).getChannelCredentials())
+    assertThat(serverInfoList.get(1).channelCredentials())
         .isInstanceOf(InsecureChannelCredentials.class);
-    assertThat(info.getNode()).isEqualTo(
+    assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
@@ -208,11 +212,11 @@ public class BootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    assertThat(info.getServers()).hasSize(1);
-    ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
-    assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
-    assertThat(info.getNode()).isEqualTo(
+    assertThat(info.servers()).hasSize(1);
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
@@ -277,11 +281,11 @@ public class BootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    assertThat(info.getServers()).hasSize(1);
-    ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
-    assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
-    assertThat(info.getNode()).isEqualTo(getNodeBuilder().build());
+    assertThat(info.servers()).hasSize(1);
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(info.node()).isEqualTo(getNodeBuilder().build());
   }
 
   @Test
@@ -379,17 +383,17 @@ public class BootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    assertThat(info.getServers()).isEmpty();
-    assertThat(info.getNode()).isEqualTo(getNodeBuilder().build());
-    Map<String, Bootstrapper.CertificateProviderInfo> certProviders = info.getCertProviders();
+    assertThat(info.servers()).isEmpty();
+    assertThat(info.node()).isEqualTo(getNodeBuilder().build());
+    Map<String, Bootstrapper.CertificateProviderInfo> certProviders = info.certProviders();
     assertThat(certProviders).isNotNull();
     Bootstrapper.CertificateProviderInfo gcpId = certProviders.get("gcp_id");
     Bootstrapper.CertificateProviderInfo fileProvider = certProviders.get("file_provider");
-    assertThat(gcpId.getPluginName()).isEqualTo("meshca");
-    assertThat(gcpId.getConfig()).isInstanceOf(Map.class);
-    assertThat(fileProvider.getPluginName()).isEqualTo("file_watcher");
-    assertThat(fileProvider.getConfig()).isInstanceOf(Map.class);
-    Map<String, ?> meshCaConfig = (Map<String, ?>)gcpId.getConfig();
+    assertThat(gcpId.pluginName()).isEqualTo("meshca");
+    assertThat(gcpId.config()).isInstanceOf(Map.class);
+    assertThat(fileProvider.pluginName()).isEqualTo("file_watcher");
+    assertThat(fileProvider.config()).isInstanceOf(Map.class);
+    Map<String, ?> meshCaConfig = gcpId.config();
     assertThat(meshCaConfig.get("key_size")).isEqualTo(2048);
   }
 
@@ -552,7 +556,7 @@ public class BootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    assertThat(info.getServerListenerResourceNameTemplate()).isEqualTo("grpc/serverx=%s");
+    assertThat(info.serverListenerResourceNameTemplate()).isEqualTo("grpc/serverx=%s");
   }
 
   @Test
@@ -571,10 +575,10 @@ public class BootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
-    assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
-    assertThat(serverInfo.isUseProtocolV3()).isFalse();
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.useProtocolV3()).isFalse();
   }
 
   @Test
@@ -593,10 +597,10 @@ public class BootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
-    assertThat(serverInfo.getTarget()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.getChannelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
-    assertThat(serverInfo.isUseProtocolV3()).isTrue();
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.channelCredentials()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.useProtocolV3()).isTrue();
   }
 
   @Test
@@ -674,6 +678,134 @@ public class BootstrapperImplTest {
     BootstrapperImpl.bootstrapConfigFromEnvVar = null;
     BootstrapperImpl.bootstrapConfigFromSysProp = rawData;
     bootstrapper.setFileReader(mock(BootstrapperImpl.FileReader.class));
+    bootstrapper.bootstrap();
+  }
+
+  @Test
+  public void parseClientDefaultListenerResourceNameTemplate() throws Exception {
+    BootstrapperImpl.enableFederation = true;
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.clientDefaultListenerResourceNameTemplate()).isEqualTo("%s");
+
+    rawData = "{\n"
+        + "  \"client_default_listener_resource_name_template\": \"xdstp://a.com/faketype/%s\",\n"
+        + "  \"xds_servers\": [\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    info = bootstrapper.bootstrap();
+    assertThat(info.clientDefaultListenerResourceNameTemplate())
+        .isEqualTo("xdstp://a.com/faketype/%s");
+  }
+
+  @Test
+  public void parseAuthorities() throws Exception {
+    BootstrapperImpl.enableFederation = true;
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.authorities()).isEmpty();
+
+    rawData = "{\n"
+        + "  \"authorities\": {\n"
+        + "    \"a.com\": {\n"
+        + "      \"client_listener_resource_name_template\": \"xdstp://a.com/v1.Listener/id-%s\"\n"
+        + "    }\n"
+        + "  },\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    info = bootstrapper.bootstrap();
+    assertThat(info.authorities()).hasSize(1);
+    AuthorityInfo authorityInfo = info.authorities().get("a.com");
+    assertThat(authorityInfo.clientListenerResourceNameTemplate())
+        .isEqualTo("xdstp://a.com/v1.Listener/id-%s");
+    // Defaults to top-level servers.
+    assertThat(authorityInfo.xdsServers()).hasSize(1);
+    assertThat(authorityInfo.xdsServers().get(0).target()).isEqualTo(SERVER_URI);
+
+    rawData = "{\n"
+        + "  \"authorities\": {\n"
+        + "    \"a.com\": {\n"
+        + "      \"xds_servers\": [\n"
+        + "        {\n"
+        + "          \"server_uri\": \"td2.googleapis.com:443\",\n"
+        + "          \"channel_creds\": [\n"
+        + "            {\"type\": \"insecure\"}\n"
+        + "          ]\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  },\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    info = bootstrapper.bootstrap();
+    assertThat(info.authorities()).hasSize(1);
+    authorityInfo = info.authorities().get("a.com");
+    // Defaults to "xdstp://<authority_name>>/envoy.config.listener.v3.Listener/%s"
+    assertThat(authorityInfo.clientListenerResourceNameTemplate())
+        .isEqualTo("xdstp://a.com/envoy.config.listener.v3.Listener/%s");
+    assertThat(authorityInfo.xdsServers()).hasSize(1);
+    assertThat(authorityInfo.xdsServers().get(0).target()).isEqualTo("td2.googleapis.com:443");
+  }
+
+  @Test
+  public void badFederationConfig() throws Exception {
+    BootstrapperImpl.enableFederation = true;
+    String rawData = "{\n"
+        + "  \"authorities\": {\n"
+        + "    \"a.com\": {\n"
+        + "      \"client_listener_resource_name_template\": \"xdstp://wrong/\"\n"
+        + "    }\n"
+        + "  },\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    try {
+      bootstrapper.bootstrap();
+      fail("should fail");
+    } catch (XdsInitializationException e) {
+      assertThat(e).hasMessageThat().isEqualTo(
+          "client_listener_resource_name_template: 'xdstp://wrong/' does not start with "
+              + "xdstp://a.com/");
+    }
+    BootstrapperImpl.enableFederation = false;
     bootstrapper.bootstrap();
   }
 

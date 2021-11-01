@@ -118,24 +118,23 @@ public class XdsServerWrapperTest {
   @Test
   public void testBootstrap_notV3() throws Exception {
     Bootstrapper.BootstrapInfo b =
-        new Bootstrapper.BootstrapInfo(
-          Arrays.asList(
-                  new Bootstrapper.ServerInfo("uri", InsecureChannelCredentials.create(), false)),
-          EnvoyProtoData.Node.newBuilder().setId("id").build(),
-          null,
-                "grpc/server?udpa.resource.listening_address=%s");
+        Bootstrapper.BootstrapInfo.builder()
+            .servers(Arrays.asList(
+                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create(), false)))
+            .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
+            .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
+            .build();
     verifyBootstrapFail(b);
   }
 
   @Test
   public void testBootstrap_noTemplate() throws Exception {
     Bootstrapper.BootstrapInfo b =
-        new Bootstrapper.BootstrapInfo(
-            Arrays.asList(
-                    new Bootstrapper.ServerInfo("uri", InsecureChannelCredentials.create(), true)),
-            EnvoyProtoData.Node.newBuilder().setId("id").build(),
-            null,
-            null);
+        Bootstrapper.BootstrapInfo.builder()
+            .servers(Arrays.asList(
+                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create(), true)))
+            .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
+            .build();
     verifyBootstrapFail(b);
   }
 

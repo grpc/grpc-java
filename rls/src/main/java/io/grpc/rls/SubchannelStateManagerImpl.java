@@ -30,6 +30,7 @@ final class SubchannelStateManagerImpl implements SubchannelStateManager {
 
   private final HashMap<String, ConnectivityState> stateMap = new HashMap<>();
   private final Multiset<ConnectivityState> stateMultiset = HashMultiset.create();
+  private ConnectivityState currentState;
 
   @Override
   public void updateState(String name, ConnectivityState newState) {
@@ -56,16 +57,20 @@ final class SubchannelStateManagerImpl implements SubchannelStateManager {
   @Override
   public ConnectivityState getAggregatedState() {
     if (stateMultiset.contains(ConnectivityState.READY)) {
-      return ConnectivityState.READY;
+      currentState = ConnectivityState.READY;
     } else if (stateMultiset.contains(ConnectivityState.CONNECTING)) {
-      return ConnectivityState.CONNECTING;
+      if (currentState != ConnectivityState.TRANSIENT_FAILURE) {
+        currentState = ConnectivityState.CONNECTING;
+      }
     } else if (stateMultiset.contains(ConnectivityState.IDLE)) {
-      return ConnectivityState.IDLE;
+      currentState = ConnectivityState.IDLE;
     } else if (stateMultiset.contains(ConnectivityState.TRANSIENT_FAILURE)) {
-      return ConnectivityState.TRANSIENT_FAILURE;
+      currentState = ConnectivityState.TRANSIENT_FAILURE;
+    } else {
+      // empty or shutdown
+      currentState = ConnectivityState.IDLE;
     }
-    // empty or shutdown
-    return ConnectivityState.IDLE;
+    return currentState;
   }
 
   @Override

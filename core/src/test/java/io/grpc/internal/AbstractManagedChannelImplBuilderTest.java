@@ -21,12 +21,12 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.base.Defaults;
+import com.google.common.collect.ImmutableSet;
 import io.grpc.ForwardingTestUtil;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.Collections;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -53,7 +53,8 @@ public class AbstractManagedChannelImplBuilderTest {
         ManagedChannelBuilder.class,
         mockDelegate,
         testChannelBuilder,
-        Collections.<Method>emptyList(),
+        // maxInboundMessageSize is the only method that shouldn't forward.
+        ImmutableSet.of(ManagedChannelBuilder.class.getMethod("maxInboundMessageSize", int.class)),
         new ForwardingTestUtil.ArgumentProvider() {
           @Override
           public Object get(Method method, int argPos, Class<?> clazz) {
@@ -64,6 +65,15 @@ public class AbstractManagedChannelImplBuilderTest {
             return null;
           }
         });
+  }
+
+  @Test
+  public void testMaxInboundMessageSize() {
+    assertThat(testChannelBuilder.maxInboundMessageSize)
+        .isEqualTo(GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE);
+
+    testChannelBuilder.maxInboundMessageSize(42);
+    assertThat(testChannelBuilder.maxInboundMessageSize).isEqualTo(42);
   }
 
   @Test

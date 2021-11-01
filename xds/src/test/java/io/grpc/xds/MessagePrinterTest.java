@@ -64,7 +64,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class MessagePrinterTest {
-  private final MessagePrinter printer = new MessagePrinter();
 
   @Test
   public void printLdsResponse_v3() {
@@ -151,7 +150,7 @@ public class MessagePrinterTest {
         + "  \"typeUrl\": \"type.googleapis.com/envoy.config.listener.v3.Listener\",\n"
         + "  \"nonce\": \"0000\"\n"
         + "}";
-    String res = printer.print(response);
+    String res = MessagePrinter.print(response);
     assertThat(res).isEqualTo(expectedString);
   }
 
@@ -202,7 +201,7 @@ public class MessagePrinterTest {
         + "  \"typeUrl\": \"type.googleapis.com/envoy.config.route.v3.RouteConfiguration\",\n"
         + "  \"nonce\": \"0000\"\n"
         + "}";
-    String res = printer.print(response);
+    String res = MessagePrinter.print(response);
     assertThat(res).isEqualTo(expectedString);
   }
 
@@ -267,7 +266,7 @@ public class MessagePrinterTest {
         + "  \"typeUrl\": \"type.googleapis.com/envoy.config.cluster.v3.Cluster\",\n"
         + "  \"nonce\": \"0000\"\n"
         + "}";
-    String res = printer.print(response);
+    String res = MessagePrinter.print(response);
     assertThat(res).isEqualTo(expectedString);
   }
 
@@ -356,7 +355,7 @@ public class MessagePrinterTest {
         + ".ClusterLoadAssignment\",\n"
         + "  \"nonce\": \"0000\"\n"
         + "}";
-    String res = printer.print(response);
+    String res = MessagePrinter.print(response);
     assertThat(res).isEqualTo(expectedString);
   }
 }

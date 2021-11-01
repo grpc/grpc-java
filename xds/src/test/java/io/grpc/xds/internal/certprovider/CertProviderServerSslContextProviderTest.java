@@ -79,8 +79,8 @@ public class CertProviderServerSslContextProviderTest {
             requireClientCert);
     return certProviderServerSslContextProviderFactory.getProvider(
         downstreamTlsContext,
-        bootstrapInfo.getNode().toEnvoyProtoNode(),
-        bootstrapInfo.getCertProviders());
+        bootstrapInfo.node().toEnvoyProtoNode(),
+        bootstrapInfo.certProviders());
   }
 
   /** Helper method to build CertProviderServerSslContextProvider. */
@@ -102,8 +102,8 @@ public class CertProviderServerSslContextProviderTest {
                     requireClientCert);
     return certProviderServerSslContextProviderFactory.getProvider(
             downstreamTlsContext,
-            bootstrapInfo.getNode().toEnvoyProtoNode(),
-            bootstrapInfo.getCertProviders());
+            bootstrapInfo.node().toEnvoyProtoNode(),
+            bootstrapInfo.certProviders());
   }
 
 

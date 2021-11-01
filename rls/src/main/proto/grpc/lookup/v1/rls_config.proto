@@ -216,3 +216,10 @@ message RouteLookupConfig {
   reserved 10;
   reserved "request_processing_strategy";
 }
+
+// RouteLookupClusterSpecifier is used in xDS to represent a cluster specifier
+// plugin for RLS.
+message RouteLookupClusterSpecifier {
+  // The RLS config for this cluster specifier plugin instance.
+  RouteLookupConfig route_lookup_config = 1;
+}

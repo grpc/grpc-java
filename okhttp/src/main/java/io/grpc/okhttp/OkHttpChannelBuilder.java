@@ -174,7 +174,6 @@ public final class OkHttpChannelBuilder extends
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private boolean keepAliveWithoutCalls;
-  private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
   private int maxInboundMetadataSize = Integer.MAX_VALUE;
 
   /**
