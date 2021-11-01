@@ -36,11 +36,13 @@ import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.NameResolverRegistry;
 import io.grpc.Server;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.testing.FakeNameResolverProvider;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
 import io.grpc.stub.StreamObserver;
@@ -66,6 +68,7 @@ public final class BinderChannelSmokeTest {
 
   private static final int SLIGHTLY_MORE_THAN_ONE_BLOCK = 16 * 1024 + 100;
   private static final String MSG = "Some text which will be repeated many many times";
+  private static final String SERVER_TARGET_URI = "fake://server";
 
   final MethodDescriptor<String, String> method =
       MethodDescriptor.newBuilder(StringMarshaller.INSTANCE, StringMarshaller.INSTANCE)
@@ -85,7 +88,7 @@ public final class BinderChannelSmokeTest {
           .setType(MethodDescriptor.MethodType.BIDI_STREAMING)
           .build();
 
-  AndroidComponentAddress serverAddress;
+  FakeNameResolverProvider fakeNameResolverProvider;
   ManagedChannel channel;
   AtomicReference<Metadata> headersCapture = new AtomicReference<>();
 
@@ -118,6 +121,8 @@ public final class BinderChannelSmokeTest {
             TestUtils.recordRequestHeadersInterceptor(headersCapture));
 
     AndroidComponentAddress serverAddress = HostServices.allocateService(appContext);
+    fakeNameResolverProvider = new FakeNameResolverProvider(SERVER_TARGET_URI, serverAddress);
+    NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverProvider);
     HostServices.configureService(serverAddress,
         HostServices.serviceParamsBuilder()
           .setServerFactory((service, receiver) ->
@@ -132,6 +137,7 @@ public final class BinderChannelSmokeTest {
   @After
   public void tearDown() throws Exception {
     channel.shutdownNow();
+    NameResolverRegistry.getDefaultRegistry().deregister(fakeNameResolverProvider);
     HostServices.awaitServiceShutdown();
   }
 
@@ -190,6 +196,12 @@ public final class BinderChannelSmokeTest {
     streamObserver.onCompleted();
     assertThat(withTestTimeout(responseStreamObserver.getAllStreamElements()).get()).isEmpty();
     assertThat(headersCapture.get().get(GrpcUtil.TIMEOUT_KEY)).isGreaterThan(0);
+  }
+
+  @Test
+  public void testConnectViaTargetUri() throws Exception {
+    channel = BinderChannelBuilder.forTarget(SERVER_TARGET_URI, appContext).build();
+    assertThat(doCall("Hello").get()).isEqualTo("Hello");
   }
 
   private static String createLargeString(int size) {
