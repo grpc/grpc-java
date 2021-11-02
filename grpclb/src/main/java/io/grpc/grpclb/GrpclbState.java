@@ -287,8 +287,9 @@ final class GrpclbState {
         cancelLbRpcRetryTimer();
         startLbRpc();
       }
-      // Start the fallback timer if it's never started
-      if (fallbackTimer == null) {
+      // Start the fallback timer if it's never started and we are not already using fallback
+      // backends.
+      if (fallbackTimer == null && !usingFallbackBackends) {
         fallbackTimer = syncContext.schedule(
             new FallbackModeTask(BALANCER_TIMEOUT_STATUS), FALLBACK_TIMEOUT_MS,
             TimeUnit.MILLISECONDS, timerService);
