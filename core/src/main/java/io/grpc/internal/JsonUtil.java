@@ -183,6 +183,23 @@ public class JsonUtil {
   }
 
   /**
+   * Gets a string from an object for the given key, parsed as a long integer.  If
+   * the key is not present, this returns null.  If the value is not a String or not properly
+   * formatted, throws an exception.
+   */
+  public static Long getStringAsLong(Map<String, ?> obj, String key) {
+    String value = getString(obj, key);
+    if (value == null) {
+      return null;
+    }
+    try {
+      return Long.valueOf(value);
+    } catch (NumberFormatException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
    * Gets a boolean from an object for the given key.  If the key is not present, this returns null.
    * If the value is not a Boolean, throws an exception.
    */

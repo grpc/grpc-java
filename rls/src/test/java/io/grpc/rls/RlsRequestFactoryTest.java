@@ -17,13 +17,10 @@
 package io.grpc.rls;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Metadata;
-import io.grpc.Status.Code;
-import io.grpc.StatusRuntimeException;
 import io.grpc.rls.RlsProtoData.ExtraKeys;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
@@ -44,28 +41,27 @@ public class RlsRequestFactoryTest {
               new GrpcKeyBuilder(
                   ImmutableList.of(new Name("com.google.service1", "Create")),
                   ImmutableList.of(
-                      new NameMatcher("user", ImmutableList.of("User", "Parent"), true),
-                      new NameMatcher("id", ImmutableList.of("X-Google-Id"), true)),
+                      new NameMatcher("user", ImmutableList.of("User", "Parent")),
+                      new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
                   ExtraKeys.create("server-1", null, null),
                   ImmutableMap.of("const-key-1", "const-value-1")),
               new GrpcKeyBuilder(
                   ImmutableList.of(new Name("com.google.service1")),
                   ImmutableList.of(
-                      new NameMatcher("user", ImmutableList.of("User", "Parent"), true),
-                      new NameMatcher("password", ImmutableList.of("Password"), true)),
+                      new NameMatcher("user", ImmutableList.of("User", "Parent")),
+                      new NameMatcher("password", ImmutableList.of("Password"))),
                   ExtraKeys.create(null, "service-2", null),
                   ImmutableMap.of("const-key-2", "const-value-2")),
               new GrpcKeyBuilder(
                   ImmutableList.of(new Name("com.google.service2")),
                   ImmutableList.of(
-                      new NameMatcher("user", ImmutableList.of("User", "Parent"), false),
-                      new NameMatcher("password", ImmutableList.of("Password"), true)),
+                      new NameMatcher("password", ImmutableList.of("Password"))),
                   ExtraKeys.create(null, "service-3", "method-3"),
                   ImmutableMap.<String, String>of()),
               new GrpcKeyBuilder(
                   ImmutableList.of(new Name("com.google.service3")),
                   ImmutableList.of(
-                      new NameMatcher("user", ImmutableList.of("User", "Parent"), true)),
+                      new NameMatcher("user", ImmutableList.of("User", "Parent"))),
                   ExtraKeys.create(null, null, null),
                   ImmutableMap.of("const-key-4", "const-value-4"))),
           /* lookupService= */ "bigtable-rls.googleapis.com",
@@ -73,7 +69,6 @@ public class RlsRequestFactoryTest {
           /* maxAgeInMillis= */ TimeUnit.SECONDS.toMillis(300),
           /* staleAgeInMillis= */ TimeUnit.SECONDS.toMillis(240),
           /* cacheSizeBytes= */ 1000,
-          /* validTargets= */ ImmutableList.of("a valid target"),
           /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
 
   private final RlsRequestFactory factory = new RlsRequestFactory(
@@ -92,20 +87,6 @@ public class RlsRequestFactoryTest {
         "id", "123",
         "server-1", "bigtable.googleapis.com",
         "const-key-1", "const-value-1");
-  }
-
-  @Test
-  public void create_missingRequiredHeader() {
-    Metadata metadata = new Metadata();
-
-    try {
-      RouteLookupRequest unused = factory.create("com.google.service2", "Create", metadata);
-      fail();
-    } catch (StatusRuntimeException e) {
-      assertThat(e.getStatus().getCode()).isEqualTo(Code.INVALID_ARGUMENT);
-      assertThat(e.getStatus().getDescription())
-          .isEqualTo("Missing mandatory metadata(user) not found");
-    }
   }
 
   @Test
