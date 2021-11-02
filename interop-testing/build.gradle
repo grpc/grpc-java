@@ -147,6 +147,13 @@ task xds_test_server(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task xds_e2e_client(type: CreateStartScripts) {
+    mainClassName = "io.grpc.testing.integration.XdsInteropTest"
+    applicationName = "xds-e2e-test-client"
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
+    classpath = startScripts.classpath
+}
+
 applicationDistribution.into("bin") {
     from(test_client)
     from(test_server)
@@ -157,6 +164,7 @@ applicationDistribution.into("bin") {
     from(grpclb_fallback_test_client)
     from(xds_test_client)
     from(xds_test_server)
+    from(xds_e2e_client)
     fileMode = 0755
 }
 
