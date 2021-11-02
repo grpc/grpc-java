@@ -17,43 +17,18 @@
 
 package io.grpc.testing.integration;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
-import com.google.protobuf.UInt32Value;
 import io.grpc.SynchronizationContext;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.shaded.io.envoyproxy.envoy.config.cluster.v3.Cluster;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.core.v3.Address;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.core.v3.ConfigSource;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.core.v3.HealthStatus;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.core.v3.SocketAddress;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.grpc.xds.shaded.io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.listener.v3.ApiListener;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.listener.v3.Filter;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.listener.v3.FilterChain;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.grpc.xds.shaded.io.envoyproxy.envoy.config.listener.v3.Listener;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.route.v3.NonForwardingAction;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.route.v3.Route;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.grpc.xds.shaded.io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.route.v3.RouteMatch;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.config.route.v3.VirtualHost;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
-import io.grpc.xds.shaded.io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
 import io.grpc.xds.shaded.io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.grpc.xds.shaded.io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.grpc.xds.shaded.io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,13 +55,6 @@ public class XdsTestControlPlaneService extends
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
   private static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
-  private static final String HTTP_CONNECTION_MANAGER_TYPE_URL =
-      "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
-          + ".HttpConnectionManager";
-
-  private static final String rdsName = "route-config.googleapis.com";
-  private static final String clusterName = "cluster0";
-  private static final String edsName = "eds-service-0";
   private final ImmutableMap<String, Listener> ldsResources;
   private final ImmutableMap<String, RouteConfiguration> rdsResources;
   private final ImmutableMap<String, Cluster> cdsResources;
@@ -95,7 +63,6 @@ public class XdsTestControlPlaneService extends
   private int rdsVersion = 1;
   private int cdsVersion = 1;
   private int edsVersion = 1;
-
   private int ldsNonce = 0;
   private int rdsNonce = 0;
   private int cdsNonce = 0;
@@ -180,7 +147,7 @@ public class XdsTestControlPlaneService extends
             }
             switch (value.getTypeUrl()) {
               case ADS_TYPE_URL_LDS:
-                if (!Strings.isNullOrEmpty(value.getResponseNonce())
+                if (!value.getResponseNonce().isEmpty()
                     && !String.valueOf(ldsNonce).equals(value.getResponseNonce())) {
                   logger.log(Level.FINE, "lds resource nonce does not match, ignore.");
                   return;
@@ -205,7 +172,7 @@ public class XdsTestControlPlaneService extends
                 responseObserver.onNext(responseBuilder.build());
                 break;
               case ADS_TYPE_URL_RDS:
-                if (!Strings.isNullOrEmpty(value.getResponseNonce())
+                if (!value.getResponseNonce().isEmpty()
                     && !String.valueOf(rdsNonce).equals(value.getResponseNonce())) {
                   logger.log(Level.FINE, "rds resource nonce does not match, ignore.");
                   return;
@@ -230,7 +197,7 @@ public class XdsTestControlPlaneService extends
                 responseObserver.onNext(responseBuilder.build());
                 break;
               case ADS_TYPE_URL_CDS:
-                if (!Strings.isNullOrEmpty(value.getResponseNonce())
+                if (!value.getResponseNonce().isEmpty()
                     && !String.valueOf(cdsNonce).equals(value.getResponseNonce())) {
                   logger.log(Level.FINE, "cds resource nonce does not match, ignore.");
                   return;
@@ -255,7 +222,7 @@ public class XdsTestControlPlaneService extends
                 responseObserver.onNext(responseBuilder.build());
                 break;
               case ADS_TYPE_URL_EDS:
-                if (!Strings.isNullOrEmpty(value.getResponseNonce())
+                if (!value.getResponseNonce().isEmpty()
                     && !String.valueOf(edsNonce).equals(value.getResponseNonce())) {
                   logger.log(Level.FINE, "eds resource nonce does not match, ignore.");
                   return;
@@ -298,131 +265,5 @@ public class XdsTestControlPlaneService extends
       }
     };
     return requestObserver;
-  }
-
-  static Listener clientListener(String name) {
-    HttpFilter httpFilter = HttpFilter.newBuilder()
-        .setName("terminal-filter")
-        .setTypedConfig(Any.pack(Router.newBuilder().build()))
-        .setIsOptional(true)
-        .build();
-    ApiListener apiListener = ApiListener.newBuilder().setApiListener(Any.pack(
-        HttpConnectionManager.newBuilder()
-            .setRds(
-                Rds.newBuilder()
-                    .setRouteConfigName(rdsName)
-                    .setConfigSource(
-                        ConfigSource.newBuilder()
-                            .setAds(AggregatedConfigSource.getDefaultInstance())))
-            .addAllHttpFilters(Collections.singletonList(httpFilter))
-            .build(),
-        HTTP_CONNECTION_MANAGER_TYPE_URL)
-    ).build();
-    Listener listener = Listener.newBuilder()
-        .setName(name)
-        .setApiListener(apiListener).build();
-    return listener;
-  }
-
-  static Listener serverListener(String name, String authority) {
-    HttpFilter routerFilter = HttpFilter.newBuilder()
-        .setName("terminal-filter")
-        .setTypedConfig(
-            Any.pack(Router.newBuilder().build()))
-        .setIsOptional(true)
-        .build();
-    VirtualHost virtualHost = VirtualHost.newBuilder()
-        .setName("virtual-host-0")
-        .addDomains(authority)
-        .addRoutes(
-            Route.newBuilder()
-                .setMatch(
-                    RouteMatch.newBuilder().setPrefix("/").build()
-                )
-                .setNonForwardingAction(NonForwardingAction.newBuilder().build())
-                .build()
-        ).build();
-    RouteConfiguration routeConfig = RouteConfiguration.newBuilder()
-        .addVirtualHosts(virtualHost)
-        .build();
-    Filter filter = Filter.newBuilder()
-        .setName("network-filter-0")
-        .setTypedConfig(
-            Any.pack(
-                HttpConnectionManager.newBuilder()
-                    .setRouteConfig(routeConfig)
-                    .addAllHttpFilters(Collections.singletonList(routerFilter))
-                    .build()
-            )
-        ).build();
-    FilterChainMatch filterChainMatch = FilterChainMatch.newBuilder()
-        .setSourceType(FilterChainMatch.ConnectionSourceType.ANY)
-        .build();
-    FilterChain filterChain = FilterChain.newBuilder()
-        .setName("filter-chain-0")
-        .setFilterChainMatch(filterChainMatch)
-        .addFilters(filter)
-        .build();
-    return Listener.newBuilder()
-        .setName(name)
-        .setTrafficDirection(TrafficDirection.INBOUND)
-        .addFilterChains(filterChain)
-        .build();
-  }
-
-  static RouteConfiguration rds(String authority) {
-    VirtualHost virtualHost = VirtualHost.newBuilder()
-        .addDomains(authority)
-        .addRoutes(
-            Route.newBuilder()
-                .setMatch(
-                    RouteMatch.newBuilder().setPrefix("/").build()
-                )
-                .setRoute(
-                    RouteAction.newBuilder().setCluster(clusterName).build()
-                )
-                .build())
-        .build();
-    return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
-  }
-
-  static Cluster cds() {
-    return Cluster.newBuilder()
-        .setName(clusterName)
-        .setType(Cluster.DiscoveryType.EDS)
-        .setEdsClusterConfig(
-            Cluster.EdsClusterConfig.newBuilder()
-                .setServiceName(edsName)
-                .setEdsConfig(
-                    ConfigSource.newBuilder()
-                        .setAds(AggregatedConfigSource.newBuilder().build())
-                        .build())
-                .build()
-        )
-        .setLbPolicy(Cluster.LbPolicy.ROUND_ROBIN)
-        .build();
-  }
-
-  static ClusterLoadAssignment eds(int port) {
-    Address address = Address.newBuilder()
-        .setSocketAddress(
-            SocketAddress.newBuilder().setAddress("0.0.0.0").setPortValue(port).build()
-        )
-        .build();
-    LocalityLbEndpoints endpoints = LocalityLbEndpoints.newBuilder()
-        .setLoadBalancingWeight(UInt32Value.of(10))
-        .setPriority(0)
-        .addLbEndpoints(
-            LbEndpoint.newBuilder()
-                .setEndpoint(
-                    Endpoint.newBuilder().setAddress(address).build())
-                .setHealthStatus(HealthStatus.HEALTHY)
-                .build()
-        )
-        .build();
-    return ClusterLoadAssignment.newBuilder()
-        .setClusterName(edsName)
-        .addEndpoints(endpoints)
-        .build();
   }
 }
