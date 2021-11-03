@@ -1,12 +1,13 @@
 syntax = "proto3";
 
-package udpa.service.orca.v1;
+package xds.service.orca.v3;
 
 option java_outer_classname = "OrcaProto";
 option java_multiple_files = true;
-option java_package = "com.github.udpa.udpa.service.orca.v1";
+option java_package = "com.github.xds.service.orca.v3";
+option go_package = "github.com/cncf/xds/go/xds/service/orca/v3";
 
-import "udpa/data/orca/v1/orca_load_report.proto";
+import "xds/data/orca/v3/orca_load_report.proto";
 
 import "google/protobuf/duration.proto";
 
@@ -24,7 +25,7 @@ import "validate/validate.proto";
 // streaming service, client needs to terminate current RPC and initiate
 // a new call to change backend reporting frequency.
 service OpenRcaService {
-  rpc StreamCoreMetrics(OrcaLoadReportRequest) returns (stream udpa.data.orca.v1.OrcaLoadReport);
+  rpc StreamCoreMetrics(OrcaLoadReportRequest) returns (stream xds.data.orca.v3.OrcaLoadReport);
 }
 
 message OrcaLoadReportRequest {

@@ -18,21 +18,29 @@
 set -e
 BRANCH=main
 # import VERSION from one of the google internal CLs
-VERSION=5459f2c994033b0afed7e4a70ac7e90c90c1ffee
-GIT_REPO="https://github.com/cncf/udpa.git"
-GIT_BASE_DIR=udpa
-SOURCE_PROTO_BASE_DIR=udpa
+VERSION=cb28da3451f158a947dfc45090fe92b07b243bc1
+GIT_REPO="https://github.com/cncf/xds.git"
+GIT_BASE_DIR=xds
+SOURCE_PROTO_BASE_DIR=xds
 TARGET_PROTO_BASE_DIR=src/main/proto
 # Sorted alphabetically.
 FILES=(
 udpa/annotations/migrate.proto
+xds/annotations/v3/migrate.proto
 udpa/annotations/security.proto
+xds/annotations/v3/security.proto
+udpa/annotations/security.proto
+xds/annotations/v3/security.proto
 udpa/annotations/sensitive.proto
+xds/annotations/v3/sensitive.proto
 udpa/annotations/status.proto
+xds/annotations/v3/status.proto
 udpa/annotations/versioning.proto
-udpa/data/orca/v1/orca_load_report.proto
-udpa/service/orca/v1/orca.proto
+xds/annotations/v3/versioning.proto
+xds/data/orca/v3/orca_load_report.proto
+xds/service/orca/v3/orca.proto
 udpa/type/v1/typed_struct.proto
+xds/type/v3/typed_struct.proto
 xds/core/v3/authority.proto
 xds/core/v3/collection_entry.proto
 xds/core/v3/context_params.proto

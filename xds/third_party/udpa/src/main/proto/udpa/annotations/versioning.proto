@@ -1,8 +1,14 @@
+// THIS FILE IS DEPRECATED
+// Users should instead use the corresponding proto in the xds tree.
+// No new changes will be accepted here.
+
 syntax = "proto3";
 
 package udpa.annotations;
 
 import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/cncf/xds/go/annotations";
 
 extend google.protobuf.MessageOptions {
   // Magic number derived from 0x78 ('x') 0x44 ('D') 0x53 ('S')

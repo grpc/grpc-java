@@ -2,16 +2,17 @@ syntax = "proto3";
 
 package xds.core.v3;
 
-import "udpa/annotations/status.proto";
+import "xds/annotations/v3/status.proto";
 import "xds/core/v3/context_params.proto";
 
 import "validate/validate.proto";
 
 option java_outer_classname = "ResourceNameProto";
 option java_multiple_files = true;
-option java_package = "com.github.udpa.xds.core.v3";
+option java_package = "com.github.xds.core.v3";
+option go_package = "github.com/cncf/xds/go/xds/core/v3";
 
-option (udpa.annotations.file_status).work_in_progress = true;
+option (xds.annotations.v3.file_status).work_in_progress = true;
 
 // xDS resource name. This has a canonical xdstp:// URI representation:
 //

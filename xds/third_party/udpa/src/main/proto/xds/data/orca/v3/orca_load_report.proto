@@ -1,10 +1,11 @@
 syntax = "proto3";
 
-package udpa.data.orca.v1;
+package xds.data.orca.v3;
 
 option java_outer_classname = "OrcaLoadReportProto";
 option java_multiple_files = true;
-option java_package = "com.github.udpa.udpa.data.orca.v1";
+option java_package = "com.github.xds.data.orca.v3";
+option go_package = "github.com/cncf/xds/go/xds/data/orca/v3";
 
 import "validate/validate.proto";
 

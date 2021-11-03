@@ -1,36 +1,27 @@
-// THIS FILE IS DEPRECATED
-// Users should instead use the corresponding proto in the xds tree.
-// No new changes will be accepted here.
-
 syntax = "proto3";
 
-package udpa.annotations;
+package xds.annotations.v3;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/cncf/xds/go/annotations";
+option go_package = "github.com/cncf/xds/go/xds/annotations/v3";
 
 // Magic number in this file derived from top 28bit of SHA256 digest of
-// "udpa.annotation.migrate".
-
+// "xds.annotation.v3.migrate".
 extend google.protobuf.MessageOptions {
-  MigrateAnnotation message_migrate = 171962766;
+  MigrateAnnotation message_migrate = 112948430;
 }
-
 extend google.protobuf.FieldOptions {
-  FieldMigrateAnnotation field_migrate = 171962766;
+  FieldMigrateAnnotation field_migrate = 112948430;
 }
-
 extend google.protobuf.EnumOptions {
-  MigrateAnnotation enum_migrate = 171962766;
+  MigrateAnnotation enum_migrate = 112948430;
 }
-
 extend google.protobuf.EnumValueOptions {
-  MigrateAnnotation enum_value_migrate = 171962766;
+  MigrateAnnotation enum_value_migrate = 112948430;
 }
-
 extend google.protobuf.FileOptions {
-  FileMigrateAnnotation file_migrate = 171962766;
+  FileMigrateAnnotation file_migrate = 112948430;
 }
 
 message MigrateAnnotation {

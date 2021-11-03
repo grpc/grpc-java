@@ -1,19 +1,38 @@
-// THIS FILE IS DEPRECATED
-// Users should instead use the corresponding proto in the xds tree.
-// No new changes will be accepted here.
-
 syntax = "proto3";
 
-package udpa.annotations;
+package xds.annotations.v3;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/cncf/xds/go/annotations";
+option go_package = "github.com/cncf/xds/go/xds/annotations/v3";
 
 // Magic number in this file derived from top 28bit of SHA256 digest of
-// "udpa.annotation.status".
+// "xds.annotations.v3.status".
 extend google.protobuf.FileOptions {
-  StatusAnnotation file_status = 222707719;
+  FileStatusAnnotation file_status = 226829418;
+}
+
+extend google.protobuf.MessageOptions {
+  MessageStatusAnnotation message_status = 226829418;
+}
+
+extend google.protobuf.FieldOptions {
+  FieldStatusAnnotation field_status = 226829418;
+}
+
+message FileStatusAnnotation {
+  // The entity is work-in-progress and subject to breaking changes.
+  bool work_in_progress = 1;
+}
+
+message MessageStatusAnnotation {
+  // The entity is work-in-progress and subject to breaking changes.
+  bool work_in_progress = 1;
+}
+
+message FieldStatusAnnotation {
+  // The entity is work-in-progress and subject to breaking changes.
+  bool work_in_progress = 1;
 }
 
 enum PackageVersionStatus {

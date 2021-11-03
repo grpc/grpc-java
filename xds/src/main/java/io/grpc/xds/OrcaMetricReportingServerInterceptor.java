@@ -16,7 +16,7 @@
 
 package io.grpc.xds;
 
-import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
+import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Context;
 import io.grpc.Contexts;
