@@ -1,0 +1,109 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "com.github.johnrengelman.shadow"
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: Authorization"
+
+[compileJava].each() {
+    it.options.compilerArgs += [
+        // valueOf(int) in RoutingPriority has been deprecated
+        "-Xlint:-deprecation",
+        // only has AutoValue annotation processor
+        "-Xlint:-processing",
+    ]
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/build/generated/sources/annotationProcessor/java/.*",
+            "|")
+}
+
+evaluationDependsOn(project(':grpc-core').path)
+
+dependencies {
+    implementation project(':grpc-protobuf'),
+            project(':grpc-stub'),
+            project(':grpc-core'),
+            project(':grpc-services'),
+            project(':grpc-auth'),
+            project(path: ':grpc-alts', configuration: 'shadow'),
+            libraries.gson,
+            libraries.re2j,
+            libraries.bouncycastle,
+            libraries.autovalue_annotation,
+            libraries.opencensus_proto,
+            libraries.protobuf_util
+    def xdsDependency = implementation project(':grpc-xds')
+
+    testImplementation project(':grpc-core').sourceSets.test.output
+
+    annotationProcessor libraries.autovalue
+    compileOnly libraries.javax_annotation,
+            // At runtime use the epoll included in grpc-netty-shaded
+            libraries.netty_epoll
+
+    testImplementation project(':grpc-testing'),
+            project(':grpc-testing-proto'),
+            libraries.netty_epoll
+    testImplementation (libraries.guava_testlib) {
+        exclude group: 'junit', module: 'junit'
+    }
+
+    shadow configurations.implementation.getDependencies().minus([xdsDependency])
+    shadow project(path: ':grpc-xds', configuration: 'shadow')
+
+    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    testRuntimeOnly libraries.netty_tcnative
+}
+
+configureProtoCompilation()
+
+jar {
+    classifier = 'original'
+}
+
+shadowJar {
+    classifier = null
+    dependencies {
+        include(project(':grpc-xds'))
+    }
+    relocate 'io.grpc.xds', 'io.grpc.xds.shaded.io.grpc.xds'
+    relocate 'udpa.annotations', 'io.grpc.xds.shaded.udpa.annotations'
+    relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
+    relocate 'envoy.annotations', 'io.grpc.xds.shaded.envoy.annotations'
+    relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
+    relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
+}
+
+javadoc {
+    // Exclusions here should generally also be relocated
+    exclude 'com/github/udpa/**'
+    exclude 'io/envoyproxy/**'
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            // We want this to throw an exception if it isn't working
+            def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
+            artifacts.remove(originalJar)
+
+            pom.withXml {
+                def dependenciesNode = new Node(null, 'dependencies')
+                project.configurations.shadow.allDependencies.each { dep ->
+                    def dependencyNode = dependenciesNode.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', dep.group)
+                    dependencyNode.appendNode('artifactId', dep.name)
+                    def version = (dep.name == 'grpc-netty-shaded') ? '[' + dep.version + ']' : dep.version
+                    dependencyNode.appendNode('version', version)
+                    dependencyNode.appendNode('scope', 'compile')
+                }
+                asNode().dependencies[0].replaceNode(dependenciesNode)
+            }
+        }
+    }
+}
