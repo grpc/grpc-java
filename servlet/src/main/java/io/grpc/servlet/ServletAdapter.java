@@ -194,9 +194,12 @@ public final class ServletAdapter {
     return InternalMetadata.newMetadata(byteArrays.toArray(new byte[][]{}));
   }
 
+  // This method must use HttpRequest#getRequestURL or HttpUtils#getRequestURL, both of which
+  // can only return StringBuffer instances
+  @SuppressWarnings("JdkObsolete")
   private static String getAuthority(HttpServletRequest req) {
     try {
-      return new URI(req.getRequestURI()).getAuthority();
+      return new URI(req.getRequestURL().toString()).getAuthority();
     } catch (URISyntaxException e) {
       logger.log(FINE, "Error getting authority from the request URL {0}" + req.getRequestURL());
       return req.getServerName() + ":" + req.getServerPort();
