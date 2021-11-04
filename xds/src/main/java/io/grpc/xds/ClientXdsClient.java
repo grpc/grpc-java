@@ -112,7 +112,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -441,14 +440,10 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
               validateDownstreamTlsContext(downstreamTlsContextProto, certProviderInstances));
     }
 
-    String name = proto.getName();
-    if (name.isEmpty()) {
-      name = UUID.randomUUID().toString();
-    }
     FilterChainMatch filterChainMatch = parseFilterChainMatch(proto.getFilterChainMatch());
     checkForUniqueness(uniqueSet, filterChainMatch);
     return new FilterChain(
-        name,
+        proto.getName(),
         filterChainMatch,
         httpConnectionManager,
         downstreamTlsContext,
