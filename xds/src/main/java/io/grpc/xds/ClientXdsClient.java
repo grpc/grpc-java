@@ -2214,11 +2214,13 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
             }
             retainedResources.add(edsName);
           }
-          continue;
+        } else if (invalidResources.contains(resourceName)) {
+          subscriber.onError(Status.UNAVAILABLE.withDescription(errorDetail));
+        } else {
+          // For State of the World services, notify watchers when their watched resource is missing
+          // from the ADS update.
+          subscriber.onAbsent();
         }
-        // For State of the World services, notify watchers when their watched resource is missing
-        // from the ADS update.
-        subscriber.onAbsent();
       }
     }
     // LDS/CDS responses represents the state of the world, RDS/EDS resources not referenced in

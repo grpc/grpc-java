@@ -23,6 +23,7 @@ import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -1563,12 +1564,16 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
 
     // The response NACKed with errors indicating indices of the failed resources.
-    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(
-        "CDS response Cluster 'cluster.googleapis.com' validation error: "
+    String errorMsg =  "CDS response Cluster 'cluster.googleapis.com' validation error: "
             + "Cluster cluster.googleapis.com: malformed UpstreamTlsContext: "
             + "io.grpc.xds.ClientXdsClient$ResourceInvalidException: "
-            + "ca_certificate_provider_instance is required in upstream-tls-context"));
-    verifyNoInteractions(cdsResourceWatcher);
+            + "ca_certificate_provider_instance is required in upstream-tls-context";
+    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(cdsResourceWatcher).onError(captor.capture());
+    Status errorStatus = captor.getValue();
+    assertThat(errorStatus.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(errorStatus.getDescription()).isEqualTo(errorMsg);
   }
 
   /**
@@ -1587,10 +1592,14 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
 
     // The response NACKed with errors indicating indices of the failed resources.
-    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(
-        "CDS response Cluster 'cluster.googleapis.com' validation error: "
-            + "transport-socket with name envoy.transport_sockets.bad not supported."));
-    verifyNoInteractions(cdsResourceWatcher);
+    String errorMsg = "CDS response Cluster 'cluster.googleapis.com' validation error: "
+        + "transport-socket with name envoy.transport_sockets.bad not supported.";
+    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(cdsResourceWatcher).onError(captor.capture());
+    Status errorStatus = captor.getValue();
+    assertThat(errorStatus.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(errorStatus.getDescription()).isEqualTo(errorMsg);
   }
 
   @Test
@@ -2438,10 +2447,14 @@ public abstract class ClientXdsClientTestBase {
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
     // The response NACKed with errors indicating indices of the failed resources.
-    call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(
-            "LDS response Listener \'grpc/server?xds.resource.listening_address=0.0.0.0:7000\' "
-                + "validation error: common-tls-context is required in downstream-tls-context"));
-    verifyNoInteractions(ldsResourceWatcher);
+    String errorMsg = "LDS response Listener \'grpc/server?xds.resource.listening_address=0.0.0.0:7000\' "
+        + "validation error: common-tls-context is required in downstream-tls-context";
+    call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(ldsResourceWatcher).onError(captor.capture());
+    Status errorStatus = captor.getValue();
+    assertThat(errorStatus.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(errorStatus.getDescription()).isEqualTo(errorMsg);
   }
 
   @Test
@@ -2462,11 +2475,16 @@ public abstract class ClientXdsClientTestBase {
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
     // The response NACKed with errors indicating indices of the failed resources.
+    String errorMsg = "LDS response Listener \'grpc/server?xds.resource.listening_address=0.0.0.0:7000\' "
+        + "validation error: "
+        + "transport-socket with name envoy.transport_sockets.bad1 not supported.";
     call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(
-        "LDS response Listener \'grpc/server?xds.resource.listening_address=0.0.0.0:7000\' "
-            + "validation error: "
-            + "transport-socket with name envoy.transport_sockets.bad1 not supported."));
-    verifyNoInteractions(ldsResourceWatcher);
+        errorMsg));
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(ldsResourceWatcher).onError(captor.capture());
+    Status errorStatus = captor.getValue();
+    assertThat(errorStatus.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(errorStatus.getDescription()).isEqualTo(errorMsg);
   }
 
   private DiscoveryRpcCall startResourceWatcher(
