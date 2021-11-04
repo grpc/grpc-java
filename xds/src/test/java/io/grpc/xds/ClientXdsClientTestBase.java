@@ -23,7 +23,6 @@ import static io.grpc.xds.AbstractXdsClient.ResourceType.EDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -2447,8 +2446,9 @@ public abstract class ClientXdsClientTestBase {
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
     // The response NACKed with errors indicating indices of the failed resources.
-    String errorMsg = "LDS response Listener \'grpc/server?xds.resource.listening_address=0.0.0.0:7000\' "
-        + "validation error: common-tls-context is required in downstream-tls-context";
+    String errorMsg = "LDS response Listener \'grpc/server?xds.resource.listening_address="
+        + "0.0.0.0:7000\' validation error: "
+        + "common-tls-context is required in downstream-tls-context";
     call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
     verify(ldsResourceWatcher).onError(captor.capture());
@@ -2475,8 +2475,8 @@ public abstract class ClientXdsClientTestBase {
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
     // The response NACKed with errors indicating indices of the failed resources.
-    String errorMsg = "LDS response Listener \'grpc/server?xds.resource.listening_address=0.0.0.0:7000\' "
-        + "validation error: "
+    String errorMsg = "LDS response Listener \'grpc/server?xds.resource.listening_address="
+        + "0.0.0.0:7000\' validation error: "
         + "transport-socket with name envoy.transport_sockets.bad1 not supported.";
     call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(
         errorMsg));
