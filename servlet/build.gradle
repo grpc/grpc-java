@@ -37,7 +37,7 @@ sourceSets {
     if (JavaVersion.current().isJava11Compatible()) {
         jetty10Test {
             java {
-                srcDir 'src/jetty/java'
+                srcDir 'src/jettyTest/java'
             }
         }
     }
