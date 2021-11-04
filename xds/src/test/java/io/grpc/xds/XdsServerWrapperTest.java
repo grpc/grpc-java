@@ -605,7 +605,13 @@ public class XdsServerWrapperTest {
     });
     String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
-    assertThat(start.isDone()).isFalse();
+    try {
+      start.get(5000, TimeUnit.MILLISECONDS);
+      fail("server should not start()");
+    } catch (TimeoutException ex) {
+      // expect to block here.
+      assertThat(start.isDone()).isFalse();
+    }
     verify(listener, times(1)).onNotServing(any(StatusException.class));
     verify(mockBuilder, times(1)).build();
     FilterChain filterChain0 = createFilterChain("filter-chain-0", createRds("rds"));
