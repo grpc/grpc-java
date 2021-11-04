@@ -1466,7 +1466,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
-  public void parseFilterChain_noName_generatedUuid() throws ResourceInvalidException {
+  public void parseFilterChain_noName() throws ResourceInvalidException {
     FilterChain filterChain1 =
         FilterChain.newBuilder()
             .setFilterChainMatch(FilterChainMatch.getDefaultInstance())
@@ -1492,7 +1492,7 @@ public class ClientXdsClientDataTest {
     EnvoyServerProtoData.FilterChain parsedFilterChain2 = ClientXdsClient.parseFilterChain(
         filterChain2, new HashSet<String>(), null, filterRegistry, null,
         true /* does not matter */);
-    assertThat(parsedFilterChain1.getName()).isNotEqualTo(parsedFilterChain2.getName());
+    assertThat(parsedFilterChain1.getName()).isEqualTo(parsedFilterChain2.getName());
   }
 
 
