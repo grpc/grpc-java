@@ -83,7 +83,7 @@ public class BootstrapperImpl extends Bootstrapper {
    *   <li>A filesystem path defined by environment variable "GRPC_XDS_BOOTSTRAP"</li>
    *   <li>A filesystem path defined by Java System Property "io.grpc.xds.bootstrap"</li>
    *   <li>Environment variable value of "GRPC_XDS_BOOTSTRAP_CONFIG"</li>
-   *   <li>Java System Property value of "io.grpc.xds.bootstrap_value"</li>
+   *   <li>Java System Property value of "io.grpc.xds.bootstrapConfig"</li>
    * </ol>
    */
   @SuppressWarnings("unchecked")
