@@ -571,10 +571,6 @@ final class XdsServerWrapper extends Server {
       for (SslContextProviderSupplier s: toRelease) {
         s.close();
       }
-      if (!initialStarted) {
-        initialStarted = true;
-        initialStartFuture.set(exception);
-      }
       if (restartTimer != null) {
         restartTimer.cancel();
       }

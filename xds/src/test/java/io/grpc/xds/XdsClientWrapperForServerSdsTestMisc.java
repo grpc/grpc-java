@@ -63,15 +63,15 @@ import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Settings;
-import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -190,8 +190,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
     try {
       start.get(5, TimeUnit.SECONDS);
       fail("Start should throw exception");
-    } catch (ExecutionException ex) {
-      assertThat(ex.getCause()).isInstanceOf(IOException.class);
+    } catch (TimeoutException ex) {
+      assertThat(start.isDone()).isFalse();
     }
     assertThat(selectorManager.getSelectorToUpdateSelector()).isSameInstanceAs(NO_FILTER_CHAIN);
   }
@@ -214,8 +214,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
     try {
       start.get(5, TimeUnit.SECONDS);
       fail("Start should throw exception");
-    } catch (ExecutionException ex) {
-      assertThat(ex.getCause()).isInstanceOf(IOException.class);
+    } catch (TimeoutException ex) {
+      assertThat(start.isDone()).isFalse();
     }
     assertThat(selectorManager.getSelectorToUpdateSelector()).isSameInstanceAs(NO_FILTER_CHAIN);
   }
@@ -238,8 +238,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
     try {
       start.get(5, TimeUnit.SECONDS);
       fail("Start should throw exception");
-    } catch (ExecutionException ex) {
-      assertThat(ex.getCause()).isInstanceOf(IOException.class);
+    } catch (TimeoutException ex) {
+      assertThat(start.isDone()).isFalse();
     }
     assertThat(selectorManager.getSelectorToUpdateSelector()).isSameInstanceAs(NO_FILTER_CHAIN);
   }
