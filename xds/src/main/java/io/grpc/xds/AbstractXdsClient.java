@@ -333,7 +333,8 @@ final class AbstractXdsClient {
       }
     }
 
-    private static ResourceType fromTypeUrl(String typeUrl) {
+    @VisibleForTesting
+    static ResourceType fromTypeUrl(String typeUrl) {
       switch (typeUrl) {
         case ADS_TYPE_URL_LDS:
           // fall trough

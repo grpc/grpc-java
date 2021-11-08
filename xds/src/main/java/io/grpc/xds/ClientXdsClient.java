@@ -2133,15 +2133,6 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   Bootstrapper.BootstrapInfo getBootstrapInfo() {
     return bootstrapInfo;
   }
-
-  // TODO(https://github.com/grpc/grpc-java/issues/8629): remove this
-  @Override
-  String getCurrentVersion(ResourceType type) {
-    if (serverChannelMap.isEmpty()) {
-      return "";
-    }
-    return serverChannelMap.values().iterator().next().getCurrentVersion(type);
-  }
   
   @Override
   public String toString() {
