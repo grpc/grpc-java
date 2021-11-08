@@ -43,6 +43,7 @@ import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.BindableService;
+import io.grpc.ChannelCredentials;
 import io.grpc.Context;
 import io.grpc.Context.CancellableContext;
 import io.grpc.InsecureChannelCredentials;
@@ -124,6 +125,9 @@ public abstract class ClientXdsClientTestBase {
   private static final String VERSION_3 = "44";
   private static final Node NODE = Node.newBuilder().build();
   private static final Any FAILING_ANY = MessageFactory.FAILING_ANY;
+  private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
+  private final ServerInfo lrsServerInfo =
+      ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3());
 
   private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
       new FakeClock.TaskFilter() {
@@ -284,8 +288,7 @@ public abstract class ClientXdsClientTestBase {
     Bootstrapper.BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(
-                Bootstrapper.ServerInfo.create(
-                    SERVER_URI, InsecureChannelCredentials.create(), useProtocolV3())))
+                Bootstrapper.ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3())))
             .node(EnvoyProtoData.Node.newBuilder().build())
             .certProviders(ImmutableMap.of("cert-instance-name",
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
@@ -1393,7 +1396,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
@@ -1422,7 +1425,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.RING_HASH);
     assertThat(cdsUpdate.minRingSize()).isEqualTo(10L);
     assertThat(cdsUpdate.maxRingSize()).isEqualTo(100L);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
@@ -1467,7 +1470,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isEqualTo(200L);
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterCircuitBreakers, VERSION_1,
@@ -1609,7 +1612,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     call.verifyNoMoreRequest();
@@ -1651,7 +1654,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
     assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterDns, VERSION_1, TIME_INCREMENT);
@@ -1670,7 +1673,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_2, TIME_INCREMENT * 2);
@@ -1691,7 +1694,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
@@ -1743,7 +1746,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
     assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verify(watcher1).onChanged(cdsUpdateCaptor.capture());
@@ -1752,7 +1755,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verify(watcher2).onChanged(cdsUpdateCaptor.capture());
@@ -1761,7 +1764,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     // Metadata of both clusters is stored.
@@ -2005,11 +2008,11 @@ public abstract class ClientXdsClientTestBase {
     verify(cdsWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(null);
-    assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     cdsUpdate = cdsUpdateCaptor.getValue();
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(EDS_RESOURCE);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     verifyResourceMetadataAcked(CDS, resource, clusters.get(0), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusters.get(1), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
@@ -2335,7 +2338,7 @@ public abstract class ClientXdsClientTestBase {
   public void reportLoadStatsToServer() {
     xdsClient.watchLdsResource(LDS_RESOURCE, ldsResourceWatcher);
     String clusterName = "cluster-foo.googleapis.com";
-    ClusterDropStats dropStats = xdsClient.addClusterDropStats(clusterName, null);
+    ClusterDropStats dropStats = xdsClient.addClusterDropStats(lrsServerInfo, clusterName, null);
     LrsRpcCall lrsCall = loadReportCalls.poll();
     lrsCall.verifyNextReportClusters(Collections.<String[]>emptyList()); // initial LRS request
 

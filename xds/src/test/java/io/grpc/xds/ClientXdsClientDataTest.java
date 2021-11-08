@@ -94,7 +94,9 @@ import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.envoyproxy.envoy.type.v3.Int64Range;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.Status.Code;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.ClientXdsClient.StructOrError;
 import io.grpc.xds.Endpoints.LbEndpoint;
@@ -125,6 +127,9 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class ClientXdsClientDataTest {
+
+  private static final ServerInfo LRS_SERVER_INFO =
+      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create(), true);
 
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
@@ -1239,7 +1244,8 @@ public class ClientXdsClientDataTest {
         .setLbPolicy(LbPolicy.RING_HASH)
         .build();
 
-    CdsUpdate update = ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null);
+    CdsUpdate update = ClientXdsClient.parseCluster(
+        cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
     assertThat(update.lbPolicy()).isEqualTo(CdsUpdate.LbPolicy.RING_HASH);
     assertThat(update.minRingSize())
         .isEqualTo(ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE);
@@ -1266,7 +1272,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "Cluster cluster-foo.googleapis.com: transport-socket-matches not supported.");
-    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null);
+    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
   }
 
   @Test
@@ -1291,7 +1297,7 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
-    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null);
+    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
   }
 
   @Test
@@ -1318,7 +1324,7 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
-    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null);
+    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
   }
 
   @Test
