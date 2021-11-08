@@ -263,9 +263,6 @@ public class XdsServerWrapperTest {
     try {
       start.get(5000, TimeUnit.MILLISECONDS);
       fail("server should not start() successfully.");
-    } catch (ExecutionException ex) {
-      assertThat(ex.getCause()).isInstanceOf(IOException.class);
-      fail("server start() should not fail.");
     } catch (TimeoutException ex) {
       // expect to block here.
       assertThat(start.isDone()).isFalse();

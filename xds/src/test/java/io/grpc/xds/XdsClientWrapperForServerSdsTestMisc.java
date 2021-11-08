@@ -192,9 +192,6 @@ public class XdsClientWrapperForServerSdsTestMisc {
     try {
       start.get(5, TimeUnit.SECONDS);
       fail("Start should throw exception");
-    } catch (ExecutionException ex) {
-      assertThat(ex.getCause()).isInstanceOf(IOException.class);
-      fail("Start should not fail");
     } catch (TimeoutException ex) {
       assertThat(start.isDone()).isFalse();
     }
