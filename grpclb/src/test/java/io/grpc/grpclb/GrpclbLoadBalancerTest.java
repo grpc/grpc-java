@@ -1462,6 +1462,33 @@ public class GrpclbLoadBalancerTest {
         .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
   }
 
+  /**
+   * A test for a situation where we first only get backend addresses resolved and then in a
+   * later name resolution get both backend and load balancer addresses. The first instance
+   * will switch us to using fallback backends and it is important that in the second instance
+   * we do not start a fallback timer as it will fail when it triggers if the fallback backends
+   * are already in use.
+   */
+  @Test
+  public void grpclbFallback_noTimerWhenAlreadyInFallback() {
+    // Initially we only get backend addresses without any LB ones. This should get us to use
+    // fallback backends from the start as we won't be able to even talk to the load balancer.
+    // No fallback timer would be started as we already started to use fallback backends.
+    deliverResolvedAddresses(createResolvedBalancerAddresses(1),
+        Collections.<EquivalentAddressGroup>emptyList());
+    assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
+
+    // Later a new name resolution call happens and we get both backend and LB addresses. Since we
+    // are already operating with fallback backends a fallback timer should not be started to move
+    // us to fallback mode.
+    deliverResolvedAddresses(Collections.<EquivalentAddressGroup>emptyList(),
+        createResolvedBalancerAddresses(1));
+
+    // If a fallback timer is started it will eventually throw an exception when it tries to switch
+    // us to using fallback backends when we already are using them.
+    assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
+  }
+
   @Test
   public void grpclbFallback_balancerLost() {
     subtestGrpclbFallbackConnectionLost(true, false);

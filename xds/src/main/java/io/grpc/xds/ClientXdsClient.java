@@ -112,7 +112,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -443,14 +442,10 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
               validateDownstreamTlsContext(downstreamTlsContextProto, certProviderInstances));
     }
 
-    String name = proto.getName();
-    if (name.isEmpty()) {
-      name = UUID.randomUUID().toString();
-    }
     FilterChainMatch filterChainMatch = parseFilterChainMatch(proto.getFilterChainMatch());
     checkForUniqueness(uniqueSet, filterChainMatch);
     return new FilterChain(
-        name,
+        proto.getName(),
         filterChainMatch,
         httpConnectionManager,
         downstreamTlsContext,
@@ -2229,11 +2224,13 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
             }
             retainedResources.add(edsName);
           }
-          continue;
+        } else if (invalidResources.contains(resourceName)) {
+          subscriber.onError(Status.UNAVAILABLE.withDescription(errorDetail));
+        } else {
+          // For State of the World services, notify watchers when their watched resource is missing
+          // from the ADS update.
+          subscriber.onAbsent();
         }
-        // For State of the World services, notify watchers when their watched resource is missing
-        // from the ADS update.
-        subscriber.onAbsent();
       }
     }
     // LDS/CDS responses represents the state of the world, RDS/EDS resources not referenced in
