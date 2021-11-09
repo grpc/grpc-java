@@ -22,7 +22,7 @@ public final class OpenRcaServiceGrpc {
 
   private OpenRcaServiceGrpc() {}
 
-  public static final String SERVICE_NAME = "udpa.service.orca.v1.OpenRcaService";
+  public static final String SERVICE_NAME = "xds.service.orca.v3.OpenRcaService";
 
   // Static method descriptors that strictly reflect the proto.
   private static volatile io.grpc.MethodDescriptor<com.github.xds.service.orca.v3.OrcaLoadReportRequest,
