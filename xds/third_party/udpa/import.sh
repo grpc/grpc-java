@@ -41,8 +41,6 @@ xds/data/orca/v3/orca_load_report.proto
 xds/service/orca/v3/orca.proto
 udpa/type/v1/typed_struct.proto
 xds/type/v3/typed_struct.proto
-udpa/data/orca/v1/orca_load_report.proto
-udpa/service/orca/v1/orca.proto
 xds/core/v3/authority.proto
 xds/core/v3/collection_entry.proto
 xds/core/v3/context_params.proto
