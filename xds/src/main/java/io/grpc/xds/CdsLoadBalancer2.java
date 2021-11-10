@@ -157,12 +157,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             if (clusterState.result.clusterType() ==  ClusterType.EDS) {
               instance = DiscoveryMechanism.forEds(
                   clusterState.name, clusterState.result.edsServiceName(),
-                  clusterState.result.lrsServerName(), clusterState.result.maxConcurrentRequests(),
+                  clusterState.result.lrsServerInfo(), clusterState.result.maxConcurrentRequests(),
                   clusterState.result.upstreamTlsContext());
             } else {  // logical DNS
               instance = DiscoveryMechanism.forLogicalDns(
                   clusterState.name, clusterState.result.dnsHostName(),
-                  clusterState.result.lrsServerName(), clusterState.result.maxConcurrentRequests(),
+                  clusterState.result.lrsServerInfo(), clusterState.result.maxConcurrentRequests(),
                   clusterState.result.upstreamTlsContext());
             }
             instances.add(instance);

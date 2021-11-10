@@ -130,10 +130,10 @@ abstract class XdsClient {
     @Nullable
     abstract String dnsHostName();
 
-    // Load report server name for reporting loads via LRS.
+    // Load report server info for reporting loads via LRS.
     // Only valid for EDS or LOGICAL_DNS cluster.
     @Nullable
-    abstract String lrsServerName();
+    abstract ServerInfo lrsServerInfo();
 
     // Max number of concurrent requests can be sent to this cluster.
     // Only valid for EDS or LOGICAL_DNS cluster.
@@ -161,7 +161,7 @@ abstract class XdsClient {
     }
 
     static Builder forEds(String clusterName, @Nullable String edsServiceName,
-        @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+        @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
         @Nullable UpstreamTlsContext upstreamTlsContext) {
       return new AutoValue_XdsClient_CdsUpdate.Builder()
           .clusterName(clusterName)
@@ -169,13 +169,13 @@ abstract class XdsClient {
           .minRingSize(0)
           .maxRingSize(0)
           .edsServiceName(edsServiceName)
-          .lrsServerName(lrsServerName)
+          .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
           .upstreamTlsContext(upstreamTlsContext);
     }
 
     static Builder forLogicalDns(String clusterName, String dnsHostName,
-        @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+        @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
         @Nullable UpstreamTlsContext upstreamTlsContext) {
       return new AutoValue_XdsClient_CdsUpdate.Builder()
           .clusterName(clusterName)
@@ -183,7 +183,7 @@ abstract class XdsClient {
           .minRingSize(0)
           .maxRingSize(0)
           .dnsHostName(dnsHostName)
-          .lrsServerName(lrsServerName)
+          .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
           .upstreamTlsContext(upstreamTlsContext);
     }
@@ -207,7 +207,7 @@ abstract class XdsClient {
           .add("maxRingSize", maxRingSize())
           .add("edsServiceName", edsServiceName())
           .add("dnsHostName", dnsHostName())
-          .add("lrsServerName", lrsServerName())
+          .add("lrsServerInfo", lrsServerInfo())
           .add("maxConcurrentRequests", maxConcurrentRequests())
           // Exclude upstreamTlsContext as its string representation is cumbersome.
           .add("prioritizedClusterNames", prioritizedClusterNames())
@@ -246,7 +246,7 @@ abstract class XdsClient {
       protected abstract Builder dnsHostName(String dnsHostName);
 
       // Private, use one of the static factory methods instead.
-      protected abstract Builder lrsServerName(String lrsServerName);
+      protected abstract Builder lrsServerInfo(ServerInfo lrsServerInfo);
 
       // Private, use one of the static factory methods instead.
       protected abstract Builder maxConcurrentRequests(Long maxConcurrentRequests);
@@ -494,14 +494,6 @@ abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
-  /**
-   * Returns the latest accepted version of the given resource type.
-   */
-  // TODO(https://github.com/grpc/grpc-java/issues/8629): remove this
-  String getCurrentVersion(ResourceType type) {
-    throw new UnsupportedOperationException();
-  }
-
   Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
     throw new UnsupportedOperationException();
   }
@@ -569,8 +561,8 @@ abstract class XdsClient {
    * use {@link ClusterDropStats#release} to release its <i>hard</i> reference when it is safe to
    * stop reporting dropped RPCs for the specified cluster in the future.
    */
-  // TODO(https://github.com/grpc/grpc-java/issues/8628): add ServerInfo arg
-  ClusterDropStats addClusterDropStats(String clusterName, @Nullable String edsServiceName) {
+  ClusterDropStats addClusterDropStats(
+      ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName) {
     throw new UnsupportedOperationException();
   }
 
@@ -582,9 +574,9 @@ abstract class XdsClient {
    * reference when it is safe to stop reporting RPC loads for the specified locality in the
    * future.
    */
-  // TODO(https://github.com/grpc/grpc-java/issues/8628): add ServerInfo arg
   ClusterLocalityStats addClusterLocalityStats(
-      String clusterName, @Nullable String edsServiceName, Locality locality) {
+      ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
+      Locality locality) {
     throw new UnsupportedOperationException();
   }
 

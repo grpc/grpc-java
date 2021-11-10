@@ -1486,7 +1486,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         if (getBootstrapInfo() != null && getBootstrapInfo().certProviders() != null) {
           certProviderInstances = getBootstrapInfo().certProviders().keySet();
         }
-        cdsUpdate = parseCluster(cluster, retainedEdsResources, certProviderInstances);
+        cdsUpdate = parseCluster(cluster, retainedEdsResources, certProviderInstances, serverInfo);
       } catch (ResourceInvalidException e) {
         errors.add(
             "CDS response Cluster '" + clusterName + "' validation error: " + e.getMessage());
@@ -1505,13 +1505,13 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   @VisibleForTesting
   static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources,
-      Set<String> certProviderInstances)
+      Set<String> certProviderInstances, ServerInfo serverInfo)
       throws ResourceInvalidException {
     StructOrError<CdsUpdate.Builder> structOrError;
     switch (cluster.getClusterDiscoveryTypeCase()) {
       case TYPE:
         structOrError = parseNonAggregateCluster(cluster, retainedEdsResources,
-            certProviderInstances);
+            certProviderInstances, serverInfo);
         break;
       case CLUSTER_TYPE:
         structOrError = parseAggregateCluster(cluster);
@@ -1574,9 +1574,10 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   }
 
   private static StructOrError<CdsUpdate.Builder> parseNonAggregateCluster(
-      Cluster cluster, Set<String> edsResources, Set<String> certProviderInstances) {
+      Cluster cluster, Set<String> edsResources, Set<String> certProviderInstances,
+      ServerInfo serverInfo) {
     String clusterName = cluster.getName();
-    String lrsServerName = null;
+    ServerInfo lrsServerInfo = null;
     Long maxConcurrentRequests = null;
     UpstreamTlsContext upstreamTlsContext = null;
     if (cluster.hasLrsServer()) {
@@ -1584,7 +1585,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         return StructOrError.fromError(
             "Cluster " + clusterName + ": only support LRS for the same management server");
       }
-      lrsServerName = "";
+      lrsServerInfo = serverInfo;
     }
     if (cluster.hasCircuitBreakers()) {
       List<Thresholds> thresholds = cluster.getCircuitBreakers().getThresholdsList();
@@ -1636,7 +1637,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         edsResources.add(clusterName);
       }
       return StructOrError.fromStruct(CdsUpdate.forEds(
-          clusterName, edsServiceName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
+          clusterName, edsServiceName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext));
     } else if (type.equals(DiscoveryType.LOGICAL_DNS)) {
       if (!cluster.hasLoadAssignment()) {
         return StructOrError.fromError(
@@ -1671,7 +1672,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       String dnsHostName =
           String.format("%s:%d", socketAddress.getAddress(), socketAddress.getPortValue());
       return StructOrError.fromStruct(CdsUpdate.forLogicalDns(
-          clusterName, dnsHostName, lrsServerName, maxConcurrentRequests, upstreamTlsContext));
+          clusterName, dnsHostName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext));
     }
     return StructOrError.fromError(
         "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);
@@ -2109,15 +2110,14 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   @Override
   ClusterDropStats addClusterDropStats(
-      String clusterName, @Nullable String edsServiceName) {
+      final ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName) {
     ClusterDropStats dropCounter =
         loadStatsManager.getClusterDropStats(clusterName, edsServiceName);
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
         if (!reportingLoad) {
-          // TODO(https://github.com/grpc/grpc-java/issues/8628): consume ServerInfo arg.
-          serverLrsClientMap.values().iterator().next().startLoadReporting();
+          serverLrsClientMap.get(serverInfo).startLoadReporting();
           reportingLoad = true;
         }
       }
@@ -2127,7 +2127,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   @Override
   ClusterLocalityStats addClusterLocalityStats(
-      String clusterName, @Nullable String edsServiceName,
+      final ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
       Locality locality) {
     ClusterLocalityStats loadCounter =
         loadStatsManager.getClusterLocalityStats(clusterName, edsServiceName, locality);
@@ -2135,8 +2135,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       @Override
       public void run() {
         if (!reportingLoad) {
-          // TODO(https://github.com/grpc/grpc-java/issues/8628): consume ServerInfo arg.
-          serverLrsClientMap.values().iterator().next().startLoadReporting();
+          serverLrsClientMap.get(serverInfo).startLoadReporting();
           reportingLoad = true;
         }
       }
@@ -2147,15 +2146,6 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   @Override
   Bootstrapper.BootstrapInfo getBootstrapInfo() {
     return bootstrapInfo;
-  }
-
-  // TODO(https://github.com/grpc/grpc-java/issues/8629): remove this
-  @Override
-  String getCurrentVersion(ResourceType type) {
-    if (serverChannelMap.isEmpty()) {
-      return "";
-    }
-    return serverChannelMap.values().iterator().next().getCurrentVersion(type);
   }
   
   @Override
