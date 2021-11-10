@@ -494,14 +494,6 @@ abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
-  /**
-   * Returns the latest accepted version of the given resource type.
-   */
-  // TODO(https://github.com/grpc/grpc-java/issues/8629): remove this
-  String getCurrentVersion(ResourceType type) {
-    throw new UnsupportedOperationException();
-  }
-
   Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
     throw new UnsupportedOperationException();
   }
