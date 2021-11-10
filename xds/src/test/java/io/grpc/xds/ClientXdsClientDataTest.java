@@ -18,14 +18,18 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.github.xds.type.v3.TypedStruct;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Message;
 import com.google.protobuf.StringValue;
+import com.google.protobuf.Struct;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.UInt64Value;
+import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -94,6 +98,8 @@ import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.envoyproxy.envoy.type.v3.Int64Range;
+import io.grpc.ClientInterceptor;
+import io.grpc.LoadBalancer;
 import io.grpc.Status.Code;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.ClientXdsClient.StructOrError;
@@ -114,7 +120,9 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -872,6 +880,105 @@ public class ClientXdsClientDataTest {
         .setTypedConfig(Any.pack(StringValue.of("unsupported")))
         .build();
     assertThat(ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, true)).isNull();
+  }
+
+  private static class TestFilter implements io.grpc.xds.Filter,
+      io.grpc.xds.Filter.ClientInterceptorBuilder {
+    @Override
+    public String[] typeUrls() {
+      return new String[]{"test-url"};
+    }
+
+    @Override
+    public ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
+      return ConfigOrError.fromConfig(new FilterConfig() {
+        @Override
+        public String typeUrl() {
+          return null;
+        }
+      });
+    }
+
+    @Override
+    public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
+        Message rawProtoMessage) {
+      return ConfigOrError.fromConfig(new FilterConfig() {
+        @Override
+        public String typeUrl() {
+          return null;
+        }
+      });
+    }
+
+    @Nullable
+    @Override
+    public ClientInterceptor buildClientInterceptor(FilterConfig config,
+                                                    @Nullable FilterConfig overrideConfig,
+                                                    LoadBalancer.PickSubchannelArgs args,
+                                                    ScheduledExecutorService scheduler) {
+      return null;
+    }
+  }
+
+  @Test
+  public void parseHttpFilter_typedStructMigration() {
+    filterRegistry.register(new TestFilter());
+    HttpFilter httpFilter = HttpFilter.newBuilder()
+        .setIsOptional(true)
+        .setTypedConfig(Any.pack(
+            com.github.udpa.udpa.type.v1.TypedStruct.newBuilder()
+                .setTypeUrl("test-url")
+                .setValue(
+                    Struct.newBuilder()
+                      .putFields("name", Value.newBuilder().setStringValue("default").build()
+                    ).build()
+                )
+        .build())).build();
+    assertThat(ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, true).getStruct())
+        .isNotNull();
+
+    HttpFilter httpFilterNewTypeStruct = HttpFilter.newBuilder()
+        .setIsOptional(true)
+        .setTypedConfig(Any.pack(
+            TypedStruct.newBuilder()
+                .setTypeUrl("test-url")
+                .setValue(
+                    Struct.newBuilder()
+                        .putFields("name", Value.newBuilder().setStringValue("default").build()
+                        ).build()
+                )
+                .build())).build();
+    assertThat(ClientXdsClient.parseHttpFilter(httpFilterNewTypeStruct, filterRegistry, true)
+        .getStruct()).isNotNull();
+  }
+
+  @Test
+  public void parseOverrideHttpFilter_typedStructMigration() {
+    filterRegistry.register(new TestFilter());
+    Map<String, Any> rawFilterMap = ImmutableMap.of(
+        "struct-0", Any.pack(
+            com.github.udpa.udpa.type.v1.TypedStruct.newBuilder()
+                .setTypeUrl("test-url")
+                .setValue(
+                    Struct.newBuilder()
+                        .putFields("name", Value.newBuilder().setStringValue("default").build()
+                        ).build()
+                )
+                .build()),
+          "struct-1", Any.pack(
+              TypedStruct.newBuilder()
+                  .setTypeUrl("test-url")
+                  .setValue(
+                      Struct.newBuilder()
+                          .putFields("name", Value.newBuilder().setStringValue("default").build()
+                          ).build()
+                  )
+                  .build())
+    );
+    assertThat(ClientXdsClient.parseOverrideFilterConfigs(rawFilterMap, filterRegistry)
+        .getStruct()).isNotNull();
+    assertThat(ClientXdsClient.parseOverrideFilterConfigs(rawFilterMap, filterRegistry)
+        .getStruct().size()).isEqualTo(2);
   }
 
   @Test
