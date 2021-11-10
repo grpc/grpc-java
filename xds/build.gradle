@@ -92,6 +92,7 @@ jar {
 javadoc {
     // Exclusions here should generally also be relocated
     exclude 'com/github/udpa/**'
+    exclude 'com/github/xds/**'
     exclude 'com/google/security/**'
     exclude 'io/envoyproxy/**'
     // Need to clean up the class structure to reduce how much is exposed
@@ -115,6 +116,7 @@ shadowJar {
     }
     // Relocated packages commonly need exclusions in jacocoTestReport and javadoc
     relocate 'com.github.udpa', "${prefixName}.shaded.com.github.udpa"
+    relocate 'com.github.xds', "${prefixName}.shaded.com.github.xds"
     relocate 'com.google.api.expr', "${prefixName}.shaded.com.google.api.expr"
     relocate 'com.google.security', "${prefixName}.shaded.com.google.security"
     // TODO: missing java_package option in .proto
@@ -124,6 +126,7 @@ shadowJar {
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
     // TODO: missing java_package option in .proto
     relocate 'udpa.annotations', "${prefixName}.shaded.udpa.annotations"
+    relocate 'xds.annotations', "${prefixName}.shaded.xds.annotations"
     exclude "**/*.proto"
 }
 
@@ -159,11 +162,13 @@ jacocoTestReport {
         fileTree(dir: it,
         exclude: [ // Exclusions here should generally also be relocated
                 '**/com/github/udpa/**',
+                '**/com/github/xds/**',
                 '**/com/google/api/expr/**',
                 '**/com/google/security/**',
                 '**/envoy/annotations/**',
                 '**/io/envoyproxy/**',
                 '**/udpa/annotations/**',
+                '**/xds/annotations/**',
         ])
     }
 }
