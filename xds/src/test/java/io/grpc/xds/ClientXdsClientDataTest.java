@@ -887,6 +887,23 @@ public class ClientXdsClientDataTest {
     assertThat(ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, true)).isNull();
   }
 
+  private static class SimpleFilterConfig implements FilterConfig {
+    private final Message message;
+
+    public SimpleFilterConfig(Message rawProtoMessage) {
+      message = rawProtoMessage;
+    }
+
+    public Message getConfig() {
+      return message;
+    }
+
+    @Override
+    public String typeUrl() {
+      return null;
+    }
+  }
+
   private static class TestFilter implements io.grpc.xds.Filter,
       io.grpc.xds.Filter.ClientInterceptorBuilder {
     @Override
@@ -896,23 +913,13 @@ public class ClientXdsClientDataTest {
 
     @Override
     public ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
-      return ConfigOrError.fromConfig(new FilterConfig() {
-        @Override
-        public String typeUrl() {
-          return null;
-        }
-      });
+      return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
     }
 
     @Override
     public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
         Message rawProtoMessage) {
-      return ConfigOrError.fromConfig(new FilterConfig() {
-        @Override
-        public String typeUrl() {
-          return null;
-        }
-      });
+      return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
     }
 
     @Nullable
@@ -928,62 +935,57 @@ public class ClientXdsClientDataTest {
   @Test
   public void parseHttpFilter_typedStructMigration() {
     filterRegistry.register(new TestFilter());
+    Struct rawStruct = Struct.newBuilder()
+        .putFields("name", Value.newBuilder().setStringValue("default").build())
+        .build();
     HttpFilter httpFilter = HttpFilter.newBuilder()
         .setIsOptional(true)
         .setTypedConfig(Any.pack(
             com.github.udpa.udpa.type.v1.TypedStruct.newBuilder()
                 .setTypeUrl("test-url")
-                .setValue(
-                    Struct.newBuilder()
-                      .putFields("name", Value.newBuilder().setStringValue("default").build()
-                    ).build()
-                )
+                .setValue(rawStruct)
         .build())).build();
-    assertThat(ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, true).getStruct())
-        .isNotNull();
+    FilterConfig config = ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry,
+        true).getStruct();
+    assertThat(((SimpleFilterConfig)config).getConfig()).isEqualTo(rawStruct);
 
     HttpFilter httpFilterNewTypeStruct = HttpFilter.newBuilder()
         .setIsOptional(true)
         .setTypedConfig(Any.pack(
             TypedStruct.newBuilder()
                 .setTypeUrl("test-url")
-                .setValue(
-                    Struct.newBuilder()
-                        .putFields("name", Value.newBuilder().setStringValue("default").build()
-                        ).build()
-                )
+                .setValue(rawStruct)
                 .build())).build();
-    assertThat(ClientXdsClient.parseHttpFilter(httpFilterNewTypeStruct, filterRegistry, true)
-        .getStruct()).isNotNull();
+    config = ClientXdsClient.parseHttpFilter(httpFilterNewTypeStruct, filterRegistry,
+        true).getStruct();
+    assertThat(((SimpleFilterConfig)config).getConfig()).isEqualTo(rawStruct);
   }
 
   @Test
   public void parseOverrideHttpFilter_typedStructMigration() {
     filterRegistry.register(new TestFilter());
+    Struct rawStruct0 = Struct.newBuilder()
+        .putFields("name", Value.newBuilder().setStringValue("default0").build())
+        .build();
+    Struct rawStruct1 = Struct.newBuilder()
+        .putFields("name", Value.newBuilder().setStringValue("default1").build())
+        .build();
     Map<String, Any> rawFilterMap = ImmutableMap.of(
         "struct-0", Any.pack(
             com.github.udpa.udpa.type.v1.TypedStruct.newBuilder()
                 .setTypeUrl("test-url")
-                .setValue(
-                    Struct.newBuilder()
-                        .putFields("name", Value.newBuilder().setStringValue("default").build()
-                        ).build()
-                )
+                .setValue(rawStruct0)
                 .build()),
           "struct-1", Any.pack(
               TypedStruct.newBuilder()
                   .setTypeUrl("test-url")
-                  .setValue(
-                      Struct.newBuilder()
-                          .putFields("name", Value.newBuilder().setStringValue("default").build()
-                          ).build()
-                  )
+                  .setValue(rawStruct1)
                   .build())
     );
-    assertThat(ClientXdsClient.parseOverrideFilterConfigs(rawFilterMap, filterRegistry)
-        .getStruct()).isNotNull();
-    assertThat(ClientXdsClient.parseOverrideFilterConfigs(rawFilterMap, filterRegistry)
-        .getStruct().size()).isEqualTo(2);
+    Map<String, FilterConfig> map = ClientXdsClient.parseOverrideFilterConfigs(rawFilterMap,
+        filterRegistry).getStruct();
+    assertThat(((SimpleFilterConfig)map.get("struct-0")).getConfig()).isEqualTo(rawStruct0);
+    assertThat(((SimpleFilterConfig)map.get("struct-1")).getConfig()).isEqualTo(rawStruct1);
   }
 
   @Test
