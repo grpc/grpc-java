@@ -48,9 +48,9 @@ xds/core/v3/resource_locator.proto
 xds/core/v3/resource_name.proto
 )
 
-pushd `git rev-parse --show-toplevel`/xds/third_party/udpa
+pushd `git rev-parse --show-toplevel`/xds/third_party/xds
 
-# clone the udpa github repo in a tmp directory
+# clone the xds github repo in a tmp directory
 tmpdir="$(mktemp -d)"
 trap "rm -rf $tmpdir" EXIT
 
