@@ -74,6 +74,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
 import org.junit.Rule;
@@ -261,9 +262,10 @@ public class XdsServerWrapperTest {
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
     try {
       start.get(5000, TimeUnit.MILLISECONDS);
-      fail("Start should throw exception");
-    } catch (ExecutionException ex) {
-      assertThat(ex.getCause()).isInstanceOf(IOException.class);
+      fail("server should not start() successfully.");
+    } catch (TimeoutException ex) {
+      // expect to block here.
+      assertThat(start.isDone()).isFalse();
     }
     verify(mockBuilder, times(1)).build();
     verify(mockServer, never()).start();
@@ -602,9 +604,10 @@ public class XdsServerWrapperTest {
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
     try {
       start.get(5000, TimeUnit.MILLISECONDS);
-      fail("Start should throw exception");
-    } catch (ExecutionException ex) {
-      assertThat(ex.getCause()).isInstanceOf(IOException.class);
+      fail("server should not start()");
+    } catch (TimeoutException ex) {
+      // expect to block here.
+      assertThat(start.isDone()).isFalse();
     }
     verify(listener, times(1)).onNotServing(any(StatusException.class));
     verify(mockBuilder, times(1)).build();
@@ -627,6 +630,13 @@ public class XdsServerWrapperTest {
     assertThat(sslSupplier0.isShutdown()).isTrue();
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
+    try {
+      start.get(5000, TimeUnit.MILLISECONDS);
+      fail("Start should throw exception");
+    } catch (ExecutionException ex) {
+      assertThat(ex.getCause()).isInstanceOf(IOException.class);
+      assertThat(ex.getCause().getMessage()).isEqualTo("error!");
+    }
     RdsResourceWatcher saveRdsWatcher = xdsClient.rdsWatchers.get("rds");
     assertThat(executor.forwardNanos(RETRY_DELAY_NANOS)).isEqualTo(1);
     verify(mockBuilder, times(1)).build();
