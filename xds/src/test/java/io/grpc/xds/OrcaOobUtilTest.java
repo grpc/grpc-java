@@ -34,9 +34,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
-import com.github.udpa.udpa.service.orca.v1.OpenRcaServiceGrpc;
-import com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest;
+import com.github.xds.data.orca.v3.OrcaLoadReport;
+import com.github.xds.service.orca.v3.OpenRcaServiceGrpc;
+import com.github.xds.service.orca.v3.OrcaLoadReportRequest;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;

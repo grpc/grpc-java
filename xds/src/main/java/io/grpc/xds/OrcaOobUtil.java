@@ -22,9 +22,9 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 
-import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
-import com.github.udpa.udpa.service.orca.v1.OpenRcaServiceGrpc;
-import com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest;
+import com.github.xds.data.orca.v3.OrcaLoadReport;
+import com.github.xds.service.orca.v3.OpenRcaServiceGrpc;
+import com.github.xds.service.orca.v3.OrcaLoadReportRequest;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
