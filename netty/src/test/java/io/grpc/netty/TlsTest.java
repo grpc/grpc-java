@@ -49,6 +49,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
@@ -183,6 +184,57 @@ public class TlsTest {
     // Send an actual request, via the full GRPC & network stack, and check that a proper
     // response comes back.
     client.unaryRpc(SimpleRequest.getDefaultInstance());
+  }
+
+  /**
+   * Test that a client fails to send requests over TLS to a server with an unexpected hostname
+   * listed in an otherwise valid certificate.
+   */
+  @Test
+  public void clientRejectedMismatchedHostname() throws Exception {
+    // Create & start a server.
+    File serverCertFile = TestUtils.loadCert("server1.pem");
+    File serverPrivateKeyFile = TestUtils.loadCert("server1.key");
+    X509Certificate[] serverTrustedCaCerts = {
+        TestUtils.loadX509Cert("ca.pem")
+    };
+    server = serverBuilder(0, serverCertFile, serverPrivateKeyFile, serverTrustedCaCerts)
+        .addService(new SimpleServiceImpl())
+        .build()
+        .start();
+
+    // Create a client.
+    File clientCertChainFile = TestUtils.loadCert("client.pem");
+    File clientPrivateKeyFile = TestUtils.loadCert("client.key");
+    X509Certificate[] clientTrustedCaCerts = {
+        TestUtils.loadX509Cert("ca.pem")
+    };
+
+    // Override authority on the client to trigger a hostname verification failure
+    channel = NettyChannelBuilder.forAddress("localhost", server.getPort())
+        .overrideAuthority("i.am.a.bad.hostname")
+        .negotiationType(NegotiationType.TLS)
+        .sslContext(clientContextBuilder
+            .keyManager(clientCertChainFile, clientPrivateKeyFile)
+            .trustManager(clientTrustedCaCerts)
+            .build()
+        )
+        .build();
+    SimpleServiceGrpc.SimpleServiceBlockingStub client = SimpleServiceGrpc.newBlockingStub(channel);
+
+    // Send an actual request, via the full GRPC & network stack, and check that a proper
+    // response comes back.
+    try {
+      client.unaryRpc(SimpleRequest.getDefaultInstance());
+      fail("TLS handshake should have failed, but didn't; received RPC response");
+    } catch (StatusRuntimeException e) {
+      assertEquals(Throwables.getStackTraceAsString(e), Status.Code.UNAVAILABLE,
+          e.getStatus().getCode());
+      // The root of the failure should be a CertificateException, but it is wrapped by a varying
+      // number of SSLHandshakeExceptions. Thus, reliably detecting the underlying cause is not
+      // feasible.
+      assertThat(e.getCause()).isInstanceOf(SSLHandshakeException.class);
+    }
   }
 
   /**
