@@ -413,42 +413,19 @@ public final class OkHttpChannelBuilder extends
    *
    * @param tlsVersions List of tls versions.
    * @param cipherSuites List of cipher suites.
-   * @param supportsTlsExtensions Support of TLS extensions.
    */
   public OkHttpChannelBuilder tlsConnectionSpec(
-          String[] tlsVersions, String[] cipherSuites,
-          boolean supportsTlsExtensions) {
+          String[] tlsVersions, String[] cipherSuites) {
     Preconditions.checkState(!freezeSecurityConfiguration,
             "Cannot change security when using ChannelCredentials");
     Preconditions.checkNotNull(tlsVersions, "tls versions must not null");
     Preconditions.checkNotNull(cipherSuites, "ciphers must not null");
 
     this.connectionSpec = new ConnectionSpec.Builder(true)
-            .supportsTlsExtensions(supportsTlsExtensions)
+            .supportsTlsExtensions(true)
             .tlsVersions(tlsVersions)
             .cipherSuites(cipherSuites)
             .build();
-    return this;
-  }
-
-  /**
-   * For secure connection, provides a ConnectionSpec to specify Cipher suite and
-   * TLS versions.
-   *
-   * <p>By default a modern, HTTP/2-compatible spec will be used.
-   *
-   * <p>This method is only used when building a secure connection. For plaintext
-   * connection, use {@link #usePlaintext()} instead.
-   *
-   * @throws IllegalArgumentException
-   *         If {@code connectionSpec} is not with TLS
-   */
-  public OkHttpChannelBuilder internalConnectionSpec(
-          io.grpc.okhttp.internal.ConnectionSpec connectionSpec) {
-    Preconditions.checkState(!freezeSecurityConfiguration,
-            "Cannot change security when using ChannelCredentials");
-    Preconditions.checkArgument(connectionSpec.isTls(), "plaintext ConnectionSpec is not accepted");
-    this.connectionSpec = connectionSpec;
     return this;
   }
 
