@@ -74,9 +74,10 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetPath,
           targetUri);
       String name = targetPath.substring(1);
-      return new XdsNameResolver(name, args.getServiceConfigParser(),
-              args.getSynchronizationContext(), args.getScheduledExecutorService(),
-              bootstrapOverride);
+      return new XdsNameResolver(
+          targetUri.getAuthority(), name, args.getServiceConfigParser(),
+          args.getSynchronizationContext(), args.getScheduledExecutorService(),
+          bootstrapOverride);
     }
     return null;
   }

@@ -24,6 +24,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
+import com.google.common.net.UrlEscapers;
 import com.google.gson.Gson;
 import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
@@ -45,6 +46,8 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.Bootstrapper.AuthorityInfo;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
@@ -101,7 +104,9 @@ final class XdsNameResolver extends NameResolver {
 
   private final InternalLogId logId;
   private final XdsLogger logger;
-  private final String authority;
+  @Nullable
+  private final String targetAuthority;
+  private final String serviceAuthority;
   private final ServiceConfigParser serviceConfigParser;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService scheduler;
@@ -120,20 +125,23 @@ final class XdsNameResolver extends NameResolver {
   private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
 
-  XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
+  XdsNameResolver(
+      @Nullable String targetAuthority, String name, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       @Nullable Map<String, ?> bootstrapOverride) {
-    this(name, serviceConfigParser, syncContext, scheduler,
+    this(targetAuthority, name, serviceConfigParser, syncContext, scheduler,
         SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance,
         FilterRegistry.getDefaultRegistry(), bootstrapOverride);
   }
 
   @VisibleForTesting
-  XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
+  XdsNameResolver(
+      @Nullable String targetAuthority, String name, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
-    authority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
+    this.targetAuthority = targetAuthority;
+    serviceAuthority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
@@ -149,7 +157,7 @@ final class XdsNameResolver extends NameResolver {
 
   @Override
   public String getServiceAuthority() {
-    return authority;
+    return serviceAuthority;
   }
 
   @Override
@@ -163,9 +171,35 @@ final class XdsNameResolver extends NameResolver {
       return;
     }
     xdsClient = xdsClientPool.getObject();
+    BootstrapInfo bootstrapInfo = xdsClient.getBootstrapInfo();
+    String listenerNameTemplate;
+    if (targetAuthority == null) {
+      listenerNameTemplate = bootstrapInfo.clientDefaultListenerResourceNameTemplate();
+    } else {
+      AuthorityInfo authorityInfo = bootstrapInfo.authorities().get(targetAuthority);
+      if (authorityInfo == null) {
+        listener.onError(Status.INVALID_ARGUMENT.withDescription(
+            "invalid target URI: target authority not found in the bootstrap"));
+        return;
+      }
+      listenerNameTemplate = authorityInfo.clientListenerResourceNameTemplate();
+    }
+    String replacement = serviceAuthority;
+    if (listenerNameTemplate.startsWith("xdstp:")) {
+      replacement = percentEncode(serviceAuthority);
+    }
+    String ldsResourceName = expandPercentS(listenerNameTemplate, replacement);
     callCounterProvider = SharedCallCounterMap.getInstance();
-    resolveState = new ResolveState();
+    resolveState = new ResolveState(ldsResourceName);
     resolveState.start();
+  }
+
+  private static String expandPercentS(String template, String replacement) {
+    return template.replace("%s", replacement);
+  }
+
+  private static String percentEncode(String input) {
+    return UrlEscapers.urlFragmentEscaper().escape(input);
   }
 
   @Override
@@ -624,11 +658,16 @@ final class XdsNameResolver extends NameResolver {
             .setServiceConfig(emptyServiceConfig)
             // let channel take action for no config selector
             .build();
+    private final String ldsResourceName;
     private boolean stopped;
     @Nullable
     private Set<String> existingClusters;  // clusters to which new requests can be routed
     @Nullable
     private RouteDiscoveryState routeDiscoveryState;
+
+    ResolveState(String ldsResourceName) {
+      this.ldsResourceName = ldsResourceName;
+    }
 
     @Override
     public void onChanged(final LdsUpdate update) {
@@ -686,23 +725,23 @@ final class XdsNameResolver extends NameResolver {
     }
 
     private void start() {
-      logger.log(XdsLogLevel.INFO, "Start watching LDS resource {0}", authority);
-      xdsClient.watchLdsResource(authority, this);
+      logger.log(XdsLogLevel.INFO, "Start watching LDS resource {0}", ldsResourceName);
+      xdsClient.watchLdsResource(ldsResourceName, this);
     }
 
     private void stop() {
-      logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", authority);
+      logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", ldsResourceName);
       stopped = true;
       cleanUpRouteDiscoveryState();
-      xdsClient.cancelLdsResourceWatch(authority, this);
+      xdsClient.cancelLdsResourceWatch(ldsResourceName, this);
     }
 
     private void updateRoutes(List<VirtualHost> virtualHosts, long httpMaxStreamDurationNano,
         @Nullable List<NamedFilterConfig> filterConfigs) {
-      VirtualHost virtualHost = findVirtualHostForHostName(virtualHosts, authority);
+      VirtualHost virtualHost = findVirtualHostForHostName(virtualHosts, ldsResourceName);
       if (virtualHost == null) {
         logger.log(XdsLogLevel.WARNING,
-            "Failed to find virtual host matching hostname {0}", authority);
+            "Failed to find virtual host matching hostname {0}", ldsResourceName);
         cleanUpRoutes();
         return;
       }
