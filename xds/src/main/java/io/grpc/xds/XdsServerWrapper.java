@@ -224,6 +224,7 @@ final class XdsServerWrapper extends Server {
           delegate.shutdownNow();
         }
         internalShutdown();
+        initialStartFuture.set(new IOException("server is forcefully shut down"));
       }
     });
     return this;
