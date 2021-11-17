@@ -342,6 +342,8 @@ final class CensusStatsModule {
 
     @Override
     public void streamClosed(Status status) {
+      stopwatch.stop();
+      roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       Deadline deadline = info.getCallOptions().getDeadline();
       statusCode = status.getCode();
       if (statusCode == Status.Code.CANCELLED && deadline != null) {
@@ -353,8 +355,6 @@ final class CensusStatsModule {
         }
       }
       attemptsState.attemptEnded();
-      stopwatch.stop();
-      roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       if (inboundReceivedOrClosed.compareAndSet(false, true)) {
         if (module.recordFinishedRpcs) {
           // Stream is closed early. So no need to record metrics for any inbound events after this
