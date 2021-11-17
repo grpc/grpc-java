@@ -26,6 +26,7 @@ import javax.net.ssl.SSLSocket;
  * {@link SSLSocket#setEnabledProtocols}.
  */
 public enum TlsVersion {
+  TLS_1_3("TLSv1.3"), // 2016.
   TLS_1_2("TLSv1.2"), // 2008.
   TLS_1_1("TLSv1.1"), // 2006.
   TLS_1_0("TLSv1"),   // 1999.
@@ -39,7 +40,9 @@ public enum TlsVersion {
   }
 
   public static TlsVersion forJavaName(String javaName) {
-    if ("TLSv1.2".equals(javaName)) {
+    if ("TLSv1.3".equals(javaName)) {
+      return TLS_1_3;
+    } else if ("TLSv1.2".equals(javaName)) {
       return TLS_1_2;
     } else if ("TLSv1.1".equals(javaName)) {
       return TLS_1_1;
