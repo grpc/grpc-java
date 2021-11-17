@@ -18,11 +18,13 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.InternalServerInterceptors;
@@ -192,7 +194,11 @@ final class XdsServerWrapper extends Server {
       xdsClient = xdsClientPool.returnObject(xdsClient);
       return;
     }
-    discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", listenerAddress));
+    String replacement = listenerAddress;
+    if (listenerTemplate.startsWith(XDSTP_SCHEME)) {
+      replacement = UrlEscapers.urlFragmentEscaper().escape(replacement);
+    }
+    discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", replacement));
   }
 
   @Override

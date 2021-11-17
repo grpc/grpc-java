@@ -33,6 +33,8 @@ import javax.annotation.Nullable;
 @Internal
 public abstract class Bootstrapper {
 
+  static final String XDSTP_SCHEME = "xdstp:";
+
   /**
    * Returns system-loaded bootstrap configuration.
    */

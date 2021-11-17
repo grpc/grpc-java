@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
@@ -185,8 +186,8 @@ final class XdsNameResolver extends NameResolver {
       listenerNameTemplate = authorityInfo.clientListenerResourceNameTemplate();
     }
     String replacement = serviceAuthority;
-    if (listenerNameTemplate.startsWith("xdstp:")) {
-      replacement = percentEncode(serviceAuthority);
+    if (listenerNameTemplate.startsWith(XDSTP_SCHEME)) {
+      replacement = UrlEscapers.urlFragmentEscaper().escape(replacement);
     }
     String ldsResourceName = expandPercentS(listenerNameTemplate, replacement);
     callCounterProvider = SharedCallCounterMap.getInstance();
@@ -196,10 +197,6 @@ final class XdsNameResolver extends NameResolver {
 
   private static String expandPercentS(String template, String replacement) {
     return template.replace("%s", replacement);
-  }
-
-  private static String percentEncode(String input) {
-    return UrlEscapers.urlFragmentEscaper().escape(input);
   }
 
   @Override
