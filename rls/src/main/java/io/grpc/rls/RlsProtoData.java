@@ -167,9 +167,6 @@ final class RlsProtoData {
       this.maxAgeInNanos = maxAgeInNanos;
       this.staleAgeInNanos = staleAgeInNanos;
       this.cacheSizeBytes = cacheSizeBytes;
-      if (defaultTarget != null && defaultTarget.isEmpty()) {
-        defaultTarget = null;
-      }
       this.defaultTarget = defaultTarget;
     }
 
