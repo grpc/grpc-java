@@ -31,6 +31,7 @@ import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -113,8 +114,8 @@ final class RlsProtoConverters {
         }
       }
       String lookupService = JsonUtil.getString(json, "lookupService");
-      // TODO(creamsoup) also check if it is URI
       checkArgument(!Strings.isNullOrEmpty(lookupService), "lookupService must not be empty");
+      URI.create(lookupService); // Will throw IllegalArgumentException if it's not a valid URI.
       long timeout = orDefault(
           JsonUtil.getStringAsDuration(json, "lookupServiceTimeout"),
           SECONDS.toNanos(10));
