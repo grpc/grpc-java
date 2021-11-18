@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import com.google.gson.stream.MalformedJsonException;
 import io.envoyproxy.envoy.config.rbac.v3.Permission;
 import io.envoyproxy.envoy.config.rbac.v3.Policy;
 import io.envoyproxy.envoy.config.rbac.v3.Principal;
@@ -30,6 +29,7 @@ import io.envoyproxy.envoy.config.rbac.v3.RBAC.Action;
 import io.envoyproxy.envoy.config.route.v3.HeaderMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.PathMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
+import java.io.IOException;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -43,8 +43,8 @@ public class AuthorizationPolicyTranslatorTest {
     try {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
-    } catch (MalformedJsonException mje) {
-      assertThat(mje).hasMessageThat().isEqualTo(
+    } catch (IOException ioe) {
+      assertThat(ioe).hasMessageThat().isEqualTo(
           "Use JsonReader.setLenient(true) to accept malformed JSON"
           + " at line 1 column 18 path $.name");
     } catch (Exception e) {
@@ -59,7 +59,7 @@ public class AuthorizationPolicyTranslatorTest {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae).hasMessageThat().isEqualTo("'name' is absent.");
+      assertThat(iae).hasMessageThat().isEqualTo("\"name\" is absent.");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -86,7 +86,7 @@ public class AuthorizationPolicyTranslatorTest {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae).hasMessageThat().isEqualTo("'allow_rules' is absent.");
+      assertThat(iae).hasMessageThat().isEqualTo("\"allow_rules\" is absent.");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -105,6 +105,8 @@ public class AuthorizationPolicyTranslatorTest {
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo("'name' is absent.");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
     }
   }
 
@@ -156,6 +158,51 @@ public class AuthorizationPolicyTranslatorTest {
             .build())
         .build();
     assertEquals(expected_rbac, rbacs.get(0));
+  }
+
+  @Test
+  public void incorrectRulesType() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"abc\" ,"
+        + " \"allow_rules\" : {}"
+        + "}";
+    try {
+      AuthorizationPolicyTranslator.translate(policy);
+      fail("exception expected");
+    } catch (ClassCastException cce) {
+      assertThat(cce).hasMessageThat().isEqualTo(
+          "value '{}' for key 'allow_rules' in '{name=abc, allow_rules={}}' is not List");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+  }
+
+  @Test
+  public void emptyPrincipalsInSource() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_any\","
+        + "     \"source\": {"
+        + "       \"principals\": []"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    List<RBAC> rbacs = AuthorizationPolicyTranslator.translate(policy);
+    assertEquals(1, rbacs.size());
+    RBAC expected_allow_rbac = 
+        RBAC.newBuilder()
+        .setAction(Action.ALLOW)
+        .putPolicies("authz_allow_any", 
+            Policy.newBuilder()
+            .addPrincipals(Principal.newBuilder()
+                .setAuthenticated(Authenticated.newBuilder().build())
+                .build())
+            .addPermissions(Permission.newBuilder().setAny(true))
+            .build()).build();
+    assertEquals(expected_allow_rbac, rbacs.get(0));
   }
 
   @Test
@@ -235,6 +282,124 @@ public class AuthorizationPolicyTranslatorTest {
   }
 
   @Test
+  public void unsupportedPseudoHeaders() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_access\","
+        + "     \"request\": {"
+        + "       \"headers\": ["
+        + "         {"
+        + "           \"key\": \":method\","
+        + "           \"values\": ["
+        + "             \"foo\""
+        + "           ]"
+        + "         }"
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    try {
+      AuthorizationPolicyTranslator.translate(policy);
+      fail("exception expected");
+    } catch (IllegalArgumentException iae) {
+      assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" :method.");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+  }
+
+  @Test
+  public void unsupportedGrpcHeaders() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_access\","
+        + "     \"request\": {"
+        + "       \"headers\": ["
+        + "         {"
+        + "           \"key\": \"grpc-xxx\","
+        + "           \"values\": ["
+        + "             \"foo\""
+        + "           ]"
+        + "         }"
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    try {
+      AuthorizationPolicyTranslator.translate(policy);
+      fail("exception expected");
+    } catch (IllegalArgumentException iae) {
+      assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" grpc-xxx.");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+  }
+
+  @Test
+  public void unsupportedHostHeaders() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_access\","
+        + "     \"request\": {"
+        + "       \"headers\": ["
+        + "         {"
+        + "           \"key\": \"Host\","
+        + "           \"values\": ["
+        + "             \"foo\""
+        + "           ]"
+        + "         }"
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    try {
+      AuthorizationPolicyTranslator.translate(policy);
+      fail("exception expected");
+    } catch (IllegalArgumentException iae) {
+      assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" Host.");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+  }
+
+  @Test
+  public void emptyHeaderValues() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_dev\","
+        + "     \"request\": {"
+        + "       \"headers\": ["
+        + "         {"
+        + "           \"key\": \"dev-path\","
+        + "           \"values\": []"
+        + "         }"
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    try {
+      AuthorizationPolicyTranslator.translate(policy);
+      fail("exception expected");
+    } catch (IllegalArgumentException iae) {
+      assertThat(iae).hasMessageThat().isEqualTo("\"values\" is absent or empty.");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+  }
+
+  @Test
   public void parseRequestSuccess() throws Exception {
     String policy = "{"
         + " \"name\" : \"authz\" ,"
@@ -243,13 +408,13 @@ public class AuthorizationPolicyTranslatorTest {
         + "     \"name\": \"deny_access\","
         + "     \"request\": {"
         + "       \"paths\": ["
-        + "         \"path-foo\","
-        + "         \"path-bar*\""
+        + "         \"/pkg.service/foo\","
+        + "         \"/pkg.service/bar*\""
         + "       ],"
         + "       \"headers\": ["
         + "         {"
-        + "           \"key\": \"key-abc\","
-        + "           \"values\": [\"abc*\"]"
+        + "           \"key\": \"dev-path\","
+        + "           \"values\": [\"/dev/path/*\"]"
         + "         }"
         + "       ]"
         + "     }"
@@ -257,7 +422,7 @@ public class AuthorizationPolicyTranslatorTest {
         + " ],"
         + " \"allow_rules\": ["
         + "   {"
-        + "     \"name\": \"allow_headers\","
+        + "     \"name\": \"allow_access1\","
         + "     \"request\": {"
         + "       \"headers\": ["
         + "         {"
@@ -277,7 +442,7 @@ public class AuthorizationPolicyTranslatorTest {
         + "     }"
         + "   },"
         + "   {"
-        + "     \"name\": \"allow_paths\","
+        + "     \"name\": \"allow_access2\","
         + "     \"request\": {"
         + "       \"paths\": ["
         + "         \"*baz\""
@@ -300,11 +465,11 @@ public class AuthorizationPolicyTranslatorTest {
                             .addRules(Permission.newBuilder()
                                 .setUrlPath(PathMatcher.newBuilder()
                                     .setPath(StringMatcher.newBuilder()
-                                        .setExact("path-foo").build()).build()).build())
+                                        .setExact("/pkg.service/foo").build()).build()).build())
                             .addRules(Permission.newBuilder()
                                 .setUrlPath(PathMatcher.newBuilder()
                                     .setPath(StringMatcher.newBuilder()
-                                        .setPrefix("path-bar").build()).build()).build())
+                                        .setPrefix("/pkg.service/bar").build()).build()).build())
                             .build()).build())
                     .addRules(Permission.newBuilder()
                         .setAndRules(Permission.Set.newBuilder()
@@ -312,9 +477,9 @@ public class AuthorizationPolicyTranslatorTest {
                                 .setOrRules(Permission.Set.newBuilder()
                                     .addRules(Permission.newBuilder()
                                         .setHeader(HeaderMatcher.newBuilder()
-                                            .setName("key-abc")
+                                            .setName("dev-path")
                                             .setStringMatch(StringMatcher.newBuilder()
-                                                .setPrefix("abc").build())
+                                                .setPrefix("/dev/path/").build())
                                             .build())
                                         .build())
                                     .build()).build())
@@ -325,7 +490,7 @@ public class AuthorizationPolicyTranslatorTest {
     RBAC expected_allow_rbac = 
         RBAC.newBuilder()
         .setAction(Action.ALLOW)
-        .putPolicies("authz_allow_headers", 
+        .putPolicies("authz_allow_access1",
             Policy.newBuilder()
             .addPermissions(Permission.newBuilder()
                 .setAndRules(Permission.Set.newBuilder()
@@ -360,7 +525,7 @@ public class AuthorizationPolicyTranslatorTest {
                                     .build()).build()).build()).build()).build()))
             .addPrincipals(Principal.newBuilder().setAny(true))
             .build())
-        .putPolicies("authz_allow_paths", 
+        .putPolicies("authz_allow_access2",
             Policy.newBuilder()
             .addPermissions(Permission.newBuilder()
                 .setAndRules(Permission.Set.newBuilder()

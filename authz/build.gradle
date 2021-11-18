@@ -9,28 +9,13 @@ plugins {
 
 description = "gRPC: Authorization"
 
-[compileJava].each() {
-    it.options.compilerArgs += [
-        // valueOf(int) in RoutingPriority has been deprecated
-        "-Xlint:-deprecation",
-        // only has AutoValue annotation processor
-        "-Xlint:-processing",
-    ]
-    appendToProperty(
-            it.options.errorprone.excludedPaths,
-            ".*/build/generated/sources/annotationProcessor/java/.*",
-            "|")
-}
-
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
     implementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-core'),
-            project(':grpc-services'),
             project(':grpc-auth'),
-            project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.gson,
             libraries.re2j,
             libraries.bouncycastle,
@@ -42,13 +27,10 @@ dependencies {
     testImplementation project(':grpc-core').sourceSets.test.output
 
     annotationProcessor libraries.autovalue
-    compileOnly libraries.javax_annotation,
-            // At runtime use the epoll included in grpc-netty-shaded
-            libraries.netty_epoll
+    compileOnly libraries.javax_annotation
 
     testImplementation project(':grpc-testing'),
-            project(':grpc-testing-proto'),
-            libraries.netty_epoll
+            project(':grpc-testing-proto')
     testImplementation (libraries.guava_testlib) {
         exclude group: 'junit', module: 'junit'
     }
@@ -57,7 +39,6 @@ dependencies {
     shadow project(path: ':grpc-xds', configuration: 'shadow')
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    testRuntimeOnly libraries.netty_tcnative
 }
 
 configureProtoCompilation()
@@ -79,12 +60,6 @@ shadowJar {
     relocate 'com.google.api.expr', 'io.grpc.xds.shaded.com.google.api.expr'
 }
 
-javadoc {
-    // Exclusions here should generally also be relocated
-    exclude 'com/github/udpa/**'
-    exclude 'io/envoyproxy/**'
-}
-
 publishing {
     publications {
         maven(MavenPublication) {
@@ -98,8 +73,7 @@ publishing {
                     def dependencyNode = dependenciesNode.appendNode('dependency')
                     dependencyNode.appendNode('groupId', dep.group)
                     dependencyNode.appendNode('artifactId', dep.name)
-                    def version = (dep.name == 'grpc-netty-shaded') ? '[' + dep.version + ']' : dep.version
-                    dependencyNode.appendNode('version', version)
+                    dependencyNode.appendNode('version', dep.version)
                     dependencyNode.appendNode('scope', 'compile')
                 }
                 asNode().dependencies[0].replaceNode(dependenciesNode)

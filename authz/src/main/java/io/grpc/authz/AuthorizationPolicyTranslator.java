@@ -16,6 +16,7 @@
 
 package io.grpc.authz;
 
+import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.config.rbac.v3.Permission;
 import io.envoyproxy.envoy.config.rbac.v3.Policy;
 import io.envoyproxy.envoy.config.rbac.v3.Principal;
@@ -34,9 +35,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * add.
+ * Translate a gRPC authorization policy in JSON string to Envoy RBAC policies.
  */
 public class AuthorizationPolicyTranslator {
+  private static final ImmutableList<String> UNSUPPORTED_HEADERS = ImmutableList.of(
+      "host", "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+      "te", "trailer", "transfer-encoding", "upgrade");
 
   private static StringMatcher getStringMatcher(String value) {
     if (value.equals("*")) {
@@ -51,8 +55,11 @@ public class AuthorizationPolicyTranslator {
 
   private static Principal parseSource(Map<String, ?> source) {
     List<String> principalsList = JsonUtil.getListOfStrings(source, "principals");
-    if (principalsList == null || (principalsList != null && principalsList.isEmpty())) {
+    if (principalsList == null) {
       return Principal.newBuilder().setAny(true).build();
+    }
+    if (principalsList != null && principalsList.isEmpty()) {
+      return Principal.newBuilder().setAuthenticated(Authenticated.newBuilder().build()).build();
     }
     Principal.Set.Builder principalsSet = Principal.Set.newBuilder();
     for (String principal: principalsList) {           
@@ -68,6 +75,11 @@ public class AuthorizationPolicyTranslator {
     String key = JsonUtil.getString(header, "key");
     if (key == null) {
       throw new IllegalArgumentException("\"key\" is absent.");
+    }
+    if (key.charAt(0) == ':'
+        || key.startsWith("grpc-")
+        || UNSUPPORTED_HEADERS.contains(key.toLowerCase())) {
+      throw new IllegalArgumentException(String.format("Unsupported \"key\" %s.", key));
     }
     List<String> valuesList = JsonUtil.getListOfStrings(header, "values");
     if (valuesList == null || (valuesList != null && valuesList.isEmpty())) {
@@ -147,19 +159,20 @@ public class AuthorizationPolicyTranslator {
     return policies;
   }
 
-
   /** 
-   * Translate a gRPC authorization policy in JSON string to two RBAC policies, a 
-   * deny RBAC policy followed by an allow RBAC policy. If the policy cannot be
-   * parsed or is invalid, an IllegalArgumentException will be thrown.
-   */
+  * Translate a gRPC authorization policy in JSON string to Envoy RBAC policies.
+  * On success, will return one of the following -
+  * 1. One allow RBAC policy or,
+  * 2. Two RBAC policies, deny policy followed by allow policy.
+  * If the policy cannot be parsed or is invalid, an exception will be thrown.
+  */
   @SuppressWarnings("unchecked")
   public static List<RBAC> translate(String authorizationPolicy) 
   throws IllegalArgumentException, IOException {
     Map<String, ?> json = (Map<String, ?>)JsonParser.parse(authorizationPolicy);
     String name = JsonUtil.getString(json, "name");
     if (name == null) {
-      throw new IllegalArgumentException("'name' is absent.");
+      throw new IllegalArgumentException("\"name\" is absent.");
     }
     List<RBAC> rbacs = new ArrayList<>();
     List<Map<String, ?>> objects = JsonUtil.getListOfObjects(json, "deny_rules");
@@ -172,28 +185,13 @@ public class AuthorizationPolicyTranslator {
     }
     objects = JsonUtil.getListOfObjects(json, "allow_rules");
     if (objects == null) {
-      throw new IllegalArgumentException("'allow_rules' is absent.");
+      throw new IllegalArgumentException("\"allow_rules\" is absent.");
     }
     rbacs.add(
         RBAC.newBuilder()
         .setAction(Action.ALLOW)
         .putAllPolicies(parseRules(objects, name))
         .build());
-    /*
-    for (Map.Entry<String, ?> object: json.entrySet()) {
-      if (object.getKey().equals("name")) {
-        continue;
-      } else if (object.getKey().equals("allow_rules")) {
-        List<Object> objects = JsonUtil.getListOfObjects(object, "allow_rules");
-        if (objects == null){
-          throw new IllegalArgumentException("\"allow_rules\" is absent or has invalid type.");
-        }
-      } else if (object.getKey().equals("deny_rules")) {
-        //...
-      } else {
-        throw new IllegalArgumentException("policy contains unknown field: " + object.getKey());
-      }
-    }*/
     return rbacs;
   }
 }
