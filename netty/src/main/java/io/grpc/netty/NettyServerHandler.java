@@ -109,6 +109,9 @@ class NettyServerHandler extends AbstractNettyHandler {
   @VisibleForTesting
   static final long GRACEFUL_SHUTDOWN_PING = 0x97ACEF001L;
   private static final long GRACEFUL_SHUTDOWN_PING_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(10);
+  /** Temporary workaround for #8674. Fine to delete after v1.45 release, and maybe earlier. */
+  private static final boolean DISABLE_CONNECTION_HEADER_CHECK = Boolean.parseBoolean(
+      System.getProperty("io.grpc.netty.disableConnectionHeaderCheck", "false"));
 
   private final Http2Connection.PropertyKey streamKey;
   private final ServerTransportListener transportListener;
@@ -380,7 +383,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     try {
       // Connection-specific header fields makes a request malformed. Ideally this would be handled
       // by Netty. RFC 7540 section 8.1.2.2
-      if (headers.contains(CONNECTION)) {
+      if (!DISABLE_CONNECTION_HEADER_CHECK && headers.contains(CONNECTION)) {
         resetStream(ctx, streamId, Http2Error.PROTOCOL_ERROR.code(), ctx.newPromise());
         return;
       }

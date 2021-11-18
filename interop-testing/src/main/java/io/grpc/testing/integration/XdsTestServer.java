@@ -180,16 +180,16 @@ public final class XdsTestServer {
               .addService(
                   ServerInterceptors.intercept(
                       new TestServiceImpl(serverId, host), new TestInfoInterceptor(host)))
-              .build()
-              .start();
+              .build();
+      server.start();
       maintenanceServer =
           NettyServerBuilder.forPort(maintenancePort)
               .addService(new XdsUpdateHealthServiceImpl(health))
               .addService(health.getHealthService())
               .addService(ProtoReflectionService.newInstance())
               .addServices(AdminInterface.getStandardServices())
-              .build()
-              .start();
+              .build();
+      maintenanceServer.start();
     } else {
       server =
           NettyServerBuilder.forPort(port)
@@ -200,8 +200,8 @@ public final class XdsTestServer {
               .addService(health.getHealthService())
               .addService(ProtoReflectionService.newInstance())
               .addServices(AdminInterface.getStandardServices())
-              .build()
-              .start();
+              .build();
+      server.start();
       maintenanceServer = null;
     }
     health.setStatus("", ServingStatus.SERVING);

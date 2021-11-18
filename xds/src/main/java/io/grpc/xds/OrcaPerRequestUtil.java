@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
+import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;

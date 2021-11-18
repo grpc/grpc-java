@@ -19,22 +19,18 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.ChannelCredentials;
 import io.grpc.Context;
-import io.grpc.Grpc;
-import io.grpc.ManagedChannel;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.ClientXdsClient.XdsChannelFactory;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.internal.sds.TlsContextManagerImpl;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -113,8 +109,6 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     @GuardedBy("lock")
     private ScheduledExecutorService scheduler;
     @GuardedBy("lock")
-    private ManagedChannel channel;
-    @GuardedBy("lock")
     private XdsClient xdsClient;
     @GuardedBy("lock")
     private int refCount;
@@ -128,16 +122,16 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     public XdsClient getObject() {
       synchronized (lock) {
         if (refCount == 0) {
-          ServerInfo serverInfo = bootstrapInfo.servers().get(0);  // use first server
-          String target = serverInfo.target();
-          ChannelCredentials channelCredentials = serverInfo.channelCredentials();
-          channel = Grpc.newChannelBuilder(target, channelCredentials)
-              .keepAliveTime(5, TimeUnit.MINUTES)
-              .build();
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
-          xdsClient = new ClientXdsClient(channel, bootstrapInfo, context, scheduler,
-              new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER,
-              TimeProvider.SYSTEM_TIME_PROVIDER, new TlsContextManagerImpl(bootstrapInfo));
+          xdsClient = new ClientXdsClient(
+              XdsChannelFactory.DEFAULT_XDS_CHANNEL_FACTORY,
+              bootstrapInfo,
+              context,
+              scheduler,
+              new ExponentialBackoffPolicy.Provider(),
+              GrpcUtil.STOPWATCH_SUPPLIER,
+              TimeProvider.SYSTEM_TIME_PROVIDER,
+              new TlsContextManagerImpl(bootstrapInfo));
         }
         refCount++;
         return xdsClient;
@@ -151,18 +145,9 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
         if (refCount == 0) {
           xdsClient.shutdown();
           xdsClient = null;
-          channel.shutdown();
           scheduler = SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, scheduler);
         }
         return null;
-      }
-    }
-
-    @VisibleForTesting
-    @Nullable
-    ManagedChannel getChannelForTest() {
-      synchronized (lock) {
-        return channel;
       }
     }
 

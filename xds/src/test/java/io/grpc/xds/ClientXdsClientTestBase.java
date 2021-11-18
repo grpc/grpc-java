@@ -43,6 +43,7 @@ import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.BindableService;
+import io.grpc.ChannelCredentials;
 import io.grpc.Context;
 import io.grpc.Context.CancellableContext;
 import io.grpc.InsecureChannelCredentials;
@@ -59,6 +60,8 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
+import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.ClientXdsClient.XdsChannelFactory;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -122,6 +125,9 @@ public abstract class ClientXdsClientTestBase {
   private static final String VERSION_3 = "44";
   private static final Node NODE = Node.newBuilder().build();
   private static final Any FAILING_ANY = MessageFactory.FAILING_ANY;
+  private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
+  private final ServerInfo lrsServerInfo =
+      ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3());
 
   private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
       new FakeClock.TaskFilter() {
@@ -272,19 +278,24 @@ public abstract class ClientXdsClientTestBase {
             .start());
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
+    XdsChannelFactory xdsChannelFactory = new XdsChannelFactory() {
+      @Override
+      ManagedChannel create(ServerInfo serverInfo) {
+        return channel;
+      }
+    };
 
     Bootstrapper.BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(
-                Bootstrapper.ServerInfo.create(
-                    SERVER_URI, InsecureChannelCredentials.create(), useProtocolV3())))
+                Bootstrapper.ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3())))
             .node(EnvoyProtoData.Node.newBuilder().build())
             .certProviders(ImmutableMap.of("cert-instance-name",
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
             .build();
     xdsClient =
         new ClientXdsClient(
-            channel,
+            xdsChannelFactory,
             bootstrapInfo,
             Context.ROOT,
             fakeClock.getScheduledExecutorService(),
@@ -1385,7 +1396,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
@@ -1414,7 +1425,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.RING_HASH);
     assertThat(cdsUpdate.minRingSize()).isEqualTo(10L);
     assertThat(cdsUpdate.maxRingSize()).isEqualTo(100L);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
@@ -1459,7 +1470,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isEqualTo(200L);
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterCircuitBreakers, VERSION_1,
@@ -1555,12 +1566,16 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
 
     // The response NACKed with errors indicating indices of the failed resources.
-    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(
-        "CDS response Cluster 'cluster.googleapis.com' validation error: "
+    String errorMsg =  "CDS response Cluster 'cluster.googleapis.com' validation error: "
             + "Cluster cluster.googleapis.com: malformed UpstreamTlsContext: "
             + "io.grpc.xds.ClientXdsClient$ResourceInvalidException: "
-            + "ca_certificate_provider_instance is required in upstream-tls-context"));
-    verifyNoInteractions(cdsResourceWatcher);
+            + "ca_certificate_provider_instance is required in upstream-tls-context";
+    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(cdsResourceWatcher).onError(captor.capture());
+    Status errorStatus = captor.getValue();
+    assertThat(errorStatus.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(errorStatus.getDescription()).isEqualTo(errorMsg);
   }
 
   /**
@@ -1579,10 +1594,14 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
 
     // The response NACKed with errors indicating indices of the failed resources.
-    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(
-        "CDS response Cluster 'cluster.googleapis.com' validation error: "
-            + "transport-socket with name envoy.transport_sockets.bad not supported."));
-    verifyNoInteractions(cdsResourceWatcher);
+    String errorMsg = "CDS response Cluster 'cluster.googleapis.com' validation error: "
+        + "transport-socket with name envoy.transport_sockets.bad not supported.";
+    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(cdsResourceWatcher).onError(captor.capture());
+    Status errorStatus = captor.getValue();
+    assertThat(errorStatus.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(errorStatus.getDescription()).isEqualTo(errorMsg);
   }
 
   @Test
@@ -1601,7 +1620,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     call.verifyNoMoreRequest();
@@ -1643,7 +1662,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
     assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterDns, VERSION_1, TIME_INCREMENT);
@@ -1662,7 +1681,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterEds, VERSION_2, TIME_INCREMENT * 2);
@@ -1683,7 +1702,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
@@ -1735,7 +1754,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
     assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verify(watcher1).onChanged(cdsUpdateCaptor.capture());
@@ -1744,7 +1763,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     verify(watcher2).onChanged(cdsUpdateCaptor.capture());
@@ -1753,7 +1772,7 @@ public abstract class ClientXdsClientTestBase {
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
     assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
-    assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
     // Metadata of both clusters is stored.
@@ -1997,11 +2016,11 @@ public abstract class ClientXdsClientTestBase {
     verify(cdsWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(null);
-    assertThat(cdsUpdate.lrsServerName()).isEqualTo("");
+    assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(lrsServerInfo);
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     cdsUpdate = cdsUpdateCaptor.getValue();
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(EDS_RESOURCE);
-    assertThat(cdsUpdate.lrsServerName()).isNull();
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
     verifyResourceMetadataAcked(CDS, resource, clusters.get(0), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusters.get(1), VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataRequested(EDS, EDS_RESOURCE);
@@ -2325,8 +2344,9 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void reportLoadStatsToServer() {
+    xdsClient.watchLdsResource(LDS_RESOURCE, ldsResourceWatcher);
     String clusterName = "cluster-foo.googleapis.com";
-    ClusterDropStats dropStats = xdsClient.addClusterDropStats(clusterName, null);
+    ClusterDropStats dropStats = xdsClient.addClusterDropStats(lrsServerInfo, clusterName, null);
     LrsRpcCall lrsCall = loadReportCalls.poll();
     lrsCall.verifyNextReportClusters(Collections.<String[]>emptyList()); // initial LRS request
 
@@ -2429,10 +2449,15 @@ public abstract class ClientXdsClientTestBase {
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
     // The response NACKed with errors indicating indices of the failed resources.
-    call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(
-            "LDS response Listener \'grpc/server?xds.resource.listening_address=0.0.0.0:7000\' "
-                + "validation error: common-tls-context is required in downstream-tls-context"));
-    verifyNoInteractions(ldsResourceWatcher);
+    String errorMsg = "LDS response Listener \'grpc/server?xds.resource.listening_address="
+        + "0.0.0.0:7000\' validation error: "
+        + "common-tls-context is required in downstream-tls-context";
+    call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(ldsResourceWatcher).onError(captor.capture());
+    Status errorStatus = captor.getValue();
+    assertThat(errorStatus.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(errorStatus.getDescription()).isEqualTo(errorMsg);
   }
 
   @Test
@@ -2453,11 +2478,16 @@ public abstract class ClientXdsClientTestBase {
     List<Any> listeners = ImmutableList.of(Any.pack(listener));
     call.sendResponse(ResourceType.LDS, listeners, "0", "0000");
     // The response NACKed with errors indicating indices of the failed resources.
+    String errorMsg = "LDS response Listener \'grpc/server?xds.resource.listening_address="
+        + "0.0.0.0:7000\' validation error: "
+        + "transport-socket with name envoy.transport_sockets.bad1 not supported.";
     call.verifyRequestNack(LDS, LISTENER_RESOURCE, "", "0000", NODE, ImmutableList.of(
-        "LDS response Listener \'grpc/server?xds.resource.listening_address=0.0.0.0:7000\' "
-            + "validation error: "
-            + "transport-socket with name envoy.transport_sockets.bad1 not supported."));
-    verifyNoInteractions(ldsResourceWatcher);
+        errorMsg));
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(ldsResourceWatcher).onError(captor.capture());
+    Status errorStatus = captor.getValue();
+    assertThat(errorStatus.getCode()).isEqualTo(Status.UNAVAILABLE.getCode());
+    assertThat(errorStatus.getDescription()).isEqualTo(errorMsg);
   }
 
   private DiscoveryRpcCall startResourceWatcher(

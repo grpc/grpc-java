@@ -23,7 +23,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import io.grpc.InsecureChannelCredentials;
-import io.grpc.ManagedChannel;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
@@ -90,7 +89,6 @@ public class SharedXdsClientPoolProviderTest {
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     RefCountedXdsClientObjectPool xdsClientPool = new RefCountedXdsClientObjectPool(bootstrapInfo);
     assertThat(xdsClientPool.getXdsClientForTest()).isNull();
-    assertThat(xdsClientPool.getChannelForTest()).isNull();
     XdsClient xdsClient = xdsClientPool.getObject();
     assertThat(xdsClientPool.getXdsClientForTest()).isNotNull();
     xdsClientPool.returnObject(xdsClient);
@@ -113,7 +111,6 @@ public class SharedXdsClientPoolProviderTest {
     // returnObject twice
     assertThat(xdsClientPool.returnObject(xdsClient)).isNull();
     assertThat(xdsClient.isShutDown()).isTrue();
-    assertThat(xdsClientPool.getChannelForTest().isShutdown()).isTrue();
   }
 
   @Test
@@ -123,14 +120,11 @@ public class SharedXdsClientPoolProviderTest {
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     RefCountedXdsClientObjectPool xdsClientPool = new RefCountedXdsClientObjectPool(bootstrapInfo);
     XdsClient xdsClient1 = xdsClientPool.getObject();
-    ManagedChannel channel1 = xdsClientPool.getChannelForTest();
     assertThat(xdsClientPool.returnObject(xdsClient1)).isNull();
     assertThat(xdsClient1.isShutDown()).isTrue();
-    assertThat(channel1.isShutdown()).isTrue();
 
     XdsClient xdsClient2 = xdsClientPool.getObject();
     assertThat(xdsClient2).isNotSameInstanceAs(xdsClient1);
-    assertThat(xdsClientPool.getChannelForTest()).isNotSameInstanceAs(channel1);
     xdsClientPool.returnObject(xdsClient2);
   }
 }
