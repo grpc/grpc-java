@@ -104,7 +104,7 @@ public class AuthorizationPolicyTranslatorTest {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae).hasMessageThat().isEqualTo("'name' is absent.");
+      assertThat(iae).hasMessageThat().isEqualTo("rule \"name\" is absent.");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -366,6 +366,58 @@ public class AuthorizationPolicyTranslatorTest {
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
       assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" Host.");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+  }
+
+  @Test
+  public void missingHeaderKey() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_dev\","
+        + "     \"request\": {"
+        + "       \"headers\": ["
+        + "         {}"
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    try {
+      AuthorizationPolicyTranslator.translate(policy);
+      fail("exception expected");
+    } catch (IllegalArgumentException iae) {
+      assertThat(iae).hasMessageThat().isEqualTo("\"key\" is absent.");
+    } catch (Exception e) {
+      throw new AssertionError("the test failed ", e);
+    }
+  }
+
+  @Test
+  public void missingHeaderValues() throws Exception {
+    String policy = "{"
+        + " \"name\" : \"authz\" ,"
+        + " \"allow_rules\": ["
+        + "   {"
+        + "     \"name\": \"allow_dev\","
+        + "     \"request\": {"
+        + "       \"headers\": ["
+        + "         {"
+        + "           \"key\": \"dev-path\""
+        + "         }"
+        + "       ]"
+        + "     }"
+        + "   }"
+        + " ]"
+        + "}";
+    try {
+      AuthorizationPolicyTranslator.translate(policy);
+      fail("exception expected");
+    } catch (IllegalArgumentException iae) {
+      assertThat(iae).hasMessageThat().isEqualTo("\"values\" is absent or empty.");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }

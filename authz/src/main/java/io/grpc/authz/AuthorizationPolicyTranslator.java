@@ -133,7 +133,7 @@ public class AuthorizationPolicyTranslator {
     for (Map<String, ?> object: objects) {
       String policyName = JsonUtil.getString(object, "name");
       if (policyName == null) {
-        throw new IllegalArgumentException("'name' is absent.");
+        throw new IllegalArgumentException("rule \"name\" is absent.");
       }
       List<Principal> principals = new ArrayList<>();
       Map<String, ?> source = JsonUtil.getObject(object, "source");
@@ -166,9 +166,9 @@ public class AuthorizationPolicyTranslator {
   * 2. Two RBAC policies, deny policy followed by allow policy.
   * If the policy cannot be parsed or is invalid, an exception will be thrown.
   */
-  @SuppressWarnings("unchecked")
   public static List<RBAC> translate(String authorizationPolicy) 
   throws IllegalArgumentException, IOException {
+    @SuppressWarnings("unchecked")
     Map<String, ?> json = (Map<String, ?>)JsonParser.parse(authorizationPolicy);
     String name = JsonUtil.getString(json, "name");
     if (name == null) {
