@@ -14,43 +14,44 @@
  * limitations under the License.
  */
 
+
 package io.grpc.xds;
 
 import static org.junit.Assert.assertEquals;
 
-import com.google.protobuf.ByteString;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class XdsInteropTest {
-  private static final Logger logger = Logger.getLogger(XdsInteropTest.class.getName());
+/** End-to-end xds tests using {@link XdsTestControlPlaneService}. */
+@RunWith(JUnit4.class)
+public class XdsE2eTest {
+  private static final Logger logger = Logger.getLogger(XdsE2eTest.class.getName());
 
-  /**
-   * The main application to run test cases.
-   */
-  public static void main(String[] args) throws Exception {
-    AbstractXdsInteropTest testCase = new PingPong();
-    testCase.setUp();
+  @Test
+  public void pingPong() throws Exception {
+    AbstractXdsE2eTest pingPong = new AbstractXdsE2eTest() {
+      @Override
+      void run() {
+        SimpleRequest request = SimpleRequest.newBuilder()
+            .build();
+        SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+            .setResponseMessage("Hi, xDS!")
+            .build();
+        assertEquals(goldenResponse, blockingStub.unaryRpc(request));
+        logger.log(Level.INFO, "success");
+      }
+    };
+    pingPong.setUp();
     try {
-      testCase.run();
+      pingPong.run();
     } finally {
-      testCase.tearDown();
-    }
-  }
-
-  private static class PingPong extends AbstractXdsInteropTest {
-    @Override
-    void run() {
-      SimpleRequest request = SimpleRequest.newBuilder()
-          .build();
-      SimpleResponse goldenResponse = SimpleResponse.newBuilder()
-          .setResponseMessage("Hi, xDS!")
-          .build();
-      assertEquals(goldenResponse, blockingStub.unaryRpc(request));
-      logger.log(Level.INFO, "success");
+      pingPong.tearDown();
     }
   }
 }

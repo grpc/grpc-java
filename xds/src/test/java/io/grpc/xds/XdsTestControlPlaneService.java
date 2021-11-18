@@ -29,16 +29,15 @@ import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.SynchronizationContext;
 import io.grpc.stub.StreamObserver;
-;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class XdsTestControlPlaneService extends
+class XdsTestControlPlaneService extends
     AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase {
-  private static final Logger logger = Logger.getLogger(XdsInteropTest.class.getName());
+  private static final Logger logger = Logger.getLogger(XdsE2eTest.class.getName());
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {

@@ -1,4 +1,4 @@
-package io.grpc.xds;/*
+/*
  * Copyright 2021 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +13,9 @@ package io.grpc.xds;/*
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+
+package io.grpc.xds;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -30,6 +33,7 @@ import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
 import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
 import io.envoyproxy.envoy.config.listener.v3.ApiListener;
+import io.envoyproxy.envoy.config.listener.v3.Filter;
 import io.envoyproxy.envoy.config.listener.v3.FilterChain;
 import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
@@ -38,12 +42,11 @@ import io.envoyproxy.envoy.config.route.v3.Route;
 import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
+import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
+import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.Rds;
-import io.envoyproxy.envoy.config.route.v3.VirtualHost;
-import io.envoyproxy.envoy.config.listener.v3.Filter;
-import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
@@ -70,8 +73,8 @@ import java.util.logging.Logger;
  * A local control plane is implemented in {@link XdsTestControlPlaneService}.
  * Test cases can inject xds configs to the control plane for testing.
  */
-public abstract class AbstractXdsInteropTest {
-  private static final Logger logger = Logger.getLogger(AbstractXdsInteropTest.class.getName());
+abstract class AbstractXdsE2eTest {
+  private static final Logger logger = Logger.getLogger(AbstractXdsE2eTest.class.getName());
 
   protected static final int testServerPort = 8080;
   private static final int controlPlaneServicePort = 443;
@@ -138,8 +141,6 @@ public abstract class AbstractXdsInteropTest {
   }
 
   protected void setUp() throws Exception {
-
-
     startControlPlane();
     startServer();
     nameResolverProvider = XdsNameResolverProvider.createForTest(scheme,
