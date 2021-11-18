@@ -25,13 +25,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 /** End-to-end xds tests using {@link XdsTestControlPlaneService}. */
 @RunWith(JUnit4.class)
 public class XdsE2eTest {
-  private static final Logger logger = Logger.getLogger(XdsE2eTest.class.getName());
 
   @Test
   public void pingPong() throws Exception {
@@ -44,7 +40,6 @@ public class XdsE2eTest {
             .setResponseMessage("Hi, xDS!")
             .build();
         assertEquals(goldenResponse, blockingStub.unaryRpc(request));
-        logger.log(Level.INFO, "success");
       }
     };
     pingPong.setUp();
