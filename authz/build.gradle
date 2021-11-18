@@ -13,16 +13,7 @@ evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
     implementation project(':grpc-protobuf'),
-            project(':grpc-stub'),
-            project(':grpc-core'),
-            project(':grpc-auth'),
-            libraries.gson,
-            libraries.re2j,
-            libraries.bouncycastle,
-            libraries.autovalue_annotation,
-            libraries.opencensus_proto,
-            libraries.protobuf_util
-    def xdsDependency = implementation project(':grpc-xds')
+            project(':grpc-core')
 
     testImplementation project(':grpc-core').sourceSets.test.output
 
@@ -35,6 +26,7 @@ dependencies {
         exclude group: 'junit', module: 'junit'
     }
 
+    def xdsDependency = implementation project(':grpc-xds')
     shadow configurations.implementation.getDependencies().minus([xdsDependency])
     shadow project(path: ':grpc-xds', configuration: 'shadow')
 
@@ -50,7 +42,7 @@ jar {
 shadowJar {
     classifier = null
     dependencies {
-        include(project(':grpc-xds'))
+        exclude(dependency {true})
     }
     relocate 'io.grpc.xds', 'io.grpc.xds.shaded.io.grpc.xds'
     relocate 'udpa.annotations', 'io.grpc.xds.shaded.udpa.annotations'
