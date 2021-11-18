@@ -16,7 +16,9 @@
 
 package io.grpc.xds;
 
+import com.google.protobuf.Descriptors.Descriptor;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Message;
 import com.google.protobuf.MessageOrBuilder;
 import com.google.protobuf.TypeRegistry;
 import com.google.protobuf.util.JsonFormat;
@@ -46,7 +48,7 @@ final class MessagePrinter {
     static final JsonFormat.Printer printer = newPrinter();
 
     private static JsonFormat.Printer newPrinter() {
-      TypeRegistry registry =
+      TypeRegistry.Builder registry =
           TypeRegistry.newBuilder()
               .add(Listener.getDescriptor())
               .add(io.envoyproxy.envoy.api.v2.Listener.getDescriptor())
@@ -71,9 +73,20 @@ final class MessagePrinter {
               .add(io.envoyproxy.envoy.config.cluster.aggregate.v2alpha.ClusterConfig
                   .getDescriptor())
               .add(ClusterLoadAssignment.getDescriptor())
-              .add(io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.getDescriptor())
-              .build();
-      return JsonFormat.printer().usingTypeRegistry(registry);
+              .add(io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.getDescriptor());
+      try {
+        @SuppressWarnings("unchecked")
+        Class<? extends Message> routeLookupClusterSpecifierClass =
+            (Class<? extends Message>)
+                Class.forName("io.grpc.lookup.v1.RouteLookupClusterSpecifier");
+        Descriptor descriptor =
+            (Descriptor)
+                routeLookupClusterSpecifierClass.getDeclaredMethod("getDescriptor").invoke(null);
+        registry.add(descriptor);
+      } catch (Exception e) {
+        // Ignore. In most cases RouteLookup is not required.
+      }
+      return JsonFormat.printer().usingTypeRegistry(registry.build());
     }
   }
 
