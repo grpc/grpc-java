@@ -312,7 +312,7 @@ public class AuthorizationPolicyTranslatorTest {
   }
 
   @Test
-  public void unsupportedGrpcHeaders() throws Exception {
+  public void unsupportedGrpcPrefixHeaders() throws Exception {
     String policy = "{"
         + " \"name\" : \"authz\" ,"
         + " \"allow_rules\": ["

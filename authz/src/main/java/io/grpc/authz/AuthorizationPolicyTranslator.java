@@ -35,7 +35,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Translate a gRPC authorization policy in JSON string to Envoy RBAC policies.
+ * Translates a gRPC SDK authorization policy in JSON string to Envoy RBAC policies.
  */
 public class AuthorizationPolicyTranslator {
   private static final ImmutableList<String> UNSUPPORTED_HEADERS = ImmutableList.of(
@@ -58,7 +58,7 @@ public class AuthorizationPolicyTranslator {
     if (principalsList == null) {
       return Principal.newBuilder().setAny(true).build();
     }
-    if (principalsList != null && principalsList.isEmpty()) {
+    if (principalsList.isEmpty()) {
       return Principal.newBuilder().setAuthenticated(Authenticated.newBuilder().build()).build();
     }
     Principal.Set.Builder principalsSet = Principal.Set.newBuilder();
@@ -160,7 +160,7 @@ public class AuthorizationPolicyTranslator {
   }
 
   /** 
-  * Translate a gRPC authorization policy in JSON string to Envoy RBAC policies.
+  * Translates a gRPC SDK authorization policy in JSON string to Envoy RBAC policies.
   * On success, will return one of the following -
   * 1. One allow RBAC policy or,
   * 2. Two RBAC policies, deny policy followed by allow policy.
