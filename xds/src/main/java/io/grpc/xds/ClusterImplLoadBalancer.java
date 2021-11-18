@@ -317,10 +317,13 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
                   "Cluster max concurrent requests limit exceeded"));
             }
           }
+          ClientStreamTracer.Factory tracerFactory = result.getStreamTracerFactory();
           final ClusterLocalityStats stats =
               result.getSubchannel().getAttributes().get(ATTR_CLUSTER_LOCALITY_STATS);
-          ClientStreamTracer.Factory tracerFactory = new CountingStreamTracerFactory(
+          if (stats != null) {
+            tracerFactory = new CountingStreamTracerFactory(
               stats, inFlights, result.getStreamTracerFactory());
+          }
           return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
         }
         return result;
