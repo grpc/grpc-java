@@ -76,6 +76,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -114,6 +115,11 @@ public class XdsServerWrapperTest {
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:1", mockBuilder, listener,
             selectorManager, new FakeXdsClientPoolFactory(xdsClient),
             filterRegistry, executor.getScheduledExecutorService());
+  }
+
+  @After
+  public void tearDown() {
+    xdsServerWrapper.shutdownNow();
   }
 
   @Test
@@ -322,6 +328,33 @@ public class XdsServerWrapperTest {
     verify(listener, never()).onServing();
     xdsServerWrapper.awaitTermination();
     assertThat(xdsServerWrapper.isTerminated()).isTrue();
+  }
+
+  @Test
+  public void shutdownNow_startThreadShouldNotLeak() throws Exception {
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                try {
+                  start.set(xdsServerWrapper.start());
+                } catch (Exception ex) {
+                  start.setException(ex);
+                }
+              }
+            });
+    assertThat(xdsClient.ldsResource.get(5, TimeUnit.SECONDS))
+        .isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
+    xdsServerWrapper.shutdownNow();
+    try {
+      start.get(5, TimeUnit.SECONDS);
+      fail("should have thrown but not");
+    } catch (ExecutionException ex) {
+      assertThat(ex).hasCauseThat().isInstanceOf(IOException.class);
+      assertThat(ex).hasCauseThat().hasMessageThat().isEqualTo("server is forcefully shut down");
+    }
   }
 
   @Test
