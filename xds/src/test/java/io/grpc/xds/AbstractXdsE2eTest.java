@@ -18,7 +18,6 @@
 package io.grpc.xds;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -59,11 +58,10 @@ import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 
+import java.net.ServerSocket;
 import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -76,15 +74,15 @@ import java.util.logging.Logger;
 abstract class AbstractXdsE2eTest {
   private static final Logger logger = Logger.getLogger(AbstractXdsE2eTest.class.getName());
 
-  protected static final int testServerPort = 8080;
-  private static final int controlPlaneServicePort = 443;
+  protected int testServerPort;
+  protected String serverHostName;
+  protected int controlPlaneServicePort;
   private Server server;
   private Server controlPlane;
+  private XdsTestControlPlaneService controlPlaneService;
   protected SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub;
-  private ScheduledExecutorService executor;
   private XdsNameResolverProvider nameResolverProvider;
   private static final String scheme = "test-xds";
-  private static final String serverHostName = "0.0.0.0:" + testServerPort;
   private static final String SERVER_LISTENER_TEMPLATE =
       "grpc/server?udpa.resource.listening_address=%s";
   private static final String rdsName = "route-config.googleapis.com";
@@ -94,60 +92,73 @@ abstract class AbstractXdsE2eTest {
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
 
-  private static final Map<String, ?> defaultClientBootstrapOverride = ImmutableMap.of(
-      "node", ImmutableMap.of(
-          "id", UUID.randomUUID().toString(),
-          "cluster", "cluster0"),
-      "xds_servers", Collections.singletonList(
-          ImmutableMap.of(
-              "server_uri", "localhost:" + controlPlaneServicePort,
-              "channel_creds", Collections.singletonList(
-                  ImmutableMap.of("type", "insecure")
-              ),
-              "server_features", Collections.singletonList("xds_v3")
-          )
-      )
-  );
-
   /**
    * Provides default client bootstrap.
    * A subclass test case should override this method if it tests client bootstrap.
    */
   protected Map<String, ?> getClientBootstrapOverride() {
+    Map<String, ?> defaultClientBootstrapOverride = ImmutableMap.of(
+        "node", ImmutableMap.of(
+            "id", UUID.randomUUID().toString(),
+            "cluster", "cluster0"),
+        "xds_servers", Collections.singletonList(
+            ImmutableMap.of(
+                "server_uri", "localhost:" + controlPlaneServicePort,
+                "channel_creds", Collections.singletonList(
+                    ImmutableMap.of("type", "insecure")
+                ),
+                "server_features", Collections.singletonList("xds_v3")
+            )
+        )
+    );
     return defaultClientBootstrapOverride;
   }
-
-  private static final Map<String, ?> defaultServerBootstrapOverride = ImmutableMap.of(
-      "node", ImmutableMap.of(
-          "id", UUID.randomUUID().toString()),
-      "xds_servers", Collections.singletonList(
-          ImmutableMap.of(
-              "server_uri", "localhost:" + controlPlaneServicePort,
-              "channel_creds", Collections.singletonList(
-                  ImmutableMap.of("type", "insecure")
-              ),
-              "server_features", Collections.singletonList("xds_v3")
-          )
-      ),
-      "server_listener_resource_name_template", SERVER_LISTENER_TEMPLATE
-  );
 
   /**
    * Provides default server bootstrap.
    * A subclass test case should override this method if it tests server bootstrap.
    */
   protected Map<String, ?> getServerBootstrapOverride() {
+    Map<String, ?> defaultServerBootstrapOverride = ImmutableMap.of(
+        "node", ImmutableMap.of(
+            "id", UUID.randomUUID().toString()),
+        "xds_servers", Collections.singletonList(
+            ImmutableMap.of(
+                "server_uri", "localhost:" + controlPlaneServicePort,
+                "channel_creds", Collections.singletonList(
+                    ImmutableMap.of("type", "insecure")
+                ),
+                "server_features", Collections.singletonList("xds_v3")
+            )
+        ),
+        "server_listener_resource_name_template", SERVER_LISTENER_TEMPLATE
+    );
     return defaultServerBootstrapOverride;
   }
 
+
+  /**
+   * 1. Start control plane server and get control plane port
+   * 2. Find an available port for xds server
+   * 3. Set control plane config using the port in 2
+   * 4. Start xds server using control plane port in 1 and available port in 2
+   * */
   protected void setUp() throws Exception {
     startControlPlane();
+    ServerSocket serverSocket = new ServerSocket(0);
+    testServerPort = serverSocket.getLocalPort();
+    serverSocket.close();
+    XdsTestControlPlaneService.XdsTestControlPlaneConfig controlPlaneConfig =
+        getControlPlaneConfig();
+    controlPlaneService.setConfig(controlPlaneConfig);
     startServer();
     nameResolverProvider = XdsNameResolverProvider.createForTest(scheme,
         getClientBootstrapOverride());
     NameResolverRegistry.getDefaultRegistry().register(nameResolverProvider);
+    serverHostName = "0.0.0.0:" + testServerPort;
     ManagedChannel channel = Grpc.newChannelBuilder(scheme + ":///" + serverHostName,
         InsecureChannelCredentials.create()).build();
+    logger.log(Level.FINER, "Starting control plane with config: {0}", controlPlaneConfig);
     blockingStub = SimpleServiceGrpc.newBlockingStub(channel);
   }
 
@@ -164,14 +175,10 @@ abstract class AbstractXdsE2eTest {
         logger.log(Level.SEVERE, "Timed out waiting for server shutdown");
       }
     }
-    if (executor != null) {
-      MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
-    }
     NameResolverRegistry.getDefaultRegistry().deregister(nameResolverProvider);
   }
 
   protected void startServer() throws Exception {
-    executor = Executors.newSingleThreadScheduledExecutor();
     SimpleServiceGrpc.SimpleServiceImplBase simpleServiceImpl =
         new SimpleServiceGrpc.SimpleServiceImplBase() {
           @Override
@@ -183,6 +190,8 @@ abstract class AbstractXdsE2eTest {
             responseObserver.onCompleted();
           }
         };
+
+
     XdsServerBuilder serverBuilder = XdsServerBuilder.forPort(
         testServerPort, InsecureServerCredentials.create())
         .addService(simpleServiceImpl)
@@ -196,6 +205,7 @@ abstract class AbstractXdsE2eTest {
    * end-to-end behavior.
    */
   protected XdsTestControlPlaneService.XdsTestControlPlaneConfig getControlPlaneConfig() {
+    String serverHostName = "0.0.0.0:" + testServerPort;
     String tcpListenerName = SERVER_LISTENER_TEMPLATE.replaceAll("%s", serverHostName);
     return new XdsTestControlPlaneService.XdsTestControlPlaneConfig(
         Collections.singletonList(serverListener(tcpListenerName, serverHostName)),
@@ -207,15 +217,12 @@ abstract class AbstractXdsE2eTest {
   }
 
   private void startControlPlane() throws Exception {
-    XdsTestControlPlaneService.XdsTestControlPlaneConfig controlPlaneConfig =
-        getControlPlaneConfig();
-    logger.log(Level.FINER, "Starting control plane with config: {0}", controlPlaneConfig);
-    XdsTestControlPlaneService controlPlaneService = new XdsTestControlPlaneService(
-        controlPlaneConfig);
+    controlPlaneService = new XdsTestControlPlaneService();
     NettyServerBuilder controlPlaneServerBuilder =
-        NettyServerBuilder.forPort(controlPlaneServicePort)
+        NettyServerBuilder.forPort(0)
         .addService(controlPlaneService);
     controlPlane = controlPlaneServerBuilder.build().start();
+    controlPlaneServicePort = controlPlane.getPort();
   }
 
   /**

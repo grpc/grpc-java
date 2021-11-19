@@ -55,10 +55,11 @@ class XdsTestControlPlaneService extends
       "type.googleapis.com/envoy.config.cluster.v3.Cluster";
   private static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
-  private final ImmutableMap<String, Listener> ldsResources;
-  private final ImmutableMap<String, RouteConfiguration> rdsResources;
-  private final ImmutableMap<String, Cluster> cdsResources;
-  private final ImmutableMap<String, ClusterLoadAssignment> edsResources;
+  private ImmutableMap<String, Listener> ldsResources = ImmutableMap.of();
+  private ImmutableMap<String, RouteConfiguration> rdsResources = ImmutableMap.of();
+  private ImmutableMap<String, Cluster> cdsResources = ImmutableMap.of();
+  private ImmutableMap<String, ClusterLoadAssignment> edsResources = ImmutableMap.of();
+
   private int ldsVersion = 1;
   private int rdsVersion = 1;
   private int cdsVersion = 1;
@@ -69,9 +70,9 @@ class XdsTestControlPlaneService extends
   private int edsNonce = 0;
 
   /**
-   * Create a control plane service for testing, with static xds configurations.
+   * Set static xds configurations, normally set config must be done before sending xds requests.
    */
-  public XdsTestControlPlaneService(XdsTestControlPlaneConfig config) {
+  public void setConfig(XdsTestControlPlaneConfig config) {
     Map<String, Listener> ldsMap = new HashMap<>();
     for (Listener apiListener: config.apiListener) {
       ldsMap.put(apiListener.getName(), apiListener);
