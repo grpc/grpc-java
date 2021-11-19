@@ -131,7 +131,7 @@ final class RlsProtoConverters {
       }
       maxAge = Math.min(maxAge, MAX_AGE_NANOS);
       staleAge = Math.min(staleAge, maxAge);
-      long cacheSize = orDefault(JsonUtil.getStringAsLong(json, "cacheSizeBytes"), MAX_CACHE_SIZE);
+      long cacheSize = orDefault(JsonUtil.getNumberAsLong(json, "cacheSizeBytes"), MAX_CACHE_SIZE);
       checkArgument(cacheSize > 0, "cacheSize must be positive");
       cacheSize = Math.min(cacheSize, MAX_CACHE_SIZE);
       String defaultTarget = JsonUtil.getString(json, "defaultTarget");
