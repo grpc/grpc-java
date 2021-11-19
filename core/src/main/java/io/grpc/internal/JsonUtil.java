@@ -96,56 +96,91 @@ public class JsonUtil {
 
   /**
    * Gets a number from an object for the given key.  If the key is not present, this returns null.
-   * If the value is not a Double, throws an exception.
+   * If the value does not represent a double, throws an exception.
    */
   @Nullable
-  public static Double getNumber(Map<String, ?> obj, String key) {
+  public static Double getNumberAsDouble(Map<String, ?> obj, String key) {
     assert key != null;
     if (!obj.containsKey(key)) {
       return null;
     }
     Object value = obj.get(key);
-    if (!(value instanceof Double)) {
-      throw new ClassCastException(
-          String.format("value '%s' for key '%s' in '%s' is not Double", value, key, obj));
+    if (value instanceof Double) {
+      return (Double) value;
     }
-    return (Double) value;
+    if (value instanceof String) {
+      try {
+        return Double.parseDouble((String) value);
+      } catch (NumberFormatException e) {
+        throw new IllegalArgumentException(
+            String.format("value '%s' for key '%s' is not a double", value, key));
+      }
+    }
+    throw new IllegalArgumentException(
+        String.format("value '%s' for key '%s' in '%s' is not a number", value, key, obj));
   }
 
   /**
    * Gets a number from an object for the given key, casted to an integer.  If the key is not
-   * present, this returns null.  If the value is not a Double or loses precision when cast to an
-   * integer, throws an exception.
+   * present, this returns null.  If the value does not represent an integer, throws an exception.
    */
+  @Nullable
   public static Integer getNumberAsInteger(Map<String, ?> obj, String key) {
-    Double d = getNumber(obj, key);
-    if (d == null) {
+    assert key != null;
+    if (!obj.containsKey(key)) {
       return null;
     }
-    int i = d.intValue();
-    if (i != d) {
-      throw new ClassCastException("Number expected to be integer: " + d);
+    Object value = obj.get(key);
+    if (value instanceof Double) {
+      Double d = (Double) value;
+      int i = d.intValue();
+      if (i != d) {
+        throw new ClassCastException("Number expected to be integer: " + d);
+      }
+      return i;
     }
-    return i;
+    if (value instanceof String) {
+      try {
+        return Integer.parseInt((String) value);
+      } catch (NumberFormatException e) {
+        throw new IllegalArgumentException(
+            String.format("value '%s' for key '%s' is not an integer", value, key));
+      }
+    }
+    throw new IllegalArgumentException(
+        String.format("value '%s' for key '%s' is not an integer", value, key));
   }
 
   /**
    * Gets a number from an object for the given key, casted to an long.  If the key is not
-   * present, this returns null.  If the value is not a Double or loses precision when cast to an
-   * long, throws an exception.
+   * present, this returns null.  If the value does not represent a long integer, throws an
+   * exception.
    */
   public static Long getNumberAsLong(Map<String, ?> obj, String key) {
-    Double d = getNumber(obj, key);
-    if (d == null) {
+    assert key != null;
+    if (!obj.containsKey(key)) {
       return null;
     }
-    long l = d.longValue();
-    if (l != d) {
-      throw new ClassCastException("Number expected to be long: " + d);
+    Object value = obj.get(key);
+    if (value instanceof Double) {
+      Double d = (Double) value;
+      long l = d.longValue();
+      if (l != d) {
+        throw new ClassCastException("Number expected to be long: " + d);
+      }
+      return l;
     }
-    return l;
+    if (value instanceof String) {
+      try {
+        return Long.parseLong((String) value);
+      } catch (NumberFormatException e) {
+        throw new IllegalArgumentException(
+            String.format("value '%s' for key '%s' is not a long integer", value, key));
+      }
+    }
+    throw new IllegalArgumentException(
+        String.format("value '%s' for key '%s' is not a long integer", value, key));
   }
-
 
   /**
    * Gets a string from an object for the given key.  If the key is not present, this returns null.
