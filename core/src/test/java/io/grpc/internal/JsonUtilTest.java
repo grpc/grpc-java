@@ -37,6 +37,9 @@ public class JsonUtilTest {
     map.put("k4", "NaN");
     map.put("k5", 5.5D);
     map.put("k6", "six");
+    map.put("key_string_infinity", "Infinity");
+    map.put("key_string_minus_infinity", "-Infinity");
+    map.put("key_string_minus_zero", "-0");
 
     assertThat(JsonUtil.getNumberAsDouble(map, "k1")).isEqualTo(1D);
     assertThat(JsonUtil.getNumberAsInteger(map, "k1")).isEqualTo(1);
@@ -107,8 +110,15 @@ public class JsonUtilTest {
       assertThat(e).hasMessageThat().isEqualTo("value 'six' for key 'k6' is not a long integer");
     }
 
-    assertThat(JsonUtil.getNumberAsDouble(map, "k7")).isNull();
-    assertThat(JsonUtil.getNumberAsInteger(map, "k7")).isNull();
-    assertThat(JsonUtil.getNumberAsLong(map, "k7")).isNull();
+    assertThat(JsonUtil.getNumberAsDouble(map, "key_string_infinity")).isPositiveInfinity();
+    assertThat(JsonUtil.getNumberAsDouble(map, "key_string_minus_infinity")).isNegativeInfinity();
+
+    assertThat(JsonUtil.getNumberAsDouble(map, "key_string_minus_zero")).isZero();
+    assertThat(JsonUtil.getNumberAsInteger(map, "key_string_minus_zero")).isEqualTo(0);
+    assertThat(JsonUtil.getNumberAsLong(map, "key_string_minus_zero")).isEqualTo(0L);
+
+    assertThat(JsonUtil.getNumberAsDouble(map, "key_nonexistent")).isNull();
+    assertThat(JsonUtil.getNumberAsInteger(map, "key_nonexistent")).isNull();
+    assertThat(JsonUtil.getNumberAsLong(map, "key_nonexistent")).isNull();
   }
 }
