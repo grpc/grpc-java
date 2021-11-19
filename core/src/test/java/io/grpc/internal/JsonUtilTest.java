@@ -31,83 +31,90 @@ public class JsonUtilTest {
   @Test
   public void getNumber() {
     Map<String, Object> map = new HashMap<>();
-    map.put("k1", 1D);
-    map.put("k2", "2.0");
-    map.put("k3", "3");
-    map.put("k4", "NaN");
-    map.put("k5", 5.5D);
-    map.put("k6", "six");
+    map.put("key_number_1", 1D);
+    map.put("key_string_2.0", "2.0");
+    map.put("key_string_3", "3");
+    map.put("key_string_nan", "NaN");
+    map.put("key_number_5.5", 5.5D);
+    map.put("key_string_six", "six");
     map.put("key_string_infinity", "Infinity");
     map.put("key_string_minus_infinity", "-Infinity");
     map.put("key_string_minus_zero", "-0");
 
-    assertThat(JsonUtil.getNumberAsDouble(map, "k1")).isEqualTo(1D);
-    assertThat(JsonUtil.getNumberAsInteger(map, "k1")).isEqualTo(1);
-    assertThat(JsonUtil.getNumberAsLong(map, "k1")).isEqualTo(1L);
+    assertThat(JsonUtil.getNumberAsDouble(map, "key_number_1")).isEqualTo(1D);
+    assertThat(JsonUtil.getNumberAsInteger(map, "key_number_1")).isEqualTo(1);
+    assertThat(JsonUtil.getNumberAsLong(map, "key_number_1")).isEqualTo(1L);
 
-    assertThat(JsonUtil.getNumberAsDouble(map, "k2")).isEqualTo(2D);
+    assertThat(JsonUtil.getNumberAsDouble(map, "key_string_2.0")).isEqualTo(2D);
     try {
-      JsonUtil.getNumberAsInteger(map, "k2");
+      JsonUtil.getNumberAsInteger(map, "key_string_2.0");
       fail("expecting to throw but did not");
     } catch (RuntimeException e) {
-      assertThat(e).hasMessageThat().isEqualTo("value '2.0' for key 'k2' is not an integer");
+      assertThat(e).hasMessageThat().isEqualTo(
+          "value '2.0' for key 'key_string_2.0' is not an integer");
     }
     try {
-      JsonUtil.getNumberAsLong(map, "k2");
+      JsonUtil.getNumberAsLong(map, "key_string_2.0");
       fail("expecting to throw but did not");
     } catch (RuntimeException e) {
-      assertThat(e).hasMessageThat().isEqualTo("value '2.0' for key 'k2' is not a long integer");
+      assertThat(e).hasMessageThat().isEqualTo(
+          "value '2.0' for key 'key_string_2.0' is not a long integer");
     }
 
-    assertThat(JsonUtil.getNumberAsDouble(map, "k3")).isEqualTo(3D);
-    assertThat(JsonUtil.getNumberAsInteger(map, "k3")).isEqualTo(3);
-    assertThat(JsonUtil.getNumberAsLong(map, "k3")).isEqualTo(3L);
+    assertThat(JsonUtil.getNumberAsDouble(map, "key_string_3")).isEqualTo(3D);
+    assertThat(JsonUtil.getNumberAsInteger(map, "key_string_3")).isEqualTo(3);
+    assertThat(JsonUtil.getNumberAsLong(map, "key_string_3")).isEqualTo(3L);
 
-    assertThat(JsonUtil.getNumberAsDouble(map, "k4")).isNaN();
+    assertThat(JsonUtil.getNumberAsDouble(map, "key_string_nan")).isNaN();
     try {
-      JsonUtil.getNumberAsInteger(map, "k4");
+      JsonUtil.getNumberAsInteger(map, "key_string_nan");
       fail("expecting to throw but did not");
     } catch (RuntimeException e) {
-      assertThat(e).hasMessageThat().isEqualTo("value 'NaN' for key 'k4' is not an integer");
+      assertThat(e).hasMessageThat().isEqualTo(
+          "value 'NaN' for key 'key_string_nan' is not an integer");
     }
     try {
-      JsonUtil.getNumberAsLong(map, "k4");
+      JsonUtil.getNumberAsLong(map, "key_string_nan");
       fail("expecting to throw but did not");
     } catch (RuntimeException e) {
-      assertThat(e).hasMessageThat().isEqualTo("value 'NaN' for key 'k4' is not a long integer");
+      assertThat(e).hasMessageThat().isEqualTo(
+          "value 'NaN' for key 'key_string_nan' is not a long integer");
     }
 
-    assertThat(JsonUtil.getNumberAsDouble(map, "k5")).isEqualTo(5.5D);
+    assertThat(JsonUtil.getNumberAsDouble(map, "key_number_5.5")).isEqualTo(5.5D);
     try {
-      JsonUtil.getNumberAsInteger(map, "k5");
+      JsonUtil.getNumberAsInteger(map, "key_number_5.5");
       fail("expecting to throw but did not");
     } catch (RuntimeException e) {
       assertThat(e).hasMessageThat().isEqualTo("Number expected to be integer: 5.5");
     }
     try {
-      JsonUtil.getNumberAsLong(map, "k5");
+      JsonUtil.getNumberAsLong(map, "key_number_5.5");
       fail("expecting to throw but did not");
     } catch (RuntimeException e) {
       assertThat(e).hasMessageThat().isEqualTo("Number expected to be long: 5.5");
     }
 
     try {
-      JsonUtil.getNumberAsDouble(map, "k6");
+      JsonUtil.getNumberAsDouble(map, "key_string_six");
       fail("expecting to throw but did not");
     } catch (RuntimeException e) {
-      assertThat(e).hasMessageThat().isEqualTo("value 'six' for key 'k6' is not a double");
+      assertThat(e).hasMessageThat().isEqualTo(
+          "value 'six' for key 'key_string_six' is not a double");
     }
     try {
-      JsonUtil.getNumberAsInteger(map, "k6");
+      JsonUtil.getNumberAsInteger(map, "key_string_six");
       fail("expecting to throw but did not");
     } catch (RuntimeException e) {
-      assertThat(e).hasMessageThat().isEqualTo("value 'six' for key 'k6' is not an integer");
+      assertThat(e).hasMessageThat().isEqualTo(
+          "value 'six' for key 'key_string_six' is not an integer");
     }
     try {
-      JsonUtil.getNumberAsLong(map, "k6");
+      JsonUtil.getNumberAsLong(map, "key_string_six");
       fail("expecting to throw but did not");
     } catch (RuntimeException e) {
-      assertThat(e).hasMessageThat().isEqualTo("value 'six' for key 'k6' is not a long integer");
+      assertThat(e).hasMessageThat().isEqualTo(
+          "value 'six' for key 'key_string_six' is not a long integer");
     }
 
     assertThat(JsonUtil.getNumberAsDouble(map, "key_string_infinity")).isPositiveInfinity();
