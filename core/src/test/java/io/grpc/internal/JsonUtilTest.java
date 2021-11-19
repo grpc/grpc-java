@@ -39,6 +39,7 @@ public class JsonUtilTest {
     map.put("key_string_six", "six");
     map.put("key_string_infinity", "Infinity");
     map.put("key_string_minus_infinity", "-Infinity");
+    map.put("key_string_exponent", "2.998e8");
     map.put("key_string_minus_zero", "-0");
 
     assertThat(JsonUtil.getNumberAsDouble(map, "key_number_1")).isEqualTo(1D);
@@ -119,6 +120,7 @@ public class JsonUtilTest {
 
     assertThat(JsonUtil.getNumberAsDouble(map, "key_string_infinity")).isPositiveInfinity();
     assertThat(JsonUtil.getNumberAsDouble(map, "key_string_minus_infinity")).isNegativeInfinity();
+    assertThat(JsonUtil.getNumberAsDouble(map, "key_string_exponent")).isEqualTo(2.998e8D);
 
     assertThat(JsonUtil.getNumberAsDouble(map, "key_string_minus_zero")).isZero();
     assertThat(JsonUtil.getNumberAsInteger(map, "key_string_minus_zero")).isEqualTo(0);
