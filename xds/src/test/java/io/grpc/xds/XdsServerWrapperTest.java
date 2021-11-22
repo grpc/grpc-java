@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -55,6 +56,7 @@ import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHan
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
@@ -171,6 +173,36 @@ public class XdsServerWrapperTest {
       assertThat(((StatusException)cause).getStatus().getCode())
               .isEqualTo(Status.UNAVAILABLE.getCode());
     }
+  }
+
+  @Test
+  public void testBootstrap_templateWithXdstp() throws Exception {
+    Bootstrapper.BootstrapInfo b = Bootstrapper.BootstrapInfo.builder()
+        .servers(Arrays.asList(
+            Bootstrapper.ServerInfo.create(
+                "uri", InsecureChannelCredentials.create(), true)))
+        .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
+        .serverListenerResourceNameTemplate(
+            "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/%s")
+        .build();
+    XdsClient xdsClient = mock(XdsClient.class);
+    when(xdsClient.getBootstrapInfo()).thenReturn(b);
+    xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
+        selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry);
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          xdsServerWrapper.start();
+        } catch (IOException ex) {
+          // ignore
+        }
+      }
+    });
+    verify(xdsClient, timeout(5000)).watchLdsResource(
+        eq("xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/"
+            + "%5B::FFFF:129.144.52.38%5D:80"),
+        any(LdsResourceWatcher.class));
   }
 
   @Test

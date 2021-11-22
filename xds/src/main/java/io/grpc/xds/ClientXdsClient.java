@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
@@ -70,6 +71,7 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
@@ -98,6 +100,7 @@ import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2267,8 +2270,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     ResourceSubscriber(ResourceType type, String resource) {
       syncContext.throwIfNotInThisSynchronizationContext();
       this.type = type;
+      // TODO(zdapeng): Validate authority in resource URI for new-style resource name
+      //   when parsing XDS response.
+      // TODO(zdapeng): Canonicalize the resource name by sorting the context params in normal
+      //   lexicographic order.
       this.resource = resource;
-      this.serverInfo = getServerInfo();
+      this.serverInfo = getServerInfo(resource);
       // Initialize metadata in UNKNOWN state to cover the case when resource subscriber,
       // is created but not yet requested because the client is in backoff.
       this.metadata = ResourceMetadata.newResourceMetadataUnknown();
@@ -2280,8 +2287,16 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       restartTimer();
     }
 
-    // TODO(zdapeng): add resourceName arg and support xdstp:// resources
-    private ServerInfo getServerInfo() {
+    private ServerInfo getServerInfo(String resource) {
+      if (resource.startsWith(XDSTP_SCHEME)) {
+        URI uri = URI.create(resource);
+        String authority = uri.getAuthority();
+        if (authority == null) {
+          authority = "";
+        }
+        AuthorityInfo authorityInfo = bootstrapInfo.authorities().get(authority);
+        return authorityInfo.xdsServers().get(0);
+      }
       return bootstrapInfo.servers().get(0); // use first server
     }
 

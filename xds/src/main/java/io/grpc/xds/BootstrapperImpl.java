@@ -229,7 +229,7 @@ public class BootstrapperImpl extends Bootstrapper {
             JsonUtil.getString(rawAuthority, "client_listener_resource_name_template");
         logger.log(
             XdsLogLevel.INFO, "client_listener_resource_name_template: {0}", clientListnerTemplate);
-        String prefix = "xdstp://" + authorityName + "/";
+        String prefix = XDSTP_SCHEME + "//" + authorityName + "/";
         if (clientListnerTemplate == null) {
           clientListnerTemplate = prefix + "envoy.config.listener.v3.Listener/%s";
         } else if (!clientListnerTemplate.startsWith(prefix)) {
