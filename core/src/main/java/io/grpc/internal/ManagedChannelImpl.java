@@ -349,6 +349,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void run() {
+      if (lbHelper == null) {
+        return;
+      }
       enterIdleMode();
     }
   }
