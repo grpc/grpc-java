@@ -28,9 +28,9 @@ import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadReportingServiceGrpc.LoadReportingServiceStub;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
+import io.grpc.Channel;
 import io.grpc.Context;
 import io.grpc.InternalLogId;
-import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -55,7 +55,7 @@ import javax.annotation.Nullable;
 final class LoadReportClient {
   private final InternalLogId logId;
   private final XdsLogger logger;
-  private final ManagedChannel channel;
+  private final Channel channel;
   private final Context context;
   private final boolean useProtocolV3;
   private final Node node;
@@ -75,7 +75,7 @@ final class LoadReportClient {
 
   LoadReportClient(
       LoadStatsManager2 loadStatsManager,
-      ManagedChannel channel,
+      Channel channel,
       Context context,
       boolean useProtocolV3,
       Node node,

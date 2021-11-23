@@ -25,6 +25,7 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import java.util.List;
 import java.util.Map;
@@ -107,9 +108,9 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       final String cluster;
       // Type of the cluster.
       final Type type;
-      // Load reporting server name. Null if not enabled.
+      // Load reporting server info. Null if not enabled.
       @Nullable
-      final String lrsServerName;
+      final ServerInfo lrsServerInfo;
       // Cluster-level max concurrent request threshold. Null if not specified.
       @Nullable
       final Long maxConcurrentRequests;
@@ -129,34 +130,34 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       }
 
       private DiscoveryMechanism(String cluster, Type type, @Nullable String edsServiceName,
-          @Nullable String dnsHostName, @Nullable String lrsServerName,
+          @Nullable String dnsHostName, @Nullable ServerInfo lrsServerInfo,
           @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext) {
         this.cluster = checkNotNull(cluster, "cluster");
         this.type = checkNotNull(type, "type");
         this.edsServiceName = edsServiceName;
         this.dnsHostName = dnsHostName;
-        this.lrsServerName = lrsServerName;
+        this.lrsServerInfo = lrsServerInfo;
         this.maxConcurrentRequests = maxConcurrentRequests;
         this.tlsContext = tlsContext;
       }
 
       static DiscoveryMechanism forEds(String cluster, @Nullable String edsServiceName,
-          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+          @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
           @Nullable UpstreamTlsContext tlsContext) {
-        return new DiscoveryMechanism(cluster, Type.EDS, edsServiceName, null, lrsServerName,
+        return new DiscoveryMechanism(cluster, Type.EDS, edsServiceName, null, lrsServerInfo,
             maxConcurrentRequests, tlsContext);
       }
 
       static DiscoveryMechanism forLogicalDns(String cluster, String dnsHostName,
-          @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+          @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
           @Nullable UpstreamTlsContext tlsContext) {
         return new DiscoveryMechanism(cluster, Type.LOGICAL_DNS, null, dnsHostName,
-            lrsServerName, maxConcurrentRequests, tlsContext);
+            lrsServerInfo, maxConcurrentRequests, tlsContext);
       }
 
       @Override
       public int hashCode() {
-        return Objects.hash(cluster, type, lrsServerName, maxConcurrentRequests, tlsContext,
+        return Objects.hash(cluster, type, lrsServerInfo, maxConcurrentRequests, tlsContext,
             edsServiceName, dnsHostName);
       }
 
@@ -173,7 +174,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
             && type == that.type
             && Objects.equals(edsServiceName, that.edsServiceName)
             && Objects.equals(dnsHostName, that.dnsHostName)
-            && Objects.equals(lrsServerName, that.lrsServerName)
+            && Objects.equals(lrsServerInfo, that.lrsServerInfo)
             && Objects.equals(maxConcurrentRequests, that.maxConcurrentRequests)
             && Objects.equals(tlsContext, that.tlsContext);
       }
@@ -186,7 +187,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
                 .add("type", type)
                 .add("edsServiceName", edsServiceName)
                 .add("dnsHostName", dnsHostName)
-                .add("lrsServerName", lrsServerName)
+                .add("lrsServerInfo", lrsServerInfo)
                 // Exclude tlsContext as its string representation is cumbersome.
                 .add("maxConcurrentRequests", maxConcurrentRequests);
         return toStringHelper.toString();

@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -55,6 +56,7 @@ import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHan
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
+import io.grpc.xds.XdsClient.LdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsResourceWatcher;
 import io.grpc.xds.XdsClient.RdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
@@ -74,7 +76,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -113,6 +117,11 @@ public class XdsServerWrapperTest {
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:1", mockBuilder, listener,
             selectorManager, new FakeXdsClientPoolFactory(xdsClient),
             filterRegistry, executor.getScheduledExecutorService());
+  }
+
+  @After
+  public void tearDown() {
+    xdsServerWrapper.shutdownNow();
   }
 
   @Test
@@ -164,6 +173,36 @@ public class XdsServerWrapperTest {
       assertThat(((StatusException)cause).getStatus().getCode())
               .isEqualTo(Status.UNAVAILABLE.getCode());
     }
+  }
+
+  @Test
+  public void testBootstrap_templateWithXdstp() throws Exception {
+    Bootstrapper.BootstrapInfo b = Bootstrapper.BootstrapInfo.builder()
+        .servers(Arrays.asList(
+            Bootstrapper.ServerInfo.create(
+                "uri", InsecureChannelCredentials.create(), true)))
+        .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
+        .serverListenerResourceNameTemplate(
+            "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/%s")
+        .build();
+    XdsClient xdsClient = mock(XdsClient.class);
+    when(xdsClient.getBootstrapInfo()).thenReturn(b);
+    xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
+        selectorManager, new FakeXdsClientPoolFactory(xdsClient), filterRegistry);
+    Executors.newSingleThreadExecutor().execute(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          xdsServerWrapper.start();
+        } catch (IOException ex) {
+          // ignore
+        }
+      }
+    });
+    verify(xdsClient, timeout(5000)).watchLdsResource(
+        eq("xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/"
+            + "%5B::FFFF:129.144.52.38%5D:80"),
+        any(LdsResourceWatcher.class));
   }
 
   @Test
@@ -261,9 +300,10 @@ public class XdsServerWrapperTest {
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
     try {
       start.get(5000, TimeUnit.MILLISECONDS);
-      fail("Start should throw exception");
-    } catch (ExecutionException ex) {
-      assertThat(ex.getCause()).isInstanceOf(IOException.class);
+      fail("server should not start() successfully.");
+    } catch (TimeoutException ex) {
+      // expect to block here.
+      assertThat(start.isDone()).isFalse();
     }
     verify(mockBuilder, times(1)).build();
     verify(mockServer, never()).start();
@@ -320,6 +360,33 @@ public class XdsServerWrapperTest {
     verify(listener, never()).onServing();
     xdsServerWrapper.awaitTermination();
     assertThat(xdsServerWrapper.isTerminated()).isTrue();
+  }
+
+  @Test
+  public void shutdownNow_startThreadShouldNotLeak() throws Exception {
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                try {
+                  start.set(xdsServerWrapper.start());
+                } catch (Exception ex) {
+                  start.setException(ex);
+                }
+              }
+            });
+    assertThat(xdsClient.ldsResource.get(5, TimeUnit.SECONDS))
+        .isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
+    xdsServerWrapper.shutdownNow();
+    try {
+      start.get(5, TimeUnit.SECONDS);
+      fail("should have thrown but not");
+    } catch (ExecutionException ex) {
+      assertThat(ex).hasCauseThat().isInstanceOf(IOException.class);
+      assertThat(ex).hasCauseThat().hasMessageThat().isEqualTo("server is forcefully shut down");
+    }
   }
 
   @Test
@@ -602,9 +669,10 @@ public class XdsServerWrapperTest {
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
     try {
       start.get(5000, TimeUnit.MILLISECONDS);
-      fail("Start should throw exception");
-    } catch (ExecutionException ex) {
-      assertThat(ex.getCause()).isInstanceOf(IOException.class);
+      fail("server should not start()");
+    } catch (TimeoutException ex) {
+      // expect to block here.
+      assertThat(start.isDone()).isFalse();
     }
     verify(listener, times(1)).onNotServing(any(StatusException.class));
     verify(mockBuilder, times(1)).build();
@@ -627,6 +695,13 @@ public class XdsServerWrapperTest {
     assertThat(sslSupplier0.isShutdown()).isTrue();
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
+    try {
+      start.get(5000, TimeUnit.MILLISECONDS);
+      fail("Start should throw exception");
+    } catch (ExecutionException ex) {
+      assertThat(ex.getCause()).isInstanceOf(IOException.class);
+      assertThat(ex.getCause().getMessage()).isEqualTo("error!");
+    }
     RdsResourceWatcher saveRdsWatcher = xdsClient.rdsWatchers.get("rds");
     assertThat(executor.forwardNanos(RETRY_DELAY_NANOS)).isEqualTo(1);
     verify(mockBuilder, times(1)).build();

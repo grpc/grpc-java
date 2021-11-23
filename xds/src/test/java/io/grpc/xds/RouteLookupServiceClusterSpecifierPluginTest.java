@@ -26,8 +26,8 @@ import io.grpc.lookup.v1.GrpcKeyBuilder;
 import io.grpc.lookup.v1.GrpcKeyBuilder.ExtraKeys;
 import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
 import io.grpc.lookup.v1.NameMatcher;
+import io.grpc.lookup.v1.RouteLookupClusterSpecifier;
 import io.grpc.lookup.v1.RouteLookupConfig;
-import io.grpc.rls.RlsProtoData;
 import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -57,29 +57,38 @@ public class RouteLookupServiceClusterSpecifierPluginTest {
         .addValidTargets("valid-target")
         .setDefaultTarget("default-target")
         .build();
+    RouteLookupClusterSpecifier specifier =
+        RouteLookupClusterSpecifier.newBuilder().setRouteLookupConfig(routeLookupConfig).build();
     RlsPluginConfig config =
-        RouteLookupServiceClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(routeLookupConfig))
+        RouteLookupServiceClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(specifier))
             .config;
     assertThat(config.typeUrl()).isEqualTo("type.googleapis.com/grpc.lookup.v1.RouteLookupConfig");
     assertThat(config.config()).isEqualTo(
-        new RlsProtoData.RouteLookupConfig(
-            ImmutableList.of(
-                new RlsProtoData.GrpcKeyBuilder(
+        ImmutableMap.builder()
+            .put(
+                "grpcKeybuilders",
+                ImmutableList.of(ImmutableMap.of(
+                    "names",
                     ImmutableList.of(
-                        new RlsProtoData.GrpcKeyBuilder.Name("service1", "method1"),
-                        new RlsProtoData.GrpcKeyBuilder.Name("service2", "method2")),
+                        ImmutableMap.of("service", "service1", "method", "method1"),
+                        ImmutableMap.of("service", "service2", "method", "method2")),
+                    "headers",
                     ImmutableList.of(
-                        new RlsProtoData.NameMatcher("key1", ImmutableList.of("v1"), true)),
-                    RlsProtoData.ExtraKeys.create("host1", "service1", "method1"),
-                    ImmutableMap.of("key2", "value2")
-                )),
-            "rls-cbt.googleapis.com",
-            1234,
-            56789L,
-            1000L,
-            5000,
-            ImmutableList.of("valid-target"),
-            "default-target"));
+                        ImmutableMap.of(
+                            "key", "key1", "names", ImmutableList.of("v1"),
+                            "requiredMatch", true)),
+                    "extraKeys",
+                    ImmutableMap.of("host", "host1", "service", "service1", "method", "method1"),
+                    "constantKeys",
+                    ImmutableMap.of("key2", "value2"))))
+            .put("lookupService", "rls-cbt.googleapis.com")
+            .put("lookupServiceTimeout", "1.234s")
+            .put("maxAge", "56.789s")
+            .put("staleAge", "1s")
+            .put("cacheSizeBytes", "5000")
+            .put("validTargets", ImmutableList.of("valid-target"))
+            .put("defaultTarget","default-target")
+            .build());
   }
 
   @Test
@@ -96,47 +105,30 @@ public class RouteLookupServiceClusterSpecifierPluginTest {
         .setCacheSizeBytes(5000)
         .addValidTargets("valid-target")
         .build();
+    RouteLookupClusterSpecifier specifier =
+        RouteLookupClusterSpecifier.newBuilder().setRouteLookupConfig(routeLookupConfig).build();
     RlsPluginConfig config =
-        RouteLookupServiceClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(routeLookupConfig))
+        RouteLookupServiceClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(specifier))
             .config;
     assertThat(config.typeUrl()).isEqualTo("type.googleapis.com/grpc.lookup.v1.RouteLookupConfig");
     assertThat(config.config()).isEqualTo(
-        new RlsProtoData.RouteLookupConfig(
-            ImmutableList.of(
-                new RlsProtoData.GrpcKeyBuilder(
+        ImmutableMap.builder()
+            .put(
+                "grpcKeybuilders",
+                ImmutableList.of(ImmutableMap.of(
+                    "names",
                     ImmutableList.of(
-                        new RlsProtoData.GrpcKeyBuilder.Name("service1"),
-                        new RlsProtoData.GrpcKeyBuilder.Name("service2")),
+                        ImmutableMap.of("service", "service1"),
+                        ImmutableMap.of("service", "service2")),
+                    "headers",
                     ImmutableList.of(
-                        new RlsProtoData.NameMatcher("key1", ImmutableList.of("v1"), true)),
-                    RlsProtoData.ExtraKeys.create(null, null, null),
-                    ImmutableMap.<String, String>of()
-                )),
-            "rls-cbt.googleapis.com",
-            1234,
-            null,
-            null,
-            5000,
-            ImmutableList.of("valid-target"),
-            null));
-  }
-
-  @Test
-  public void parseInvalidConfig() {
-    RouteLookupConfig routeLookupConfig = RouteLookupConfig.newBuilder()
-        .addGrpcKeybuilders(
-            GrpcKeyBuilder.newBuilder()
-                .addNames(Name.newBuilder().setService("service1"))
-                .addNames(Name.newBuilder().setService("service2"))
-                .addHeaders(
-                    NameMatcher.newBuilder().setKey("key1").addNames("v1").setRequiredMatch(true)))
-        .setLookupService("rls-cbt.googleapis.com")
-        .setLookupServiceTimeout(Durations.fromMillis(1234))
-        .setCacheSizeBytes(-5000) // negative
-        .addValidTargets("valid-target")
-        .build();
-    ConfigOrError<RlsPluginConfig> configOrError =
-        RouteLookupServiceClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(routeLookupConfig));
-    assertThat(configOrError.errorDetail).contains("cacheSize must be positive");
+                        ImmutableMap.of(
+                            "key", "key1", "names", ImmutableList.of("v1"),
+                            "requiredMatch", true)))))
+            .put("lookupService", "rls-cbt.googleapis.com")
+            .put("lookupServiceTimeout", "1.234s")
+            .put("cacheSizeBytes", "5000")
+            .put("validTargets", ImmutableList.of("valid-target"))
+            .build());
   }
 }
