@@ -141,10 +141,7 @@ final class RlsProtoConverters {
       long cacheSize = orDefault(JsonUtil.getNumberAsLong(json, "cacheSizeBytes"), MAX_CACHE_SIZE);
       checkArgument(cacheSize > 0, "cacheSize must be positive");
       cacheSize = Math.min(cacheSize, MAX_CACHE_SIZE);
-      String defaultTarget = JsonUtil.getString(json, "defaultTarget");
-      if (Strings.isNullOrEmpty(defaultTarget)) {
-        defaultTarget = null;
-      }
+      String defaultTarget = Strings.emptyToNull(JsonUtil.getString(json, "defaultTarget"));
       return new RouteLookupConfig(
           grpcKeyBuilders,
           lookupService,
