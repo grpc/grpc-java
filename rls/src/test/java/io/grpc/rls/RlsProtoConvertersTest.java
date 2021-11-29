@@ -335,18 +335,6 @@ public class RlsProtoConvertersTest {
         + "          \"service\": \"service1\",\n"
         + "          \"method\": \"create\"\n"
         + "        }\n"
-        + "      ],\n"
-        + "      \"headers\": [\n"
-        + "        {\n"
-        + "          \"key\": \"user\","
-        + "          \"names\": [\"User\", \"Parent\"],\n"
-        + "          \"optional\": true\n"
-        + "        },\n"
-        + "        {\n"
-        + "          \"key\": \"id\","
-        + "          \"names\": [\"X-Google-Id\"],\n"
-        + "          \"optional\": true\n"
-        + "        }\n"
         + "      ]\n"
         + "    }\n"
         + "  ],\n"
@@ -360,9 +348,7 @@ public class RlsProtoConvertersTest {
             ImmutableList.of(
                 new GrpcKeyBuilder(
                     ImmutableList.of(new Name("service1", "create")),
-                    ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent")),
-                        new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
+                    ImmutableList.<NameMatcher>of(),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of())),
             /* lookupService= */ "service1",
