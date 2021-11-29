@@ -32,6 +32,7 @@ import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -115,7 +116,12 @@ final class RlsProtoConverters {
       }
       String lookupService = JsonUtil.getString(json, "lookupService");
       checkArgument(!Strings.isNullOrEmpty(lookupService), "lookupService must not be empty");
-      URI.create(lookupService); // Will throw IllegalArgumentException if it's not a valid URI.
+      try {
+        new URI(lookupService);
+      } catch (URISyntaxException x) {
+        throw new IllegalArgumentException(
+            "The lookupService field is not valid URI: " + lookupService, x);
+      }
       long timeout = orDefault(
           JsonUtil.getStringAsDuration(json, "lookupServiceTimeout"),
           SECONDS.toNanos(10));
