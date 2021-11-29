@@ -23,6 +23,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.base.Converter;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.JsonUtil;
 import io.grpc.lookup.v1.RouteLookupRequest;
@@ -221,13 +222,12 @@ final class RlsProtoConverters {
 
   private static void checkUniqueKey(List<NameMatcher> nameMatchers, Set<String> constantKeys) {
     Set<String> keys = new HashSet<>(constantKeys);
-    keys.add("host");
-    keys.add("service");
-    keys.add("method");
+    List<String> extraKeys = ImmutableList.of("host", "service", "method");
+    keys.addAll(extraKeys);
     for (NameMatcher nameMatcher :  nameMatchers) {
       keys.add(nameMatcher.getKey());
     }
-    if (keys.size() != nameMatchers.size() + constantKeys.size() + 3) {
+    if (keys.size() != nameMatchers.size() + constantKeys.size() + extraKeys.size()) {
       throw new IllegalArgumentException("keys in KeyBuilder must be unique");
     }
   }
