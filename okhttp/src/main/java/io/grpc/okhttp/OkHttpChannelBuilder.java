@@ -413,6 +413,8 @@ public final class OkHttpChannelBuilder extends
    *
    * @param tlsVersions List of tls versions.
    * @param cipherSuites List of cipher suites.
+   *
+   * @since  1.43.0
    */
   public OkHttpChannelBuilder tlsConnectionSpec(
           String[] tlsVersions, String[] cipherSuites) {
