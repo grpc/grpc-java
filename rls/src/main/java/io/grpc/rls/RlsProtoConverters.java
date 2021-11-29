@@ -18,6 +18,7 @@ package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.base.Converter;
@@ -38,7 +39,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -47,8 +47,9 @@ import javax.annotation.Nullable;
  */
 final class RlsProtoConverters {
 
-  private static final long MAX_AGE_NANOS = TimeUnit.MINUTES.toNanos(5);
+  private static final long MAX_AGE_NANOS = MINUTES.toNanos(5);
   private static final long MAX_CACHE_SIZE = 5 * 1024 * 1024; // 5MiB
+  private static final long DEFAULT_LOOKUP_SERVICE_TIMEOUT = SECONDS.toNanos(10);
 
   /**
    * RouteLookupRequestConverter converts between {@link RouteLookupRequest} and {@link
@@ -124,7 +125,7 @@ final class RlsProtoConverters {
       }
       long timeout = orDefault(
           JsonUtil.getStringAsDuration(json, "lookupServiceTimeout"),
-          SECONDS.toNanos(10));
+          DEFAULT_LOOKUP_SERVICE_TIMEOUT);
       checkArgument(timeout > 0, "lookupServiceTimeout should be positive");
       Long maxAge = JsonUtil.getStringAsDuration(json, "maxAge");
       Long staleAge = JsonUtil.getStringAsDuration(json, "staleAge");
