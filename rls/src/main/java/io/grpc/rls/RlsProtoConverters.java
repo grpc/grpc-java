@@ -47,7 +47,7 @@ import javax.annotation.Nullable;
 final class RlsProtoConverters {
 
   private static final long MAX_AGE_NANOS = TimeUnit.MINUTES.toNanos(5);
-  private static final long MAX_CACHE_SIZE = 5 * 1024 * 1024;
+  private static final long MAX_CACHE_SIZE = 5 * 1024 * 1024; // 5MiB
 
   /**
    * RouteLookupRequestConverter converts between {@link RouteLookupRequest} and {@link
