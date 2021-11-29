@@ -30,8 +30,7 @@ sourceSets {
     undertowTest {}
     tomcatTest {}
 
-    jettyTest {
-    }
+    jettyTest {}
 
     // Only compile these tests if java 11+ is being used
     if (JavaVersion.current().isJava11Compatible()) {
