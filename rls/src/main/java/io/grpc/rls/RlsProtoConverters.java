@@ -220,8 +220,7 @@ final class RlsProtoConverters {
   }
 
   private static void checkUniqueKey(List<NameMatcher> nameMatchers, Set<String> constantKeys) {
-    Set<String> keys = new HashSet<>();
-    keys.addAll(constantKeys);
+    Set<String> keys = new HashSet<>(constantKeys);
     keys.add("host");
     keys.add("service");
     keys.add("method");
