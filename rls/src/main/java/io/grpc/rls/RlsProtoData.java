@@ -156,8 +156,8 @@ final class RlsProtoData {
         List<GrpcKeyBuilder> grpcKeyBuilders,
         String lookupService,
         long lookupServiceTimeoutInNanos,
-        @Nullable Long maxAgeInNanos,
-        @Nullable Long staleAgeInNanos,
+        long maxAgeInNanos,
+        long staleAgeInNanos,
         long cacheSizeBytes,
         @Nullable
         String defaultTarget) {
