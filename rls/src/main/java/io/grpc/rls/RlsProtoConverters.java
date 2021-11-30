@@ -51,6 +51,8 @@ final class RlsProtoConverters {
   private static final long MAX_AGE_NANOS = MINUTES.toNanos(5);
   private static final long MAX_CACHE_SIZE = 5 * 1024 * 1024; // 5MiB
   private static final long DEFAULT_LOOKUP_SERVICE_TIMEOUT = SECONDS.toNanos(10);
+  private static final ImmutableList<String> EXTRA_KEY_NAMES =
+      ImmutableList.of("host", "service", "method");
 
   /**
    * RouteLookupRequestConverter converts between {@link RouteLookupRequest} and {@link
@@ -221,12 +223,11 @@ final class RlsProtoConverters {
 
   private static void checkUniqueKey(List<NameMatcher> nameMatchers, Set<String> constantKeys) {
     Set<String> keys = new HashSet<>(constantKeys);
-    List<String> extraKeys = ImmutableList.of("host", "service", "method");
-    keys.addAll(extraKeys);
+    keys.addAll(EXTRA_KEY_NAMES);
     for (NameMatcher nameMatcher :  nameMatchers) {
       keys.add(nameMatcher.getKey());
     }
-    if (keys.size() != nameMatchers.size() + constantKeys.size() + extraKeys.size()) {
+    if (keys.size() != nameMatchers.size() + constantKeys.size() + EXTRA_KEY_NAMES.size()) {
       throw new IllegalArgumentException("keys in KeyBuilder must be unique");
     }
   }
