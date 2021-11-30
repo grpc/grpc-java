@@ -17,6 +17,7 @@
 package io.grpc.rls;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 
 import com.google.common.base.Converter;
 import com.google.common.collect.ImmutableList;
@@ -166,11 +167,11 @@ public class RlsProtoConvertersTest {
         + "    }\n"
         + "  ],\n"
         + "  \"lookupService\": \"service1\",\n"
-        + "  \"lookupServiceTimeout\": 2,\n"
-        + "  \"maxAge\": 300,\n"
-        + "  \"staleAge\": 240,\n"
+        + "  \"lookupServiceTimeout\": \"2s\",\n"
+        + "  \"maxAge\": \"300s\",\n"
+        + "  \"staleAge\": \"240s\",\n"
         + "  \"validTargets\": [\"a valid target\"],"
-        + "  \"cacheSizeBytes\": 1000,\n"
+        + "  \"cacheSizeBytes\": \"1000\",\n"
         + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
         + "}";
 
@@ -180,29 +181,28 @@ public class RlsProtoConvertersTest {
                 new GrpcKeyBuilder(
                     ImmutableList.of(new Name("service1", "create")),
                     ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent"), true),
-                        new NameMatcher("id", ImmutableList.of("X-Google-Id"), true)),
+                        new NameMatcher("user", ImmutableList.of("User", "Parent")),
+                        new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of()),
                 new GrpcKeyBuilder(
-                    ImmutableList.of(new Name("service1")),
+                    ImmutableList.of(new Name("service1", "*")),
                     ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent"), true),
-                        new NameMatcher("password", ImmutableList.of("Password"), true)),
+                        new NameMatcher("user", ImmutableList.of("User", "Parent")),
+                        new NameMatcher("password", ImmutableList.of("Password"))),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of()),
                 new GrpcKeyBuilder(
-                    ImmutableList.of(new Name("service3")),
+                    ImmutableList.of(new Name("service3", "*")),
                     ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent"), true)),
+                        new NameMatcher("user", ImmutableList.of("User", "Parent"))),
                     ExtraKeys.create("host-key", "service-key", "method-key"),
                     ImmutableMap.of("constKey1", "value1"))),
             /* lookupService= */ "service1",
-            /* lookupServiceTimeoutInMillis= */ TimeUnit.SECONDS.toMillis(2),
-            /* maxAgeInMillis= */ TimeUnit.SECONDS.toMillis(300),
-            /* staleAgeInMillis= */ TimeUnit.SECONDS.toMillis(240),
+            /* lookupServiceTimeoutInMillis= */ TimeUnit.SECONDS.toNanos(2),
+            /* maxAgeInNanos= */ TimeUnit.SECONDS.toNanos(300),
+            /* staleAgeInNanos= */ TimeUnit.SECONDS.toNanos(240),
             /* cacheSizeBytes= */ 1000,
-            /* validTargets= */ ImmutableList.of("a valid target"),
             /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
 
     RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
@@ -210,5 +210,383 @@ public class RlsProtoConvertersTest {
     Map<String, ?> parsedJson = (Map<String, ?>) JsonParser.parse(jsonStr);
     RouteLookupConfig converted = converter.convert(parsedJson);
     assertThat(converted).isEqualTo(expectedConfig);
+  }
+
+  @Test
+  public void convert_jsonRlsConfig_emptyKeyBuilders()  throws IOException {
+    String jsonStr = "{\n"
+        + "  \"grpcKeyBuilders\": [],\n"
+        + "  \"lookupService\": \"service1\",\n"
+        + "  \"lookupServiceTimeout\": \"2s\",\n"
+        + "  \"maxAge\": \"300s\",\n"
+        + "  \"staleAge\": \"240s\",\n"
+        + "  \"validTargets\": [\"a valid target\"],"
+        + "  \"cacheSizeBytes\": \"1000\",\n"
+        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
+        + "}";
+
+    RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> parsedJson = (Map<String, ?>) JsonParser.parse(jsonStr);
+    try {
+      converter.convert(parsedJson);
+      fail("Exception expected");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("must have at least one GrpcKeyBuilder");
+    }
+  }
+
+  @Test
+  public void convert_jsonRlsConfig_namesNotUnique() throws IOException {
+    String jsonStr = "{\n"
+        + "  \"grpcKeyBuilders\": [\n"
+        + "    {\n"
+        + "      \"names\": [\n"
+        + "        {\n"
+        + "          \"service\": \"service1\",\n"
+        + "          \"method\": \"create\"\n"
+        + "        }\n"
+        + "      ],\n"
+        + "      \"headers\": [\n"
+        + "        {\n"
+        + "          \"key\": \"user\","
+        + "          \"names\": [\"User\", \"Parent\"],\n"
+        + "          \"optional\": true\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"key\": \"id\","
+        + "          \"names\": [\"X-Google-Id\"],\n"
+        + "          \"optional\": true\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    },\n"
+        + "    {\n"
+        + "      \"names\": [\n"
+        + "        {\n"
+        + "          \"service\": \"service1\",\n"
+        + "          \"method\": \"create\"\n"
+        + "        }\n"
+        + "      ],\n"
+        + "      \"headers\": [\n"
+        + "        {\n"
+        + "          \"key\": \"user\","
+        + "          \"names\": [\"User\", \"Parent\"],\n"
+        + "          \"optional\": true\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"key\": \"password\","
+        + "          \"names\": [\"Password\"],\n"
+        + "          \"optional\": true\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    },\n"
+        + "    {\n"
+        + "      \"names\": [\n"
+        + "        {\n"
+        + "          \"service\": \"service3\",\n"
+        + "          \"method\": \"*\"\n"
+        + "        }\n"
+        + "      ],\n"
+        + "      \"headers\": ["
+        + "        {\n"
+        + "          \"key\": \"user\","
+        + "          \"names\": [\"User\", \"Parent\"],\n"
+        + "          \"optional\": true\n"
+        + "        }\n"
+        + "      ],\n"
+        + "      \"extraKeys\": {\n"
+        + "        \"host\": \"host-key\",\n"
+        + "        \"service\": \"service-key\",\n"
+        + "        \"method\": \"method-key\"\n"
+        + "      }, \n"
+        + "      \"constantKeys\": {\n"
+        + "        \"constKey1\": \"value1\"\n"
+        + "      }\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"lookupService\": \"service1\",\n"
+        + "  \"lookupServiceTimeout\": \"2s\",\n"
+        + "  \"maxAge\": \"300s\",\n"
+        + "  \"staleAge\": \"240s\",\n"
+        + "  \"validTargets\": [\"a valid target\"],"
+        + "  \"cacheSizeBytes\": \"1000\",\n"
+        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
+        + "}";
+
+    RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> parsedJson = (Map<String, ?>) JsonParser.parse(jsonStr);
+    try {
+      converter.convert(parsedJson);
+      fail("Exception expected");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat()
+          .contains("duplicate names in grpc_keybuilders: Name{service=service1, method=create}");
+    }
+  }
+
+  @Test
+  public void convert_jsonRlsConfig_defaultValues() throws IOException {
+    String jsonStr = "{\n"
+        + "  \"grpcKeyBuilders\": [\n"
+        + "    {\n"
+        + "      \"names\": [\n"
+        + "        {\n"
+        + "          \"service\": \"service1\"\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"lookupService\": \"service1\",\n"
+        + "  \"validTargets\": [\"a valid target\"],"
+        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
+        + "}";
+
+    RouteLookupConfig expectedConfig =
+        new RouteLookupConfig(
+            ImmutableList.of(
+                new GrpcKeyBuilder(
+                    ImmutableList.of(new Name("service1", null)),
+                    ImmutableList.<NameMatcher>of(),
+                    ExtraKeys.DEFAULT,
+                    ImmutableMap.<String, String>of())),
+            /* lookupService= */ "service1",
+            /* lookupServiceTimeoutInMillis= */ TimeUnit.SECONDS.toNanos(10),
+            /* maxAgeInNanos= */ TimeUnit.MINUTES.toNanos(5),
+            /* staleAgeInNanos= */ TimeUnit.MINUTES.toNanos(5),
+            /* cacheSizeBytes= */ 5 * 1024 * 1024,
+            /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
+
+    RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> parsedJson = (Map<String, ?>) JsonParser.parse(jsonStr);
+    RouteLookupConfig converted = converter.convert(parsedJson);
+    assertThat(converted).isEqualTo(expectedConfig);
+  }
+
+  @Test
+  public void convert_jsonRlsConfig_staleAgeCappedByMaxAge() throws IOException {
+    String jsonStr = "{\n"
+        + "  \"grpcKeyBuilders\": [\n"
+        + "    {\n"
+        + "      \"names\": [\n"
+        + "        {\n"
+        + "          \"service\": \"service1\",\n"
+        + "          \"method\": \"create\"\n"
+        + "        }\n"
+        + "      ],\n"
+        + "      \"headers\": [\n"
+        + "        {\n"
+        + "          \"key\": \"user\","
+        + "          \"names\": [\"User\", \"Parent\"],\n"
+        + "          \"optional\": true\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"key\": \"id\","
+        + "          \"names\": [\"X-Google-Id\"],\n"
+        + "          \"optional\": true\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"lookupService\": \"service1\",\n"
+        + "  \"lookupServiceTimeout\": \"2s\",\n"
+        + "  \"maxAge\": \"300s\",\n"
+        + "  \"staleAge\": \"400s\",\n"
+        + "  \"validTargets\": [\"a valid target\"],"
+        + "  \"cacheSizeBytes\": \"1000\",\n"
+        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
+        + "}";
+
+    RouteLookupConfig expectedConfig =
+        new RouteLookupConfig(
+            ImmutableList.of(
+                new GrpcKeyBuilder(
+                    ImmutableList.of(new Name("service1", "create")),
+                    ImmutableList.of(
+                        new NameMatcher("user", ImmutableList.of("User", "Parent")),
+                        new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
+                    ExtraKeys.DEFAULT,
+                    ImmutableMap.<String, String>of())),
+            /* lookupService= */ "service1",
+            /* lookupServiceTimeoutInMillis= */ TimeUnit.SECONDS.toNanos(2),
+            /* maxAgeInNanos= */ TimeUnit.SECONDS.toNanos(300),
+            /* staleAgeInNanos= */ TimeUnit.SECONDS.toNanos(300),
+            /* cacheSizeBytes= */ 1000,
+            /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
+
+    RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> parsedJson = (Map<String, ?>) JsonParser.parse(jsonStr);
+    RouteLookupConfig converted = converter.convert(parsedJson);
+    assertThat(converted).isEqualTo(expectedConfig);
+  }
+
+  @Test
+  public void convert_jsonRlsConfig_staleAgeGivenWithoutMaxAge() throws IOException {
+    String jsonStr = "{\n"
+        + "  \"grpcKeyBuilders\": [\n"
+        + "    {\n"
+        + "      \"names\": [\n"
+        + "        {\n"
+        + "          \"service\": \"service1\",\n"
+        + "          \"method\": \"create\"\n"
+        + "        }\n"
+        + "      ],\n"
+        + "      \"headers\": [\n"
+        + "        {\n"
+        + "          \"key\": \"user\","
+        + "          \"names\": [\"User\", \"Parent\"],\n"
+        + "          \"optional\": true\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"key\": \"id\","
+        + "          \"names\": [\"X-Google-Id\"],\n"
+        + "          \"optional\": true\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"lookupService\": \"service1\",\n"
+        + "  \"lookupServiceTimeout\": \"2s\",\n"
+        + "  \"staleAge\": \"240s\",\n"
+        + "  \"validTargets\": [\"a valid target\"],"
+        + "  \"cacheSizeBytes\": \"1000\",\n"
+        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
+        + "}";
+
+    RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> parsedJson = (Map<String, ?>) JsonParser.parse(jsonStr);
+    try {
+      converter.convert(parsedJson);
+      fail("Exception expected");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("to specify staleAge, must have maxAge");
+    }
+  }
+
+  @Test
+  public void convert_jsonRlsConfig_keyBuilderWithoutName() throws IOException {
+    String jsonStr = "{\n"
+        + "  \"grpcKeyBuilders\": [\n"
+        + "    {\n"
+        + "      \"headers\": [\n"
+        + "        {\n"
+        + "          \"key\": \"user\","
+        + "          \"names\": [\"User\", \"Parent\"],\n"
+        + "          \"optional\": true\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"key\": \"id\","
+        + "          \"names\": [\"X-Google-Id\"],\n"
+        + "          \"optional\": true\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"lookupService\": \"service1\",\n"
+        + "  \"lookupServiceTimeout\": \"2s\",\n"
+        + "  \"staleAge\": \"240s\",\n"
+        + "  \"validTargets\": [\"a valid target\"],"
+        + "  \"cacheSizeBytes\": \"1000\",\n"
+        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
+        + "}";
+
+    RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> parsedJson = (Map<String, ?>) JsonParser.parse(jsonStr);
+    try {
+      converter.convert(parsedJson);
+      fail("Exception expected");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("each keyBuilder must have at least one name");
+    }
+  }
+
+  @Test
+  public void convert_jsonRlsConfig_nameWithoutService() throws IOException {
+    String jsonStr = "{\n"
+        + "  \"grpcKeyBuilders\": [\n"
+        + "    {\n"
+        + "      \"names\": [\n"
+        + "        {\n"
+        + "          \"method\": \"create\"\n"
+        + "        }\n"
+        + "      ],\n"
+        + "      \"headers\": [\n"
+        + "        {\n"
+        + "          \"key\": \"user\","
+        + "          \"names\": [\"User\", \"Parent\"],\n"
+        + "          \"optional\": true\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"key\": \"id\","
+        + "          \"names\": [\"X-Google-Id\"],\n"
+        + "          \"optional\": true\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"lookupService\": \"service1\",\n"
+        + "  \"lookupServiceTimeout\": \"2s\",\n"
+        + "  \"staleAge\": \"240s\",\n"
+        + "  \"validTargets\": [\"a valid target\"],"
+        + "  \"cacheSizeBytes\": \"1000\",\n"
+        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
+        + "}";
+
+    RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> parsedJson = (Map<String, ?>) JsonParser.parse(jsonStr);
+    try {
+      converter.convert(parsedJson);
+      fail("Exception expected");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("service must not be empty or null");
+    }
+  }
+
+  @Test
+  public void convert_jsonRlsConfig_keysNotUnique() throws IOException {
+    String jsonStr = "{\n"
+        + "  \"grpcKeyBuilders\": [\n"
+        + "    {\n"
+        + "      \"names\": [\n"
+        + "        {\n"
+        + "          \"service\": \"service1\"\n"
+        + "        }\n"
+        + "      ],\n"
+        + "      \"headers\": [\n"
+        + "        {\n"
+        + "          \"key\": \"service\","  // duplicate to extra_keys
+        + "          \"names\": [\"User\", \"Parent\"],\n"
+        + "          \"optional\": true\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"key\": \"id\","
+        + "          \"names\": [\"X-Google-Id\"],\n"
+        + "          \"optional\": true\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"lookupService\": \"service1\",\n"
+        + "  \"lookupServiceTimeout\": \"2s\",\n"
+        + "  \"staleAge\": \"240s\",\n"
+        + "  \"validTargets\": [\"a valid target\"],"
+        + "  \"cacheSizeBytes\": \"1000\",\n"
+        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
+        + "}";
+
+    RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> parsedJson = (Map<String, ?>) JsonParser.parse(jsonStr);
+    try {
+      converter.convert(parsedJson);
+      fail("Exception expected");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("keys in KeyBuilder must be unique");
+    }
   }
 }

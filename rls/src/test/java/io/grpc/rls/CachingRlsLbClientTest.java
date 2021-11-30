@@ -210,7 +210,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.hasData()).isTrue();
 
     // cache hit for staled entry
-    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.getStaleAgeInMillis(), TimeUnit.MILLISECONDS);
+    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.getStaleAgeInNanos(), TimeUnit.NANOSECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
@@ -226,7 +226,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.hasData()).isTrue();
 
     // existing cache expired
-    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.getMaxAgeInMillis(), TimeUnit.MILLISECONDS);
+    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.getMaxAgeInNanos(), TimeUnit.NANOSECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
 
@@ -423,16 +423,15 @@ public class CachingRlsLbClientTest {
             new GrpcKeyBuilder(
                 ImmutableList.of(new Name("service1", "create")),
                 ImmutableList.of(
-                    new NameMatcher("user", ImmutableList.of("User", "Parent"), true),
-                    new NameMatcher("id", ImmutableList.of("X-Google-Id"), true)),
+                    new NameMatcher("user", ImmutableList.of("User", "Parent")),
+                    new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
                 ExtraKeys.create("server", "service-key", "method-key"),
                 ImmutableMap.<String, String>of())),
         /* lookupService= */ "service1",
-        /* lookupServiceTimeoutInMillis= */ TimeUnit.SECONDS.toMillis(2),
-        /* maxAgeInMillis= */ TimeUnit.SECONDS.toMillis(300),
-        /* staleAgeInMillis= */ TimeUnit.SECONDS.toMillis(240),
+        /* lookupServiceTimeoutInNanos= */ TimeUnit.SECONDS.toNanos(2),
+        /* maxAgeInNanos= */ TimeUnit.SECONDS.toNanos(300),
+        /* staleAgeInNanos= */ TimeUnit.SECONDS.toNanos(240),
         /* cacheSizeBytes= */ 1000,
-        /* validTargets= */ ImmutableList.of("a valid target"),
         DEFAULT_TARGET);
   }
 
