@@ -411,14 +411,11 @@ final class RlsProtoData {
 
       private final String service;
 
+      @Nullable
       private final String method;
 
-      public Name(String service) {
-        this(service, "*");
-      }
-
       /** The primary constructor. */
-      Name(String service, String method) {
+      Name(String service, @Nullable String method) {
         this.service = service;
         this.method = method;
       }
@@ -427,6 +424,7 @@ final class RlsProtoData {
         return service;
       }
 
+      @Nullable
       String getMethod() {
         return method;
       }

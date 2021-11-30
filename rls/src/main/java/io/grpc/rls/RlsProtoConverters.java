@@ -120,9 +120,9 @@ final class RlsProtoConverters {
       checkArgument(!Strings.isNullOrEmpty(lookupService), "lookupService must not be empty");
       try {
         new URI(lookupService);
-      } catch (URISyntaxException x) {
+      } catch (URISyntaxException e) {
         throw new IllegalArgumentException(
-            "The lookupService field is not valid URI: " + lookupService, x);
+            "The lookupService field is not valid URI: " + lookupService, e);
       }
       long timeout = orDefault(
           JsonUtil.getStringAsDuration(json, "lookupServiceTimeout"),
@@ -191,8 +191,7 @@ final class RlsProtoConverters {
       List<?> rawRawHeaders = JsonUtil.getList(keyBuilder, "headers");
       List<Map<String, ?>> rawHeaders =
           rawRawHeaders == null
-              ? new ArrayList<Map<String, ?>>()
-              : JsonUtil.checkObjectList(JsonUtil.getList(keyBuilder, "headers"));
+              ? new ArrayList<Map<String, ?>>() : JsonUtil.checkObjectList(rawRawHeaders);
       List<NameMatcher> nameMatchers = new ArrayList<>();
       for (Map<String, ?> rawHeader : rawHeaders) {
         Boolean requiredMatch = JsonUtil.getBoolean(rawHeader, "requiredMatch");

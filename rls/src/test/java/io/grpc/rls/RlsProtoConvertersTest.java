@@ -186,14 +186,14 @@ public class RlsProtoConvertersTest {
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of()),
                 new GrpcKeyBuilder(
-                    ImmutableList.of(new Name("service1")),
+                    ImmutableList.of(new Name("service1", "*")),
                     ImmutableList.of(
                         new NameMatcher("user", ImmutableList.of("User", "Parent")),
                         new NameMatcher("password", ImmutableList.of("Password"))),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of()),
                 new GrpcKeyBuilder(
-                    ImmutableList.of(new Name("service3")),
+                    ImmutableList.of(new Name("service3", "*")),
                     ImmutableList.of(
                         new NameMatcher("user", ImmutableList.of("User", "Parent"))),
                     ExtraKeys.create("host-key", "service-key", "method-key"),
@@ -332,8 +332,7 @@ public class RlsProtoConvertersTest {
         + "    {\n"
         + "      \"names\": [\n"
         + "        {\n"
-        + "          \"service\": \"service1\",\n"
-        + "          \"method\": \"create\"\n"
+        + "          \"service\": \"service1\"\n"
         + "        }\n"
         + "      ]\n"
         + "    }\n"
@@ -347,7 +346,7 @@ public class RlsProtoConvertersTest {
         new RouteLookupConfig(
             ImmutableList.of(
                 new GrpcKeyBuilder(
-                    ImmutableList.of(new Name("service1", "create")),
+                    ImmutableList.of(new Name("service1", null)),
                     ImmutableList.<NameMatcher>of(),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of())),
