@@ -345,7 +345,8 @@ public abstract class BinderTransport
         // Ignore.
       }
       Parcel parcel = Parcel.obtain();
-      parcel.writeInt(0);  // Send empty flags to avoid a memory leak linked to empty parcels.
+      // Send empty flags to avoid a memory leak linked to empty parcels (b/207778694).
+      parcel.writeInt(0);
       try {
         outgoingBinder.transact(SHUTDOWN_TRANSPORT, parcel, null, IBinder.FLAG_ONEWAY);
       } catch (RemoteException re) {
