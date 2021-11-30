@@ -178,34 +178,6 @@ public class AuthorizationPolicyTranslatorTest {
   }
 
   @Test
-  public void emptyPrincipalsInSource() throws Exception {
-    String policy = "{"
-        + " \"name\" : \"authz\" ,"
-        + " \"allow_rules\": ["
-        + "   {"
-        + "     \"name\": \"allow_any\","
-        + "     \"source\": {"
-        + "       \"principals\": []"
-        + "     }"
-        + "   }"
-        + " ]"
-        + "}";
-    List<RBAC> rbacs = AuthorizationPolicyTranslator.translate(policy);
-    assertEquals(1, rbacs.size());
-    RBAC expected_allow_rbac = 
-        RBAC.newBuilder()
-        .setAction(Action.ALLOW)
-        .putPolicies("authz_allow_any", 
-            Policy.newBuilder()
-            .addPrincipals(Principal.newBuilder()
-                .setAuthenticated(Authenticated.newBuilder().build())
-                .build())
-            .addPermissions(Permission.newBuilder().setAny(true))
-            .build()).build();
-    assertEquals(expected_allow_rbac, rbacs.get(0));
-  }
-
-  @Test
   public void parseSourceSuccess() throws Exception {
     String policy = "{"
         + " \"name\" : \"authz\" ,"

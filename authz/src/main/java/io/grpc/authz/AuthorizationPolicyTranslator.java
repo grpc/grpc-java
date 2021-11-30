@@ -59,7 +59,7 @@ public class AuthorizationPolicyTranslator {
       return Principal.newBuilder().setAny(true).build();
     }
     if (principalsList.isEmpty()) {
-      return Principal.newBuilder().setAuthenticated(Authenticated.newBuilder().build()).build();
+      return Principal.newBuilder().setAny(true).build();
     }
     Principal.Set.Builder principalsSet = Principal.Set.newBuilder();
     for (String principal: principalsList) {           
