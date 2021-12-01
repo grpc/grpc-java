@@ -65,9 +65,9 @@ public class RlsRequestFactoryTest {
                   ExtraKeys.create(null, null, null),
                   ImmutableMap.of("const-key-4", "const-value-4"))),
           /* lookupService= */ "bigtable-rls.googleapis.com",
-          /* lookupServiceTimeoutInMillis= */ TimeUnit.SECONDS.toMillis(2),
-          /* maxAgeInMillis= */ TimeUnit.SECONDS.toMillis(300),
-          /* staleAgeInMillis= */ TimeUnit.SECONDS.toMillis(240),
+          /* lookupServiceTimeoutInNanos= */ TimeUnit.SECONDS.toNanos(2),
+          /* maxAgeInNanos= */ TimeUnit.SECONDS.toNanos(300),
+          /* staleAgeInNanos= */ TimeUnit.SECONDS.toNanos(240),
           /* cacheSizeBytes= */ 1000,
           /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
 
