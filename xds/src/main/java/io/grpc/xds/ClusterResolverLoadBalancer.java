@@ -690,7 +690,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       // the locality. If the endpoint-level LB policy is ring_hash, it creates a unified LB
       // policy that balances load by weighing the product of each endpoint's weight and the
       // weight of the locality it belongs to.
-      if (endpointLbPolicy.getProvider().getPolicyName().equals("round_robin")) {
+      if (endpointLbPolicy.getProvider().getPolicyName().equals("round_robin")
+          || endpointLbPolicy.getProvider().getPolicyName().equals("least_request")) {
         Map<Locality, Integer> localityWeights = prioritizedLocalityWeights.get(priority);
         Map<String, WeightedPolicySelection> targets = new HashMap<>();
         for (Locality locality : localityWeights.keySet()) {

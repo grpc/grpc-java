@@ -36,6 +36,7 @@ import io.envoyproxy.envoy.api.v2.Cluster.CustomClusterType;
 import io.envoyproxy.envoy.api.v2.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.api.v2.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.api.v2.Cluster.LbPolicy;
+import io.envoyproxy.envoy.api.v2.Cluster.LeastRequestLbConfig;
 import io.envoyproxy.envoy.api.v2.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.api.v2.Cluster.RingHashLbConfig.HashFunction;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
@@ -392,10 +393,12 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
 
     @Override
     protected Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
-        String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
+        String lbPolicy, @Nullable Message ringHashLbConfig, @Nullable Message leastRequestLbConfig,
+        boolean enableLrs,
         @Nullable Message upstreamTlsContext, String transportSocketName,
         @Nullable Message circuitBreakers) {
-      Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
+      Cluster.Builder builder = initClusterBuilder(
+          clusterName, lbPolicy, ringHashLbConfig, leastRequestLbConfig,
           enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.EDS);
       EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
@@ -410,9 +413,11 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
 
     @Override
     protected Message buildLogicalDnsCluster(String clusterName, String dnsHostAddr,
-        int dnsHostPort, String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
+        int dnsHostPort, String lbPolicy, @Nullable Message ringHashLbConfig,
+        @Nullable Message leastRequestLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
-      Cluster.Builder builder = initClusterBuilder(clusterName, lbPolicy, ringHashLbConfig,
+      Cluster.Builder builder = initClusterBuilder(
+          clusterName, lbPolicy, ringHashLbConfig, leastRequestLbConfig,
           enableLrs, upstreamTlsContext, circuitBreakers);
       builder.setType(DiscoveryType.LOGICAL_DNS);
       builder.setLoadAssignment(
@@ -428,7 +433,8 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
 
     @Override
     protected Message buildAggregateCluster(String clusterName, String lbPolicy,
-        @Nullable Message ringHashLbConfig, List<String> clusters) {
+        @Nullable Message ringHashLbConfig, @Nullable Message leastRequestLbConfig,
+        List<String> clusters) {
       ClusterConfig clusterConfig = ClusterConfig.newBuilder().addAllClusters(clusters).build();
       CustomClusterType type =
           CustomClusterType.newBuilder()
@@ -441,6 +447,9 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
       } else if (lbPolicy.equals("ring_hash")) {
         builder.setLbPolicy(LbPolicy.RING_HASH);
         builder.setRingHashLbConfig((RingHashLbConfig) ringHashLbConfig);
+      } else if (lbPolicy.equals("least_request")) {
+        builder.setLbPolicy(LbPolicy.LEAST_REQUEST);
+        builder.setLeastRequestLbConfig((LeastRequestLbConfig) leastRequestLbConfig);
       } else {
         throw new AssertionError("Invalid LB policy");
       }
@@ -448,8 +457,9 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
     }
 
     private Cluster.Builder initClusterBuilder(String clusterName, String lbPolicy,
-        @Nullable Message ringHashLbConfig, boolean enableLrs,
-        @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers) {
+        @Nullable Message ringHashLbConfig, @Nullable Message leastRequestLbConfig,
+        boolean enableLrs, @Nullable Message upstreamTlsContext,
+        @Nullable Message circuitBreakers) {
       Cluster.Builder builder = Cluster.newBuilder();
       builder.setName(clusterName);
       if (lbPolicy.equals("round_robin")) {
@@ -457,6 +467,9 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
       } else if (lbPolicy.equals("ring_hash")) {
         builder.setLbPolicy(LbPolicy.RING_HASH);
         builder.setRingHashLbConfig((RingHashLbConfig) ringHashLbConfig);
+      } else if (lbPolicy.equals("least_request")) {
+        builder.setLbPolicy(LbPolicy.LEAST_REQUEST);
+        builder.setLeastRequestLbConfig((LeastRequestLbConfig) leastRequestLbConfig);
       } else {
         throw new AssertionError("Invalid LB policy");
       }
@@ -490,6 +503,13 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
       }
       builder.setMinimumRingSize(UInt64Value.newBuilder().setValue(minRingSize).build());
       builder.setMaximumRingSize(UInt64Value.newBuilder().setValue(maxRingSize).build());
+      return builder.build();
+    }
+
+    @Override
+    protected Message buildLeastRequestLbConfig(int choiceCount) {
+      LeastRequestLbConfig.Builder builder = LeastRequestLbConfig.newBuilder();
+      builder.setChoiceCount(UInt32Value.newBuilder().setValue(choiceCount));
       return builder.build();
     }
 
