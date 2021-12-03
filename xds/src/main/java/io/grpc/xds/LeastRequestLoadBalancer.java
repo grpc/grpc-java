@@ -53,9 +53,12 @@ import javax.annotation.Nonnull;
 /**
  * A {@link LoadBalancer} that provides least request load balancing based on
  * outstanding request counters.
- *
+ * It works by sampling a number of subchannels and picking the one with the
+ * fewest amount of outstanding requests.
+ * The default sampling amount of two is also known as
+ * the "power of two choices" (P2C).
  */
-public class LeastRequestLoadBalancer extends LoadBalancer {
+final class LeastRequestLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
