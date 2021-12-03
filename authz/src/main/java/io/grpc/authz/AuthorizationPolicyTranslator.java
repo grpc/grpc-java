@@ -57,10 +57,7 @@ public class AuthorizationPolicyTranslator {
 
   private static Principal parseSource(Map<String, ?> source) {
     List<String> principalsList = JsonUtil.getListOfStrings(source, "principals");
-    if (principalsList == null) {
-      return Principal.newBuilder().setAny(true).build();
-    }
-    if (principalsList.isEmpty()) {
+    if (principalsList == null || principalsList.isEmpty()) {
       return Principal.newBuilder().setAny(true).build();
     }
     Principal.Set.Builder principalsSet = Principal.Set.newBuilder();
@@ -165,7 +162,7 @@ public class AuthorizationPolicyTranslator {
   * If the policy cannot be parsed or is invalid, an exception will be thrown.
   */
   public static List<RBAC> translate(String authorizationPolicy) 
-          throws IllegalArgumentException, IOException {
+            throws IllegalArgumentException, IOException {
     Object jsonObject = JsonParser.parse(authorizationPolicy);
     if (!(jsonObject instanceof Map<?, ?>)) {
       throw new IllegalArgumentException("failed to cast authorization policy");
