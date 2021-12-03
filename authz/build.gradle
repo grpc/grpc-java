@@ -9,13 +9,9 @@ plugins {
 
 description = "gRPC: Authorization"
 
-evaluationDependsOn(project(':grpc-core').path)
-
 dependencies {
     implementation project(':grpc-protobuf'),
             project(':grpc-core')
-
-    testImplementation project(':grpc-core').sourceSets.test.output
 
     annotationProcessor libraries.autovalue
     compileOnly libraries.javax_annotation
@@ -32,8 +28,6 @@ dependencies {
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
-
-configureProtoCompilation()
 
 jar {
     classifier = 'original'

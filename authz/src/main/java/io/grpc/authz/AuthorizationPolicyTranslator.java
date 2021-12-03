@@ -25,6 +25,7 @@ import io.envoyproxy.envoy.config.rbac.v3.RBAC;
 import io.envoyproxy.envoy.config.rbac.v3.RBAC.Action;
 import io.envoyproxy.envoy.config.route.v3.HeaderMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.PathMatcher;
+import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
@@ -44,7 +45,8 @@ public class AuthorizationPolicyTranslator {
 
   private static StringMatcher getStringMatcher(String value) {
     if (value.equals("*")) {
-      return StringMatcher.newBuilder().setPrefix("").build();
+      return StringMatcher.newBuilder().setSafeRegex(
+        RegexMatcher.newBuilder().setRegex("^\\S+$").build()).build();
     } else if (value.startsWith("*")) {
       return StringMatcher.newBuilder().setSuffix(value.substring(1)).build();
     } else if (value.endsWith("*")) {
@@ -73,17 +75,17 @@ public class AuthorizationPolicyTranslator {
 
   private static Permission parseHeader(Map<String, ?> header) throws IllegalArgumentException {
     String key = JsonUtil.getString(header, "key");
-    if (key == null) {
-      throw new IllegalArgumentException("\"key\" is absent.");
+    if (key == null || key.isEmpty()) {
+      throw new IllegalArgumentException("\"key\" is absent or empty");
     }
     if (key.charAt(0) == ':'
         || key.startsWith("grpc-")
         || UNSUPPORTED_HEADERS.contains(key.toLowerCase())) {
-      throw new IllegalArgumentException(String.format("Unsupported \"key\" %s.", key));
+      throw new IllegalArgumentException(String.format("Unsupported \"key\" %s", key));
     }
     List<String> valuesList = JsonUtil.getListOfStrings(header, "values");
-    if (valuesList == null || (valuesList != null && valuesList.isEmpty())) {
-      throw new IllegalArgumentException("\"values\" is absent or empty.");
+    if (valuesList == null || valuesList.isEmpty()) {
+      throw new IllegalArgumentException("\"values\" is absent or empty");
     }
     Permission.Set.Builder orSet = Permission.Set.newBuilder();
     for (String value: valuesList) {
@@ -99,7 +101,7 @@ public class AuthorizationPolicyTranslator {
   private static Permission parseRequest(Map<String, ?> request) throws IllegalArgumentException {
     Permission.Set.Builder andSet = Permission.Set.newBuilder();
     List<String> pathsList = JsonUtil.getListOfStrings(request, "paths"); 
-    if (pathsList != null) {
+    if (pathsList != null && !pathsList.isEmpty()) {
       Permission.Set.Builder pathsSet = Permission.Set.newBuilder();
       for (String path: pathsList) {           
         pathsSet.addRules(
@@ -107,19 +109,15 @@ public class AuthorizationPolicyTranslator {
               PathMatcher.newBuilder().setPath(
                 getStringMatcher(path)).build()).build());
       }
-      if (pathsSet.getRulesCount() > 0) {
-        andSet.addRules(Permission.newBuilder().setOrRules(pathsSet.build()).build());
-      }
+      andSet.addRules(Permission.newBuilder().setOrRules(pathsSet.build()).build());
     }
     List<Map<String, ?>> headersList = JsonUtil.getListOfObjects(request, "headers"); 
-    if (headersList != null) {
+    if (headersList != null && !headersList.isEmpty()) {
       Permission.Set.Builder headersSet = Permission.Set.newBuilder();
       for (Map<String, ?> header: headersList) {           
         headersSet.addRules(parseHeader(header));
       }
-      if (headersSet.getRulesCount() > 0) {
-        andSet.addRules(Permission.newBuilder().setAndRules(headersSet.build()).build());
-      }
+      andSet.addRules(Permission.newBuilder().setAndRules(headersSet.build()).build());
     }
     if (andSet.getRulesCount() == 0) {
       return Permission.newBuilder().setAny(true).build();
@@ -132,8 +130,8 @@ public class AuthorizationPolicyTranslator {
     Map<String, Policy> policies = new LinkedHashMap<String, Policy>();
     for (Map<String, ?> object: objects) {
       String policyName = JsonUtil.getString(object, "name");
-      if (policyName == null) {
-        throw new IllegalArgumentException("rule \"name\" is absent.");
+      if (policyName == null || policyName.isEmpty()) {
+        throw new IllegalArgumentException("rule \"name\" is absent or empty");
       }
       List<Principal> principals = new ArrayList<>();
       Map<String, ?> source = JsonUtil.getObject(object, "source");
@@ -167,16 +165,20 @@ public class AuthorizationPolicyTranslator {
   * If the policy cannot be parsed or is invalid, an exception will be thrown.
   */
   public static List<RBAC> translate(String authorizationPolicy) 
-  throws IllegalArgumentException, IOException {
+          throws IllegalArgumentException, IOException {
+    Object jsonObject = JsonParser.parse(authorizationPolicy);
+    if (!(jsonObject instanceof Map<?, ?>)) {
+      throw new IllegalArgumentException("failed to cast authorization policy");
+    }
     @SuppressWarnings("unchecked")
-    Map<String, ?> json = (Map<String, ?>)JsonParser.parse(authorizationPolicy);
+    Map<String, ?> json = (Map<String, ?>)jsonObject;
     String name = JsonUtil.getString(json, "name");
-    if (name == null) {
-      throw new IllegalArgumentException("\"name\" is absent.");
+    if (name == null || name.isEmpty()) {
+      throw new IllegalArgumentException("\"name\" is absent or empty");
     }
     List<RBAC> rbacs = new ArrayList<>();
     List<Map<String, ?>> objects = JsonUtil.getListOfObjects(json, "deny_rules");
-    if (objects != null) {
+    if (objects != null && !objects.isEmpty()) {
       rbacs.add(
           RBAC.newBuilder()
           .setAction(Action.DENY)
@@ -184,8 +186,8 @@ public class AuthorizationPolicyTranslator {
           .build());
     }
     objects = JsonUtil.getListOfObjects(json, "allow_rules");
-    if (objects == null) {
-      throw new IllegalArgumentException("\"allow_rules\" is absent.");
+    if (objects == null || objects.isEmpty()) {
+      throw new IllegalArgumentException("\"allow_rules\" is absent");
     }
     rbacs.add(
         RBAC.newBuilder()

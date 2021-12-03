@@ -28,6 +28,7 @@ import io.envoyproxy.envoy.config.rbac.v3.RBAC;
 import io.envoyproxy.envoy.config.rbac.v3.RBAC.Action;
 import io.envoyproxy.envoy.config.route.v3.HeaderMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.PathMatcher;
+import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import java.io.IOException;
 import java.util.List;
@@ -59,7 +60,7 @@ public class AuthorizationPolicyTranslatorTest {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae).hasMessageThat().isEqualTo("\"name\" is absent.");
+      assertThat(iae).hasMessageThat().isEqualTo("\"name\" is absent or empty");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -86,7 +87,7 @@ public class AuthorizationPolicyTranslatorTest {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae).hasMessageThat().isEqualTo("\"allow_rules\" is absent.");
+      assertThat(iae).hasMessageThat().isEqualTo("\"allow_rules\" is absent");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -104,7 +105,7 @@ public class AuthorizationPolicyTranslatorTest {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae).hasMessageThat().isEqualTo("rule \"name\" is absent.");
+      assertThat(iae).hasMessageThat().isEqualTo("rule \"name\" is absent or empty");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -245,7 +246,9 @@ public class AuthorizationPolicyTranslatorTest {
                     .addIds(Principal.newBuilder()
                         .setAuthenticated(Authenticated.newBuilder()
                             .setPrincipalName(StringMatcher.newBuilder()
-                                .setPrefix("").build()).build()).build())
+                                .setSafeRegex(RegexMatcher.newBuilder()
+                                    .setRegex("^\\S+$").build()).build()).build())
+                        .build())
                     .build()).build())
             .addPermissions(Permission.newBuilder().setAny(true))
             .build()).build();
@@ -277,7 +280,7 @@ public class AuthorizationPolicyTranslatorTest {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" :method.");
+      assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" :method");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -307,7 +310,7 @@ public class AuthorizationPolicyTranslatorTest {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" grpc-xxx.");
+      assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" grpc-xxx");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -337,7 +340,7 @@ public class AuthorizationPolicyTranslatorTest {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" Host.");
+      assertThat(iae).hasMessageThat().isEqualTo("Unsupported \"key\" Host");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -362,7 +365,7 @@ public class AuthorizationPolicyTranslatorTest {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae).hasMessageThat().isEqualTo("\"key\" is absent.");
+      assertThat(iae).hasMessageThat().isEqualTo("\"key\" is absent or empty");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -389,7 +392,7 @@ public class AuthorizationPolicyTranslatorTest {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae).hasMessageThat().isEqualTo("\"values\" is absent or empty.");
+      assertThat(iae).hasMessageThat().isEqualTo("\"values\" is absent or empty");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -417,7 +420,7 @@ public class AuthorizationPolicyTranslatorTest {
       AuthorizationPolicyTranslator.translate(policy);
       fail("exception expected");
     } catch (IllegalArgumentException iae) {
-      assertThat(iae).hasMessageThat().isEqualTo("\"values\" is absent or empty.");
+      assertThat(iae).hasMessageThat().isEqualTo("\"values\" is absent or empty");
     } catch (Exception e) {
       throw new AssertionError("the test failed ", e);
     }
@@ -543,7 +546,8 @@ public class AuthorizationPolicyTranslatorTest {
                                         .setHeader(HeaderMatcher.newBuilder()
                                             .setName("key-2")
                                             .setStringMatch(StringMatcher.newBuilder()
-                                                .setPrefix("").build())
+                                                .setSafeRegex(RegexMatcher.newBuilder()
+                                                    .setRegex("^\\S+$").build()).build())
                                             .build())
                                         .build())
                                     .build()).build()).build()).build()).build()))
