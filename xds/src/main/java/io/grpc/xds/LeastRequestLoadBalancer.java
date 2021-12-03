@@ -371,7 +371,7 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
   /**
    * A lighter weight Reference than AtomicReference.
    */
-  private static final class Ref<T> {
+  static final class Ref<T> {
     T value;
 
     Ref(T value) {
