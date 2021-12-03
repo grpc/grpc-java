@@ -164,7 +164,7 @@ public class AuthorizationPolicyTranslator {
   public static List<RBAC> translate(String authorizationPolicy) 
             throws IllegalArgumentException, IOException {
     Object jsonObject = JsonParser.parse(authorizationPolicy);
-    if (!(jsonObject instanceof Map<?, ?>)) {
+    if (!(jsonObject instanceof Map)) {
       throw new IllegalArgumentException("failed to cast authorization policy");
     }
     @SuppressWarnings("unchecked")
