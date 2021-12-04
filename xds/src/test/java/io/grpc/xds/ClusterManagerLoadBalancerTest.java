@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;

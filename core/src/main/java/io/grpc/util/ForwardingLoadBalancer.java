@@ -35,15 +35,15 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
 
   @Override
   @Deprecated
-  public void handleResolvedAddressGroups(
+  public boolean handleResolvedAddressGroups(
         List<EquivalentAddressGroup> servers,
         @NameResolver.ResolutionResultAttr Attributes attributes) {
-    delegate().handleResolvedAddressGroups(servers, attributes);
+    return delegate().handleResolvedAddressGroups(servers, attributes);
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    delegate().handleResolvedAddresses(resolvedAddresses);
+  public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    return delegate().handleResolvedAddresses(resolvedAddresses);
   }
 
   @Override

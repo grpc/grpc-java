@@ -126,18 +126,20 @@ public abstract class LoadBalancer {
    *
    * @param servers the resolved server addresses, never empty.
    * @param attributes extra information from naming system.
+   * @return {@code true} if the resolved addresses were accepted. {@code false} if rejected.
    * @deprecated override {@link #handleResolvedAddresses(ResolvedAddresses) instead}
    * @since 1.2.0
    */
   @Deprecated
-  public void handleResolvedAddressGroups(
+  public boolean handleResolvedAddressGroups(
       List<EquivalentAddressGroup> servers,
       @NameResolver.ResolutionResultAttr Attributes attributes) {
     if (recursionCount++ == 0) {
-      handleResolvedAddresses(
+      return handleResolvedAddresses(
           ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
     }
     recursionCount = 0;
+    return true;
   }
 
   /**
@@ -148,15 +150,17 @@ public abstract class LoadBalancer {
    * <p>Implementations should not modify the given {@code servers}.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
+   * @return {@code true} if the resolved addresses were accepted. {@code false} if rejected.
    * @since 1.21.0
    */
   @SuppressWarnings("deprecation")
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (recursionCount++ == 0) {
-      handleResolvedAddressGroups(
+      return handleResolvedAddressGroups(
           resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes());
     }
     recursionCount = 0;
+    return true;
   }
 
   /**

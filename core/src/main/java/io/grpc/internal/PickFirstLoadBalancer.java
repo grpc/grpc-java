@@ -45,7 +45,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     if (subchannel == null) {
       final Subchannel subchannel = helper.createSubchannel(
@@ -67,6 +67,8 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     } else {
       subchannel.updateAddresses(servers);
     }
+
+    return true;
   }
 
   @Override

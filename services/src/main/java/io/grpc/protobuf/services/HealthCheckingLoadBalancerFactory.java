@@ -179,14 +179,14 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       Map<String, ?> healthCheckingConfig =
           resolvedAddresses
               .getAttributes()
               .get(LoadBalancer.ATTR_HEALTH_CHECKING_CONFIG);
       String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(healthCheckingConfig);
       helper.setHealthCheckedService(serviceName);
-      super.handleResolvedAddresses(resolvedAddresses);
+      return super.handleResolvedAddresses(resolvedAddresses);
     }
 
     @Override

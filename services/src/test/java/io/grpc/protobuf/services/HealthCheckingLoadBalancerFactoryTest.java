@@ -193,7 +193,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
         boolean shutdown;
 
         @Override
-        public void handleResolvedAddresses(final ResolvedAddresses resolvedAddresses) {
+        public boolean handleResolvedAddresses(final ResolvedAddresses resolvedAddresses) {
           syncContext.execute(new Runnable() {
               @Override
               public void run() {
@@ -202,6 +202,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
                 }
               }
             });
+          return true;
         }
 
         @Override

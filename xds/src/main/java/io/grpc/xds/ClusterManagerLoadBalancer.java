@@ -70,7 +70,7 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+  public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     try {
       resolvingAddresses = true;
       handleResolvedAddressesInternal(resolvedAddresses);
@@ -109,6 +109,8 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
     // Must update channel picker before return so that new RPCs will not be routed to deleted
     // clusters and resolver can remove them in service config.
     updateOverallBalancingState();
+
+    return true;
   }
 
   @Override

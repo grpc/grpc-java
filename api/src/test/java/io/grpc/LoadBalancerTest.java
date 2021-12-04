@@ -240,8 +240,9 @@ public class LoadBalancerTest {
 
     LoadBalancer balancer = new LoadBalancer() {
         @Override
-        public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+        public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
           resultCapture.set(resolvedAddresses);
+          return true;
         }
 
         @Override
@@ -273,10 +274,11 @@ public class LoadBalancerTest {
 
     LoadBalancer balancer = new LoadBalancer() {
         @Override
-        public void handleResolvedAddressGroups(
+        public boolean handleResolvedAddressGroups(
             List<EquivalentAddressGroup> servers, Attributes attrs) {
           serversCapture.set(servers);
           attrsCapture.set(attrs);
+          return true;
         }
 
         @Override
@@ -309,11 +311,12 @@ public class LoadBalancerTest {
 
     LoadBalancer balancer = new LoadBalancer() {
       @Override
-      public void handleResolvedAddressGroups(
+      public boolean handleResolvedAddressGroups(
           List<EquivalentAddressGroup> servers, Attributes attrs) {
         serversCapture.add(servers);
         attrsCapture.add(attrs);
         super.handleResolvedAddressGroups(servers, attrs);
+        return true;
       }
 
       @Override

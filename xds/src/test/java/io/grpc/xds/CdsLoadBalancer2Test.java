@@ -627,8 +627,9 @@ public class CdsLoadBalancer2Test {
     }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
+      return true;
     }
 
     @Override

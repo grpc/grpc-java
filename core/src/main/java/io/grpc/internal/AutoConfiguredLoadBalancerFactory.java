@@ -67,10 +67,14 @@ public final class AutoConfiguredLoadBalancerFactory {
 
     @Override
     @Deprecated
-    public void handleResolvedAddressGroups(List<EquivalentAddressGroup> s, Attributes a) {}
+    public boolean handleResolvedAddressGroups(List<EquivalentAddressGroup> s, Attributes a) {
+      return true;
+    }
 
     @Override
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {}
+    public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      return true;
+    }
 
     @Override
     public void handleNameResolutionError(Status error) {}
