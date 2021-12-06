@@ -101,10 +101,8 @@ public final class AutoConfiguredLoadBalancerFactory {
     }
 
     /**
-     * Returns non-OK status if resolvedAddresses is empty and delegate lb requires address ({@link
-     * LoadBalancer#canHandleEmptyAddressListFromNameResolution()} returns {@code false}). {@code
-     * AutoConfiguredLoadBalancer} doesn't expose {@code
-     * canHandleEmptyAddressListFromNameResolution} because it depends on the delegated LB.
+     * Returns non-OK status if the delegate rejects the resolvedAddresses (e.g. if it does not
+     * support an empty list).
      */
     Status tryHandleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
@@ -146,18 +144,16 @@ public final class AutoConfiguredLoadBalancerFactory {
       }
 
       LoadBalancer delegate = getDelegate();
-      if (resolvedAddresses.getAddresses().isEmpty()
-          && !delegate.canHandleEmptyAddressListFromNameResolution()) {
+      if (delegate.handleResolvedAddresses(
+          ResolvedAddresses.newBuilder()
+              .setAddresses(resolvedAddresses.getAddresses())
+              .setAttributes(attributes)
+              .setLoadBalancingPolicyConfig(lbConfig)
+              .build())) {
+        return Status.OK;
+      } else {
         return Status.UNAVAILABLE.withDescription(
             "NameResolver returned no usable address. addrs=" + servers + ", attrs=" + attributes);
-      } else {
-        delegate.handleResolvedAddresses(
-            ResolvedAddresses.newBuilder()
-                .setAddresses(resolvedAddresses.getAddresses())
-                .setAttributes(attributes)
-                .setLoadBalancingPolicyConfig(lbConfig)
-                .build());
-        return Status.OK;
       }
     }
 

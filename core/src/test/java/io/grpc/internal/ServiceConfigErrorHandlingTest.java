@@ -192,6 +192,7 @@ public class ServiceConfigErrorHandlingTest {
 
   @Before
   public void setUp() throws Exception {
+    mockLoadBalancer.setAcceptAddresses(true);
     when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenCallRealMethod();
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     expectedUri = new URI(TARGET);
@@ -280,11 +281,12 @@ public class ServiceConfigErrorHandlingTest {
     nameResolverFactory.servers.clear();
 
     // 2nd resolution
+    mockLoadBalancer.setAcceptAddresses(false);
     nameResolverFactory.allResolved();
 
     // 2nd service config without addresses
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(mockLoadBalancer, never()).handleResolvedAddresses(any(ResolvedAddresses.class));
+    verify(mockLoadBalancer).handleResolvedAddresses(any(ResolvedAddresses.class));
     verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(statusCaptor.getValue().getDescription())
@@ -316,7 +318,7 @@ public class ServiceConfigErrorHandlingTest {
 
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).isEmpty();
-    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("val");;
+    assertThat(resolvedAddresses.getLoadBalancingPolicyConfig()).isEqualTo("val");
 
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -658,11 +660,22 @@ public class ServiceConfigErrorHandlingTest {
 
   private static class FakeLoadBalancer extends LoadBalancer {
 
+    private boolean acceptAddresses = true;
+
     @Nullable
     private Helper helper;
 
     public void setHelper(Helper helper) {
       this.helper = helper;
+    }
+
+    @Override
+    public boolean handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      return acceptAddresses;
+    }
+
+    public void setAcceptAddresses(boolean acceptAddresses) {
+      this.acceptAddresses = acceptAddresses;
     }
 
     @Override

@@ -21,6 +21,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
@@ -97,8 +98,10 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
   @Before
   public void setUp() {
+    when(testLbBalancer.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
     when(testLbBalancer.canHandleEmptyAddressListFromNameResolution()).thenCallRealMethod();
     assertThat(testLbBalancer.canHandleEmptyAddressListFromNameResolution()).isFalse();
+    when(testLbBalancer2.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
     when(testLbBalancer2.canHandleEmptyAddressListFromNameResolution()).thenReturn(true);
     defaultRegistry.register(testLbBalancerProvider);
     defaultRegistry.register(testLbBalancerProvider2);
@@ -335,6 +338,10 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   @Test
   public void handleResolvedAddressGroups_delegateDoNotAcceptEmptyAddressList_nothing()
       throws Exception {
+
+    // The test LB will NOT accept the addresses we give them.
+    when(testLbBalancer.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(false);
+
     Helper helper = new TestHelper();
     AutoConfiguredLoadBalancer lb = lbf.newLoadBalancer(helper);
 

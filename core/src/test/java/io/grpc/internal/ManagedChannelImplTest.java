@@ -327,6 +327,7 @@ public class ManagedChannelImplTest {
 
   @Before
   public void setUp() throws Exception {
+    when(mockLoadBalancer.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
     when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenCallRealMethod();
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     expectedUri = new URI(TARGET);
@@ -1165,6 +1166,9 @@ public class ManagedChannelImplTest {
   @Test
   public void nameResolverReturnsEmptySubLists_becomeErrorByDefault() throws Exception {
     String errorDescription = "NameResolver returned no usable address";
+
+    // The mock LB is set to reject the addresses.
+    when(mockLoadBalancer.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(false);
 
     // Pass a FakeNameResolverFactory with an empty list and LB config
     FakeNameResolverFactory nameResolverFactory =
