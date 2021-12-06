@@ -18,8 +18,12 @@ package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.base.Converter;
+import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.internal.JsonUtil;
 import io.grpc.lookup.v1.RouteLookupRequest;
@@ -29,10 +33,13 @@ import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -40,6 +47,12 @@ import javax.annotation.Nullable;
  * messages to internal representation in {@link RlsProtoData}.
  */
 final class RlsProtoConverters {
+
+  private static final long MAX_AGE_NANOS = MINUTES.toNanos(5);
+  private static final long MAX_CACHE_SIZE = 5 * 1024 * 1024; // 5MiB
+  private static final long DEFAULT_LOOKUP_SERVICE_TIMEOUT = SECONDS.toNanos(10);
+  private static final ImmutableList<String> EXTRA_KEY_NAMES =
+      ImmutableList.of("host", "service", "method");
 
   /**
    * RouteLookupRequestConverter converts between {@link RouteLookupRequest} and {@link
@@ -96,31 +109,49 @@ final class RlsProtoConverters {
     @Override
     protected RouteLookupConfig doForward(Map<String, ?> json) {
       List<GrpcKeyBuilder> grpcKeyBuilders =
-          GrpcKeyBuilderConverter
-              .covertAll(JsonUtil.checkObjectList(JsonUtil.getList(json, "grpcKeyBuilders")));
+          GrpcKeyBuilderConverter.covertAll(
+              checkNotNull(JsonUtil.getListOfObjects(json, "grpcKeyBuilders"), "grpcKeyBuilders"));
+      checkArgument(!grpcKeyBuilders.isEmpty(), "must have at least one GrpcKeyBuilder");
+      Set<Name> names = new HashSet<>();
+      for (GrpcKeyBuilder keyBuilder : grpcKeyBuilders) {
+        for (Name name : keyBuilder.getNames()) {
+          checkArgument(names.add(name), "duplicate names in grpc_keybuilders: " + name);
+        }
+      }
       String lookupService = JsonUtil.getString(json, "lookupService");
-      long timeout =
-          TimeUnit.SECONDS.toMillis(
-              orDefault(
-                  JsonUtil.getNumberAsLong(json, "lookupServiceTimeout"),
-                  0L));
-      Long maxAge =
-          convertTimeIfNotNull(
-              TimeUnit.SECONDS, TimeUnit.MILLISECONDS, JsonUtil.getNumberAsLong(json, "maxAge"));
-      Long staleAge =
-          convertTimeIfNotNull(
-              TimeUnit.SECONDS, TimeUnit.MILLISECONDS, JsonUtil.getNumberAsLong(json, "staleAge"));
-      long cacheSize = orDefault(JsonUtil.getNumberAsLong(json, "cacheSizeBytes"), Long.MAX_VALUE);
-      List<String> validTargets = JsonUtil.checkStringList(JsonUtil.getList(json, "validTargets"));
-      String defaultTarget = JsonUtil.getString(json, "defaultTarget");
+      checkArgument(!Strings.isNullOrEmpty(lookupService), "lookupService must not be empty");
+      try {
+        new URI(lookupService);
+      } catch (URISyntaxException e) {
+        throw new IllegalArgumentException(
+            "The lookupService field is not valid URI: " + lookupService, e);
+      }
+      long timeout = orDefault(
+          JsonUtil.getStringAsDuration(json, "lookupServiceTimeout"),
+          DEFAULT_LOOKUP_SERVICE_TIMEOUT);
+      checkArgument(timeout > 0, "lookupServiceTimeout should be positive");
+      Long maxAge = JsonUtil.getStringAsDuration(json, "maxAge");
+      Long staleAge = JsonUtil.getStringAsDuration(json, "staleAge");
+      if (maxAge == null) {
+        checkArgument(staleAge == null, "to specify staleAge, must have maxAge");
+        maxAge = MAX_AGE_NANOS;
+      }
+      if (staleAge == null) {
+        staleAge = MAX_AGE_NANOS;
+      }
+      maxAge = Math.min(maxAge, MAX_AGE_NANOS);
+      staleAge = Math.min(staleAge, maxAge);
+      long cacheSize = orDefault(JsonUtil.getNumberAsLong(json, "cacheSizeBytes"), MAX_CACHE_SIZE);
+      checkArgument(cacheSize > 0, "cacheSize must be positive");
+      cacheSize = Math.min(cacheSize, MAX_CACHE_SIZE);
+      String defaultTarget = Strings.emptyToNull(JsonUtil.getString(json, "defaultTarget"));
       return new RouteLookupConfig(
           grpcKeyBuilders,
           lookupService,
-          /* lookupServiceTimeoutInMillis= */ timeout,
-          /* maxAgeInMillis= */ maxAge,
-          /* staleAgeInMillis= */ staleAge,
+          /* lookupServiceTimeoutInNanos= */ timeout,
+          /* maxAgeInNanos= */ maxAge,
+          /* staleAgeInNanos= */ staleAge,
           /* cacheSizeBytes= */ cacheSize,
-          validTargets,
           defaultTarget);
     }
 
@@ -129,13 +160,6 @@ final class RlsProtoConverters {
         return checkNotNull(defaultValue, "defaultValue");
       }
       return value;
-    }
-
-    private static Long convertTimeIfNotNull(TimeUnit from, TimeUnit to, Long value) {
-      if (value == null) {
-        return null;
-      }
-      return to.convert(value, from);
     }
 
     @Override
@@ -155,25 +179,29 @@ final class RlsProtoConverters {
 
     @SuppressWarnings("unchecked")
     static GrpcKeyBuilder convert(Map<String, ?> keyBuilder) {
-      List<Map<String, ?>> rawNames =
-          JsonUtil.checkObjectList(JsonUtil.getList(keyBuilder, "names"));
+      List<?> rawRawNames = JsonUtil.getList(keyBuilder, "names");
+      checkArgument(
+          rawRawNames != null && !rawRawNames.isEmpty(),
+          "each keyBuilder must have at least one name");
+      List<Map<String, ?>> rawNames = JsonUtil.checkObjectList(rawRawNames);
       List<Name> names = new ArrayList<>();
       for (Map<String, ?> rawName : rawNames) {
-        names.add(
-            new Name(
-                JsonUtil.getString(rawName, "service"), JsonUtil.getString(rawName, "method")));
+        String serviceName = JsonUtil.getString(rawName, "service");
+        checkArgument(!Strings.isNullOrEmpty(serviceName), "service must not be empty or null");
+        names.add(new Name(serviceName, JsonUtil.getString(rawName, "method")));
       }
+      List<?> rawRawHeaders = JsonUtil.getList(keyBuilder, "headers");
       List<Map<String, ?>> rawHeaders =
-          JsonUtil.checkObjectList(JsonUtil.getList(keyBuilder, "headers"));
+          rawRawHeaders == null
+              ? new ArrayList<Map<String, ?>>() : JsonUtil.checkObjectList(rawRawHeaders);
       List<NameMatcher> nameMatchers = new ArrayList<>();
       for (Map<String, ?> rawHeader : rawHeaders) {
-        NameMatcher matcher =
-            new NameMatcher(
-                JsonUtil.getString(rawHeader, "key"),
-                (List<String>) rawHeader.get("names"),
-                (Boolean) rawHeader.get("optional"));
+        Boolean requiredMatch = JsonUtil.getBoolean(rawHeader, "requiredMatch");
         checkArgument(
-            matcher.isOptional(), "NameMatcher for GrpcKeyBuilders shouldn't be required");
+            requiredMatch == null || !requiredMatch,
+            "requiredMatch shouldn't be specified for gRPC");
+        NameMatcher matcher = new NameMatcher(
+            JsonUtil.getString(rawHeader, "key"), (List<String>) rawHeader.get("names"));
         nameMatchers.add(matcher);
       }
       ExtraKeys extraKeys = ExtraKeys.DEFAULT;
@@ -188,7 +216,19 @@ final class RlsProtoConverters {
       if (constantKeys == null) {
         constantKeys = ImmutableMap.of();
       }
+      checkUniqueKey(nameMatchers, constantKeys.keySet());
       return new GrpcKeyBuilder(names, nameMatchers, extraKeys, constantKeys);
+    }
+  }
+
+  private static void checkUniqueKey(List<NameMatcher> nameMatchers, Set<String> constantKeys) {
+    Set<String> keys = new HashSet<>(constantKeys);
+    keys.addAll(EXTRA_KEY_NAMES);
+    for (NameMatcher nameMatcher :  nameMatchers) {
+      keys.add(nameMatcher.getKey());
+    }
+    if (keys.size() != nameMatchers.size() + constantKeys.size() + EXTRA_KEY_NAMES.size()) {
+      throw new IllegalArgumentException("keys in KeyBuilder must be unique");
     }
   }
 

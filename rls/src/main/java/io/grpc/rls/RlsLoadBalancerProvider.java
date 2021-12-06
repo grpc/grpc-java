@@ -67,22 +67,6 @@ public final class RlsLoadBalancerProvider extends LoadBalancerProvider {
               JsonUtil.getString(rawLoadBalancingConfigPolicy, "childPolicyConfigTargetFieldName"),
               JsonUtil.checkObjectList(
                   checkNotNull(JsonUtil.getList(rawLoadBalancingConfigPolicy, "childPolicy"))));
-      // Checking all valid targets to make sure the config is always valid. This strict check
-      // prevents child policy to handle invalid child policy.
-      for (String validTarget : routeLookupConfig.getValidTargets()) {
-        ConfigOrError childPolicyConfigOrError =
-            lbPolicy
-                .getEffectiveLbProvider()
-                .parseLoadBalancingPolicyConfig(lbPolicy.getEffectiveChildPolicy(validTarget));
-        if (childPolicyConfigOrError.getError() != null) {
-          return
-              ConfigOrError.fromError(
-                  childPolicyConfigOrError
-                      .getError()
-                      .augmentDescription(
-                          "failed to parse childPolicy for validTarget: " + validTarget));
-        }
-      }
       return ConfigOrError.fromConfig(new LbPolicyConfiguration(routeLookupConfig, lbPolicy));
     } catch (Exception e) {
       return ConfigOrError.fromError(
