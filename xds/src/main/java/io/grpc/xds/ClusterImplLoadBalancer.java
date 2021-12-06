@@ -164,11 +164,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
   }
 
-  @Override
-  public boolean canHandleEmptyAddressListFromNameResolution() {
-    return true;
-  }
-
   /**
    * A decorated {@link LoadBalancer.Helper} that applies configurations for connections
    * or requests to endpoints in the cluster.

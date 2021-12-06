@@ -23,7 +23,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -99,10 +98,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   @Before
   public void setUp() {
     when(testLbBalancer.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
-    when(testLbBalancer.canHandleEmptyAddressListFromNameResolution()).thenCallRealMethod();
-    assertThat(testLbBalancer.canHandleEmptyAddressListFromNameResolution()).isFalse();
     when(testLbBalancer2.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
-    when(testLbBalancer2.canHandleEmptyAddressListFromNameResolution()).thenReturn(true);
     defaultRegistry.register(testLbBalancerProvider);
     defaultRegistry.register(testLbBalancerProvider2);
   }
@@ -267,7 +263,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(testLbBalancer).handleResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
-    verify(testLbBalancer, atLeast(0)).canHandleEmptyAddressListFromNameResolution();
     ArgumentCaptor<Map<String, ?>> lbConfigCaptor = ArgumentCaptor.forClass(Map.class);
     verify(testLbBalancerProvider).parseLoadBalancingPolicyConfig(lbConfigCaptor.capture());
     assertThat(lbConfigCaptor.getValue()).containsExactly("setting1", "high");
@@ -354,7 +349,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             .setLoadBalancingPolicyConfig(lbConfig.getConfig())
             .build());
 
-    assertThat(testLbBalancer.canHandleEmptyAddressListFromNameResolution()).isFalse();
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(handleResult.getDescription()).startsWith("NameResolver returned no usable address");
     assertThat(lb.getDelegate()).isSameInstanceAs(testLbBalancer);
@@ -378,7 +372,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     assertThat(handleResult.getCode()).isEqualTo(Status.Code.OK);
     assertThat(lb.getDelegate()).isSameInstanceAs(testLbBalancer2);
-    assertThat(testLbBalancer2.canHandleEmptyAddressListFromNameResolution()).isTrue();
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(testLbBalancer2).handleResolvedAddresses(resultCaptor.capture());

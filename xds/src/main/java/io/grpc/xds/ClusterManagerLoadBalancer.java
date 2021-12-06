@@ -129,11 +129,6 @@ class ClusterManagerLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean canHandleEmptyAddressListFromNameResolution() {
-    return true;
-  }
-
-  @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
     for (ChildLbState state : childLbStates.values()) {

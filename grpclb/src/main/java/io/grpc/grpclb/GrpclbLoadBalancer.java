@@ -152,11 +152,6 @@ class GrpclbLoadBalancer extends LoadBalancer {
     }
   }
 
-  @Override
-  public boolean canHandleEmptyAddressListFromNameResolution() {
-    return true;
-  }
-
   @VisibleForTesting
   @Nullable
   GrpclbState getGrpclbState() {

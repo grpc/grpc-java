@@ -328,7 +328,6 @@ public class ManagedChannelImplTest {
   @Before
   public void setUp() throws Exception {
     when(mockLoadBalancer.handleResolvedAddresses(isA(ResolvedAddresses.class))).thenReturn(true);
-    when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenCallRealMethod();
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     expectedUri = new URI(TARGET);
     transports = TestUtils.captureTransports(mockTransportFactory);
@@ -1194,8 +1193,6 @@ public class ManagedChannelImplTest {
 
   @Test
   public void nameResolverReturnsEmptySubLists_optionallyAllowed() throws Exception {
-    when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenReturn(true);
-
     // Pass a FakeNameResolverFactory with an empty list and LB config
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri).build();

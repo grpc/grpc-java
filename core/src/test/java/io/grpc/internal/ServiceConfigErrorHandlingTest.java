@@ -193,7 +193,6 @@ public class ServiceConfigErrorHandlingTest {
   @Before
   public void setUp() throws Exception {
     mockLoadBalancer.setAcceptAddresses(true);
-    when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenCallRealMethod();
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     expectedUri = new URI(TARGET);
     when(mockTransportFactory.getScheduledExecutorService())
@@ -304,7 +303,6 @@ public class ServiceConfigErrorHandlingTest {
             .setServers(Collections.<EquivalentAddressGroup>emptyList())
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
-    when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenReturn(true);
 
     Map<String, Object> rawServiceConfig =
         parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {\"check\": \"val\"}}]}");

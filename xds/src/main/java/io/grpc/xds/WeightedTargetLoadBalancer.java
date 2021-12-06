@@ -125,11 +125,6 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public boolean canHandleEmptyAddressListFromNameResolution() {
-    return true;
-  }
-
-  @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
     for (LoadBalancer childBalancer : childBalancers.values()) {

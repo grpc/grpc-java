@@ -22,7 +22,6 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.util.GracefulSwitchLoadBalancer.BUFFER_PICKER;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -84,35 +83,6 @@ public class GracefulSwitchLoadBalancerTest {
       lbProviders.put(lbPolicy, lbProvider);
       lbRegistry.register(lbProvider);
     }
-  }
-
-  @Test
-  public void canHandleEmptyAddressListFromNameResolutionForwardedToLatestPolicy() {
-    gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[0]));
-    LoadBalancer lb0 = balancers.get(lbPolicies[0]);
-    Helper helper0 = helpers.get(lb0);
-    SubchannelPicker picker = mock(SubchannelPicker.class);
-    helper0.updateBalancingState(READY, picker);
-
-    assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isFalse();
-    doReturn(true).when(lb0).canHandleEmptyAddressListFromNameResolution();
-    assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isTrue();
-
-    gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[1]));
-    LoadBalancer lb1 = balancers.get(lbPolicies[1]);
-
-    assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isFalse();
-
-    doReturn(true).when(lb1).canHandleEmptyAddressListFromNameResolution();
-    assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isTrue();
-
-    gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[2]));
-    LoadBalancer lb2 = balancers.get(lbPolicies[2]);
-
-    assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isFalse();
-
-    doReturn(true).when(lb2).canHandleEmptyAddressListFromNameResolution();
-    assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isTrue();
   }
 
   @Test
