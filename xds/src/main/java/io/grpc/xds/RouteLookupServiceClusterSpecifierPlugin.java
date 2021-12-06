@@ -33,7 +33,7 @@ final class RouteLookupServiceClusterSpecifierPlugin implements ClusterSpecifier
       new RouteLookupServiceClusterSpecifierPlugin();
 
   private static final String TYPE_URL =
-      "type.googleapis.com/grpc.lookup.v1.RouteLookupConfig";
+      "type.googleapis.com/grpc.lookup.v1.RouteLookupClusterSpecifier";
 
   private RouteLookupServiceClusterSpecifierPlugin() {}
 

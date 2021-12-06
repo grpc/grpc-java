@@ -1487,16 +1487,20 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     Any anyConfig = extension.getTypedConfig();
     String typeUrl = anyConfig.getTypeUrl();
     Message rawConfig = anyConfig;
-    if (typeUrl.equals(TYPE_URL_TYPED_STRUCT)) {
-      TypedStruct typedStruct;
-      try {
-        typedStruct = anyConfig.unpack(TypedStruct.class);
-      } catch (InvalidProtocolBufferException e) {
-        throw new ResourceInvalidException(
-            "ClusterSpecifierPlugin [" + pluginName + "] contains invalid proto", e);
+    try {
+      if (typeUrl.equals(TYPE_URL_TYPED_STRUCT_UDPA)) {
+        TypedStruct typedStruct = anyConfig.unpack(TypedStruct.class);
+        typeUrl = typedStruct.getTypeUrl();
+        rawConfig = typedStruct.getValue();
+      } else if (typeUrl.equals(TYPE_URL_TYPED_STRUCT)) {
+        com.github.xds.type.v3.TypedStruct newTypedStruct =
+            anyConfig.unpack(com.github.xds.type.v3.TypedStruct.class);
+        typeUrl = newTypedStruct.getTypeUrl();
+        rawConfig = newTypedStruct.getValue();
       }
-      typeUrl = typedStruct.getTypeUrl();
-      rawConfig = typedStruct.getValue();
+    } catch (InvalidProtocolBufferException e) {
+      throw new ResourceInvalidException(
+          "ClusterSpecifierPlugin [" + pluginName + "] contains invalid proto", e);
     }
     io.grpc.xds.ClusterSpecifierPlugin plugin = registry.get(typeUrl);
     if (plugin == null) {

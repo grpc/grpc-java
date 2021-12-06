@@ -107,6 +107,7 @@ import io.grpc.Status.Code;
 import io.grpc.lookup.v1.GrpcKeyBuilder;
 import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
 import io.grpc.lookup.v1.NameMatcher;
+import io.grpc.lookup.v1.RouteLookupClusterSpecifier;
 import io.grpc.lookup.v1.RouteLookupConfig;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
@@ -1394,9 +1395,11 @@ public class ClientXdsClientDataTest {
         .setCacheSizeBytes(5000)
         .addValidTargets("valid-target")
         .build();
+    RouteLookupClusterSpecifier specifier =
+        RouteLookupClusterSpecifier.newBuilder().setRouteLookupConfig(routeLookupConfig).build();
     TypedExtensionConfig typedExtensionConfig = TypedExtensionConfig.newBuilder()
         .setName("rls-plugin-1")
-        .setTypedConfig(Any.pack(routeLookupConfig))
+        .setTypedConfig(Any.pack(specifier))
         .build();
     io.envoyproxy.envoy.config.route.v3.Route route =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
@@ -1433,7 +1436,7 @@ public class ClientXdsClientDataTest {
   @Test
   public void parseHttpConnectionManager_duplicatePluginName() throws Exception {
     ClientXdsClient.enableRouteLookup = true;
-    RouteLookupConfig routeLookupConfig = RouteLookupConfig.newBuilder()
+    RouteLookupConfig routeLookupConfig1 = RouteLookupConfig.newBuilder()
         .addGrpcKeybuilders(
             GrpcKeyBuilder.newBuilder()
                 .addNames(Name.newBuilder().setService("service1"))
@@ -1445,6 +1448,8 @@ public class ClientXdsClientDataTest {
         .setCacheSizeBytes(5000)
         .addValidTargets("valid-target")
         .build();
+    RouteLookupClusterSpecifier specifier1 =
+        RouteLookupClusterSpecifier.newBuilder().setRouteLookupConfig(routeLookupConfig1).build();
     RouteLookupConfig routeLookupConfig2 = RouteLookupConfig.newBuilder()
         .addGrpcKeybuilders(
             GrpcKeyBuilder.newBuilder()
@@ -1456,13 +1461,15 @@ public class ClientXdsClientDataTest {
         .setCacheSizeBytes(5000)
         .addValidTargets("valid-target")
         .build();
+    RouteLookupClusterSpecifier specifier2 =
+        RouteLookupClusterSpecifier.newBuilder().setRouteLookupConfig(routeLookupConfig2).build();
     TypedExtensionConfig typedExtensionConfig = TypedExtensionConfig.newBuilder()
         .setName("rls-plugin-1")
-        .setTypedConfig(Any.pack(routeLookupConfig))
+        .setTypedConfig(Any.pack(specifier1))
         .build();
     TypedExtensionConfig typedExtensionConfig2 = TypedExtensionConfig.newBuilder()
         .setName("rls-plugin-1")
-        .setTypedConfig(Any.pack(routeLookupConfig2))
+        .setTypedConfig(Any.pack(specifier2))
         .build();
     io.envoyproxy.envoy.config.route.v3.Route route =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
@@ -1511,9 +1518,11 @@ public class ClientXdsClientDataTest {
         .setCacheSizeBytes(5000)
         .addValidTargets("valid-target")
         .build();
+    RouteLookupClusterSpecifier specifier =
+        RouteLookupClusterSpecifier.newBuilder().setRouteLookupConfig(routeLookupConfig).build();
     TypedExtensionConfig typedExtensionConfig = TypedExtensionConfig.newBuilder()
         .setName("rls-plugin-1")
-        .setTypedConfig(Any.pack(routeLookupConfig))
+        .setTypedConfig(Any.pack(specifier))
         .build();
     io.envoyproxy.envoy.config.route.v3.Route route =
         io.envoyproxy.envoy.config.route.v3.Route.newBuilder()
@@ -1568,6 +1577,44 @@ public class ClientXdsClientDataTest {
     });
 
     TypedStruct typedStruct = TypedStruct.newBuilder()
+        .setTypeUrl("type.googleapis.com/google.protobuf.Empty")
+        .setValue(Struct.newBuilder())
+        .build();
+    io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin pluginProto =
+        io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin.newBuilder()
+            .setExtension(TypedExtensionConfig.newBuilder()
+                .setTypedConfig(Any.pack(typedStruct)))
+            .build();
+
+    PluginConfig pluginConfig = ClientXdsClient.parseClusterSpecifierPlugin(pluginProto, registry);
+    assertThat(pluginConfig).isInstanceOf(TestPluginConfig.class);
+  }
+
+  @Test
+  public void parseClusterSpecifierPlugin_v3TypedStructInTypedExtension() throws Exception {
+    class TestPluginConfig implements PluginConfig {
+      @Override
+      public String typeUrl() {
+        return "type.googleapis.com/google.protobuf.Empty";
+      }
+    }
+
+    ClusterSpecifierPluginRegistry registry = ClusterSpecifierPluginRegistry.newRegistry();
+    registry.register(new ClusterSpecifierPlugin() {
+      @Override
+      public String[] typeUrls() {
+        return new String[] {
+            "type.googleapis.com/google.protobuf.Empty",
+        };
+      }
+
+      @Override
+      public ConfigOrError<? extends PluginConfig> parsePlugin(Message rawProtoMessage) {
+        return ConfigOrError.fromConfig(new TestPluginConfig());
+      }
+    });
+
+    com.github.xds.type.v3.TypedStruct typedStruct = com.github.xds.type.v3.TypedStruct.newBuilder()
         .setTypeUrl("type.googleapis.com/google.protobuf.Empty")
         .setValue(Struct.newBuilder())
         .build();
