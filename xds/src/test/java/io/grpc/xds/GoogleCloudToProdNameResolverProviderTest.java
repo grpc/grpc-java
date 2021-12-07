@@ -73,7 +73,7 @@ public class GoogleCloudToProdNameResolverProviderTest {
 
   @Test
   public void newNameResolver() {
-    assertThat(provider.newNameResolver(URI.create("google-c2p:///foo.googleapis.com"), args))
+    assertThat(provider.newNameResolver(URI.create("google-c2p-experimental:///foo.googleapis.com"), args))
         .isInstanceOf(GoogleCloudToProdNameResolver.class);
   }
 }
