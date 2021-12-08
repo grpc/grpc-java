@@ -22,12 +22,15 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
+import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.ObjectPool;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
@@ -197,10 +200,16 @@ final class LbPolicyConfiguration {
 
     private final ChildLoadBalancerHelperProvider childLbHelperProvider;
     private final ChildLbStatusListener childLbStatusListener;
+    private final ChildLoadBalancingPolicy childPolicy;
+    private final ResolvedAddressFactory childLbResolvedAddressFactory;
 
     public RefCountedChildPolicyWrapperFactory(
+        ChildLoadBalancingPolicy childPolicy,
+        ResolvedAddressFactory childLbResolvedAddressFactory,
         ChildLoadBalancerHelperProvider childLbHelperProvider,
         ChildLbStatusListener childLbStatusListener) {
+      this.childPolicy = childPolicy;
+      this.childLbResolvedAddressFactory = childLbResolvedAddressFactory;
       this.childLbHelperProvider = checkNotNull(childLbHelperProvider, "childLbHelperProvider");
       this.childLbStatusListener = checkNotNull(childLbStatusListener, "childLbStatusListener");
     }
@@ -209,13 +218,19 @@ final class LbPolicyConfiguration {
       // TODO(creamsoup) check if the target is valid or not
       RefCountedChildPolicyWrapper pooledChildPolicyWrapper = childPolicyMap.get(target);
       if (pooledChildPolicyWrapper == null) {
-        ChildPolicyWrapper childPolicyWrapper =
-            new ChildPolicyWrapper(target, childLbHelperProvider, childLbStatusListener);
+        ChildPolicyWrapper childPolicyWrapper = new ChildPolicyWrapper(
+            target, childPolicy, childLbResolvedAddressFactory, childLbHelperProvider,
+            childLbStatusListener);
         pooledChildPolicyWrapper = RefCountedChildPolicyWrapper.of(childPolicyWrapper);
         childPolicyMap.put(target, pooledChildPolicyWrapper);
+        return pooledChildPolicyWrapper.getObject();
+      } else {
+        ChildPolicyWrapper childPolicyWrapper = pooledChildPolicyWrapper.getObject();
+        if (childPolicyWrapper.getPicker() != null) {
+          childPolicyWrapper.refreshState();
+        }
+        return childPolicyWrapper;
       }
-
-      return pooledChildPolicyWrapper.getObject();
     }
 
     void release(ChildPolicyWrapper childPolicyWrapper) {
@@ -240,14 +255,34 @@ final class LbPolicyConfiguration {
     private final ChildPolicyReportingHelper helper;
     private volatile SubchannelPicker picker;
     private ConnectivityState state;
+    private LoadBalancer lb;
 
     public ChildPolicyWrapper(
         String target,
+        ChildLoadBalancingPolicy childPolicy,
+        final ResolvedAddressFactory childLbResolvedAddressFactory,
         ChildLoadBalancerHelperProvider childLbHelperProvider,
         ChildLbStatusListener childLbStatusListener) {
       this.target = target;
       this.helper =
           new ChildPolicyReportingHelper(childLbHelperProvider, childLbStatusListener);
+      LoadBalancerProvider lbProvider = childPolicy.getEffectiveLbProvider();
+      final ConfigOrError lbConfig =
+          lbProvider
+              .parseLoadBalancingPolicyConfig(
+                  childPolicy.getEffectiveChildPolicy(target));
+      this.lb = lbProvider.newLoadBalancer(helper);
+      helper.getChannelLogger().log(
+          ChannelLogLevel.DEBUG, "RLS child lb created. config: {0}", lbConfig.getConfig());
+      helper.getSynchronizationContext().execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              lb.handleResolvedAddresses(
+                  childLbResolvedAddressFactory.create(lbConfig.getConfig()));
+              lb.requestConnection();
+            }
+          });
     }
 
     String getTarget() {
