@@ -49,10 +49,10 @@ interface LruCache<K, V> {
   V invalidate(K key);
 
   /**
-   * Invalidates cache entries for given keys. This operation will trigger {@link EvictionListener}
+   * Invalidates cache entries for all keys. This operation will trigger {@link EvictionListener}
    * with {@link EvictionType#EXPLICIT}.
    */
-  void invalidateAll(Iterable<K> keys);
+  void invalidateAll();
 
   /** Returns {@code true} if given key is cached. */
   @CheckReturnValue

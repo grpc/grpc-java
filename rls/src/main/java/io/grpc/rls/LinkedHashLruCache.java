@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableSet;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -200,9 +201,10 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
   }
 
   @Override
-  public final void invalidateAll(Iterable<K> keys) {
-    checkNotNull(keys, "keys");
+  public final void invalidateAll() {
     synchronized (lock) {
+      // make a copy to avoid ConcurrentModificationException
+      Iterable<K> keys = ImmutableSet.copyOf(delegate.keySet());
       for (K key : keys) {
         SizedValue existing = delegate.remove(key);
         if (existing != null) {
@@ -291,12 +293,9 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
   public final void close() {
     synchronized (lock) {
       periodicCleaner.stop();
-      doClose();
-      delegate.clear();
+      invalidateAll();
     }
   }
-
-  protected void doClose() {}
 
   /** Periodically cleans up the AsyncRequestCache. */
   private final class PeriodicCleaner {

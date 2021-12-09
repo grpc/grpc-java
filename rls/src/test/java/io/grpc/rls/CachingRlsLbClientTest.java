@@ -81,6 +81,7 @@ import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -172,6 +173,7 @@ public class CachingRlsLbClientTest {
   public void tearDown() throws Exception {
     rlsLbClient.close();
     CachingRlsLbClient.enableOobChannelDirectPath = existingEnableOobChannelDirectPath;
+    assertThat(lbProvider.loadBalancers).isEmpty();
   }
 
   private CachedRouteLookupResponse getInSyncContext(
@@ -462,6 +464,7 @@ public class CachingRlsLbClientTest {
    * immediately fails when using the fallback target.
    */
   private static final class TestLoadBalancerProvider extends LoadBalancerProvider {
+    Set<LoadBalancer> loadBalancers = new HashSet<>();
 
     @Override
     public boolean isAvailable() {
@@ -486,7 +489,7 @@ public class CachingRlsLbClientTest {
 
     @Override
     public LoadBalancer newLoadBalancer(final Helper helper) {
-      return new LoadBalancer() {
+      LoadBalancer loadBalancer = new LoadBalancer() {
 
         @Override
         public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
@@ -527,8 +530,12 @@ public class CachingRlsLbClientTest {
 
         @Override
         public void shutdown() {
+          loadBalancers.remove(this);
         }
       };
+
+      loadBalancers.add(loadBalancer);
+      return loadBalancer;
     }
   }
 

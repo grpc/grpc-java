@@ -301,6 +301,17 @@ final class LbPolicyConfiguration {
       helper.updateBalancingState(state, picker);
     }
 
+    void shutdown() {
+      helper.getSynchronizationContext().execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              lb.shutdown();
+            }
+          }
+      );
+    }
+
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
@@ -381,6 +392,7 @@ final class LbPolicyConfiguration {
       long newCnt = refCnt.decrementAndGet();
       checkState(newCnt != -1, "Cannot return never pooled childPolicyWrapper");
       if (newCnt == 0) {
+        childPolicyWrapper.shutdown();
         childPolicyWrapper = null;
       }
       return null;

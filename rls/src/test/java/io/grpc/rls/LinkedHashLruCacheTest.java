@@ -23,7 +23,6 @@ import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import com.google.common.collect.ImmutableList;
 import io.grpc.rls.DoNotUseDirectScheduledExecutorService.FakeTimeProvider;
 import io.grpc.rls.LruCache.EvictionListener;
 import io.grpc.rls.LruCache.EvictionType;
@@ -210,7 +209,7 @@ public class LinkedHashLruCacheTest {
 
     assertThat(cache.estimatedSize()).isEqualTo(2);
 
-    cache.invalidateAll(ImmutableList.of(1, 2));
+    cache.invalidateAll();
 
     assertThat(cache.estimatedSize()).isEqualTo(0);
   }
