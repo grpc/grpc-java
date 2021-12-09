@@ -33,6 +33,12 @@ jar {
     classifier = 'original'
 }
 
+// TODO(ashithasantosh): Remove javadoc exclusion on adding authorization
+// interceptor implementations.
+javadoc {
+    exclude "io/grpc/authz/*"
+}
+
 shadowJar {
     classifier = null
     dependencies {

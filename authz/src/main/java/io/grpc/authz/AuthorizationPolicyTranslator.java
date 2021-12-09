@@ -167,7 +167,7 @@ class AuthorizationPolicyTranslator {
     if (!(jsonObject instanceof Map)) {
       throw new IllegalArgumentException(
         "Authorization policy should be a JSON object. Found: %s"
-        + jsonObject == null ? null : jsonObject.getClass().getName());
+        + (jsonObject == null ? null : jsonObject.getClass()));
     }
     @SuppressWarnings("unchecked")
     Map<String, ?> json = (Map<String, ?>)jsonObject;
