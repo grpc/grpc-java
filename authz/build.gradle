@@ -67,3 +67,5 @@ publishing {
         }
     }
 }
+
+[publishMavenPublicationToMavenRepository]*.onlyIf {false}

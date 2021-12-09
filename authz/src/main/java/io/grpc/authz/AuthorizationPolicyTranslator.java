@@ -38,7 +38,7 @@ import java.util.Map;
 /**
  * Translates a gRPC SDK authorization policy in JSON string to Envoy RBAC policies.
  */
-public class AuthorizationPolicyTranslator {
+class AuthorizationPolicyTranslator {
   private static final ImmutableList<String> UNSUPPORTED_HEADERS = ImmutableList.of(
       "host", "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
       "te", "trailer", "transfer-encoding", "upgrade");
@@ -46,7 +46,7 @@ public class AuthorizationPolicyTranslator {
   private static StringMatcher getStringMatcher(String value) {
     if (value.equals("*")) {
       return StringMatcher.newBuilder().setSafeRegex(
-        RegexMatcher.newBuilder().setRegex("^\\S+$").build()).build();
+        RegexMatcher.newBuilder().setRegex(".+").build()).build();
     } else if (value.startsWith("*")) {
       return StringMatcher.newBuilder().setSuffix(value.substring(1)).build();
     } else if (value.endsWith("*")) {
@@ -165,7 +165,9 @@ public class AuthorizationPolicyTranslator {
             throws IllegalArgumentException, IOException {
     Object jsonObject = JsonParser.parse(authorizationPolicy);
     if (!(jsonObject instanceof Map)) {
-      throw new IllegalArgumentException("failed to cast authorization policy");
+      throw new IllegalArgumentException(
+        "Authorization policy should be a JSON object. Found: %s"
+        + jsonObject == null ? null : jsonObject.getClass().getName());
     }
     @SuppressWarnings("unchecked")
     Map<String, ?> json = (Map<String, ?>)jsonObject;
