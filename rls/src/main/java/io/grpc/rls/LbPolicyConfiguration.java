@@ -298,7 +298,14 @@ final class LbPolicyConfiguration {
     }
 
     void refreshState() {
-      helper.updateBalancingState(state, picker);
+      helper.getSynchronizationContext().execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              helper.updateBalancingState(state, picker);
+            }
+          }
+      );
     }
 
     void shutdown() {
