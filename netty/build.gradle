@@ -30,7 +30,8 @@ dependencies {
             project(':grpc-testing-proto')
     testRuntimeOnly libraries.netty_tcnative,
             libraries.conscrypt,
-            libraries.netty_epoll
+            libraries.netty_epoll_x86,
+            libraries.netty_epoll_arm
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     alpnagent libraries.jetty_alpn_agent
 }

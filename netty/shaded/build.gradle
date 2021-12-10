@@ -18,7 +18,8 @@ sourceSets { testShadow {} }
 dependencies {
     implementation project(':grpc-netty')
     runtimeOnly libraries.netty_tcnative,
-            libraries.netty_epoll
+            libraries.netty_epoll_x86,
+	    libraries.netty_epoll_arm
     testShadowImplementation files(shadowJar),
             project(':grpc-testing-proto'),
             project(':grpc-testing'),

@@ -29,7 +29,8 @@ dependencies {
             project(':grpc-testing'),
             libraries.hdrhistogram,
             libraries.netty_tcnative,
-            libraries.netty_epoll,
+            libraries.netty_epoll_x86,
+	    libraries.netty_epoll_arm,
             libraries.math
     compileOnly libraries.javax_annotation
     alpnagent libraries.jetty_alpn_agent
