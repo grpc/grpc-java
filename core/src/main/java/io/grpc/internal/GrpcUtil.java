@@ -546,10 +546,10 @@ public final class GrpcUtil {
           int maxThreads = Integer.getInteger(MAX_THREADS_PROPERTY_NAME, Integer.MAX_VALUE);
           // This creates a cached bounded pool
           ThreadPoolExecutor executor = new ThreadPoolExecutor(
-            maxThreads, maxThreads,
-            60, TimeUnit.SECONDS, 
-            new LinkedBlockingQueue<Runnable>(), 
-            getThreadFactory(NAME + "-%d", true));
+              maxThreads, maxThreads,
+              60, TimeUnit.SECONDS, 
+              new LinkedBlockingQueue<Runnable>(), 
+              getThreadFactory(NAME + "-%d", true));
           executor.allowCoreThreadTimeOut(true);
           return executor;
         }
