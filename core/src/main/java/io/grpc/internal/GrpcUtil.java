@@ -59,11 +59,14 @@ import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -544,14 +547,40 @@ public final class GrpcUtil {
         @Override
         public Executor create() {
           int maxThreads = Integer.getInteger(MAX_THREADS_PROPERTY_NAME, Integer.MAX_VALUE);
-          // This creates a cached bounded pool
-          ThreadPoolExecutor executor = new ThreadPoolExecutor(
-              maxThreads, maxThreads,
+          // This creates a bounded cached pool
+          BlockingQueue<Runnable> queue = new LinkedBlockingQueue<>();
+          return new ThreadPoolExecutor(
+              0, maxThreads,
               60, TimeUnit.SECONDS, 
-              new LinkedBlockingQueue<Runnable>(), 
-              getThreadFactory(NAME + "-%d", true));
-          executor.allowCoreThreadTimeOut(true);
-          return executor;
+              new SynchronousQueue<Runnable>() {
+                private static final long serialVersionUID = 1L;
+
+                @Override
+                public Runnable poll(long timeout, TimeUnit unit) throws InterruptedException {
+                  Runnable runnable = queue.poll();
+                  if (runnable != null) {
+                    return runnable;
+                  }
+                  return super.poll(timeout, unit);
+                }
+
+                @Override
+                public int size() {
+                  return queue.size();
+                }
+
+                @Override
+                public boolean isEmpty() {
+                  return queue.isEmpty();
+                }
+              }, 
+              getThreadFactory(NAME + "-%d", true),
+              new RejectedExecutionHandler() {
+                @Override
+                public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+                  queue.add(r);
+                }
+              });
         }
 
         @Override
