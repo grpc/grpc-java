@@ -548,7 +548,7 @@ public final class GrpcUtil {
           ThreadPoolExecutor executor = new ThreadPoolExecutor(
             maxThreads, maxThreads,
             60, TimeUnit.SECONDS, 
-            new LinkedBlockingQueue<>(), 
+            new LinkedBlockingQueue<Runnable>(), 
             getThreadFactory(NAME + "-%d", true));
           executor.allowCoreThreadTimeOut(true);
           return executor;
