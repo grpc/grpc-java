@@ -17,6 +17,12 @@
 
 package io.grpc.xds;
 
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
+import static org.junit.Assert.assertEquals;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import com.google.protobuf.UInt32Value;
@@ -57,7 +63,6 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
-
 import java.net.ServerSocket;
 import java.util.Collections;
 import java.util.Map;
@@ -65,17 +70,23 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
 /**
- * Abstract base class for end-to-end xds tests.
- * A local control plane is implemented in {@link XdsTestControlPlaneService}.
+ * Xds integration tests using a local control plane, implemented in
+ * {@link XdsTestControlPlaneService}.
  * Test cases can inject xds configs to the control plane for testing.
  */
-abstract class AbstractXdsE2eTest {
-  private static final Logger logger = Logger.getLogger(AbstractXdsE2eTest.class.getName());
+@RunWith(JUnit4.class)
+public class FakeControlPlaneXdsIntegrationTest {
+  private static final Logger logger =
+      Logger.getLogger(FakeControlPlaneXdsIntegrationTest.class.getName());
 
   protected int testServerPort;
-  protected String serverHostName;
   protected int controlPlaneServicePort;
   private Server server;
   private Server controlPlane;
@@ -93,36 +104,15 @@ abstract class AbstractXdsE2eTest {
           + ".HttpConnectionManager";
 
   /**
-   * Provides default client bootstrap.
-   * A subclass test case should override this method if it tests client bootstrap.
+   * Provides default bootstrapOverride.
    */
-  protected Map<String, ?> getClientBootstrapOverride() {
-    Map<String, ?> defaultClientBootstrapOverride = ImmutableMap.of(
+  private Map<String, ?> defaultBootstrapOverride() {
+    return ImmutableMap.of(
         "node", ImmutableMap.of(
             "id", UUID.randomUUID().toString(),
             "cluster", "cluster0"),
         "xds_servers", Collections.singletonList(
-            ImmutableMap.of(
-                "server_uri", "localhost:" + controlPlaneServicePort,
-                "channel_creds", Collections.singletonList(
-                    ImmutableMap.of("type", "insecure")
-                ),
-                "server_features", Collections.singletonList("xds_v3")
-            )
-        )
-    );
-    return defaultClientBootstrapOverride;
-  }
 
-  /**
-   * Provides default server bootstrap.
-   * A subclass test case should override this method if it tests server bootstrap.
-   */
-  protected Map<String, ?> getServerBootstrapOverride() {
-    Map<String, ?> defaultServerBootstrapOverride = ImmutableMap.of(
-        "node", ImmutableMap.of(
-            "id", UUID.randomUUID().toString()),
-        "xds_servers", Collections.singletonList(
             ImmutableMap.of(
                 "server_uri", "localhost:" + controlPlaneServicePort,
                 "channel_creds", Collections.singletonList(
@@ -133,9 +123,7 @@ abstract class AbstractXdsE2eTest {
         ),
         "server_listener_resource_name_template", SERVER_LISTENER_TEMPLATE
     );
-    return defaultServerBootstrapOverride;
   }
-
 
   /**
    * 1. Start control plane server and get control plane port
@@ -143,26 +131,19 @@ abstract class AbstractXdsE2eTest {
    * 3. Set control plane config using the port in 2
    * 4. Start xds server using control plane port in 1 and available port in 2
    * */
-  protected void setUp() throws Exception {
+  @Before
+  public void setUp() throws Exception {
     startControlPlane();
     ServerSocket serverSocket = new ServerSocket(0);
     testServerPort = serverSocket.getLocalPort();
     serverSocket.close();
-    XdsTestControlPlaneService.XdsTestControlPlaneConfig controlPlaneConfig =
-        getControlPlaneConfig();
-    controlPlaneService.setConfig(controlPlaneConfig);
-    startServer();
     nameResolverProvider = XdsNameResolverProvider.createForTest(scheme,
-        getClientBootstrapOverride());
+        defaultBootstrapOverride());
     NameResolverRegistry.getDefaultRegistry().register(nameResolverProvider);
-    serverHostName = "0.0.0.0:" + testServerPort;
-    ManagedChannel channel = Grpc.newChannelBuilder(scheme + ":///" + serverHostName,
-        InsecureChannelCredentials.create()).build();
-    logger.log(Level.FINER, "Starting control plane with config: {0}", controlPlaneConfig);
-    blockingStub = SimpleServiceGrpc.newBlockingStub(channel);
   }
 
-  protected void tearDown() throws Exception {
+  @After
+  public void tearDown() throws Exception {
     if (server != null) {
       server.shutdownNow();
       if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
@@ -178,7 +159,35 @@ abstract class AbstractXdsE2eTest {
     NameResolverRegistry.getDefaultRegistry().deregister(nameResolverProvider);
   }
 
-  protected void startServer() throws Exception {
+  @Test
+  public void pingPong() throws Exception {
+    String serverHostName = "0.0.0.0:" + testServerPort;
+    String tcpListenerName = SERVER_LISTENER_TEMPLATE.replaceAll("%s", serverHostName);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS, ImmutableMap.<String, Listener>of(
+        tcpListenerName, serverListener(tcpListenerName, serverHostName),
+        serverHostName, clientListener(serverHostName)
+    ));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_RDS,
+        ImmutableMap.of(rdsName, rds(serverHostName)));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS,
+        ImmutableMap.<String, Object>of(clusterName, cds()));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS,
+        ImmutableMap.<String, Object>of(edsName, eds(testServerPort)));
+    startServer(defaultBootstrapOverride());
+    serverHostName = "0.0.0.0:" + testServerPort;
+    ManagedChannel channel = Grpc.newChannelBuilder(scheme + ":///" + serverHostName,
+        InsecureChannelCredentials.create()).build();
+    blockingStub = SimpleServiceGrpc.newBlockingStub(channel);
+    SimpleRequest request = SimpleRequest.newBuilder()
+        .build();
+    SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+        .setResponseMessage("Hi, xDS!")
+        .build();
+    assertEquals(goldenResponse, blockingStub.unaryRpc(request));
+  }
+
+  // server can only be started after xds config resources are set.
+  private void startServer(Map<String, ?> bootstrapOverride) throws Exception {
     SimpleServiceGrpc.SimpleServiceImplBase simpleServiceImpl =
         new SimpleServiceGrpc.SimpleServiceImplBase() {
           @Override
@@ -191,29 +200,12 @@ abstract class AbstractXdsE2eTest {
           }
         };
 
-
     XdsServerBuilder serverBuilder = XdsServerBuilder.forPort(
         testServerPort, InsecureServerCredentials.create())
         .addService(simpleServiceImpl)
-        .overrideBootstrapForTest(getServerBootstrapOverride());
+        .overrideBootstrapForTest(bootstrapOverride);
     server = serverBuilder.build().start();
-  }
-
-  /**
-   * Provides default control plane xds configs.
-   * A subclass test case should override this method to inject control plane xds configs to verify
-   * end-to-end behavior.
-   */
-  protected XdsTestControlPlaneService.XdsTestControlPlaneConfig getControlPlaneConfig() {
-    String serverHostName = "0.0.0.0:" + testServerPort;
-    String tcpListenerName = SERVER_LISTENER_TEMPLATE.replaceAll("%s", serverHostName);
-    return new XdsTestControlPlaneService.XdsTestControlPlaneConfig(
-        Collections.singletonList(serverListener(tcpListenerName, serverHostName)),
-        Collections.singletonList(clientListener(serverHostName)),
-        Collections.singletonList(rds(serverHostName)),
-        Collections.singletonList(cds()),
-        Collections.singletonList(eds(testServerPort))
-    );
+    logger.log(Level.FINE, "server started");
   }
 
   private void startControlPlane() throws Exception {
@@ -224,11 +216,6 @@ abstract class AbstractXdsE2eTest {
     controlPlane = controlPlaneServerBuilder.build().start();
     controlPlaneServicePort = controlPlane.getPort();
   }
-
-  /**
-   * A subclass test case should override this method to verify end-to-end behaviour.
-   */
-  abstract void run();
 
   private static Listener clientListener(String name) {
     HttpFilter httpFilter = HttpFilter.newBuilder()
@@ -247,8 +234,7 @@ abstract class AbstractXdsE2eTest {
                             .setAds(AggregatedConfigSource.getDefaultInstance())))
             .addAllHttpFilters(Collections.singletonList(httpFilter))
             .build(),
-        HTTP_CONNECTION_MANAGER_TYPE_URL)
-    ).build();
+        HTTP_CONNECTION_MANAGER_TYPE_URL)).build();
     Listener listener = Listener.newBuilder()
         .setName(name)
         .setApiListener(apiListener).build();
@@ -268,11 +254,9 @@ abstract class AbstractXdsE2eTest {
         .addRoutes(
             Route.newBuilder()
                 .setMatch(
-                    RouteMatch.newBuilder().setPrefix("/").build()
-                )
+                    RouteMatch.newBuilder().setPrefix("/").build())
                 .setNonForwardingAction(NonForwardingAction.newBuilder().build())
-                .build()
-        ).build();
+                .build()).build();
     RouteConfiguration routeConfig = RouteConfiguration.newBuilder()
         .addVirtualHosts(virtualHost)
         .build();
@@ -283,9 +267,7 @@ abstract class AbstractXdsE2eTest {
                 HttpConnectionManager.newBuilder()
                     .setRouteConfig(routeConfig)
                     .addAllHttpFilters(Collections.singletonList(routerFilter))
-                    .build()
-            )
-        ).build();
+                    .build())).build();
     FilterChainMatch filterChainMatch = FilterChainMatch.newBuilder()
         .setSourceType(FilterChainMatch.ConnectionSourceType.ANY)
         .build();
@@ -307,13 +289,9 @@ abstract class AbstractXdsE2eTest {
         .addRoutes(
             Route.newBuilder()
                 .setMatch(
-                    RouteMatch.newBuilder().setPrefix("/").build()
-                )
+                    RouteMatch.newBuilder().setPrefix("/").build())
                 .setRoute(
-                    RouteAction.newBuilder().setCluster(clusterName).build()
-                )
-                .build())
-        .build();
+                    RouteAction.newBuilder().setCluster(clusterName).build()).build()).build();
     return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
   }
 
@@ -328,8 +306,7 @@ abstract class AbstractXdsE2eTest {
                     ConfigSource.newBuilder()
                         .setAds(AggregatedConfigSource.newBuilder().build())
                         .build())
-                .build()
-        )
+                .build())
         .setLbPolicy(Cluster.LbPolicy.ROUND_ROBIN)
         .build();
   }
@@ -337,9 +314,7 @@ abstract class AbstractXdsE2eTest {
   private static ClusterLoadAssignment eds(int port) {
     Address address = Address.newBuilder()
         .setSocketAddress(
-            SocketAddress.newBuilder().setAddress("0.0.0.0").setPortValue(port).build()
-        )
-        .build();
+            SocketAddress.newBuilder().setAddress("0.0.0.0").setPortValue(port).build()).build();
     LocalityLbEndpoints endpoints = LocalityLbEndpoints.newBuilder()
         .setLoadBalancingWeight(UInt32Value.of(10))
         .setPriority(0)
@@ -348,9 +323,7 @@ abstract class AbstractXdsE2eTest {
                 .setEndpoint(
                     Endpoint.newBuilder().setAddress(address).build())
                 .setHealthStatus(HealthStatus.HEALTHY)
-                .build()
-        )
-        .build();
+                .build()).build();
     return ClusterLoadAssignment.newBuilder()
         .setClusterName(edsName)
         .addEndpoints(endpoints)
