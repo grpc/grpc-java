@@ -59,6 +59,7 @@ import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.internal.TimeProvider;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClientXdsClient.XdsChannelFactory;
@@ -114,6 +115,8 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public abstract class ClientXdsClientTestBase {
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
+  private static final String SERVER_URI_CUSTOME_AUTHORITY = "trafficdirector2.googleapis.com";
+  private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
   private static final String LDS_RESOURCE = "listener.googleapis.com";
   private static final String RDS_RESOURCE = "route-configuration.googleapis.com";
   private static final String CDS_RESOURCE = "cluster.googleapis.com";
@@ -250,6 +253,8 @@ public abstract class ClientXdsClientTestBase {
   private TlsContextManager tlsContextManager;
 
   private ManagedChannel channel;
+  private ManagedChannel channelForCustomAuthority;
+  private ManagedChannel channelForEmptyAuthority;
   private ClientXdsClient xdsClient;
   private boolean originalEnableFaultInjection;
   private boolean originalEnableRbac;
@@ -281,7 +286,24 @@ public abstract class ClientXdsClientTestBase {
     XdsChannelFactory xdsChannelFactory = new XdsChannelFactory() {
       @Override
       ManagedChannel create(ServerInfo serverInfo) {
-        return channel;
+        if (serverInfo.target().equals(SERVER_URI)) {
+          return channel;
+        }
+        if (serverInfo.target().equals(SERVER_URI_CUSTOME_AUTHORITY)) {
+          if (channelForCustomAuthority == null) {
+            channelForCustomAuthority = cleanupRule.register(
+                InProcessChannelBuilder.forName(serverName).directExecutor().build());
+          }
+          return channelForCustomAuthority;
+        }
+        if (serverInfo.target().equals(SERVER_URI_EMPTY_AUTHORITY)) {
+          if (channelForEmptyAuthority == null) {
+            channelForEmptyAuthority = cleanupRule.register(
+                InProcessChannelBuilder.forName(serverName).directExecutor().build());
+          }
+          return channelForEmptyAuthority;
+        }
+        throw new IllegalArgumentException("Can not create channel for " + serverInfo);
       }
     };
 
@@ -290,6 +312,17 @@ public abstract class ClientXdsClientTestBase {
             .servers(Arrays.asList(
                 Bootstrapper.ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3())))
             .node(EnvoyProtoData.Node.newBuilder().build())
+            .authorities(ImmutableMap.of(
+                "authority.xds.com",
+                AuthorityInfo.create(
+                    "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
+                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                        SERVER_URI_CUSTOME_AUTHORITY, CHANNEL_CREDENTIALS, useProtocolV3()))),
+                "",
+                AuthorityInfo.create(
+                    "xdstp:///envoy.config.listener.v3.Listener/%s",
+                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                        SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS, useProtocolV3())))))
             .certProviders(ImmutableMap.of("cert-instance-name",
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
             .build();
@@ -706,6 +739,46 @@ public abstract class ClientXdsClientTestBase {
         .isEqualTo(RDS_RESOURCE);
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_2, TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+    assertThat(channelForCustomAuthority).isNull();
+    assertThat(channelForEmptyAuthority).isNull();
+  }
+
+  @Test
+  public void ldsResourceUpdated_withXdstpResourceName() {
+    String ldsResourceName =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1";
+    DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+    verifyResourceMetadataRequested(LDS, ldsResourceName);
+
+    Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(ldsResourceName,
+        mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequest(LDS, ldsResourceName, VERSION_1, "0000", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
+        .hasSize(VHOST_SIZE);
+    verifyResourceMetadataAcked(
+        LDS, ldsResourceName, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+  }
+
+  @Test
+  public void ldsResourceUpdated_withXdstpResourceName_withEmptyAuthority() {
+    String ldsResourceName =
+        "xdstp:///envoy.config.listener.v3.Listener/listener1";
+    DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
+    assertThat(channelForEmptyAuthority).isNotNull();
+    verifyResourceMetadataRequested(LDS, ldsResourceName);
+
+    Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(ldsResourceName,
+        mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequest(LDS, ldsResourceName, VERSION_1, "0000", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
+        .hasSize(VHOST_SIZE);
+    verifyResourceMetadataAcked(
+        LDS, ldsResourceName, testListenerVhosts, VERSION_1, TIME_INCREMENT);
   }
 
   @Test

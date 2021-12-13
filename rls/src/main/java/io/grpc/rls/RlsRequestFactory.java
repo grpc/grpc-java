@@ -21,8 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Metadata;
-import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
 import io.grpc.rls.RlsProtoData.ExtraKeys;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
@@ -107,10 +105,6 @@ final class RlsRequestFactory {
       }
       if (value != null) {
         rlsRequestHeaders.put(nameMatcher.getKey(), value);
-      } else if (!nameMatcher.isOptional()) {
-        throw new StatusRuntimeException(
-            Status.INVALID_ARGUMENT.withDescription(
-                String.format("Missing mandatory metadata(%s) not found", nameMatcher.getKey())));
       }
     }
     return rlsRequestHeaders;

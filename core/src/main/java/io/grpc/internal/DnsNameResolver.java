@@ -434,7 +434,7 @@ public class DnsNameResolver extends NameResolver {
 
   @Nullable
   private static final Double getPercentageFromChoice(Map<String, ?> serviceConfigChoice) {
-    return JsonUtil.getNumber(serviceConfigChoice, SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY);
+    return JsonUtil.getNumberAsDouble(serviceConfigChoice, SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY);
   }
 
   @Nullable
