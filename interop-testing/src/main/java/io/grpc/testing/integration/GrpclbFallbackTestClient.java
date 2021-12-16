@@ -255,10 +255,10 @@ public final class GrpclbFallbackTestClient {
   }
 
   private void runSlowFallbackBeforeStartup() throws Exception {
-    runShellCmd(blackholeLbAndBackendAddrsCmd);
+    runShellCmd(blackholeLbAndBackendAddrsCmd, skipNetCmd);
     final Deadline fallbackDeadline = Deadline.after(20, TimeUnit.SECONDS);
     initStub();
-    waitForFallbackAndDoRpcs(fallbackDeadline, skipNetCmd);
+    waitForFallbackAndDoRpcs(fallbackDeadline);
   }
 
   private void runFastFallbackAfterStartup() throws Exception {
