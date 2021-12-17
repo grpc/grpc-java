@@ -27,48 +27,34 @@ import org.junit.runners.JUnit4;
 /** Unit tests for the embedded classes in {@link ClientStreamTracer}. */
 @RunWith(JUnit4.class)
 public class ClientStreamTracerTest {
-  private static final Attributes.Key<String> TRANSPORT_ATTR_KEY =
-      Attributes.Key.create("transport-attr-key");
   private final CallOptions callOptions = CallOptions.DEFAULT.withDeadlineAfter(1, MINUTES);
-  private final Attributes transportAttrs =
-      Attributes.newBuilder().set(TRANSPORT_ATTR_KEY, "value").build();
 
   @Test
-  @SuppressWarnings("deprecation") // info.getTransportAttrs()
   public void streamInfo_empty() {
     StreamInfo info = StreamInfo.newBuilder().build();
     assertThat(info.getCallOptions()).isSameInstanceAs(CallOptions.DEFAULT);
-    assertThat(info.getTransportAttrs()).isSameInstanceAs(Attributes.EMPTY);
   }
 
   @Test
-  @SuppressWarnings("deprecation") // info.getTransportAttrs()
   public void streamInfo_withInfo() {
-    StreamInfo info = StreamInfo.newBuilder()
-        .setCallOptions(callOptions).setTransportAttrs(transportAttrs).build();
+    StreamInfo info = StreamInfo.newBuilder().setCallOptions(callOptions).build();
     assertThat(info.getCallOptions()).isSameInstanceAs(callOptions);
-    assertThat(info.getTransportAttrs()).isSameInstanceAs(transportAttrs);
   }
 
   @Test
-  @SuppressWarnings("deprecation") // info.setTransportAttrs()
   public void streamInfo_noEquality() {
-    StreamInfo info1 = StreamInfo.newBuilder()
-        .setCallOptions(callOptions).setTransportAttrs(transportAttrs).build();
-    StreamInfo info2 = StreamInfo.newBuilder()
-        .setCallOptions(callOptions).setTransportAttrs(transportAttrs).build();
+    StreamInfo info1 = StreamInfo.newBuilder().setCallOptions(callOptions).build();
+    StreamInfo info2 = StreamInfo.newBuilder().setCallOptions(callOptions).build();
 
     assertThat(info1).isNotSameInstanceAs(info2);
     assertThat(info1).isNotEqualTo(info2);
   }
 
   @Test
-  @SuppressWarnings("deprecation") // info.getTransportAttrs()
   public void streamInfo_toBuilder() {
     StreamInfo info1 = StreamInfo.newBuilder()
-        .setCallOptions(callOptions).setTransportAttrs(transportAttrs).build();
+        .setCallOptions(callOptions).build();
     StreamInfo info2 = info1.toBuilder().build();
     assertThat(info2.getCallOptions()).isSameInstanceAs(callOptions);
-    assertThat(info2.getTransportAttrs()).isSameInstanceAs(transportAttrs);
   }
 }
