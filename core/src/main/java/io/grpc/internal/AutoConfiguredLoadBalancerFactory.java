@@ -96,10 +96,6 @@ public final class AutoConfiguredLoadBalancerFactory {
       delegate = delegateProvider.newLoadBalancer(helper);
     }
 
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      tryHandleResolvedAddresses(resolvedAddresses);
-    }
-
     /**
      * Returns non-OK status if resolvedAddresses is empty and delegate lb requires address ({@link
      * LoadBalancer#canHandleEmptyAddressListFromNameResolution()} returns {@code false}). {@code
