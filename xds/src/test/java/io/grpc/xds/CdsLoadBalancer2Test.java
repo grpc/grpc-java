@@ -122,7 +122,7 @@ public class CdsLoadBalancer2Test {
     lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_RESOLVER_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider("round_robin"));
     lbRegistry.register(new FakeLoadBalancerProvider("ring_hash"));
-    lbRegistry.register(new FakeLoadBalancerProvider("least_request"));
+    lbRegistry.register(new FakeLoadBalancerProvider("least_request_experimental"));
     loadBalancer = new CdsLoadBalancer2(helper, lbRegistry);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -176,7 +176,8 @@ public class CdsLoadBalancer2Test {
     DiscoveryMechanism instance = Iterables.getOnlyElement(childLbConfig.discoveryMechanisms);
     assertDiscoveryMechanism(instance, CLUSTER, DiscoveryMechanism.Type.LOGICAL_DNS, null,
         DNS_HOST_NAME, LRS_SERVER_INFO, 100L, upstreamTlsContext);
-    assertThat(childLbConfig.lbPolicy.getProvider().getPolicyName()).isEqualTo("least_request");
+    assertThat(childLbConfig.lbPolicy.getProvider().getPolicyName())
+        .isEqualTo("least_request_experimental");
     assertThat(((LeastRequestConfig) childLbConfig.lbPolicy.getConfig()).choiceCount).isEqualTo(3);
   }
 

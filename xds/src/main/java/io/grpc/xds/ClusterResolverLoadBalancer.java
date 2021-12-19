@@ -691,7 +691,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       // policy that balances load by weighing the product of each endpoint's weight and the
       // weight of the locality it belongs to.
       if (endpointLbPolicy.getProvider().getPolicyName().equals("round_robin")
-          || endpointLbPolicy.getProvider().getPolicyName().equals("least_request")) {
+          || endpointLbPolicy.getProvider().getPolicyName().equals("least_request_experimental")) {
         Map<Locality, Integer> localityWeights = prioritizedLocalityWeights.get(priority);
         Map<String, WeightedPolicySelection> targets = new HashMap<>();
         for (Locality locality : localityWeights.keySet()) {

@@ -503,7 +503,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       } else if (lbPolicy.equals("ring_hash")) {
         builder.setLbPolicy(LbPolicy.RING_HASH);
         builder.setRingHashLbConfig((RingHashLbConfig) ringHashLbConfig);
-      } else if (lbPolicy.equals("least_request")) {
+      } else if (lbPolicy.equals("least_request_experimental")) {
         builder.setLbPolicy(LbPolicy.LEAST_REQUEST);
         builder.setLeastRequestLbConfig((LeastRequestLbConfig) leastRequestLbConfig);
       } else {
@@ -523,7 +523,7 @@ public class ClientXdsClientV3Test extends ClientXdsClientTestBase {
       } else if (lbPolicy.equals("ring_hash")) {
         builder.setLbPolicy(LbPolicy.RING_HASH);
         builder.setRingHashLbConfig((RingHashLbConfig) ringHashLbConfig);
-      } else if (lbPolicy.equals("least_request")) {
+      } else if (lbPolicy.equals("least_request_experimental")) {
         builder.setLbPolicy(LbPolicy.LEAST_REQUEST);
         builder.setLeastRequestLbConfig((LeastRequestLbConfig) leastRequestLbConfig);
       } else {

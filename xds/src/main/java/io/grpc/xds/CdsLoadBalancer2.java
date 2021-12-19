@@ -192,7 +192,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         lbConfig = new RingHashConfig(root.result.minRingSize(), root.result.maxRingSize());
       }
       if (root.result.lbPolicy() == LbPolicy.LEAST_REQUEST) {
-        lbProvider = lbRegistry.getProvider("least_request");
+        lbProvider = lbRegistry.getProvider("least_request_experimental");
         lbConfig = new LeastRequestConfig(root.result.choiceCount());
       }
       if (lbProvider == null) {

@@ -119,7 +119,7 @@ abstract class XdsClient {
     // Only valid if lbPolicy is "ring_hash".
     abstract long maxRingSize();
 
-    // Only valid if lbPolicy is "least_request".
+    // Only valid if lbPolicy is "least_request_experimental".
     abstract int choiceCount();
 
     // Alternative resource name to be used in EDS requests.

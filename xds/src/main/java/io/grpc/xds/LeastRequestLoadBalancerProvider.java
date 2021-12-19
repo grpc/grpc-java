@@ -28,7 +28,7 @@ import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import java.util.Map;
 
 /**
- * Provider for the "least_request" balancing policy.
+ * Provider for the "least_request_experimental" balancing policy.
  */
 @Internal
 public final class LeastRequestLoadBalancerProvider extends LoadBalancerProvider {
@@ -61,7 +61,7 @@ public final class LeastRequestLoadBalancerProvider extends LoadBalancerProvider
 
   @Override
   public String getPolicyName() {
-    return "least_request";
+    return "least_request_experimental";
   }
 
   @Override

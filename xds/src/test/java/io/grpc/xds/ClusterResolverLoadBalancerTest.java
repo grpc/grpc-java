@@ -138,7 +138,7 @@ public class ClusterResolverLoadBalancerTest {
   private final PolicySelection ringHash = new PolicySelection(
       new FakeLoadBalancerProvider("ring_hash"), new RingHashConfig(10L, 100L));
   private final PolicySelection leastRequest = new PolicySelection(
-      new FakeLoadBalancerProvider("least_request"), new LeastRequestConfig(3));
+      new FakeLoadBalancerProvider("least_request_experimental"), new LeastRequestConfig(3));
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
   private final List<FakeNameResolver> resolvers = new ArrayList<>();
   private final FakeXdsClient xdsClient = new FakeXdsClient();
