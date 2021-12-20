@@ -221,7 +221,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Substream sub = new Substream(previousAttemptCount);
     // one tracer per substream
     final ClientStreamTracer bufferSizeTracer = new BufferSizeTracer(sub);
-    ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.InternalLimitedInfoFactory() {
+    ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
       @Override
       public ClientStreamTracer newClientStreamTracer(
           ClientStreamTracer.StreamInfo info, Metadata headers) {
