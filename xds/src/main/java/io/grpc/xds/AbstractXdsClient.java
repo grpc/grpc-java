@@ -56,6 +56,8 @@ import javax.annotation.Nullable;
  */
 final class AbstractXdsClient {
 
+  static final Status COMPLETED_BY_SERVER =
+      Status.UNAVAILABLE.withDescription("Closed by server");
   private static final String ADS_TYPE_URL_LDS_V2 = "type.googleapis.com/envoy.api.v2.Listener";
   private static final String ADS_TYPE_URL_LDS =
       "type.googleapis.com/envoy.config.listener.v3.Listener";
@@ -450,7 +452,7 @@ final class AbstractXdsClient {
     }
 
     final void handleRpcCompleted() {
-      handleRpcStreamClosed(Status.UNAVAILABLE.withDescription("Closed by server"));
+      handleRpcStreamClosed(COMPLETED_BY_SERVER);
     }
 
     private void handleRpcStreamClosed(Status error) {

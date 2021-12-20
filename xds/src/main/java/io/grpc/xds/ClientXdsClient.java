@@ -1860,6 +1860,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   public void handleStreamClosed(Status error) {
     syncContext.throwIfNotInThisSynchronizationContext();
     cleanUpResourceTimers();
+    if (error.equals(AbstractXdsClient.COMPLETED_BY_SERVER)) {
+      return;
+    }
     for (ResourceSubscriber subscriber : ldsResourceSubscribers.values()) {
       subscriber.onError(error);
     }
