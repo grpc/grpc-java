@@ -32,32 +32,35 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
- * Test client that verifies that grpclb failover into fallback mode works under different failure
- * modes. This client is suitable for testing fallback with any "grpclb" load-balanced service, but
- * is particularly meant to implement a set of test cases described in an internal doc titled
- * "DirectPath Cloud-to-Prod End-to-End Test Cases", section "gRPC DirectPath-to-CFE fallback".
+ * Test client that verifies that grpclb failover into fallback mode works under
+ * different failure modes.
+ * This client is suitable for testing fallback with any "grpclb" load-balanced
+ * service, but is particularly meant to implement a set of test cases described
+ * in an internal doc titled "DirectPath Cloud-to-Prod End-to-End Test Cases",
+ * section "gRPC DirectPath-to-CFE fallback".
  */
 public final class GrpclbFallbackTestClient {
-  private static final Logger logger = Logger.getLogger(GrpclbFallbackTestClient.class.getName());
+  private static final Logger logger =
+      Logger.getLogger(GrpclbFallbackTestClient.class.getName());
 
-  /** Entry point. */
+  /** 
+   * Entry point.
+   */
   public static void main(String[] args) throws Exception {
     final GrpclbFallbackTestClient client = new GrpclbFallbackTestClient();
     client.parseArgs(args);
-    Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread() {
-              @Override
-              @SuppressWarnings("CatchAndPrintStackTrace")
-              public void run() {
-                System.out.println("Shutting down");
-                try {
-                  client.tearDown();
-                } catch (Exception e) {
-                  e.printStackTrace();
-                }
-              }
-            });
+    Runtime.getRuntime().addShutdownHook(new Thread() {
+      @Override
+      @SuppressWarnings("CatchAndPrintStackTrace")
+      public void run() {
+        System.out.println("Shutting down");
+        try {
+          client.tearDown();
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+    });
     try {
       client.run();
     } finally {
@@ -118,32 +121,32 @@ public final class GrpclbFallbackTestClient {
       GrpclbFallbackTestClient c = new GrpclbFallbackTestClient();
       System.out.println(
           "Usage: [ARGS...]"
-              + "\n"
-              + "\n  --server_uri                          Server target. Default: "
-              + c.serverUri
-              + "\n  --custom_credentials_type             Name of Credentials to use. "
-              + "Default: "
-              + c.customCredentialsType
-              + "\n  --unroute_lb_and_backend_addrs_cmd    Shell command used to make "
-              + "LB and backend addresses unroutable. Default: "
-              + c.unrouteLbAndBackendAddrsCmd
-              + "\n  --blackhole_lb_and_backend_addrs_cmd  Shell command used to make "
-              + "LB and backend addresses black holed. Default: "
-              + c.blackholeLbAndBackendAddrsCmd
-              + "\n  --skip_net_cmd                        Skip unroute and blackhole "
-              + "shell command to allow setting the net config outside of the test "
-              + "client. Default: "
-              + c.skipNetCmd
-              + "\n  --test_case=TEST_CASE        Test case to run. Valid options are:"
-              + "\n      fast_fallback_before_startup : fallback before LB connection"
-              + "\n      fast_fallback_after_startup : fallback after startup due to "
-              + "LB/backend addresses becoming unroutable"
-              + "\n      slow_fallback_before_startup : fallback before LB connection "
-              + "due to LB/backend addresses being blackholed"
-              + "\n      slow_fallback_after_startup : fallback after startup due to "
-              + "LB/backend addresses becoming blackholed"
-              + "\n      Default: "
-              + c.testCase);
+         + "\n"
+         + "\n  --server_uri                          Server target. Default: "
+         + c.serverUri
+         + "\n  --custom_credentials_type             Name of Credentials to use. "
+         + "Default: "
+         + c.customCredentialsType
+         + "\n  --unroute_lb_and_backend_addrs_cmd    Shell command used to make "
+         + "LB and backend addresses unroutable. Default: "
+         + c.unrouteLbAndBackendAddrsCmd
+         + "\n  --blackhole_lb_and_backend_addrs_cmd  Shell command used to make "
+         + "LB and backend addresses black holed. Default: "
+         + c.blackholeLbAndBackendAddrsCmd
+         + "\n  --skip_net_cmd                        Skip unroute and blackhole "
+         + "shell command to allow setting the net config outside of the test "
+         + "client. Default: "
+         + c.skipNetCmd
+         + "\n  --test_case=TEST_CASE        Test case to run. Valid options are:"
+         + "\n      fast_fallback_before_startup : fallback before LB connection"
+         + "\n      fast_fallback_after_startup : fallback after startup due to "
+         + "LB/backend addresses becoming unroutable"
+         + "\n      slow_fallback_before_startup : fallback before LB connection "
+         + "due to LB/backend addresses being blackholed"
+         + "\n      slow_fallback_after_startup : fallback after startup due to "
+         + "LB/backend addresses becoming blackholed"
+         + "\n      Default: " + c.testCase
+      );
       System.exit(1);
     }
   }
@@ -152,8 +155,8 @@ public final class GrpclbFallbackTestClient {
     if (!customCredentialsType.equals("compute_engine_channel_creds")) {
       throw new AssertionError(
           "This test currently only supports "
-              + "--custom_credentials_type=compute_engine_channel_creds. "
-              + "TODO: add support for other types.");
+          + "--custom_credentials_type=compute_engine_channel_creds. "
+          + "TODO: add support for other types.");
     }
     ComputeEngineChannelBuilder builder = ComputeEngineChannelBuilder.forTarget(serverUri);
     builder.keepAliveTime(3600, TimeUnit.SECONDS);
@@ -189,7 +192,8 @@ public final class GrpclbFallbackTestClient {
     Process process = pb.start();
     logger.info(
         "Shell command merged stdout and stderr: "
-            + CharStreams.toString(new InputStreamReader(process.getInputStream(), UTF_8)));
+            + CharStreams.toString(
+                new InputStreamReader(process.getInputStream(), UTF_8)));
     int exitCode = process.waitFor();
     logger.info("Shell command exit code: " + exitCode);
     assertEquals(0, exitCode);
@@ -197,10 +201,14 @@ public final class GrpclbFallbackTestClient {
 
   private GrpclbRouteType doRpcAndGetPath(Deadline deadline) {
     logger.info("doRpcAndGetPath deadline: " + deadline);
-    final SimpleRequest request = SimpleRequest.newBuilder().setFillGrpclbRouteType(true).build();
+    final SimpleRequest request = SimpleRequest.newBuilder()
+        .setFillGrpclbRouteType(true)
+        .build();
     GrpclbRouteType result = GrpclbRouteType.GRPCLB_ROUTE_TYPE_UNKNOWN;
     try {
-      SimpleResponse response = blockingStub.withDeadline(deadline).unaryCall(request);
+      SimpleResponse response = blockingStub
+          .withDeadline(deadline)
+          .unaryCall(request);
       result = response.getGrpclbRouteType();
     } catch (StatusRuntimeException ex) {
       logger.warning("doRpcAndGetPath failed. Status: " + ex);
@@ -209,9 +217,8 @@ public final class GrpclbFallbackTestClient {
     logger.info("doRpcAndGetPath. GrpclbRouteType result: " + result);
     if (result != GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK
         && result != GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND) {
-      throw new AssertionError(
-          "Received invalid LB route type. This suggests "
-              + "that the server hasn't implemented this test correctly.");
+      throw new AssertionError("Received invalid LB route type. This suggests "
+          + "that the server hasn't implemented this test correctly.");
     }
     return result;
   }
@@ -220,15 +227,15 @@ public final class GrpclbFallbackTestClient {
     int fallbackRetryCount = 0;
     boolean fallBack = false;
     while (!fallbackDeadline.isExpired()) {
-      GrpclbRouteType grpclbRouteType = doRpcAndGetPath(Deadline.after(1, TimeUnit.SECONDS));
+      GrpclbRouteType grpclbRouteType = doRpcAndGetPath(
+          Deadline.after(1, TimeUnit.SECONDS));
       if (grpclbRouteType == GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND) {
-        throw new AssertionError(
-            "Got grpclb route type backend. Backends are "
-                + "supposed to be unreachable, so this test is broken");
+        throw new AssertionError("Got grpclb route type backend. Backends are "
+            + "supposed to be unreachable, so this test is broken");
       }
       if (grpclbRouteType == GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK) {
-        logger.info(
-            "Made one successful RPC to a fallback. Now expect the " + "same for the rest.");
+        logger.info("Made one successful RPC to a fallback. Now expect the "
+            + "same for the rest.");
         fallBack = true;
         break;
       } else {
