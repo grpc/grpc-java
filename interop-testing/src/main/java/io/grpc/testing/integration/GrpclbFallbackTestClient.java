@@ -125,8 +125,7 @@ public final class GrpclbFallbackTestClient {
           + "\n  --server_uri                          Server target. Default: "
           + c.serverUri
           + "\n  --custom_credentials_type             Name of Credentials to use. "
-          + "Default: "
-          + c.customCredentialsType
+          + "Default: " + c.customCredentialsType
           + "\n  --unroute_lb_and_backend_addrs_cmd    Shell command used to make "
           + "LB and backend addresses unroutable. Default: "
           + c.unrouteLbAndBackendAddrsCmd
