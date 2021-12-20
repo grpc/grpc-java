@@ -43,7 +43,7 @@ public final class GrpclbFallbackTestClient {
   private static final Logger logger =
       Logger.getLogger(GrpclbFallbackTestClient.class.getName());
 
-  /** 
+  /**
    * Entry point.
    */
   public static void main(String[] args) throws Exception {
@@ -121,31 +121,31 @@ public final class GrpclbFallbackTestClient {
       GrpclbFallbackTestClient c = new GrpclbFallbackTestClient();
       System.out.println(
           "Usage: [ARGS...]"
-         + "\n"
-         + "\n  --server_uri                          Server target. Default: "
-         + c.serverUri
-         + "\n  --custom_credentials_type             Name of Credentials to use. "
-         + "Default: "
-         + c.customCredentialsType
-         + "\n  --unroute_lb_and_backend_addrs_cmd    Shell command used to make "
-         + "LB and backend addresses unroutable. Default: "
-         + c.unrouteLbAndBackendAddrsCmd
-         + "\n  --blackhole_lb_and_backend_addrs_cmd  Shell command used to make "
-         + "LB and backend addresses black holed. Default: "
-         + c.blackholeLbAndBackendAddrsCmd
-         + "\n  --skip_net_cmd                        Skip unroute and blackhole "
-         + "shell command to allow setting the net config outside of the test "
-         + "client. Default: "
-         + c.skipNetCmd
-         + "\n  --test_case=TEST_CASE        Test case to run. Valid options are:"
-         + "\n      fast_fallback_before_startup : fallback before LB connection"
-         + "\n      fast_fallback_after_startup : fallback after startup due to "
-         + "LB/backend addresses becoming unroutable"
-         + "\n      slow_fallback_before_startup : fallback before LB connection "
-         + "due to LB/backend addresses being blackholed"
-         + "\n      slow_fallback_after_startup : fallback after startup due to "
-         + "LB/backend addresses becoming blackholed"
-         + "\n      Default: " + c.testCase
+          + "\n"
+          + "\n  --server_uri                          Server target. Default: "
+          + c.serverUri
+          + "\n  --custom_credentials_type             Name of Credentials to use. "
+          + "Default: "
+          + c.customCredentialsType
+          + "\n  --unroute_lb_and_backend_addrs_cmd    Shell command used to make "
+          + "LB and backend addresses unroutable. Default: "
+          + c.unrouteLbAndBackendAddrsCmd
+          + "\n  --blackhole_lb_and_backend_addrs_cmd  Shell command used to make "
+          + "LB and backend addresses black holed. Default: "
+          + c.blackholeLbAndBackendAddrsCmd
+          + "\n  --skip_net_cmd                        Skip unroute and blackhole "
+          + "shell command to allow setting the net config outside of the test "
+          + "client. Default: "
+          + c.skipNetCmd
+          + "\n  --test_case=TEST_CASE        Test case to run. Valid options are:"
+          + "\n      fast_fallback_before_startup : fallback before LB connection"
+          + "\n      fast_fallback_after_startup : fallback after startup due to "
+          + "LB/backend addresses becoming unroutable"
+          + "\n      slow_fallback_before_startup : fallback before LB connection "
+          + "due to LB/backend addresses being blackholed"
+          + "\n      slow_fallback_after_startup : fallback after startup due to "
+          + "LB/backend addresses becoming blackholed"
+          + "\n      Default: " + c.testCase
       );
       System.exit(1);
     }
@@ -190,10 +190,9 @@ public final class GrpclbFallbackTestClient {
     ProcessBuilder pb = new ProcessBuilder(cmd.split(" "));
     pb.redirectErrorStream(true);
     Process process = pb.start();
-    logger.info(
-        "Shell command merged stdout and stderr: "
-            + CharStreams.toString(
-                new InputStreamReader(process.getInputStream(), UTF_8)));
+    logger.info("Shell command merged stdout and stderr: "
+        + CharStreams.toString(
+            new InputStreamReader(process.getInputStream(), UTF_8)));
     int exitCode = process.waitFor();
     logger.info("Shell command exit code: " + exitCode);
     assertEquals(0, exitCode);
