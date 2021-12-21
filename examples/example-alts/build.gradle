@@ -56,16 +56,16 @@ startScripts.enabled = false
 
 
 task helloWorldAltsServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.alts.HelloWorldAltsServer'
+    mainClass = 'io.grpc.examples.alts.HelloWorldAltsServer'
     applicationName = 'hello-world-alts-server'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task helloWorldAltsClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.alts.HelloWorldAltsClient'
+    mainClass = 'io.grpc.examples.alts.HelloWorldAltsClient'
     applicationName = 'hello-world-alts-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 

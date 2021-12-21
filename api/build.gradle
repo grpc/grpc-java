@@ -2,7 +2,7 @@ plugins {
     id "java-library"
     id "maven-publish"
 
-    id "me.champeau.gradle.jmh"
+    id "me.champeau.jmh"
     id "ru.vyarus.animalsniffer"
 }
 

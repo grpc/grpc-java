@@ -64,16 +64,16 @@ sourceSets {
 startScripts.enabled = false
 
 task hellowWorldJwtAuthServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.jwtauth.AuthServer'
+    mainClass = 'io.grpc.examples.jwtauth.AuthServer'
     applicationName = 'auth-server'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task hellowWorldJwtAuthClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.jwtauth.AuthClient'
+    mainClass = 'io.grpc.examples.jwtauth.AuthClient'
     applicationName = 'auth-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
