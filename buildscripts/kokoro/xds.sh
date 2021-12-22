@@ -31,7 +31,7 @@ JAVA_OPTS=-Djava.util.logging.config.file=grpc-java/buildscripts/xds_logging.pro
     --test_case="all,path_matching,header_matching,circuit_breaking,timeout,fault_injection,csds" \
     --project_id=grpc-testing \
     --project_num=830293263384 \
-    --source_image=projects/grpc-testing/global/images/xds-test-server-4 \
+    --source_image=projects/grpc-testing/global/images/xds-test-server-5 \
     --path_to_server_binary=/java_server/grpc-java/interop-testing/build/install/grpc-interop-testing/bin/xds-test-server \
     --gcp_suffix=$(date '+%s') \
     --verbose \
