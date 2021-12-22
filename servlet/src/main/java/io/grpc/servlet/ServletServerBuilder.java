@@ -123,7 +123,8 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
     return internalServer.serverListener.transportCreated(serverTransport);
   }
 
-  protected InternalServer buildTransportServers(
+  @VisibleForTesting
+  InternalServer buildTransportServers(
       List<? extends Factory> streamTracerFactories) {
     checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.streamTracerFactories = streamTracerFactories;
