@@ -44,30 +44,65 @@ public final class GoogleDefaultChannelCredentials {
    * as fallback.
    */
   public static ChannelCredentials create() {
-    ChannelCredentials nettyCredentials =
-        InternalNettyChannelCredentials.create(createClientFactory());
-    CallCredentials callCredentials;
-    try {
-      callCredentials = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
-    } catch (IOException e) {
-      callCredentials = new FailingCallCredentials(
-          Status.UNAUTHENTICATED
-              .withDescription("Failed to get Google default credentials")
-              .withCause(e));
-    }
-    return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
+    return newBuilder().build();
   }
 
-  private static InternalProtocolNegotiator.ClientFactory createClientFactory() {
-    SslContext sslContext;
-    try {
-      sslContext = GrpcSslContexts.forClient().build();
-    } catch (SSLException e) {
-      throw new RuntimeException(e);
+  /**
+   * Returns a new instance of {@link Builder}.
+   *
+   * @since 1.43.0
+   */
+  public static Builder newBuilder() {
+    return new Builder();
+  }
+
+  /**
+   * Builder for {@link GoogleDefaultChannelCredentials} instances.
+   *
+   * @since 1.43.0
+   */
+  public static final class Builder {
+    private CallCredentials callCredentials;
+
+    private Builder() {}
+
+    /** Constructs GoogleDefaultChannelCredentials with a given call credential. */
+    public Builder callCredentials(CallCredentials callCreds) {
+      callCredentials = callCreds;
+      return this;
     }
-    return new GoogleDefaultProtocolNegotiatorFactory(
-        /* targetServiceAccounts= */ ImmutableList.<String>of(),
-        SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
-        sslContext);
+
+    /** Builds a GoogleDefaultChannelCredentials instance. */
+    public ChannelCredentials build() {
+      ChannelCredentials nettyCredentials =
+          InternalNettyChannelCredentials.create(createClientFactory());
+      if (callCredentials != null) {
+        return CompositeChannelCredentials.create(nettyCredentials, callCredentials);
+      }
+      CallCredentials callCreds;
+      try {
+        callCreds = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
+      } catch (IOException e) {
+        callCreds =
+            new FailingCallCredentials(
+                Status.UNAUTHENTICATED
+                    .withDescription("Failed to get Google default credentials")
+                    .withCause(e));
+      }
+      return CompositeChannelCredentials.create(nettyCredentials, callCreds);
+    }
+
+    private static InternalProtocolNegotiator.ClientFactory createClientFactory() {
+      SslContext sslContext;
+      try {
+        sslContext = GrpcSslContexts.forClient().build();
+      } catch (SSLException e) {
+        throw new RuntimeException(e);
+      }
+      return new GoogleDefaultProtocolNegotiatorFactory(
+          /* targetServiceAccounts= */ ImmutableList.<String>of(),
+          SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
+          sslContext);
+    }
   }
 }

@@ -26,6 +26,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import java.util.ArrayList;
@@ -73,9 +74,9 @@ public final class ClusterImplLoadBalancerProvider extends LoadBalancerProvider 
     // Resource name used in discovering endpoints via EDS. Only valid for EDS clusters.
     @Nullable
     final String edsServiceName;
-    // Load report server name. Null if load reporting is disabled.
+    // Load report server info. Null if load reporting is disabled.
     @Nullable
-    final String lrsServerName;
+    final ServerInfo lrsServerInfo;
     // Cluster-level max concurrent request threshold. Null if not specified.
     @Nullable
     final Long maxConcurrentRequests;
@@ -88,12 +89,12 @@ public final class ClusterImplLoadBalancerProvider extends LoadBalancerProvider 
     final PolicySelection childPolicy;
 
     ClusterImplConfig(String cluster, @Nullable String edsServiceName,
-        @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+        @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
         List<DropOverload> dropCategories, PolicySelection childPolicy,
         @Nullable UpstreamTlsContext tlsContext) {
       this.cluster = checkNotNull(cluster, "cluster");
       this.edsServiceName = edsServiceName;
-      this.lrsServerName = lrsServerName;
+      this.lrsServerInfo = lrsServerInfo;
       this.maxConcurrentRequests = maxConcurrentRequests;
       this.tlsContext = tlsContext;
       this.dropCategories = Collections.unmodifiableList(
@@ -106,7 +107,7 @@ public final class ClusterImplLoadBalancerProvider extends LoadBalancerProvider 
       return MoreObjects.toStringHelper(this)
           .add("cluster", cluster)
           .add("edsServiceName", edsServiceName)
-          .add("lrsServerName", lrsServerName)
+          .add("lrsServerInfo", lrsServerInfo)
           .add("maxConcurrentRequests", maxConcurrentRequests)
           // Exclude tlsContext as its string representation is cumbersome.
           .add("dropCategories", dropCategories)

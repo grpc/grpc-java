@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -32,6 +34,8 @@ import javax.annotation.Nullable;
  */
 @Internal
 public abstract class Bootstrapper {
+
+  static final String XDSTP_SCHEME = "xdstp:";
 
   /**
    * Returns system-loaded bootstrap configuration.
@@ -104,12 +108,13 @@ public abstract class Bootstrapper {
      * <p>If the same server is listed in multiple authorities, the entries will be de-duped (i.e.,
      * resources for both authorities will be fetched on the same ADS stream).
      *
-     * <p>If empty, the top-level server list {@link BootstrapInfo#servers()} will be used.
+     * <p>Defaults to the top-level server list {@link BootstrapInfo#servers()}. Must not be empty.
      */
     abstract ImmutableList<ServerInfo> xdsServers();
 
     static AuthorityInfo create(
         String clientListenerResourceNameTemplate, List<ServerInfo> xdsServers) {
+      checkArgument(!xdsServers.isEmpty(), "xdsServers must not be empty");
       return new AutoValue_Bootstrapper_AuthorityInfo(
           clientListenerResourceNameTemplate, ImmutableList.copyOf(xdsServers));
     }
@@ -121,7 +126,7 @@ public abstract class Bootstrapper {
   @AutoValue
   @Internal
   public abstract static class BootstrapInfo {
-    /** Returns the list of xDS servers to be connected to. */
+    /** Returns the list of xDS servers to be connected to. Must not be empty. */
     abstract ImmutableList<ServerInfo> servers();
 
     /** Returns the node identifier to be included in xDS requests. */

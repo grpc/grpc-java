@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import io.grpc.Status;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
@@ -31,6 +32,7 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -128,10 +130,10 @@ abstract class XdsClient {
     @Nullable
     abstract String dnsHostName();
 
-    // Load report server name for reporting loads via LRS.
+    // Load report server info for reporting loads via LRS.
     // Only valid for EDS or LOGICAL_DNS cluster.
     @Nullable
-    abstract String lrsServerName();
+    abstract ServerInfo lrsServerInfo();
 
     // Max number of concurrent requests can be sent to this cluster.
     // Only valid for EDS or LOGICAL_DNS cluster.
@@ -159,7 +161,7 @@ abstract class XdsClient {
     }
 
     static Builder forEds(String clusterName, @Nullable String edsServiceName,
-        @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+        @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
         @Nullable UpstreamTlsContext upstreamTlsContext) {
       return new AutoValue_XdsClient_CdsUpdate.Builder()
           .clusterName(clusterName)
@@ -167,13 +169,13 @@ abstract class XdsClient {
           .minRingSize(0)
           .maxRingSize(0)
           .edsServiceName(edsServiceName)
-          .lrsServerName(lrsServerName)
+          .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
           .upstreamTlsContext(upstreamTlsContext);
     }
 
     static Builder forLogicalDns(String clusterName, String dnsHostName,
-        @Nullable String lrsServerName, @Nullable Long maxConcurrentRequests,
+        @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
         @Nullable UpstreamTlsContext upstreamTlsContext) {
       return new AutoValue_XdsClient_CdsUpdate.Builder()
           .clusterName(clusterName)
@@ -181,7 +183,7 @@ abstract class XdsClient {
           .minRingSize(0)
           .maxRingSize(0)
           .dnsHostName(dnsHostName)
-          .lrsServerName(lrsServerName)
+          .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
           .upstreamTlsContext(upstreamTlsContext);
     }
@@ -205,7 +207,7 @@ abstract class XdsClient {
           .add("maxRingSize", maxRingSize())
           .add("edsServiceName", edsServiceName())
           .add("dnsHostName", dnsHostName())
-          .add("lrsServerName", lrsServerName())
+          .add("lrsServerInfo", lrsServerInfo())
           .add("maxConcurrentRequests", maxConcurrentRequests())
           // Exclude upstreamTlsContext as its string representation is cumbersome.
           .add("prioritizedClusterNames", prioritizedClusterNames())
@@ -244,7 +246,7 @@ abstract class XdsClient {
       protected abstract Builder dnsHostName(String dnsHostName);
 
       // Private, use one of the static factory methods instead.
-      protected abstract Builder lrsServerName(String lrsServerName);
+      protected abstract Builder lrsServerInfo(ServerInfo lrsServerInfo);
 
       // Private, use one of the static factory methods instead.
       protected abstract Builder maxConcurrentRequests(Long maxConcurrentRequests);
@@ -492,13 +494,6 @@ abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
-  /**
-   * Returns the latest accepted version of the given resource type.
-   */
-  String getCurrentVersion(ResourceType type) {
-    throw new UnsupportedOperationException();
-  }
-
   Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
     throw new UnsupportedOperationException();
   }
@@ -566,7 +561,8 @@ abstract class XdsClient {
    * use {@link ClusterDropStats#release} to release its <i>hard</i> reference when it is safe to
    * stop reporting dropped RPCs for the specified cluster in the future.
    */
-  ClusterDropStats addClusterDropStats(String clusterName, @Nullable String edsServiceName) {
+  ClusterDropStats addClusterDropStats(
+      ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName) {
     throw new UnsupportedOperationException();
   }
 
@@ -579,7 +575,47 @@ abstract class XdsClient {
    * future.
    */
   ClusterLocalityStats addClusterLocalityStats(
-      String clusterName, @Nullable String edsServiceName, Locality locality) {
+      ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
+      Locality locality) {
     throw new UnsupportedOperationException();
+  }
+
+  interface XdsResponseHandler {
+    /** Called when an LDS response is received. */
+    void handleLdsResponse(
+        ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce);
+
+    /** Called when an RDS response is received. */
+    void handleRdsResponse(
+        ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce);
+
+    /** Called when an CDS response is received. */
+    void handleCdsResponse(
+        ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce);
+
+    /** Called when an EDS response is received. */
+    void handleEdsResponse(
+        ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce);
+
+    /** Called when the ADS stream is closed passively. */
+    // Must be synchronized.
+    void handleStreamClosed(Status error);
+
+    /** Called when the ADS stream has been recreated. */
+    // Must be synchronized.
+    void handleStreamRestarted(ServerInfo serverInfo);
+  }
+
+  interface ResourceStore {
+    /**
+     * Returns the collection of resources currently subscribing to or {@code null} if not
+     * subscribing to any resources for the given type.
+     *
+     * <p>Note an empty collection indicates subscribing to resources of the given type with
+     * wildcard mode.
+     */
+    // Must be synchronized.
+    @Nullable
+    Collection<String> getSubscribedResources(ServerInfo serverInfo, ResourceType type);
   }
 }

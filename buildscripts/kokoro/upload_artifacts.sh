@@ -24,6 +24,9 @@ LOCAL_OTHER_ARTIFACTS="$KOKORO_GFILE_DIR"/github/grpc-java/artifacts/
 # cronet artifact from linux job:
 [[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'grpc-cronet-*.aar' | wc -l)" != '0' ]]
 
+# binder artifact from linux job:
+[[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'grpc-binder-*.aar' | wc -l)" != '0' ]]
+
 # from linux job:
 [[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-linux-x86_64.exe' | wc -l)" != '0' ]]
 [[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-linux-x86_32.exe' | wc -l)" != '0' ]]
@@ -33,6 +36,8 @@ LOCAL_OTHER_ARTIFACTS="$KOKORO_GFILE_DIR"/github/grpc-java/artifacts/
 
 # from macos job:
 [[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-osx-x86_64.exe' | wc -l)" != '0' ]]
+# copy all x86 artifacts to aarch until native artifacts are built
+find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-osx-x86_64.exe*' -exec bash -c 'cp "${0}" "${0/x86/aarch}"' {} \;
 
 # from windows job:
 [[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-windows-x86_64.exe' | wc -l)" != '0' ]]

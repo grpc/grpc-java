@@ -128,9 +128,9 @@ final class CachingRlsLbClient {
     synchronizationContext = helper.getSynchronizationContext();
     lbPolicyConfig = checkNotNull(builder.lbPolicyConfig, "lbPolicyConfig");
     RouteLookupConfig rlsConfig = lbPolicyConfig.getRouteLookupConfig();
-    maxAgeNanos = TimeUnit.MILLISECONDS.toNanos(rlsConfig.getMaxAgeInMillis());
-    staleAgeNanos = TimeUnit.MILLISECONDS.toNanos(rlsConfig.getStaleAgeInMillis());
-    callTimeoutNanos = TimeUnit.MILLISECONDS.toNanos(rlsConfig.getLookupServiceTimeoutInMillis());
+    maxAgeNanos = rlsConfig.getMaxAgeInNanos();
+    staleAgeNanos = rlsConfig.getStaleAgeInNanos();
+    callTimeoutNanos = rlsConfig.getLookupServiceTimeoutInNanos();
     timeProvider = checkNotNull(builder.timeProvider, "timeProvider");
     throttler = checkNotNull(builder.throttler, "throttler");
     linkedHashLruCache =

@@ -18,14 +18,18 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.github.xds.type.v3.TypedStruct;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Message;
 import com.google.protobuf.StringValue;
+import com.google.protobuf.Struct;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.UInt64Value;
+import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -94,7 +98,11 @@ import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.envoyproxy.envoy.type.v3.Int64Range;
+import io.grpc.ClientInterceptor;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.LoadBalancer;
 import io.grpc.Status.Code;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.ClientXdsClient.StructOrError;
 import io.grpc.xds.Endpoints.LbEndpoint;
@@ -114,7 +122,9 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -125,6 +135,9 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class ClientXdsClientDataTest {
+
+  private static final ServerInfo LRS_SERVER_INFO =
+      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create(), true);
 
   @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
   @Rule
@@ -874,6 +887,107 @@ public class ClientXdsClientDataTest {
     assertThat(ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry, true)).isNull();
   }
 
+  private static class SimpleFilterConfig implements FilterConfig {
+    private final Message message;
+
+    public SimpleFilterConfig(Message rawProtoMessage) {
+      message = rawProtoMessage;
+    }
+
+    public Message getConfig() {
+      return message;
+    }
+
+    @Override
+    public String typeUrl() {
+      return null;
+    }
+  }
+
+  private static class TestFilter implements io.grpc.xds.Filter,
+      io.grpc.xds.Filter.ClientInterceptorBuilder {
+    @Override
+    public String[] typeUrls() {
+      return new String[]{"test-url"};
+    }
+
+    @Override
+    public ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage) {
+      return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
+    }
+
+    @Override
+    public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
+        Message rawProtoMessage) {
+      return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
+    }
+
+    @Nullable
+    @Override
+    public ClientInterceptor buildClientInterceptor(FilterConfig config,
+                                                    @Nullable FilterConfig overrideConfig,
+                                                    LoadBalancer.PickSubchannelArgs args,
+                                                    ScheduledExecutorService scheduler) {
+      return null;
+    }
+  }
+
+  @Test
+  public void parseHttpFilter_typedStructMigration() {
+    filterRegistry.register(new TestFilter());
+    Struct rawStruct = Struct.newBuilder()
+        .putFields("name", Value.newBuilder().setStringValue("default").build())
+        .build();
+    HttpFilter httpFilter = HttpFilter.newBuilder()
+        .setIsOptional(true)
+        .setTypedConfig(Any.pack(
+            com.github.udpa.udpa.type.v1.TypedStruct.newBuilder()
+                .setTypeUrl("test-url")
+                .setValue(rawStruct)
+        .build())).build();
+    FilterConfig config = ClientXdsClient.parseHttpFilter(httpFilter, filterRegistry,
+        true).getStruct();
+    assertThat(((SimpleFilterConfig)config).getConfig()).isEqualTo(rawStruct);
+
+    HttpFilter httpFilterNewTypeStruct = HttpFilter.newBuilder()
+        .setIsOptional(true)
+        .setTypedConfig(Any.pack(
+            TypedStruct.newBuilder()
+                .setTypeUrl("test-url")
+                .setValue(rawStruct)
+                .build())).build();
+    config = ClientXdsClient.parseHttpFilter(httpFilterNewTypeStruct, filterRegistry,
+        true).getStruct();
+    assertThat(((SimpleFilterConfig)config).getConfig()).isEqualTo(rawStruct);
+  }
+
+  @Test
+  public void parseOverrideHttpFilter_typedStructMigration() {
+    filterRegistry.register(new TestFilter());
+    Struct rawStruct0 = Struct.newBuilder()
+        .putFields("name", Value.newBuilder().setStringValue("default0").build())
+        .build();
+    Struct rawStruct1 = Struct.newBuilder()
+        .putFields("name", Value.newBuilder().setStringValue("default1").build())
+        .build();
+    Map<String, Any> rawFilterMap = ImmutableMap.of(
+        "struct-0", Any.pack(
+            com.github.udpa.udpa.type.v1.TypedStruct.newBuilder()
+                .setTypeUrl("test-url")
+                .setValue(rawStruct0)
+                .build()),
+          "struct-1", Any.pack(
+              TypedStruct.newBuilder()
+                  .setTypeUrl("test-url")
+                  .setValue(rawStruct1)
+                  .build())
+    );
+    Map<String, FilterConfig> map = ClientXdsClient.parseOverrideFilterConfigs(rawFilterMap,
+        filterRegistry).getStruct();
+    assertThat(((SimpleFilterConfig)map.get("struct-0")).getConfig()).isEqualTo(rawStruct0);
+    assertThat(((SimpleFilterConfig)map.get("struct-1")).getConfig()).isEqualTo(rawStruct1);
+  }
+
   @Test
   public void parseHttpFilter_unsupportedAndRequired() {
     HttpFilter httpFilter = HttpFilter.newBuilder()
@@ -1239,7 +1353,8 @@ public class ClientXdsClientDataTest {
         .setLbPolicy(LbPolicy.RING_HASH)
         .build();
 
-    CdsUpdate update = ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null);
+    CdsUpdate update = ClientXdsClient.parseCluster(
+        cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
     assertThat(update.lbPolicy()).isEqualTo(CdsUpdate.LbPolicy.RING_HASH);
     assertThat(update.minRingSize())
         .isEqualTo(ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE);
@@ -1266,7 +1381,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "Cluster cluster-foo.googleapis.com: transport-socket-matches not supported.");
-    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null);
+    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
   }
 
   @Test
@@ -1291,7 +1406,7 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
-    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null);
+    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
   }
 
   @Test
@@ -1318,7 +1433,7 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
-    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null);
+    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
   }
 
   @Test
@@ -1587,7 +1702,7 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
-  public void parseFilterChain_noName_generatedUuid() throws ResourceInvalidException {
+  public void parseFilterChain_noName() throws ResourceInvalidException {
     FilterChain filterChain1 =
         FilterChain.newBuilder()
             .setFilterChainMatch(FilterChainMatch.getDefaultInstance())
@@ -1615,7 +1730,7 @@ public class ClientXdsClientDataTest {
     EnvoyServerProtoData.FilterChain parsedFilterChain2 = ClientXdsClient.parseFilterChain(
         filterChain2, new HashSet<String>(), null, filterRegistry, null,
         null, true /* does not matter */);
-    assertThat(parsedFilterChain1.getName()).isNotEqualTo(parsedFilterChain2.getName());
+    assertThat(parsedFilterChain1.getName()).isEqualTo(parsedFilterChain2.getName());
   }
 
   @Test

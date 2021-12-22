@@ -323,17 +323,18 @@ public abstract class BinderTransport
   @GuardedBy("this")
   final void sendSetupTransaction(IBinder iBinder) {
     Parcel parcel = Parcel.obtain();
-    parcel.writeInt(WIRE_FORMAT_VERSION);
-    parcel.writeStrongBinder(incomingBinder);
     try {
+      parcel.writeInt(WIRE_FORMAT_VERSION);
+      parcel.writeStrongBinder(incomingBinder);
       if (!iBinder.transact(SETUP_TRANSPORT, parcel, null, IBinder.FLAG_ONEWAY)) {
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Failed sending SETUP_TRANSPORT transaction"), true);
       }
     } catch (RemoteException re) {
       shutdownInternal(statusFromRemoteException(re), true);
+    } finally {
+      parcel.recycle();
     }
-    parcel.recycle();
   }
 
   @GuardedBy("this")
@@ -346,11 +347,14 @@ public abstract class BinderTransport
       }
       Parcel parcel = Parcel.obtain();
       try {
+        // Send empty flags to avoid a memory leak linked to empty parcels (b/207778694).
+        parcel.writeInt(0);
         outgoingBinder.transact(SHUTDOWN_TRANSPORT, parcel, null, IBinder.FLAG_ONEWAY);
       } catch (RemoteException re) {
         // Ignore.
+      } finally {
+        parcel.recycle();
       }
-      parcel.recycle();
     }
   }
 
@@ -361,8 +365,8 @@ public abstract class BinderTransport
       throw Status.FAILED_PRECONDITION.withDescription("Transport not ready.").asException();
     } else {
       Parcel parcel = Parcel.obtain();
-      parcel.writeInt(id);
       try {
+        parcel.writeInt(id);
         outgoingBinder.transact(PING, parcel, null, IBinder.FLAG_ONEWAY);
       } catch (RemoteException re) {
         throw statusFromRemoteException(re).asException();
@@ -408,15 +412,16 @@ public abstract class BinderTransport
 
   final void sendOutOfBandClose(int callId, Status status) {
     Parcel parcel = Parcel.obtain();
-    parcel.writeInt(0); // Placeholder for flags. Will be filled in below.
-    int flags = TransactionUtils.writeStatus(parcel, status);
-    TransactionUtils.fillInFlags(parcel, flags | TransactionUtils.FLAG_OUT_OF_BAND_CLOSE);
     try {
+      parcel.writeInt(0); // Placeholder for flags. Will be filled in below.
+      int flags = TransactionUtils.writeStatus(parcel, status);
+      TransactionUtils.fillInFlags(parcel, flags | TransactionUtils.FLAG_OUT_OF_BAND_CLOSE);
       sendTransaction(callId, parcel);
     } catch (StatusException e) {
       logger.log(Level.WARNING, "Failed sending oob close transaction", e);
+    } finally {
+      parcel.recycle();
     }
-    parcel.recycle();
   }
 
   @Override
@@ -505,16 +510,17 @@ public abstract class BinderTransport
     long n = numIncomingBytes.get();
     acknowledgedIncomingBytes = n;
     Parcel parcel = Parcel.obtain();
-    parcel.writeLong(n);
     try {
+      parcel.writeLong(n);
       if (!iBinder.transact(ACKNOWLEDGE_BYTES, parcel, null, IBinder.FLAG_ONEWAY)) {
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Failed sending ack bytes transaction"), true);
       }
     } catch (RemoteException re) {
       shutdownInternal(statusFromRemoteException(re), true);
+    } finally {
+      parcel.recycle();
     }
-    parcel.recycle();
   }
 
   @GuardedBy("this")
@@ -907,3 +913,4 @@ public abstract class BinderTransport
     return Status.INTERNAL.withCause(e);
   }
 }
+

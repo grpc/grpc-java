@@ -69,7 +69,7 @@ public class GoogleCloudToProdNameResolverTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private static final URI TARGET_URI = URI.create("google-c2p:///googleapis.com");
+  private static final URI TARGET_URI = URI.create("google-c2p-experimental:///googleapis.com");
   private static final String ZONE = "us-central1-a";
   private static final int DEFAULT_PORT = 887;
 

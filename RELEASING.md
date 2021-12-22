@@ -10,19 +10,6 @@ We deploy GRPC to Maven Central under the following systems:
 
 Other systems may also work, but we haven't verified them.
 
-Prerequisites
--------------
-
-### Set Up OSSRH Account
-
-If you haven't deployed artifacts to Maven Central before, you need to setup
-your OSSRH (OSS Repository Hosting) account.
-- Follow the instructions on [this
-  page](https://central.sonatype.org/pages/ossrh-guide.html) to set up an
-  account with OSSRH.
-  - You only need to create the account, not set up a new project
-  - Contact a gRPC maintainer to add your account after you have created it.
-
 Common Variables
 ----------------
 Many of the following commands expect release-specific variables to be set. Set
