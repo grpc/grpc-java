@@ -22,10 +22,6 @@ import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.testing.integration.AbstractInteropTest;
 import java.io.File;
-import java.util.logging.Handler;
-import java.util.logging.Level;
-import java.util.logging.LogManager;
-import java.util.logging.Logger;
 import org.apache.catalina.Context;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.startup.Tomcat;
@@ -33,7 +29,6 @@ import org.apache.coyote.http2.Http2Protocol;
 import org.apache.tomcat.util.http.fileupload.FileUtils;
 import org.junit.After;
 import org.junit.AfterClass;
-import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -46,17 +41,6 @@ public class TomcatInteropTest extends AbstractInteropTest {
   private static final String MYAPP = "/grpc.testing.TestService";
   private int port;
   private Tomcat server;
-
-  @Before
-  public void before() {
-    Logger rootLogger = LogManager.getLogManager().getLogger("");
-    // rootLogger.setLevel(Level.ALL);
-    for (Handler h : rootLogger.getHandlers()) {
-      h.setLevel(Level.FINEST);
-    }
-    Logger.getLogger(ServletServerStream.class.getName()).setLevel(Level.FINEST);
-    Logger.getLogger(AsyncServletOutputStreamWriter.class.getName()).setLevel(Level.FINEST);
-  }
 
   @After
   @Override
