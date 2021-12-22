@@ -43,6 +43,7 @@ import io.grpc.okhttp.internal.framed.Header;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
@@ -243,7 +244,7 @@ public class OkHttpClientStreamTest {
         eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
     verify(transport, times(0)).streamReadyToStart(isA(OkHttpClientStream.class));
 
-    byte[] msg = "request".getBytes(Charset.forName("UTF-8"));
+    byte[] msg = "request".getBytes(StandardCharsets.UTF_8);
     stream.writeMessage(new ByteArrayInputStream(msg));
     stream.halfClose();
     verify(transport).streamReadyToStart(eq(stream));

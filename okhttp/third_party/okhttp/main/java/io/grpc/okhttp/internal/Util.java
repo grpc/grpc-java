@@ -27,6 +27,7 @@ import java.lang.reflect.Array;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -47,7 +48,7 @@ public final class Util {
   public static final String[] EMPTY_STRING_ARRAY = new String[0];
 
   /** A cheap and type-safe constant for the UTF-8 Charset. */
-  public static final Charset UTF_8 = Charset.forName("UTF-8");
+  public static final Charset UTF_8 = StandardCharsets.UTF_8;
 
   private Util() {
   }
