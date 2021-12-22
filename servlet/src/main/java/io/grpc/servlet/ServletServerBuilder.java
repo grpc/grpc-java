@@ -32,7 +32,6 @@ import io.grpc.InternalLogId;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
-import io.grpc.ServerStreamTracer.Factory;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
@@ -125,7 +124,7 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
 
   @VisibleForTesting
   InternalServer buildTransportServers(
-      List<? extends Factory> streamTracerFactories) {
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
     checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.streamTracerFactories = streamTracerFactories;
     internalServer = new InternalServerImpl();
