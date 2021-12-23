@@ -309,7 +309,7 @@ public final class ServletAdapter {
     public void onAllDataRead() {
       logger.log(FINE, "[{0}] onAllDataRead", logId);
       stream.transportState().runOnTransportThread(() ->
-          stream.transportState().inboundDataReceived(ReadableBuffers.wrap(new byte[] {}), true));
+          stream.transportState().inboundDataReceived(ReadableBuffers.empty(), true));
     }
 
     @Override
