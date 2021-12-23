@@ -81,12 +81,12 @@ dependencies {
         exclude group: 'io.grpc', module: 'grpc-xds'
     }
 
-    tomcatTestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:10.0.12'
+    tomcatTestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:10.0.14'
 
     jettyTestImplementation "org.eclipse.jetty:jetty-servlet:11.0.7",
             "org.eclipse.jetty.http2:http2-server:11.0.7"
 
-    undertowTestImplementation 'io.undertow:undertow-servlet-jakartaee9:2.2.12.Final'
+    undertowTestImplementation 'io.undertow:undertow-servlet-jakartaee9:2.2.13.Final'
 }
 
 // Set up individual classpaths for each test, to avoid any mismatch,

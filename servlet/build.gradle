@@ -60,9 +60,9 @@ dependencies {
         exclude group: 'io.grpc', module: 'grpc-xds'
     }
 
-    undertowTestImplementation 'io.undertow:undertow-servlet:2.2.12.Final'
+    undertowTestImplementation 'io.undertow:undertow-servlet:2.2.14.Final'
 
-    tomcatTestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:9.0.54'
+    tomcatTestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:9.0.56'
 
     jettyTestImplementation "org.eclipse.jetty:jetty-servlet:${jettyVersion}",
             "org.eclipse.jetty.http2:http2-server:${jettyVersion}"
