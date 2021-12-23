@@ -415,7 +415,9 @@ public class ProtocolNegotiatorsTest {
         .trustManager(caCert)
         .build();
     Status status = expectFailedHandshake(channelCreds, serverCreds);
-    assertThat(status.getDescription()).isEqualTo("ssl exception");
+    if (!"ssl exception".equals(status.getDescription())) {
+      assertThat(status.getDescription()).startsWith("io exception");
+    }
   }
 
   @Test
