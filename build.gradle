@@ -452,7 +452,7 @@ subprojects {
             publishing {
                 publications {
                     maven {
-                        if (project.name != 'grpc-netty-shaded' && project.name != 'grpc-servlet-jakarta') {
+                        if (project.name != 'grpc-netty-shaded') {
                             from components.java
                         }
                     }
