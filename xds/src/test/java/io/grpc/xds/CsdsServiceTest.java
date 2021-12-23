@@ -81,7 +81,7 @@ public class CsdsServiceTest {
     }
 
     @Override
-    Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
+    Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
       return ImmutableMap.of();
     }
   };
@@ -130,7 +130,7 @@ public class CsdsServiceTest {
     public void fetchClientConfig_unexpectedException() {
       XdsClient throwingXdsClient = new XdsClient() {
         @Override
-        Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
+        Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
           throw new IllegalArgumentException("IllegalArgumentException");
         }
       };
@@ -302,20 +302,13 @@ public class CsdsServiceTest {
         }
 
         @Override
-        Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
-          switch (type) {
-            case LDS:
-              return ImmutableMap.of("subscribedResourceName." + type.name(), METADATA_ACKED_LDS);
-            case RDS:
-              return ImmutableMap.of("subscribedResourceName." + type.name(), METADATA_ACKED_RDS);
-            case CDS:
-              return ImmutableMap.of("subscribedResourceName." + type.name(), METADATA_ACKED_CDS);
-            case EDS:
-              return ImmutableMap.of("subscribedResourceName." + type.name(), METADATA_ACKED_EDS);
-            case UNKNOWN:
-            default:
-              throw new AssertionError("Unexpected resource name");
-          }
+        Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
+          return new ImmutableMap.Builder<ResourceType, Map<String, ResourceMetadata>>()
+            .put(LDS, ImmutableMap.of("subscribedResourceName.LDS", METADATA_ACKED_LDS))
+            .put(RDS, ImmutableMap.of("subscribedResourceName.RDS", METADATA_ACKED_RDS))
+            .put(CDS, ImmutableMap.of("subscribedResourceName.CDS", METADATA_ACKED_CDS))
+            .put(EDS, ImmutableMap.of("subscribedResourceName.EDS", METADATA_ACKED_EDS))
+            .build();
         }
       });
 

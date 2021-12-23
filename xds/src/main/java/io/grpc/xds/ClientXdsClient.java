@@ -28,7 +28,10 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.util.concurrent.SettableFuture;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.google.protobuf.Any;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -119,8 +122,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import javax.annotation.Nullable;
 
 /**
@@ -159,6 +164,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"))
           && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"));
 
+  private static final long METADATA_SYNC_TIMEOUT_SEC = 1;
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
@@ -2028,12 +2034,34 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   }
 
   @Override
-  Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
-    Map<String, ResourceMetadata> metadataMap = new HashMap<>();
-    for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
-      metadataMap.put(entry.getKey(), entry.getValue().metadata);
+  Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
+    final SettableFuture<Map<ResourceType, Map<String, ResourceMetadata>>> future =
+        SettableFuture.create();
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        // A map from ResourceType to a map (ResourceName: ResourceMetadata)
+        ImmutableMap.Builder<ResourceType, Map<String, ResourceMetadata>> metadataSnapshot =
+            ImmutableMap.builder();
+        for (ResourceType type : ResourceType.values()) {
+          if (type == ResourceType.UNKNOWN) {
+            continue;
+          }
+          ImmutableMap.Builder<String, ResourceMetadata> metadataMap = ImmutableMap.builder();
+          for (Map.Entry<String, ResourceSubscriber> resourceEntry
+              : getSubscribedResourcesMap(type).entrySet()) {
+            metadataMap.put(resourceEntry.getKey(), resourceEntry.getValue().metadata);
+          }
+          metadataSnapshot.put(type, metadataMap.build());
+        }
+        future.set(metadataSnapshot.build());
+      }
+    });
+    try {
+      return future.get(METADATA_SYNC_TIMEOUT_SEC, TimeUnit.SECONDS);
+    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+      throw new UncheckedExecutionException(e);
     }
-    return metadataMap;
   }
 
   @Override

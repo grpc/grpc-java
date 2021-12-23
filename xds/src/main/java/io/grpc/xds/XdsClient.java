@@ -494,7 +494,12 @@ abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
-  Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
+  /**
+   * Returns the map containing the {@link ResourceMetadata} of the subscribed resources for the
+   * given resource type, indexed by the resource name.
+   */
+  // Must be synchronized.
+  Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
     throw new UnsupportedOperationException();
   }
 

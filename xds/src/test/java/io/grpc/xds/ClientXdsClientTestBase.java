@@ -379,10 +379,12 @@ public abstract class ClientXdsClientTestBase {
 
   private void verifySubscribedResourcesMetadataSizes(
       int ldsSize, int cdsSize, int rdsSize, int edsSize) {
-    assertThat(xdsClient.getSubscribedResourcesMetadata(LDS)).hasSize(ldsSize);
-    assertThat(xdsClient.getSubscribedResourcesMetadata(CDS)).hasSize(cdsSize);
-    assertThat(xdsClient.getSubscribedResourcesMetadata(RDS)).hasSize(rdsSize);
-    assertThat(xdsClient.getSubscribedResourcesMetadata(EDS)).hasSize(edsSize);
+    Map<ResourceType, Map<String, ResourceMetadata>> subscribedResourcesMetadata =
+        xdsClient.getSubscribedResourcesMetadataSnapshot();
+    assertThat(subscribedResourcesMetadata.get(LDS)).hasSize(ldsSize);
+    assertThat(subscribedResourcesMetadata.get(CDS)).hasSize(cdsSize);
+    assertThat(subscribedResourcesMetadata.get(RDS)).hasSize(rdsSize);
+    assertThat(subscribedResourcesMetadata.get(EDS)).hasSize(edsSize);
   }
 
   /** Verify the resource requested, but not updated. */
@@ -435,7 +437,7 @@ public abstract class ClientXdsClientTestBase {
       ResourceType type, String resourceName, Any rawResource, ResourceMetadataStatus status,
       String versionInfo, long updateTimeNanos, boolean hasErrorState) {
     ResourceMetadata resourceMetadata =
-        xdsClient.getSubscribedResourcesMetadata(type).get(resourceName);
+        xdsClient.getSubscribedResourcesMetadataSnapshot().get(type).get(resourceName);
     assertThat(resourceMetadata).isNotNull();
     String name = type.toString() + " resource '" + resourceName + "' metadata field ";
     assertWithMessage(name + "status").that(resourceMetadata.getStatus()).isEqualTo(status);

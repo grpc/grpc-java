@@ -143,16 +143,15 @@ public final class CsdsService extends
   static ClientConfig getClientConfigForXdsClient(XdsClient xdsClient) {
     ClientConfig.Builder builder = ClientConfig.newBuilder()
         .setNode(xdsClient.getBootstrapInfo().node().toEnvoyProtoNode());
-    for (ResourceType type : ResourceType.values()) {
-      if (type == ResourceType.UNKNOWN) {
-        continue;
-      }
-      Map<String, ResourceMetadata> metadataMap = xdsClient.getSubscribedResourcesMetadata(type);
-      for (String resourceName : metadataMap.keySet()) {
-        ResourceMetadata metadata = metadataMap.get(resourceName);
+    for (Map.Entry<ResourceType, Map<String, ResourceMetadata>> metadataByTypeEntry
+        : xdsClient.getSubscribedResourcesMetadataSnapshot().entrySet()) {
+      ResourceType type = metadataByTypeEntry.getKey();
+      for (Map.Entry<String, ResourceMetadata> metadataEntry
+          : metadataByTypeEntry.getValue().entrySet()) {
+        ResourceMetadata metadata = metadataEntry.getValue();
         GenericXdsConfig.Builder genericXdsConfigBuilder = GenericXdsConfig.newBuilder()
             .setTypeUrl(type.typeUrl())
-            .setName(resourceName)
+            .setName(metadataEntry.getKey())
             .setClientStatus(metadataStatusToClientStatus(metadata.getStatus()));
         if (metadata.getRawResource() != null) {
           genericXdsConfigBuilder
@@ -161,6 +160,7 @@ public final class CsdsService extends
               .setXdsConfig(metadata.getRawResource());
         }
         if (metadata.getStatus() == ResourceMetadataStatus.NACKED) {
+          assert metadata.getErrorState() != null;
           genericXdsConfigBuilder
               .setErrorState(metadataUpdateFailureStateToProto(metadata.getErrorState()));
         }
