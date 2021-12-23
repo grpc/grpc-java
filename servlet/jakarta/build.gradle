@@ -42,14 +42,7 @@ def migrate(String name, String inputDir, SourceSet sourceSet) {
     return tasks.register('migrateSources' + name.capitalize(), Sync) { task ->
         from(inputDir)
         into(outputDir)
-        exclude '**/jetty/*'
-        filter { String line ->
-            // if in the main sources, remove all Jetty lines - must be skipped for tests
-            if (name.equals('main') && line.contains('Jetty')) {
-                return ''
-            }
-            return line.replaceAll('javax\\.servlet', 'jakarta.servlet')
-        }
+        filter { String line -> line.replaceAll('javax\\.servlet', 'jakarta.servlet') }
     }
 }
 

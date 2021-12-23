@@ -9,14 +9,12 @@ description = "gRPC: Servlet"
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
-def jetty9Version = '9.4.44.v20210927'
-def jetty10Version = '10.0.7'
+def jettyVersion = '10.0.7'
 
 configurations {
     undertowTestImplementation.extendsFrom(testImplementation)
     tomcatTestImplementation.extendsFrom(testImplementation)
     jettyTestImplementation.extendsFrom(testImplementation)
-    jetty10TestImplementation.extendsFrom(testImplementation)
 }
 
 sourceSets {
@@ -30,11 +28,9 @@ sourceSets {
     undertowTest {}
     tomcatTest {}
 
-    jettyTest {}
-
     // Only compile these tests if java 11+ is being used
     if (JavaVersion.current().isJava11Compatible()) {
-        jetty10Test {
+        jettyTest {
             java {
                 srcDir 'src/jettyTest/java'
             }
@@ -46,10 +42,6 @@ dependencies {
     api project(':grpc-core')
     compileOnly 'javax.servlet:javax.servlet-api:4.0.1',
             libraries.javax_annotation // java 9, 10 needs it
-
-    // Jetty9 workaround, we won't include this as a transitive dependency or otherwise
-    // use at runtime, unless it is already present
-    compileOnly "org.eclipse.jetty.http2:http2-server:${jetty9Version}"
 
     implementation libraries.guava
 
@@ -72,16 +64,8 @@ dependencies {
 
     tomcatTestImplementation 'org.apache.tomcat.embed:tomcat-embed-core:9.0.54'
 
-    jettyTestImplementation "org.eclipse.jetty:jetty-servlet:${jetty9Version}",
-            "org.eclipse.jetty.http2:http2-server:${jetty9Version}",
-            'javax.servlet:javax.servlet-api:4.0.1'// jetty9 only supports servlet 3, force servlet4
-
-    jetty10TestImplementation "org.eclipse.jetty:jetty-servlet:${jetty10Version}",
-            "org.eclipse.jetty.http2:http2-server:${jetty10Version}"
-}
-
-javadoc {
-    exclude 'io/grpc/servlet/jetty/*'
+    jettyTestImplementation "org.eclipse.jetty:jetty-servlet:${jettyVersion}",
+            "org.eclipse.jetty.http2:http2-server:${jettyVersion}"
 }
 
 // Set up individual classpaths for each test, to avoid any mismatch,
@@ -101,15 +85,11 @@ check.dependsOn(tasks.register('tomcat9Test', Test) {
         file(tomcatTempDir).deleteDir()
     }
 })
-check.dependsOn(tasks.register('jetty9Test', Test) {
-    classpath = sourceSets.jettyTest.runtimeClasspath
-    testClassesDirs = sourceSets.jettyTest.output.classesDirs
-})
 
 // Only run these tests if java 11+ is being used
 if (JavaVersion.current().isJava11Compatible()) {
-    check.dependsOn(tasks.register('jetty10Test', Test) {
-        classpath = sourceSets.jetty10Test.runtimeClasspath
-        testClassesDirs = sourceSets.jetty10Test.output.classesDirs
+    check.dependsOn(tasks.register('jettyTest', Test) {
+        classpath = sourceSets.jettyTest.runtimeClasspath
+        testClassesDirs = sourceSets.jettyTest.output.classesDirs
     })
 }

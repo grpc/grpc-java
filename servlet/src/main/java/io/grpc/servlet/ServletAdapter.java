@@ -35,7 +35,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ReadableBuffers;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
-import io.grpc.servlet.jetty.JettyHttpServletResponse;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -117,13 +116,6 @@ public final class ServletAdapter {
 
     InternalLogId logId = InternalLogId.allocate(ServletAdapter.class, null);
     logger.log(FINE, "[{0}] RPC started", logId);
-
-    // Jetty workaround: Detect, work around Jetty 9.4.x not having setTrailerFields
-    // Jetty workaround: implemented for servlet 4.0.
-    // Jetty workaround: Note that these lines are removed when copying to the jakarta
-    // Jetty workaround: build because they all have the string "Jetty" in them.
-    resp = JettyHttpServletResponse.wrap(resp);
-    // end Jetty workaround.
 
     AsyncContext asyncCtx = req.startAsync(req, resp);
 
