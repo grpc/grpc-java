@@ -63,7 +63,10 @@ public class JettyInteropTest extends AbstractInteropTest {
     ServerConnector sc = (ServerConnector)server.getConnectors()[0];
     HTTP2CServerConnectionFactory factory =
             new HTTP2CServerConnectionFactory(new HttpConfiguration());
+
+    // Explicitly disable safeguards against malicious clients, as some unit tests trigger this
     factory.setRateControlFactory(new RateControl.Factory() {});
+
     sc.addConnectionFactory(factory);
     ServletContextHandler context =
         new ServletContextHandler(ServletContextHandler.SESSIONS);

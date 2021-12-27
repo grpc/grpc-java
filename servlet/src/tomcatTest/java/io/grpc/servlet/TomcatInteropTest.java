@@ -74,8 +74,14 @@ public class TomcatInteropTest extends AbstractInteropTest {
             new GrpcServlet(((ServletServerBuilder) builer).buildServletAdapter()))
         .setAsyncSupported(true);
     ctx.addServletMappingDecoded("/*", "io.grpc.servlet.TomcatInteropTest");
+
+    // Explicitly disable safeguards against malicious clients, as some unit tests trigger these
     Http2Protocol http2Protocol = new Http2Protocol();
     http2Protocol.setOverheadCountFactor(0);
+    http2Protocol.setOverheadWindowUpdateThreshold(0);
+    http2Protocol.setOverheadContinuationThreshold(0);
+    http2Protocol.setOverheadDataThreshold(0);
+
     server.getConnector().addUpgradeProtocol(http2Protocol);
     try {
       server.start();
@@ -131,20 +137,4 @@ public class TomcatInteropTest extends AbstractInteropTest {
   @Ignore("Tomcat is not able to send trailer only")
   @Test
   public void emptyStream() {}
-
-  // Fails intermittently
-  //@Ignore
-  //@Test
-  //@Override
-  //public void exchangeMetadataStreamingCall() {}
-
-
-  // Fails intermittently:
-  // RESOURCE_EXHAUSTED: Connection closed after GOAWAY. HTTP/2 error code: ENHANCE_YOUR_CALM
-  // (Bandwidth exhausted), debug data: Connection [12], Too much overhead so the connection
-  // will be closed
-  @Override
-  @Ignore("Tomcat 10 doesn't seem to handle overheadCountFactor=0 consistently?")
-  @Test
-  public void fullDuplexCallShouldSucceed() {}
 }
