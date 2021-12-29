@@ -58,7 +58,9 @@ if (JavaVersion.current().isJava11Compatible()) {
 }
 
 // Disable checkstyle for this project, since it consists only of generated code
-checkstyle.ignoreFailures = true
+tasks.withType(Checkstyle) {
+    enabled = false
+}
 
 dependencies {
     api project(':grpc-core')
