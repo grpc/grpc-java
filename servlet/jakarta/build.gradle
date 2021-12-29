@@ -9,9 +9,10 @@ targetCompatibility = 1.8
 
 // Set up classpaths and source directories for different servlet tests
 configurations {
-    jettyTestImplementation.extendsFrom(testImplementation)
-    tomcatTestImplementation.extendsFrom(testImplementation)
-    undertowTestImplementation.extendsFrom(testImplementation)
+    itImplementation.extendsFrom(implementation)
+    jettyTestImplementation.extendsFrom(itImplementation)
+    tomcatTestImplementation.extendsFrom(itImplementation)
+    undertowTestImplementation.extendsFrom(itImplementation)
 }
 
 sourceSets {
@@ -66,16 +67,11 @@ dependencies {
 
     implementation libraries.guava
 
-    testImplementation project(':grpc-stub'),
-            project(':grpc-protobuf'),
-            project(':grpc-servlet-jakarta'),
+    itImplementation project(':grpc-servlet-jakarta'),
             project(':grpc-netty'),
-            project(':grpc-testing'),
-            project(':grpc-auth'),
-            project(':grpc-core').sourceSets.test.output,
-            project(':grpc-netty').sourceSets.test.output,
+            project(':grpc-core').sourceSets.test.runtimeClasspath,
             libraries.junit
-    testImplementation(project(':grpc-interop-testing')) {
+    itImplementation(project(':grpc-interop-testing')) {
         // Avoid grpc-netty-shaded dependency
         exclude group: 'io.grpc', module: 'grpc-alts'
         exclude group: 'io.grpc', module: 'grpc-xds'

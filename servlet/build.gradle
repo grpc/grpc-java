@@ -12,29 +12,20 @@ targetCompatibility = 1.8
 def jettyVersion = '10.0.7'
 
 configurations {
-    undertowTestImplementation.extendsFrom(testImplementation)
-    tomcatTestImplementation.extendsFrom(testImplementation)
-    jettyTestImplementation.extendsFrom(testImplementation)
+    itImplementation.extendsFrom(implementation)
+    undertowTestImplementation.extendsFrom(itImplementation)
+    tomcatTestImplementation.extendsFrom(itImplementation)
+    jettyTestImplementation.extendsFrom(itImplementation)
 }
 
 sourceSets {
-    // Disable plain test, we only want to run tests per runtime
-    test {
-        java {
-            exclude '**/*.java'
-        }
-    }
     // Create a test sourceset for each classpath - could be simplified if we made new test directories
     undertowTest {}
     tomcatTest {}
 
     // Only compile these tests if java 11+ is being used
     if (JavaVersion.current().isJava11Compatible()) {
-        jettyTest {
-            java {
-                srcDir 'src/jettyTest/java'
-            }
-        }
+        jettyTest {}
     }
 }
 
@@ -45,16 +36,11 @@ dependencies {
 
     implementation libraries.guava
 
-    testImplementation project(':grpc-stub'),
-            project(':grpc-protobuf'),
-            project(':grpc-servlet'),
+    itImplementation project(':grpc-servlet'),
             project(':grpc-netty'),
-            project(':grpc-testing'),
-            project(':grpc-auth'),
-            project(':grpc-core').sourceSets.test.output,
-            project(':grpc-netty').sourceSets.test.output,
+            project(':grpc-core').sourceSets.test.runtimeClasspath,
             libraries.junit
-    testImplementation(project(':grpc-interop-testing')) {
+    itImplementation(project(':grpc-interop-testing')) {
         // Avoid grpc-netty-shaded dependency
         exclude group: 'io.grpc', module: 'grpc-alts'
         exclude group: 'io.grpc', module: 'grpc-xds'
