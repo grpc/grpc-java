@@ -16,12 +16,12 @@
 
 package io.grpc.servlet;
 
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.servlet.ServletServerStream.toHexString;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
 
 import io.grpc.InternalLogId;
-import io.grpc.Status;
 import io.grpc.servlet.ServletServerStream.ServletTransportState;
 import java.io.IOException;
 import java.time.Duration;
@@ -57,9 +57,9 @@ final class AsyncServletOutputStreamWriter {
    * </pre>
    *
    * <p>There are two threads, the container thread (calling {@code onWritePossible()}) and the
-   * application thread (calling {@code runOrBufferActionItem()}) that read and update the
-   * writeState. Only onWritePossible() may turn readyAndEmpty from false to true, and only
-   * runOrBufferActionItem() may turn it from true to false.
+   * application thread (calling {@code runOrBuffer()}) that read and update the
+   * writeState. Only onWritePossible() may turn {@code readyAndDrained} from false to true, and
+   * only runOrBuffer() may turn it from true to false.
    */
   private final AtomicReference<WriteState> writeState = new AtomicReference<>(WriteState.DEFAULT);
 
@@ -82,10 +82,9 @@ final class AsyncServletOutputStreamWriter {
 
   AsyncServletOutputStreamWriter(
       AsyncContext asyncContext,
-      ServletOutputStream outputStream,
       ServletTransportState transportState,
-      InternalLogId logId) {
-    this.outputStream = outputStream;
+      InternalLogId logId) throws IOException {
+    this.outputStream = asyncContext.getResponse().getOutputStream();
     this.transportState = transportState;
     this.logId = logId;
     this.flushAction = () -> {
@@ -105,7 +104,7 @@ final class AsyncServletOutputStreamWriter {
 
   /** Called from application thread. */
   void writeBytes(byte[] bytes, int numBytes) throws IOException {
-    runOrBufferActionItem(
+    runOrBuffer(
         // write bytes action
         () -> {
           outputStream.write(bytes, 0, numBytes);
@@ -121,16 +120,15 @@ final class AsyncServletOutputStreamWriter {
 
   /** Called from application thread. */
   void flush() throws IOException {
-    runOrBufferActionItem(flushAction);
+    runOrBuffer(flushAction);
   }
 
   /** Called from application thread. */
   void complete() {
     try {
-      runOrBufferActionItem(completeAction);
-    } catch (IOException e) {
-      // actually completeAction does not throw
-      throw Status.fromThrowable(e).asRuntimeException();
+      runOrBuffer(completeAction);
+    } catch (IOException ignore) {
+      // actually completeAction does not throw IOException
     }
   }
 
@@ -138,7 +136,7 @@ final class AsyncServletOutputStreamWriter {
   void onWritePossible() throws IOException {
     logger.log(
         FINEST, "[{0}] onWritePossible: ENTRY. The servlet output stream becomes ready", logId);
-    assureReadyAndEmptyFalse();
+    assureReadyAndDrainedTurnsFalse();
     while (outputStream.isReady()) {
       WriteState curState = writeState.get();
 
@@ -148,7 +146,7 @@ final class AsyncServletOutputStreamWriter {
         continue;
       }
 
-      if (writeState.compareAndSet(curState, curState.withReadyAndEmpty(true))) {
+      if (writeState.compareAndSet(curState, curState.withReadyAndDrained(true))) {
         // state has not changed since.
         logger.log(
             FINEST,
@@ -157,45 +155,54 @@ final class AsyncServletOutputStreamWriter {
             logId);
         return;
       }
-      // else, state changed by another thread (runOrBufferActionItem), need to drain the writeChain
+      // else, state changed by another thread (runOrBuffer()), need to drain the writeChain
       // again
     }
     logger.log(
         FINEST, "[{0}] onWritePossible: EXIT. The servlet output stream becomes not ready", logId);
   }
 
-  private void runOrBufferActionItem(ActionItem actionItem) throws IOException {
+  private void assureReadyAndDrainedTurnsFalse() {
+    // readyAndDrained should have been set to false already.
+    // Just in case due to a race condition readyAndDrained is still true at this moment and is
+    // being set to false by runOrBuffer() concurrently.
+    while (writeState.get().readyAndDrained) {
+      parkingThread = Thread.currentThread();
+      LockSupport.parkNanos(Duration.ofHours(1).toNanos()); // should return immediately
+    }
+    parkingThread = null;
+  }
+
+  /**
+   * Either execute the write action directly, or buffer the action and let the container thread
+   * drain it.
+   *
+   * <p>Called from application thread.
+   */
+  private void runOrBuffer(ActionItem actionItem) throws IOException {
     WriteState curState = writeState.get();
-    if (curState.readyAndEmpty) { // write to the outputStream directly
+    if (curState.readyAndDrained) { // write to the outputStream directly
       actionItem.run();
       if (!outputStream.isReady()) {
-        logger.log(FINEST, "[{0}] the servlet output stream becomes not ready", logId);
-        boolean successful = writeState.compareAndSet(curState, curState.withReadyAndEmpty(false));
-        assert successful;
+        boolean successful =
+            writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
         LockSupport.unpark(parkingThread);
+        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+        logger.log(FINEST, "[{0}] the servlet output stream becomes not ready", logId);
       }
     } else { // buffer to the writeChain
       writeChain.offer(actionItem);
-      if (!writeState.compareAndSet(curState, curState.newItemBuffered())) {
-        // state changed by another thread (onWritePossible)
-        assert writeState.get().readyAndEmpty;
+      if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
+        checkState(
+            writeState.get().readyAndDrained,
+            "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
         ActionItem lastItem = writeChain.poll();
         if (lastItem != null) {
-          assert lastItem == actionItem;
-          runOrBufferActionItem(lastItem);
+          checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
+          runOrBuffer(lastItem);
         }
       } // state has not changed since
     }
-  }
-
-  private void assureReadyAndEmptyFalse() {
-    // readyAndEmpty should have been set to false already or right now
-    // It's very very unlikely readyAndEmpty is still true due to a race condition
-    while (writeState.get().readyAndEmpty) {
-      parkingThread = Thread.currentThread();
-      LockSupport.parkNanos(Duration.ofSeconds(1).toNanos());
-    }
-    parkingThread = null;
   }
 
   /** Write actions, e.g. writeBytes, flush, complete. */
@@ -211,34 +218,28 @@ final class AsyncServletOutputStreamWriter {
     /**
      * The servlet output stream is ready and the writeChain is empty.
      *
-     * <p>readyAndEmpty turns from false to true when:
+     * <p>readyAndDrained turns from false to true when:
      * {@code onWritePossible()} exits while currently there is no more data to write, but the last
      * check of {@link javax.servlet.ServletOutputStream#isReady()} is true.
      *
-     * <p>readyAndEmpty turns from false to true when:
-     * {@code runOrBufferActionItem()} exits while either the action item is written directly to the
+     * <p>readyAndDrained turns from true to false when:
+     * {@code runOrBuffer()} exits while either the action item is written directly to the
      * servlet output stream and the check of {@link javax.servlet.ServletOutputStream#isReady()}
      * right after that returns false, or the action item is buffered into the writeChain.
      */
-    final boolean readyAndEmpty;
+    final boolean readyAndDrained;
 
-    WriteState(boolean readyAndEmpty) {
-      this.readyAndEmpty = readyAndEmpty;
+    WriteState(boolean readyAndDrained) {
+      this.readyAndDrained = readyAndDrained;
     }
 
     /**
-     * Only {@code onWritePossible()} can set readyAndEmpty to true, and only {@code
-     * runOrBufferActionItem()} can set it to false.
+     * Only {@code onWritePossible()} can set readyAndDrained to true, and only {@code
+     * runOrBuffer()} can set it to false.
      */
     @CheckReturnValue
-    WriteState withReadyAndEmpty(boolean readyAndEmpty) {
-      return new WriteState(readyAndEmpty);
-    }
-
-    /** Only {@code runOrBufferActionItem()} can call it, and will set readyAndEmpty to false. */
-    @CheckReturnValue
-    WriteState newItemBuffered() {
-      return new WriteState(false);
+    WriteState withReadyAndDrained(boolean readyAndDrained) {
+      return new WriteState(readyAndDrained);
     }
   }
 }

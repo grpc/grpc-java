@@ -80,9 +80,9 @@ final class ServletServerStream extends AbstractServerStream {
     this.logId = logId;
     this.asyncCtx = asyncCtx;
     this.resp = (HttpServletResponse) asyncCtx.getResponse();
-    resp.getOutputStream().setWriteListener(new GrpcWriteListener());
     this.writer = new AsyncServletOutputStreamWriter(
-        asyncCtx, resp.getOutputStream(), transportState, logId);
+        asyncCtx, transportState, logId);
+    resp.getOutputStream().setWriteListener(new GrpcWriteListener());
   }
 
   @Override
