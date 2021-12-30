@@ -41,8 +41,7 @@ public final class LeastRequestLoadBalancerProvider extends LoadBalancerProvider
   static final Integer DEFAULT_CHOICE_COUNT = 2;
 
   private static final boolean enableLeastRequest =
-      Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
-          || Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"));
+      Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"));
 
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
