@@ -495,8 +495,8 @@ abstract class XdsClient {
   }
 
   /**
-   * Returns the map containing the {@link ResourceMetadata} of the subscribed resources for the
-   * given resource type, indexed by the resource name.
+   * Returns a map from the "resource type" to a map ("resource name": "resource metadata")
+   * containing the snapshot of the subscribed resources as they are at the moment of the call.
    */
   // Must be synchronized.
   Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {

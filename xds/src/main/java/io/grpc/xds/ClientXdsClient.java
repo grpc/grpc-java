@@ -2040,7 +2040,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        // A map from ResourceType to a map (ResourceName: ResourceMetadata)
+        // A map from a "resource type" to a map ("resource name": "resource metadata")
         ImmutableMap.Builder<ResourceType, Map<String, ResourceMetadata>> metadataSnapshot =
             ImmutableMap.builder();
         for (ResourceType type : ResourceType.values()) {

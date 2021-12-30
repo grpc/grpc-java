@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Verify.verifyNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.util.Timestamps;
@@ -148,10 +149,11 @@ public final class CsdsService extends
       ResourceType type = metadataByTypeEntry.getKey();
       for (Map.Entry<String, ResourceMetadata> metadataEntry
           : metadataByTypeEntry.getValue().entrySet()) {
+        String resourceName = metadataEntry.getKey();
         ResourceMetadata metadata = metadataEntry.getValue();
         GenericXdsConfig.Builder genericXdsConfigBuilder = GenericXdsConfig.newBuilder()
             .setTypeUrl(type.typeUrl())
-            .setName(metadataEntry.getKey())
+            .setName(resourceName)
             .setClientStatus(metadataStatusToClientStatus(metadata.getStatus()));
         if (metadata.getRawResource() != null) {
           genericXdsConfigBuilder
@@ -160,7 +162,7 @@ public final class CsdsService extends
               .setXdsConfig(metadata.getRawResource());
         }
         if (metadata.getStatus() == ResourceMetadataStatus.NACKED) {
-          assert metadata.getErrorState() != null;
+          verifyNotNull(metadata.getErrorState(), "resource %s getErrorState", resourceName);
           genericXdsConfigBuilder
               .setErrorState(metadataUpdateFailureStateToProto(metadata.getErrorState()));
         }
