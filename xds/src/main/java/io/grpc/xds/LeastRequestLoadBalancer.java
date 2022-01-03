@@ -380,7 +380,7 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
   }
 
   private static final class OutstandingRequestsTracingFactory extends
-      ClientStreamTracer.InternalLimitedInfoFactory {
+      ClientStreamTracer.Factory {
     private final AtomicInteger inFlights;
 
     private OutstandingRequestsTracingFactory(AtomicInteger inFlights) {
