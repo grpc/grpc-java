@@ -44,6 +44,7 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
   <groupId>io.grpc</groupId>
   <artifactId>grpc-netty-shaded</artifactId>
   <version>1.43.1</version>
+  <scope>runtime</scope>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
