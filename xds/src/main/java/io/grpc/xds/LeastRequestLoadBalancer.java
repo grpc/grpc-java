@@ -24,6 +24,8 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.LeastRequestLoadBalancerProvider.DEFAULT_CHOICE_COUNT;
+import static io.grpc.xds.LeastRequestLoadBalancerProvider.MAX_CHOICE_COUNT;
+import static io.grpc.xds.LeastRequestLoadBalancerProvider.MIN_CHOICE_COUNT;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -403,8 +405,10 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
     final int choiceCount;
 
     LeastRequestConfig(int choiceCount) {
-      checkArgument(choiceCount > 1, "choiceCount <= 1");
-      this.choiceCount = choiceCount;
+      checkArgument(choiceCount >= MIN_CHOICE_COUNT, "choiceCount <= 1");
+      // Even though a choiceCount value larger than 2 is currently considered valid in xDS
+      // we restrict it to 10 here as specified in "A48: xDS Least Request LB Policy".
+      this.choiceCount = Math.min(choiceCount, MAX_CHOICE_COUNT);
     }
 
     @Override

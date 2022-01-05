@@ -122,6 +122,16 @@ public class LeastRequestLoadBalancerProviderTest {
     assertThat(config.choiceCount).isEqualTo(LeastRequestLoadBalancerProvider.MAX_CHOICE_COUNT);
   }
 
+  @Test
+  public void parseLoadBalancingConfig_invalidInteger() throws IOException {
+    Map<String, ?> lbConfig = parseJsonObject("{\"choiceCount\" : \"NaN\"}");
+    ConfigOrError configOrError =
+        provider.parseLoadBalancingPolicyConfig(lbConfig);
+    assertThat(configOrError.getError()).isNotNull();
+    assertThat(configOrError.getError().getDescription()).isEqualTo(
+        "Failed to parse least_request_experimental LB config: " + lbConfig);
+  }
+
   @SuppressWarnings("unchecked")
   private static Map<String, ?> parseJsonObject(String json) throws IOException {
     return (Map<String, ?>) JsonParser.parse(json);

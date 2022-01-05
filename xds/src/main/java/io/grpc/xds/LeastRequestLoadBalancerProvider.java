@@ -63,18 +63,21 @@ public final class LeastRequestLoadBalancerProvider extends LoadBalancerProvider
   }
 
   @Override
-  public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLoadBalancingPolicyConfig) {
-    Integer choiceCount = JsonUtil.getNumberAsInteger(rawLoadBalancingPolicyConfig, "choiceCount");
-    if (choiceCount == null) {
-      choiceCount = DEFAULT_CHOICE_COUNT;
+  public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawConfig) {
+    try {
+      Integer choiceCount = JsonUtil.getNumberAsInteger(rawConfig, "choiceCount");
+      if (choiceCount == null) {
+        choiceCount = DEFAULT_CHOICE_COUNT;
+      }
+      if (choiceCount < MIN_CHOICE_COUNT) {
+        return ConfigOrError.fromError(Status.INVALID_ARGUMENT.withDescription(
+            "Invalid 'choiceCount'"));
+      }
+      return ConfigOrError.fromConfig(new LeastRequestConfig(choiceCount));
+    } catch (RuntimeException e) {
+      return ConfigOrError.fromError(
+          Status.fromThrowable(e).withDescription(
+              "Failed to parse least_request_experimental LB config: " + rawConfig));
     }
-    if (choiceCount < MIN_CHOICE_COUNT) {
-      return ConfigOrError.fromError(Status.INVALID_ARGUMENT.withDescription(
-          "Invalid 'choiceCount'"));
-    }
-    if (choiceCount > MAX_CHOICE_COUNT) {
-      choiceCount = MAX_CHOICE_COUNT;
-    }
-    return ConfigOrError.fromConfig(new LeastRequestConfig(choiceCount));
   }
 }
