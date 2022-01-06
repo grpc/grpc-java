@@ -865,7 +865,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
     // Parse inlined RouteConfiguration or RDS.
     if (proto.hasRouteConfig()) {
-      List<VirtualHost> virtualHosts = processRouteConfiguration(
+      List<VirtualHost> virtualHosts = extractVirtualHosts(
           proto.getRouteConfig(), filterRegistry, parseHttpFilter);
       return io.grpc.xds.HttpConnectionManager.forVirtualHosts(
           maxStreamDuration, virtualHosts, filterConfigs);
@@ -1422,8 +1422,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       RdsUpdate rdsUpdate;
       boolean isResourceV3 = resource.getTypeUrl().equals(ResourceType.RDS.typeUrl());
       try {
-        rdsUpdate = new RdsUpdate(processRouteConfiguration(
-            routeConfig, filterRegistry, enableFaultInjection && isResourceV3));
+        rdsUpdate = processRouteConfiguration(
+            routeConfig, filterRegistry, enableFaultInjection && isResourceV3);
       } catch (ResourceInvalidException e) {
         errors.add(
             "RDS response RouteConfiguration '" + routeConfigName + "' validation error: " + e
@@ -1442,7 +1442,13 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         Collections.<String>emptySet(), versionInfo, nonce, errors);
   }
 
-  private static List<VirtualHost> processRouteConfiguration(
+  private static RdsUpdate processRouteConfiguration(
+      RouteConfiguration routeConfig, FilterRegistry filterRegistry, boolean parseHttpFilter)
+      throws ResourceInvalidException {
+    return new RdsUpdate(extractVirtualHosts(routeConfig, filterRegistry, parseHttpFilter));
+  }
+
+  private static List<VirtualHost> extractVirtualHosts(
       RouteConfiguration routeConfig, FilterRegistry filterRegistry, boolean parseHttpFilter)
       throws ResourceInvalidException {
     Map<String, PluginConfig> pluginConfigMap = new HashMap<>();
