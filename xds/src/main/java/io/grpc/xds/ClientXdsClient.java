@@ -47,8 +47,10 @@ import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.PortSpecifierCase;
 import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
+import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin;
 import io.envoyproxy.envoy.config.route.v3.RetryPolicy.RetryBackOff;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
@@ -73,6 +75,8 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
+import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -150,6 +154,10 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   static boolean enableRbac =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"));
+  @VisibleForTesting
+  static boolean enableRouteLookup =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"))
+          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"));
 
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
@@ -857,18 +865,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
     // Parse inlined RouteConfiguration or RDS.
     if (proto.hasRouteConfig()) {
-      List<VirtualHost> virtualHosts = new ArrayList<>();
-      for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
-          : proto.getRouteConfig().getVirtualHostsList()) {
-        StructOrError<VirtualHost> virtualHost =
-            parseVirtualHost(virtualHostProto, filterRegistry, parseHttpFilter);
-        if (virtualHost.getErrorDetail() != null) {
-          throw new ResourceInvalidException(
-              "HttpConnectionManager contains invalid virtual host: "
-                  + virtualHost.getErrorDetail());
-        }
-        virtualHosts.add(virtualHost.getStruct());
-      }
+      List<VirtualHost> virtualHosts = extractVirtualHosts(
+          proto.getRouteConfig(), filterRegistry, parseHttpFilter);
       return io.grpc.xds.HttpConnectionManager.forVirtualHosts(
           maxStreamDuration, virtualHosts, filterConfigs);
     }
@@ -950,11 +948,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   private static StructOrError<VirtualHost> parseVirtualHost(
       io.envoyproxy.envoy.config.route.v3.VirtualHost proto, FilterRegistry filterRegistry,
-      boolean parseHttpFilter) {
+      boolean parseHttpFilter, Map<String, PluginConfig> pluginConfigMap) {
     String name = proto.getName();
     List<Route> routes = new ArrayList<>(proto.getRoutesCount());
     for (io.envoyproxy.envoy.config.route.v3.Route routeProto : proto.getRoutesList()) {
-      StructOrError<Route> route = parseRoute(routeProto, filterRegistry, parseHttpFilter);
+      StructOrError<Route> route = parseRoute(
+          routeProto, filterRegistry, parseHttpFilter, pluginConfigMap);
       if (route == null) {
         continue;
       }
@@ -1039,7 +1038,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   @Nullable
   static StructOrError<Route> parseRoute(
       io.envoyproxy.envoy.config.route.v3.Route proto, FilterRegistry filterRegistry,
-      boolean parseHttpFilter) {
+      boolean parseHttpFilter, Map<String, PluginConfig> pluginConfigMap) {
     StructOrError<RouteMatch> routeMatch = parseRouteMatch(proto.getMatch());
     if (routeMatch == null) {
       return null;
@@ -1065,7 +1064,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     switch (proto.getActionCase()) {
       case ROUTE:
         StructOrError<RouteAction> routeAction =
-            parseRouteAction(proto.getRoute(), filterRegistry, parseHttpFilter);
+            parseRouteAction(proto.getRoute(), filterRegistry, parseHttpFilter, pluginConfigMap);
         if (routeAction == null) {
           return null;
         }
@@ -1218,7 +1217,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   @Nullable
   static StructOrError<RouteAction> parseRouteAction(
       io.envoyproxy.envoy.config.route.v3.RouteAction proto, FilterRegistry filterRegistry,
-      boolean parseHttpFilter) {
+      boolean parseHttpFilter, Map<String, PluginConfig> pluginConfigMap) {
     Long timeoutNano = null;
     if (proto.hasMaxStreamDuration()) {
       io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration maxStreamDuration
@@ -1297,6 +1296,20 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         // TODO(chengyuanzhang): validate if the sum of weights equals to total weight.
         return StructOrError.fromStruct(RouteAction.forWeightedClusters(
             weightedClusters, hashPolicies, timeoutNano, retryPolicy));
+      case CLUSTER_SPECIFIER_PLUGIN:
+        if (enableRouteLookup) {
+          String pluginName = proto.getClusterSpecifierPlugin();
+          PluginConfig pluginConfig = pluginConfigMap.get(pluginName);
+          if (pluginConfig == null) {
+            return StructOrError.fromError(
+                "ClusterSpecifierPlugin for [" + pluginName + "] not found");
+          }
+          NamedPluginConfig namedPluginConfig = NamedPluginConfig.create(pluginName, pluginConfig);
+          return StructOrError.fromStruct(RouteAction.forClusterSpecifierPlugin(
+              namedPluginConfig, hashPolicies, timeoutNano, retryPolicy));
+        } else {
+          return StructOrError.fromError("Support for ClusterSpecifierPlugin not enabled");
+        }
       case CLUSTERSPECIFIER_NOT_SET:
       default:
         return StructOrError.fromError(
@@ -1432,18 +1445,74 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   private static RdsUpdate processRouteConfiguration(
       RouteConfiguration routeConfig, FilterRegistry filterRegistry, boolean parseHttpFilter)
       throws ResourceInvalidException {
+    return new RdsUpdate(extractVirtualHosts(routeConfig, filterRegistry, parseHttpFilter));
+  }
+
+  private static List<VirtualHost> extractVirtualHosts(
+      RouteConfiguration routeConfig, FilterRegistry filterRegistry, boolean parseHttpFilter)
+      throws ResourceInvalidException {
+    Map<String, PluginConfig> pluginConfigMap = new HashMap<>();
+    if (enableRouteLookup) {
+      List<ClusterSpecifierPlugin> plugins = routeConfig.getClusterSpecifierPluginsList();
+      for (ClusterSpecifierPlugin plugin : plugins) {
+        PluginConfig existing = pluginConfigMap.put(
+            plugin.getExtension().getName(), parseClusterSpecifierPlugin(plugin));
+        if (existing != null) {
+          throw new ResourceInvalidException(
+              "Multiple ClusterSpecifierPlugins with the same name: "
+                  + plugin.getExtension().getName());
+        }
+      }
+    }
     List<VirtualHost> virtualHosts = new ArrayList<>(routeConfig.getVirtualHostsCount());
     for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
         : routeConfig.getVirtualHostsList()) {
       StructOrError<VirtualHost> virtualHost =
-          parseVirtualHost(virtualHostProto, filterRegistry, parseHttpFilter);
+          parseVirtualHost(virtualHostProto, filterRegistry, parseHttpFilter, pluginConfigMap);
       if (virtualHost.getErrorDetail() != null) {
         throw new ResourceInvalidException(
             "RouteConfiguration contains invalid virtual host: " + virtualHost.getErrorDetail());
       }
       virtualHosts.add(virtualHost.getStruct());
     }
-    return new RdsUpdate(virtualHosts);
+    return virtualHosts;
+  }
+
+  private static PluginConfig parseClusterSpecifierPlugin(ClusterSpecifierPlugin pluginProto)
+      throws ResourceInvalidException {
+    return parseClusterSpecifierPlugin(
+        pluginProto, ClusterSpecifierPluginRegistry.getDefaultRegistry());
+  }
+
+  @VisibleForTesting
+  static PluginConfig parseClusterSpecifierPlugin(
+      ClusterSpecifierPlugin pluginProto, ClusterSpecifierPluginRegistry registry)
+      throws ResourceInvalidException {
+    TypedExtensionConfig extension = pluginProto.getExtension();
+    String pluginName = extension.getName();
+    Any anyConfig = extension.getTypedConfig();
+    String typeUrl = anyConfig.getTypeUrl();
+    Message rawConfig = anyConfig;
+    if (typeUrl.equals(TYPE_URL_TYPED_STRUCT_UDPA) || typeUrl.equals(TYPE_URL_TYPED_STRUCT)) {
+      try {
+        TypedStruct typedStruct = unpackCompatibleType(
+            anyConfig, TypedStruct.class, TYPE_URL_TYPED_STRUCT_UDPA, TYPE_URL_TYPED_STRUCT);
+        typeUrl = typedStruct.getTypeUrl();
+        rawConfig = typedStruct.getValue();
+      } catch (InvalidProtocolBufferException e) {
+        throw new ResourceInvalidException(
+            "ClusterSpecifierPlugin [" + pluginName + "] contains invalid proto", e);
+      }
+    }
+    io.grpc.xds.ClusterSpecifierPlugin plugin = registry.get(typeUrl);
+    if (plugin == null) {
+      throw new ResourceInvalidException("Unsupported ClusterSpecifierPlugin type: " + typeUrl);
+    }
+    ConfigOrError<? extends PluginConfig> pluginConfigOrError = plugin.parsePlugin(rawConfig);
+    if (pluginConfigOrError.errorDetail != null) {
+      throw new ResourceInvalidException(pluginConfigOrError.errorDetail);
+    }
+    return pluginConfigOrError.config;
   }
 
   @Override

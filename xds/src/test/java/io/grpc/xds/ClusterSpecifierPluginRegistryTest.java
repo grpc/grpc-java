@@ -28,7 +28,7 @@ public class ClusterSpecifierPluginRegistryTest {
   @Test
   public void pluginsInGlobaalInstance() {
     assertThat(ClusterSpecifierPluginRegistry.getDefaultRegistry()
-            .get("type.googleapis.com/grpc.lookup.v1.RouteLookupConfig"))
+            .get("type.googleapis.com/grpc.lookup.v1.RouteLookupClusterSpecifier"))
         .isEqualTo(RouteLookupServiceClusterSpecifierPlugin.INSTANCE);
   }
 }
