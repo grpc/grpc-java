@@ -20,7 +20,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.auto.value:auto-value-annotations:1.7.4",
     "com.google.errorprone:error_prone_annotations:2.9.0",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:30.1-android",
+    "com.google.guava:guava:30.1.1-android",
     "com.google.j2objc:j2objc-annotations:1.3",
     "com.google.truth:truth:1.0.1",
     "com.squareup.okhttp:okhttp:2.7.4",
@@ -111,18 +111,18 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "f6042eef01551cee4c663a11c3f429c06360a1f51daa9f4772bf3f13d24cde1f",
-        strip_prefix = "protobuf-3.17.2",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.17.2.zip"],
+        sha256 = "b0f31602175335be93734645e5c3914778a48b16fc315e4cf524e868f0a9949e",
+        strip_prefix = "protobuf-3.18.2",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.18.2.zip"],
     )
 
 def com_google_protobuf_javalite():
     # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
     http_archive(
         name = "com_google_protobuf_javalite",
-        sha256 = "f6042eef01551cee4c663a11c3f429c06360a1f51daa9f4772bf3f13d24cde1f",
-        strip_prefix = "protobuf-3.17.2",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.17.2.zip"],
+        sha256 = "b0f31602175335be93734645e5c3914778a48b16fc315e4cf524e868f0a9949e",
+        strip_prefix = "protobuf-3.18.2",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.18.2.zip"],
     )
 
 def io_grpc_grpc_proto():
