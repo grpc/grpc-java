@@ -21,10 +21,12 @@ echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 # Proto deps
 buildscripts/make_dependencies.sh
 
+GRADLE_FLAGS="-Pandroid.useAndroidX=true -Pandroid.enableJetifier=true"
+
 # Build and run interop instrumentation tests on Firebase Test Lab
 cd android-interop-testing
-../gradlew assembleDebug
-../gradlew assembleDebugAndroidTest
+../gradlew assembleDebug $GRADLE_FLAGS
+../gradlew assembleDebugAndroidTest $GRADLE_FLAGS
 gcloud firebase test android run \
   --type instrumentation \
   --app build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
@@ -41,7 +43,7 @@ gcloud firebase test android run \
 
 # Build and run binderchannel instrumentation tests on Firebase Test Lab
 cd ../binder
-../gradlew assembleDebugAndroidTest
+../gradlew assembleDebugAndroidTest $GRADLE_FLAGS
 gcloud firebase test android run \
   --type instrumentation \
   --app ../android-interop-testing/build/outputs/apk/debug/grpc-android-interop-testing-debug.apk \
