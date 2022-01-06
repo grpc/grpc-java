@@ -1658,7 +1658,7 @@ public class ClientXdsClientDataTest {
         .setLbPolicy(LbPolicy.RING_HASH)
         .build();
 
-    CdsUpdate update = ClientXdsClient.parseCluster(
+    CdsUpdate update = ClientXdsClient.processCluster(
         cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
     assertThat(update.lbPolicy()).isEqualTo(CdsUpdate.LbPolicy.RING_HASH);
     assertThat(update.minRingSize())
@@ -1686,7 +1686,7 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "Cluster cluster-foo.googleapis.com: transport-socket-matches not supported.");
-    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
+    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
   }
 
   @Test
@@ -1711,7 +1711,7 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
-    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
+    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
   }
 
   @Test
@@ -1738,7 +1738,7 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
-    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
+    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
   }
 
   @Test

@@ -1554,7 +1554,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         if (getBootstrapInfo() != null && getBootstrapInfo().certProviders() != null) {
           certProviderInstances = getBootstrapInfo().certProviders().keySet();
         }
-        cdsUpdate = parseCluster(cluster, retainedEdsResources, certProviderInstances, serverInfo);
+        cdsUpdate =
+            processCluster(cluster, retainedEdsResources, certProviderInstances, serverInfo);
       } catch (ResourceInvalidException e) {
         errors.add(
             "CDS response Cluster '" + clusterName + "' validation error: " + e.getMessage());
@@ -1572,7 +1573,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   }
 
   @VisibleForTesting
-  static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources,
+  static CdsUpdate processCluster(Cluster cluster, Set<String> retainedEdsResources,
       Set<String> certProviderInstances, ServerInfo serverInfo)
       throws ResourceInvalidException {
     StructOrError<CdsUpdate.Builder> structOrError;
