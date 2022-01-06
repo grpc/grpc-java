@@ -681,6 +681,7 @@ public final class InternalChannelz {
       Certificate localCert = null;
       Certificate remoteCert = null;
       Certificate[] localCerts = session.getLocalCertificates();
+      System.err.println("session.getProtocol()=" + session.getProtocol());
       if (localCerts != null) {
         localCert = localCerts[0];
       }

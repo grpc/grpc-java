@@ -415,6 +415,12 @@ public class ProtocolNegotiatorsTest {
         .trustManager(caCert)
         .build();
     Status status = expectFailedHandshake(channelCreds, serverCreds);
+    System.err.println("java.version=" + System.getProperty("java.version"));
+    String[] enabled = engine.getEnabledProtocols();
+    String[] supported = engine.getSupportedProtocols();
+    System.err.println("enabled protocols=" + Arrays.toString(enabled));
+    System.err.println("supported protocols=" + Arrays.toString(supported));
+    status.asException().printStackTrace(); // temp - for debygging
     assertThat(status.getDescription()).isEqualTo("ssl exception");
   }
 
