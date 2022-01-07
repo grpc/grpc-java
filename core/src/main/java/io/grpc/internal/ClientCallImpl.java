@@ -53,7 +53,6 @@ import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import java.io.InputStream;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.CancellationException;
