@@ -54,6 +54,7 @@ import io.grpc.okhttp.internal.TlsVersion;
 import io.grpc.util.CertificateUtils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
@@ -667,21 +668,24 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
 
   static KeyManager[] createKeyManager(byte[] certChain, byte[] privateKey)
       throws GeneralSecurityException {
-    X509Certificate[] chain;
-    ByteArrayInputStream inCertChain = new ByteArrayInputStream(certChain);
+    InputStream certChainStream = new ByteArrayInputStream(certChain);
+    InputStream privateKeyStream = new ByteArrayInputStream(privateKey);
     try {
-      chain = CertificateUtils.getX509Certificates(inCertChain);
+      return createKeyManager(certChainStream, privateKeyStream);
     } finally {
-      GrpcUtil.closeQuietly(inCertChain);
+      GrpcUtil.closeQuietly(certChainStream);
+      GrpcUtil.closeQuietly(privateKeyStream);
     }
+  }
+
+  static KeyManager[] createKeyManager(InputStream certChain, InputStream privateKey)
+      throws GeneralSecurityException {
+    X509Certificate[] chain = CertificateUtils.getX509Certificates(certChain);
     PrivateKey key;
-    ByteArrayInputStream inPrivateKey = new ByteArrayInputStream(privateKey);
     try {
-      key = CertificateUtils.getPrivateKey(inPrivateKey);
+      key = CertificateUtils.getPrivateKey(privateKey);
     } catch (IOException uee) {
       throw new GeneralSecurityException("Unable to decode private key", uee);
-    } finally {
-      GrpcUtil.closeQuietly(inPrivateKey);
     }
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     try {
@@ -699,6 +703,15 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
   }
 
   static TrustManager[] createTrustManager(byte[] rootCerts) throws GeneralSecurityException {
+    InputStream rootCertsStream = new ByteArrayInputStream(rootCerts);
+    try {
+      return createTrustManager(rootCertsStream);
+    } finally {
+      GrpcUtil.closeQuietly(rootCertsStream);
+    }
+  }
+
+  static TrustManager[] createTrustManager(InputStream rootCerts) throws GeneralSecurityException {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     try {
       ks.load(null, null);
@@ -706,13 +719,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
       // Shouldn't really happen, as we're not loading any data.
       throw new GeneralSecurityException(ex);
     }
-    X509Certificate[] certs;
-    ByteArrayInputStream in = new ByteArrayInputStream(rootCerts);
-    try {
-      certs = CertificateUtils.getX509Certificates(in);
-    } finally {
-      GrpcUtil.closeQuietly(in);
-    }
+    X509Certificate[] certs = CertificateUtils.getX509Certificates(rootCerts);
     for (X509Certificate cert : certs) {
       X500Principal principal = cert.getSubjectX500Principal();
       ks.setCertificateEntry(principal.getName("RFC2253"), cert);
