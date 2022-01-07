@@ -28,7 +28,7 @@ echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 # Proto deps
 buildscripts/make_dependencies.sh
 
-GRADLE_FLAGS="-Pandroid.useAndroidX=true -Pandroid.enableJetifier=true"
+GRADLE_FLAGS="-Pandroid.useAndroidX=true"
 
 ./gradlew \
     :grpc-android-interop-testing:build \

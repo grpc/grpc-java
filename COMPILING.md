@@ -15,11 +15,7 @@ Some parts of grpc-java depend on Android. Since many Java developers don't have
 the Android SDK installed and don't need to run or modify the Android
 components, the build can skip it. To skip, create the file
 `<project-root>/gradle.properties` and add `skipAndroid=true`.
-Otherwise, create the file `<project-root>/gradle.properties` and add
-```
-android.useAndroidX=true
-android.enableJetifier=true
-```
+Otherwise, create the file `<project-root>/gradle.properties` and add `android.useAndroidX=true`.
 
 Then, to build, run:
 ```
