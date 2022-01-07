@@ -51,6 +51,11 @@
       <artifactId>protobuf-java-util</artifactId>
       <version>${protobuf.version}</version>
     </dependency>
+    <dependency><!-- protobuf-java-util pulls in newer Guava; satify requireUpperBoundDeps -->
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>30.1-android</version>
+    </dependency>
     <dependency>
       <groupId>org.apache.tomcat</groupId>
       <artifactId>annotations-api</artifactId>
