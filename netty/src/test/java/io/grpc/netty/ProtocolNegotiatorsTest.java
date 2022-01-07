@@ -415,6 +415,12 @@ public class ProtocolNegotiatorsTest {
         .trustManager(caCert)
         .build();
     Status status = expectFailedHandshake(channelCreds, serverCreds);
+    if (status.getCause() != null) {
+      status.getCause().printStackTrace();
+    } else {
+      Logger logger = Logger.getLogger(ProtocolNegotiators.class.getName());
+      logger.severe("status has no exception attached");
+    }
     assertThat(status.getDescription()).isEqualTo("ssl exception");
   }
 
