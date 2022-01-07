@@ -53,7 +53,7 @@ import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import java.io.InputStream;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
@@ -71,7 +71,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   private static final Logger log = Logger.getLogger(ClientCallImpl.class.getName());
   private static final byte[] FULL_STREAM_DECOMPRESSION_ENCODINGS
-      = "gzip".getBytes(Charset.forName("US-ASCII"));
+      = "gzip".getBytes(StandardCharsets.US_ASCII);
 
   private final MethodDescriptor<ReqT, RespT> method;
   private final Tag tag;
