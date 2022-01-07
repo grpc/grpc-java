@@ -56,16 +56,16 @@ sourceSets {
 startScripts.enabled = false
 
 task helloWorldTlsServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworldtls.HelloWorldServerTls'
+    mainClass = 'io.grpc.examples.helloworldtls.HelloWorldServerTls'
     applicationName = 'hello-world-tls-server'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task helloWorldTlsClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworldtls.HelloWorldClientTls'
+    mainClass = 'io.grpc.examples.helloworldtls.HelloWorldClientTls'
     applicationName = 'hello-world-tls-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 

@@ -61,9 +61,9 @@ sourceSets {
 startScripts.enabled = false
 
 task googleAuthClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.googleAuth.GoogleAuthClient'
+    mainClass = 'io.grpc.examples.googleAuth.GoogleAuthClient'
     applicationName = 'google-auth-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 

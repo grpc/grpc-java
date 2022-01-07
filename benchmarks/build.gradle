@@ -4,7 +4,7 @@ plugins {
     id "maven-publish"
 
     id "com.google.protobuf"
-    id "me.champeau.gradle.jmh"
+    id "me.champeau.jmh"
 }
 
 description = "grpc Benchmarks"
@@ -13,7 +13,7 @@ startScripts.enabled = false
 run.enabled = false
 
 jmh {
-    jvmArgs = "-server -Xms2g -Xmx2g"
+    jvmArgs = ["-server", "-Xms2g", "-Xmx2g"]
 }
 
 configurations {
@@ -55,7 +55,7 @@ def vmArgs = [
 ]
 
 task qps_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.benchmarks.qps.AsyncClient"
+    mainClass = "io.grpc.benchmarks.qps.AsyncClient"
     applicationName = "qps_client"
     defaultJvmOpts = vmArgs
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
@@ -63,7 +63,7 @@ task qps_client(type: CreateStartScripts) {
 }
 
 task openloop_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.benchmarks.qps.OpenLoopClient"
+    mainClass = "io.grpc.benchmarks.qps.OpenLoopClient"
     applicationName = "openloop_client"
     defaultJvmOpts = vmArgs
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
@@ -71,14 +71,14 @@ task openloop_client(type: CreateStartScripts) {
 }
 
 task qps_server(type: CreateStartScripts) {
-    mainClassName = "io.grpc.benchmarks.qps.AsyncServer"
+    mainClass = "io.grpc.benchmarks.qps.AsyncServer"
     applicationName = "qps_server"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task benchmark_worker(type: CreateStartScripts) {
-    mainClassName = "io.grpc.benchmarks.driver.LoadWorker"
+    mainClass = "io.grpc.benchmarks.driver.LoadWorker"
     applicationName = "benchmark_worker"
     defaultJvmOpts = vmArgs
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
