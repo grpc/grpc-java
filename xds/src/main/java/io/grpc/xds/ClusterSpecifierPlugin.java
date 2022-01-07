@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import com.google.auto.value.AutoValue;
 import com.google.protobuf.Message;
 
 /**
@@ -34,5 +35,16 @@ interface ClusterSpecifierPlugin {
   /** Represents an opaque data structure holding configuration for a ClusterSpecifierPlugin. */
   interface PluginConfig {
     String typeUrl();
+  }
+
+  @AutoValue
+  abstract class NamedPluginConfig {
+    abstract String name();
+
+    abstract PluginConfig config();
+
+    static NamedPluginConfig create(String name, PluginConfig config) {
+      return new AutoValue_ClusterSpecifierPlugin_NamedPluginConfig(name, config);
+    }
   }
 }
