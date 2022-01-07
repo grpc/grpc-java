@@ -421,7 +421,7 @@ public class ProtocolNegotiatorsTest {
     System.err.println("enabled protocols=" + Arrays.toString(enabled));
     System.err.println("supported protocols=" + Arrays.toString(supported));
     status.asException().printStackTrace(); // temp - for debygging
-    assertThat(status.getDescription()).isEqualTo("ssl exception");
+    assertThat(status.getDescription()).isEqualTo("mis exception");
   }
 
   @Test
