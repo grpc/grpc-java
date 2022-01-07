@@ -21,20 +21,11 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.util.Timestamps;
 import io.envoyproxy.envoy.admin.v3.ClientResourceStatus;
-import io.envoyproxy.envoy.admin.v3.ClustersConfigDump;
-import io.envoyproxy.envoy.admin.v3.ClustersConfigDump.DynamicCluster;
-import io.envoyproxy.envoy.admin.v3.EndpointsConfigDump;
-import io.envoyproxy.envoy.admin.v3.EndpointsConfigDump.DynamicEndpointConfig;
-import io.envoyproxy.envoy.admin.v3.ListenersConfigDump;
-import io.envoyproxy.envoy.admin.v3.ListenersConfigDump.DynamicListener;
-import io.envoyproxy.envoy.admin.v3.ListenersConfigDump.DynamicListenerState;
-import io.envoyproxy.envoy.admin.v3.RoutesConfigDump;
-import io.envoyproxy.envoy.admin.v3.RoutesConfigDump.DynamicRouteConfig;
 import io.envoyproxy.envoy.service.status.v3.ClientConfig;
+import io.envoyproxy.envoy.service.status.v3.ClientConfig.GenericXdsConfig;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusRequest;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusResponse;
-import io.envoyproxy.envoy.service.status.v3.PerXdsConfig;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -150,124 +141,33 @@ public final class CsdsService extends
 
   @VisibleForTesting
   static ClientConfig getClientConfigForXdsClient(XdsClient xdsClient) {
-    ListenersConfigDump ldsConfig = dumpLdsConfig(
-        xdsClient.getSubscribedResourcesMetadata(ResourceType.LDS),
-        xdsClient.getCurrentVersion(ResourceType.LDS));
-    RoutesConfigDump rdsConfig = dumpRdsConfig(
-        xdsClient.getSubscribedResourcesMetadata(ResourceType.RDS));
-    ClustersConfigDump cdsConfig = dumpCdsConfig(
-        xdsClient.getSubscribedResourcesMetadata(ResourceType.CDS),
-        xdsClient.getCurrentVersion(ResourceType.CDS));
-    EndpointsConfigDump edsConfig = dumpEdsConfig(
-        xdsClient.getSubscribedResourcesMetadata(ResourceType.EDS));
-
-    return ClientConfig.newBuilder()
-        .setNode(xdsClient.getBootstrapInfo().getNode().toEnvoyProtoNode())
-        .addXdsConfig(PerXdsConfig.newBuilder().setListenerConfig(ldsConfig))
-        .addXdsConfig(PerXdsConfig.newBuilder().setRouteConfig(rdsConfig))
-        .addXdsConfig(PerXdsConfig.newBuilder().setClusterConfig(cdsConfig))
-        .addXdsConfig(PerXdsConfig.newBuilder().setEndpointConfig(edsConfig))
-        .build();
-  }
-
-  @VisibleForTesting
-  static ListenersConfigDump dumpLdsConfig(
-      Map<String, ResourceMetadata> resourcesMetadata, String version) {
-    ListenersConfigDump.Builder ldsConfig = ListenersConfigDump.newBuilder();
-    for (Map.Entry<String, ResourceMetadata> entry : resourcesMetadata.entrySet()) {
-      ldsConfig.addDynamicListeners(buildDynamicListener(entry.getKey(), entry.getValue()));
+    ClientConfig.Builder builder = ClientConfig.newBuilder()
+        .setNode(xdsClient.getBootstrapInfo().node().toEnvoyProtoNode());
+    for (ResourceType type : ResourceType.values()) {
+      if (type == ResourceType.UNKNOWN) {
+        continue;
+      }
+      Map<String, ResourceMetadata> metadataMap = xdsClient.getSubscribedResourcesMetadata(type);
+      for (String resourceName : metadataMap.keySet()) {
+        ResourceMetadata metadata = metadataMap.get(resourceName);
+        GenericXdsConfig.Builder genericXdsConfigBuilder = GenericXdsConfig.newBuilder()
+            .setTypeUrl(type.typeUrl())
+            .setName(resourceName)
+            .setClientStatus(metadataStatusToClientStatus(metadata.getStatus()));
+        if (metadata.getRawResource() != null) {
+          genericXdsConfigBuilder
+              .setVersionInfo(metadata.getVersion())
+              .setLastUpdated(Timestamps.fromNanos(metadata.getUpdateTimeNanos()))
+              .setXdsConfig(metadata.getRawResource());
+        }
+        if (metadata.getStatus() == ResourceMetadataStatus.NACKED) {
+          genericXdsConfigBuilder
+              .setErrorState(metadataUpdateFailureStateToProto(metadata.getErrorState()));
+        }
+        builder.addGenericXdsConfigs(genericXdsConfigBuilder);
+      }
     }
-    return ldsConfig.setVersionInfo(version).build();
-  }
-
-  @VisibleForTesting
-  static DynamicListener buildDynamicListener(String name, ResourceMetadata metadata) {
-    DynamicListener.Builder dynamicListener = DynamicListener.newBuilder()
-        .setName(name)
-        .setClientStatus(metadataStatusToClientStatus(metadata.getStatus()));
-    if (metadata.getErrorState() != null) {
-      dynamicListener.setErrorState(metadataUpdateFailureStateToProto(metadata.getErrorState()));
-    }
-    DynamicListenerState.Builder dynamicListenerState = DynamicListenerState.newBuilder()
-        .setVersionInfo(metadata.getVersion())
-        .setLastUpdated(Timestamps.fromNanos(metadata.getUpdateTimeNanos()));
-    if (metadata.getRawResource() != null) {
-      dynamicListenerState.setListener(metadata.getRawResource());
-    }
-    return dynamicListener.setActiveState(dynamicListenerState).build();
-  }
-
-  @VisibleForTesting
-  static RoutesConfigDump dumpRdsConfig(Map<String, ResourceMetadata> resourcesMetadata) {
-    RoutesConfigDump.Builder rdsConfig = RoutesConfigDump.newBuilder();
-    for (ResourceMetadata metadata : resourcesMetadata.values()) {
-      rdsConfig.addDynamicRouteConfigs(buildDynamicRouteConfig(metadata));
-    }
-    return rdsConfig.build();
-  }
-
-  @VisibleForTesting
-  static DynamicRouteConfig buildDynamicRouteConfig(ResourceMetadata metadata) {
-    DynamicRouteConfig.Builder dynamicRouteConfig = DynamicRouteConfig.newBuilder()
-        .setVersionInfo(metadata.getVersion())
-        .setClientStatus(metadataStatusToClientStatus(metadata.getStatus()))
-        .setLastUpdated(Timestamps.fromNanos(metadata.getUpdateTimeNanos()));
-    if (metadata.getErrorState() != null) {
-      dynamicRouteConfig.setErrorState(metadataUpdateFailureStateToProto(metadata.getErrorState()));
-    }
-    if (metadata.getRawResource() != null) {
-      dynamicRouteConfig.setRouteConfig(metadata.getRawResource());
-    }
-    return dynamicRouteConfig.build();
-  }
-
-  @VisibleForTesting
-  static ClustersConfigDump dumpCdsConfig(
-      Map<String, ResourceMetadata> resourcesMetadata, String version) {
-    ClustersConfigDump.Builder cdsConfig = ClustersConfigDump.newBuilder();
-    for (ResourceMetadata metadata : resourcesMetadata.values()) {
-      cdsConfig.addDynamicActiveClusters(buildDynamicCluster(metadata));
-    }
-    return cdsConfig.setVersionInfo(version).build();
-  }
-
-  @VisibleForTesting
-  static DynamicCluster buildDynamicCluster(ResourceMetadata metadata) {
-    DynamicCluster.Builder dynamicCluster = DynamicCluster.newBuilder()
-        .setVersionInfo(metadata.getVersion())
-        .setClientStatus(metadataStatusToClientStatus(metadata.getStatus()))
-        .setLastUpdated(Timestamps.fromNanos(metadata.getUpdateTimeNanos()));
-    if (metadata.getErrorState() != null) {
-      dynamicCluster.setErrorState(metadataUpdateFailureStateToProto(metadata.getErrorState()));
-    }
-    if (metadata.getRawResource() != null) {
-      dynamicCluster.setCluster(metadata.getRawResource());
-    }
-    return dynamicCluster.build();
-  }
-
-  @VisibleForTesting
-  static EndpointsConfigDump dumpEdsConfig(Map<String, ResourceMetadata> resourcesMetadata) {
-    EndpointsConfigDump.Builder edsConfig = EndpointsConfigDump.newBuilder();
-    for (ResourceMetadata metadata : resourcesMetadata.values()) {
-      edsConfig.addDynamicEndpointConfigs(buildDynamicEndpointConfig(metadata));
-    }
-    return edsConfig.build();
-  }
-
-  @VisibleForTesting
-  static DynamicEndpointConfig buildDynamicEndpointConfig(ResourceMetadata metadata) {
-    DynamicEndpointConfig.Builder dynamicRouteConfig = DynamicEndpointConfig.newBuilder()
-        .setVersionInfo(metadata.getVersion())
-        .setClientStatus(metadataStatusToClientStatus(metadata.getStatus()))
-        .setLastUpdated(Timestamps.fromNanos(metadata.getUpdateTimeNanos()));
-    if (metadata.getErrorState() != null) {
-      dynamicRouteConfig.setErrorState(metadataUpdateFailureStateToProto(metadata.getErrorState()));
-    }
-    if (metadata.getRawResource() != null) {
-      dynamicRouteConfig.setEndpointConfig(metadata.getRawResource());
-    }
-    return dynamicRouteConfig.build();
+    return builder.build();
   }
 
   @VisibleForTesting

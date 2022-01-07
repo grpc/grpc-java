@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Duration;
 import com.google.re2j.Pattern;
 import io.grpc.Status.Code;
+import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
@@ -34,7 +35,7 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 
-/** Reprsents an upstream virtual host. */
+/** Represents an upstream virtual host. */
 @AutoValue
 abstract class VirtualHost {
   // The canonical name of this virtual host.
@@ -160,13 +161,16 @@ abstract class VirtualHost {
       abstract ImmutableList<ClusterWeight> weightedClusters();
 
       @Nullable
+      abstract NamedPluginConfig namedClusterSpecifierPluginConfig();
+
+      @Nullable
       abstract RetryPolicy retryPolicy();
 
       static RouteAction forCluster(
           String cluster, List<HashPolicy> hashPolicies, @Nullable Long timeoutNano,
           @Nullable RetryPolicy retryPolicy) {
         checkNotNull(cluster, "cluster");
-        return RouteAction.create(hashPolicies, timeoutNano, cluster, null, retryPolicy);
+        return RouteAction.create(hashPolicies, timeoutNano, cluster, null, null, retryPolicy);
       }
 
       static RouteAction forWeightedClusters(
@@ -174,15 +178,32 @@ abstract class VirtualHost {
           @Nullable Long timeoutNano, @Nullable RetryPolicy retryPolicy) {
         checkNotNull(weightedClusters, "weightedClusters");
         checkArgument(!weightedClusters.isEmpty(), "empty cluster list");
-        return RouteAction.create(hashPolicies, timeoutNano, null, weightedClusters, retryPolicy);
+        return RouteAction.create(
+            hashPolicies, timeoutNano, null, weightedClusters, null, retryPolicy);
       }
 
-      private static RouteAction create(List<HashPolicy> hashPolicies, @Nullable Long timeoutNano,
-          @Nullable String cluster, @Nullable List<ClusterWeight> weightedClusters,
+      static RouteAction forClusterSpecifierPlugin(
+          NamedPluginConfig namedConfig,
+          List<HashPolicy> hashPolicies,
+          @Nullable Long timeoutNano,
+          @Nullable RetryPolicy retryPolicy) {
+        checkNotNull(namedConfig, "namedConfig");
+        return RouteAction.create(hashPolicies, timeoutNano, null, null, namedConfig, retryPolicy);
+      }
+
+      private static RouteAction create(
+          List<HashPolicy> hashPolicies,
+          @Nullable Long timeoutNano,
+          @Nullable String cluster,
+          @Nullable List<ClusterWeight> weightedClusters,
+          @Nullable NamedPluginConfig namedConfig,
           @Nullable RetryPolicy retryPolicy) {
         return new AutoValue_VirtualHost_Route_RouteAction(
-            ImmutableList.copyOf(hashPolicies), timeoutNano, cluster,
+            ImmutableList.copyOf(hashPolicies),
+            timeoutNano,
+            cluster,
             weightedClusters == null ? null : ImmutableList.copyOf(weightedClusters),
+            namedConfig,
             retryPolicy);
       }
 

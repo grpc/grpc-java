@@ -16,7 +16,6 @@
 
 package io.grpc.rls;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -25,17 +24,15 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /** RlsProtoData is a collection of internal representation of RouteLookupService proto messages. */
 final class RlsProtoData {
+
+  private RlsProtoData() {}
 
   /** A request object sent to route lookup service. */
   @Immutable
@@ -140,21 +137,17 @@ final class RlsProtoData {
   @Immutable
   static final class RouteLookupConfig {
 
-    private static final long MAX_AGE_MILLIS = TimeUnit.MINUTES.toMillis(5);
-
     private final ImmutableList<GrpcKeyBuilder> grpcKeyBuilders;
 
     private final String lookupService;
 
-    private final long lookupServiceTimeoutInMillis;
+    private final long lookupServiceTimeoutInNanos;
 
-    private final long maxAgeInMillis;
+    private final long maxAgeInNanos;
 
-    private final long staleAgeInMillis;
+    private final long staleAgeInNanos;
 
     private final long cacheSizeBytes;
-
-    private final ImmutableList<String> validTargets;
 
     @Nullable
     private final String defaultTarget;
@@ -162,40 +155,18 @@ final class RlsProtoData {
     RouteLookupConfig(
         List<GrpcKeyBuilder> grpcKeyBuilders,
         String lookupService,
-        long lookupServiceTimeoutInMillis,
-        @Nullable Long maxAgeInMillis,
-        @Nullable Long staleAgeInMillis,
+        long lookupServiceTimeoutInNanos,
+        long maxAgeInNanos,
+        long staleAgeInNanos,
         long cacheSizeBytes,
-        List<String> validTargets,
         @Nullable
         String defaultTarget) {
-      checkState(
-          !checkNotNull(grpcKeyBuilders, "grpcKeyBuilders").isEmpty(),
-          "must have at least one GrpcKeyBuilder");
-      checkUniqueName(grpcKeyBuilders);
       this.grpcKeyBuilders = ImmutableList.copyOf(grpcKeyBuilders);
-      // TODO(creamsoup) also check if it is URI
-      checkState(
-          lookupService != null && !lookupService.isEmpty(), "lookupService must not be empty");
       this.lookupService = lookupService;
-      checkState(
-          lookupServiceTimeoutInMillis > 0, "lookupServiceTimeoutInMillis should be positive");
-      this.lookupServiceTimeoutInMillis = lookupServiceTimeoutInMillis;
-      if (maxAgeInMillis == null) {
-        checkState(
-            staleAgeInMillis == null, "To specify staleAgeInMillis, must have maxAgeInMillis");
-      }
-      if (maxAgeInMillis == null || maxAgeInMillis == 0) {
-        maxAgeInMillis = MAX_AGE_MILLIS;
-      }
-      if (staleAgeInMillis == null || staleAgeInMillis == 0) {
-        staleAgeInMillis = MAX_AGE_MILLIS;
-      }
-      this.maxAgeInMillis = Math.min(maxAgeInMillis, MAX_AGE_MILLIS);
-      this.staleAgeInMillis = Math.min(staleAgeInMillis, this.maxAgeInMillis);
-      checkArgument(cacheSizeBytes > 0, "cacheSize must be positive");
+      this.lookupServiceTimeoutInNanos = lookupServiceTimeoutInNanos;
+      this.maxAgeInNanos = maxAgeInNanos;
+      this.staleAgeInNanos = staleAgeInNanos;
       this.cacheSizeBytes = cacheSizeBytes;
-      this.validTargets = ImmutableList.copyOf(checkNotNull(validTargets, "validTargets"));
       this.defaultTarget = defaultTarget;
     }
 
@@ -218,22 +189,22 @@ final class RlsProtoData {
     }
 
     /** Returns the timeout value for lookup service requests. */
-    long getLookupServiceTimeoutInMillis() {
-      return lookupServiceTimeoutInMillis;
+    long getLookupServiceTimeoutInNanos() {
+      return lookupServiceTimeoutInNanos;
     }
 
 
     /** Returns the maximum age the result will be cached. */
-    long getMaxAgeInMillis() {
-      return maxAgeInMillis;
+    long getMaxAgeInNanos() {
+      return maxAgeInNanos;
     }
 
     /**
      * Returns the time when an entry will be in a staled status. When cache is accessed whgen the
      * entry is in staled status, it will
      */
-    long getStaleAgeInMillis() {
-      return staleAgeInMillis;
+    long getStaleAgeInNanos() {
+      return staleAgeInNanos;
     }
 
     /**
@@ -244,15 +215,6 @@ final class RlsProtoData {
      */
     long getCacheSizeBytes() {
       return cacheSizeBytes;
-    }
-
-    /**
-     * Returns the list of all the possible targets that can be returned by the lookup service.  If
-     * a target not on this list is returned, it will be treated the same as an RPC error from the
-     * RLS.
-     */
-    ImmutableList<String> getValidTargets() {
-      return validTargets;
     }
 
     /**
@@ -275,9 +237,9 @@ final class RlsProtoData {
         return false;
       }
       RouteLookupConfig that = (RouteLookupConfig) o;
-      return lookupServiceTimeoutInMillis == that.lookupServiceTimeoutInMillis
-          && maxAgeInMillis == that.maxAgeInMillis
-          && staleAgeInMillis == that.staleAgeInMillis
+      return lookupServiceTimeoutInNanos == that.lookupServiceTimeoutInNanos
+          && maxAgeInNanos == that.maxAgeInNanos
+          && staleAgeInNanos == that.staleAgeInNanos
           && cacheSizeBytes == that.cacheSizeBytes
           && Objects.equal(grpcKeyBuilders, that.grpcKeyBuilders)
           && Objects.equal(lookupService, that.lookupService)
@@ -289,9 +251,9 @@ final class RlsProtoData {
       return Objects.hashCode(
           grpcKeyBuilders,
           lookupService,
-          lookupServiceTimeoutInMillis,
-          maxAgeInMillis,
-          staleAgeInMillis,
+          lookupServiceTimeoutInNanos,
+          maxAgeInNanos,
+          staleAgeInNanos,
           cacheSizeBytes,
           defaultTarget);
     }
@@ -301,23 +263,12 @@ final class RlsProtoData {
       return MoreObjects.toStringHelper(this)
           .add("grpcKeyBuilders", grpcKeyBuilders)
           .add("lookupService", lookupService)
-          .add("lookupServiceTimeoutInMillis", lookupServiceTimeoutInMillis)
-          .add("maxAgeInMillis", maxAgeInMillis)
-          .add("staleAgeInMillis", staleAgeInMillis)
+          .add("lookupServiceTimeoutInNanos", lookupServiceTimeoutInNanos)
+          .add("maxAgeInNanos", maxAgeInNanos)
+          .add("staleAgeInNanos", staleAgeInNanos)
           .add("cacheSize", cacheSizeBytes)
           .add("defaultTarget", defaultTarget)
           .toString();
-    }
-  }
-
-  private static void checkUniqueName(List<GrpcKeyBuilder> grpcKeyBuilders) {
-    Set<Name> names = new HashSet<>();
-    for (GrpcKeyBuilder grpcKeyBuilder : grpcKeyBuilders) {
-      int prevSize = names.size();
-      names.addAll(grpcKeyBuilder.getNames());
-      if (names.size() != prevSize + grpcKeyBuilder.getNames().size()) {
-        throw new IllegalStateException("Names in the GrpcKeyBuilders should be unique");
-      }
     }
   }
 
@@ -333,12 +284,9 @@ final class RlsProtoData {
 
     private final ImmutableList<String> names;
 
-    private final boolean optional;
-
-    NameMatcher(String key, List<String> names, @Nullable Boolean optional) {
+    NameMatcher(String key, List<String> names) {
       this.key = checkNotNull(key, "key");
       this.names = ImmutableList.copyOf(checkNotNull(names, "names"));
-      this.optional = optional != null ? optional : true;
     }
 
     /** The name that will be used in the RLS key_map to refer to this value. */
@@ -351,13 +299,6 @@ final class RlsProtoData {
       return names;
     }
 
-    /**
-     * Indicates if this extraction optional. A key builder will still match if no value is found.
-     */
-    boolean isOptional() {
-      return optional;
-    }
-
     @Override
     public boolean equals(Object o) {
       if (this == o) {
@@ -367,14 +308,13 @@ final class RlsProtoData {
         return false;
       }
       NameMatcher matcher = (NameMatcher) o;
-      return optional == matcher.optional
-          && java.util.Objects.equals(key, matcher.key)
+      return java.util.Objects.equals(key, matcher.key)
           && java.util.Objects.equals(names, matcher.names);
     }
 
     @Override
     public int hashCode() {
-      return java.util.Objects.hash(key, names, optional);
+      return java.util.Objects.hash(key, names);
     }
 
     @Override
@@ -382,7 +322,6 @@ final class RlsProtoData {
       return MoreObjects.toStringHelper(this)
           .add("key", key)
           .add("names", names)
-          .add("optional", optional)
           .toString();
     }
   }
@@ -396,22 +335,15 @@ final class RlsProtoData {
     private final ExtraKeys extraKeys;
     private final ImmutableMap<String, String> constantKeys;
 
-    public GrpcKeyBuilder(
+    /** Constructor. All args should be nonnull. Headers should head unique keys. */
+    GrpcKeyBuilder(
         List<Name> names, List<NameMatcher> headers, ExtraKeys extraKeys,
         Map<String, String> constantKeys) {
       checkState(names != null && !names.isEmpty(), "names cannot be empty");
       this.names = ImmutableList.copyOf(names);
-      checkUniqueKey(checkNotNull(headers, "headers"));
       this.headers = ImmutableList.copyOf(headers);
       this.extraKeys = checkNotNull(extraKeys, "extraKeys");
       this.constantKeys = ImmutableMap.copyOf(checkNotNull(constantKeys, "constantKeys"));
-    }
-
-    private static void checkUniqueKey(List<NameMatcher> headers) {
-      Set<String> names = new HashSet<>();
-      for (NameMatcher header :  headers) {
-        checkState(names.add(header.key), "key in headers must be unique");
-      }
     }
 
     /**
@@ -479,16 +411,11 @@ final class RlsProtoData {
 
       private final String service;
 
+      @Nullable
       private final String method;
 
-      Name(String service) {
-        this(service, "*");
-      }
-
-      Name(String service, String method) {
-        checkState(
-            !checkNotNull(service, "service").isEmpty(),
-            "service must not be empty or null");
+      /** The primary constructor. */
+      Name(String service, @Nullable String method) {
         this.service = service;
         this.method = method;
       }
@@ -497,6 +424,7 @@ final class RlsProtoData {
         return service;
       }
 
+      @Nullable
       String getMethod() {
         return method;
       }

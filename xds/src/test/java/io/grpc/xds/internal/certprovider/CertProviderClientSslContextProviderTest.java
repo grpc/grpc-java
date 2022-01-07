@@ -83,8 +83,8 @@ public class CertProviderClientSslContextProviderTest {
             staticCertValidationContext);
     return certProviderClientSslContextProviderFactory.getProvider(
         upstreamTlsContext,
-        bootstrapInfo.getNode().toEnvoyProtoNode(),
-        bootstrapInfo.getCertProviders());
+        bootstrapInfo.node().toEnvoyProtoNode(),
+        bootstrapInfo.certProviders());
   }
 
   /** Helper method to build CertProviderClientSslContextProvider. */
@@ -104,8 +104,8 @@ public class CertProviderClientSslContextProviderTest {
                     staticCertValidationContext);
     return certProviderClientSslContextProviderFactory.getProvider(
             upstreamTlsContext,
-            bootstrapInfo.getNode().toEnvoyProtoNode(),
-            bootstrapInfo.getCertProviders());
+            bootstrapInfo.node().toEnvoyProtoNode(),
+            bootstrapInfo.certProviders());
   }
 
   @Test

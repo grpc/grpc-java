@@ -27,7 +27,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
+import com.github.xds.data.orca.v3.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;

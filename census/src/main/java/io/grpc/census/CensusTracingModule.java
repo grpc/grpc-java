@@ -226,7 +226,7 @@ final class CensusTracingModule {
   }
 
   @VisibleForTesting
-  final class CallAttemptsTracerFactory extends ClientStreamTracer.InternalLimitedInfoFactory {
+  final class CallAttemptsTracerFactory extends ClientStreamTracer.Factory {
     volatile int callEnded;
 
     private final boolean isSampledToLocalTracing;

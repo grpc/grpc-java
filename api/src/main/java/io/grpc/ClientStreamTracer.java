@@ -81,10 +81,6 @@ public abstract class ClientStreamTracer extends StreamTracer {
     }
   }
 
-  /** An abstract class for internal use only. */
-  @Internal
-  public abstract static class InternalLimitedInfoFactory extends Factory {}
-
   /**
    * Information about a stream.
    *
@@ -95,30 +91,15 @@ public abstract class ClientStreamTracer extends StreamTracer {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
   public static final class StreamInfo {
-    private final Attributes transportAttrs;
     private final CallOptions callOptions;
     private final int previousAttempts;
     private final boolean isTransparentRetry;
 
     StreamInfo(
-        Attributes transportAttrs, CallOptions callOptions, int previousAttempts,
-        boolean isTransparentRetry) {
-      this.transportAttrs = checkNotNull(transportAttrs, "transportAttrs");
+        CallOptions callOptions, int previousAttempts, boolean isTransparentRetry) {
       this.callOptions = checkNotNull(callOptions, "callOptions");
       this.previousAttempts = previousAttempts;
       this.isTransparentRetry = isTransparentRetry;
-    }
-
-    /**
-     * Returns the attributes of the transport that this stream was created on.
-     *
-     * @deprecated Use {@link ClientStreamTracer#streamCreated(Attributes, Metadata)} to handle
-     *             the transport Attributes instead.
-     */
-    @Deprecated
-    @Grpc.TransportAttr
-    public Attributes getTransportAttrs() {
-      return transportAttrs;
     }
 
     /**
@@ -154,7 +135,6 @@ public abstract class ClientStreamTracer extends StreamTracer {
     public Builder toBuilder() {
       return new Builder()
           .setCallOptions(callOptions)
-          .setTransportAttrs(transportAttrs)
           .setPreviousAttempts(previousAttempts)
           .setIsTransparentRetry(isTransparentRetry);
     }
@@ -171,7 +151,6 @@ public abstract class ClientStreamTracer extends StreamTracer {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("transportAttrs", transportAttrs)
           .add("callOptions", callOptions)
           .add("previousAttempts", previousAttempts)
           .add("isTransparentRetry", isTransparentRetry)
@@ -184,25 +163,11 @@ public abstract class ClientStreamTracer extends StreamTracer {
      * @since 1.21.0
      */
     public static final class Builder {
-      private Attributes transportAttrs = Attributes.EMPTY;
       private CallOptions callOptions = CallOptions.DEFAULT;
       private int previousAttempts;
       private boolean isTransparentRetry;
 
       Builder() {
-      }
-
-      /**
-       * Sets the attributes of the transport that this stream was created on.  This field is
-       * optional.
-       *
-       * @deprecated Use {@link ClientStreamTracer#streamCreated(Attributes, Metadata)} to handle
-       *             the transport Attributes instead.
-       */
-      @Deprecated
-      public Builder setTransportAttrs(@Grpc.TransportAttr Attributes transportAttrs) {
-        this.transportAttrs = checkNotNull(transportAttrs, "transportAttrs cannot be null");
-        return this;
       }
 
       /**
@@ -237,7 +202,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
        * Builds a new StreamInfo.
        */
       public StreamInfo build() {
-        return new StreamInfo(transportAttrs, callOptions, previousAttempts, isTransparentRetry);
+        return new StreamInfo(callOptions, previousAttempts, isTransparentRetry);
       }
     }
   }

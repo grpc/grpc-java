@@ -16,13 +16,15 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkArgument;
 
+import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.xds.EnvoyProtoData.Node;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -32,6 +34,8 @@ import javax.annotation.Nullable;
  */
 @Internal
 public abstract class Bootstrapper {
+
+  static final String XDSTP_SCHEME = "xdstp:";
 
   /**
    * Returns system-loaded bootstrap configuration.
@@ -49,29 +53,19 @@ public abstract class Bootstrapper {
    * Data class containing xDS server information, such as server URI and channel credentials
    * to be used for communication.
    */
+  @AutoValue
   @Internal
-  static class ServerInfo {
-    private final String target;
-    private final ChannelCredentials channelCredentials;
-    private final boolean useProtocolV3;
+  abstract static class ServerInfo {
+    abstract String target();
+
+    abstract ChannelCredentials channelCredentials();
+
+    abstract boolean useProtocolV3();
 
     @VisibleForTesting
-    ServerInfo(String target, ChannelCredentials channelCredentials, boolean useProtocolV3) {
-      this.target = checkNotNull(target, "target");
-      this.channelCredentials = checkNotNull(channelCredentials, "channelCredentials");
-      this.useProtocolV3 = useProtocolV3;
-    }
-
-    String getTarget() {
-      return target;
-    }
-
-    ChannelCredentials getChannelCredentials() {
-      return channelCredentials;
-    }
-
-    boolean isUseProtocolV3() {
-      return useProtocolV3;
+    static ServerInfo create(
+        String target, ChannelCredentials channelCredentials, boolean useProtocolV3) {
+      return new AutoValue_Bootstrapper_ServerInfo(target, channelCredentials, useProtocolV3);
     }
   }
 
@@ -79,71 +73,149 @@ public abstract class Bootstrapper {
    * Data class containing Certificate provider information: the plugin-name and an opaque
    * Map that represents the config for that plugin.
    */
+  @AutoValue
   @Internal
-  public static class CertificateProviderInfo {
-    private final String pluginName;
-    private final Map<String, ?> config;
+  public abstract static class CertificateProviderInfo {
+    public abstract String pluginName();
+
+    public abstract ImmutableMap<String, ?> config();
 
     @VisibleForTesting
-    public CertificateProviderInfo(String pluginName, Map<String, ?> config) {
-      this.pluginName = checkNotNull(pluginName, "pluginName");
-      this.config = checkNotNull(config, "config");
+    public static CertificateProviderInfo create(String pluginName, Map<String, ?> config) {
+      return new AutoValue_Bootstrapper_CertificateProviderInfo(
+          pluginName, ImmutableMap.copyOf(config));
     }
+  }
 
-    public String getPluginName() {
-      return pluginName;
-    }
+  @AutoValue
+  abstract static class AuthorityInfo {
 
-    public Map<String, ?> getConfig() {
-      return config;
+    /**
+     * A template for the name of the Listener resource to subscribe to for a gRPC client
+     * channel. Used only when the channel is created using an "xds:" URI with this authority
+     * name.
+     *
+     * <p>The token "%s", if present in this string, will be replaced with %-encoded
+     * service authority (i.e., the path part of the target URI used to create the gRPC channel).
+     *
+     * <p>Return value must start with {@code "xdstp://<authority_name>/"}.
+     */
+    abstract String clientListenerResourceNameTemplate();
+
+    /**
+     * Ordered list of xDS servers to contact for this authority.
+     *
+     * <p>If the same server is listed in multiple authorities, the entries will be de-duped (i.e.,
+     * resources for both authorities will be fetched on the same ADS stream).
+     *
+     * <p>Defaults to the top-level server list {@link BootstrapInfo#servers()}. Must not be empty.
+     */
+    abstract ImmutableList<ServerInfo> xdsServers();
+
+    static AuthorityInfo create(
+        String clientListenerResourceNameTemplate, List<ServerInfo> xdsServers) {
+      checkArgument(!xdsServers.isEmpty(), "xdsServers must not be empty");
+      return new AutoValue_Bootstrapper_AuthorityInfo(
+          clientListenerResourceNameTemplate, ImmutableList.copyOf(xdsServers));
     }
   }
 
   /**
    * Data class containing the results of reading bootstrap.
    */
+  @AutoValue
   @Internal
-  public static class BootstrapInfo {
-    private List<ServerInfo> servers;
-    private final Node node;
-    @Nullable private final Map<String, CertificateProviderInfo> certProviders;
-    @Nullable private final String serverListenerResourceNameTemplate;
+  public abstract static class BootstrapInfo {
+    /** Returns the list of xDS servers to be connected to. Must not be empty. */
+    abstract ImmutableList<ServerInfo> servers();
 
-    @VisibleForTesting
-    BootstrapInfo(
-        List<ServerInfo> servers,
-        Node node,
-        Map<String, CertificateProviderInfo> certProviders,
-        String serverListenerResourceNameTemplate) {
-      this.servers = servers;
-      this.node = node;
-      this.certProviders = certProviders;
-      this.serverListenerResourceNameTemplate = serverListenerResourceNameTemplate;
-    }
-
-    /**
-     * Returns the list of xDS servers to be connected to.
-     */
-    List<ServerInfo> getServers() {
-      return Collections.unmodifiableList(servers);
-    }
-
-    /**
-     * Returns the node identifier to be included in xDS requests.
-     */
-    public Node getNode() {
-      return node;
-    }
+    /** Returns the node identifier to be included in xDS requests. */
+    public abstract Node node();
 
     /** Returns the cert-providers config map. */
     @Nullable
-    public Map<String, CertificateProviderInfo> getCertProviders() {
-      return certProviders == null ? null : Collections.unmodifiableMap(certProviders);
+    public abstract ImmutableMap<String, CertificateProviderInfo> certProviders();
+
+    /**
+     * A template for the name of the Listener resource to subscribe to for a gRPC server.
+     *
+     * <p>If starts with "xdstp:", will be interpreted as a new-style name, in which case the
+     * authority of the URI will be used to select the relevant configuration in the
+     * "authorities" map. The token "%s", if present in this string, will be replaced with
+     * the IP and port on which the server is listening. If the template starts with "xdstp:",
+     * the replaced string will be %-encoded.
+     *
+     * <p>There is no default; if unset, xDS-based server creation fails.
+     */
+    @Nullable
+    public abstract String serverListenerResourceNameTemplate();
+
+    /**
+     * A template for the name of the Listener resource to subscribe to for a gRPC client channel.
+     * Used only when the channel is created with an "xds:" URI with no authority.
+     *
+     * <p>If starts with "xdstp:", will be interpreted as a new-style name, in which case the
+     * authority of the URI will be used to select the relevant configuration in the "authorities"
+     * map.
+     *
+     * <p>The token "%s", if present in this string, will be replaced with the service authority
+     * (i.e., the path part of the target URI used to create the gRPC channel). If the template
+     * starts with "xdstp:", the replaced string will be %-encoded.
+     *
+     * <p>Defaults to {@code "%s"}.
+     */
+    abstract String clientDefaultListenerResourceNameTemplate();
+
+    /**
+     * A map of authority name to corresponding configuration.
+     *
+     * <p>This is used in the following cases:
+     *
+     * <ul>
+     * <li>A gRPC client channel is created using an "xds:" URI that includes  an
+     * authority.</li>
+     *
+     * <li>A gRPC client channel is created using an "xds:" URI with no authority,
+     * but the "client_default_listener_resource_name_template" field above turns it into an
+     * "xdstp:" URI.</li>
+     *
+     * <li>A gRPC server is created and the "server_listener_resource_name_template" field is an
+     * "xdstp:" URI.</li>
+     * </ul>
+     *
+     * <p>In any of those cases, it is an error if the specified authority is not present in this
+     * map.
+     *
+     * <p>Defaults to an empty map.
+     */
+    abstract ImmutableMap<String, AuthorityInfo> authorities();
+
+    @VisibleForTesting
+    static Builder builder() {
+      return new AutoValue_Bootstrapper_BootstrapInfo.Builder()
+          .clientDefaultListenerResourceNameTemplate("%s")
+          .authorities(ImmutableMap.<String, AuthorityInfo>of());
     }
 
-    @Nullable
-    public String getServerListenerResourceNameTemplate() {
-      return serverListenerResourceNameTemplate;
+    @AutoValue.Builder
+    @VisibleForTesting
+    abstract static class Builder {
+
+      abstract Builder servers(List<ServerInfo> servers);
+
+      abstract Builder node(Node node);
+
+      abstract Builder certProviders(@Nullable Map<String, CertificateProviderInfo> certProviders);
+
+      abstract Builder serverListenerResourceNameTemplate(
+          @Nullable String serverListenerResourceNameTemplate);
+
+      abstract Builder clientDefaultListenerResourceNameTemplate(
+          String clientDefaultListenerResourceNameTemplate);
+
+      abstract Builder authorities(Map<String, AuthorityInfo> authorities);
+
+      abstract BootstrapInfo build();
     }
   }
 }

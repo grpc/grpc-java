@@ -23,6 +23,11 @@ import javax.annotation.CheckReturnValue;
 /**
  * Decides whether a given Android UID is authorized to access some resource.
  *
+ * While it's possible to extend this class to define your own policy, it's strongly
+ * recommended that you only use the policies provided by the {@link SecurityPolicies} or
+ * {@link UntrustedSecurityPolicies} classes. Implementing your own security policy requires
+ * significant care, and an understanding of the details and pitfalls of Android security.
+ *
  * <p><b>IMPORTANT</b> For any concrete extensions of this class, it's assumed that the
  * authorization status of a given UID will <b>not</b> change as long as a process with that UID is
  * alive.

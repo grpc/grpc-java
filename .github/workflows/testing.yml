@@ -53,6 +53,13 @@ jobs:
 
     - name: Build
       run: buildscripts/kokoro/unix.sh
+    - name: Post Failure Upload Test Reports to Artifacts
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: Test Reports (JRE ${{ matrix.jre }})
+        path: ./*/build/reports/tests/**
+        retention-days: 14
     - name: Check for modified codegen
       run: test -z "$(git status --porcelain)" || (git status && echo Error Working directory is not clean. Forget to commit generated files? && false)
 
@@ -60,4 +67,4 @@ jobs:
       if: matrix.jre == 8 # Upload once, instead of for each job in the matrix
       run: ./gradlew :grpc-all:coveralls -x compileJava
     - name: Codecov
-      uses: codecov/codecov-action@v1
+      uses: codecov/codecov-action@v2

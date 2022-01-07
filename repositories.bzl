@@ -15,12 +15,12 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.auth:google-auth-library-credentials:0.22.0",
     "com.google.auth:google-auth-library-oauth2-http:0.22.0",
     "com.google.code.findbugs:jsr305:3.0.2",
-    "com.google.code.gson:gson:jar:2.8.6",
+    "com.google.code.gson:gson:jar:2.8.9",
     "com.google.auto.value:auto-value:1.7.4",
     "com.google.auto.value:auto-value-annotations:1.7.4",
     "com.google.errorprone:error_prone_annotations:2.9.0",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:30.1-android",
+    "com.google.guava:guava:30.1.1-android",
     "com.google.j2objc:j2objc-annotations:1.3",
     "com.google.truth:truth:1.0.1",
     "com.squareup.okhttp:okhttp:2.7.4",
@@ -92,37 +92,24 @@ def grpc_java_repositories():
     if not native.existing_rule("io_grpc_grpc_proto"):
         io_grpc_grpc_proto()
 
-    native.bind(
-        name = "guava",
-        actual = "@com_google_guava_guava//jar",
-    )
-    native.bind(
-        name = "gson",
-        actual = "@com_google_code_gson_gson//jar",
-    )
-    native.bind(
-        name = "error_prone_annotations",
-        actual = "@com_google_errorprone_error_prone_annotations//jar",
-    )
-
 def com_google_protobuf():
     # proto_library rules implicitly depend on @com_google_protobuf//:protoc,
     # which is the proto-compiler.
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "f6042eef01551cee4c663a11c3f429c06360a1f51daa9f4772bf3f13d24cde1f",
-        strip_prefix = "protobuf-3.17.2",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.17.2.zip"],
+        sha256 = "9ceef0daf7e8be16cd99ac759271eb08021b53b1c7b6edd399953a76390234cd",
+        strip_prefix = "protobuf-3.19.2",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.19.2.zip"],
     )
 
 def com_google_protobuf_javalite():
     # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
     http_archive(
         name = "com_google_protobuf_javalite",
-        sha256 = "f6042eef01551cee4c663a11c3f429c06360a1f51daa9f4772bf3f13d24cde1f",
-        strip_prefix = "protobuf-3.17.2",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.17.2.zip"],
+        sha256 = "9ceef0daf7e8be16cd99ac759271eb08021b53b1c7b6edd399953a76390234cd",
+        strip_prefix = "protobuf-3.19.2",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.19.2.zip"],
     )
 
 def io_grpc_grpc_proto():

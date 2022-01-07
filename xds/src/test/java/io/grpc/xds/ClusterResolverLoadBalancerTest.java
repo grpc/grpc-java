@@ -34,6 +34,7 @@ import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -56,6 +57,7 @@ import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.PolicySelection;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
@@ -103,7 +105,8 @@ public class ClusterResolverLoadBalancerTest {
   private static final String EDS_SERVICE_NAME1 = "backend-service-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME2 = "backend-service-bar.googleapis.com";
   private static final String DNS_HOST_NAME = "dns-service.googleapis.com";
-  private static final String LRS_SERVER_NAME = "lrs.googleapis.com";
+  private static final ServerInfo LRS_SERVER_INFO =
+      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create(), true);
   private final Locality locality1 =
       Locality.create("test-region-1", "test-zone-1", "test-subzone-1");
   private final Locality locality2 =
@@ -113,11 +116,11 @@ public class ClusterResolverLoadBalancerTest {
   private final UpstreamTlsContext tlsContext =
       CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
   private final DiscoveryMechanism edsDiscoveryMechanism1 =
-      DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L, tlsContext);
+      DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext);
   private final DiscoveryMechanism edsDiscoveryMechanism2 =
-      DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_NAME, 200L, tlsContext);
+      DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L, tlsContext);
   private final DiscoveryMechanism logicalDnsDiscoveryMechanism =
-      DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, DNS_HOST_NAME, LRS_SERVER_NAME, 300L, null);
+      DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, DNS_HOST_NAME, LRS_SERVER_INFO, 300L, null);
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -256,7 +259,7 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     ClusterImplConfig clusterImplConfig =
         (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
-    assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L,
+    assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
         tlsContext, Collections.<DropOverload>emptyList(), "ring_hash");
     RingHashConfig ringHashConfig =
         (RingHashConfig) clusterImplConfig.childPolicy.getConfig();
@@ -320,7 +323,7 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     ClusterImplConfig clusterImplConfig1 =
         (ClusterImplConfig) priorityChildConfig1.policySelection.getConfig();
-    assertClusterImplConfig(clusterImplConfig1, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_NAME, 200L,
+    assertClusterImplConfig(clusterImplConfig1, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L,
         tlsContext, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
     WeightedTargetConfig weightedTargetConfig1 =
         (WeightedTargetConfig) clusterImplConfig1.childPolicy.getConfig();
@@ -335,7 +338,7 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     ClusterImplConfig clusterImplConfig2 =
         (ClusterImplConfig) priorityChildConfig2.policySelection.getConfig();
-    assertClusterImplConfig(clusterImplConfig2, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_NAME, 200L,
+    assertClusterImplConfig(clusterImplConfig2, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L,
         tlsContext, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
     WeightedTargetConfig weightedTargetConfig2 =
         (WeightedTargetConfig) clusterImplConfig2.childPolicy.getConfig();
@@ -358,7 +361,7 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     ClusterImplConfig clusterImplConfig3 =
         (ClusterImplConfig) priorityChildConfig3.policySelection.getConfig();
-    assertClusterImplConfig(clusterImplConfig3, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_NAME, 100L,
+    assertClusterImplConfig(clusterImplConfig3, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
         tlsContext, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
     WeightedTargetConfig weightedTargetConfig3 =
         (WeightedTargetConfig) clusterImplConfig3.childPolicy.getConfig();
@@ -549,7 +552,7 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     ClusterImplConfig clusterImplConfig =
         (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
-    assertClusterImplConfig(clusterImplConfig, CLUSTER_DNS, null, LRS_SERVER_NAME, 300L, null,
+    assertClusterImplConfig(clusterImplConfig, CLUSTER_DNS, null, LRS_SERVER_INFO, 300L, null,
         Collections.<DropOverload>emptyList(), "pick_first");
     assertAddressesEqual(Arrays.asList(endpoint1, endpoint2), childBalancer.addresses);
   }
@@ -884,12 +887,12 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   private static void assertClusterImplConfig(ClusterImplConfig config, String cluster,
-      @Nullable String edsServiceName, String lrsServerName, Long maxConcurrentRequests,
+      @Nullable String edsServiceName, ServerInfo lrsServerInfo, Long maxConcurrentRequests,
       @Nullable UpstreamTlsContext tlsContext, List<DropOverload> dropCategories,
       String childPolicy) {
     assertThat(config.cluster).isEqualTo(cluster);
     assertThat(config.edsServiceName).isEqualTo(edsServiceName);
-    assertThat(config.lrsServerName).isEqualTo(lrsServerName);
+    assertThat(config.lrsServerInfo).isEqualTo(lrsServerInfo);
     assertThat(config.maxConcurrentRequests).isEqualTo(maxConcurrentRequests);
     assertThat(config.tlsContext).isEqualTo(tlsContext);
     assertThat(config.dropCategories).isEqualTo(dropCategories);
