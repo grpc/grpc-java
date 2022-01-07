@@ -54,6 +54,7 @@ project.sourceSets {
 test {
     // Allow testing Jetty ALPN in TlsTest
     jvmArgs "-javaagent:" + configurations.alpnagent.asPath
+    systemProperty "io.netty.handler.ssl.openssl.useTasks", "false"
 }
 
 jmh {
