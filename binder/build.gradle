@@ -1,7 +1,6 @@
 plugins {
     id "maven-publish"
     id "com.android.library"
-    id "ru.vyarus.animalsniffer"
     id "digital.wup.android-maven-publish"
 }
 

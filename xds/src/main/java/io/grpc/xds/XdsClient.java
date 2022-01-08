@@ -113,10 +113,10 @@ abstract class XdsClient {
     // Endpoint-level load balancing policy.
     abstract LbPolicy lbPolicy();
 
-    // Only valid if lbPolicy is "ring_hash".
+    // Only valid if lbPolicy is "ring_hash_experimental".
     abstract long minRingSize();
 
-    // Only valid if lbPolicy is "ring_hash".
+    // Only valid if lbPolicy is "ring_hash_experimental".
     abstract long maxRingSize();
 
     // Only valid if lbPolicy is "least_request_experimental".

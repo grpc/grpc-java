@@ -37,7 +37,7 @@ import java.util.List;
 abstract class OrcaPerRequestUtil {
   private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER = new ClientStreamTracer() {};
   private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
-      new ClientStreamTracer.InternalLimitedInfoFactory() {
+      new ClientStreamTracer.Factory() {
         @Override
         public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
           return NOOP_CLIENT_STREAM_TRACER;
@@ -190,7 +190,7 @@ abstract class OrcaPerRequestUtil {
    */
   @VisibleForTesting
   static final class OrcaReportingTracerFactory extends
-      ClientStreamTracer.InternalLimitedInfoFactory {
+      ClientStreamTracer.Factory {
 
     @VisibleForTesting
     static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =

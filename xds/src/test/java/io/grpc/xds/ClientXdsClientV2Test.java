@@ -444,7 +444,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
       Cluster.Builder builder = Cluster.newBuilder().setName(clusterName).setClusterType(type);
       if (lbPolicy.equals("round_robin")) {
         builder.setLbPolicy(LbPolicy.ROUND_ROBIN);
-      } else if (lbPolicy.equals("ring_hash")) {
+      } else if (lbPolicy.equals("ring_hash_experimental")) {
         builder.setLbPolicy(LbPolicy.RING_HASH);
         builder.setRingHashLbConfig((RingHashLbConfig) ringHashLbConfig);
       } else if (lbPolicy.equals("least_request_experimental")) {
@@ -464,7 +464,7 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
       builder.setName(clusterName);
       if (lbPolicy.equals("round_robin")) {
         builder.setLbPolicy(LbPolicy.ROUND_ROBIN);
-      } else if (lbPolicy.equals("ring_hash")) {
+      } else if (lbPolicy.equals("ring_hash_experimental")) {
         builder.setLbPolicy(LbPolicy.RING_HASH);
         builder.setRingHashLbConfig((RingHashLbConfig) ringHashLbConfig);
       } else if (lbPolicy.equals("least_request_experimental")) {

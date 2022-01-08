@@ -672,7 +672,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    * Generates configs to be used in the priority LB policy for priorities in an EDS cluster.
    *
    * <p>priority LB -> cluster_impl LB (one per priority) -> (weighted_target LB
-   * -> round_robin (one per locality)) / ring_hash
+   * -> round_robin (one per locality)) / ring_hash_experimental
    */
   private static Map<String, PriorityChildConfig> generateEdsBasedPriorityChildConfigs(
       String cluster, @Nullable String edsServiceName, @Nullable ServerInfo lrsServerInfo,
@@ -687,9 +687,9 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       // created. If the endpoint-level LB policy is round_robin, it creates a two-level LB
       // hierarchy: a locality-level LB policy that balances load according to locality weights
       // followed by an endpoint-level LB policy that simply rounds robin the endpoints within
-      // the locality. If the endpoint-level LB policy is ring_hash, it creates a unified LB
-      // policy that balances load by weighing the product of each endpoint's weight and the
-      // weight of the locality it belongs to.
+      // the locality. If the endpoint-level LB policy is ring_hash_experimental, it creates
+      // a unified LB policy that balances load by weighing the product of each endpoint's weight
+      // and the weight of the locality it belongs to.
       if (endpointLbPolicy.getProvider().getPolicyName().equals("round_robin")
           || endpointLbPolicy.getProvider().getPolicyName().equals("least_request_experimental")) {
         Map<Locality, Integer> localityWeights = prioritizedLocalityWeights.get(priority);

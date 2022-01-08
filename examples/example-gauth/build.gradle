@@ -24,7 +24,7 @@ targetCompatibility = 1.7
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
 def grpcVersion = '1.44.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.17.2'
+def protobufVersion = '3.19.2'
 def protocVersion = protobufVersion
 
 
@@ -61,9 +61,9 @@ sourceSets {
 startScripts.enabled = false
 
 task googleAuthClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.googleAuth.GoogleAuthClient'
+    mainClass = 'io.grpc.examples.googleAuth.GoogleAuthClient'
     applicationName = 'google-auth-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 

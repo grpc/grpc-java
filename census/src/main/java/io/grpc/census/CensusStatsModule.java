@@ -397,7 +397,7 @@ final class CensusStatsModule {
 
   @VisibleForTesting
   static final class CallAttemptsTracerFactory extends
-      ClientStreamTracer.InternalLimitedInfoFactory {
+      ClientStreamTracer.Factory {
     static final MeasureLong RETRIES_PER_CALL =
         Measure.MeasureLong.create(
             "grpc.io/client/retries_per_call", "Number of retries per call", "1");

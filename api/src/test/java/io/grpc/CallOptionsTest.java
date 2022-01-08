@@ -272,7 +272,7 @@ public class CallOptionsTest {
     }
   }
 
-  private static class FakeTracerFactory extends ClientStreamTracer.InternalLimitedInfoFactory {
+  private static class FakeTracerFactory extends ClientStreamTracer.Factory {
     final String name;
 
     FakeTracerFactory(String name) {

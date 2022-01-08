@@ -67,7 +67,9 @@ public class NettyTestUtil {
       inUse = true;
       return new Executor() {
         @Override
-        public void execute(Runnable var1) { }
+        public void execute(Runnable var1) {
+          var1.run();
+        }
       };
     }
 
