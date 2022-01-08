@@ -1682,7 +1682,7 @@ public class ClientXdsClientDataTest {
         .setLbPolicy(LbPolicy.LEAST_REQUEST)
         .build();
 
-    CdsUpdate update = ClientXdsClient.parseCluster(
+    CdsUpdate update = ClientXdsClient.processCluster(
         cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
     assertThat(update.lbPolicy()).isEqualTo(CdsUpdate.LbPolicy.LEAST_REQUEST);
     assertThat(update.choiceCount())
@@ -1784,7 +1784,7 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid least_request_lb_config");
-    ClientXdsClient.parseCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
+    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
   }
 
   @Test
