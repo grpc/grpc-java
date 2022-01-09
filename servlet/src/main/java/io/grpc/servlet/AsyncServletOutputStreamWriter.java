@@ -183,6 +183,9 @@ final class AsyncServletOutputStreamWriter {
     WriteState curState = writeState.get();
     if (curState.readyAndDrained) { // write to the outputStream directly
       actionItem.run();
+      if (actionItem == completeAction) {
+        return;
+      }
       if (!outputStream.isReady()) {
         boolean successful =
             writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
