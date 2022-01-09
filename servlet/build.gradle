@@ -80,3 +80,10 @@ if (JavaVersion.current().isJava11Compatible()) {
         testClassesDirs = sourceSets.jettyTest.output.classesDirs
     })
 }
+
+jacocoTestReport {
+    executionData undertowTest, tomcat9Test
+    if (JavaVersion.current().isJava11Compatible()) {
+        executionData jettyTest
+    }
+}
