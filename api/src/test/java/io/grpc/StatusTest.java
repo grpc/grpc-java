@@ -21,6 +21,8 @@ import static org.junit.Assert.assertSame;
 
 import io.grpc.Status.Code;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -28,7 +30,7 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link Status}. */
 @RunWith(JUnit4.class)
 public class StatusTest {
-  private final Charset ascii = Charset.forName("US-ASCII");
+  private final Charset ascii = StandardCharsets.US_ASCII;
 
   @Test
   public void verifyExceptionMessage() {

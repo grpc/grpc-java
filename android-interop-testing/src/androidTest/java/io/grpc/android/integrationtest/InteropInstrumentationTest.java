@@ -20,7 +20,6 @@ import static junit.framework.Assert.assertEquals;
 
 import android.util.Log;
 import androidx.test.InstrumentationRegistry;
-import androidx.test.rule.ActivityTestRule;
 import androidx.test.runner.AndroidJUnit4;
 import com.google.android.gms.common.GooglePlayServicesNotAvailableException;
 import com.google.android.gms.common.GooglePlayServicesRepairableException;
@@ -30,7 +29,6 @@ import io.grpc.android.integrationtest.InteropTask.Listener;
 import java.io.InputStream;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -45,12 +43,6 @@ public class InteropInstrumentationTest {
   private String serverHostOverride;
   private boolean useTestCa;
   private String testCase;
-
-  // Ensures Looper is initialized for tests running on API level 15. Otherwise instantiating an
-  // AsyncTask throws an exception.
-  @Rule
-  public ActivityTestRule<TesterActivity> activityRule =
-      new ActivityTestRule<TesterActivity>(TesterActivity.class);
 
   @Before
   public void setUp() throws Exception {

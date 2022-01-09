@@ -135,7 +135,7 @@ public class ClusterResolverLoadBalancerTest {
   private final PolicySelection roundRobin =
       new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null);
   private final PolicySelection ringHash = new PolicySelection(
-      new FakeLoadBalancerProvider("ring_hash"), new RingHashConfig(10L, 100L));
+      new FakeLoadBalancerProvider("ring_hash_experimental"), new RingHashConfig(10L, 100L));
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
   private final List<FakeNameResolver> resolvers = new ArrayList<>();
   private final FakeXdsClient xdsClient = new FakeXdsClient();
@@ -260,7 +260,7 @@ public class ClusterResolverLoadBalancerTest {
     ClusterImplConfig clusterImplConfig =
         (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
     assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
-        tlsContext, Collections.<DropOverload>emptyList(), "ring_hash");
+        tlsContext, Collections.<DropOverload>emptyList(), "ring_hash_experimental");
     RingHashConfig ringHashConfig =
         (RingHashConfig) clusterImplConfig.childPolicy.getConfig();
     assertThat(ringHashConfig.minRingSize).isEqualTo(10L);
