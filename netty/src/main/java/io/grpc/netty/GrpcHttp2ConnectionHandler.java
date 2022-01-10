@@ -58,6 +58,7 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
    * @deprecated Use the two argument method instead.
    */
   @Deprecated
+  @SuppressWarnings("InlineMeSuggester") // the caller should consider providing securityInfo
   public void handleProtocolNegotiationCompleted(Attributes attrs) {
     handleProtocolNegotiationCompleted(attrs, /*securityInfo=*/ null);
   }

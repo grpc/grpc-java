@@ -42,6 +42,7 @@ class BinaryLogProviderImpl extends BinaryLogProvider {
    * Deprecated and will be removed in a future version of gRPC.
    */
   @Deprecated
+  @SuppressWarnings("InlineMeSuggester") // Only called internally; don't care
   public BinaryLogProviderImpl(BinaryLogSink sink) throws IOException {
     this(sink, System.getenv("GRPC_BINARY_LOG_CONFIG"));
   }
