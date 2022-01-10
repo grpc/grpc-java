@@ -16,10 +16,6 @@ set -exu -o pipefail
 # It would be nicer to use 'readlink -f' here but osx does not support it.
 readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 
-if [[ -f /VERSION ]]; then
-  cat /VERSION
-fi
-
 # cd to the root dir of grpc-java
 cd $(dirname $0)/../..
 
