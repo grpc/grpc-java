@@ -1622,7 +1622,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       updateBuilder.ringHashLbPolicy(minRingSize, maxRingSize);
     } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
       updateBuilder.roundRobinLbPolicy();
-    } else if ( enableLeastRequest && cluster.getLbPolicy() == LbPolicy.LEAST_REQUEST) {
+    } else if (enableLeastRequest && cluster.getLbPolicy() == LbPolicy.LEAST_REQUEST) {
       LeastRequestLbConfig lbConfig =  cluster.getLeastRequestLbConfig();
       int choiceCount =
               lbConfig.hasChoiceCount()
