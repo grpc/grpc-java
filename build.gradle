@@ -314,6 +314,7 @@ subprojects {
             options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
             options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
+            options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
         }
 
         plugins.withId("ru.vyarus.animalsniffer") {
