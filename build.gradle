@@ -7,6 +7,7 @@ plugins {
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
+import org.gradle.util.GUtil
 
 subprojects {
     apply plugin: "checkstyle"
@@ -97,6 +98,11 @@ subprojects {
                             def syncTask = project.tasks.register("syncGeneratedSources${variantOrSourceSet}", Sync) {
                                 from "$buildDir/generated/source/proto/${variantOrSourceSet}/grpc"
                                 into "$generatedSourcePath/${variantOrSourceSet}/grpc"
+                                String source = GUtil.toCamelCase(variantOrSourceSet)
+                                if (source == "Main") {
+                                    source = ""
+                                }
+                                dependsOn "generate${source}Proto"
                             }
                             syncGeneratedSources.dependsOn syncTask
 
