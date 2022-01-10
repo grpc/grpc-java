@@ -157,6 +157,7 @@ public class ClientXdsClientDataTest {
   private boolean originalEnableRetry;
   private boolean originalEnableRbac;
   private boolean originalEnableRouteLookup;
+  private boolean originalEnableLeastRequest;
 
   @Before
   public void setUp() {
@@ -166,6 +167,8 @@ public class ClientXdsClientDataTest {
     assertThat(originalEnableRbac).isTrue();
     originalEnableRouteLookup = ClientXdsClient.enableRouteLookup;
     assertThat(originalEnableRouteLookup).isFalse();
+    originalEnableLeastRequest = ClientXdsClient.enableLeastRequest;
+    assertThat(originalEnableLeastRequest).isFalse();
   }
 
   @After
@@ -173,6 +176,7 @@ public class ClientXdsClientDataTest {
     ClientXdsClient.enableRetry = originalEnableRetry;
     ClientXdsClient.enableRbac = originalEnableRbac;
     ClientXdsClient.enableRouteLookup = originalEnableRouteLookup;
+    ClientXdsClient.enableLeastRequest = originalEnableLeastRequest;
   }
 
   @Test
@@ -1670,6 +1674,7 @@ public class ClientXdsClientDataTest {
 
   @Test
   public void parseCluster_leastRequestLbPolicy_defaultLbConfig() throws ResourceInvalidException {
+    ClientXdsClient.enableLeastRequest = true;
     Cluster cluster = Cluster.newBuilder()
         .setName("cluster-foo.googleapis.com")
         .setType(DiscoveryType.EDS)
@@ -1766,6 +1771,7 @@ public class ClientXdsClientDataTest {
   @Test
   public void parseCluster_leastRequestLbPolicy_invalidChoiceCountConfig_tooSmallChoiceCount()
       throws ResourceInvalidException {
+    ClientXdsClient.enableLeastRequest = true;
     Cluster cluster = Cluster.newBuilder()
         .setName("cluster-foo.googleapis.com")
         .setType(DiscoveryType.EDS)

@@ -161,6 +161,11 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   static boolean enableRouteLookup =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"))
           && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"));
+  @VisibleForTesting
+  static boolean enableLeastRequest =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
+          ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
+          : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
 
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
@@ -1617,7 +1622,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       updateBuilder.ringHashLbPolicy(minRingSize, maxRingSize);
     } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
       updateBuilder.roundRobinLbPolicy();
-    } else if (cluster.getLbPolicy() == LbPolicy.LEAST_REQUEST) {
+    } else if ( enableLeastRequest && cluster.getLbPolicy() == LbPolicy.LEAST_REQUEST) {
       LeastRequestLbConfig lbConfig =  cluster.getLeastRequestLbConfig();
       int choiceCount =
               lbConfig.hasChoiceCount()
