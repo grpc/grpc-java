@@ -497,6 +497,12 @@ abstract class XdsClient {
   /**
    * Returns a map from the "resource type" to a map ("resource name": "resource metadata")
    * containing the snapshot of the subscribed resources as they are at the moment of the call.
+   *
+   * @throws com.google.common.util.concurrent.UncheckedExecutionException
+   *     if couldn't retrieve the snapshot of the subscribed resources in a synchronous manner
+   *     because the task failed, cancelled, or timed out.
+   *     TODO(sergiitk): when migrated to Java 8, throw CompletionException instead.
+   * @throws InterruptedException if the current thread was interrupted while waiting.
    */
   // Must be synchronized.
   Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot()

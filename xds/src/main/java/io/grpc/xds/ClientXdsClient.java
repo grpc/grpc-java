@@ -122,6 +122,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -163,8 +164,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   static boolean enableRouteLookup =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"))
           && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"));
-
-  private static final long METADATA_SYNC_TIMEOUT_SEC = 1;
+  // Normally this shouldn't take long, but add some slack for cases like a cold JVM.
+  private static final long METADATA_SYNC_TIMEOUT_SEC = 20;
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
@@ -2062,7 +2063,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       return future.get(METADATA_SYNC_TIMEOUT_SEC, TimeUnit.SECONDS);
     } catch (ExecutionException e) {
       throw new UncheckedExecutionException(e.getCause());
-    } catch (TimeoutException e) {
+    } catch (TimeoutException | CancellationException e) {
       throw new UncheckedExecutionException(e);
     } catch (InterruptedException e) {
       logger.log(XdsLogLevel.DEBUG, "Interrupted while preparing subscribed resources snapshot", e);
