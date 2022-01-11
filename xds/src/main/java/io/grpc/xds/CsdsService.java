@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Verify.verifyNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.util.Timestamps;
 import io.envoyproxy.envoy.admin.v3.ClientResourceStatus;
 import io.envoyproxy.envoy.service.status.v3.ClientConfig;
@@ -38,6 +39,9 @@ import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsClient.ResourceMetadata.UpdateFailureState;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -154,11 +158,15 @@ public final class CsdsService extends
   static ClientConfig getClientConfigForXdsClient(XdsClient xdsClient) throws InterruptedException {
     ClientConfig.Builder builder = ClientConfig.newBuilder()
         .setNode(xdsClient.getBootstrapInfo().node().toEnvoyProtoNode());
+
+    Map<ResourceType, Map<String, ResourceMetadata>> metadataByType =
+        awaitSubscribedResourcesMetadata(xdsClient.getSubscribedResourcesMetadataSnapshot());
+
     for (Map.Entry<ResourceType, Map<String, ResourceMetadata>> metadataByTypeEntry
-        : xdsClient.getSubscribedResourcesMetadataSnapshot().entrySet()) {
+        : metadataByType.entrySet()) {
       ResourceType type = metadataByTypeEntry.getKey();
-      for (Map.Entry<String, ResourceMetadata> metadataEntry
-          : metadataByTypeEntry.getValue().entrySet()) {
+      Map<String, ResourceMetadata> metadataByResourceName = metadataByTypeEntry.getValue();
+      for (Map.Entry<String, ResourceMetadata> metadataEntry : metadataByResourceName.entrySet()) {
         String resourceName = metadataEntry.getKey();
         ResourceMetadata metadata = metadataEntry.getValue();
         GenericXdsConfig.Builder genericXdsConfigBuilder = GenericXdsConfig.newBuilder()
@@ -180,6 +188,18 @@ public final class CsdsService extends
       }
     }
     return builder.build();
+  }
+
+  private static Map<ResourceType, Map<String, ResourceMetadata>> awaitSubscribedResourcesMetadata(
+      ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>> future)
+      throws InterruptedException {
+    try {
+      // Normally this shouldn't take long, but add some slack for cases like a cold JVM.
+      return future.get(20, TimeUnit.SECONDS);
+    } catch (ExecutionException | TimeoutException e) {
+      // Four CSDS' purposes, the exact reason why metadata not loaded isn't important.
+      throw new RuntimeException(e);
+    }
   }
 
   @VisibleForTesting

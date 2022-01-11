@@ -379,17 +379,23 @@ public abstract class ClientXdsClientTestBase {
 
   private void verifySubscribedResourcesMetadataSizes(
       int ldsSize, int cdsSize, int rdsSize, int edsSize) {
-    Map<ResourceType, Map<String, ResourceMetadata>> subscribedResourcesMetadata;
-    try {
-      subscribedResourcesMetadata = xdsClient.getSubscribedResourcesMetadataSnapshot();
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new AssertionError("Thread interrupted", e);
-    }
+    Map<ResourceType, Map<String, ResourceMetadata>> subscribedResourcesMetadata =
+        awaitSubscribedResourcesMetadata();
     assertThat(subscribedResourcesMetadata.get(LDS)).hasSize(ldsSize);
     assertThat(subscribedResourcesMetadata.get(CDS)).hasSize(cdsSize);
     assertThat(subscribedResourcesMetadata.get(RDS)).hasSize(rdsSize);
     assertThat(subscribedResourcesMetadata.get(EDS)).hasSize(edsSize);
+  }
+
+  private Map<ResourceType, Map<String, ResourceMetadata>> awaitSubscribedResourcesMetadata() {
+    try {
+      return xdsClient.getSubscribedResourcesMetadataSnapshot().get(20, TimeUnit.SECONDS);
+    } catch (Exception e) {
+      if (e instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
+      throw new AssertionError(e);
+    }
   }
 
   /** Verify the resource requested, but not updated. */
@@ -441,28 +447,20 @@ public abstract class ClientXdsClientTestBase {
   private ResourceMetadata verifyResourceMetadata(
       ResourceType type, String resourceName, Any rawResource, ResourceMetadataStatus status,
       String versionInfo, long updateTimeNanos, boolean hasErrorState) {
-    ResourceMetadata resourceMetadata;
-    try {
-      resourceMetadata =
-          xdsClient.getSubscribedResourcesMetadataSnapshot().get(type).get(resourceName);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new AssertionError("Thread interrupted", e);
-    }
-    assertThat(resourceMetadata).isNotNull();
+    ResourceMetadata metadata = awaitSubscribedResourcesMetadata().get(type).get(resourceName);
+    assertThat(metadata).isNotNull();
     String name = type.toString() + " resource '" + resourceName + "' metadata field ";
-    assertWithMessage(name + "status").that(resourceMetadata.getStatus()).isEqualTo(status);
-    assertWithMessage(name + "version").that(resourceMetadata.getVersion()).isEqualTo(versionInfo);
-    assertWithMessage(name + "rawResource").that(resourceMetadata.getRawResource())
-        .isEqualTo(rawResource);
-    assertWithMessage(name + "updateTimeNanos").that(resourceMetadata.getUpdateTimeNanos())
+    assertWithMessage(name + "status").that(metadata.getStatus()).isEqualTo(status);
+    assertWithMessage(name + "version").that(metadata.getVersion()).isEqualTo(versionInfo);
+    assertWithMessage(name + "rawResource").that(metadata.getRawResource()).isEqualTo(rawResource);
+    assertWithMessage(name + "updateTimeNanos").that(metadata.getUpdateTimeNanos())
         .isEqualTo(updateTimeNanos);
     if (hasErrorState) {
-      assertWithMessage(name + "errorState").that(resourceMetadata.getErrorState()).isNotNull();
+      assertWithMessage(name + "errorState").that(metadata.getErrorState()).isNotNull();
     } else {
-      assertWithMessage(name + "errorState").that(resourceMetadata.getErrorState()).isNull();
+      assertWithMessage(name + "errorState").that(metadata.getErrorState()).isNull();
     }
-    return resourceMetadata;
+    return metadata;
   }
 
   /**

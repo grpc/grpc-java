@@ -25,6 +25,10 @@ import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Any;
 import io.envoyproxy.envoy.admin.v3.ClientResourceStatus;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -55,6 +59,7 @@ import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
@@ -76,12 +81,7 @@ public class CsdsServiceTest {
           ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create(), true)))
       .node(BOOTSTRAP_NODE)
       .build();
-  private static final XdsClient XDS_CLIENT_NO_RESOURCES = new FakeXdsClient() {
-    @Override
-    Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
-      return ImmutableMap.of();
-    }
-  };
+  private static final XdsClient XDS_CLIENT_NO_RESOURCES = new FakeXdsClient();
 
   @RunWith(JUnit4.class)
   public static class ServiceTests {
@@ -127,7 +127,8 @@ public class CsdsServiceTest {
     public void fetchClientConfig_unexpectedException() {
       XdsClient throwingXdsClient = new FakeXdsClient() {
         @Override
-        Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
+        ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
+              getSubscribedResourcesMetadataSnapshot() {
           throw new IllegalArgumentException("IllegalArgumentException");
         }
       };
@@ -149,9 +150,16 @@ public class CsdsServiceTest {
     public void fetchClientConfig_interruptedException() {
       XdsClient throwingXdsClient = new FakeXdsClient() {
         @Override
-        Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot()
-            throws InterruptedException {
-          throw new InterruptedException();
+        ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
+            getSubscribedResourcesMetadataSnapshot() {
+          return Futures.submit(
+              new Callable<Map<ResourceType, Map<String, ResourceMetadata>>>() {
+                @Override
+                public Map<ResourceType, Map<String, ResourceMetadata>> call() {
+                  Thread.currentThread().interrupt();
+                  return null;
+                }
+              }, MoreExecutors.directExecutor());
         }
       };
       grpcServerRule.getServiceRegistry()
@@ -163,7 +171,7 @@ public class CsdsServiceTest {
       } catch (StatusRuntimeException e) {
         assertThat(e.getStatus().getCode()).isEqualTo(Code.ABORTED);
         assertThat(e.getStatus().getDescription()).isEqualTo("Thread interrupted");
-        // Clean test thread interrupt.
+        // Clean the test thread interrupt.
         assertThat(Thread.interrupted()).isEqualTo(true);
       }
     }
@@ -315,13 +323,14 @@ public class CsdsServiceTest {
         throws InterruptedException {
       ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(new FakeXdsClient() {
         @Override
-        Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
+        protected Map<ResourceType, Map<String, ResourceMetadata>>
+            getSubscribedResourcesMetadata() {
           return new ImmutableMap.Builder<ResourceType, Map<String, ResourceMetadata>>()
-            .put(LDS, ImmutableMap.of("subscribedResourceName.LDS", METADATA_ACKED_LDS))
-            .put(RDS, ImmutableMap.of("subscribedResourceName.RDS", METADATA_ACKED_RDS))
-            .put(CDS, ImmutableMap.of("subscribedResourceName.CDS", METADATA_ACKED_CDS))
-            .put(EDS, ImmutableMap.of("subscribedResourceName.EDS", METADATA_ACKED_EDS))
-            .build();
+              .put(LDS, ImmutableMap.of("subscribedResourceName.LDS", METADATA_ACKED_LDS))
+              .put(RDS, ImmutableMap.of("subscribedResourceName.RDS", METADATA_ACKED_RDS))
+              .put(CDS, ImmutableMap.of("subscribedResourceName.CDS", METADATA_ACKED_CDS))
+              .put(EDS, ImmutableMap.of("subscribedResourceName.EDS", METADATA_ACKED_EDS))
+              .build();
         }
       });
 
@@ -402,6 +411,19 @@ public class CsdsServiceTest {
   }
 
   private static class FakeXdsClient extends XdsClient {
+    protected Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadata() {
+      return ImmutableMap.of();
+    }
+
+    @Override
+    ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
+        getSubscribedResourcesMetadataSnapshot() {
+      SettableFuture<Map<ResourceType, Map<String, ResourceMetadata>>> future =
+          SettableFuture.create();
+      future.set(getSubscribedResourcesMetadata());
+      return future;
+    }
+
     @Override
     BootstrapInfo getBootstrapInfo() {
       return BOOTSTRAP_INFO;

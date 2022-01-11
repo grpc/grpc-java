@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.auto.value.AutoValue;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.Any;
 import io.grpc.Status;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
@@ -495,18 +496,15 @@ abstract class XdsClient {
   }
 
   /**
-   * Returns a map from the "resource type" to a map ("resource name": "resource metadata")
-   * containing the snapshot of the subscribed resources as they are at the moment of the call.
+   * Returns a {@link ListenableFuture} to the snapshot of the subscribed resources as
+   * they are at the moment of the call.
    *
-   * @throws com.google.common.util.concurrent.UncheckedExecutionException
-   *     if couldn't retrieve the snapshot of the subscribed resources in a synchronous manner
-   *     because the task failed, cancelled, or timed out.
-   *     TODO(sergiitk): when migrated to Java 8, throw CompletionException instead.
-   * @throws InterruptedException if the current thread was interrupted while waiting.
+   * <p>The snapshot is a map from the "resource type" to
+   * a map ("resource name": "resource metadata").
    */
   // Must be synchronized.
-  Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot()
-      throws InterruptedException {
+  ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
+      getSubscribedResourcesMetadataSnapshot() {
     throw new UnsupportedOperationException();
   }
 
