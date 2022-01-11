@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import com.google.common.annotations.VisibleForTesting;
 import java.util.HashMap;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -34,11 +35,13 @@ final class ClusterSpecifierPluginRegistry {
     return instance;
   }
 
-  private static ClusterSpecifierPluginRegistry newRegistry() {
+  @VisibleForTesting
+  static ClusterSpecifierPluginRegistry newRegistry() {
     return new ClusterSpecifierPluginRegistry();
   }
 
-  private ClusterSpecifierPluginRegistry register(ClusterSpecifierPlugin... plugins) {
+  @VisibleForTesting
+  ClusterSpecifierPluginRegistry register(ClusterSpecifierPlugin... plugins) {
     for (ClusterSpecifierPlugin plugin : plugins) {
       for (String typeUrl : plugin.typeUrls()) {
         supportedPlugins.put(typeUrl, plugin);

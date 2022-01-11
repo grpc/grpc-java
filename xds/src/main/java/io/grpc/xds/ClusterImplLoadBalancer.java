@@ -336,7 +336,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   }
 
   private static final class CountingStreamTracerFactory extends
-      ClientStreamTracer.InternalLimitedInfoFactory {
+      ClientStreamTracer.Factory {
     private ClusterLocalityStats stats;
     private final AtomicLong inFlights;
     @Nullable

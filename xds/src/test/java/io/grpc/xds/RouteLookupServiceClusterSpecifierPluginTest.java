@@ -62,7 +62,8 @@ public class RouteLookupServiceClusterSpecifierPluginTest {
     RlsPluginConfig config =
         RouteLookupServiceClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(specifier))
             .config;
-    assertThat(config.typeUrl()).isEqualTo("type.googleapis.com/grpc.lookup.v1.RouteLookupConfig");
+    assertThat(config.typeUrl())
+        .isEqualTo("type.googleapis.com/grpc.lookup.v1.RouteLookupClusterSpecifier");
     assertThat(config.config()).isEqualTo(
         ImmutableMap.builder()
             .put(
@@ -110,7 +111,8 @@ public class RouteLookupServiceClusterSpecifierPluginTest {
     RlsPluginConfig config =
         RouteLookupServiceClusterSpecifierPlugin.INSTANCE.parsePlugin(Any.pack(specifier))
             .config;
-    assertThat(config.typeUrl()).isEqualTo("type.googleapis.com/grpc.lookup.v1.RouteLookupConfig");
+    assertThat(config.typeUrl())
+        .isEqualTo("type.googleapis.com/grpc.lookup.v1.RouteLookupClusterSpecifier");
     assertThat(config.config()).isEqualTo(
         ImmutableMap.builder()
             .put(

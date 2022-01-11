@@ -1483,8 +1483,8 @@ public abstract class ClientXdsClientTestBase {
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
     Message ringHashConfig = mf.buildRingHashLbConfig("xx_hash", 10L, 100L);
     Any clusterRingHash = Any.pack(
-        mf.buildEdsCluster(CDS_RESOURCE, null, "ring_hash", ringHashConfig, false, null,
-            "envoy.transport_sockets.tls", null
+        mf.buildEdsCluster(CDS_RESOURCE, null, "ring_hash_experimental", ringHashConfig, false,
+            null, "envoy.transport_sockets.tls", null
         ));
     call.sendResponse(ResourceType.CDS, clusterRingHash, VERSION_1, "0000");
 

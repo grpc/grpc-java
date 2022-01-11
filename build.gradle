@@ -7,6 +7,7 @@ plugins {
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
+import org.gradle.util.GUtil
 
 subprojects {
     apply plugin: "checkstyle"
@@ -54,10 +55,10 @@ subprojects {
         protocPluginBaseName = 'protoc-gen-grpc-java'
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
-        nettyVersion = '4.1.63.Final'
+        nettyVersion = '4.1.72.Final'
         guavaVersion = '30.1.1-android'
         googleauthVersion = '0.22.2'
-        protobufVersion = '3.19.1'
+        protobufVersion = '3.19.2'
         protocVersion = protobufVersion
         opencensusVersion = '0.28.0'
         autovalueVersion = '1.7.4'
@@ -97,6 +98,11 @@ subprojects {
                             def syncTask = project.tasks.register("syncGeneratedSources${variantOrSourceSet}", Sync) {
                                 from "$buildDir/generated/source/proto/${variantOrSourceSet}/grpc"
                                 into "$generatedSourcePath/${variantOrSourceSet}/grpc"
+                                String source = GUtil.toCamelCase(variantOrSourceSet)
+                                if (source == "Main") {
+                                    source = ""
+                                }
+                                dependsOn "generate${source}Proto"
                             }
                             syncGeneratedSources.dependsOn syncTask
 
@@ -148,7 +154,7 @@ subprojects {
             errorprone: "com.google.errorprone:error_prone_annotations:2.9.0",
             cronet_api: 'org.chromium.net:cronet-api:92.4515.131',
             cronet_embedded: 'org.chromium.net:cronet-embedded:92.4515.131',
-            gson: "com.google.code.gson:gson:2.8.6",
+            gson: "com.google.code.gson:gson:2.8.9",
             guava: "com.google.guava:guava:${guavaVersion}",
             javax_annotation: 'org.apache.tomcat:annotations-api:6.0.53',
             jsr305: 'com.google.code.findbugs:jsr305:3.0.2',
@@ -176,7 +182,7 @@ subprojects {
             // SECURITY.md (multiple occurrences)
             // examples/example-tls/build.gradle
             // examples/example-tls/pom.xml
-            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.38.Final',
+            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.46.Final',
 
             conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:2.5.1',
             re2j: 'com.google.re2j:re2j:1.5',
@@ -223,8 +229,6 @@ subprojects {
             }
         }
     }
-
-    jacoco { toolVersion = "0.8.2" }
 
     checkstyle {
         configDirectory = file("$rootDir/buildscripts")
@@ -320,6 +324,14 @@ subprojects {
             options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
         }
+
+        plugins.withId("ru.vyarus.animalsniffer") {
+	    // Only available after java plugin has loaded
+            animalsniffer {
+                // Breaks on upgrade: https://github.com/mojohaus/animal-sniffer/issues/131
+                toolVersion = '1.18'
+            }
+        }
     }
 
     plugins.withId("java-library") {
@@ -335,13 +347,13 @@ subprojects {
         }
     }
 
-    plugins.withId("me.champeau.gradle.jmh") {
-        dependencies {
-            jmh 'org.openjdk.jmh:jmh-core:1.19',
-                    'org.openjdk.jmh:jmh-generator-bytecode:1.19'
-        }
+    plugins.withId("me.champeau.jmh") {
         // invoke jmh on a single benchmark class like so:
         //   ./gradlew -PjmhIncludeSingleClass=StatsTraceContextBenchmark clean :grpc-core:jmh
+	compileJmhJava {
+	    sourceCompatibility = 1.8
+	    targetCompatibility = 1.8
+	}
         jmh {
             warmupIterations = 10
             iterations = 10

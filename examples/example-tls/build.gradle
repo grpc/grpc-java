@@ -24,7 +24,7 @@ targetCompatibility = 1.7
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
 def grpcVersion = '1.44.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.19.1'
+def protocVersion = '3.19.2'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
@@ -56,16 +56,16 @@ sourceSets {
 startScripts.enabled = false
 
 task helloWorldTlsServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworldtls.HelloWorldServerTls'
+    mainClass = 'io.grpc.examples.helloworldtls.HelloWorldServerTls'
     applicationName = 'hello-world-tls-server'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task helloWorldTlsClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworldtls.HelloWorldClientTls'
+    mainClass = 'io.grpc.examples.helloworldtls.HelloWorldClientTls'
     applicationName = 'hello-world-tls-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
