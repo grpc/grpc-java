@@ -499,7 +499,8 @@ abstract class XdsClient {
    * containing the snapshot of the subscribed resources as they are at the moment of the call.
    */
   // Must be synchronized.
-  Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
+  Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot()
+      throws InterruptedException {
     throw new UnsupportedOperationException();
   }
 

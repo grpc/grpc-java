@@ -23,6 +23,7 @@ import static io.grpc.xds.AbstractXdsClient.ResourceType.LDS;
 import static io.grpc.xds.AbstractXdsClient.ResourceType.RDS;
 import static org.junit.Assert.fail;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import io.envoyproxy.envoy.admin.v3.ClientResourceStatus;
@@ -46,10 +47,11 @@ import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcServerRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.XdsClient.ResourceMetadata;
 import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
-import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -69,17 +71,12 @@ public class CsdsServiceTest {
       "projects/42/networks/default/nodes/5c85b298-6f5b-4722-b74a-f7d1f0ccf5ad";
   private static final EnvoyProtoData.Node BOOTSTRAP_NODE =
       EnvoyProtoData.Node.newBuilder().setId(NODE_ID).build();
-  private static final XdsClient XDS_CLIENT_NO_RESOURCES = new XdsClient() {
-    @Override
-    Bootstrapper.BootstrapInfo getBootstrapInfo() {
-      return Bootstrapper.BootstrapInfo.builder()
-          .servers(Arrays.asList(
-              Bootstrapper.ServerInfo.create(
-                  SERVER_URI, InsecureChannelCredentials.create(), false)))
-          .node(BOOTSTRAP_NODE)
-          .build();
-    }
-
+  private static final BootstrapInfo BOOTSTRAP_INFO = BootstrapInfo.builder()
+      .servers(ImmutableList.of(
+          ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create(), true)))
+      .node(BOOTSTRAP_NODE)
+      .build();
+  private static final XdsClient XDS_CLIENT_NO_RESOURCES = new FakeXdsClient() {
     @Override
     Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
       return ImmutableMap.of();
@@ -125,10 +122,10 @@ public class CsdsServiceTest {
       }
     }
 
-    /** Unexpected exceptions translated to internal error status. */
+    /** Unexpected exceptions translated to Status.Code.INTERNAL. */
     @Test
     public void fetchClientConfig_unexpectedException() {
-      XdsClient throwingXdsClient = new XdsClient() {
+      XdsClient throwingXdsClient = new FakeXdsClient() {
         @Override
         Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
           throw new IllegalArgumentException("IllegalArgumentException");
@@ -143,6 +140,31 @@ public class CsdsServiceTest {
       } catch (StatusRuntimeException e) {
         assertThat(e.getStatus().getCode()).isEqualTo(Code.INTERNAL);
         assertThat(e.getStatus().getDescription()).isEqualTo("Unexpected internal error");
+        // Cause is not propagated.
+      }
+    }
+
+    /** Interrupted exceptions translated to Status.Code.ABORTED. */
+    @Test
+    public void fetchClientConfig_interruptedException() {
+      XdsClient throwingXdsClient = new FakeXdsClient() {
+        @Override
+        Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot()
+            throws InterruptedException {
+          throw new InterruptedException();
+        }
+      };
+      grpcServerRule.getServiceRegistry()
+          .addService(new CsdsService(new FakeXdsClientPoolFactory(throwingXdsClient)));
+
+      try {
+        ClientStatusResponse response = csdsStub.fetchClientStatus(REQUEST);
+        fail("Should've failed, got response: " + response);
+      } catch (StatusRuntimeException e) {
+        assertThat(e.getStatus().getCode()).isEqualTo(Code.ABORTED);
+        assertThat(e.getStatus().getDescription()).isEqualTo("Thread interrupted");
+        // Clean test thread interrupt.
+        assertThat(Thread.interrupted()).isEqualTo(true);
       }
     }
 
@@ -289,18 +311,9 @@ public class CsdsServiceTest {
     }
 
     @Test
-    public void getClientConfigForXdsClient_subscribedResourcesToGenericXdsConfig() {
-      ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(new XdsClient() {
-        @Override
-        Bootstrapper.BootstrapInfo getBootstrapInfo() {
-          return Bootstrapper.BootstrapInfo.builder()
-              .servers(Arrays.asList(
-                  Bootstrapper.ServerInfo.create(
-                          SERVER_URI, InsecureChannelCredentials.create(), false)))
-              .node(BOOTSTRAP_NODE)
-              .build();
-        }
-
+    public void getClientConfigForXdsClient_subscribedResourcesToGenericXdsConfig()
+        throws InterruptedException {
+      ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(new FakeXdsClient() {
         @Override
         Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
           return new ImmutableMap.Builder<ResourceType, Map<String, ResourceMetadata>>()
@@ -348,7 +361,7 @@ public class CsdsServiceTest {
     }
 
     @Test
-    public void getClientConfigForXdsClient_noSubscribedResources() {
+    public void getClientConfigForXdsClient_noSubscribedResources() throws InterruptedException {
       ClientConfig clientConfig = CsdsService.getClientConfigForXdsClient(XDS_CLIENT_NO_RESOURCES);
       verifyClientConfigNode(clientConfig);
       verifyClientConfigNoResources(clientConfig);
@@ -388,6 +401,13 @@ public class CsdsServiceTest {
     return xdsConfigMap;
   }
 
+  private static class FakeXdsClient extends XdsClient {
+    @Override
+    BootstrapInfo getBootstrapInfo() {
+      return BOOTSTRAP_INFO;
+    }
+  }
+
   private static class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
     @Nullable private final XdsClient xdsClient;
 
@@ -417,7 +437,7 @@ public class CsdsServiceTest {
     }
 
     @Override
-    public ObjectPool<XdsClient> getOrCreate() throws XdsInitializationException {
+    public ObjectPool<XdsClient> getOrCreate() {
       throw new UnsupportedOperationException("Should not be called");
     }
   }

@@ -102,21 +102,31 @@ public final class CsdsService extends
 
   private boolean handleRequest(
       ClientStatusRequest request, StreamObserver<ClientStatusResponse> responseObserver) {
+    StatusException error = null;
     try {
       responseObserver.onNext(getConfigDumpForRequest(request));
-      return true;
     } catch (StatusException e) {
-      responseObserver.onError(e);
+      error = e;
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      logger.log(Level.FINE, "Server interrupted while building CSDS config dump", e);
+      error = Status.ABORTED.withDescription("Thread interrupted").withCause(e).asException();
     } catch (Exception e) {
       logger.log(Level.WARNING, "Unexpected error while building CSDS config dump", e);
-      responseObserver.onError(new StatusException(
-          Status.INTERNAL.withDescription("Unexpected internal error").withCause(e)));
+      error =
+          Status.INTERNAL.withDescription("Unexpected internal error").withCause(e).asException();
     }
-    return false;
+
+    if (error == null) {
+      return true;
+    } else {
+      responseObserver.onError(error);
+      return false;
+    }
   }
 
   private ClientStatusResponse getConfigDumpForRequest(ClientStatusRequest request)
-      throws StatusException {
+      throws StatusException, InterruptedException {
     if (request.getNodeMatchersCount() > 0) {
       throw new StatusException(
           Status.INVALID_ARGUMENT.withDescription("node_matchers not supported"));
@@ -141,7 +151,7 @@ public final class CsdsService extends
   }
 
   @VisibleForTesting
-  static ClientConfig getClientConfigForXdsClient(XdsClient xdsClient) {
+  static ClientConfig getClientConfigForXdsClient(XdsClient xdsClient) throws InterruptedException {
     ClientConfig.Builder builder = ClientConfig.newBuilder()
         .setNode(xdsClient.getBootstrapInfo().node().toEnvoyProtoNode());
     for (Map.Entry<ResourceType, Map<String, ResourceMetadata>> metadataByTypeEntry

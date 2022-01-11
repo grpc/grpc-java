@@ -2034,7 +2034,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   }
 
   @Override
-  Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot() {
+  Map<ResourceType, Map<String, ResourceMetadata>> getSubscribedResourcesMetadataSnapshot()
+      throws InterruptedException {
     final SettableFuture<Map<ResourceType, Map<String, ResourceMetadata>>> future =
         SettableFuture.create();
     syncContext.execute(new Runnable() {
@@ -2059,8 +2060,13 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     });
     try {
       return future.get(METADATA_SYNC_TIMEOUT_SEC, TimeUnit.SECONDS);
-    } catch (InterruptedException | ExecutionException | TimeoutException e) {
+    } catch (ExecutionException e) {
+      throw new UncheckedExecutionException(e.getCause());
+    } catch (TimeoutException e) {
       throw new UncheckedExecutionException(e);
+    } catch (InterruptedException e) {
+      logger.log(XdsLogLevel.DEBUG, "Interrupted while preparing subscribed resources snapshot", e);
+      throw e;
     }
   }
 

@@ -379,8 +379,13 @@ public abstract class ClientXdsClientTestBase {
 
   private void verifySubscribedResourcesMetadataSizes(
       int ldsSize, int cdsSize, int rdsSize, int edsSize) {
-    Map<ResourceType, Map<String, ResourceMetadata>> subscribedResourcesMetadata =
-        xdsClient.getSubscribedResourcesMetadataSnapshot();
+    Map<ResourceType, Map<String, ResourceMetadata>> subscribedResourcesMetadata;
+    try {
+      subscribedResourcesMetadata = xdsClient.getSubscribedResourcesMetadataSnapshot();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new AssertionError("Thread interrupted", e);
+    }
     assertThat(subscribedResourcesMetadata.get(LDS)).hasSize(ldsSize);
     assertThat(subscribedResourcesMetadata.get(CDS)).hasSize(cdsSize);
     assertThat(subscribedResourcesMetadata.get(RDS)).hasSize(rdsSize);
@@ -436,8 +441,14 @@ public abstract class ClientXdsClientTestBase {
   private ResourceMetadata verifyResourceMetadata(
       ResourceType type, String resourceName, Any rawResource, ResourceMetadataStatus status,
       String versionInfo, long updateTimeNanos, boolean hasErrorState) {
-    ResourceMetadata resourceMetadata =
-        xdsClient.getSubscribedResourcesMetadataSnapshot().get(type).get(resourceName);
+    ResourceMetadata resourceMetadata;
+    try {
+      resourceMetadata =
+          xdsClient.getSubscribedResourcesMetadataSnapshot().get(type).get(resourceName);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new AssertionError("Thread interrupted", e);
+    }
     assertThat(resourceMetadata).isNotNull();
     String name = type.toString() + " resource '" + resourceName + "' metadata field ";
     assertWithMessage(name + "status").that(resourceMetadata.getStatus()).isEqualTo(status);
