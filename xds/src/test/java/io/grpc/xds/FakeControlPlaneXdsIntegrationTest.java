@@ -104,7 +104,7 @@ public class FakeControlPlaneXdsIntegrationTest {
           + ".HttpConnectionManager";
 
   /**
-   * Provides default bootstrapOverride.
+   * For test purpose, use boostrapOverride to programmatically provide bootstrap info.
    */
   private Map<String, ?> defaultBootstrapOverride() {
     return ImmutableMap.of(
@@ -186,7 +186,6 @@ public class FakeControlPlaneXdsIntegrationTest {
     assertEquals(goldenResponse, blockingStub.unaryRpc(request));
   }
 
-  // server can only be started after xds config resources are set.
   private void startServer(Map<String, ?> bootstrapOverride) throws Exception {
     SimpleServiceGrpc.SimpleServiceImplBase simpleServiceImpl =
         new SimpleServiceGrpc.SimpleServiceImplBase() {

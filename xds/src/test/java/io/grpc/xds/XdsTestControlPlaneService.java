@@ -77,6 +77,8 @@ class XdsTestControlPlaneService extends
   );
 
 
+  // treat all the resource types as state-of-the-world, send back all resources of a particular
+  // type when any of them change.
   public <T> void setXdsConfig(final String type, final Map<String, T> resources) {
     logger.log(Level.FINE, "setting config {0} {1}", new Object[]{type, resources});
     syncContext.execute(new Runnable() {
