@@ -39,17 +39,13 @@ import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.netty.channel.ChannelHandler;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
-import io.netty.util.concurrent.DefaultThreadFactory;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -79,16 +75,6 @@ public class NettyFlowControlTest {
 
   private int proxyPort;
   private int serverPort;
-
-  private static final ThreadPoolExecutor executor =
-      new ThreadPoolExecutor(1, 10, 1, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(),
-          new DefaultThreadFactory("flowcontrol-test-pool", true));
-
-
-  @AfterClass
-  public static void shutDownTests() {
-    executor.shutdown();
-  }
 
   @Before
   public void initTest() {

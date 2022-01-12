@@ -99,8 +99,6 @@ public class XdsServerWrapperTest {
   @Mock
   private Server mockServer;
   @Mock
-  private static TlsContextManager tlsContextManager;
-  @Mock
   private XdsServingStatusListener listener;
 
   private FilterChainSelectorManager selectorManager = new FilterChainSelectorManager();
@@ -441,7 +439,7 @@ public class XdsServerWrapperTest {
             0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
     EnvoyServerProtoData.FilterChain filterChain = new EnvoyServerProtoData.FilterChain(
             "filter-chain-foo", createMatch(), httpConnectionManager, createTls(),
-            tlsContextManager);
+            mock(TlsContextManager.class));
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
     start.get(5000, TimeUnit.MILLISECONDS);
     assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
@@ -1190,7 +1188,7 @@ public class XdsServerWrapperTest {
 
   private static FilterChain createFilterChain(String name, HttpConnectionManager hcm) {
     return new EnvoyServerProtoData.FilterChain(name, createMatch(),
-            hcm, createTls(), tlsContextManager);
+            hcm, createTls(), mock(TlsContextManager.class));
   }
 
   private static VirtualHost createVirtualHost(String name) {

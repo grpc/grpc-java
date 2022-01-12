@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import com.google.common.base.MoreObjects;
+import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.BinaryLog;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
@@ -53,6 +54,7 @@ public abstract class AbstractServerImplBuilder
   /**
    * This method serves to force sub classes to "hide" this static factory.
    */
+  @DoNotCall("Unsupported")
   public static ServerBuilder<?> forPort(int port) {
     throw new UnsupportedOperationException("Subclass failed to hide static factory");
   }

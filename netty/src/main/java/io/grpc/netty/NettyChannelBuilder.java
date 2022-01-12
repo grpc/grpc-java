@@ -24,6 +24,7 @@ import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import com.google.errorprone.annotations.InlineMe;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
@@ -393,6 +394,7 @@ public final class NettyChannelBuilder extends
    * @deprecated Use {@link #maxInboundMetadataSize} instead
    */
   @Deprecated
+  @InlineMe(replacement = "this.maxInboundMetadataSize(maxHeaderListSize)")
   public NettyChannelBuilder maxHeaderListSize(int maxHeaderListSize) {
     return maxInboundMetadataSize(maxHeaderListSize);
   }
