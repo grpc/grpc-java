@@ -106,9 +106,10 @@ public final class CsdsService extends
 
   private boolean handleRequest(
       ClientStatusRequest request, StreamObserver<ClientStatusResponse> responseObserver) {
-    StatusException error = null;
+    StatusException error;
     try {
       responseObserver.onNext(getConfigDumpForRequest(request));
+      return true;
     } catch (StatusException e) {
       error = e;
     } catch (InterruptedException e) {
@@ -121,12 +122,8 @@ public final class CsdsService extends
           Status.INTERNAL.withDescription("Unexpected internal error").withCause(e).asException();
     }
 
-    if (error == null) {
-      return true;
-    } else {
-      responseObserver.onError(error);
-      return false;
-    }
+    responseObserver.onError(error);
+    return false;
   }
 
   private ClientStatusResponse getConfigDumpForRequest(ClientStatusRequest request)
@@ -197,7 +194,7 @@ public final class CsdsService extends
       // Normally this shouldn't take long, but add some slack for cases like a cold JVM.
       return future.get(20, TimeUnit.SECONDS);
     } catch (ExecutionException | TimeoutException e) {
-      // Four CSDS' purposes, the exact reason why metadata not loaded isn't important.
+      // For CSDS' purposes, the exact reason why metadata not loaded isn't important.
       throw new RuntimeException(e);
     }
   }
