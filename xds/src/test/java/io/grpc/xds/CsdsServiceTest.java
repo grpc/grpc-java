@@ -28,7 +28,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Any;
 import io.envoyproxy.envoy.admin.v3.ClientResourceStatus;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -129,7 +128,8 @@ public class CsdsServiceTest {
         @Override
         ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
               getSubscribedResourcesMetadataSnapshot() {
-          throw new IllegalArgumentException("IllegalArgumentException");
+          return Futures.immediateFailedFuture(
+              new IllegalArgumentException("IllegalArgumentException"));
         }
       };
       grpcServerRule.getServiceRegistry()
@@ -418,10 +418,7 @@ public class CsdsServiceTest {
     @Override
     ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
         getSubscribedResourcesMetadataSnapshot() {
-      SettableFuture<Map<ResourceType, Map<String, ResourceMetadata>>> future =
-          SettableFuture.create();
-      future.set(getSubscribedResourcesMetadata());
-      return future;
+      return Futures.immediateFuture(getSubscribedResourcesMetadata());
     }
 
     @Override
