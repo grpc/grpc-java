@@ -16,10 +16,6 @@ set -exu -o pipefail
 # It would be nicer to use 'readlink -f' here but osx does not support it.
 readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 
-if [[ -f /VERSION ]]; then
-  cat /VERSION
-fi
-
 # cd to the root dir of grpc-java
 cd $(dirname $0)/../..
 
@@ -48,7 +44,7 @@ export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS="-I/tmp/protobuf/include"
 
-./gradlew clean $GRADLE_FLAGS
+./gradlew grpc-compiler:clean $GRADLE_FLAGS
 
 if [[ -z "${SKIP_TESTS:-}" ]]; then
   # Ensure all *.proto changes include *.java generated code
@@ -62,7 +58,6 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   # Run tests
   ./gradlew build :grpc-all:jacocoTestReport $GRADLE_FLAGS
   pushd examples
-  ./gradlew clean $GRADLE_FLAGS
   ./gradlew build $GRADLE_FLAGS
   # --batch-mode reduces log spam
   mvn verify --batch-mode
