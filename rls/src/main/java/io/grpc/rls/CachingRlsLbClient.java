@@ -30,17 +30,14 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
-import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
-import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -51,7 +48,6 @@ import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc.RouteLookupServiceStub;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
 import io.grpc.rls.LbPolicyConfiguration.ChildLbStatusListener;
-import io.grpc.rls.LbPolicyConfiguration.ChildLoadBalancingPolicy;
 import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
 import io.grpc.rls.LruCache.EvictionListener;
@@ -138,7 +134,8 @@ final class CachingRlsLbClient {
             rlsConfig.getCacheSizeBytes(),
             builder.evictionListener,
             scheduledExecutorService,
-            timeProvider);
+            timeProvider,
+            lock);
     logger = helper.getChannelLogger();
     String serverHost = null;
     try {
@@ -181,7 +178,9 @@ final class CachingRlsLbClient {
         new ChildLoadBalancerHelperProvider(helper, new SubchannelStateManagerImpl(), rlsPicker);
     refCountedChildPolicyWrapperFactory =
         new RefCountedChildPolicyWrapperFactory(
-            childLbHelperProvider, new BackoffRefreshListener());
+            lbPolicyConfig.getLoadBalancingPolicy(), childLbResolvedAddressFactory,
+            childLbHelperProvider,
+            new BackoffRefreshListener());
     logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient created");
   }
 
@@ -536,6 +535,7 @@ final class CachingRlsLbClient {
     private final long staleTime;
     private final ChildPolicyWrapper childPolicyWrapper;
 
+    // GuardedBy CachingRlsLbClient.lock
     DataCacheEntry(RouteLookupRequest request, final RouteLookupResponse response) {
       super(request);
       this.response = checkNotNull(response, "response");
@@ -546,29 +546,6 @@ final class CachingRlsLbClient {
       long now = timeProvider.currentTimeNanos();
       expireTime = now + maxAgeNanos;
       staleTime = now + staleAgeNanos;
-
-      if (childPolicyWrapper.getPicker() != null) {
-        childPolicyWrapper.refreshState();
-      } else {
-        createChildLbPolicy();
-      }
-    }
-
-    private void createChildLbPolicy() {
-      ChildLoadBalancingPolicy childPolicy = lbPolicyConfig.getLoadBalancingPolicy();
-      LoadBalancerProvider lbProvider = childPolicy.getEffectiveLbProvider();
-      ConfigOrError lbConfig =
-          lbProvider
-              .parseLoadBalancingPolicyConfig(
-                  childPolicy.getEffectiveChildPolicy(childPolicyWrapper.getTarget()));
-
-      LoadBalancer lb = lbProvider.newLoadBalancer(childPolicyWrapper.getHelper());
-      logger.log(
-          ChannelLogLevel.DEBUG,
-          "RLS child lb created. config: {0}",
-          lbConfig.getConfig());
-      lb.handleResolvedAddresses(childLbResolvedAddressFactory.create(lbConfig.getConfig()));
-      lb.requestConnection();
     }
 
     /**
@@ -637,7 +614,9 @@ final class CachingRlsLbClient {
 
     @Override
     void cleanup() {
-      refCountedChildPolicyWrapperFactory.release(childPolicyWrapper);
+      synchronized (lock) {
+        refCountedChildPolicyWrapperFactory.release(childPolicyWrapper);
+      }
     }
 
     @Override
@@ -856,14 +835,15 @@ final class CachingRlsLbClient {
 
     RlsAsyncLruCache(long maxEstimatedSizeBytes,
         @Nullable EvictionListener<RouteLookupRequest, CacheEntry> evictionListener,
-        ScheduledExecutorService ses, TimeProvider timeProvider) {
+        ScheduledExecutorService ses, TimeProvider timeProvider, Object lock) {
       super(
           maxEstimatedSizeBytes,
           new AutoCleaningEvictionListener(evictionListener),
           1,
           TimeUnit.MINUTES,
           ses,
-          timeProvider);
+          timeProvider,
+          lock);
     }
 
     @Override
@@ -985,27 +965,9 @@ final class CachingRlsLbClient {
         }
         fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
       }
-      LoadBalancerProvider lbProvider =
-          lbPolicyConfig.getLoadBalancingPolicy().getEffectiveLbProvider();
-      final LoadBalancer lb =
-          lbProvider.newLoadBalancer(fallbackChildPolicyWrapper.getHelper());
-      final ConfigOrError lbConfig =
-          lbProvider
-              .parseLoadBalancingPolicyConfig(
-                  lbPolicyConfig
-                      .getLoadBalancingPolicy()
-                      .getEffectiveChildPolicy(defaultTarget));
-      helper.getSynchronizationContext().execute(
-          new Runnable() {
-            @Override
-            public void run() {
-              lb.handleResolvedAddresses(
-                  childLbResolvedAddressFactory.create(lbConfig.getConfig()));
-              lb.requestConnection();
-            }
-          });
     }
 
+    // GuardedBy CachingRlsLbClient.lock
     void close() {
       if (fallbackChildPolicyWrapper != null) {
         refCountedChildPolicyWrapperFactory.release(fallbackChildPolicyWrapper);

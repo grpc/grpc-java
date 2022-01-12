@@ -18,17 +18,25 @@ package io.grpc.rls;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
+import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.SynchronizationContext;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
 import io.grpc.rls.LbPolicyConfiguration.ChildLbStatusListener;
 import io.grpc.rls.LbPolicyConfiguration.ChildLoadBalancingPolicy;
@@ -36,22 +44,57 @@ import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper.ChildPolicyReportingHelper;
 import io.grpc.rls.LbPolicyConfiguration.InvalidChildPolicyConfigException;
 import io.grpc.rls.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
+import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.Map;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentMatchers;
 
 @RunWith(JUnit4.class)
 public class LbPolicyConfigurationTest {
 
   private final Helper helper = mock(Helper.class);
+  private final LoadBalancerProvider lbProvider = mock(LoadBalancerProvider.class);
   private final SubchannelStateManager subchannelStateManager = new SubchannelStateManagerImpl();
   private final SubchannelPicker picker = mock(SubchannelPicker.class);
   private final ChildLbStatusListener childLbStatusListener = mock(ChildLbStatusListener.class);
+  private final ResolvedAddressFactory resolvedAddressFactory =
+      new ResolvedAddressFactory() {
+        @Override
+        public ResolvedAddresses create(Object childLbConfig) {
+          return ResolvedAddresses.newBuilder()
+              .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+              .build();
+        }
+      };
   private final RefCountedChildPolicyWrapperFactory factory =
       new RefCountedChildPolicyWrapperFactory(
+          new ChildLoadBalancingPolicy(
+              "targetFieldName",
+              ImmutableMap.<String, Object>of("foo", "bar"),
+              lbProvider),
+          resolvedAddressFactory,
           new ChildLoadBalancerHelperProvider(helper, subchannelStateManager, picker),
           childLbStatusListener);
+
+  @Before
+  public void setUp() {
+    doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
+    doReturn(
+        new SynchronizationContext(
+            new UncaughtExceptionHandler() {
+              @Override
+              public void uncaughtException(Thread t, Throwable e) {
+                throw new AssertionError(e);
+              }
+            }))
+        .when(helper).getSynchronizationContext();
+    doReturn(mock(LoadBalancer.class)).when(lbProvider).newLoadBalancer(any(Helper.class));
+    doReturn(ConfigOrError.fromConfig(new Object()))
+        .when(lbProvider).parseLoadBalancingPolicyConfig(ArgumentMatchers.<Map<String, ?>>any());
+  }
 
   @Test
   public void childPolicyWrapper_refCounted() {
