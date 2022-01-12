@@ -208,8 +208,9 @@ final class LbPolicyConfiguration {
         ResolvedAddressFactory childLbResolvedAddressFactory,
         ChildLoadBalancerHelperProvider childLbHelperProvider,
         ChildLbStatusListener childLbStatusListener) {
-      this.childPolicy = childPolicy;
-      this.childLbResolvedAddressFactory = childLbResolvedAddressFactory;
+      this.childPolicy = checkNotNull(childPolicy, "childPolicy");
+      this.childLbResolvedAddressFactory =
+          checkNotNull(childLbResolvedAddressFactory, "childLbResolvedAddressFactory");
       this.childLbHelperProvider = checkNotNull(childLbHelperProvider, "childLbHelperProvider");
       this.childLbStatusListener = checkNotNull(childLbStatusListener, "childLbStatusListener");
     }
@@ -253,9 +254,9 @@ final class LbPolicyConfiguration {
 
     private final String target;
     private final ChildPolicyReportingHelper helper;
+    private final LoadBalancer lb;
     private volatile SubchannelPicker picker;
     private ConnectivityState state;
-    private LoadBalancer lb;
 
     public ChildPolicyWrapper(
         String target,

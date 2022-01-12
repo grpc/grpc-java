@@ -464,7 +464,7 @@ public class CachingRlsLbClientTest {
    * immediately fails when using the fallback target.
    */
   private static final class TestLoadBalancerProvider extends LoadBalancerProvider {
-    Set<LoadBalancer> loadBalancers = new HashSet<>();
+    final Set<LoadBalancer> loadBalancers = new HashSet<>();
 
     @Override
     public boolean isAvailable() {
