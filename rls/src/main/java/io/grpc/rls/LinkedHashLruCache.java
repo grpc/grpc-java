@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableSet;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -205,13 +204,13 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
   @Override
   public final void invalidateAll() {
     synchronized (lock) {
-      // make a copy to avoid ConcurrentModificationException
-      Iterable<K> keys = ImmutableSet.copyOf(delegate.keySet());
-      for (K key : keys) {
-        SizedValue existing = delegate.remove(key);
-        if (existing != null) {
-          evictionListener.onEviction(key, existing, EvictionType.EXPLICIT);
+      Iterator<Map.Entry<K, SizedValue>> iterator = delegate.entrySet().iterator();
+      while (iterator.hasNext()) {
+        Map.Entry<K, SizedValue> entry = iterator.next();
+        if (entry.getValue() != null) {
+          evictionListener.onEviction(entry.getKey(), entry.getValue(), EvictionType.EXPLICIT);
         }
+        iterator.remove();
       }
     }
   }
