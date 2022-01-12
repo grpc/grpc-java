@@ -19,6 +19,7 @@ package io.grpc.rls;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.rls.CachingRlsLbClient.RLS_DATA_KEY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -81,6 +82,7 @@ import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -172,6 +174,9 @@ public class CachingRlsLbClientTest {
   public void tearDown() throws Exception {
     rlsLbClient.close();
     CachingRlsLbClient.enableOobChannelDirectPath = existingEnableOobChannelDirectPath;
+    assertWithMessage(
+            "On client shut down, RlsLoadBalancer must shut down with all its child loadbalancers.")
+        .that(lbProvider.loadBalancers).isEmpty();
   }
 
   private CachedRouteLookupResponse getInSyncContext(
@@ -462,6 +467,7 @@ public class CachingRlsLbClientTest {
    * immediately fails when using the fallback target.
    */
   private static final class TestLoadBalancerProvider extends LoadBalancerProvider {
+    final Set<LoadBalancer> loadBalancers = new HashSet<>();
 
     @Override
     public boolean isAvailable() {
@@ -486,7 +492,7 @@ public class CachingRlsLbClientTest {
 
     @Override
     public LoadBalancer newLoadBalancer(final Helper helper) {
-      return new LoadBalancer() {
+      LoadBalancer loadBalancer = new LoadBalancer() {
 
         @Override
         public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
@@ -527,8 +533,12 @@ public class CachingRlsLbClientTest {
 
         @Override
         public void shutdown() {
+          loadBalancers.remove(this);
         }
       };
+
+      loadBalancers.add(loadBalancer);
+      return loadBalancer;
     }
   }
 
