@@ -24,7 +24,7 @@ targetCompatibility = 1.7
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
 def grpcVersion = '1.44.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.17.2'
+def protocVersion = '3.19.2'
 
 dependencies {
     // grpc-alts transitively depends on grpc-netty-shaded, grpc-protobuf, and grpc-stub
@@ -56,16 +56,16 @@ startScripts.enabled = false
 
 
 task helloWorldAltsServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.alts.HelloWorldAltsServer'
+    mainClass = 'io.grpc.examples.alts.HelloWorldAltsServer'
     applicationName = 'hello-world-alts-server'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task helloWorldAltsClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.alts.HelloWorldAltsClient'
+    mainClass = 'io.grpc.examples.alts.HelloWorldAltsClient'
     applicationName = 'hello-world-alts-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 

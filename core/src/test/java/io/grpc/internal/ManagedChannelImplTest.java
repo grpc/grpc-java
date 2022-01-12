@@ -2447,13 +2447,13 @@ public class ManagedChannelImplTest {
     ClientStream mockStream = mock(ClientStream.class);
     final ClientStreamTracer tracer1 = new ClientStreamTracer() {};
     final ClientStreamTracer tracer2 = new ClientStreamTracer() {};
-    ClientStreamTracer.Factory factory1 = new ClientStreamTracer.InternalLimitedInfoFactory() {
+    ClientStreamTracer.Factory factory1 = new ClientStreamTracer.Factory() {
       @Override
       public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
         return tracer1;
       }
     };
-    ClientStreamTracer.Factory factory2 = new ClientStreamTracer.InternalLimitedInfoFactory() {
+    ClientStreamTracer.Factory factory2 = new ClientStreamTracer.Factory() {
       @Override
       public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
         return tracer2;
@@ -2491,13 +2491,13 @@ public class ManagedChannelImplTest {
     ClientStream mockStream = mock(ClientStream.class);
     final ClientStreamTracer tracer1 = new ClientStreamTracer() {};
     final ClientStreamTracer tracer2 = new ClientStreamTracer() {};
-    ClientStreamTracer.Factory factory1 = new ClientStreamTracer.InternalLimitedInfoFactory() {
+    ClientStreamTracer.Factory factory1 = new ClientStreamTracer.Factory() {
       @Override
       public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
         return tracer1;
       }
     };
-    ClientStreamTracer.Factory factory2 = new ClientStreamTracer.InternalLimitedInfoFactory() {
+    ClientStreamTracer.Factory factory2 = new ClientStreamTracer.Factory() {
       @Override
       public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
         return tracer2;

@@ -2,7 +2,7 @@ plugins {
     // Provide convenience executables for trying out the examples.
     id 'application'
     // ASSUMES GRADLE 5.6 OR HIGHER. Use plugin version 0.8.10 with earlier gradle versions
-    id 'com.google.protobuf' version '0.8.17'
+    id 'com.google.protobuf' version '0.8.18'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
 }
@@ -23,7 +23,7 @@ targetCompatibility = 1.7
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
 def grpcVersion = '1.44.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.17.2'
+def protobufVersion = '3.19.2'
 def protocVersion = protobufVersion
 
 dependencies {
@@ -64,79 +64,79 @@ sourceSets {
 startScripts.enabled = false
 
 task routeGuideServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.routeguide.RouteGuideServer'
+    mainClass = 'io.grpc.examples.routeguide.RouteGuideServer'
     applicationName = 'route-guide-server'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task routeGuideClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.routeguide.RouteGuideClient'
+    mainClass = 'io.grpc.examples.routeguide.RouteGuideClient'
     applicationName = 'route-guide-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task helloWorldServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworld.HelloWorldServer'
+    mainClass = 'io.grpc.examples.helloworld.HelloWorldServer'
     applicationName = 'hello-world-server'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task helloWorldClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworld.HelloWorldClient'
+    mainClass = 'io.grpc.examples.helloworld.HelloWorldClient'
     applicationName = 'hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task retryingHelloWorldServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.retrying.RetryingHelloWorldServer'
+    mainClass = 'io.grpc.examples.retrying.RetryingHelloWorldServer'
     applicationName = 'retrying-hello-world-server'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task retryingHelloWorldClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.retrying.RetryingHelloWorldClient'
+    mainClass = 'io.grpc.examples.retrying.RetryingHelloWorldClient'
     applicationName = 'retrying-hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task hedgingHelloWorldServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.hedging.HedgingHelloWorldServer'
+    mainClass = 'io.grpc.examples.hedging.HedgingHelloWorldServer'
     applicationName = 'hedging-hello-world-server'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task hedgingHelloWorldClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.hedging.HedgingHelloWorldClient'
+    mainClass = 'io.grpc.examples.hedging.HedgingHelloWorldClient'
     applicationName = 'hedging-hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task compressingHelloWorldClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
+    mainClass = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
     applicationName = 'compressing-hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task manualFlowControlClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.manualflowcontrol.ManualFlowControlClient'
+    mainClass = 'io.grpc.examples.manualflowcontrol.ManualFlowControlClient'
     applicationName = 'manual-flow-control-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task manualFlowControlServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.manualflowcontrol.ManualFlowControlServer'
+    mainClass = 'io.grpc.examples.manualflowcontrol.ManualFlowControlServer'
     applicationName = 'manual-flow-control-server'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 

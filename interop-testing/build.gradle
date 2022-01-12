@@ -68,7 +68,7 @@ test {
 // Note that OkHttp currently only supports ALPN, so OpenSSL version >= 1.0.2 is required.
 
 task test_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.TestServiceClient"
+    mainClass = "io.grpc.testing.integration.TestServiceClient"
     applicationName = "test-client"
     defaultJvmOpts = [
         "-javaagent:JAVAAGENT_APP_HOME" + configurations.alpnagent.singleFile.name
@@ -76,27 +76,27 @@ task test_client(type: CreateStartScripts) {
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
     doLast {
-        unixScript.text = unixScript.text.replace('JAVAAGENT_APP_HOME', '\$APP_HOME/lib/')
+        unixScript.text = unixScript.text.replace('JAVAAGENT_APP_HOME', '\'"\$APP_HOME"\'/lib/')
         windowsScript.text = windowsScript.text.replace('JAVAAGENT_APP_HOME', '%APP_HOME%\\lib\\')
     }
 }
 
 task test_server(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.TestServiceServer"
+    mainClass = "io.grpc.testing.integration.TestServiceServer"
     applicationName = "test-server"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task reconnect_test_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.ReconnectTestClient"
+    mainClass = "io.grpc.testing.integration.ReconnectTestClient"
     applicationName = "reconnect-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task stresstest_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.StressTestClient"
+    mainClass = "io.grpc.testing.integration.StressTestClient"
     applicationName = "stresstest-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
@@ -107,14 +107,14 @@ task stresstest_client(type: CreateStartScripts) {
 }
 
 task http2_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.Http2Client"
+    mainClass = "io.grpc.testing.integration.Http2Client"
     applicationName = "http2-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.GrpclbLongLivedAffinityTestClient"
+    mainClass = "io.grpc.testing.integration.GrpclbLongLivedAffinityTestClient"
     applicationName = "grpclb-long-lived-affinity-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
@@ -124,7 +124,7 @@ task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
 }
 
 task grpclb_fallback_test_client (type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.GrpclbFallbackTestClient"
+    mainClass = "io.grpc.testing.integration.GrpclbFallbackTestClient"
     applicationName = "grpclb-fallback-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
@@ -134,14 +134,14 @@ task grpclb_fallback_test_client (type: CreateStartScripts) {
 }
 
 task xds_test_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.XdsTestClient"
+    mainClass = "io.grpc.testing.integration.XdsTestClient"
     applicationName = "xds-test-client"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task xds_test_server(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.XdsTestServer"
+    mainClass = "io.grpc.testing.integration.XdsTestServer"
     applicationName = "xds-test-server"
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath

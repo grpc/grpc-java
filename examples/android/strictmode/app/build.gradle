@@ -6,13 +6,13 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    compileSdkVersion 28
+    compileSdkVersion 29
 
     defaultConfig {
         applicationId "io.grpc.strictmodehelloworldexample"
         // API level 28 is required for StrictMode penaltyListener
         minSdkVersion 28
-        targetSdkVersion 28
+        targetSdkVersion 29
         versionCode 1
         versionName "1.0"
     }
@@ -31,7 +31,7 @@ android {
 }
 
 protobuf {
-    protoc { artifact = 'com.google.protobuf:protoc:3.17.2' }
+    protoc { artifact = 'com.google.protobuf:protoc:3.19.2' }
     plugins {
         grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.44.0-SNAPSHOT' // CURRENT_GRPC_VERSION
         }

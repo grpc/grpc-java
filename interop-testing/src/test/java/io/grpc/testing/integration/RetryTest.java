@@ -432,7 +432,7 @@ public class RetryTest {
       }
     }
 
-    class CloseDelayedTracerFactory extends ClientStreamTracer.InternalLimitedInfoFactory {
+    class CloseDelayedTracerFactory extends ClientStreamTracer.Factory {
       @Override
       public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
         return new CloseDelayedTracer();
@@ -492,7 +492,7 @@ public class RetryTest {
       }
     }
 
-    class TransparentRetryTracerFactory extends ClientStreamTracer.InternalLimitedInfoFactory {
+    class TransparentRetryTracerFactory extends ClientStreamTracer.Factory {
       @Override
       public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
         return new TransparentRetryTriggeringTracer();

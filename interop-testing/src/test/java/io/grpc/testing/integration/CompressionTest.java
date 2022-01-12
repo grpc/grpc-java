@@ -52,7 +52,7 @@ import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.testing.integration.TestServiceGrpc.TestServiceBlockingStub;
 import io.grpc.testing.integration.TransportCompressionTest.Fzip;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -312,6 +312,6 @@ public class CompressionTest {
   }
 
   private static void assertEqualsString(String expected, byte[] actual) {
-    assertEquals(expected, new String(actual, Charset.forName("US-ASCII")));
+    assertEquals(expected, new String(actual, StandardCharsets.US_ASCII));
   }
 }

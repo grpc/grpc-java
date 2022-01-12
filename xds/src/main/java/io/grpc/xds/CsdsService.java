@@ -17,8 +17,10 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Verify.verifyNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.util.Timestamps;
 import io.envoyproxy.envoy.admin.v3.ClientResourceStatus;
 import io.envoyproxy.envoy.service.status.v3.ClientConfig;
@@ -37,6 +39,9 @@ import io.grpc.xds.XdsClient.ResourceMetadata.ResourceMetadataStatus;
 import io.grpc.xds.XdsClient.ResourceMetadata.UpdateFailureState;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -101,21 +106,28 @@ public final class CsdsService extends
 
   private boolean handleRequest(
       ClientStatusRequest request, StreamObserver<ClientStatusResponse> responseObserver) {
+    StatusException error;
     try {
       responseObserver.onNext(getConfigDumpForRequest(request));
       return true;
     } catch (StatusException e) {
-      responseObserver.onError(e);
+      error = e;
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      logger.log(Level.FINE, "Server interrupted while building CSDS config dump", e);
+      error = Status.ABORTED.withDescription("Thread interrupted").withCause(e).asException();
     } catch (Exception e) {
       logger.log(Level.WARNING, "Unexpected error while building CSDS config dump", e);
-      responseObserver.onError(new StatusException(
-          Status.INTERNAL.withDescription("Unexpected internal error").withCause(e)));
+      error =
+          Status.INTERNAL.withDescription("Unexpected internal error").withCause(e).asException();
     }
+
+    responseObserver.onError(error);
     return false;
   }
 
   private ClientStatusResponse getConfigDumpForRequest(ClientStatusRequest request)
-      throws StatusException {
+      throws StatusException, InterruptedException {
     if (request.getNodeMatchersCount() > 0) {
       throw new StatusException(
           Status.INVALID_ARGUMENT.withDescription("node_matchers not supported"));
@@ -140,16 +152,20 @@ public final class CsdsService extends
   }
 
   @VisibleForTesting
-  static ClientConfig getClientConfigForXdsClient(XdsClient xdsClient) {
+  static ClientConfig getClientConfigForXdsClient(XdsClient xdsClient) throws InterruptedException {
     ClientConfig.Builder builder = ClientConfig.newBuilder()
         .setNode(xdsClient.getBootstrapInfo().node().toEnvoyProtoNode());
-    for (ResourceType type : ResourceType.values()) {
-      if (type == ResourceType.UNKNOWN) {
-        continue;
-      }
-      Map<String, ResourceMetadata> metadataMap = xdsClient.getSubscribedResourcesMetadata(type);
-      for (String resourceName : metadataMap.keySet()) {
-        ResourceMetadata metadata = metadataMap.get(resourceName);
+
+    Map<ResourceType, Map<String, ResourceMetadata>> metadataByType =
+        awaitSubscribedResourcesMetadata(xdsClient.getSubscribedResourcesMetadataSnapshot());
+
+    for (Map.Entry<ResourceType, Map<String, ResourceMetadata>> metadataByTypeEntry
+        : metadataByType.entrySet()) {
+      ResourceType type = metadataByTypeEntry.getKey();
+      Map<String, ResourceMetadata> metadataByResourceName = metadataByTypeEntry.getValue();
+      for (Map.Entry<String, ResourceMetadata> metadataEntry : metadataByResourceName.entrySet()) {
+        String resourceName = metadataEntry.getKey();
+        ResourceMetadata metadata = metadataEntry.getValue();
         GenericXdsConfig.Builder genericXdsConfigBuilder = GenericXdsConfig.newBuilder()
             .setTypeUrl(type.typeUrl())
             .setName(resourceName)
@@ -161,6 +177,7 @@ public final class CsdsService extends
               .setXdsConfig(metadata.getRawResource());
         }
         if (metadata.getStatus() == ResourceMetadataStatus.NACKED) {
+          verifyNotNull(metadata.getErrorState(), "resource %s getErrorState", resourceName);
           genericXdsConfigBuilder
               .setErrorState(metadataUpdateFailureStateToProto(metadata.getErrorState()));
         }
@@ -168,6 +185,18 @@ public final class CsdsService extends
       }
     }
     return builder.build();
+  }
+
+  private static Map<ResourceType, Map<String, ResourceMetadata>> awaitSubscribedResourcesMetadata(
+      ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>> future)
+      throws InterruptedException {
+    try {
+      // Normally this shouldn't take long, but add some slack for cases like a cold JVM.
+      return future.get(20, TimeUnit.SECONDS);
+    } catch (ExecutionException | TimeoutException e) {
+      // For CSDS' purposes, the exact reason why metadata not loaded isn't important.
+      throw new RuntimeException(e);
+    }
   }
 
   @VisibleForTesting

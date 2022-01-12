@@ -49,7 +49,7 @@ public class TokenAttachingTracerFactoryTest {
   private final ClientStreamTracer.Factory delegate = mock(
       ClientStreamTracer.Factory.class,
       delegatesTo(
-          new ClientStreamTracer.InternalLimitedInfoFactory() {
+          new ClientStreamTracer.Factory() {
             @Override
             public ClientStreamTracer newClientStreamTracer(
                 ClientStreamTracer.StreamInfo info, Metadata headers) {

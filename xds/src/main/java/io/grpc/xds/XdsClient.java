@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.auto.value.AutoValue;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.Any;
 import io.grpc.Status;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
@@ -113,10 +114,10 @@ abstract class XdsClient {
     // Endpoint-level load balancing policy.
     abstract LbPolicy lbPolicy();
 
-    // Only valid if lbPolicy is "ring_hash".
+    // Only valid if lbPolicy is "ring_hash_experimental".
     abstract long minRingSize();
 
-    // Only valid if lbPolicy is "ring_hash".
+    // Only valid if lbPolicy is "ring_hash_experimental".
     abstract long maxRingSize();
 
     // Alternative resource name to be used in EDS requests.
@@ -494,7 +495,16 @@ abstract class XdsClient {
     throw new UnsupportedOperationException();
   }
 
-  Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
+  /**
+   * Returns a {@link ListenableFuture} to the snapshot of the subscribed resources as
+   * they are at the moment of the call.
+   *
+   * <p>The snapshot is a map from the "resource type" to
+   * a map ("resource name": "resource metadata").
+   */
+  // Must be synchronized.
+  ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
+      getSubscribedResourcesMetadataSnapshot() {
     throw new UnsupportedOperationException();
   }
 

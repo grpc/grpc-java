@@ -120,7 +120,7 @@ public class CdsLoadBalancer2Test {
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_RESOLVER_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider("round_robin"));
-    lbRegistry.register(new FakeLoadBalancerProvider("ring_hash"));
+    lbRegistry.register(new FakeLoadBalancerProvider("ring_hash_experimental"));
     loadBalancer = new CdsLoadBalancer2(helper, lbRegistry);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -283,7 +283,7 @@ public class CdsLoadBalancer2Test {
     assertDiscoveryMechanism(childLbConfig.discoveryMechanisms.get(2), cluster4,
         DiscoveryMechanism.Type.EDS, null, null, LRS_SERVER_INFO, 300L, null);
     assertThat(childLbConfig.lbPolicy.getProvider().getPolicyName())
-        .isEqualTo("ring_hash");  // dominated by top-level cluster's config
+        .isEqualTo("ring_hash_experimental");  // dominated by top-level cluster's config
     assertThat(((RingHashConfig) childLbConfig.lbPolicy.getConfig()).minRingSize).isEqualTo(100L);
     assertThat(((RingHashConfig) childLbConfig.lbPolicy.getConfig()).maxRingSize).isEqualTo(1000L);
   }

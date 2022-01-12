@@ -24,7 +24,7 @@ targetCompatibility = 1.7
 // updating the version in our release process.
 def grpcVersion = '1.44.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def nettyTcNativeVersion = '2.0.31.Final'
-def protocVersion = '3.17.2'
+def protocVersion = '3.19.2'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
@@ -49,16 +49,16 @@ protobuf {
 startScripts.enabled = false
 
 task xdsHelloWorldClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworldxds.XdsHelloWorldClient'
+    mainClass = 'io.grpc.examples.helloworldxds.XdsHelloWorldClient'
     applicationName = 'xds-hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task xdsHelloWorldServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworldxds.XdsHelloWorldServer'
+    mainClass = 'io.grpc.examples.helloworldxds.XdsHelloWorldServer'
     applicationName = 'xds-hello-world-server'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
