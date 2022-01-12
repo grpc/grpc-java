@@ -194,6 +194,7 @@ final class LbPolicyConfiguration {
 
   /** Factory for {@link ChildPolicyWrapper}. */
   static final class RefCountedChildPolicyWrapperFactory {
+    // GuardedBy CachingRlsLbClient.lock
     @VisibleForTesting
     final Map<String /* target */, RefCountedChildPolicyWrapper> childPolicyMap =
         new HashMap<>();
@@ -215,6 +216,7 @@ final class LbPolicyConfiguration {
       this.childLbStatusListener = checkNotNull(childLbStatusListener, "childLbStatusListener");
     }
 
+    // GuardedBy CachingRlsLbClient.lock
     ChildPolicyWrapper createOrGet(String target) {
       // TODO(creamsoup) check if the target is valid or not
       RefCountedChildPolicyWrapper pooledChildPolicyWrapper = childPolicyMap.get(target);
@@ -234,6 +236,7 @@ final class LbPolicyConfiguration {
       }
     }
 
+    // GuardedBy CachingRlsLbClient.lock
     void release(ChildPolicyWrapper childPolicyWrapper) {
       checkNotNull(childPolicyWrapper, "childPolicyWrapper");
       String target = childPolicyWrapper.getTarget();

@@ -134,7 +134,8 @@ final class CachingRlsLbClient {
             rlsConfig.getCacheSizeBytes(),
             builder.evictionListener,
             scheduledExecutorService,
-            timeProvider);
+            timeProvider,
+            lock);
     logger = helper.getChannelLogger();
     String serverHost = null;
     try {
@@ -534,6 +535,7 @@ final class CachingRlsLbClient {
     private final long staleTime;
     private final ChildPolicyWrapper childPolicyWrapper;
 
+    // GuardedBy CachingRlsLbClient.lock
     DataCacheEntry(RouteLookupRequest request, final RouteLookupResponse response) {
       super(request);
       this.response = checkNotNull(response, "response");
@@ -612,7 +614,9 @@ final class CachingRlsLbClient {
 
     @Override
     void cleanup() {
-      refCountedChildPolicyWrapperFactory.release(childPolicyWrapper);
+      synchronized (lock) {
+        refCountedChildPolicyWrapperFactory.release(childPolicyWrapper);
+      }
     }
 
     @Override
@@ -831,14 +835,15 @@ final class CachingRlsLbClient {
 
     RlsAsyncLruCache(long maxEstimatedSizeBytes,
         @Nullable EvictionListener<RouteLookupRequest, CacheEntry> evictionListener,
-        ScheduledExecutorService ses, TimeProvider timeProvider) {
+        ScheduledExecutorService ses, TimeProvider timeProvider, Object lock) {
       super(
           maxEstimatedSizeBytes,
           new AutoCleaningEvictionListener(evictionListener),
           1,
           TimeUnit.MINUTES,
           ses,
-          timeProvider);
+          timeProvider,
+          lock);
     }
 
     @Override
@@ -962,6 +967,7 @@ final class CachingRlsLbClient {
       }
     }
 
+    // GuardedBy CachingRlsLbClient.lock
     void close() {
       if (fallbackChildPolicyWrapper != null) {
         refCountedChildPolicyWrapperFactory.release(fallbackChildPolicyWrapper);

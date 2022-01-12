@@ -61,7 +61,8 @@ public class LinkedHashLruCacheTest {
         10,
         TimeUnit.NANOSECONDS,
         fakeScheduledService,
-        timeProvider) {
+        timeProvider,
+        new Object()) {
       @Override
       protected boolean isExpired(Integer key, Entry value, long nowNanos) {
         return value.expireTime <= nowNanos;

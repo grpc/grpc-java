@@ -49,7 +49,7 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
 
-  private final Object lock = new Object();
+  private final Object lock;
 
   @GuardedBy("lock")
   private final LinkedHashMap<K, SizedValue> delegate;
@@ -65,9 +65,11 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
       int cleaningInterval,
       TimeUnit cleaningIntervalUnit,
       ScheduledExecutorService ses,
-      final TimeProvider timeProvider) {
+      final TimeProvider timeProvider,
+      Object lock) {
     checkState(estimatedMaxSizeBytes > 0, "max estimated cache size should be positive");
     this.estimatedMaxSizeBytes = estimatedMaxSizeBytes;
+    this.lock = checkNotNull(lock, "lock");
     this.evictionListener = new SizeHandlingEvictionListener(evictionListener);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     delegate = new LinkedHashMap<K, SizedValue>(
