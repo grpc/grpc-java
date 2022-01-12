@@ -19,6 +19,7 @@ package io.grpc.rls;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.rls.CachingRlsLbClient.RLS_DATA_KEY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -173,7 +174,9 @@ public class CachingRlsLbClientTest {
   public void tearDown() throws Exception {
     rlsLbClient.close();
     CachingRlsLbClient.enableOobChannelDirectPath = existingEnableOobChannelDirectPath;
-    assertThat(lbProvider.loadBalancers).isEmpty();
+    assertWithMessage(
+            "On client shut down, RlsLoadBalancer must shut down with all its child loadbalancers.")
+        .that(lbProvider.loadBalancers).isEmpty();
   }
 
   private CachedRouteLookupResponse getInSyncContext(
