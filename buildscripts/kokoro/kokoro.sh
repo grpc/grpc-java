@@ -2,8 +2,8 @@
 
 spongify_logs() {
   local f
-  for f in $(find "${KOKORO_ARTIFACTS_DIR:-.}" -name 'TEST-*.xml'); do
+  while read -r f; do
     mkdir "${f%.xml}"
     cp "$f" "${f%.xml}/sponge_log.xml"
-  done
+  done < <(find "${KOKORO_ARTIFACTS_DIR:-.}" -name 'TEST-*.xml')
 }
