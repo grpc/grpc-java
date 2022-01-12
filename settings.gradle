@@ -2,7 +2,7 @@ pluginManagement {
     plugins {
         id "com.android.application" version "4.2.0"
         id "com.android.library" version "4.2.0"
-        id "com.github.johnrengelman.shadow" version "6.1.0"
+        id "com.github.johnrengelman.shadow" version "7.1.2"
         id "com.github.kt3k.coveralls" version "2.12.0"
         id "com.google.osdetector" version "1.7.0"
         id "com.google.protobuf" version "0.8.18"

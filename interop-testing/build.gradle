@@ -76,7 +76,7 @@ task test_client(type: CreateStartScripts) {
     outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
     doLast {
-        unixScript.text = unixScript.text.replace('JAVAAGENT_APP_HOME', '\$APP_HOME/lib/')
+        unixScript.text = unixScript.text.replace('JAVAAGENT_APP_HOME', '\'"\$APP_HOME"\'/lib/')
         windowsScript.text = windowsScript.text.replace('JAVAAGENT_APP_HOME', '%APP_HOME%\\lib\\')
     }
 }
