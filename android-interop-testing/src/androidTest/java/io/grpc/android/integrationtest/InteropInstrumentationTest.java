@@ -16,11 +16,12 @@
 
 package io.grpc.android.integrationtest;
 
-import static junit.framework.Assert.assertEquals;
+import static org.junit.Assert.assertEquals;
 
 import android.util.Log;
-import androidx.test.InstrumentationRegistry;
-import androidx.test.runner.AndroidJUnit4;
+import androidx.test.core.app.ApplicationProvider;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
 import com.google.android.gms.common.GooglePlayServicesNotAvailableException;
 import com.google.android.gms.common.GooglePlayServicesRepairableException;
 import com.google.android.gms.security.ProviderInstaller;
@@ -59,7 +60,7 @@ public class InteropInstrumentationTest {
 
     if (useTls) {
       try {
-        ProviderInstaller.installIfNeeded(InstrumentationRegistry.getTargetContext());
+        ProviderInstaller.installIfNeeded(ApplicationProvider.getApplicationContext());
       } catch (GooglePlayServicesRepairableException e) {
         // The provider is helpful, but it is possible to succeed without it.
         // Hope that the system-provided libraries are new enough.
@@ -110,7 +111,7 @@ public class InteropInstrumentationTest {
         };
     InputStream testCa;
     if (useTestCa) {
-      testCa = InstrumentationRegistry.getTargetContext().getResources().openRawResource(R.raw.ca);
+      testCa = ApplicationProvider.getApplicationContext().getResources().openRawResource(R.raw.ca);
     } else {
       testCa = null;
     }
