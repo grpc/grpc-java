@@ -53,7 +53,7 @@ public class CertificateUtilsTest {
     // Checks some information on the test certificate.
     assertThat(cert[0].getSerialNumber()).isEqualTo(new BigInteger(
         "6c97d344427a93affea089d6855d4ed63dd94f38", 16));
-    assertThat(cert[0].getSubjectDN().getName()).isEqualTo(
+    assertThat(cert[0].getSubjectX500Principal().toString()).isEqualTo(
         "CN=*.test.google.com.au, O=Internet Widgits Pty Ltd, ST=Some-State, C=AU");
   }
 
@@ -74,7 +74,7 @@ public class CertificateUtilsTest {
     // Checks some information on the test certificate.
     assertThat(cert[0].getSerialNumber()).isEqualTo(new BigInteger(
         "5ab3f456f1dccbe2cfe94b9836d88bf600610f9a", 16));
-    assertThat(cert[0].getSubjectDN().getName()).isEqualTo(
+    assertThat(cert[0].getSubjectX500Principal().toString()).isEqualTo(
         "CN=testca, O=Internet Widgits Pty Ltd, ST=Some-State, C=AU");
   }
 
