@@ -198,7 +198,7 @@ public class AdvancedTlsTest {
                   throw new CertificateException("peerCertChain is empty");
                 }
                 X509Certificate leafCert = peerCertChain[0];
-                if (!leafCert.getSubjectDN().getName().contains("testclient")) {
+                if (!leafCert.getSubjectX500Principal().getName().contains("testclient")) {
                   throw new CertificateException("SslSocketAndEnginePeerVerifier failed");
                 }
               }
@@ -210,7 +210,7 @@ public class AdvancedTlsTest {
                   throw new CertificateException("peerCertChain is empty");
                 }
                 X509Certificate leafCert = peerCertChain[0];
-                if (!leafCert.getSubjectDN().getName().contains("testclient")) {
+                if (!leafCert.getSubjectX500Principal().getName().contains("testclient")) {
                   throw new CertificateException("SslSocketAndEnginePeerVerifier failed");
                 }
               }
@@ -237,7 +237,8 @@ public class AdvancedTlsTest {
                   throw new CertificateException("peerCertChain is empty");
                 }
                 X509Certificate leafCert = peerCertChain[0];
-                if (!leafCert.getSubjectDN().getName().contains("*.test.google.com.au")) {
+                if (!leafCert.getSubjectX500Principal().getName()
+                    .contains("*.test.google.com.au")) {
                   throw new CertificateException("SslSocketAndEnginePeerVerifier failed");
                 }
               }
@@ -249,7 +250,8 @@ public class AdvancedTlsTest {
                   throw new CertificateException("peerCertChain is empty");
                 }
                 X509Certificate leafCert = peerCertChain[0];
-                if (!leafCert.getSubjectDN().getName().contains("*.test.google.com.au")) {
+                if (!leafCert.getSubjectX500Principal().getName()
+                    .contains("*.test.google.com.au")) {
                   throw new CertificateException("SslSocketAndEnginePeerVerifier failed");
                 }
               }
