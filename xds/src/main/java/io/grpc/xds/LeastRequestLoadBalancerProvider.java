@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Strings;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -40,13 +39,6 @@ public final class LeastRequestLoadBalancerProvider extends LoadBalancerProvider
   @VisibleForTesting
   static final Integer DEFAULT_CHOICE_COUNT = 2;
 
-  // Use GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST if set,
-  // otherwise use the io.grpc.xds.experimentalEnableLeastRequest system property.
-  private static final boolean enableLeastRequest =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
-          ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
-          : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
-
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
     return new LeastRequestLoadBalancer(helper);
@@ -54,7 +46,7 @@ public final class LeastRequestLoadBalancerProvider extends LoadBalancerProvider
 
   @Override
   public boolean isAvailable() {
-    return enableLeastRequest;
+    return true;
   }
 
   @Override
