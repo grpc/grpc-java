@@ -349,7 +349,7 @@ public final class NettyChannelBuilder extends
     if (sslContext != null) {
       checkArgument(sslContext.isClient(),
           "Server SSL context can not be used for client channel");
-      GrpcSslContexts.ensureAlpnAndH2Enabled(sslContext.applicationProtocolNegotiator());
+      GrpcSslContexts.ensureProtocolNegotiationAndH2Enabled(sslContext.applicationProtocolNegotiator());
     }
     if (!(protocolNegotiatorFactory instanceof DefaultProtocolNegotiator)) {
       // Do nothing for compatibility

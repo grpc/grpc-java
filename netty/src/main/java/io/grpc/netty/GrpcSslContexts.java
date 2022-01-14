@@ -271,17 +271,17 @@ public class GrpcSslContexts {
     return null;
   }
 
-  @SuppressWarnings("deprecation")
-  static void ensureAlpnAndH2Enabled(
-      io.netty.handler.ssl.ApplicationProtocolNegotiator alpnNegotiator) {
-    checkArgument(alpnNegotiator != null, "ALPN must be configured");
-    checkArgument(alpnNegotiator.protocols() != null && !alpnNegotiator.protocols().isEmpty(),
-        "ALPN must be enabled and list HTTP/2 as a supported protocol.");
+  static void ensureProtocolNegotiationAndH2Enabled(
+      io.netty.handler.ssl.ApplicationProtocolNegotiator protocolNegotiator) {
+    checkArgument(protocolNegotiator != null, "ALPN or NPN must be configured");
+    List<String> protocols = protocolNegotiator.protocols();
+    checkArgument(protocols != null && !protocols.isEmpty(),
+        "ALPN or NPN must be enabled and list HTTP/2 as a supported protocol.");
     checkArgument(
-        alpnNegotiator.protocols().contains(HTTP2_VERSION),
-        "This ALPN config does not support HTTP/2. Expected %s, but got %s'.",
+        protocols.contains(HTTP2_VERSION),
+        "This ApplicationProtocolConfig does not support HTTP/2. Expected %s, but got %s'.",
         HTTP2_VERSION,
-        alpnNegotiator.protocols());
+        protocols);
   }
 
   private static class ConscryptHolder {

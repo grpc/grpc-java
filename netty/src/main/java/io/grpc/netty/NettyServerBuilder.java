@@ -355,7 +355,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     if (sslContext != null) {
       checkArgument(sslContext.isServer(),
           "Client SSL context can not be used for server");
-      GrpcSslContexts.ensureAlpnAndH2Enabled(sslContext.applicationProtocolNegotiator());
+      GrpcSslContexts.ensureProtocolNegotiationAndH2Enabled(sslContext.applicationProtocolNegotiator());
       protocolNegotiatorFactory = ProtocolNegotiators.serverTlsFactory(sslContext);
     } else {
       protocolNegotiatorFactory = ProtocolNegotiators.serverPlaintextFactory();

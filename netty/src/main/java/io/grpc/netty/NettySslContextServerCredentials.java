@@ -33,7 +33,7 @@ public final class NettySslContextServerCredentials {
   public static ServerCredentials create(SslContext sslContext) {
     Preconditions.checkArgument(sslContext.isServer(),
         "Client SSL context can not be used for server");
-    GrpcSslContexts.ensureAlpnAndH2Enabled(sslContext.applicationProtocolNegotiator());
+    GrpcSslContexts.ensureProtocolNegotiationAndH2Enabled(sslContext.applicationProtocolNegotiator());
     return NettyServerCredentials.create(ProtocolNegotiators.serverTlsFactory(sslContext));
   }
 }
