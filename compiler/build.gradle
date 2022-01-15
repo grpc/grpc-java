@@ -254,8 +254,8 @@ publishing {
             artifacts = []
             artifactId 'protoc-gen-grpc-java'
             artifact("$artifactStagingPath/java_plugin/${protocPluginBaseName}.exe" as File) {
-                classifier osdetector.os + "-" + arch
-                extension "exe"
+                archiveClassifier osdetector.os + "-" + arch
+                archiveExtension "exe"
                 builtBy checkArtifacts
             }
             pom.withXml {
