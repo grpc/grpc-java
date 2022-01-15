@@ -302,7 +302,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
               return;
             }
             if (failOverTimer.isPending()) {
-              if (newState.equals(READY) || newState.equals(TRANSIENT_FAILURE)) {
+              if (newState.equals(READY) || newState.equals(IDLE)
+                  || newState.equals(TRANSIENT_FAILURE)) {
                 failOverTimer.cancel();
               }
             }
