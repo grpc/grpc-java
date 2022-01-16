@@ -278,7 +278,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         }
         if (index == savedState.buffer.size()) { // I'm drained
           state = savedState.substreamDrained(substream);
-          if (!isReady()) {
+          if (!substream.stream.isReady()) {
             return;
           }
           onReadyRunnable = new Runnable() {
@@ -1047,9 +1047,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     @Override
     public void onReady() {
-      // FIXME(#7089): hedging case is broken.
-      if (!isReady()) {
-        return;
+      synchronized (lock) {
+        if (!state.drainedSubstreams.contains(substream)) {
+          return;
+        }
       }
       listenerSerializeExecutor.execute(
           new Runnable() {
