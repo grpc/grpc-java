@@ -270,18 +270,14 @@ final class XdsNameResolver extends NameResolver {
               ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())))
           .put("childPolicyConfigTargetFieldName", "cluster")
           .build();
-      Map<String, ?> rlsPolicy = ImmutableMap.of(
-          "rls_experimental",
-          rlsConfig);
-      childPolicy.put(
-          pluginName,
-          ImmutableMap.of("lbPolicy", ImmutableList.of(rlsPolicy)));
+      Map<String, ?> rlsPolicy = ImmutableMap.of("rls_experimental", rlsConfig);
+      childPolicy.put(pluginName, ImmutableMap.of("lbPolicy", ImmutableList.of(rlsPolicy)));
     }
-    return Collections.singletonMap("loadBalancingConfig",
-        Collections.singletonList(
-            Collections.singletonMap(
-                "cluster_manager_experimental", Collections.singletonMap(
-                    "childPolicy", Collections.unmodifiableMap(childPolicy)))));
+    return Collections.singletonMap(
+        "loadBalancingConfig",
+        Collections.singletonList(Collections.singletonMap(
+            "cluster_manager_experimental",
+            Collections.singletonMap("childPolicy", Collections.unmodifiableMap(childPolicy)))));
   }
 
   @VisibleForTesting
