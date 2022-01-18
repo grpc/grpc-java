@@ -1155,22 +1155,43 @@ public class XdsNameResolverTest {
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
-  public void generateServiceConfig_forLoadBalancingConfig() throws IOException {
-    Map<String, String> clusterNameMap = ImmutableMap.of(
-        "cluster:cluster-foo",
-        "cluster-foo",
-        "cluster:cluster-bar",
-        "cluster-bar",
-        "cluster:cluster-baz",
-        "cluster-baz");
-    Map<String, ?> rlsConfig = ImmutableMap.of(
-        "lookupService",
-        "rls.bigtable.google.com");
-    Map<String, RlsPluginConfig> pluginConfigMap = ImmutableMap.of(
-        "cluster_specifier_plugin:plugin-foo",
-        RlsPluginConfig.create(rlsConfig));
+  public void generateServiceConfig_forClusterManagerLoadBalancingConfig() throws IOException {
+    Route route1 = Route.forAction(
+        RouteMatch.withPathExactOnly("HelloService/hi"),
+        RouteAction.forCluster(
+            "cluster-foo", Collections.emptyList(), TimeUnit.SECONDS.toNanos(15L), null),
+        ImmutableMap.of());
+    Route route2 = Route.forAction(
+        RouteMatch.withPathExactOnly("HelloService/hello"),
+        RouteAction.forWeightedClusters(
+            ImmutableList.of(
+                ClusterWeight.create("cluster-bar", 50, ImmutableMap.of()),
+                ClusterWeight.create("cluster-baz", 50, ImmutableMap.of())),
+            ImmutableList.of(),
+            TimeUnit.SECONDS.toNanos(15L),
+            null),
+        ImmutableMap.of());
+    Map<String, ?> rlsConfig = ImmutableMap.of("lookupService", "rls.bigtable.google.com");
+    Route route3 = Route.forAction(
+        RouteMatch.withPathExactOnly("HelloService/greetings"),
+        RouteAction.forClusterSpecifierPlugin(
+            NamedPluginConfig.create("plugin-foo", RlsPluginConfig.create(rlsConfig)),
+            Collections.emptyList(),
+            TimeUnit.SECONDS.toNanos(20L),
+            null),
+        ImmutableMap.of());
+
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
+    VirtualHost virtualHost =
+        VirtualHost.create("virtualhost", Collections.singletonList(AUTHORITY),
+            ImmutableList.of(route1, route2, route3),
+            ImmutableMap.of());
+    xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
     String expectedServiceConfigJson =
         "{\n"
             + "  \"loadBalancingConfig\": [{\n"
@@ -1214,11 +1235,8 @@ public class XdsNameResolverTest {
             + "    }\n"
             + "  }]\n"
             + "}";
-    Map<String, ?> expectedServiceConfig =
-        (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
-    assertThat(XdsNameResolver.generateServiceConfigWithLoadBalancingConfig(
-            clusterNameMap, pluginConfigMap))
-        .isEqualTo(expectedServiceConfig);
+    assertThat(resolutionResultCaptor.getValue().getServiceConfig().getConfig())
+        .isEqualTo(JsonParser.parse(expectedServiceConfigJson));
   }
 
   @SuppressWarnings("unchecked")

@@ -250,28 +250,28 @@ final class XdsNameResolver extends NameResolver {
         "methodConfig", Collections.singletonList(methodConfig.build()));
   }
 
-  @VisibleForTesting
-  static Map<String, ?> generateServiceConfigWithLoadBalancingConfig(
-      Map<String, String> clusterNameMap, Map<String, RlsPluginConfig> pluginConfigMap) {
+  // called in syncContext
+  private Map<String, ?> generateServiceConfigWithLoadBalancingConfig() {
     Map<String, Object> childPolicy = new HashMap<>();
-    for (String cluster : clusterNameMap.keySet()) {
-      List<?> lbPolicy = ImmutableList.of(
-          ImmutableMap.of(
-              "cds_experimental",
-              ImmutableMap.of("cluster", clusterNameMap.get(cluster))));
-      childPolicy.put(cluster, ImmutableMap.of("lbPolicy", lbPolicy));
-    }
-    for (String pluginName : pluginConfigMap.keySet()) {
-      RlsPluginConfig pluginConfig = pluginConfigMap.get(pluginName);
-      Map<String, ?> rlsConfig = new ImmutableMap.Builder<String, Object>()
-          .put("routeLookupConfig", pluginConfig.config())
-          .put(
-              "childPolicy",
-              ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())))
-          .put("childPolicyConfigTargetFieldName", "cluster")
-          .build();
-      Map<String, ?> rlsPolicy = ImmutableMap.of("rls_experimental", rlsConfig);
-      childPolicy.put(pluginName, ImmutableMap.of("lbPolicy", ImmutableList.of(rlsPolicy)));
+    for (String name : clusterRefs.keySet()) {
+      String traditionalCluster = clusterRefs.get(name).traditionalCluster;
+      if (traditionalCluster != null) {
+        List<?> lbPolicy = ImmutableList.of(
+            ImmutableMap.of("cds_experimental", ImmutableMap.of("cluster", traditionalCluster)));
+        childPolicy.put(name, ImmutableMap.of("lbPolicy", lbPolicy));
+      }
+      RlsPluginConfig rlsPluginConfig = clusterRefs.get(name).rlsPluginConfig;
+      if (rlsPluginConfig != null) {
+        Map<String, ?> rlsConfig = new ImmutableMap.Builder<String, Object>()
+            .put("routeLookupConfig", rlsPluginConfig.config())
+            .put(
+                "childPolicy",
+                ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())))
+            .put("childPolicyConfigTargetFieldName", "cluster")
+            .build();
+        Map<String, ?> rlsPolicy = ImmutableMap.of("rls_experimental", rlsConfig);
+        childPolicy.put(name, ImmutableMap.of("lbPolicy", ImmutableList.of(rlsPolicy)));
+      }
     }
     return Collections.singletonMap(
         "loadBalancingConfig",
@@ -287,18 +287,7 @@ final class XdsNameResolver extends NameResolver {
 
   // called in syncContext
   private void updateResolutionResult() {
-    Map<String, String> clusterNameMap = new HashMap<>();
-    Map<String, RlsPluginConfig> pluginConfigMap = new HashMap<>();
-    for (String name : clusterRefs.keySet()) {
-      if (clusterRefs.get(name).traditionalCluster != null) {
-        clusterNameMap.put(name, clusterRefs.get(name).traditionalCluster);
-      }
-      if (clusterRefs.get(name).rlsPluginConfig != null) {
-        pluginConfigMap.put(name, clusterRefs.get(name).rlsPluginConfig);
-      }
-    }
-    Map<String, ?> rawServiceConfig =
-        generateServiceConfigWithLoadBalancingConfig(clusterNameMap, pluginConfigMap);
+    Map<String, ?> rawServiceConfig = generateServiceConfigWithLoadBalancingConfig();
     if (logger.isLoggable(XdsLogLevel.INFO)) {
       logger.log(
           XdsLogLevel.INFO, "Generated service config:\n{0}", new Gson().toJson(rawServiceConfig));
