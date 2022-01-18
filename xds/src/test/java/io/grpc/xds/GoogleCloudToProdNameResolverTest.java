@@ -104,8 +104,7 @@ public class GoogleCloudToProdNameResolverTest {
 
   @Mock
   private NameResolver.Listener2 mockListener;
-  @Mock
-  private Random mockRandom;
+  private Random random = new Random(1);
   @Captor
   private ArgumentCaptor<Status> errorCaptor;
   private boolean originalIsOnGcp;
@@ -114,7 +113,6 @@ public class GoogleCloudToProdNameResolverTest {
 
   @Before
   public void setUp() {
-    when(mockRandom.nextInt()).thenReturn(123456789);
     nsRegistry.register(new FakeNsProvider("dns"));
     nsRegistry.register(new FakeNsProvider("xds"));
     originalIsOnGcp = GoogleCloudToProdNameResolver.isOnGcp;
@@ -146,7 +144,7 @@ public class GoogleCloudToProdNameResolverTest {
       }
     };
     resolver = new GoogleCloudToProdNameResolver(
-        TARGET_URI, args, fakeExecutorResource, mockRandom, fakeXdsClientPoolFactory,
+        TARGET_URI, args, fakeExecutorResource, random, fakeXdsClientPoolFactory,
         nsRegistry.asFactory());
     resolver.setHttpConnectionProvider(httpConnections);
   }
@@ -183,7 +181,7 @@ public class GoogleCloudToProdNameResolverTest {
     Map<String, ?> bootstrap = fakeXdsClientPoolFactory.bootstrapRef.get();
     Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
     assertThat(node).containsExactly(
-        "id", "C2P-123456789",
+        "id", "C2P-991614323",
         "locality", ImmutableMap.of("zone", ZONE),
         "metadata", ImmutableMap.of("TRAFFICDIRECTOR_DIRECTPATH_C2P_IPV6_CAPABLE", true));
     Map<String, ?> server = Iterables.getOnlyElement(
