@@ -15,5 +15,5 @@ dependencies {
         exclude group: 'junit', module: 'junit'
     }
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    signature "net.sf.androidscents.signature:android-api-level-19:4.4.2_r4@signature"
+    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
