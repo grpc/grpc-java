@@ -9,9 +9,6 @@ plugins {
 
 description = "gRPC: ALTS"
 
-sourceCompatibility = 1.7
-targetCompatibility = 1.7
-
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
@@ -65,14 +62,14 @@ javadoc {
 }
 
 jar {
-    // Must use a different classifier to avoid conflicting with shadowJar
-    classifier = 'original'
+    // Must use a different archiveClassifier to avoid conflicting with shadowJar
+    archiveClassifier = 'original'
 }
 
 // We want to use grpc-netty-shaded instead of grpc-netty. But we also want our
 // source to work with Bazel, so we rewrite the code as part of the build.
 shadowJar {
-    classifier = null
+    archiveClassifier = null
     dependencies {
         exclude(dependency {true})
     }

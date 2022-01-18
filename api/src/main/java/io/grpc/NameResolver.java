@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
+import com.google.errorprone.annotations.InlineMe;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -204,6 +205,10 @@ public abstract class NameResolver {
      */
     @Override
     @Deprecated
+    @InlineMe(
+        replacement = "this.onResult(ResolutionResult.newBuilder().setAddresses(servers)"
+            + ".setAttributes(attributes).build())",
+        imports = "io.grpc.NameResolver.ResolutionResult")
     public final void onAddresses(
         List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
       // TODO(jihuncho) need to promote Listener2 if we want to use ConfigOrError

@@ -7,6 +7,9 @@ fi
 
 readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 
+. "$GRPC_JAVA_DIR"/buildscripts/kokoro/kokoro.sh
+trap spongify_logs EXIT
+
 "$GRPC_JAVA_DIR"/buildscripts/build_docker.sh
 "$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh /grpc-java/buildscripts/build_artifacts_in_docker.sh
 
@@ -14,25 +17,29 @@ readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 # use --include-build for its grpc-core dependency
 echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 LOCAL_MVN_TEMP=$(mktemp -d)
+GRADLE_FLAGS="-Pandroid.useAndroidX=true"
 pushd "$GRPC_JAVA_DIR/android"
 ../gradlew publish \
   -Dorg.gradle.parallel=false \
   -PskipCodegen=true \
-  -PrepositoryDir="$LOCAL_MVN_TEMP"
+  -PrepositoryDir="$LOCAL_MVN_TEMP" \
+  $GRADLE_FLAGS
 popd
 
 pushd "$GRPC_JAVA_DIR/cronet"
 ../gradlew publish \
   -Dorg.gradle.parallel=false \
   -PskipCodegen=true \
-  -PrepositoryDir="$LOCAL_MVN_TEMP"
+  -PrepositoryDir="$LOCAL_MVN_TEMP" \
+  $GRADLE_FLAGS
 popd
 
 pushd "$GRPC_JAVA_DIR/binder"
 ../gradlew publish \
   -Dorg.gradle.parallel=false \
   -PskipCodegen=true \
-  -PrepositoryDir="$LOCAL_MVN_TEMP"
+  -PrepositoryDir="$LOCAL_MVN_TEMP" \
+  $GRADLE_FLAGS
 popd
 
 readonly MVN_ARTIFACT_DIR="${MVN_ARTIFACT_DIR:-$GRPC_JAVA_DIR/mvn-artifacts}"

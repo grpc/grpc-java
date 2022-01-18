@@ -140,7 +140,7 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
       Level level = Level.WARNING;
       for (String rawSrv : rawSrvRecords) {
         try {
-          String[] parts = whitespace.split(rawSrv);
+          String[] parts = whitespace.split(rawSrv, 5);
           Verify.verify(parts.length == 4, "Bad SRV Record: %s", rawSrv);
           // SRV requires the host name to be absolute
           if (!parts[3].endsWith(".")) {
