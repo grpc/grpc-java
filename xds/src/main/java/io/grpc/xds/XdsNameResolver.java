@@ -438,7 +438,7 @@ final class XdsNameResolver extends NameResolver {
         }
         RouteAction action = selectedRoute.routeAction();
         if (action.cluster() != null) {
-          cluster = uniqueNameFromCluster(action.cluster());
+          cluster = prefixedClusterName(action.cluster());
         } else if (action.weightedClusters() != null) {
           int totalWeight = 0;
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
@@ -449,13 +449,14 @@ final class XdsNameResolver extends NameResolver {
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
             accumulator += weightedCluster.weight();
             if (select < accumulator) {
-              cluster = uniqueNameFromCluster(weightedCluster.name());
+              cluster = prefixedClusterName(weightedCluster.name());
               selectedOverrideConfigs.putAll(weightedCluster.filterConfigOverrides());
               break;
             }
           }
         } else if (action.namedClusterSpecifierPluginConfig() != null) {
-          cluster = uniqueNameFromPlugin(action.namedClusterSpecifierPluginConfig().name());
+          cluster =
+              prefixedClusterSpecifierPluginName(action.namedClusterSpecifierPluginConfig().name());
         }
       } while (!retainCluster(cluster));
       Long timeoutNanos = null;
@@ -667,11 +668,11 @@ final class XdsNameResolver extends NameResolver {
     return values == null ? null : Joiner.on(",").join(values);
   }
 
-  private static String uniqueNameFromCluster(String name) {
+  private static String prefixedClusterName(String name) {
     return "cluster:" + name;
   }
 
-  private static String uniqueNameFromPlugin(String pluginName) {
+  private static String prefixedClusterSpecifierPluginName(String pluginName) {
     return "cluster_specifier_plugin:" + pluginName;
   }
 
@@ -782,24 +783,25 @@ final class XdsNameResolver extends NameResolver {
       Map<String, RlsPluginConfig> rlsPluginConfigMap = new HashMap<>();
       for (Route route : routes) {
         RouteAction action = route.routeAction();
-        String uniqueName;
+        String prefixedName;
         if (action != null) {
           if (action.cluster() != null) {
-            uniqueName = uniqueNameFromCluster(action.cluster());
-            clusters.add(uniqueName);
-            clusterNameMap.put(uniqueName, action.cluster());
+            prefixedName = prefixedClusterName(action.cluster());
+            clusters.add(prefixedName);
+            clusterNameMap.put(prefixedName, action.cluster());
           } else if (action.weightedClusters() != null) {
             for (ClusterWeight weighedCluster : action.weightedClusters()) {
-              uniqueName = uniqueNameFromCluster(weighedCluster.name());
-              clusters.add(uniqueName);
-              clusterNameMap.put(uniqueName, weighedCluster.name());
+              prefixedName = prefixedClusterName(weighedCluster.name());
+              clusters.add(prefixedName);
+              clusterNameMap.put(prefixedName, weighedCluster.name());
             }
           } else if (action.namedClusterSpecifierPluginConfig() != null) {
             PluginConfig pluginConfig = action.namedClusterSpecifierPluginConfig().config();
             if (pluginConfig instanceof RlsPluginConfig) {
-              uniqueName = uniqueNameFromPlugin(action.namedClusterSpecifierPluginConfig().name());
-              clusters.add(uniqueName);
-              rlsPluginConfigMap.put(uniqueName, (RlsPluginConfig) pluginConfig);
+              prefixedName = prefixedClusterSpecifierPluginName(
+                  action.namedClusterSpecifierPluginConfig().name());
+              clusters.add(prefixedName);
+              rlsPluginConfigMap.put(prefixedName, (RlsPluginConfig) pluginConfig);
             }
           }
         }
