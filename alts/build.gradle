@@ -9,9 +9,6 @@ plugins {
 
 description = "gRPC: ALTS"
 
-sourceCompatibility = 1.7
-targetCompatibility = 1.7
-
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
