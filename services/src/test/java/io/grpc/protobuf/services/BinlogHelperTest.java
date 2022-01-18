@@ -80,7 +80,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -95,7 +94,7 @@ import org.mockito.ArgumentMatchers;
 /** Tests for {@link BinlogHelper}. */
 @RunWith(JUnit4.class)
 public final class BinlogHelperTest {
-  private static final Charset US_ASCII = StandardCharsets.US_ASCII;
+  private static final Charset US_ASCII = Charset.forName("US-ASCII");
   private static final BinlogHelper HEADER_FULL = new Builder().header(Integer.MAX_VALUE).build();
   private static final BinlogHelper HEADER_256 = new Builder().header(256).build();
   private static final BinlogHelper MSG_FULL = new Builder().msg(Integer.MAX_VALUE).build();
