@@ -46,7 +46,7 @@ import io.grpc.testing.TestMethodDescriptors;
 import java.io.ByteArrayInputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -168,7 +168,7 @@ public final class CronetClientStreamTest {
     for (int i = 0; i < 5; ++i) {
       requests[i] = new String("request" + String.valueOf(i));
       buffers[i] = allocator.allocate(requests[i].length());
-      buffers[i].write(requests[i].getBytes(StandardCharsets.UTF_8), 0, requests[i].length());
+      buffers[i].write(requests[i].getBytes(Charset.forName("UTF-8")), 0, requests[i].length());
       // The 3rd and 5th writeFrame calls have flush=true.
       clientStream.abstractClientStreamSink().writeFrame(buffers[i], false, i == 2 || i == 4, 1);
     }
@@ -261,7 +261,7 @@ public final class CronetClientStreamTest {
     callback.onReadCompleted(
         cronetStream,
         info,
-        createMessageFrame(new String("response1").getBytes(StandardCharsets.UTF_8)),
+        createMessageFrame(new String("response1").getBytes(Charset.forName("UTF-8"))),
         false);
     // Haven't request any message, so no callback is called here.
     verify(clientListener, times(0)).messagesAvailable(isA(MessageProducer.class));
@@ -293,7 +293,7 @@ public final class CronetClientStreamTest {
     CronetWritableBufferAllocator allocator = new CronetWritableBufferAllocator();
     String request = new String("request");
     WritableBuffer writableBuffer = allocator.allocate(request.length());
-    writableBuffer.write(request.getBytes(StandardCharsets.UTF_8), 0, request.length());
+    writableBuffer.write(request.getBytes(Charset.forName("UTF-8")), 0, request.length());
     clientStream.abstractClientStreamSink().writeFrame(writableBuffer, false, true, 1);
     ArgumentCaptor<ByteBuffer> bufferCaptor = ArgumentCaptor.forClass(ByteBuffer.class);
     verify(cronetStream, times(1)).write(bufferCaptor.capture(), isA(Boolean.class));
@@ -312,7 +312,7 @@ public final class CronetClientStreamTest {
     callback.onReadCompleted(
         cronetStream,
         info,
-        createMessageFrame(new String("response").getBytes(StandardCharsets.UTF_8)),
+        createMessageFrame(new String("response").getBytes(Charset.forName("UTF-8"))),
         false);
     verify(clientListener, times(1)).messagesAvailable(isA(MessageProducer.class));
     verify(cronetStream, times(2)).read(isA(ByteBuffer.class));
@@ -688,7 +688,7 @@ public final class CronetClientStreamTest {
         .newBidirectionalStreamBuilder(
             isA(String.class), isA(BidirectionalStream.Callback.class), isA(Executor.class));
 
-    byte[] msg = "request".getBytes(StandardCharsets.UTF_8);
+    byte[] msg = "request".getBytes(Charset.forName("UTF-8"));
     stream.writeMessage(new ByteArrayInputStream(msg));
     // We still haven't built the stream or sent anything.
     verify(cronetStream, times(0)).write(isA(ByteBuffer.class), isA(Boolean.class));
