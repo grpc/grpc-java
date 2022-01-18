@@ -175,7 +175,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
 
   private ImmutableMap<String, ?> generateBootstrap(String zone, boolean supportIpv6) {
     ImmutableMap.Builder<String, Object> nodeBuilder = ImmutableMap.builder();
-    nodeBuilder.put("id", "C2P-" + rand.nextInt());
+    nodeBuilder.put("id", "C2P-" + (rand.nextInt() & 0x7FFFFFFF));
     if (!zone.isEmpty()) {
       nodeBuilder.put("locality", ImmutableMap.of("zone", zone));
     }
