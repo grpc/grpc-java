@@ -263,13 +263,13 @@ final class XdsNameResolver extends NameResolver {
     }
     for (String pluginName : pluginConfigMap.keySet()) {
       RlsPluginConfig pluginConfig = pluginConfigMap.get(pluginName);
-      Map<String, ?> rlsConfig = ImmutableMap.of(
-          "routeLookupConfig",
-          pluginConfig.config(),
-          "childPolicy",
-          ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())),
-          "childPolicyConfigTargetFieldName",
-          "cluster");
+      Map<String, ?> rlsConfig = new ImmutableMap.Builder<String, Object>()
+          .put("routeLookupConfig", pluginConfig.config())
+          .put(
+              "childPolicy",
+              ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())))
+          .put("childPolicyConfigTargetFieldName", "cluster")
+          .build();
       Map<String, ?> rlsPolicy = ImmutableMap.of(
           "rls_experimental",
           rlsConfig);
