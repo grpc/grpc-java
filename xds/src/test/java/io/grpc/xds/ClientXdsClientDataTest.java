@@ -37,6 +37,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.LeastRequestLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig.HashFunction;
 import io.envoyproxy.envoy.config.core.v3.Address;
@@ -156,6 +157,7 @@ public class ClientXdsClientDataTest {
   private boolean originalEnableRetry;
   private boolean originalEnableRbac;
   private boolean originalEnableRouteLookup;
+  private boolean originalEnableLeastRequest;
 
   @Before
   public void setUp() {
@@ -165,6 +167,8 @@ public class ClientXdsClientDataTest {
     assertThat(originalEnableRbac).isTrue();
     originalEnableRouteLookup = ClientXdsClient.enableRouteLookup;
     assertThat(originalEnableRouteLookup).isFalse();
+    originalEnableLeastRequest = ClientXdsClient.enableLeastRequest;
+    assertThat(originalEnableLeastRequest).isFalse();
   }
 
   @After
@@ -172,6 +176,7 @@ public class ClientXdsClientDataTest {
     ClientXdsClient.enableRetry = originalEnableRetry;
     ClientXdsClient.enableRbac = originalEnableRbac;
     ClientXdsClient.enableRouteLookup = originalEnableRouteLookup;
+    ClientXdsClient.enableLeastRequest = originalEnableLeastRequest;
   }
 
   @Test
@@ -1668,6 +1673,28 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  public void parseCluster_leastRequestLbPolicy_defaultLbConfig() throws ResourceInvalidException {
+    ClientXdsClient.enableLeastRequest = true;
+    Cluster cluster = Cluster.newBuilder()
+        .setName("cluster-foo.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder()
+                        .setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-foo.googleapis.com"))
+        .setLbPolicy(LbPolicy.LEAST_REQUEST)
+        .build();
+
+    CdsUpdate update = ClientXdsClient.processCluster(
+        cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
+    assertThat(update.lbPolicy()).isEqualTo(CdsUpdate.LbPolicy.LEAST_REQUEST);
+    assertThat(update.choiceCount())
+        .isEqualTo(ClientXdsClient.DEFAULT_LEAST_REQUEST_CHOICE_COUNT);
+  }
+
+  @Test
   public void parseCluster_transportSocketMatches_exception() throws ResourceInvalidException {
     Cluster cluster = Cluster.newBuilder()
         .setName("cluster-foo.googleapis.com")
@@ -1738,6 +1765,31 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
+    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
+  }
+
+  @Test
+  public void parseCluster_leastRequestLbPolicy_invalidChoiceCountConfig_tooSmallChoiceCount()
+      throws ResourceInvalidException {
+    ClientXdsClient.enableLeastRequest = true;
+    Cluster cluster = Cluster.newBuilder()
+        .setName("cluster-foo.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder()
+                        .setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-foo.googleapis.com"))
+        .setLbPolicy(LbPolicy.LEAST_REQUEST)
+        .setLeastRequestLbConfig(
+            LeastRequestLbConfig.newBuilder()
+                .setChoiceCount(UInt32Value.newBuilder().setValue(1))
+        )
+        .build();
+
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid least_request_lb_config");
     ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
   }
 
