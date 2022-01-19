@@ -261,24 +261,8 @@ final class XdsNameResolver extends NameResolver {
 
     ImmutableMap.Builder<String, Object> childPolicy = new ImmutableMap.Builder<>();
     for (String name : clusterRefs.keySet()) {
-      String traditionalCluster = clusterRefs.get(name).traditionalCluster;
-      if (traditionalCluster != null) {
-        List<?> lbPolicy = ImmutableList.of(
-            ImmutableMap.of("cds_experimental", ImmutableMap.of("cluster", traditionalCluster)));
-        childPolicy.put(name, ImmutableMap.of("lbPolicy", lbPolicy));
-      }
-      RlsPluginConfig rlsPluginConfig = clusterRefs.get(name).rlsPluginConfig;
-      if (rlsPluginConfig != null) {
-        Map<String, ?> rlsConfig = new ImmutableMap.Builder<String, Object>()
-            .put("routeLookupConfig", rlsPluginConfig.config())
-            .put(
-                "childPolicy",
-                ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())))
-            .put("childPolicyConfigTargetFieldName", "cluster")
-            .build();
-        Map<String, ?> rlsPolicy = ImmutableMap.of("rls_experimental", rlsConfig);
-        childPolicy.put(name, ImmutableMap.of("lbPolicy", ImmutableList.of(rlsPolicy)));
-      }
+      Map<String, ?> lbPolicy = clusterRefs.get(name).toLbPolicy();
+      childPolicy.put(name, ImmutableMap.of("lbPolicy", ImmutableList.of(lbPolicy)));
     }
     Map<String, ?> rawServiceConfig = ImmutableMap.of(
         "loadBalancingConfig",
@@ -984,6 +968,21 @@ final class XdsNameResolver extends NameResolver {
           "There must be exactly one non-null value in traditionalCluster and pluginConfig");
       this.traditionalCluster = traditionalCluster;
       this.rlsPluginConfig = rlsPluginConfig;
+    }
+
+    private Map<String, ?> toLbPolicy() {
+      if (traditionalCluster != null) {
+        return ImmutableMap.of("cds_experimental", ImmutableMap.of("cluster", traditionalCluster));
+      } else {
+        ImmutableMap<String, ?> rlsConfig = new ImmutableMap.Builder<String, Object>()
+            .put("routeLookupConfig", rlsPluginConfig.config())
+            .put(
+                "childPolicy",
+                ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())))
+            .put("childPolicyConfigTargetFieldName", "cluster")
+            .build();
+        return ImmutableMap.of("rls_experimental", rlsConfig);
+      }
     }
 
     static ClusterRefState forCluster(AtomicInteger refCount, String name) {
