@@ -71,6 +71,13 @@ check.dependsOn(tasks.register('tomcat9Test', Test) {
     doLast {
         file(tomcatTempDir).deleteDir()
     }
+
+    // tomcat-embed-core 9 presently performs illegal reflective access on
+    // java.io.ObjectStreamClass$Caches.localDescs and sun.rmi.transport.Target.ccl,
+    // see https://lists.apache.org/thread/s0xr7tk2kfkkxfjps9n7dhh4cypfdhyy
+    if (JavaVersion.current().isJava9Compatible()) {
+        jvmArgs += ['--add-opens=java.base/java.io=ALL-UNNAMED', '--add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED']
+    }
 })
 
 // Only run these tests if java 11+ is being used
