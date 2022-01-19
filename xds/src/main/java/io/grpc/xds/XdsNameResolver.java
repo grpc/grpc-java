@@ -250,9 +250,14 @@ final class XdsNameResolver extends NameResolver {
         "methodConfig", Collections.singletonList(methodConfig.build()));
   }
 
+  @VisibleForTesting
+  XdsClient getXdsClient() {
+    return xdsClient;
+  }
+
   // called in syncContext
-  private Map<String, ?> generateServiceConfigWithLoadBalancingConfig() {
-    Map<String, Object> childPolicy = new HashMap<>();
+  private void updateResolutionResult() {
+    ImmutableMap.Builder<String, Object> childPolicy = new ImmutableMap.Builder<>();
     for (String name : clusterRefs.keySet()) {
       String traditionalCluster = clusterRefs.get(name).traditionalCluster;
       if (traditionalCluster != null) {
@@ -273,21 +278,11 @@ final class XdsNameResolver extends NameResolver {
         childPolicy.put(name, ImmutableMap.of("lbPolicy", ImmutableList.of(rlsPolicy)));
       }
     }
-    return Collections.singletonMap(
+    Map<String, ?> rawServiceConfig = ImmutableMap.of(
         "loadBalancingConfig",
-        Collections.singletonList(Collections.singletonMap(
-            "cluster_manager_experimental",
-            Collections.singletonMap("childPolicy", Collections.unmodifiableMap(childPolicy)))));
-  }
+        ImmutableList.of(ImmutableMap.of(
+            "cluster_manager_experimental", ImmutableMap.of("childPolicy", childPolicy.build()))));
 
-  @VisibleForTesting
-  XdsClient getXdsClient() {
-    return xdsClient;
-  }
-
-  // called in syncContext
-  private void updateResolutionResult() {
-    Map<String, ?> rawServiceConfig = generateServiceConfigWithLoadBalancingConfig();
     if (logger.isLoggable(XdsLogLevel.INFO)) {
       logger.log(
           XdsLogLevel.INFO, "Generated service config:\n{0}", new Gson().toJson(rawServiceConfig));
