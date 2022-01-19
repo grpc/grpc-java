@@ -41,9 +41,14 @@ def migrate(String name, String inputDir, SourceSet sourceSet) {
     def outputDir = layout.buildDirectory.dir('generated/sources/jakarta-' + name)
     sourceSet.java.srcDir outputDir
     return tasks.register('migrateSources' + name.capitalize(), Sync) { task ->
-        from(inputDir)
         into(outputDir)
-        filter { String line -> line.replaceAll('javax\\.servlet', 'jakarta.servlet') }
+        from("$inputDir/io/grpc/servlet") {
+            into('io/grpc/servlet/jakarta')
+            filter { String line ->
+                line.replaceAll('javax\\.servlet', 'jakarta.servlet')
+                    .replaceAll('io\\.grpc\\.servlet', 'io.grpc.servlet.jakarta')
+            }
+        }
     }
 }
 
