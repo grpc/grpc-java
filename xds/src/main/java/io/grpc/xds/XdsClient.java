@@ -120,6 +120,9 @@ abstract class XdsClient {
     // Only valid if lbPolicy is "ring_hash_experimental".
     abstract long maxRingSize();
 
+    // Only valid if lbPolicy is "least_request_experimental".
+    abstract int choiceCount();
+
     // Alternative resource name to be used in EDS requests.
     /// Only valid for EDS cluster.
     @Nullable
@@ -158,6 +161,7 @@ abstract class XdsClient {
           .clusterType(ClusterType.AGGREGATE)
           .minRingSize(0)
           .maxRingSize(0)
+          .choiceCount(0)
           .prioritizedClusterNames(ImmutableList.copyOf(prioritizedClusterNames));
     }
 
@@ -169,6 +173,7 @@ abstract class XdsClient {
           .clusterType(ClusterType.EDS)
           .minRingSize(0)
           .maxRingSize(0)
+          .choiceCount(0)
           .edsServiceName(edsServiceName)
           .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
@@ -183,6 +188,7 @@ abstract class XdsClient {
           .clusterType(ClusterType.LOGICAL_DNS)
           .minRingSize(0)
           .maxRingSize(0)
+          .choiceCount(0)
           .dnsHostName(dnsHostName)
           .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
@@ -194,7 +200,7 @@ abstract class XdsClient {
     }
 
     enum LbPolicy {
-      ROUND_ROBIN, RING_HASH
+      ROUND_ROBIN, RING_HASH, LEAST_REQUEST
     }
 
     // FIXME(chengyuanzhang): delete this after UpstreamTlsContext's toString() is fixed.
@@ -206,6 +212,7 @@ abstract class XdsClient {
           .add("lbPolicy", lbPolicy())
           .add("minRingSize", minRingSize())
           .add("maxRingSize", maxRingSize())
+          .add("choiceCount", choiceCount())
           .add("edsServiceName", edsServiceName())
           .add("dnsHostName", dnsHostName())
           .add("lrsServerInfo", lrsServerInfo())
@@ -233,6 +240,13 @@ abstract class XdsClient {
       Builder ringHashLbPolicy(long minRingSize, long maxRingSize) {
         return this.lbPolicy(LbPolicy.RING_HASH).minRingSize(minRingSize).maxRingSize(maxRingSize);
       }
+
+      Builder leastRequestLbPolicy(int choiceCount) {
+        return this.lbPolicy(LbPolicy.LEAST_REQUEST).choiceCount(choiceCount);
+      }
+
+      // Private, use leastRequestLbPolicy(int).
+      protected abstract Builder choiceCount(int choiceCount);
 
       // Private, use ringHashLbPolicy(long, long).
       protected abstract Builder minRingSize(long minRingSize);

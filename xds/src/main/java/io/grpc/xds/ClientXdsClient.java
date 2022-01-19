@@ -44,6 +44,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.CustomClusterType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.LeastRequestLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
@@ -140,6 +141,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   @VisibleForTesting
   static final long DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE = 8 * 1024 * 1024L;
   @VisibleForTesting
+  static final int DEFAULT_LEAST_REQUEST_CHOICE_COUNT = 2;
+  @VisibleForTesting
   static final long MAX_RING_HASH_LB_POLICY_RING_SIZE = 8 * 1024 * 1024L;
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
@@ -161,6 +164,11 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   static boolean enableRouteLookup =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"))
           && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"));
+  @VisibleForTesting
+  static boolean enableLeastRequest =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
+          ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
+          : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
@@ -1616,6 +1624,17 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       updateBuilder.ringHashLbPolicy(minRingSize, maxRingSize);
     } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
       updateBuilder.roundRobinLbPolicy();
+    } else if (enableLeastRequest && cluster.getLbPolicy() == LbPolicy.LEAST_REQUEST) {
+      LeastRequestLbConfig lbConfig =  cluster.getLeastRequestLbConfig();
+      int choiceCount =
+              lbConfig.hasChoiceCount()
+                ? lbConfig.getChoiceCount().getValue()
+                : DEFAULT_LEAST_REQUEST_CHOICE_COUNT;
+      if (choiceCount < DEFAULT_LEAST_REQUEST_CHOICE_COUNT) {
+        throw new ResourceInvalidException(
+                "Cluster " + cluster.getName() + ": invalid least_request_lb_config: " + lbConfig);
+      }
+      updateBuilder.leastRequestLbPolicy(choiceCount);
     } else {
       throw new ResourceInvalidException(
           "Cluster " + cluster.getName() + ": unsupported lb policy: " + cluster.getLbPolicy());
