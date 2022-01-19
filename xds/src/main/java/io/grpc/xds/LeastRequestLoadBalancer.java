@@ -345,7 +345,7 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
       // the lists cannot contain duplicate subchannels
       return other == this
           || ((list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list))
-          && choiceCount == other.choiceCount);
+                && choiceCount == other.choiceCount);
     }
   }
 
