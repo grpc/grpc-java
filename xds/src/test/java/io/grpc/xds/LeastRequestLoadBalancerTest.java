@@ -95,7 +95,6 @@ public class LeastRequestLoadBalancerTest {
       Maps.newLinkedHashMap();
   private final Attributes affinity =
       Attributes.newBuilder().set(MAJOR_KEY, "I got the keys").build();
-  private final FakeRandom fakeRandom = new FakeRandom();
 
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
@@ -105,6 +104,8 @@ public class LeastRequestLoadBalancerTest {
   private ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor;
   @Mock
   private Helper mockHelper;
+  @Mock
+  private ThreadSafeRandom mockRandom;
 
   @Mock // This LoadBalancer doesn't use any of the arg fields, as verified in tearDown().
   private PickSubchannelArgs mockArgs;
@@ -141,12 +142,12 @@ public class LeastRequestLoadBalancerTest {
             return subchannel;
           }
         });
-
-    loadBalancer = new LeastRequestLoadBalancer(mockHelper);
+    loadBalancer = new LeastRequestLoadBalancer(mockHelper, mockRandom);
   }
 
   @After
   public void tearDown() throws Exception {
+    verifyNoMoreInteractions(mockRandom);
     verifyNoMoreInteractions(mockArgs);
   }
 
@@ -299,6 +300,35 @@ public class LeastRequestLoadBalancerTest {
   }
 
   @Test
+  public void pickAfterConfigChange() {
+    final LeastRequestConfig oldConfig = new LeastRequestConfig(4);
+    final LeastRequestConfig newConfig = new LeastRequestConfig(6);
+    final Subchannel readySubchannel = subchannels.values().iterator().next();
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity)
+            .setLoadBalancingPolicyConfig(oldConfig).build());
+    deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
+    verify(mockHelper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(mockHelper, times(2))
+        .updateBalancingState(any(ConnectivityState.class), pickerCaptor.capture());
+
+    // At this point it should use a ReadyPicker with oldConfig
+    pickerCaptor.getValue().pickSubchannel(mockArgs);
+    verify(mockRandom, times(oldConfig.choiceCount)).nextInt(1);
+
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity)
+            .setLoadBalancingPolicyConfig(newConfig).build());
+    verify(mockHelper, times(3))
+        .updateBalancingState(any(ConnectivityState.class), pickerCaptor.capture());
+
+    // At this point it should use a ReadyPicker with newConfig
+    pickerCaptor.getValue().pickSubchannel(mockArgs);
+    verify(mockRandom, times(oldConfig.choiceCount + newConfig.choiceCount)).nextInt(1);
+    verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
   public void ignoreShutdownSubchannelStateChange() {
     InOrder inOrder = inOrder(mockHelper);
     loadBalancer.handleResolvedAddresses(
@@ -386,11 +416,11 @@ public class LeastRequestLoadBalancerTest {
 
   @Test
   public void pickerLeastRequest() throws Exception {
-
+    int choiceCount = 2;
     // This should add inFlight counters to all subchannels.
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
-            .setLoadBalancingPolicyConfig(new LeastRequestConfig(2))
+            .setLoadBalancingPolicyConfig(new LeastRequestConfig(choiceCount))
             .build());
 
     assertEquals(3, loadBalancer.getSubchannels().size());
@@ -405,30 +435,43 @@ public class LeastRequestLoadBalancerTest {
     assertEquals(0,
         subchannels.get(2).getAttributes().get(IN_FLIGHTS).get());
 
-    ReadyPicker picker = new ReadyPicker(Collections.unmodifiableList(subchannels),
-        2 , fakeRandom);
+    for (Subchannel sc : subchannels) {
+      deliverSubchannelState(sc, ConnectivityStateInfo.forNonError(READY));
+    }
+
+    // Capture the active ReadyPicker once all subchannels are READY
+    verify(mockHelper, times(4))
+        .updateBalancingState(any(ConnectivityState.class), pickerCaptor.capture());
+    assertThat(pickerCaptor.getValue()).isInstanceOf(ReadyPicker.class);
+
+    ReadyPicker picker = (ReadyPicker) pickerCaptor.getValue();
 
     assertThat(picker.getList()).containsExactlyElementsIn(subchannels);
 
     // Make random return 0, then 2 for the sample indexes.
-    fakeRandom.addInts(Lists.newArrayList(0, 2));
+    when(mockRandom.nextInt(subchannels.size())).thenReturn(0, 2);
     PickResult pickResult1 = picker.pickSubchannel(mockArgs);
+    verify(mockRandom, times(choiceCount)).nextInt(subchannels.size());
     assertEquals(subchannels.get(0), pickResult1.getSubchannel());
     // This simulates sending the actual RPC on the picked channel
     ClientStreamTracer streamTracer1 =
         pickResult1.getStreamTracerFactory()
             .newClientStreamTracer(StreamInfo.newBuilder().build(), new Metadata());
+    streamTracer1.streamCreated(Attributes.EMPTY, new Metadata());
     assertEquals(1,
         pickResult1.getSubchannel().getAttributes().get(IN_FLIGHTS).get());
 
     // For the second pick it should pick the one with lower inFlight.
-    fakeRandom.addInts(Lists.newArrayList(0, 2));
+    when(mockRandom.nextInt(subchannels.size())).thenReturn(0, 2);
     PickResult pickResult2 = picker.pickSubchannel(mockArgs);
+    // Since this is the second pick we expect the total random samples to be choiceCount * 2
+    verify(mockRandom, times(choiceCount * 2)).nextInt(subchannels.size());
     assertEquals(subchannels.get(2), pickResult2.getSubchannel());
 
     // For the third pick we unavoidably pick subchannel with index 1.
-    fakeRandom.addInts(Lists.newArrayList(1, 1));
+    when(mockRandom.nextInt(subchannels.size())).thenReturn(1, 1);
     PickResult pickResult3 = picker.pickSubchannel(mockArgs);
+    verify(mockRandom, times(choiceCount * 3)).nextInt(subchannels.size());
     assertEquals(subchannels.get(1), pickResult3.getSubchannel());
 
     // Finally ensure a finished RPC decreases inFlight
@@ -459,9 +502,12 @@ public class LeastRequestLoadBalancerTest {
 
   @Test
   public void nameResolutionErrorWithActiveChannels() throws Exception {
+    int choiceCount = 8;
     final Subchannel readySubchannel = subchannels.values().iterator().next();
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+        ResolvedAddresses.newBuilder()
+            .setLoadBalancingPolicyConfig(new LeastRequestConfig(choiceCount))
+            .setAddresses(servers).setAttributes(affinity).build());
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
 
@@ -474,10 +520,12 @@ public class LeastRequestLoadBalancerTest {
     assertEquals(READY, stateIterator.next());
 
     LoadBalancer.PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    verify(mockRandom, times(choiceCount)).nextInt(1);
     assertEquals(readySubchannel, pickResult.getSubchannel());
     assertEquals(Status.OK.getCode(), pickResult.getStatus().getCode());
 
     LoadBalancer.PickResult pickResult2 = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    verify(mockRandom, times(choiceCount * 2)).nextInt(1);
     assertEquals(readySubchannel, pickResult2.getSubchannel());
     verifyNoMoreInteractions(mockHelper);
   }
@@ -530,7 +578,7 @@ public class LeastRequestLoadBalancerTest {
   @Test(expected = IllegalArgumentException.class)
   public void readyPicker_emptyList() {
     // ready picker list must be non-empty
-    new ReadyPicker(Collections.<Subchannel>emptyList(), 2, fakeRandom);
+    new ReadyPicker(Collections.<Subchannel>emptyList(), 2, mockRandom);
   }
 
   @Test
@@ -542,11 +590,12 @@ public class LeastRequestLoadBalancerTest {
     Iterator<Subchannel> subchannelIterator = subchannels.values().iterator();
     Subchannel sc1 = subchannelIterator.next();
     Subchannel sc2 = subchannelIterator.next();
-    ReadyPicker ready1 = new ReadyPicker(Arrays.asList(sc1, sc2), 2, fakeRandom);
-    ReadyPicker ready2 = new ReadyPicker(Arrays.asList(sc1), 2, fakeRandom);
-    ReadyPicker ready3 = new ReadyPicker(Arrays.asList(sc2, sc1), 2, fakeRandom);
-    ReadyPicker ready4 = new ReadyPicker(Arrays.asList(sc1, sc2), 2, fakeRandom);
-    ReadyPicker ready5 = new ReadyPicker(Arrays.asList(sc2, sc1), 2, fakeRandom);
+    ReadyPicker ready1 = new ReadyPicker(Arrays.asList(sc1, sc2), 2, mockRandom);
+    ReadyPicker ready2 = new ReadyPicker(Arrays.asList(sc1), 2, mockRandom);
+    ReadyPicker ready3 = new ReadyPicker(Arrays.asList(sc2, sc1), 2, mockRandom);
+    ReadyPicker ready4 = new ReadyPicker(Arrays.asList(sc1, sc2), 2, mockRandom);
+    ReadyPicker ready5 = new ReadyPicker(Arrays.asList(sc2, sc1), 2, mockRandom);
+    ReadyPicker ready6 = new ReadyPicker(Arrays.asList(sc2, sc1), 8, mockRandom);
 
     assertTrue(emptyOk1.isEquivalentTo(emptyOk2));
     assertFalse(emptyOk1.isEquivalentTo(emptyErr));
@@ -556,6 +605,7 @@ public class LeastRequestLoadBalancerTest {
     assertTrue(ready4.isEquivalentTo(ready5));
     assertFalse(emptyOk1.isEquivalentTo(ready1));
     assertFalse(ready1.isEquivalentTo(emptyOk1));
+    assertFalse(ready5.isEquivalentTo(ready6));
   }
 
   private static List<Subchannel> getList(SubchannelPicker picker) {
@@ -577,25 +627,6 @@ public class LeastRequestLoadBalancerTest {
     @Override
     public String toString() {
       return "FakeSocketAddress-" + name;
-    }
-  }
-
-  private static class FakeRandom implements ThreadSafeRandom {
-
-    private final List<Integer> ints = new ArrayList<>();
-
-    public void addInts(List<Integer> nextInts) {
-      ints.addAll(nextInts);
-    }
-
-    @Override
-    public int nextInt(int bound) {
-      return ints.remove(0);
-    }
-
-    @Override
-    public long nextLong() {
-      return 0; // Not used
     }
   }
 }

@@ -81,6 +81,7 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
     this(helper, ThreadSafeRandomImpl.instance);
   }
 
+  @VisibleForTesting
   LeastRequestLoadBalancer(Helper helper, ThreadSafeRandom random) {
     this.helper = checkNotNull(helper, "helper");
     this.random = checkNotNull(random, "random");
@@ -297,10 +298,10 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
     private final ThreadSafeRandom random;
 
     ReadyPicker(List<Subchannel> list, int choiceCount, ThreadSafeRandom random) {
-      Preconditions.checkArgument(!list.isEmpty(), "empty list");
+      checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
       this.choiceCount = choiceCount;
-      this.random = random;
+      this.random = checkNotNull(random, "random");
     }
 
     @Override
@@ -313,7 +314,10 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(ReadyPicker.class).add("list", list).toString();
+      return MoreObjects.toStringHelper(ReadyPicker.class)
+                        .add("list", list)
+                        .add("choiceCount", choiceCount)
+                        .toString();
     }
 
     private Subchannel nextSubchannel() {
@@ -340,7 +344,8 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
       ReadyPicker other = (ReadyPicker) picker;
       // the lists cannot contain duplicate subchannels
       return other == this
-          || (list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list));
+          || ((list.size() == other.list.size() && new HashSet<>(list).containsAll(other.list))
+          && choiceCount == other.choiceCount);
     }
   }
 
@@ -391,8 +396,12 @@ final class LeastRequestLoadBalancer extends LoadBalancer {
 
     @Override
     public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-      inFlights.incrementAndGet();
       return new ClientStreamTracer() {
+        @Override
+        public void streamCreated(Attributes transportAttrs, Metadata headers) {
+          inFlights.incrementAndGet();
+        }
+
         @Override
         public void streamClosed(Status status) {
           inFlights.decrementAndGet();
