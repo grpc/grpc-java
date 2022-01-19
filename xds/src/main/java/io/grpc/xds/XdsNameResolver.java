@@ -257,6 +257,8 @@ final class XdsNameResolver extends NameResolver {
 
   // called in syncContext
   private void updateResolutionResult() {
+    syncContext.throwIfNotInThisSynchronizationContext();
+
     ImmutableMap.Builder<String, Object> childPolicy = new ImmutableMap.Builder<>();
     for (String name : clusterRefs.keySet()) {
       String traditionalCluster = clusterRefs.get(name).traditionalCluster;
