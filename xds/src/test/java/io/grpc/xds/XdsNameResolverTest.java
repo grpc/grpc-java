@@ -1955,6 +1955,31 @@ public class XdsNameResolverTest {
         .isFalse();
   }
 
+  /**
+   *  Tests compliance with RFC 3986 section 3.3
+   *  https://datatracker.ietf.org/doc/html/rfc3986#section-3.3
+   */
+  @Test
+  public void percentEncodePath()  {
+    String unreserved = "aAzZ09-._~";
+    assertThat(XdsNameResolver.percentEncodePath(unreserved)).isEqualTo(unreserved);
+
+    String subDelims = "!$&'(*+,;/=";
+    assertThat(XdsNameResolver.percentEncodePath(subDelims)).isEqualTo(subDelims);
+
+    String colonAndAt = ":@";
+    assertThat(XdsNameResolver.percentEncodePath(colonAndAt)).isEqualTo(colonAndAt);
+
+    String needBeEncoded = "?#[]";
+    assertThat(XdsNameResolver.percentEncodePath(needBeEncoded)).isEqualTo("%3F%23%5B%5D");
+
+    String ipv4 = "0.0.0.0:8080";
+    assertThat(XdsNameResolver.percentEncodePath(ipv4)).isEqualTo(ipv4);
+
+    String ipv6 = "[::1]:8080";
+    assertThat(XdsNameResolver.percentEncodePath(ipv6)).isEqualTo("%5B::1%5D:8080");
+  }
+
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
     Map<String, ?> bootstrap;
 
