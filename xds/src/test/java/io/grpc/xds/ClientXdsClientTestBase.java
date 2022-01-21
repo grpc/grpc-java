@@ -760,8 +760,9 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName() {
-    String ldsResourceName =
-        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1";
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
+        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
     DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
     assertThat(channelForCustomAuthority).isNotNull();
     verifyResourceMetadataRequested(LDS, ldsResourceName);
@@ -779,8 +780,9 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_withEmptyAuthority() {
-    String ldsResourceName =
-        "xdstp:///envoy.config.listener.v3.Listener/listener1";
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp:///envoy.config.listener.v3.Listener/listener1"
+        : "xdstp:///envoy.api.v2.Listener/listener1";
     DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
     assertThat(channelForEmptyAuthority).isNotNull();
     verifyResourceMetadataRequested(LDS, ldsResourceName);
@@ -794,6 +796,107 @@ public abstract class ClientXdsClientTestBase {
         .hasSize(VHOST_SIZE);
     verifyResourceMetadataAcked(
         LDS, ldsResourceName, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+  }
+
+  @Test
+  public void ldsResourceUpdated_withXdstpResourceName_witUnorderedContextParams() {
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?bar=2&foo=1"
+        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1/a?bar=2&foo=1";
+    DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String ldsResourceNameWithUnorderedContextParams = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?foo=1&bar=2"
+        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1/a?foo=1&bar=2";
+    Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(
+        ldsResourceNameWithUnorderedContextParams,
+        mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequest(
+        LDS, ldsResourceName, VERSION_1, "0000", NODE);
+  }
+
+  @Test
+  public void ldsResourceUpdated_withXdstpResourceName_withWrongType() {
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
+        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
+    DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String ldsResourceNameWithWrongType =
+        "xdstp://authority.xds.com/envoy.config.route.v3.RouteConfiguration/listener1";
+    Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(
+        ldsResourceNameWithWrongType,
+        mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequestNack(
+        LDS, ldsResourceName, "", "0000", NODE,
+        ImmutableList.of(
+            "Unsupported resource name: " +  ldsResourceNameWithWrongType + " for type: LDS"));
+  }
+
+  @Test
+  public void rdsResourceUpdated_withXdstpResourceName_withWrongType() {
+    String rdsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.route.v3.RouteConfiguration/route1"
+        : "xdstp://authority.xds.com/envoy.api.v2.RouteConfiguration/route1";
+    DiscoveryRpcCall call = startResourceWatcher(RDS, rdsResourceName, rdsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String rdsResourceNameWithWrongType =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/route1";
+    Any testRouteConfig = Any.pack(mf.buildRouteConfiguration(
+        rdsResourceNameWithWrongType, mf.buildOpaqueVirtualHosts(VHOST_SIZE)));
+    call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
+    call.verifyRequestNack(
+        RDS, rdsResourceName, "", "0000", NODE,
+        ImmutableList.of(
+            "Unsupported resource name: " + rdsResourceNameWithWrongType + " for type: RDS"));
+  }
+
+  @Test
+  public void cdsResourceUpdated_withXdstpResourceName_withWrongType() {
+    String cdsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.cluster.v3.Cluster/cluster1"
+        : "xdstp://authority.xds.com/envoy.api.v2.Cluster/cluster1";
+    DiscoveryRpcCall call = startResourceWatcher(CDS, cdsResourceName, cdsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String cdsResourceNameWithWrongType =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/cluster1";
+    Any testClusterConfig = Any.pack(mf.buildEdsCluster(
+        cdsResourceNameWithWrongType, null, "round_robin", null, null, false, null,
+        "envoy.transport_sockets.tls", null));
+    call.sendResponse(CDS, testClusterConfig, VERSION_1, "0000");
+    call.verifyRequestNack(
+        CDS, cdsResourceName, "", "0000", NODE,
+        ImmutableList.of(
+            "Unsupported resource name: " + cdsResourceNameWithWrongType + " for type: CDS"));
+  }
+
+  @Test
+  public void edsResourceUpdated_withXdstpResourceName_withWrongType() {
+    String edsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1"
+        : "xdstp://authority.xds.com/envoy.api.v2.ClusterLoadAssignment/cluster1";
+    DiscoveryRpcCall call = startResourceWatcher(EDS, edsResourceName, edsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String edsResourceNameWithWrongType =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/cluster1";
+    Any testEdsConfig = Any.pack(mf.buildClusterLoadAssignment(
+        edsResourceNameWithWrongType,
+        ImmutableList.of(mf.buildLocalityLbEndpoints(
+            "region2", "zone2", "subzone2",
+            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 0)),
+        ImmutableList.of()));
+    call.sendResponse(EDS, testEdsConfig, VERSION_1, "0000");
+    call.verifyRequestNack(
+        EDS, edsResourceName, "", "0000", NODE,
+        ImmutableList.of(
+            "Unsupported resource name: " + edsResourceNameWithWrongType + " for type: EDS"));
   }
 
   @Test

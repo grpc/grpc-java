@@ -111,6 +111,7 @@ import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
 import io.grpc.lookup.v1.NameMatcher;
 import io.grpc.lookup.v1.RouteLookupClusterSpecifier;
 import io.grpc.lookup.v1.RouteLookupConfig;
+import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.ClientXdsClient.StructOrError;
@@ -2571,6 +2572,51 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("common-tls-context is required in upstream-tls-context");
     ClientXdsClient.validateUpstreamTlsContext(upstreamTlsContext, null);
+  }
+
+  @Test
+  public void validateResourceName() {
+    String traditionalResource = "cluster1.google.com";
+    assertThat(XdsClient.isResourceNameValid(traditionalResource, ResourceType.CDS.typeUrl()))
+        .isTrue();
+    assertThat(XdsClient.isResourceNameValid(traditionalResource, ResourceType.RDS.typeUrlV2()))
+        .isTrue();
+
+    String invalidPath = "xdstp:/abc/efg";
+    assertThat(XdsClient.isResourceNameValid(invalidPath, ResourceType.CDS.typeUrl())).isFalse();
+
+    String invalidPath2 = "xdstp:///envoy.config.route.v3.RouteConfiguration";
+    assertThat(XdsClient.isResourceNameValid(invalidPath2, ResourceType.RDS.typeUrl())).isFalse();
+
+    String typeMatch = "xdstp:///envoy.config.route.v3.RouteConfiguration/foo/route1";
+    assertThat(XdsClient.isResourceNameValid(typeMatch, ResourceType.LDS.typeUrl())).isFalse();
+    assertThat(XdsClient.isResourceNameValid(typeMatch, ResourceType.RDS.typeUrl())).isTrue();
+    assertThat(XdsClient.isResourceNameValid(typeMatch, ResourceType.RDS.typeUrlV2())).isFalse();
+  }
+
+  @Test
+  public void canonifyResourceName() {
+    String traditionalResource = "cluster1.google.com";
+    assertThat(XdsClient.canonifyResourceName(traditionalResource))
+        .isEqualTo(traditionalResource);
+    assertThat(XdsClient.canonifyResourceName(traditionalResource))
+        .isEqualTo(traditionalResource);
+    assertThat(XdsClient.canonifyResourceName(traditionalResource))
+        .isEqualTo(traditionalResource);
+    assertThat(XdsClient.canonifyResourceName(traditionalResource))
+        .isEqualTo(traditionalResource);
+
+    String withNoQueries = "xdstp:///envoy.config.route.v3.RouteConfiguration/foo/route1";
+    assertThat(XdsClient.canonifyResourceName(withNoQueries)).isEqualTo(withNoQueries);
+
+    String withOneQueries = "xdstp:///envoy.config.route.v3.RouteConfiguration/foo/route1?name=foo";
+    assertThat(XdsClient.canonifyResourceName(withOneQueries)).isEqualTo(withOneQueries);
+
+    String withTwoQueries = "xdstp:///envoy.config.route.v3.RouteConfiguration/id/route1?b=1&a=1";
+    String expectedCanonifiedName =
+        "xdstp:///envoy.config.route.v3.RouteConfiguration/id/route1?a=1&b=1";
+    assertThat(XdsClient.canonifyResourceName(withTwoQueries))
+        .isEqualTo(expectedCanonifiedName);
   }
 
   private static Filter buildHttpConnectionManagerFilter(HttpFilter... httpFilters) {

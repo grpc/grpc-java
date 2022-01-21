@@ -270,12 +270,12 @@ public class XdsNameResolverTest {
         .node(Node.newBuilder().build())
         .authorities(
             ImmutableMap.of(targetAuthority, AuthorityInfo.create(
-                "xdstp://" + targetAuthority + "/envoy.config.listener.v3.Listener/%s",
+                "xdstp://" + targetAuthority + "/envoy.config.listener.v3.Listener/%s?foo=1&bar=2",
                 ImmutableList.<ServerInfo>of(ServerInfo.create(
                     "td.googleapis.com", InsecureChannelCredentials.create(), true)))))
         .build();
-    expectedLdsResourceName =
-        "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%5B::FFFF:129.144.52.38%5D:80";
+    expectedLdsResourceName = "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
+        + "%5B::FFFF:129.144.52.38%5D:80?bar=2&foo=1"; // query param canonified
     resolver = new XdsNameResolver(
         "xds.authority.com", serviceAuthority, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);

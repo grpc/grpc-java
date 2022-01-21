@@ -17,9 +17,12 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 
 import com.google.auto.value.AutoValue;
+import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.Any;
@@ -32,6 +35,8 @@ import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -48,6 +53,58 @@ import javax.annotation.Nullable;
  * are provided for each set of data needed by gRPC.
  */
 abstract class XdsClient {
+
+  static boolean isResourceNameValid(String resourceName, String typeUrl) {
+    checkNotNull(resourceName, "resourceName");
+    if (!resourceName.startsWith(XDSTP_SCHEME)) {
+      return true;
+    }
+    URI uri;
+    try {
+      uri = new URI(resourceName);
+    } catch (URISyntaxException e) {
+      return false;
+    }
+    String path = uri.getPath();
+    // path must be in the form of /{resource type}/{id/*}
+    Splitter slashSplitter = Splitter.on('/').omitEmptyStrings();
+    if (path == null) {
+      return false;
+    }
+    List<String> pathSegs = slashSplitter.splitToList(path);
+    if (pathSegs.size() < 2) {
+      return false;
+    }
+    String type = pathSegs.get(0);
+    if (!type.equals(slashSplitter.splitToList(typeUrl).get(1))) {
+      return false;
+    }
+    return true;
+  }
+
+  static String canonifyResourceName(String resourceName) {
+    checkNotNull(resourceName, "resourceName");
+    if (!resourceName.startsWith(XDSTP_SCHEME)) {
+      return resourceName;
+    }
+    URI uri = URI.create(resourceName);
+    String rawQuery = uri.getRawQuery();
+    Splitter ampSplitter = Splitter.on('&').omitEmptyStrings();
+    if (rawQuery == null) {
+      return resourceName;
+    }
+    List<String> queries = ampSplitter.splitToList(rawQuery);
+    if (queries.size() < 2) {
+      return resourceName;
+    }
+    List<String> canonicalContextParams = new ArrayList<>(queries.size());
+    for (String query : queries) {
+      canonicalContextParams.add(query);
+    }
+    Collections.sort(canonicalContextParams);
+    String canonifiedQuery = Joiner.on('&').join(canonicalContextParams);
+    return resourceName.replace(rawQuery, canonifiedQuery);
+  }
 
   @AutoValue
   abstract static class LdsUpdate implements ResourceUpdate {
