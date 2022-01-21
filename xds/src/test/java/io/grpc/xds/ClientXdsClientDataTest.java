@@ -48,6 +48,7 @@ import io.envoyproxy.envoy.config.core.v3.DataSource;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.Locality;
 import io.envoyproxy.envoy.config.core.v3.RuntimeFractionalPercent;
+import io.envoyproxy.envoy.config.core.v3.SelfConfigSource;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
 import io.envoyproxy.envoy.config.core.v3.TransportSocket;
@@ -133,6 +134,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -1558,6 +1560,48 @@ public class ClientXdsClientDataTest {
   }
 
   @Test
+  public void parseHttpConnectionManager_validateRdsConfigSource() throws Exception {
+    ClientXdsClient.enableRouteLookup = true;
+    Set<String> rdsResources = new HashSet<>();
+
+    HttpConnectionManager hcm1 =
+        HttpConnectionManager.newBuilder()
+            .setRds(Rds.newBuilder()
+                .setRouteConfigName("rds-config-foo")
+                .setConfigSource(
+                    ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance())))
+            .build();
+    ClientXdsClient.parseHttpConnectionManager(
+        hcm1, rdsResources, filterRegistry, false /* parseHttpFilter */,
+        true /* does not matter */);
+
+    HttpConnectionManager hcm2 =
+        HttpConnectionManager.newBuilder()
+            .setRds(Rds.newBuilder()
+                .setRouteConfigName("rds-config-foo")
+                .setConfigSource(
+                    ConfigSource.newBuilder().setSelf(SelfConfigSource.getDefaultInstance())))
+            .build();
+    ClientXdsClient.parseHttpConnectionManager(
+        hcm2, rdsResources, filterRegistry, false /* parseHttpFilter */,
+        true /* does not matter */);
+
+    HttpConnectionManager hcm3 =
+        HttpConnectionManager.newBuilder()
+            .setRds(Rds.newBuilder()
+                .setRouteConfigName("rds-config-foo")
+                .setConfigSource(
+                    ConfigSource.newBuilder().setPath("foo-path")))
+            .build();
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage(
+        "HttpConnectionManager contains invalid RDS: must specify ADS or self ConfigSource");
+    ClientXdsClient.parseHttpConnectionManager(
+        hcm3, rdsResources, filterRegistry, false /* parseHttpFilter */,
+        true /* does not matter */);
+  }
+
+  @Test
   public void parseClusterSpecifierPlugin_typedStructInTypedExtension() throws Exception {
     class TestPluginConfig implements PluginConfig {
       @Override
@@ -1791,6 +1835,54 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid least_request_lb_config");
     ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
+  }
+
+  @Test
+  public void parseCluster_validateEdsSourceConfig() throws ResourceInvalidException {
+    Set<String> retainedEdsResources = new HashSet<>();
+    Cluster cluster1 = Cluster.newBuilder()
+        .setName("cluster-foo.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder()
+                        .setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-foo.googleapis.com"))
+        .setLbPolicy(LbPolicy.ROUND_ROBIN)
+        .build();
+    ClientXdsClient.processCluster(cluster1, retainedEdsResources, null, LRS_SERVER_INFO);
+
+    Cluster cluster2 = Cluster.newBuilder()
+        .setName("cluster-foo.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder()
+                        .setSelf(SelfConfigSource.getDefaultInstance()))
+                .setServiceName("service-foo.googleapis.com"))
+        .setLbPolicy(LbPolicy.ROUND_ROBIN)
+        .build();
+    ClientXdsClient.processCluster(cluster2, retainedEdsResources, null, LRS_SERVER_INFO);
+
+    Cluster cluster3 = Cluster.newBuilder()
+        .setName("cluster-foo.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder()
+                        .setPath("foo-path"))
+                .setServiceName("service-foo.googleapis.com"))
+        .setLbPolicy(LbPolicy.ROUND_ROBIN)
+        .build();
+
+    thrown.expect(ResourceInvalidException.class);
+    thrown.expectMessage(
+        "Cluster cluster-foo.googleapis.com: field eds_cluster_config must be set to indicate to"
+            + " use EDS over ADS or self ConfigSource");
+    ClientXdsClient.processCluster(cluster3, retainedEdsResources, null, LRS_SERVER_INFO);
   }
 
   @Test
