@@ -40,7 +40,6 @@ import io.grpc.okhttp.OkHttpChannelBuilder;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -51,7 +50,7 @@ import javax.annotation.Nullable;
  */
 public class TestServiceClient {
 
-  private static final Charset UTF_8 = StandardCharsets.UTF_8;
+  private static final Charset UTF_8 = Charset.forName("UTF-8");
 
   /**
    * The main application allowing this client to be launched from the command line.

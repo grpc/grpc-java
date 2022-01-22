@@ -20,7 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Joiner;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -85,7 +85,7 @@ public final class DecompressorRegistry {
 
     decompressors = Collections.unmodifiableMap(newDecompressors);
     advertisedDecompressors = ACCEPT_ENCODING_JOINER.join(getAdvertisedMessageEncodings())
-        .getBytes(StandardCharsets.US_ASCII);
+        .getBytes(Charset.forName("US-ASCII"));
   }
 
   private DecompressorRegistry() {

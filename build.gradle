@@ -7,6 +7,7 @@ plugins {
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
+import org.gradle.util.GUtil
 
 subprojects {
     apply plugin: "checkstyle"
@@ -18,7 +19,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.44.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.45.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -97,6 +98,11 @@ subprojects {
                             def syncTask = project.tasks.register("syncGeneratedSources${variantOrSourceSet}", Sync) {
                                 from "$buildDir/generated/source/proto/${variantOrSourceSet}/grpc"
                                 into "$generatedSourcePath/${variantOrSourceSet}/grpc"
+                                String source = GUtil.toCamelCase(variantOrSourceSet)
+                                if (source == "Main") {
+                                    source = ""
+                                }
+                                dependsOn "generate${source}Proto"
                             }
                             syncGeneratedSources.dependsOn syncTask
 
@@ -145,7 +151,7 @@ subprojects {
             animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.19",
             autovalue: "com.google.auto.value:auto-value:${autovalueVersion}",
             autovalue_annotation: "com.google.auto.value:auto-value-annotations:${autovalueVersion}",
-            errorprone: "com.google.errorprone:error_prone_annotations:2.9.0",
+            errorprone: "com.google.errorprone:error_prone_annotations:2.10.0",
             cronet_api: 'org.chromium.net:cronet-api:92.4515.131',
             cronet_embedded: 'org.chromium.net:cronet-embedded:92.4515.131',
             gson: "com.google.code.gson:gson:2.8.9",
@@ -233,25 +239,21 @@ subprojects {
         }
     }
 
-    if (rootProject.properties.get('errorProne', true)) {
+    if (!project.hasProperty('errorProne') || errorProne.toBoolean()) {
         dependencies {
-            errorprone 'com.google.errorprone:error_prone_core:2.4.0'
+            errorprone 'com.google.errorprone:error_prone_core:2.10.0'
             errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
         }
     } else {
         // Disable Error Prone
-        allprojects {
-            afterEvaluate { project ->
-                project.tasks.withType(JavaCompile) {
-                    options.errorprone.enabled = false
-                }
-            }
+        tasks.withType(JavaCompile) {
+            options.errorprone.enabled = false
         }
     }
 
     plugins.withId("java") {
-        sourceCompatibility = 1.7
-        targetCompatibility = 1.7
+        sourceCompatibility = 1.8
+        targetCompatibility = 1.8
 
         dependencies {
             testImplementation libraries.junit,
@@ -298,7 +300,7 @@ subprojects {
             maxHeapSize = '1500m'
         }
 
-        if (rootProject.properties.get('errorProne', true)) {
+        if (!project.hasProperty('errorProne') || errorProne.toBoolean()) {
             dependencies {
                 annotationProcessor 'com.google.guava:guava-beta-checker:1.0'
             }
@@ -309,6 +311,7 @@ subprojects {
             options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
             // This project targets Java 7 (no time.Duration class)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
+            options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
             // The warning fails to provide a source location
             options.errorprone.check("MissingSummary", CheckSeverity.OFF)
         }
@@ -317,6 +320,7 @@ subprojects {
             options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
             options.errorprone.check("UnnecessaryAnonymousClass", CheckSeverity.OFF)
             options.errorprone.check("PreferJavaTimeOverload", CheckSeverity.OFF)
+            options.errorprone.check("JavaUtilDate", CheckSeverity.OFF)
         }
 
         plugins.withId("ru.vyarus.animalsniffer") {

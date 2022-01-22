@@ -60,6 +60,8 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -185,6 +187,9 @@ public abstract class BinderTransport
   private final LeakSafeOneWayBinder incomingBinder;
 
   protected final ConcurrentHashMap<Integer, Inbound<?>> ongoingCalls;
+
+  @GuardedBy("this")
+  private final LinkedHashSet<Integer> callIdsToNotifyWhenReady = new LinkedHashSet<>();
 
   @GuardedBy("this")
   protected Attributes attributes;
@@ -529,9 +534,18 @@ public abstract class BinderTransport
       logger.log(
           Level.FINE,
           "handleAcknowledgedBytes: Transmit Window No-Longer Full. Unblock calls: " + this);
-      // We're ready again, and need to poke any waiting transactions.
-      for (Inbound<?> inbound : ongoingCalls.values()) {
-        inbound.onTransportReady();
+
+      // The LinkedHashSet contract guarantees that an id already present in this collection will
+      // not lose its priority if we re-insert it here.
+      callIdsToNotifyWhenReady.addAll(ongoingCalls.keySet());
+
+      Iterator<Integer> i = callIdsToNotifyWhenReady.iterator();
+      while (isReady() && i.hasNext()) {
+        Inbound<?> inbound = ongoingCalls.get(i.next());
+        i.remove();
+        if (inbound != null) { // Calls can be removed out from under us.
+          inbound.onTransportReady();
+        }
       }
     }
   }

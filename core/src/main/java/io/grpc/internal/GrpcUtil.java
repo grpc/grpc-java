@@ -55,7 +55,6 @@ import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -76,7 +75,7 @@ public final class GrpcUtil {
 
   private static final Logger log = Logger.getLogger(GrpcUtil.class.getName());
 
-  public static final Charset US_ASCII = StandardCharsets.US_ASCII;
+  public static final Charset US_ASCII = Charset.forName("US-ASCII");
 
   /**
    * {@link io.grpc.Metadata.Key} for the timeout header.
@@ -204,7 +203,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.44.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  private static final String IMPLEMENTATION_VERSION = "1.45.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.

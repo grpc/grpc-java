@@ -202,7 +202,14 @@ class ProxyDetectorImpl implements ProxyDetector {
 
   private ProxiedSocketAddress detectProxy(InetSocketAddress targetAddr) throws IOException {
     URI uri;
-    String host = GrpcUtil.getHost(targetAddr);
+    String host;
+    try {
+      host = GrpcUtil.getHost(targetAddr);
+    } catch (Throwable t) {
+      // Workaround for Android API levels < 19 if getHostName causes a NetworkOnMainThreadException
+      log.log(Level.WARNING, "Failed to get host for proxy lookup, proceeding without proxy", t);
+      return null;
+    }
     try {
       uri =
           new URI(

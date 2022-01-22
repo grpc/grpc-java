@@ -69,11 +69,15 @@ public class AndroidComponentAddress extends SocketAddress { // NOTE: Only tempo
   }
 
   /**
-   * Creates an address referencing a {@link android.app.Service} (potentially) in another
+   * Creates an address referencing a {@link android.app.Service} in another
    * application and using the default binding {@link Intent}.
+   *
+   * @param applicationPackage The package name of the application containing the server.
+   * @param serviceClassName The full class name of the Android Service to bind to.
    */
-  public static AndroidComponentAddress forRemoteComponent(String packageName, String className) {
-    return forComponent(new ComponentName(packageName, className));
+  public static AndroidComponentAddress forRemoteComponent(
+      String applicationPackage, String serviceClassName) {
+    return forComponent(new ComponentName(applicationPackage, serviceClassName));
   }
 
   /**

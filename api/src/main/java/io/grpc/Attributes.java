@@ -46,11 +46,13 @@ import javax.annotation.concurrent.Immutable;
 @Immutable
 public final class Attributes {
 
-  private final Map<Key<?>, Object> data;
+  private final IdentityHashMap<Key<?>, Object> data;
 
-  public static final Attributes EMPTY = new Attributes(Collections.<Key<?>, Object>emptyMap());
+  private static final IdentityHashMap<Key<?>, Object> EMPTY_MAP =
+      new IdentityHashMap<Key<?>, Object>();
+  public static final Attributes EMPTY = new Attributes(EMPTY_MAP);
 
-  private Attributes(Map<Key<?>, Object> data) {
+  private Attributes(IdentityHashMap<Key<?>, Object> data) {
     assert data != null;
     this.data = data;
   }
@@ -212,14 +214,14 @@ public final class Attributes {
    */
   public static final class Builder {
     private Attributes base;
-    private Map<Key<?>, Object> newdata;
+    private IdentityHashMap<Key<?>, Object> newdata;
 
     private Builder(Attributes base) {
       assert base != null;
       this.base = base;
     }
 
-    private Map<Key<?>, Object> data(int size) {
+    private IdentityHashMap<Key<?>, Object> data(int size) {
       if (newdata == null) {
         newdata = new IdentityHashMap<>(size);
       }
@@ -241,7 +243,7 @@ public final class Attributes {
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5777")
     public <T> Builder discard(Key<T> key) {
       if (base.data.containsKey(key)) {
-        Map<Key<?>, Object> newBaseData = new IdentityHashMap<>(base.data);
+        IdentityHashMap<Key<?>, Object> newBaseData = new IdentityHashMap<>(base.data);
         newBaseData.remove(key);
         base = new Attributes(newBaseData);
       }

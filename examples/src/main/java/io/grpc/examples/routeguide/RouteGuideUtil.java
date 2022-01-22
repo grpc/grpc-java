@@ -22,7 +22,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.util.List;
 
 /**
@@ -58,7 +58,7 @@ public class RouteGuideUtil {
   public static List<Feature> parseFeatures(URL file) throws IOException {
     InputStream input = file.openStream();
     try {
-      Reader reader = new InputStreamReader(input, StandardCharsets.UTF_8);
+      Reader reader = new InputStreamReader(input, Charset.forName("UTF-8"));
       try {
         FeatureDatabase.Builder database = FeatureDatabase.newBuilder();
         JsonFormat.parser().merge(reader, database);

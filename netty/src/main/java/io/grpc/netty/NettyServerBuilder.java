@@ -26,6 +26,7 @@ import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import com.google.errorprone.annotations.InlineMe;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
@@ -437,6 +438,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *     future release.
    */
   @Deprecated
+  @InlineMe(replacement = "this.maxInboundMessageSize(maxMessageSize)")
   public NettyServerBuilder maxMessageSize(int maxMessageSize) {
     return maxInboundMessageSize(maxMessageSize);
   }
@@ -458,6 +460,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * @deprecated Use {@link #maxInboundMetadataSize} instead
    */
   @Deprecated
+  @InlineMe(replacement = "this.maxInboundMetadataSize(maxHeaderListSize)")
   public NettyServerBuilder maxHeaderListSize(int maxHeaderListSize) {
     return maxInboundMetadataSize(maxHeaderListSize);
   }

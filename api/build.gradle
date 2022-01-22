@@ -12,9 +12,9 @@ evaluationDependsOn(project(':grpc-context').path)
 
 dependencies {
     api project(':grpc-context'),
-            libraries.jsr305
-    implementation libraries.guava,
+            libraries.jsr305,
             libraries.errorprone
+    implementation libraries.guava
 
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),
@@ -25,7 +25,7 @@ dependencies {
     jmh project(':grpc-core')
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    signature "net.sf.androidscents.signature:android-api-level-19:4.4.2_r4@signature"
+    signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
 
 javadoc {

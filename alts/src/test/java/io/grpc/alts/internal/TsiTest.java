@@ -34,13 +34,13 @@ import java.util.Collections;
 import java.util.List;
 import javax.crypto.AEADBadTagException;
 
-/** Utility class that provides tests for implementations of @{link TsiHandshaker}. */
+/** Utility class that provides tests for implementations of {@link TsiHandshaker}. */
 public final class TsiTest {
   private static final String DECRYPTION_FAILURE_RE = "Tag mismatch!|BAD_DECRYPT";
 
   private TsiTest() {}
 
-  /** A @{code TsiHandshaker} pair for running tests. */
+  /** A {@code TsiHandshaker} pair for running tests. */
   public static class Handshakers {
     private final TsiHandshaker client;
     private final TsiHandshaker server;

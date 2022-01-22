@@ -15,15 +15,15 @@ repositories {
     mavenLocal()
 }
 
-sourceCompatibility = 1.7
-targetCompatibility = 1.7
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
 
 // IMPORTANT: You probably want the non-SNAPSHOT version of gRPC. Make sure you
 // are looking at a tagged version of the example and not "master"!
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.44.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.45.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protocVersion = '3.19.2'
 
 dependencies {
