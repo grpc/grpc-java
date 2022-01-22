@@ -886,9 +886,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         throw new ResourceInvalidException(
             "HttpConnectionManager contains invalid RDS: missing config_source");
       }
-      if (!rds.getConfigSource().hasAds()) {
+      if (!rds.getConfigSource().hasAds() && !rds.getConfigSource().hasSelf()) {
         throw new ResourceInvalidException(
-            "HttpConnectionManager contains invalid RDS: must specify ADS");
+            "HttpConnectionManager contains invalid RDS: must specify ADS or self ConfigSource");
       }
       // Collect the RDS resource referenced by this HttpConnectionManager.
       rdsResources.add(rds.getRouteConfigName());
@@ -1715,9 +1715,11 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       String edsServiceName = null;
       io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig edsClusterConfig =
           cluster.getEdsClusterConfig();
-      if (!edsClusterConfig.getEdsConfig().hasAds()) {
-        return StructOrError.fromError("Cluster " + clusterName
-            + ": field eds_cluster_config must be set to indicate to use EDS over ADS.");
+      if (!edsClusterConfig.getEdsConfig().hasAds()
+          && ! edsClusterConfig.getEdsConfig().hasSelf()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": field eds_cluster_config must be set to indicate to use"
+                + " EDS over ADS or self ConfigSource");
       }
       // If the service_name field is set, that value will be used for the EDS request.
       if (!edsClusterConfig.getServiceName().isEmpty()) {
