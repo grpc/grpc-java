@@ -29,8 +29,6 @@ import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.junit.After;
-import org.junit.Ignore;
-import org.junit.Test;
 
 public class JettyInteropTest extends AbstractInteropTest {
 
@@ -93,10 +91,4 @@ public class JettyInteropTest extends AbstractInteropTest {
     builder.intercept(createCensusStatsClientInterceptor());
     return builder;
   }
-
-  // FIXME
-  @Override
-  @Ignore("Jetty is broken on client GOAWAY")
-  @Test
-  public void gracefulShutdown() {}
 }
