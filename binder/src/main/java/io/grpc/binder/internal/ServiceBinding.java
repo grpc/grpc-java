@@ -119,6 +119,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       state = State.BINDING;
       Status bindResult = bindInternal(sourceContext, bindIntent, this, bindFlags);
       if (!bindResult.isOk()) {
+        handleBindServiceFailure(sourceContext, this);
         state = State.UNBOUND;
         mainThreadExecutor.execute(() -> notifyUnbound(bindResult));
       }
@@ -139,6 +140,19 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     } catch (RuntimeException e) {
       return Status.INTERNAL.withCause(e).withDescription(
           "RuntimeException from bindService");
+    }
+  }
+
+  // Over the years, the API contract for Context#bindService() has been inconsistent on the subject
+  // of error handling. But inspecting recent AOSP implementations shows that, internally,
+  // bindService() retains a reference to the ServiceConnection when it throws certain Exceptions
+  // and even when it returns false. To avoid leaks, we *always* call unbindService() in case of
+  // error and simply ignore any "Service not registered" IAE and other RuntimeExceptions.
+  private static void handleBindServiceFailure(Context context, ServiceConnection conn) {
+    try {
+      context.unbindService(conn);
+    } catch (RuntimeException e) {
+      logger.log(Level.FINE, "Could not clean up after bindService() failure.", e);
     }
   }
 

@@ -67,6 +67,7 @@ public final class ServiceBindingTest {
 
     shadowApplication = shadowOf(appContext);
     shadowApplication.setComponentNameAndServiceForBindService(serviceComponent, mockBinder);
+    shadowApplication.setUnbindServiceCallsOnServiceDisconnected(false);
 
     binding = newBuilder().build();
     shadowOf(getMainLooper()).idle();
@@ -137,6 +138,7 @@ public final class ServiceBindingTest {
     assertThat(observer.gotUnboundEvent).isTrue();
     assertThat(observer.unboundReason.getCode()).isEqualTo(Code.CANCELLED);
     assertThat(binding.isSourceContextCleared()).isTrue();
+    assertThat(shadowApplication.getBoundServiceConnections()).isEmpty();
   }
 
   @Test
@@ -174,6 +176,7 @@ public final class ServiceBindingTest {
     assertThat(observer.gotUnboundEvent).isTrue();
     assertThat(observer.unboundReason.getCode()).isEqualTo(Code.UNIMPLEMENTED);
     assertThat(binding.isSourceContextCleared()).isTrue();
+    assertThat(shadowApplication.getBoundServiceConnections()).isEmpty();
   }
 
   @Test
@@ -187,6 +190,7 @@ public final class ServiceBindingTest {
     assertThat(observer.unboundReason.getCode()).isEqualTo(Code.PERMISSION_DENIED);
     assertThat(observer.unboundReason.getCause()).isEqualTo(securityException);
     assertThat(binding.isSourceContextCleared()).isTrue();
+    assertThat(shadowApplication.getBoundServiceConnections()).isEmpty();
   }
 
   @Test
@@ -257,7 +261,8 @@ public final class ServiceBindingTest {
     } catch (IllegalMonitorStateException ime) {
       // Expected.
     } catch (InterruptedException inte) {
-      throw new AssertionError("Interrupted exception when we shouldn't have been able to wait.", inte);
+      throw new AssertionError(
+          "Interrupted exception when we shouldn't have been able to wait.", inte);
     }
   }
 
