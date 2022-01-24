@@ -22,6 +22,7 @@ import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -191,12 +192,22 @@ final class XdsNameResolver extends NameResolver {
     }
     String replacement = serviceAuthority;
     if (listenerNameTemplate.startsWith(XDSTP_SCHEME)) {
-      replacement = UrlEscapers.urlFragmentEscaper().escape(replacement);
+      replacement = percentEncodePath(replacement);
     }
     String ldsResourceName = expandPercentS(listenerNameTemplate, replacement);
     callCounterProvider = SharedCallCounterMap.getInstance();
     resolveState = new ResolveState(ldsResourceName);
     resolveState.start();
+  }
+
+  @VisibleForTesting
+  static String percentEncodePath(String input) {
+    Iterable<String> pathSegs = Splitter.on('/').split(input);
+    List<String> encodedSegs = new ArrayList<>();
+    for (String pathSeg : pathSegs) {
+      encodedSegs.add(UrlEscapers.urlPathSegmentEscaper().escape(pathSeg));
+    }
+    return Joiner.on('/').join(encodedSegs);
   }
 
   private static String expandPercentS(String template, String replacement) {
