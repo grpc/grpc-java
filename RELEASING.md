@@ -133,7 +133,7 @@ Tagging the Release
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT"
    ```
 6. Go through PR review and push the release tag and updated release branch to
-   GitHub:
+   GitHub (DO NOT click the merge button on the GitHub page):
 
    ```bash
    $ git checkout v$MAJOR.$MINOR.x
