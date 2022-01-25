@@ -67,7 +67,6 @@ public final class ServiceBindingTest {
 
     shadowApplication = shadowOf(appContext);
     shadowApplication.setComponentNameAndServiceForBindService(serviceComponent, mockBinder);
-    shadowApplication.setUnbindServiceCallsOnServiceDisconnected(false);
 
     binding = newBuilder().build();
     shadowOf(getMainLooper()).idle();
