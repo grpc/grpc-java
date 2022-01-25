@@ -298,7 +298,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         errors.add("LDS response Resource index " + i + " - can't decode Listener: " + e);
         continue;
       }
-      String listenerName = listener.getName();
+      if (!isResourceNameValid(listener.getName(), resource.getTypeUrl())) {
+        errors.add(
+            "Unsupported resource name: " + listener.getName() + " for type: " + ResourceType.LDS);
+        continue;
+      }
+      String listenerName = canonifyResourceName(listener.getName());
       unpackedResources.add(listenerName);
 
       // Process Listener into LdsUpdate.
@@ -1425,7 +1430,13 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         errors.add("RDS response Resource index " + i + " - can't decode RouteConfiguration: " + e);
         continue;
       }
-      String routeConfigName = routeConfig.getName();
+      if (!isResourceNameValid(routeConfig.getName(), resource.getTypeUrl())) {
+        errors.add(
+            "Unsupported resource name: " + routeConfig.getName() + " for type: "
+                + ResourceType.RDS);
+        continue;
+      }
+      String routeConfigName = canonifyResourceName(routeConfig.getName());
       unpackedResources.add(routeConfigName);
 
       // Process RouteConfiguration into RdsUpdate.
@@ -1547,7 +1558,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         errors.add("CDS response Resource index " + i + " - can't decode Cluster: " + e);
         continue;
       }
-      String clusterName = cluster.getName();
+      if (!isResourceNameValid(cluster.getName(), resource.getTypeUrl())) {
+        errors.add(
+            "Unsupported resource name: " + cluster.getName() + " for type: " + ResourceType.CDS);
+        continue;
+      }
+      String clusterName = canonifyResourceName(cluster.getName());
 
       // Management server is required to always send newly requested resources, even if they
       // may have been sent previously (proactively). Thus, client does not need to cache
@@ -1793,7 +1809,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
             "EDS response Resource index " + i + " - can't decode ClusterLoadAssignment: " + e);
         continue;
       }
-      String clusterName = assignment.getClusterName();
+      if (!isResourceNameValid(assignment.getClusterName(), resource.getTypeUrl())) {
+        errors.add("Unsupported resource name: " + assignment.getClusterName() + " for type: "
+            + ResourceType.EDS);
+        continue;
+      }
+      String clusterName = canonifyResourceName(assignment.getClusterName());
 
       // Skip information for clusters not requested.
       // Management server is required to always send newly requested resources, even if they
@@ -2382,10 +2403,6 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     ResourceSubscriber(ResourceType type, String resource) {
       syncContext.throwIfNotInThisSynchronizationContext();
       this.type = type;
-      // TODO(zdapeng): Validate authority in resource URI for new-style resource name
-      //   when parsing XDS response.
-      // TODO(zdapeng): Canonicalize the resource name by sorting the context params in normal
-      //   lexicographic order.
       this.resource = resource;
       this.serverInfo = getServerInfo(resource);
       // Initialize metadata in UNKNOWN state to cover the case when resource subscriber,
