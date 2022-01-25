@@ -68,6 +68,9 @@ public final class ServiceBindingTest {
     shadowApplication = shadowOf(appContext);
     shadowApplication.setComponentNameAndServiceForBindService(serviceComponent, mockBinder);
 
+    // Don't call onServiceDisconnected() upon unbindService(), just like the real Android doesn't.
+    shadowApplication.setUnbindServiceCallsOnServiceDisconnected(false);
+
     binding = newBuilder().build();
     shadowOf(getMainLooper()).idle();
   }
