@@ -154,7 +154,7 @@ final class CachingRlsLbClient {
     if (routeLookupChannelServiceConfig != null) {
       logger.log(
           ChannelLogLevel.DEBUG,
-          "RLS channel direct path enabled. RLS channel service config: {0}",
+          "RLS channel service config: {0}",
           routeLookupChannelServiceConfig);
       rlsChannelBuilder.defaultServiceConfig(routeLookupChannelServiceConfig);
       rlsChannelBuilder.disableServiceConfigLookUp();
