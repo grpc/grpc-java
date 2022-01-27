@@ -1,0 +1,13 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: Observability"
+dependencies {
+    api project(':grpc-api')
+
+    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+}
