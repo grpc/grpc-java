@@ -20,6 +20,7 @@ def subprojects = [
     project(':grpc-rls'),
     project(':grpc-services'),
     project(':grpc-servlet'),
+    project(':grpc-servlet-jakarta'),
     project(':grpc-stub'),
     project(':grpc-testing'),
     project(':grpc-xds'),
@@ -34,7 +35,7 @@ for (subproject in subprojects) {
 evaluationDependsOn(':grpc-interop-testing')
 
 dependencies {
-    api subprojects.minus([project(':grpc-protobuf-lite'), project(':grpc-servlet')])
+    api subprojects.minus([project(':grpc-protobuf-lite')])
 }
 
 javadoc {
