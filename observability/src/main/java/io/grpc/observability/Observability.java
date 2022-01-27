@@ -18,14 +18,29 @@ package io.grpc.observability;
 
 import io.grpc.ExperimentalApi;
 
-/**
- * The main class for gRPC Observability features.
- */
+/** The main class for gRPC Observability features. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class Observability {
+  private static boolean initialized = false;
 
-  public static void grpcInit() {
-    // TODO(sanjaypujare): initialize channel and server providers and customTags map
+  /** Initialize grpc-observability. */
+  public static synchronized void grpcInit() {
+    if (initialized) {
+      throw new IllegalStateException("Observability already initialized!");
+    }
+    LoggingChannelProvider.init();
+    // TODO(sanjaypujare): initialize server provider and customTags map
+    initialized = true;
+  }
+
+  /** Un-initialize or finish grpc-observability. */
+  public static synchronized void grpcFinish() {
+    if (!initialized) {
+      throw new IllegalStateException("Observability not initialized!");
+    }
+    LoggingChannelProvider.finish();
+    // TODO(sanjaypujare): finish server provider and customTags map
+    initialized = false;
   }
 
   private Observability() {
