@@ -90,7 +90,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import javax.annotation.Nonnull;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -144,18 +143,11 @@ public class CachingRlsLbClientTest {
       mock(Helper.class, AdditionalAnswers.delegatesTo(new FakeHelper()));
   private final FakeThrottler fakeThrottler = new FakeThrottler();
   private final LbPolicyConfiguration lbPolicyConfiguration =
-      new LbPolicyConfiguration(ROUTE_LOOKUP_CONFIG, childLbPolicy);
+      new LbPolicyConfiguration(ROUTE_LOOKUP_CONFIG, null, childLbPolicy);
 
   private CachingRlsLbClient rlsLbClient;
-  private boolean existingEnableOobChannelDirectPath;
   private Map<String, ?> rlsChannelServiceConfig;
   private String rlsChannelOverriddenAuthority;
-
-  @Before
-  public void setUp() throws Exception {
-    existingEnableOobChannelDirectPath = CachingRlsLbClient.enableOobChannelDirectPath;
-    CachingRlsLbClient.enableOobChannelDirectPath = false;
-  }
 
   private void setUpRlsLbClient() {
     rlsLbClient =
@@ -173,7 +165,6 @@ public class CachingRlsLbClientTest {
   @After
   public void tearDown() throws Exception {
     rlsLbClient.close();
-    CachingRlsLbClient.enableOobChannelDirectPath = existingEnableOobChannelDirectPath;
     assertWithMessage(
             "On client shut down, RlsLoadBalancer must shut down with all its child loadbalancers.")
         .that(lbProvider.loadBalancers).isEmpty();
@@ -245,8 +236,28 @@ public class CachingRlsLbClientTest {
 
   @Test
   public void rls_overDirectPath() throws Exception {
-    CachingRlsLbClient.enableOobChannelDirectPath = true;
-    setUpRlsLbClient();
+    Map<String, ?> routeLookupChannelServiceConfig =
+        ImmutableMap.of(
+            "loadBalancingConfig",
+            ImmutableList.of(ImmutableMap.of(
+                "grpclb",
+                ImmutableMap.of(
+                    "childPolicy",
+                    ImmutableList.of(ImmutableMap.of("pick_first", ImmutableMap.of())),
+                    "serviceName",
+                    "service1"))));
+    LbPolicyConfiguration lbPolicyConfiguration = new LbPolicyConfiguration(
+        ROUTE_LOOKUP_CONFIG, routeLookupChannelServiceConfig, childLbPolicy);
+    rlsLbClient =
+        CachingRlsLbClient.newBuilder()
+            .setBackoffProvider(fakeBackoffProvider)
+            .setResolvedAddressesFactory(resolvedAddressFactory)
+            .setEvictionListener(evictionListener)
+            .setHelper(helper)
+            .setLbPolicyConfig(lbPolicyConfiguration)
+            .setThrottler(fakeThrottler)
+            .setTimeProvider(fakeTimeProvider)
+            .build();
     RouteLookupRequest routeLookupRequest = new RouteLookupRequest(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
     rlsServerImpl.setLookupTable(
@@ -265,16 +276,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.hasData()).isTrue();
 
     assertThat(rlsChannelOverriddenAuthority).isEqualTo("bigtable.googleapis.com:443");
-    assertThat(rlsChannelServiceConfig).isEqualTo(
-        ImmutableMap.of(
-            "loadBalancingConfig",
-            ImmutableList.of(ImmutableMap.of(
-                "grpclb",
-                ImmutableMap.of(
-                    "childPolicy",
-                    ImmutableList.of(ImmutableMap.of("pick_first", ImmutableMap.of())),
-                    "serviceName",
-                    "service1")))));
+    assertThat(rlsChannelServiceConfig).isEqualTo(routeLookupChannelServiceConfig);
   }
 
   @Test

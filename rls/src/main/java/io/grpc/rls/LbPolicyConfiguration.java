@@ -42,22 +42,32 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /** Configuration for RLS load balancing policy. */
 final class LbPolicyConfiguration {
 
   private final RouteLookupConfig routeLookupConfig;
+  @Nullable
+  private final Map<String, ?> routeLookupChannelServiceConfig;
   private final ChildLoadBalancingPolicy policy;
 
   LbPolicyConfiguration(
-      RouteLookupConfig routeLookupConfig, ChildLoadBalancingPolicy policy) {
+      RouteLookupConfig routeLookupConfig, @Nullable Map<String, ?> routeLookupChannelServiceConfig,
+      ChildLoadBalancingPolicy policy) {
     this.routeLookupConfig = checkNotNull(routeLookupConfig, "routeLookupConfig");
+    this.routeLookupChannelServiceConfig = routeLookupChannelServiceConfig;
     this.policy = checkNotNull(policy, "policy");
   }
 
   RouteLookupConfig getRouteLookupConfig() {
     return routeLookupConfig;
+  }
+
+  @Nonnull
+  Map<String, ?> getRouteLookupChannelServiceConfig() {
+    return routeLookupChannelServiceConfig;
   }
 
   ChildLoadBalancingPolicy getLoadBalancingPolicy() {
@@ -74,18 +84,20 @@ final class LbPolicyConfiguration {
     }
     LbPolicyConfiguration that = (LbPolicyConfiguration) o;
     return Objects.equals(routeLookupConfig, that.routeLookupConfig)
+        && Objects.equals(routeLookupChannelServiceConfig, that.routeLookupChannelServiceConfig)
         && Objects.equals(policy, that.policy);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(routeLookupConfig, policy);
+    return Objects.hash(routeLookupConfig, routeLookupChannelServiceConfig, policy);
   }
 
   @Override
   public String toString() {
     return MoreObjects.toStringHelper(this)
         .add("routeLookupConfig", routeLookupConfig)
+        .add("routeLookupChannelServiceConfig", routeLookupChannelServiceConfig)
         .add("policy", policy)
         .toString();
   }
