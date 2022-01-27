@@ -773,7 +773,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       buffer.append("(").append(status.getDescription()).append(")");
     }
     if (status.getCause() != null) {
-      buffer.append("(").append(status.getCause()).append(")");
+      buffer.append("[").append(status.getCause()).append("]");
     }
     return buffer.toString();
   }
