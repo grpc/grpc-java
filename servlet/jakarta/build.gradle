@@ -54,6 +54,8 @@ def migrate(String name, String inputDir, SourceSet sourceSet) {
 
 compileJava.dependsOn migrate('main', '../src/main/java', sourceSets.main)
 
+sourcesJar.dependsOn migrateSourcesMain
+
 // Build the set of sourceSets and classpaths to modify, since Jetty 11 requires Java 11
 // and must be skipped
 compileUndertowTestJava.dependsOn(migrate('undertowTest', '../src/undertowTest/java', sourceSets.undertowTest))
