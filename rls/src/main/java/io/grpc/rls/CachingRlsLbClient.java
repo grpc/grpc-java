@@ -149,13 +149,14 @@ final class CachingRlsLbClient {
     ManagedChannelBuilder<?> rlsChannelBuilder = helper.createResolvingOobChannelBuilder(
         rlsConfig.getLookupService(), helper.getUnsafeChannelCredentials());
     rlsChannelBuilder.overrideAuthority(helper.getAuthority());
-    Map<String, ?> directPathServiceConfig = lbPolicyConfig.getRouteLookupChannelServiceConfig();
-    if (directPathServiceConfig != null) {
+    Map<String, ?> routeLookupChannelServiceConfig =
+        lbPolicyConfig.getRouteLookupChannelServiceConfig();
+    if (routeLookupChannelServiceConfig != null) {
       logger.log(
           ChannelLogLevel.DEBUG,
           "RLS channel direct path enabled. RLS channel service config: {0}",
-          directPathServiceConfig);
-      rlsChannelBuilder.defaultServiceConfig(directPathServiceConfig);
+          routeLookupChannelServiceConfig);
+      rlsChannelBuilder.defaultServiceConfig(routeLookupChannelServiceConfig);
       rlsChannelBuilder.disableServiceConfigLookUp();
     }
     rlsChannel = rlsChannelBuilder.build();
