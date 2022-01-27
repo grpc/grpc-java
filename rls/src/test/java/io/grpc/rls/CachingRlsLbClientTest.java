@@ -235,7 +235,7 @@ public class CachingRlsLbClientTest {
   }
 
   @Test
-  public void rls_overDirectPath() throws Exception {
+  public void rls_withCustomRlsChannelServiceConfig() throws Exception {
     Map<String, ?> routeLookupChannelServiceConfig =
         ImmutableMap.of(
             "loadBalancingConfig",
