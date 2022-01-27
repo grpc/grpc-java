@@ -37,6 +37,9 @@ dependencies {
     implementation project(':grpc-core'),
             libraries.guava
 
+    testImplementation 'javax.servlet:javax.servlet-api:4.0.1',
+        'org.jetbrains.kotlinx:lincheck:2.14.1'
+
     itImplementation project(':grpc-servlet'),
             project(':grpc-netty'),
             project(':grpc-core').sourceSets.test.runtimeClasspath,
@@ -53,6 +56,16 @@ dependencies {
 
     jettyTestImplementation "org.eclipse.jetty:jetty-servlet:${jettyVersion}",
             "org.eclipse.jetty.http2:http2-server:${jettyVersion}"
+}
+
+test {
+    if (JavaVersion.current().isJava9Compatible()) {
+        jvmArgs += [
+                // required for Lincheck
+                '--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED',
+                '--add-exports=java.base/jdk.internal.util=ALL-UNNAMED',
+        ]
+    }
 }
 
 // Set up individual classpaths for each test, to avoid any mismatch,
