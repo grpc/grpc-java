@@ -18,29 +18,47 @@ package io.grpc.observability;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
+import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider;
+import io.grpc.MethodDescriptor;
 import io.grpc.TlsChannelCredentials;
-import io.grpc.netty.NettyChannelBuilder;
-import io.grpc.netty.NettyChannelProvider;
+import io.grpc.observability.interceptors.LoggingChannelInterceptor;
+import io.grpc.testing.TestMethodDescriptors;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentMatchers;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class LoggingChannelProviderTest {
-  
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
+
+  private final MethodDescriptor<Void, Void> method = TestMethodDescriptors.voidMethod();
+
   @Test
-  public void init_usesNettyProvider() {
-    LoggingChannelProvider.init();
+  public void initTwiceCausesException() {
+    LoggingChannelProvider.init(new LoggingChannelInterceptor.FactoryImpl());
     assertThat(LoggingChannelProvider.instance).isNotNull();
-    NettyChannelProvider prevProvider = LoggingChannelProvider.instance.prevProvider;
-    assertThat(prevProvider).isInstanceOf(NettyChannelProvider.class);
+    ManagedChannelProvider prevProvider = LoggingChannelProvider.instance.prevProvider;
     assertThat(ManagedChannelProvider.provider()).isSameInstanceAs(LoggingChannelProvider.instance);
     try {
-      LoggingChannelProvider.init();
+      LoggingChannelProvider.init(new LoggingChannelInterceptor.FactoryImpl());
       fail("should have failed for calling init() again");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("LoggingChannelProvider already initialized!");
@@ -50,27 +68,65 @@ public class LoggingChannelProviderTest {
   }
 
   @Test
-  public void builderForTarget() {
-    LoggingChannelProvider.init();
-    ManagedChannelBuilder<?> builder = ManagedChannelBuilder.forTarget("dns://localhost");
-    assertThat(builder).isInstanceOf(NettyChannelBuilder.class);
+  public void forTarget_interceptorCalled() {
+    ClientInterceptor interceptor = mock(ClientInterceptor.class,
+        delegatesTo(new NoopInterceptor()));
+    LoggingChannelInterceptor.Factory factory = mock(LoggingChannelInterceptor.Factory.class);
+    when(factory.create()).thenReturn(interceptor);
+    LoggingChannelProvider.init(factory);
+    ManagedChannelBuilder<?> builder = ManagedChannelBuilder.forTarget("localhost");
+    ManagedChannel channel = builder.build();
+    CallOptions callOptions = CallOptions.DEFAULT;
+
+    ClientCall<Void, Void> unused = channel.newCall(method, callOptions);
+    verify(interceptor)
+        .interceptCall(same(method), same(callOptions), ArgumentMatchers.<Channel>any());
+    channel.shutdownNow();
     LoggingChannelProvider.finish();
   }
 
   @Test
-  public void builderForAddress() {
-    LoggingChannelProvider.init();
+  public void forAddress_interceptorCalled() {
+    ClientInterceptor interceptor = mock(ClientInterceptor.class,
+        delegatesTo(new NoopInterceptor()));
+    LoggingChannelInterceptor.Factory factory = mock(LoggingChannelInterceptor.Factory.class);
+    when(factory.create()).thenReturn(interceptor);
+    LoggingChannelProvider.init(factory);
     ManagedChannelBuilder<?> builder = ManagedChannelBuilder.forAddress("localhost", 80);
-    assertThat(builder).isInstanceOf(NettyChannelBuilder.class);
+    ManagedChannel channel = builder.build();
+    CallOptions callOptions = CallOptions.DEFAULT;
+
+    ClientCall<Void, Void> unused = channel.newCall(method, callOptions);
+    verify(interceptor)
+        .interceptCall(same(method), same(callOptions), ArgumentMatchers.<Channel>any());
+    channel.shutdownNow();
     LoggingChannelProvider.finish();
   }
 
   @Test
-  public void newChannelBuilder() {
-    LoggingChannelProvider.init();
-    ManagedChannelBuilder<?> builder = Grpc.newChannelBuilder("dns://localhost",
+  public void newChannelBuilder_interceptorCalled() {
+    ClientInterceptor interceptor = mock(ClientInterceptor.class,
+        delegatesTo(new NoopInterceptor()));
+    LoggingChannelInterceptor.Factory factory = mock(LoggingChannelInterceptor.Factory.class);
+    when(factory.create()).thenReturn(interceptor);
+    LoggingChannelProvider.init(factory);
+    ManagedChannelBuilder<?> builder = Grpc.newChannelBuilder("localhost",
         TlsChannelCredentials.create());
-    assertThat(builder).isInstanceOf(NettyChannelBuilder.class);
+    ManagedChannel channel = builder.build();
+    CallOptions callOptions = CallOptions.DEFAULT;
+
+    ClientCall<Void, Void> unused = channel.newCall(method, callOptions);
+    verify(interceptor)
+        .interceptCall(same(method), same(callOptions), ArgumentMatchers.<Channel>any());
+    channel.shutdownNow();
     LoggingChannelProvider.finish();
+  }
+
+  private static class NoopInterceptor implements ClientInterceptor {
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
+        CallOptions callOptions, Channel next) {
+      return next.newCall(method, callOptions);
+    }
   }
 }

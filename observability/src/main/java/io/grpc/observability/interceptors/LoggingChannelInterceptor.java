@@ -27,6 +27,18 @@ import io.grpc.MethodDescriptor;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class LoggingChannelInterceptor implements ClientInterceptor {
 
+  public interface Factory {
+    public ClientInterceptor create();
+  }
+
+  public static class FactoryImpl implements Factory {
+
+    @Override
+    public ClientInterceptor create() {
+      return new LoggingChannelInterceptor();
+    }
+  }
+
   @Override
   public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
       CallOptions callOptions, Channel next) {

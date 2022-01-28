@@ -24,30 +24,26 @@ import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.ManagedChannelRegistry;
-import io.grpc.netty.NettyChannelProvider;
 import io.grpc.observability.interceptors.LoggingChannelInterceptor;
 
 /** A channel provider that injects logging interceptor. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 final class LoggingChannelProvider extends ManagedChannelProvider {
-  @VisibleForTesting NettyChannelProvider prevProvider;
+  @VisibleForTesting final ManagedChannelProvider prevProvider;
+  @VisibleForTesting final LoggingChannelInterceptor.Factory clientInterceptorFactory;
 
   @VisibleForTesting static LoggingChannelProvider instance;
 
-  private LoggingChannelProvider() {
-    ManagedChannelProvider provider = ManagedChannelProvider.provider();
-    if (provider instanceof NettyChannelProvider) {
-      prevProvider = (NettyChannelProvider) provider;
-    } else {
-      throw new ProviderNotFoundException("Only NettyChannelProvider supported!");
-    }
+  private LoggingChannelProvider(LoggingChannelInterceptor.Factory factory) {
+    prevProvider = ManagedChannelProvider.provider();
+    clientInterceptorFactory = factory;
   }
 
-  static synchronized void init() {
+  static synchronized void init(LoggingChannelInterceptor.Factory factory) {
     if (instance != null) {
       throw new IllegalStateException("LoggingChannelProvider already initialized!");
     }
-    instance = new LoggingChannelProvider();
+    instance = new LoggingChannelProvider(factory);
     ManagedChannelRegistry.getDefaultRegistry().register(instance);
   }
 
@@ -69,17 +65,17 @@ final class LoggingChannelProvider extends ManagedChannelProvider {
     return 6;
   }
 
-  private static ManagedChannelBuilder<?> addInterceptor(ManagedChannelBuilder<?> builder) {
-    return builder.intercept(new LoggingChannelInterceptor());
+  private ManagedChannelBuilder<?> addInterceptor(ManagedChannelBuilder<?> builder) {
+    return builder.intercept(clientInterceptorFactory.create());
   }
 
   @Override
-  protected ManagedChannelBuilder<?> builderForAddress(String name, int port) {
+  public ManagedChannelBuilder<?> builderForAddress(String name, int port) {
     return addInterceptor(prevProvider.builderForAddress(name, port));
   }
 
   @Override
-  protected ManagedChannelBuilder<?> builderForTarget(String target) {
+  public ManagedChannelBuilder<?> builderForTarget(String target) {
     return addInterceptor(prevProvider.builderForTarget(target));
   }
 
