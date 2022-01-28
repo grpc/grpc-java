@@ -56,7 +56,7 @@ public class LoggingChannelProviderTest {
     LoggingChannelProvider.init(new LoggingChannelInterceptor.FactoryImpl());
     assertThat(LoggingChannelProvider.instance).isNotNull();
     ManagedChannelProvider prevProvider = LoggingChannelProvider.instance.prevProvider;
-    assertThat(ManagedChannelProvider.provider()).isSameInstanceAs(LoggingChannelProvider.instance);
+    assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
     try {
       LoggingChannelProvider.init(new LoggingChannelInterceptor.FactoryImpl());
       fail("should have failed for calling init() again");
