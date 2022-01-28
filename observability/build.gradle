@@ -7,12 +7,12 @@ plugins {
 
 description = "gRPC: Observability"
 dependencies {
-    api project(':grpc-api'),
-            project(':grpc-netty-shaded')
+    api project(':grpc-api')
 
     implementation libraries.guava
 
-    testImplementation project(':grpc-testing')
+    testImplementation project(':grpc-testing'),
+            project(':grpc-netty-shaded')
     testImplementation (libraries.guava_testlib) {
         exclude group: 'junit', module: 'junit'
     }

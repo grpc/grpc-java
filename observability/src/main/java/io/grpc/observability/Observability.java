@@ -17,6 +17,7 @@
 package io.grpc.observability;
 
 import io.grpc.ExperimentalApi;
+import io.grpc.ManagedChannelProvider.ProviderNotFoundException;
 import io.grpc.observability.interceptors.LoggingChannelInterceptor;
 
 /** The main class for gRPC Observability features. */
@@ -24,7 +25,11 @@ import io.grpc.observability.interceptors.LoggingChannelInterceptor;
 public final class Observability {
   private static boolean initialized = false;
 
-  /** Initialize grpc-observability. */
+  /**
+   * Initialize grpc-observability.
+   *
+   * @throws ProviderNotFoundException if no underlying channel provider is available.
+   */
   public static synchronized void grpcInit() {
     if (initialized) {
       throw new IllegalStateException("Observability already initialized!");

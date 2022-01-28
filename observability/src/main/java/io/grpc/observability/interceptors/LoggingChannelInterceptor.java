@@ -20,11 +20,9 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
-import io.grpc.ExperimentalApi;
 import io.grpc.MethodDescriptor;
 
 /** A channel provider that injects logging interceptor. */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class LoggingChannelInterceptor implements ClientInterceptor {
 
   public interface Factory {
