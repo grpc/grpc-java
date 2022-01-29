@@ -268,29 +268,10 @@ class NettyServer implements InternalServer, InternalWithLogId {
           }
           // `channel` shutdown can race with `ch` initialization, so this is only safe to increment
           // inside the lock.
-          sharedResourceReferenceCounter.retain();
           transportListener = listener.transportCreated(transport);
         }
 
-        /**
-         * Releases the event loop if the channel is "done", possibly due to the channel closing.
-         */
-        final class LoopReleaser implements ChannelFutureListener {
-          private boolean done;
-
-          @Override
-          public void operationComplete(ChannelFuture future) throws Exception {
-            if (!done) {
-              done = true;
-              sharedResourceReferenceCounter.release();
-            }
-          }
-        }
-
         transport.start(transportListener);
-        ChannelFutureListener loopReleaser = new LoopReleaser();
-        channelDone.addListener(loopReleaser);
-        ch.closeFuture().addListener(loopReleaser);
       }
     });
     Future<Map<ChannelFuture, SocketAddress>> bindCallFuture =
