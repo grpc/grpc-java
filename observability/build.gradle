@@ -12,10 +12,11 @@ dependencies {
     implementation libraries.guava
 
     testImplementation project(':grpc-testing'),
+            project(':grpc-testing-proto'),
             project(':grpc-netty-shaded')
     testImplementation (libraries.guava_testlib) {
         exclude group: 'junit', module: 'junit'
     }
 
-    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    signature "org.codehaus.mojo.signature:java18:1.0@signature"
 }

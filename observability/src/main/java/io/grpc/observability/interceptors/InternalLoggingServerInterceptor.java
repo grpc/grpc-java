@@ -16,32 +16,31 @@
 
 package io.grpc.observability.interceptors;
 
-import io.grpc.CallOptions;
-import io.grpc.Channel;
-import io.grpc.ClientCall;
-import io.grpc.ClientInterceptor;
 import io.grpc.Internal;
-import io.grpc.MethodDescriptor;
+import io.grpc.Metadata;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 
-/** A logging interceptor for {@code LoggingChannelProvider}. */
+/** A logging interceptor for {@code LoggingServerProvider}. */
 @Internal
-public final class InternalLoggingChannelInterceptor implements ClientInterceptor {
+public final class InternalLoggingServerInterceptor implements ServerInterceptor {
 
   public interface Factory {
-    ClientInterceptor create();
+    ServerInterceptor create();
   }
 
   public static class FactoryImpl implements Factory {
 
     @Override
-    public ClientInterceptor create() {
-      return new InternalLoggingChannelInterceptor();
+    public ServerInterceptor create() {
+      return new InternalLoggingServerInterceptor();
     }
   }
 
   @Override
-  public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
-      CallOptions callOptions, Channel next) {
+  public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+      Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     // TODO(dnvindhya) implement the interceptor
     return null;
   }
