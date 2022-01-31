@@ -176,12 +176,12 @@ public class ManagedChannelRegistryTest {
     }
 
     @Override
-    protected ManagedChannelBuilder<?> builderForAddress(String name, int port) {
+    public ManagedChannelBuilder<?> builderForAddress(String name, int port) {
       throw new UnsupportedOperationException();
     }
 
     @Override
-    protected ManagedChannelBuilder<?> builderForTarget(String target) {
+    public ManagedChannelBuilder<?> builderForTarget(String target) {
       throw new UnsupportedOperationException();
     }
   }

@@ -64,18 +64,18 @@ public abstract class ManagedChannelProvider {
   /**
    * Creates a new builder with the given host and port.
    */
-  protected abstract ManagedChannelBuilder<?> builderForAddress(String name, int port);
+  public abstract ManagedChannelBuilder<?> builderForAddress(String name, int port);
 
   /**
    * Creates a new builder with the given target URI.
    */
-  protected abstract ManagedChannelBuilder<?> builderForTarget(String target);
+  public abstract ManagedChannelBuilder<?> builderForTarget(String target);
 
   /**
    * Creates a new builder with the given target URI and credentials. Returns an error-string result
    * if unable to understand the credentials.
    */
-  protected NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds) {
+  public NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds) {
     return NewChannelBuilderResult.error("ChannelCredentials are unsupported");
   }
 
