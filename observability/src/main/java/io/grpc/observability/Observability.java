@@ -18,7 +18,7 @@ package io.grpc.observability;
 
 import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelProvider.ProviderNotFoundException;
-import io.grpc.observability.interceptors.LoggingChannelInterceptor;
+import io.grpc.observability.interceptors.InternalLoggingChannelInterceptor;
 
 /** The main class for gRPC Observability features. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
@@ -34,7 +34,7 @@ public final class Observability {
     if (initialized) {
       throw new IllegalStateException("Observability already initialized!");
     }
-    LoggingChannelProvider.init(new LoggingChannelInterceptor.FactoryImpl());
+    LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl());
     // TODO(sanjaypujare): initialize server provider and customTags map
     initialized = true;
   }

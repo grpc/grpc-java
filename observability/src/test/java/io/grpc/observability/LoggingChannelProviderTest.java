@@ -34,7 +34,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.MethodDescriptor;
 import io.grpc.TlsChannelCredentials;
-import io.grpc.observability.interceptors.LoggingChannelInterceptor;
+import io.grpc.observability.interceptors.InternalLoggingChannelInterceptor;
 import io.grpc.testing.TestMethodDescriptors;
 import org.junit.Rule;
 import org.junit.Test;
@@ -54,12 +54,11 @@ public class LoggingChannelProviderTest {
   @Test
   public void initTwiceCausesException() {
     ManagedChannelProvider prevProvider = ManagedChannelProvider.provider();
-    LoggingChannelProvider.init(new LoggingChannelInterceptor.FactoryImpl());
-    //assertThat(LoggingChannelProvider.instance).isNotNull();
-    //ManagedChannelProvider prevProvider = LoggingChannelProvider.instance.prevProvider;
+    assertThat(prevProvider).isNotInstanceOf(LoggingChannelProvider.class);
+    LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl());
     assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
     try {
-      LoggingChannelProvider.init(new LoggingChannelInterceptor.FactoryImpl());
+      LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl());
       fail("should have failed for calling init() again");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("LoggingChannelProvider already initialized!");
@@ -72,7 +71,8 @@ public class LoggingChannelProviderTest {
   public void forTarget_interceptorCalled() {
     ClientInterceptor interceptor = mock(ClientInterceptor.class,
         delegatesTo(new NoopInterceptor()));
-    LoggingChannelInterceptor.Factory factory = mock(LoggingChannelInterceptor.Factory.class);
+    InternalLoggingChannelInterceptor.Factory factory = mock(
+        InternalLoggingChannelInterceptor.Factory.class);
     when(factory.create()).thenReturn(interceptor);
     LoggingChannelProvider.init(factory);
     ManagedChannelBuilder<?> builder = ManagedChannelBuilder.forTarget("localhost");
@@ -90,7 +90,8 @@ public class LoggingChannelProviderTest {
   public void forAddress_interceptorCalled() {
     ClientInterceptor interceptor = mock(ClientInterceptor.class,
         delegatesTo(new NoopInterceptor()));
-    LoggingChannelInterceptor.Factory factory = mock(LoggingChannelInterceptor.Factory.class);
+    InternalLoggingChannelInterceptor.Factory factory = mock(
+        InternalLoggingChannelInterceptor.Factory.class);
     when(factory.create()).thenReturn(interceptor);
     LoggingChannelProvider.init(factory);
     ManagedChannelBuilder<?> builder = ManagedChannelBuilder.forAddress("localhost", 80);
@@ -108,7 +109,8 @@ public class LoggingChannelProviderTest {
   public void newChannelBuilder_interceptorCalled() {
     ClientInterceptor interceptor = mock(ClientInterceptor.class,
         delegatesTo(new NoopInterceptor()));
-    LoggingChannelInterceptor.Factory factory = mock(LoggingChannelInterceptor.Factory.class);
+    InternalLoggingChannelInterceptor.Factory factory = mock(
+        InternalLoggingChannelInterceptor.Factory.class);
     when(factory.create()).thenReturn(interceptor);
     LoggingChannelProvider.init(factory);
     ManagedChannelBuilder<?> builder = Grpc.newChannelBuilder("localhost",

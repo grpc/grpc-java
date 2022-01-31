@@ -22,21 +22,21 @@ import io.grpc.ChannelCredentials;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.ManagedChannelRegistry;
-import io.grpc.observability.interceptors.LoggingChannelInterceptor;
+import io.grpc.observability.interceptors.InternalLoggingChannelInterceptor;
 
 /** A channel provider that injects logging interceptor. */
 final class LoggingChannelProvider extends ManagedChannelProvider {
   private final ManagedChannelProvider prevProvider;
-  private final LoggingChannelInterceptor.Factory clientInterceptorFactory;
+  private final InternalLoggingChannelInterceptor.Factory clientInterceptorFactory;
 
   private static LoggingChannelProvider instance;
 
-  private LoggingChannelProvider(LoggingChannelInterceptor.Factory factory) {
+  private LoggingChannelProvider(InternalLoggingChannelInterceptor.Factory factory) {
     prevProvider = ManagedChannelProvider.provider();
     clientInterceptorFactory = factory;
   }
 
-  static synchronized void init(LoggingChannelInterceptor.Factory factory) {
+  static synchronized void init(InternalLoggingChannelInterceptor.Factory factory) {
     if (instance != null) {
       throw new IllegalStateException("LoggingChannelProvider already initialized!");
     }

@@ -20,20 +20,22 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.Internal;
 import io.grpc.MethodDescriptor;
 
 /** A channel provider that injects logging interceptor. */
-public final class LoggingChannelInterceptor implements ClientInterceptor {
+@Internal
+public final class InternalLoggingChannelInterceptor implements ClientInterceptor {
 
   public interface Factory {
-    public ClientInterceptor create();
+    ClientInterceptor create();
   }
 
   public static class FactoryImpl implements Factory {
 
     @Override
     public ClientInterceptor create() {
-      return new LoggingChannelInterceptor();
+      return new InternalLoggingChannelInterceptor();
     }
   }
 
