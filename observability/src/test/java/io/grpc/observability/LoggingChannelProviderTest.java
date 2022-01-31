@@ -53,9 +53,10 @@ public class LoggingChannelProviderTest {
 
   @Test
   public void initTwiceCausesException() {
+    ManagedChannelProvider prevProvider = ManagedChannelProvider.provider();
     LoggingChannelProvider.init(new LoggingChannelInterceptor.FactoryImpl());
-    assertThat(LoggingChannelProvider.instance).isNotNull();
-    ManagedChannelProvider prevProvider = LoggingChannelProvider.instance.prevProvider;
+    //assertThat(LoggingChannelProvider.instance).isNotNull();
+    //ManagedChannelProvider prevProvider = LoggingChannelProvider.instance.prevProvider;
     assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
     try {
       LoggingChannelProvider.init(new LoggingChannelInterceptor.FactoryImpl());

@@ -18,21 +18,18 @@ package io.grpc.observability;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ChannelCredentials;
-import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.ManagedChannelRegistry;
 import io.grpc.observability.interceptors.LoggingChannelInterceptor;
 
 /** A channel provider that injects logging interceptor. */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 final class LoggingChannelProvider extends ManagedChannelProvider {
-  @VisibleForTesting final ManagedChannelProvider prevProvider;
-  @VisibleForTesting final LoggingChannelInterceptor.Factory clientInterceptorFactory;
+  private final ManagedChannelProvider prevProvider;
+  private final LoggingChannelInterceptor.Factory clientInterceptorFactory;
 
-  @VisibleForTesting static LoggingChannelProvider instance;
+  private static LoggingChannelProvider instance;
 
   private LoggingChannelProvider(LoggingChannelInterceptor.Factory factory) {
     prevProvider = ManagedChannelProvider.provider();
