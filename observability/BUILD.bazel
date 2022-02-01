@@ -1,0 +1,26 @@
+load("//:java_grpc_library.bzl", "java_grpc_library")
+
+java_library(
+    name = "observabilitylog",
+    srcs = glob([
+        "src/main/java/io/grpc/protobuf/observability/*.java",
+    ]),
+    visibility = ["//visibility:private"],
+    deps = [
+        ":observability_java_grpc",
+        "//api",
+        "//context",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_protobuf//:protobuf_java",
+        "@com_google_protobuf//:protobuf_java_util",
+        "@io_grpc_grpc_proto//:observabilitylog_java_proto",
+    ],
+)
+
+java_grpc_library(
+    name = "observability_java_grpc",
+    srcs = ["@io_grpc_grpc_proto//:observabilitylog_proto"],
+    visibility = ["//visibility:private"],
+    deps = ["@io_grpc_grpc_proto//:observability_java_proto"],
+)

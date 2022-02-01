@@ -1,0 +1,107 @@
+/*
+ * Copyright 2022 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package grpc.observabilitylog.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "io.grpc.observabilitylog.v1";
+option java_outer_classname = "ObservabilityLogProto";
+
+enum EventType {
+  GRPC_CALL_UNKNOWN = 0;
+  GRPC_CALL_REQUEST_HEADER = 1;
+  GRPC_CALL_RESPONSE_HEADER = 2;
+  GRPC_CALL_REQUEST_MESSAGE = 3;
+  GRPC_CALL_RESPONSE_MESSAGE = 4;
+  GRPC_CALL_TRAILER = 5;
+  GRPC_CALL_HALF_CLOSE = 6;
+  GRPC_CALL_CANCEL = 7;
+}
+
+enum EventLogger {
+  LOGGER_UNKNOWN = 0;
+  LOGGER_CLIENT = 1;
+  LOGGER_SERVER = 2;
+}
+
+enum LogLevel {
+  LOG_LEVEL_UNKNOWN = 0;
+  LOG_LEVEL_TRACE = 1;
+  LOG_LEVEL_DEBUG = 2;
+  LOG_LEVEL_INFO = 3;
+  LOG_LEVEL_WARN = 4;
+  LOG_LEVEL_ERROR = 5;
+  LOG_LEVEL_FATAL = 6;
+}
+
+enum MethodType {
+  METHOD_TYPE_UNKNOWN = 0;
+  METHOD_TYPE_UNARY = 1;
+  METHOD_TYPE_SERVER_STREAMING = 2;
+  METHOD_TYPE_CLIENT_STREAMING = 3;
+  METHOD_TYPE_BIDI_STREAMING = 4;
+}
+
+message Metadata {
+  repeated MetadataEntry entry = 1;
+}
+
+message MetadataEntry {
+  string key = 1;
+  bytes value = 2;
+}
+
+message EnvironmentTags {
+  string gcp_project_id = 1;
+  string gcp_numeric_project_id = 2;
+  string gce_instance_id = 3;
+  string gce_instance_hostname = 4;
+  string gce_instance_zone = 5;
+  string gke_cluster_uid = 6;
+}
+
+message CustomTags {
+  string key = 1;
+  string value = 2;
+}
+
+message GrpcLogRecord {
+  google.protobuf.Timestamp timestamp = 1;
+  string service_name = 2;
+  string method_name = 3;
+  EventLogger event_logger = 4;
+  EventType event_type = 5;
+  LogLevel  log_level = 6;
+  EnvironmentTags environment_tags = 7;
+  repeated CustomTags custom_tags = 8;
+  MethodType method_type = 9;
+  string client_address = 10;
+  string server_address = 11;
+  Metadata headers = 20;
+  Metadata trailers = 21;
+  google.protobuf.Duration timeout = 22;
+  int32 sequence_number = 23;
+  bytes message = 24;
+  int32 status_code = 25;
+  string status_message = 26;
+  bytes status_details = 27;
+  int32 duration = 28;
+}
