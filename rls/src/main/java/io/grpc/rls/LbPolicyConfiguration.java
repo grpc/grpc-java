@@ -42,7 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /** Configuration for RLS load balancing policy. */
@@ -65,7 +64,7 @@ final class LbPolicyConfiguration {
     return routeLookupConfig;
   }
 
-  @Nonnull
+  @Nullable
   Map<String, ?> getRouteLookupChannelServiceConfig() {
     return routeLookupChannelServiceConfig;
   }
