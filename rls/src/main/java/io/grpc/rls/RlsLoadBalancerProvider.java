@@ -62,12 +62,15 @@ public final class RlsLoadBalancerProvider extends LoadBalancerProvider {
     try {
       RouteLookupConfig routeLookupConfig = new RouteLookupConfigConverter()
           .convert(JsonUtil.getObject(rawLoadBalancingConfigPolicy, "routeLookupConfig"));
+      Map<String, ?> routeLookupChannelServiceConfig =
+          JsonUtil.getObject(rawLoadBalancingConfigPolicy, "routeLookupChannelServiceConfig");
       ChildLoadBalancingPolicy lbPolicy = ChildLoadBalancingPolicy
           .create(
               JsonUtil.getString(rawLoadBalancingConfigPolicy, "childPolicyConfigTargetFieldName"),
               JsonUtil.checkObjectList(
                   checkNotNull(JsonUtil.getList(rawLoadBalancingConfigPolicy, "childPolicy"))));
-      return ConfigOrError.fromConfig(new LbPolicyConfiguration(routeLookupConfig, lbPolicy));
+      return ConfigOrError.fromConfig(
+          new LbPolicyConfiguration(routeLookupConfig, routeLookupChannelServiceConfig, lbPolicy));
     } catch (Exception e) {
       return ConfigOrError.fromError(
           Status.INVALID_ARGUMENT
