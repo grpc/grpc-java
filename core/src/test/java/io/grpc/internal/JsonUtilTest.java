@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.Test;
@@ -129,5 +130,17 @@ public class JsonUtilTest {
     assertThat(JsonUtil.getNumberAsDouble(map, "key_nonexistent")).isNull();
     assertThat(JsonUtil.getNumberAsInteger(map, "key_nonexistent")).isNull();
     assertThat(JsonUtil.getNumberAsLong(map, "key_nonexistent")).isNull();
+  }
+
+  @Test
+  public void getObject_mapExplicitNullValue() {
+    Map<String, ?> mapWithNullValue = Collections.singletonMap("key", null);
+    try {
+      JsonUtil.getObject(mapWithNullValue, "key");
+      fail("ClassCastException expected");
+    } catch (ClassCastException e) {
+      assertThat(e).hasMessageThat()
+          .isEqualTo("value 'null' for key 'key' in '{key=null}' is not object");
+    }
   }
 }
