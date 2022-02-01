@@ -851,8 +851,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       }
 
       if (state.winningSubstream == null) {
-        if (rpcProgress == RpcProgress.REFUSED
-            && noMoreTransparentRetry.compareAndSet(false, true)) {
+        if (rpcProgress == RpcProgress.MISCARRIED
+            || (rpcProgress == RpcProgress.REFUSED
+                && noMoreTransparentRetry.compareAndSet(false, true))) {
           // transparent retry
           final Substream newSubstream = createSubstream(substream.previousAttemptCount, true);
           if (isHedging) {

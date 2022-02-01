@@ -535,7 +535,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       // The connection is going away (it is really the GOAWAY case),
       // just terminate the stream now.
       command.stream().transportReportStatus(
-          lifecycleManager.getShutdownStatus(), RpcProgress.REFUSED, true, new Metadata());
+          lifecycleManager.getShutdownStatus(), RpcProgress.MISCARRIED, true, new Metadata());
       promise.setFailure(lifecycleManager.getShutdownThrowable());
       return;
     }
@@ -576,7 +576,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         // This should only be reachable during onGoAwayReceived, as otherwise
         // getShutdownThrowable() != null
         command.stream().setNonExistent();
-        command.stream().transportReportStatus(s, RpcProgress.REFUSED, true, new Metadata());
+        command.stream().transportReportStatus(s, RpcProgress.MISCARRIED, true, new Metadata());
         promise.setFailure(s.asRuntimeException());
         return;
       }
@@ -635,18 +635,29 @@ class NettyClientHandler extends AbstractNettyHandler {
               // Just forward on the success status to the original promise.
               promise.setSuccess();
             } else {
-              final Throwable cause = future.cause();
+              Throwable cause = future.cause();
               if (cause instanceof StreamBufferingEncoder.Http2GoAwayException) {
                 StreamBufferingEncoder.Http2GoAwayException e =
                     (StreamBufferingEncoder.Http2GoAwayException) cause;
                 Status status = statusFromH2Error(
                     Status.Code.UNAVAILABLE, "GOAWAY closed buffered stream",
                     e.errorCode(), e.debugData());
-                stream.transportReportStatus(status, RpcProgress.REFUSED, true, new Metadata());
-                promise.setFailure(status.asRuntimeException());
-              } else {
-                promise.setFailure(cause);
+                status = status.withCause(cause);
+                cause = status.asRuntimeException();
+                stream.transportReportStatus(status, RpcProgress.MISCARRIED, true, new Metadata());
+              } else if (cause instanceof StreamBufferingEncoder.Http2ChannelClosedException) {
+                if (lifecycleManager.getShutdownStatus() == null) {
+                  Status status = Status.UNAVAILABLE.withCause(cause)
+                      .withDescription("Connection closed while stream is buffered");
+                  stream.transportReportStatus(
+                      status, RpcProgress.MISCARRIED, true, new Metadata());
+                } else {
+                  stream.transportReportStatus(
+                      lifecycleManager.getShutdownStatus(), RpcProgress.MISCARRIED, true,
+                      new Metadata());
+                }
               }
+              promise.setFailure(cause);
             }
           }
         });
@@ -663,7 +674,11 @@ class NettyClientHandler extends AbstractNettyHandler {
     try {
       Status reason = cmd.reason();
       if (reason != null) {
-        stream.transportReportStatus(reason, true, new Metadata());
+        if (cmd.stream().isNonExistent())  {
+          stream.transportReportStatus(reason, RpcProgress.MISCARRIED, true, new Metadata());
+        } else {
+          stream.transportReportStatus(reason, RpcProgress.PROCESSED, true, new Metadata());
+        }
       }
       if (!cmd.stream().isNonExistent()) {
         encoder().writeRstStream(ctx, stream.id(), Http2Error.CANCEL.code(), promise);
