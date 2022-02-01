@@ -64,13 +64,13 @@ public abstract class ServerProvider {
   /**
    * Creates a new builder with the given port.
    */
-  protected abstract ServerBuilder<?> builderForPort(int port);
+  public abstract ServerBuilder<?> builderForPort(int port);
 
   /**
    * Creates a new builder with the given port and credentials. Returns an error-string result if
    * unable to understand the credentials.
    */
-  protected NewServerBuilderResult newServerBuilderForPort(int port, ServerCredentials creds) {
+  public NewServerBuilderResult newServerBuilderForPort(int port, ServerCredentials creds) {
     return NewServerBuilderResult.error("ServerCredentials are unsupported");
   }
 
