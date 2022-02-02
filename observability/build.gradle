@@ -11,7 +11,8 @@ dependencies {
     def cloudLoggingVersion = '3.6.1'
 
     api project(':grpc-api'),
-            project(':grpc-alts')
+            project(':grpc-alts'),
+            libraries.google_auth_oauth2_http
 
     implementation project(':grpc-protobuf'),
             project(':grpc-stub'),
