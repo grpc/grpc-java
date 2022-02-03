@@ -28,8 +28,7 @@ dependencies {
 
     compileOnly libraries.javax_annotation
     testImplementation project(':grpc-testing'),
-            libraries.netty_epoll_x86, // for DomainSocketAddress
-	    libraries.netty_epoll_arm,
+            libraries.netty_epoll, // for DomainSocketAddress
             project(':grpc-core').sourceSets.test.output  // for FakeClock
     testCompileOnly libraries.javax_annotation
     signature "org.codehaus.mojo.signature:java17:1.0@signature"

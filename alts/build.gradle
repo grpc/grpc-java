@@ -39,8 +39,7 @@ dependencies {
         exclude group: 'junit', module: 'junit'
     }
     testRuntimeOnly libraries.netty_tcnative,
-            libraries.netty_epoll_x86,
-	    libraries.netty_epoll_arm
+            libraries.netty_epoll
     signature 'org.codehaus.mojo.signature:java17:1.0@signature'
 }
 
