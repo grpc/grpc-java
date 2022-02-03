@@ -20,6 +20,8 @@ import io.grpc.Internal;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import java.util.logging.LogRecord;
 
+/** An extension of java.util.logging.LogRecord which includes gRPC observability logging
+ * specific fields. */
 @Internal
 public final class LogRecordExtension extends LogRecord {
   public static GrpcLogRecord grpcLogRecord;
@@ -40,6 +42,6 @@ public final class LogRecordExtension extends LogRecord {
     return grpcLogRecord;
   }
 
-  // Adding a serial version UID ti suppress warning since LogRecord class is Serializable
+  // Adding a serial version UID since base class i.e LogRecord is Serializable
   private static final long serialVersionUID = 1L;
 }

@@ -24,18 +24,5 @@ dependencies {
     signature "org.codehaus.mojo.signature:java18:1.0@signature"
 }
 
-protobuf {
-    protoc {
-        artifact = "com.google.protobuf:protoc:${protocVersion}"
-    }
-    plugins {
-        grpc {
-            artifact = "io.grpc:protoc-gen-grpc-java:1.44.0"
-        }
-    }
-    generateProtoTasks {
-        all()*.plugins {
-            grpc {}
-        }
-    }
-}
+configureProtoCompilation()
+
