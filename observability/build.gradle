@@ -8,12 +8,11 @@ plugins {
 
 description = "gRPC: Observability"
 dependencies {
-    api project(':grpc-api'),
-            project(':grpc-protobuf'),
-            project(':grpc-stub')
+    api project(':grpc-api')
 
     implementation libraries.guava,
-            libraries.protobuf_util
+            project(':grpc-protobuf'),
+            project(':grpc-stub')
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
@@ -25,12 +24,18 @@ dependencies {
     signature "org.codehaus.mojo.signature:java18:1.0@signature"
 }
 
-configureProtoCompilation()
-
-jacocoTestReport {
-    classDirectories.from = sourceSets.main.output.collect {
-        fileTree(dir: it,
-                exclude: ['**/io/grpc/observabilitylog/v1/**']
-        )
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${protocVersion}"
+    }
+    plugins {
+        grpc {
+            artifact = "io.grpc:protoc-gen-grpc-java:1.44.0"
+        }
+    }
+    generateProtoTasks {
+        all()*.plugins {
+            grpc {}
+        }
     }
 }

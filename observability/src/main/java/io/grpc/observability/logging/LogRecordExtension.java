@@ -18,30 +18,28 @@ package io.grpc.observability.logging;
 
 import io.grpc.Internal;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
-import java.util.logging.Level;
 import java.util.logging.LogRecord;
 
 @Internal
 public final class LogRecordExtension extends LogRecord {
-  public GrpcLogRecord grpcLogRecord;
+  public static GrpcLogRecord grpcLogRecord;
 
-  public LogRecordExtension(Level level, String msg) {
-    super(level, msg);
+  public LogRecordExtension() {
+    super(null, null);
   }
 
-  // One option is to return proto builder
-  // Have to check if this is allowed when GrpcLogRecord is final
-  public GrpcLogRecord.Builder getGrpcLogRecordBuilder() {
+  public static GrpcLogRecord.Builder getGrpcLogRecordBuilder() {
     return GrpcLogRecord.newBuilder();
   }
 
-  public void setGrpcLogRecord(GrpcLogRecord record) {
+  private void setGrpcLogRecord(GrpcLogRecord record) {
     grpcLogRecord = record;
   }
 
-  public GrpcLogRecord getGrpcLogRecord() {
+  private GrpcLogRecord getGrpcLogRecord() {
     return grpcLogRecord;
   }
 
+  // Adding a serial version UID ti suppress warning since LogRecord class is Serializable
   private static final long serialVersionUID = 1L;
 }
