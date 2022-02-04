@@ -27,6 +27,7 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-protobuf'),
             project(':grpc-testing'),
+            project(':grpc-xds'),
             libraries.hdrhistogram,
             libraries.netty_tcnative,
             libraries.netty_epoll,

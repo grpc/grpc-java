@@ -28,8 +28,6 @@ import io.grpc.benchmarks.proto.Messages;
 import io.grpc.benchmarks.proto.Messages.PayloadType;
 import io.grpc.internal.testing.TestUtils;
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -47,7 +45,7 @@ public class ClientConfiguration implements Configuration {
   String authorityOverride = TestUtils.TEST_SERVER_HOST;
   boolean useDefaultCiphers;
   boolean directExecutor;
-  SocketAddress address;
+  String target;
   int channels = 4;
   int outstandingRpcsPerChannel = 10;
   int serverPayload;
@@ -66,7 +64,7 @@ public class ClientConfiguration implements Configuration {
   }
 
   public ManagedChannel newChannel() throws IOException {
-    return Utils.newClientChannel(transport, address, tls, testca, authorityOverride,
+    return Utils.newClientChannel(transport, target, tls, testca, authorityOverride,
         flowControlWindow, directExecutor);
   }
 
@@ -106,18 +104,10 @@ public class ClientConfiguration implements Configuration {
           throw new IllegalArgumentException(
               "Transport " + config.transport.name().toLowerCase() + " does not support TLS.");
         }
-
-        if (config.transport != Transport.OK_HTTP
-            && config.testca && config.address instanceof InetSocketAddress) {
-          // Override the socket address with the host from the testca.
-          InetSocketAddress address = (InetSocketAddress) config.address;
-          config.address = TestUtils.testServerAddress(address.getHostName(),
-                  address.getPort());
-        }
       }
 
       // Verify that the address type is correct for the transport type.
-      config.transport.validateSocketAddress(config.address);
+      config.transport.validateSocketAddress(config.target);
 
       return config;
     }
@@ -136,7 +126,7 @@ public class ClientConfiguration implements Configuration {
         + "(unix:///path/to/file), depending on the transport selected.", null, true) {
       @Override
       protected void setClientValue(ClientConfiguration config, String value) {
-        config.address = Utils.parseSocketAddress(value);
+        config.target = value;
       }
     },
     CHANNELS("INT", "Number of Channels.", "" + DEFAULT.channels) {

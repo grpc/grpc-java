@@ -18,20 +18,22 @@ package io.grpc.benchmarks;
 
 import static java.util.concurrent.ForkJoinPool.defaultForkJoinWorkerThreadFactory;
 
+import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.UncaughtExceptionHandlers;
 import com.google.protobuf.ByteString;
+import io.grpc.ChannelCredentials;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.benchmarks.proto.Messages;
 import io.grpc.benchmarks.proto.Messages.Payload;
 import io.grpc.benchmarks.proto.Messages.SimpleRequest;
 import io.grpc.benchmarks.proto.Messages.SimpleResponse;
-import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
-import io.grpc.okhttp.internal.Platform;
+import io.grpc.testing.TlsTesting;
 import io.netty.channel.epoll.EpollDomainSocketChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollSocketChannel;
@@ -79,15 +81,10 @@ public final class Utils {
   /**
    * Parse a {@link SocketAddress} from the given string.
    */
-  public static SocketAddress parseSocketAddress(String value) {
+  public static SocketAddress parseServerSocketAddress(String value) {
     if (value.startsWith(UNIX_DOMAIN_SOCKET_PREFIX)) {
-      // Unix Domain Socket address.
-      // Create the underlying file for the Unix Domain Socket.
-      String filePath = value.substring(UNIX_DOMAIN_SOCKET_PREFIX.length());
-      File file = new File(filePath);
-      if (!file.isAbsolute()) {
-        throw new IllegalArgumentException("File path must be absolute: " + filePath);
-      }
+      DomainSocketAddress domainAddress = parseUnixSocketAddress(value);
+      File file = new File(domainAddress.path());
       try {
         if (file.createNewFile()) {
           // If this application created the file, delete it when the application exits.
@@ -96,8 +93,7 @@ public final class Utils {
       } catch (IOException ex) {
         throw new RuntimeException(ex);
       }
-      // Create the SocketAddress referencing the file.
-      return new DomainSocketAddress(file);
+      return domainAddress;
     } else {
       // Standard TCP/IP address.
       String[] parts = value.split(":", 2);
@@ -111,37 +107,24 @@ public final class Utils {
     }
   }
 
-  private static OkHttpChannelBuilder newOkHttpClientChannel(
-      SocketAddress address, boolean tls, boolean testca) {
-    InetSocketAddress addr = (InetSocketAddress) address;
-    OkHttpChannelBuilder builder =
-        OkHttpChannelBuilder.forAddress(addr.getHostName(), addr.getPort());
-    if (!tls) {
-      builder.usePlaintext();
-    } else if (testca) {
-      try {
-        builder.sslSocketFactory(TestUtils.newSslSocketFactoryForCa(
-            Platform.get().getProvider(),
-            TestUtils.loadCert("ca.pem")));
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
+  private static DomainSocketAddress parseUnixSocketAddress(String value) {
+    Preconditions.checkArgument(
+        value.startsWith(UNIX_DOMAIN_SOCKET_PREFIX),
+        "Must start with %s: %s", UNIX_DOMAIN_SOCKET_PREFIX, value);
+    // Unix Domain Socket address.
+    // Create the underlying file for the Unix Domain Socket.
+    String filePath = value.substring(UNIX_DOMAIN_SOCKET_PREFIX.length());
+    File file = new File(filePath);
+    if (!file.isAbsolute()) {
+      throw new IllegalArgumentException("File path must be absolute: " + filePath);
     }
-    return builder;
+    // Create the SocketAddress referencing the file.
+    return new DomainSocketAddress(file);
   }
 
-  private static NettyChannelBuilder newNettyClientChannel(Transport transport,
-      SocketAddress address, boolean tls, boolean testca, int flowControlWindow)
-      throws IOException {
-    NettyChannelBuilder builder =
-        NettyChannelBuilder.forAddress(address).flowControlWindow(flowControlWindow);
-    if (!tls) {
-      builder.usePlaintext();
-    } else if (testca) {
-      File cert = TestUtils.loadCert("ca.pem");
-      builder.sslContext(GrpcSslContexts.forClient().trustManager(cert).build());
-    }
-
+  private static NettyChannelBuilder configureNetty(
+      NettyChannelBuilder builder, Transport transport, int flowControlWindow) {
+    builder.flowControlWindow(flowControlWindow);
     DefaultThreadFactory tf = new DefaultThreadFactory("client-elg-", true /*daemon */);
     switch (transport) {
       case NETTY_NIO:
@@ -194,17 +177,38 @@ public final class Utils {
   /**
    * Create a {@link ManagedChannel} for the given parameters.
    */
-  public static ManagedChannel newClientChannel(Transport transport, SocketAddress address,
+  public static ManagedChannel newClientChannel(Transport transport, String target,
         boolean tls, boolean testca, @Nullable String authorityOverride,
         int flowControlWindow, boolean directExecutor) {
+    ChannelCredentials credentials;
+    if (tls) {
+      if (testca) {
+        try {
+          credentials = TlsChannelCredentials.newBuilder()
+              .trustManager(TlsTesting.loadCert("ca.pem"))
+              .build();
+        } catch (IOException ex) {
+          throw new RuntimeException(ex);
+        }
+      } else {
+        credentials = TlsChannelCredentials.create();
+      }
+    } else {
+      credentials = InsecureChannelCredentials.create();
+    }
     ManagedChannelBuilder<?> builder;
     if (transport == Transport.OK_HTTP) {
-      builder = newOkHttpClientChannel(address, tls, testca);
+      builder = OkHttpChannelBuilder.forTarget(target, credentials)
+          .flowControlWindow(flowControlWindow);
     } else {
-      try {
-        builder = newNettyClientChannel(transport, address, tls, testca, flowControlWindow);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
+      if (target.startsWith(UNIX_DOMAIN_SOCKET_PREFIX)) {
+        builder = configureNetty(
+            NettyChannelBuilder.forAddress(parseUnixSocketAddress(target), credentials),
+            transport, flowControlWindow);
+      } else {
+        builder = configureNetty(
+            NettyChannelBuilder.forTarget(target, credentials),
+            transport, flowControlWindow);
       }
     }
     if (authorityOverride != null) {
