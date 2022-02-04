@@ -33,11 +33,13 @@ public final class LogRecordExtension extends LogRecord {
   public static GrpcLogRecord.Builder getGrpcLogRecordBuilder() {
     return GrpcLogRecord.newBuilder();
   }
-
+  
+  @SuppressWarnings("unused")
   private void setGrpcLogRecord(GrpcLogRecord record) {
     grpcLogRecord = record;
   }
 
+  @SuppressWarnings("unused")
   private GrpcLogRecord getGrpcLogRecord() {
     return grpcLogRecord;
   }
