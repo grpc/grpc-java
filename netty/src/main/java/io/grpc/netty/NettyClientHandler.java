@@ -642,7 +642,6 @@ class NettyClientHandler extends AbstractNettyHandler {
                 Status status = statusFromH2Error(
                     Status.Code.UNAVAILABLE, "GOAWAY closed buffered stream",
                     e.errorCode(), e.debugData());
-                status = status.withCause(cause);
                 cause = status.asRuntimeException();
                 stream.transportReportStatus(status, RpcProgress.MISCARRIED, true, new Metadata());
               } else if (cause instanceof StreamBufferingEncoder.Http2ChannelClosedException) {
