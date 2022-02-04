@@ -36,12 +36,12 @@ public final class NettyServerProvider extends ServerProvider {
   }
 
   @Override
-  public NettyServerBuilder builderForPort(int port) {
+  protected NettyServerBuilder builderForPort(int port) {
     return NettyServerBuilder.forPort(port);
   }
 
   @Override
-  public NewServerBuilderResult newServerBuilderForPort(int port, ServerCredentials creds) {
+  protected NewServerBuilderResult newServerBuilderForPort(int port, ServerCredentials creds) {
     ProtocolNegotiators.FromServerCredentialsResult result = ProtocolNegotiators.from(creds);
     if (result.error != null) {
       return NewServerBuilderResult.error(result.error);

@@ -19,6 +19,7 @@ package io.grpc.observability;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.ChannelCredentials;
+import io.grpc.InternalManagedChannelProvider;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.ManagedChannelRegistry;
@@ -67,18 +68,20 @@ final class LoggingChannelProvider extends ManagedChannelProvider {
   }
 
   @Override
-  public ManagedChannelBuilder<?> builderForAddress(String name, int port) {
-    return addInterceptor(prevProvider.builderForAddress(name, port));
+  protected ManagedChannelBuilder<?> builderForAddress(String name, int port) {
+    return addInterceptor(
+        InternalManagedChannelProvider.builderForAddress(prevProvider, name, port));
   }
 
   @Override
-  public ManagedChannelBuilder<?> builderForTarget(String target) {
-    return addInterceptor(prevProvider.builderForTarget(target));
+  protected ManagedChannelBuilder<?> builderForTarget(String target) {
+    return addInterceptor(InternalManagedChannelProvider.builderForTarget(prevProvider, target));
   }
 
   @Override
-  public NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds) {
-    NewChannelBuilderResult result = prevProvider.newChannelBuilder(target, creds);
+  protected NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds) {
+    NewChannelBuilderResult result = InternalManagedChannelProvider.newChannelBuilder(prevProvider,
+        target, creds);
     ManagedChannelBuilder<?> builder = result.getChannelBuilder();
     if (builder != null) {
       return NewChannelBuilderResult.channelBuilder(

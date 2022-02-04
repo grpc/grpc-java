@@ -18,6 +18,7 @@ package io.grpc.observability;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import io.grpc.InternalServerProvider;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerProvider;
@@ -67,13 +68,14 @@ final class LoggingServerProvider extends ServerProvider {
   }
 
   @Override
-  public ServerBuilder<?> builderForPort(int port) {
-    return addInterceptor(prevProvider.builderForPort(port));
+  protected ServerBuilder<?> builderForPort(int port) {
+    return addInterceptor(InternalServerProvider.builderForPort(prevProvider, port));
   }
 
   @Override
-  public NewServerBuilderResult newServerBuilderForPort(int port, ServerCredentials creds) {
-    ServerProvider.NewServerBuilderResult result = prevProvider.newServerBuilderForPort(port,
+  protected NewServerBuilderResult newServerBuilderForPort(int port, ServerCredentials creds) {
+    ServerProvider.NewServerBuilderResult result = InternalServerProvider.newServerBuilderForPort(
+        prevProvider, port,
         creds);
     ServerBuilder<?> builder = result.getServerBuilder();
     if (builder != null) {

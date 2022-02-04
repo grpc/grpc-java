@@ -171,7 +171,7 @@ public class ServerRegistryTest {
     }
 
     @Override
-    public ServerBuilder<?> builderForPort(int port) {
+    protected ServerBuilder<?> builderForPort(int port) {
       throw new UnsupportedOperationException();
     }
   }
