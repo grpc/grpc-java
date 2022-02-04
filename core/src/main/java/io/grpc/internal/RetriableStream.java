@@ -101,7 +101,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       false, 0);
 
   /**
-   * Either transparent retry happened or reached server's application logic.
+   * Either non-local transparent retry happened or reached server's application logic.
+   *
+   * <p>Note that local-only transparent retries are unlimited.
    */
   private final AtomicBoolean noMoreTransparentRetry = new AtomicBoolean();
 
