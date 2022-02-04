@@ -28,7 +28,10 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Any;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -41,6 +44,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.CustomClusterType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.LeastRequestLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
@@ -137,6 +141,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   @VisibleForTesting
   static final long DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE = 8 * 1024 * 1024L;
   @VisibleForTesting
+  static final int DEFAULT_LEAST_REQUEST_CHOICE_COUNT = 2;
+  @VisibleForTesting
   static final long MAX_RING_HASH_LB_POLICY_RING_SIZE = 8 * 1024 * 1024L;
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
@@ -158,7 +164,11 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   static boolean enableRouteLookup =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"))
           && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"));
-
+  @VisibleForTesting
+  static boolean enableLeastRequest =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
+          ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
+          : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
@@ -288,7 +298,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         errors.add("LDS response Resource index " + i + " - can't decode Listener: " + e);
         continue;
       }
-      String listenerName = listener.getName();
+      if (!isResourceNameValid(listener.getName(), resource.getTypeUrl())) {
+        errors.add(
+            "Unsupported resource name: " + listener.getName() + " for type: " + ResourceType.LDS);
+        continue;
+      }
+      String listenerName = canonifyResourceName(listener.getName());
       unpackedResources.add(listenerName);
 
       // Process Listener into LdsUpdate.
@@ -876,9 +891,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         throw new ResourceInvalidException(
             "HttpConnectionManager contains invalid RDS: missing config_source");
       }
-      if (!rds.getConfigSource().hasAds()) {
+      if (!rds.getConfigSource().hasAds() && !rds.getConfigSource().hasSelf()) {
         throw new ResourceInvalidException(
-            "HttpConnectionManager contains invalid RDS: must specify ADS");
+            "HttpConnectionManager contains invalid RDS: must specify ADS or self ConfigSource");
       }
       // Collect the RDS resource referenced by this HttpConnectionManager.
       rdsResources.add(rds.getRouteConfigName());
@@ -1415,7 +1430,13 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         errors.add("RDS response Resource index " + i + " - can't decode RouteConfiguration: " + e);
         continue;
       }
-      String routeConfigName = routeConfig.getName();
+      if (!isResourceNameValid(routeConfig.getName(), resource.getTypeUrl())) {
+        errors.add(
+            "Unsupported resource name: " + routeConfig.getName() + " for type: "
+                + ResourceType.RDS);
+        continue;
+      }
+      String routeConfigName = canonifyResourceName(routeConfig.getName());
       unpackedResources.add(routeConfigName);
 
       // Process RouteConfiguration into RdsUpdate.
@@ -1537,7 +1558,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         errors.add("CDS response Resource index " + i + " - can't decode Cluster: " + e);
         continue;
       }
-      String clusterName = cluster.getName();
+      if (!isResourceNameValid(cluster.getName(), resource.getTypeUrl())) {
+        errors.add(
+            "Unsupported resource name: " + cluster.getName() + " for type: " + ResourceType.CDS);
+        continue;
+      }
+      String clusterName = canonifyResourceName(cluster.getName());
 
       // Management server is required to always send newly requested resources, even if they
       // may have been sent previously (proactively). Thus, client does not need to cache
@@ -1614,6 +1640,17 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       updateBuilder.ringHashLbPolicy(minRingSize, maxRingSize);
     } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
       updateBuilder.roundRobinLbPolicy();
+    } else if (enableLeastRequest && cluster.getLbPolicy() == LbPolicy.LEAST_REQUEST) {
+      LeastRequestLbConfig lbConfig =  cluster.getLeastRequestLbConfig();
+      int choiceCount =
+              lbConfig.hasChoiceCount()
+                ? lbConfig.getChoiceCount().getValue()
+                : DEFAULT_LEAST_REQUEST_CHOICE_COUNT;
+      if (choiceCount < DEFAULT_LEAST_REQUEST_CHOICE_COUNT) {
+        throw new ResourceInvalidException(
+                "Cluster " + cluster.getName() + ": invalid least_request_lb_config: " + lbConfig);
+      }
+      updateBuilder.leastRequestLbPolicy(choiceCount);
     } else {
       throw new ResourceInvalidException(
           "Cluster " + cluster.getName() + ": unsupported lb policy: " + cluster.getLbPolicy());
@@ -1694,9 +1731,11 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       String edsServiceName = null;
       io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig edsClusterConfig =
           cluster.getEdsClusterConfig();
-      if (!edsClusterConfig.getEdsConfig().hasAds()) {
-        return StructOrError.fromError("Cluster " + clusterName
-            + ": field eds_cluster_config must be set to indicate to use EDS over ADS.");
+      if (!edsClusterConfig.getEdsConfig().hasAds()
+          && ! edsClusterConfig.getEdsConfig().hasSelf()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": field eds_cluster_config must be set to indicate to use"
+                + " EDS over ADS or self ConfigSource");
       }
       // If the service_name field is set, that value will be used for the EDS request.
       if (!edsClusterConfig.getServiceName().isEmpty()) {
@@ -1770,7 +1809,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
             "EDS response Resource index " + i + " - can't decode ClusterLoadAssignment: " + e);
         continue;
       }
-      String clusterName = assignment.getClusterName();
+      if (!isResourceNameValid(assignment.getClusterName(), resource.getTypeUrl())) {
+        errors.add("Unsupported resource name: " + assignment.getClusterName() + " for type: "
+            + ResourceType.EDS);
+        continue;
+      }
+      String clusterName = canonifyResourceName(assignment.getClusterName());
 
       // Skip information for clusters not requested.
       // Management server is required to always send newly requested resources, even if they
@@ -2028,12 +2072,31 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   }
 
   @Override
-  Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
-    Map<String, ResourceMetadata> metadataMap = new HashMap<>();
-    for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
-      metadataMap.put(entry.getKey(), entry.getValue().metadata);
-    }
-    return metadataMap;
+  ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
+      getSubscribedResourcesMetadataSnapshot() {
+    final SettableFuture<Map<ResourceType, Map<String, ResourceMetadata>>> future =
+        SettableFuture.create();
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        // A map from a "resource type" to a map ("resource name": "resource metadata")
+        ImmutableMap.Builder<ResourceType, Map<String, ResourceMetadata>> metadataSnapshot =
+            ImmutableMap.builder();
+        for (ResourceType type : ResourceType.values()) {
+          if (type == ResourceType.UNKNOWN) {
+            continue;
+          }
+          ImmutableMap.Builder<String, ResourceMetadata> metadataMap = ImmutableMap.builder();
+          for (Map.Entry<String, ResourceSubscriber> resourceEntry
+              : getSubscribedResourcesMap(type).entrySet()) {
+            metadataMap.put(resourceEntry.getKey(), resourceEntry.getValue().metadata);
+          }
+          metadataSnapshot.put(type, metadataMap.build());
+        }
+        future.set(metadataSnapshot.build());
+      }
+    });
+    return future;
   }
 
   @Override
@@ -2340,10 +2403,6 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     ResourceSubscriber(ResourceType type, String resource) {
       syncContext.throwIfNotInThisSynchronizationContext();
       this.type = type;
-      // TODO(zdapeng): Validate authority in resource URI for new-style resource name
-      //   when parsing XDS response.
-      // TODO(zdapeng): Canonicalize the resource name by sorting the context params in normal
-      //   lexicographic order.
       this.resource = resource;
       this.serverInfo = getServerInfo(resource);
       // Initialize metadata in UNKNOWN state to cover the case when resource subscriber,

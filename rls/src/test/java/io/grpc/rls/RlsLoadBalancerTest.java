@@ -118,15 +118,11 @@ public class RlsLoadBalancerTest {
   private MethodDescriptor<Object, Object> fakeSearchMethod;
   private MethodDescriptor<Object, Object> fakeRescueMethod;
   private RlsLoadBalancer rlsLb;
-  private boolean existingEnableOobChannelDirectPath;
   private String defaultTarget = "defaultTarget";
 
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
-
-    existingEnableOobChannelDirectPath = CachingRlsLbClient.enableOobChannelDirectPath;
-    CachingRlsLbClient.enableOobChannelDirectPath = false;
 
     fakeSearchMethod =
         MethodDescriptor.newBuilder()
@@ -168,7 +164,6 @@ public class RlsLoadBalancerTest {
   @After
   public void tearDown() throws Exception {
     rlsLb.shutdown();
-    CachingRlsLbClient.enableOobChannelDirectPath = existingEnableOobChannelDirectPath;
   }
 
   @Test

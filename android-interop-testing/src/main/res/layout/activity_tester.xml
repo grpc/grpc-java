@@ -46,6 +46,7 @@
       android:layout_height="wrap_content"
       android:onClick="startEmptyUnary"
       android:text="Empty Unary"
+      tools:ignore="OnClick"
       />
 
   <Button
@@ -54,6 +55,7 @@
       android:layout_height="wrap_content"
       android:onClick="startLargeUnary"
       android:text="Large Unary"
+      tools:ignore="OnClick"
       />
 
   <Button
@@ -62,6 +64,7 @@
       android:layout_height="wrap_content"
       android:onClick="startClientStreaming"
       android:text="Client Streaming"
+      tools:ignore="OnClick"
       />
 
   <Button
@@ -70,6 +73,7 @@
       android:layout_height="wrap_content"
       android:onClick="startServerStreaming"
       android:text="Server Streaming"
+      tools:ignore="OnClick"
       />
 
   <Button
@@ -78,6 +82,7 @@
       android:layout_height="wrap_content"
       android:onClick="startPingPong"
       android:text="Ping Pong"
+      tools:ignore="OnClick"
       />
 
   <TextView

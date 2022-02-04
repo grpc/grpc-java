@@ -27,6 +27,7 @@ import android.os.Build;
 import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.InlineMe;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
@@ -90,6 +91,9 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6043")
   @Deprecated
+  @InlineMe(
+      replacement = "AndroidChannelBuilder.usingBuilder(builder)",
+      imports = "io.grpc.android.AndroidChannelBuilder")
   public static AndroidChannelBuilder fromBuilder(ManagedChannelBuilder<?> builder) {
     return usingBuilder(builder);
   }
@@ -292,6 +296,11 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
       @Override
       public void onAvailable(Network network) {
         delegate.enterIdle();
+      }
+      @Override
+      public void onBlockedStatusChanged (Network network, boolean blocked) {
+        if (!blocked)
+          delegate.enterIdle();
       }
     }
 

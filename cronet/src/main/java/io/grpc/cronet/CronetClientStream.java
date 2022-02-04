@@ -44,7 +44,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -408,10 +408,10 @@ class CronetClientStream extends AbstractClientStream {
     // String and byte array.
     byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(headers);
     for (int i = 0; i < serializedHeaders.length; i += 2) {
-      String key = new String(serializedHeaders[i], StandardCharsets.UTF_8);
+      String key = new String(serializedHeaders[i], Charset.forName("UTF-8"));
       // TODO(ericgribkoff): log an error or throw an exception
       if (isApplicationHeader(key)) {
-        String value = new String(serializedHeaders[i + 1],  StandardCharsets.UTF_8);
+        String value = new String(serializedHeaders[i + 1], Charset.forName("UTF-8"));
         builder.addHeader(key, value);
       }
     }
@@ -588,8 +588,8 @@ class CronetClientStream extends AbstractClientStream {
 
       byte[][] headerValues = new byte[headerList.size()][];
       for (int i = 0; i < headerList.size(); i += 2) {
-        headerValues[i] = headerList.get(i).getBytes(StandardCharsets.UTF_8);
-        headerValues[i + 1] = headerList.get(i + 1).getBytes(StandardCharsets.UTF_8);
+        headerValues[i] = headerList.get(i).getBytes(Charset.forName("UTF-8"));
+        headerValues[i + 1] = headerList.get(i + 1).getBytes(Charset.forName("UTF-8"));
       }
       Metadata metadata =
           InternalMetadata.newMetadata(TransportFrameUtil.toRawSerializedHeaders(headerValues));

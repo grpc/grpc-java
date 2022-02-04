@@ -86,7 +86,7 @@ sourceSets {
 configureProtoCompilation()
 
 jar {
-    classifier = 'original'
+    archiveClassifier = 'original'
 }
 
 javadoc {
@@ -110,7 +110,7 @@ javadoc {
 
 def prefixName = 'io.grpc.xds'
 shadowJar {
-    classifier = null
+    archiveClassifier = null
     dependencies {
         include(project(':grpc-xds'))
     }

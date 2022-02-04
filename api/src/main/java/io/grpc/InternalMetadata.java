@@ -20,7 +20,6 @@ import com.google.common.io.BaseEncoding;
 import io.grpc.Metadata.AsciiMarshaller;
 import io.grpc.Metadata.BinaryStreamMarshaller;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 
 /**
  * Internal {@link Metadata} accessor. This is intended for use by io.grpc.internal, and the
@@ -43,7 +42,7 @@ public final class InternalMetadata {
    * Copy of StandardCharsets, which is only available on Java 1.7 and above.
    */
   @Internal
-  public static final Charset US_ASCII = StandardCharsets.US_ASCII;
+  public static final Charset US_ASCII = Charset.forName("US-ASCII");
 
   /**
    * An instance of base64 encoder that omits padding.

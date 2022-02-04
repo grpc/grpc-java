@@ -16,7 +16,7 @@
 
 package io.grpc;
 
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -57,7 +57,7 @@ public class StatusBenchmark {
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
   public String messageDecodePlain() {
     return Status.MESSAGE_KEY.parseBytes(
-        "Unexpected RST in stream".getBytes(StandardCharsets.US_ASCII));
+        "Unexpected RST in stream".getBytes(Charset.forName("US-ASCII")));
   }
 
   /**
@@ -68,7 +68,7 @@ public class StatusBenchmark {
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
   public String messageDecodeEscape() {
     return Status.MESSAGE_KEY.parseBytes(
-        "Some Error%10Wasabi and Horseradish are the same".getBytes(StandardCharsets.US_ASCII));
+        "Some Error%10Wasabi and Horseradish are the same".getBytes(Charset.forName("US-ASCII")));
   }
 
   /**
@@ -88,7 +88,7 @@ public class StatusBenchmark {
   @BenchmarkMode(Mode.SampleTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
   public Status codeDecode() {
-    return Status.CODE_KEY.parseBytes("15".getBytes(StandardCharsets.US_ASCII));
+    return Status.CODE_KEY.parseBytes("15".getBytes(Charset.forName("US-ASCII")));
   }
 }
 

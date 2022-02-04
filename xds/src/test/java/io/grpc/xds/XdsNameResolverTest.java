@@ -72,11 +72,13 @@ import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.EnvoyProtoData.Node;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
+import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
@@ -87,6 +89,7 @@ import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -267,12 +270,12 @@ public class XdsNameResolverTest {
         .node(Node.newBuilder().build())
         .authorities(
             ImmutableMap.of(targetAuthority, AuthorityInfo.create(
-                "xdstp://" + targetAuthority + "/envoy.config.listener.v3.Listener/%s",
+                "xdstp://" + targetAuthority + "/envoy.config.listener.v3.Listener/%s?foo=1&bar=2",
                 ImmutableList.<ServerInfo>of(ServerInfo.create(
                     "td.googleapis.com", InsecureChannelCredentials.create(), true)))))
         .build();
-    expectedLdsResourceName =
-        "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%5B::FFFF:129.144.52.38%5D:80";
+    expectedLdsResourceName = "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
+        + "%5B::FFFF:129.144.52.38%5D:80?bar=2&foo=1"; // query param canonified
     resolver = new XdsNameResolver(
         "xds.authority.com", serviceAuthority, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
@@ -494,7 +497,7 @@ public class XdsNameResolverTest {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
-    assertCallSelectResult(call1, configSelector, cluster1, null);
+    assertCallSelectClusterResult(call1, configSelector, cluster1, null);
   }
 
   @Test
@@ -513,7 +516,7 @@ public class XdsNameResolverTest {
     verify(mockListener).onResult(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
-    assertCallSelectResult(call1, configSelector, cluster1, 5.0);
+    assertCallSelectClusterResult(call1, configSelector, cluster1, 5.0);
   }
 
   @Test
@@ -562,7 +565,7 @@ public class XdsNameResolverTest {
   @Test
   public void resolved_simpleCallSucceeds() {
     InternalConfigSelector configSelector = resolveToClusters();
-    assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+    assertCallSelectClusterResult(call1, configSelector, cluster1, 15.0);
     testCall.deliverResponseHeaders();
     verifyNoMoreInteractions(mockListener);
   }
@@ -756,7 +759,7 @@ public class XdsNameResolverTest {
   @Test
   public void resolved_resourceUpdateAfterCallStarted() {
     InternalConfigSelector configSelector = resolveToClusters();
-    assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+    assertCallSelectClusterResult(call1, configSelector, cluster1, 15.0);
     TestCall<?, ?> firstCall = testCall;
 
     reset(mockListener);
@@ -784,7 +787,7 @@ public class XdsNameResolverTest {
         (Map<String, ?>) result.getServiceConfig().getConfig());
     assertThat(result.getAttributes().get(InternalConfigSelector.KEY))
         .isSameInstanceAs(configSelector);
-    assertCallSelectResult(call1, configSelector, "another-cluster", 20.0);
+    assertCallSelectClusterResult(call1, configSelector, "another-cluster", 20.0);
 
     firstCall.deliverErrorStatus();  // completes previous call
     verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
@@ -824,7 +827,7 @@ public class XdsNameResolverTest {
         (Map<String, ?>) result.getServiceConfig().getConfig());
     assertThat(result.getAttributes().get(InternalConfigSelector.KEY))
         .isSameInstanceAs(configSelector);
-    assertCallSelectResult(call1, configSelector, "another-cluster", 20.0);
+    assertCallSelectClusterResult(call1, configSelector, "another-cluster", 20.0);
 
     verifyNoMoreInteractions(mockListener);
   }
@@ -833,7 +836,7 @@ public class XdsNameResolverTest {
   @Test
   public void resolved_raceBetweenCallAndRepeatedResourceUpdate() {
     InternalConfigSelector configSelector = resolveToClusters();
-    assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+    assertCallSelectClusterResult(call1, configSelector, cluster1, 15.0);
 
     reset(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
@@ -873,13 +876,13 @@ public class XdsNameResolverTest {
                     TimeUnit.SECONDS.toNanos(15L), null),
                 ImmutableMap.<String, FilterConfig>of())));
     verifyNoMoreInteractions(mockListener);  // no cluster added/deleted
-    assertCallSelectResult(call1, configSelector, "another-cluster", 15.0);
+    assertCallSelectClusterResult(call1, configSelector, "another-cluster", 15.0);
   }
 
   @Test
   public void resolved_raceBetweenClusterReleasedAndResourceUpdateAddBackAgain() {
     InternalConfigSelector configSelector = resolveToClusters();
-    assertCallSelectResult(call1, configSelector, cluster1, 15.0);
+    assertCallSelectClusterResult(call1, configSelector, cluster1, 15.0);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
         Collections.singletonList(
@@ -933,8 +936,105 @@ public class XdsNameResolverTest {
         Arrays.asList(cluster1, cluster2), (Map<String, ?>) result.getServiceConfig().getConfig());
     assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
-    assertCallSelectResult(call1, configSelector, cluster2, 20.0);
-    assertCallSelectResult(call1, configSelector, cluster1, 20.0);
+    assertCallSelectClusterResult(call1, configSelector, cluster2, 20.0);
+    assertCallSelectClusterResult(call1, configSelector, cluster1, 20.0);
+  }
+
+  @Test
+  public void resolved_simpleCallSucceeds_routeToRls() {
+    when(mockRandom.nextInt(anyInt())).thenReturn(90, 10);
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdate(
+        Collections.singletonList(
+            Route.forAction(
+                RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+                RouteAction.forClusterSpecifierPlugin(
+                    NamedPluginConfig.create(
+                        "rls-plugin-foo",
+                        RlsPluginConfig.create(
+                            ImmutableMap.of("lookupService", "rls-cbt.googleapis.com"))),
+                    Collections.<HashPolicy>emptyList(),
+                    TimeUnit.SECONDS.toNanos(20L),
+                    null),
+                ImmutableMap.<String, FilterConfig>of())));
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    assertThat(result.getAddresses()).isEmpty();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> resultServiceConfig = (Map<String, ?>) result.getServiceConfig().getConfig();
+    List<Map<String, ?>> rawLbConfigs =
+        JsonUtil.getListOfObjects(resultServiceConfig, "loadBalancingConfig");
+    Map<String, ?> lbConfig = Iterables.getOnlyElement(rawLbConfigs);
+    assertThat(lbConfig.keySet()).containsExactly("cluster_manager_experimental");
+    Map<String, ?> clusterManagerLbConfig =
+        JsonUtil.getObject(lbConfig, "cluster_manager_experimental");
+    Map<String, ?> expectedRlsLbConfig = ImmutableMap.of(
+        "routeLookupConfig",
+        ImmutableMap.of("lookupService", "rls-cbt.googleapis.com"),
+        "childPolicy",
+        ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())),
+        "childPolicyConfigTargetFieldName",
+        "cluster");
+    Map<String, ?> expectedClusterManagerLbConfig = ImmutableMap.of(
+        "childPolicy",
+        ImmutableMap.of(
+            "cluster_specifier_plugin:rls-plugin-foo",
+            ImmutableMap.of(
+                "lbPolicy",
+                ImmutableList.of(ImmutableMap.of("rls_experimental", expectedRlsLbConfig)))));
+    assertThat(clusterManagerLbConfig).isEqualTo(expectedClusterManagerLbConfig);
+
+    assertThat(result.getAttributes().get(InternalXdsAttributes.XDS_CLIENT_POOL)).isNotNull();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+    assertCallSelectRlsPluginResult(
+        call1, configSelector, "rls-plugin-foo", 20.0);
+
+    // config changed
+    xdsClient.deliverLdsUpdate(
+        Collections.singletonList(
+            Route.forAction(
+                RouteMatch.withPathExactOnly(call1.getFullMethodNameForPath()),
+                RouteAction.forClusterSpecifierPlugin(
+                    NamedPluginConfig.create(
+                        "rls-plugin-foo",
+                        RlsPluginConfig.create(
+                            // changed
+                            ImmutableMap.of("lookupService", "rls-cbt-2.googleapis.com"))),
+                    Collections.<HashPolicy>emptyList(),
+                    // changed
+                    TimeUnit.SECONDS.toNanos(30L),
+                    null),
+                ImmutableMap.<String, FilterConfig>of())));
+    verify(mockListener, times(2)).onResult(resolutionResultCaptor.capture());
+    ResolutionResult result2 = resolutionResultCaptor.getValue();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> resultServiceConfig2 = (Map<String, ?>) result2.getServiceConfig().getConfig();
+    List<Map<String, ?>> rawLbConfigs2 =
+        JsonUtil.getListOfObjects(resultServiceConfig2, "loadBalancingConfig");
+    Map<String, ?> lbConfig2 = Iterables.getOnlyElement(rawLbConfigs2);
+    assertThat(lbConfig2.keySet()).containsExactly("cluster_manager_experimental");
+    Map<String, ?> clusterManagerLbConfig2 =
+        JsonUtil.getObject(lbConfig2, "cluster_manager_experimental");
+    Map<String, ?> expectedRlsLbConfig2 = ImmutableMap.of(
+        "routeLookupConfig",
+        ImmutableMap.of("lookupService", "rls-cbt-2.googleapis.com"),
+        "childPolicy",
+        ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())),
+        "childPolicyConfigTargetFieldName",
+        "cluster");
+    Map<String, ?> expectedClusterManagerLbConfig2 = ImmutableMap.of(
+        "childPolicy",
+        ImmutableMap.of(
+            "cluster_specifier_plugin:rls-plugin-foo",
+            ImmutableMap.of(
+                "lbPolicy",
+                ImmutableList.of(ImmutableMap.of("rls_experimental", expectedRlsLbConfig2)))));
+    assertThat(clusterManagerLbConfig2).isEqualTo(expectedClusterManagerLbConfig2);
+
+    InternalConfigSelector configSelector2 = result.getAttributes().get(InternalConfigSelector.KEY);
+    assertCallSelectRlsPluginResult(
+        call1, configSelector2, "rls-plugin-foo", 30.0);
   }
 
   @SuppressWarnings("unchecked")
@@ -945,7 +1045,7 @@ public class XdsNameResolverTest {
     assertThat((Map<String, ?>) result.getServiceConfig().getConfig()).isEmpty();
   }
 
-  private void assertCallSelectResult(
+  private void assertCallSelectClusterResult(
       CallInfo call, InternalConfigSelector configSelector, String expectedCluster,
       @Nullable Double expectedTimeoutSec) {
     Result result = configSelector.selectConfig(
@@ -956,7 +1056,7 @@ public class XdsNameResolverTest {
         call.methodDescriptor, CallOptions.DEFAULT, channel);
     clientCall.start(new NoopClientCallListener<Void>(), new Metadata());
     assertThat(testCall.callOptions.getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
-        .isEqualTo(expectedCluster);
+        .isEqualTo("cluster:" + expectedCluster);
     @SuppressWarnings("unchecked")
     Map<String, ?> config = (Map<String, ?>) result.getConfig();
     if (expectedTimeoutSec != null) {
@@ -971,6 +1071,28 @@ public class XdsNameResolverTest {
     } else {
       assertThat(config).isEmpty();
     }
+  }
+
+  private void assertCallSelectRlsPluginResult(
+      CallInfo call, InternalConfigSelector configSelector, String expectedPluginName,
+      Double expectedTimeoutSec) {
+    Result result = configSelector.selectConfig(
+        new PickSubchannelArgsImpl(call.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
+    assertThat(result.getStatus().isOk()).isTrue();
+    ClientInterceptor interceptor = result.getInterceptor();
+    ClientCall<Void, Void> clientCall = interceptor.interceptCall(
+        call.methodDescriptor, CallOptions.DEFAULT, channel);
+    clientCall.start(new NoopClientCallListener<Void>(), new Metadata());
+    assertThat(testCall.callOptions.getOption(XdsNameResolver.CLUSTER_SELECTION_KEY))
+        .isEqualTo("cluster_specifier_plugin:" + expectedPluginName);
+    @SuppressWarnings("unchecked")
+    Map<String, ?> config = (Map<String, ?>) result.getConfig();
+    List<Map<String, ?>> rawMethodConfigs =
+        JsonUtil.getListOfObjects(config, "methodConfig");
+    Map<String, ?> methodConfig = Iterables.getOnlyElement(rawMethodConfigs);
+    List<Map<String, ?>> methods = JsonUtil.getListOfObjects(methodConfig, "name");
+    assertThat(Iterables.getOnlyElement(methods)).isEmpty();
+    assertThat(JsonUtil.getString(methodConfig, "timeout")).isEqualTo(expectedTimeoutSec + "s");
   }
 
   @SuppressWarnings("unchecked")
@@ -1014,56 +1136,107 @@ public class XdsNameResolverTest {
         JsonUtil.getObject(lbConfig, "cluster_manager_experimental");
     Map<String, ?> clusterManagerChildLbPolicies =
         JsonUtil.getObject(clusterManagerLbConfig, "childPolicy");
-    assertThat(clusterManagerChildLbPolicies.keySet()).containsExactlyElementsIn(clusters);
+    List<String> expectedChildLbClusterNames = new ArrayList<>(clusters.size());
     for (String cluster : clusters) {
-      Map<String, ?> childLbConfig = JsonUtil.getObject(clusterManagerChildLbPolicies, cluster);
+      expectedChildLbClusterNames.add("cluster:" + cluster);
+    }
+    assertThat(clusterManagerChildLbPolicies.keySet())
+        .containsExactlyElementsIn(expectedChildLbClusterNames);
+    for (int i = 0; i < clusters.size(); i++) {
+      Map<String, ?> childLbConfig =
+          JsonUtil.getObject(clusterManagerChildLbPolicies, expectedChildLbClusterNames.get(i));
       assertThat(childLbConfig.keySet()).containsExactly("lbPolicy");
       List<Map<String, ?>> childLbConfigValues =
           JsonUtil.getListOfObjects(childLbConfig, "lbPolicy");
       Map<String, ?> cdsLbPolicy = Iterables.getOnlyElement(childLbConfigValues);
       assertThat(cdsLbPolicy.keySet()).containsExactly("cds_experimental");
       assertThat(JsonUtil.getObject(cdsLbPolicy, "cds_experimental"))
-          .containsExactly("cluster", cluster);
+          .containsExactly("cluster", clusters.get(i));
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
-  public void generateServiceConfig_forLoadBalancingConfig() throws IOException {
-    List<String> clusters = Arrays.asList("cluster-foo", "cluster-bar", "cluster-baz");
-    String expectedServiceConfigJson = "{\n"
-        + "  \"loadBalancingConfig\": [{\n"
-        + "    \"cluster_manager_experimental\": {\n"
-        + "      \"childPolicy\": {\n"
-        + "        \"cluster-foo\": {\n"
-        + "          \"lbPolicy\": [{\n"
-        + "            \"cds_experimental\": {\n"
-        + "              \"cluster\": \"cluster-foo\"\n"
-        + "            }\n"
-        + "          }]\n"
-        + "        },\n"
-        + "        \"cluster-bar\": {\n"
-        + "          \"lbPolicy\": [{\n"
-        + "            \"cds_experimental\": {\n"
-        + "              \"cluster\": \"cluster-bar\"\n"
-        + "            }\n"
-        + "          }]\n"
-        + "        },\n"
-        + "        \"cluster-baz\": {\n"
-        + "          \"lbPolicy\": [{\n"
-        + "            \"cds_experimental\": {\n"
-        + "              \"cluster\": \"cluster-baz\"\n"
-        + "            }\n"
-        + "          }]\n"
-        + "        }\n"
-        + "      }\n"
-        + "    }\n"
-        + "  }]\n"
-        + "}";
-    Map<String, ?> expectedServiceConfig =
-        (Map<String, ?>) JsonParser.parse(expectedServiceConfigJson);
-    assertThat(XdsNameResolver.generateServiceConfigWithLoadBalancingConfig(clusters))
-        .isEqualTo(expectedServiceConfig);
+  public void generateServiceConfig_forClusterManagerLoadBalancingConfig() throws IOException {
+    Route route1 = Route.forAction(
+        RouteMatch.withPathExactOnly("HelloService/hi"),
+        RouteAction.forCluster(
+            "cluster-foo", Collections.emptyList(), TimeUnit.SECONDS.toNanos(15L), null),
+        ImmutableMap.of());
+    Route route2 = Route.forAction(
+        RouteMatch.withPathExactOnly("HelloService/hello"),
+        RouteAction.forWeightedClusters(
+            ImmutableList.of(
+                ClusterWeight.create("cluster-bar", 50, ImmutableMap.of()),
+                ClusterWeight.create("cluster-baz", 50, ImmutableMap.of())),
+            ImmutableList.of(),
+            TimeUnit.SECONDS.toNanos(15L),
+            null),
+        ImmutableMap.of());
+    Map<String, ?> rlsConfig = ImmutableMap.of("lookupService", "rls.bigtable.google.com");
+    Route route3 = Route.forAction(
+        RouteMatch.withPathExactOnly("HelloService/greetings"),
+        RouteAction.forClusterSpecifierPlugin(
+            NamedPluginConfig.create("plugin-foo", RlsPluginConfig.create(rlsConfig)),
+            Collections.emptyList(),
+            TimeUnit.SECONDS.toNanos(20L),
+            null),
+        ImmutableMap.of());
+
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
+    VirtualHost virtualHost =
+        VirtualHost.create("virtualhost", Collections.singletonList(AUTHORITY),
+            ImmutableList.of(route1, route2, route3),
+            ImmutableMap.of());
+    xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
+
+    verify(mockListener).onResult(resolutionResultCaptor.capture());
+    String expectedServiceConfigJson =
+        "{\n"
+            + "  \"loadBalancingConfig\": [{\n"
+            + "    \"cluster_manager_experimental\": {\n"
+            + "      \"childPolicy\": {\n"
+            + "        \"cluster:cluster-foo\": {\n"
+            + "          \"lbPolicy\": [{\n"
+            + "            \"cds_experimental\": {\n"
+            + "              \"cluster\": \"cluster-foo\"\n"
+            + "            }\n"
+            + "          }]\n"
+            + "        },\n"
+            + "        \"cluster:cluster-bar\": {\n"
+            + "          \"lbPolicy\": [{\n"
+            + "            \"cds_experimental\": {\n"
+            + "              \"cluster\": \"cluster-bar\"\n"
+            + "            }\n"
+            + "          }]\n"
+            + "        },\n"
+            + "        \"cluster:cluster-baz\": {\n"
+            + "          \"lbPolicy\": [{\n"
+            + "            \"cds_experimental\": {\n"
+            + "              \"cluster\": \"cluster-baz\"\n"
+            + "            }\n"
+            + "          }]\n"
+            + "        },\n"
+            + "        \"cluster_specifier_plugin:plugin-foo\": {\n"
+            + "          \"lbPolicy\": [{\n"
+            + "            \"rls_experimental\": {\n"
+            + "              \"routeLookupConfig\": {\n"
+            + "                \"lookupService\": \"rls.bigtable.google.com\"\n"
+            + "              },\n"
+            + "              \"childPolicy\": [\n"
+            + "                {\"cds_experimental\": {}}\n"
+            + "              ],\n"
+            + "              \"childPolicyConfigTargetFieldName\": \"cluster\"\n"
+            + "            }\n"
+            + "          }]\n"
+            + "        }\n"
+            + "      }\n"
+            + "    }\n"
+            + "  }]\n"
+            + "}";
+    assertThat(resolutionResultCaptor.getValue().getServiceConfig().getConfig())
+        .isEqualTo(JsonParser.parse(expectedServiceConfigJson));
   }
 
   @SuppressWarnings("unchecked")
@@ -1780,6 +1953,31 @@ public class XdsNameResolverTest {
         null);
     assertThat(XdsNameResolver.matchRoute(routeMatch9, "/FooService/barMethod", headers, random))
         .isFalse();
+  }
+
+  /**
+   *  Tests compliance with RFC 3986 section 3.3
+   *  https://datatracker.ietf.org/doc/html/rfc3986#section-3.3
+   */
+  @Test
+  public void percentEncodePath()  {
+    String unreserved = "aAzZ09-._~";
+    assertThat(XdsNameResolver.percentEncodePath(unreserved)).isEqualTo(unreserved);
+
+    String subDelims = "!$&'(*+,;/=";
+    assertThat(XdsNameResolver.percentEncodePath(subDelims)).isEqualTo(subDelims);
+
+    String colonAndAt = ":@";
+    assertThat(XdsNameResolver.percentEncodePath(colonAndAt)).isEqualTo(colonAndAt);
+
+    String needBeEncoded = "?#[]";
+    assertThat(XdsNameResolver.percentEncodePath(needBeEncoded)).isEqualTo("%3F%23%5B%5D");
+
+    String ipv4 = "0.0.0.0:8080";
+    assertThat(XdsNameResolver.percentEncodePath(ipv4)).isEqualTo(ipv4);
+
+    String ipv6 = "[::1]:8080";
+    assertThat(XdsNameResolver.percentEncodePath(ipv6)).isEqualTo("%5B::1%5D:8080");
   }
 
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {

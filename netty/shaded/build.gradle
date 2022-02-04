@@ -29,12 +29,12 @@ dependencies {
 }
 
 jar {
-    // Must use a different classifier to avoid conflicting with shadowJar
-    classifier = 'original'
+    // Must use a different archiveClassifier to avoid conflicting with shadowJar
+    archiveClassifier = 'original'
 }
 
 shadowJar {
-    classifier = null
+    archiveClassifier = null
     dependencies {
         include(project(':grpc-netty'))
         include(dependency('io.netty:'))
