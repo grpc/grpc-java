@@ -473,6 +473,20 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
+  public void channelClosureShouldFailBufferedStreams() throws Exception {
+    receiveMaxConcurrentStreams(0);
+
+    ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
+    channel().pipeline().fireChannelInactive();
+
+    assertTrue(future.isDone());
+    assertFalse(future.isSuccess());
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(streamListener).closed(captor.capture(), same(MISCARRIED), ArgumentMatchers.notNull());
+    assertEquals(Status.UNAVAILABLE.getCode(), captor.getValue().getCode());
+  }
+
+  @Test
   public void receivedGoAwayShouldFailNewStreams() throws Exception {
     // Read a GOAWAY that indicates our stream was never processed by the server.
     channelRead(goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
