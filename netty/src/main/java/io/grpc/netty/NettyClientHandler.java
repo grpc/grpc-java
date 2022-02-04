@@ -673,11 +673,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     try {
       Status reason = cmd.reason();
       if (reason != null) {
-        if (cmd.stream().isNonExistent())  {
-          stream.transportReportStatus(reason, RpcProgress.MISCARRIED, true, new Metadata());
-        } else {
-          stream.transportReportStatus(reason, RpcProgress.PROCESSED, true, new Metadata());
-        }
+        stream.transportReportStatus(reason, true, new Metadata());
       }
       if (!cmd.stream().isNonExistent()) {
         encoder().writeRstStream(ctx, stream.id(), Http2Error.CANCEL.code(), promise);
