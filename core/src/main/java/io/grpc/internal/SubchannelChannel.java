@@ -43,7 +43,7 @@ final class SubchannelChannel extends Channel {
       Status.UNAVAILABLE.withDescription(
           "wait-for-ready RPC is not supported on Subchannel.asChannel()");
   private static final FailingClientTransport notReadyTransport =
-      new FailingClientTransport(NOT_READY_ERROR, RpcProgress.REFUSED);
+      new FailingClientTransport(NOT_READY_ERROR, RpcProgress.MISCARRIED);
   private final InternalSubchannel subchannel;
   private final Executor executor;
   private final ScheduledExecutorService deadlineCancellationExecutor;
