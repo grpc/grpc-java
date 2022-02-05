@@ -645,16 +645,12 @@ class NettyClientHandler extends AbstractNettyHandler {
                 cause = status.asRuntimeException();
                 stream.transportReportStatus(status, RpcProgress.MISCARRIED, true, new Metadata());
               } else if (cause instanceof StreamBufferingEncoder.Http2ChannelClosedException) {
-                if (lifecycleManager.getShutdownStatus() == null) {
-                  Status status = Status.UNAVAILABLE.withCause(cause)
+                Status status = lifecycleManager.getShutdownStatus();
+                if (status == null) {
+                  status = Status.UNAVAILABLE.withCause(cause)
                       .withDescription("Connection closed while stream is buffered");
-                  stream.transportReportStatus(
-                      status, RpcProgress.MISCARRIED, true, new Metadata());
-                } else {
-                  stream.transportReportStatus(
-                      lifecycleManager.getShutdownStatus(), RpcProgress.MISCARRIED, true,
-                      new Metadata());
                 }
+                stream.transportReportStatus(status, RpcProgress.MISCARRIED, true, new Metadata());
               }
               promise.setFailure(cause);
             }
