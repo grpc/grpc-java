@@ -18,6 +18,7 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.MISCARRIED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 
 import com.google.common.io.BaseEncoding;
@@ -372,7 +373,8 @@ class OkHttpClientStream extends AbstractClientStream {
         requestHeaders = null;
         pendingData.clear();
         canStart = false;
-        transportReportStatus(reason, true, trailers != null ? trailers : new Metadata());
+        transportReportStatus(
+            reason, MISCARRIED, true, trailers != null ? trailers : new Metadata());
       } else {
         // If pendingData is null, start must have already been called, which means synStream has
         // been called as well.

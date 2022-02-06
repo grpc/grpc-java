@@ -419,7 +419,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   void streamReadyToStart(OkHttpClientStream clientStream) {
     if (goAwayStatus != null) {
       clientStream.transportState().transportReportStatus(
-          goAwayStatus, RpcProgress.REFUSED, true, new Metadata());
+          goAwayStatus, RpcProgress.MISCARRIED, true, new Metadata());
     } else if (streams.size() >= maxConcurrentStreams) {
       pendingStreams.add(clientStream);
       setInUse(clientStream);
@@ -811,7 +811,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       }
 
       for (OkHttpClientStream stream : pendingStreams) {
-        stream.transportState().transportReportStatus(reason, true, new Metadata());
+        stream.transportState().transportReportStatus(
+            reason, RpcProgress.MISCARRIED, true, new Metadata());
         maybeClearInUse(stream);
       }
       pendingStreams.clear();
@@ -894,7 +895,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
       for (OkHttpClientStream stream : pendingStreams) {
         stream.transportState().transportReportStatus(
-            status, RpcProgress.REFUSED, true, new Metadata());
+            status, RpcProgress.MISCARRIED, true, new Metadata());
         maybeClearInUse(stream);
       }
       pendingStreams.clear();

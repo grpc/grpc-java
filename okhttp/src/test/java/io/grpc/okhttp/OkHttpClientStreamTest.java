@@ -20,8 +20,10 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -33,6 +35,8 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
+import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.NoopClientStreamListener;
 import io.grpc.internal.StatsTraceContext;
@@ -148,9 +152,13 @@ public class OkHttpClientStreamTest {
   @Test
   @SuppressWarnings("GuardedBy")
   public void start_alreadyCancelled() {
-    stream.start(new BaseClientStreamListener());
-    stream.cancel(Status.CANCELLED);
+    ClientStreamListener clientStreamListener = mock(ClientStreamListener.class);
+    stream.start(clientStreamListener);
+    Status cancelStatus = Status.CANCELLED;
+    stream.cancel(cancelStatus);
 
+    verify(clientStreamListener)
+        .closed(eq(cancelStatus), eq(RpcProgress.MISCARRIED), any(Metadata.class));
     stream.transportState().start(1234);
 
     verifyNoMoreInteractions(mockedFrameWriter);

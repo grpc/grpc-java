@@ -18,6 +18,7 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.MISCARRIED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
@@ -2080,7 +2081,7 @@ public class OkHttpClientTransportTest {
     listener3.waitUntilStreamClosed();
     assertNull(listener1.rpcProgress);
     assertEquals(REFUSED, listener2.rpcProgress);
-    assertEquals(REFUSED, listener3.rpcProgress);
+    assertEquals(MISCARRIED, listener3.rpcProgress);
     assertEquals(1, activeStreamCount());
     assertContainStream(DEFAULT_START_STREAM_ID);
 
@@ -2131,6 +2132,39 @@ public class OkHttpClientTransportTest {
     assertEquals(PROCESSED, listener3.rpcProgress);
 
     shutdownAndVerify();
+  }
+
+  @Test
+  public void shutdownNow_streamListenerRpcProgress() throws Exception {
+    initTransport();
+    setMaxConcurrentStreams(2);
+    MockStreamListener listener1 = new MockStreamListener();
+    MockStreamListener listener2 = new MockStreamListener();
+    MockStreamListener listener3 = new MockStreamListener();
+    OkHttpClientStream stream1 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream1.start(listener1);
+    OkHttpClientStream stream2 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream2.start(listener2);
+    OkHttpClientStream stream3 =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream3.start(listener3);
+    waitForStreamPending(1);
+
+    assertEquals(2, activeStreamCount());
+    assertContainStream(DEFAULT_START_STREAM_ID);
+    assertContainStream(DEFAULT_START_STREAM_ID + 2);
+
+    clientTransport.shutdownNow(Status.INTERNAL);
+
+    listener1.waitUntilStreamClosed();
+    listener2.waitUntilStreamClosed();
+    listener3.waitUntilStreamClosed();
+
+    assertEquals(PROCESSED, listener1.rpcProgress);
+    assertEquals(PROCESSED, listener2.rpcProgress);
+    assertEquals(MISCARRIED, listener3.rpcProgress);
   }
 
   private int activeStreamCount() {
