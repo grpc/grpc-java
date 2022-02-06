@@ -206,4 +206,41 @@ public class ServerSslContextProviderFactoryTest {
     verifyWatcher(sslContextProvider, watcherCaptor[0]);
     verifyWatcher(sslContextProvider, watcherCaptor[1]);
   }
+
+  @Test
+  public void createNewCertProviderServerSslContextProvider_withSans()
+      throws XdsInitializationException {
+    final CertificateProvider.DistributorWatcher[] watcherCaptor =
+        new CertificateProvider.DistributorWatcher[2];
+    createAndRegisterProviderProvider(certificateProviderRegistry, watcherCaptor, "testca", 0);
+    createAndRegisterProviderProvider(
+        certificateProviderRegistry, watcherCaptor, "file_watcher", 1);
+    CertificateValidationContext staticCertValidationContext =
+        CertificateValidationContext.newBuilder()
+            .addAllMatchSubjectAltNames(
+                ImmutableSet.of(
+                    StringMatcher.newBuilder().setExact("foo").build(),
+                    StringMatcher.newBuilder().setExact("bar").build()))
+            .build();
+
+    DownstreamTlsContext downstreamTlsContext =
+        CommonTlsContextTestsUtil.buildNewDownstreamTlsContextForCertProviderInstance(
+            "gcp_id",
+            "cert-default",
+            "file_provider",
+            "root-default",
+            /* alpnProtocols= */ null,
+            staticCertValidationContext,
+            /* requireClientCert= */ true);
+
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
+    serverSslContextProviderFactory =
+        new ServerSslContextProviderFactory(
+            bootstrapInfo, certProviderServerSslContextProviderFactory);
+    SslContextProvider sslContextProvider =
+        serverSslContextProviderFactory.create(downstreamTlsContext);
+    assertThat(sslContextProvider).isInstanceOf(CertProviderServerSslContextProvider.class);
+    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    verifyWatcher(sslContextProvider, watcherCaptor[1]);
+  }
 }
