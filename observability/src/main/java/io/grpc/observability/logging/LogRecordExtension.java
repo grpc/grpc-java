@@ -24,16 +24,13 @@ import java.util.logging.LogRecord;
  * specific fields. */
 @Internal
 public final class LogRecordExtension extends LogRecord {
-  public GrpcLogRecord grpcLogRecord;
+  public final GrpcLogRecord grpcLogRecord;
 
   public LogRecordExtension(GrpcLogRecord record) {
     super(null, null);
+    this.grpcLogRecord = record;
   }
   
-  public void setGrpcLogRecord(GrpcLogRecord record) {
-    grpcLogRecord = record;
-  }
-
   public GrpcLogRecord getGrpcLogRecord() {
     return grpcLogRecord;
   }
