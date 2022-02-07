@@ -811,6 +811,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       }
 
       for (OkHttpClientStream stream : pendingStreams) {
+        // in cases such as the connection fails to ACK keep-alive, pending streams should have a
+        // chance to retry and be routed to another connection.
         stream.transportState().transportReportStatus(
             reason, RpcProgress.MISCARRIED, true, new Metadata());
         maybeClearInUse(stream);
