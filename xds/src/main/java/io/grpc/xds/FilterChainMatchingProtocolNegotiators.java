@@ -39,7 +39,6 @@ import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
-import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.XdsServerWrapper.ServerRoutingConfig;
 import io.grpc.xds.internal.Matchers.CidrMatcher;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
@@ -189,7 +188,7 @@ final class FilterChainMatchingProtocolNegotiators {
         if (filterChains.size() == 1) {
           FilterChain selected = Iterables.getOnlyElement(filterChains);
           return new SelectedConfig(
-                  routingConfigs.get(selected), selected.getSslContextProviderSupplier());
+                  routingConfigs.get(selected), selected.sslContextProviderSupplier());
         }
         if (defaultRoutingConfig.get() != null) {
           return new SelectedConfig(defaultRoutingConfig, defaultSslContextProviderSupplier);
@@ -202,9 +201,9 @@ final class FilterChainMatchingProtocolNegotiators {
               Collection<FilterChain> filterChains) {
         ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
         for (FilterChain filterChain : filterChains) {
-          FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+          FilterChainMatch filterChainMatch = filterChain.filterChainMatch();
 
-          if (filterChainMatch.getApplicationProtocols().isEmpty()) {
+          if (filterChainMatch.applicationProtocols().isEmpty()) {
             filtered.add(filterChain);
           }
         }
@@ -216,9 +215,9 @@ final class FilterChainMatchingProtocolNegotiators {
               Collection<FilterChain> filterChains) {
         ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
         for (FilterChain filterChain : filterChains) {
-          FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+          FilterChainMatch filterChainMatch = filterChain.filterChainMatch();
 
-          String transportProtocol = filterChainMatch.getTransportProtocol();
+          String transportProtocol = filterChainMatch.transportProtocol();
           if (Strings.isNullOrEmpty(transportProtocol) || "raw_buffer".equals(transportProtocol)) {
             filtered.add(filterChain);
           }
@@ -231,9 +230,9 @@ final class FilterChainMatchingProtocolNegotiators {
               Collection<FilterChain> filterChains) {
         ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
         for (FilterChain filterChain : filterChains) {
-          FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+          FilterChainMatch filterChainMatch = filterChain.filterChainMatch();
 
-          if (filterChainMatch.getServerNames().isEmpty()) {
+          if (filterChainMatch.serverNames().isEmpty()) {
             filtered.add(filterChain);
           }
         }
@@ -245,9 +244,9 @@ final class FilterChainMatchingProtocolNegotiators {
               Collection<FilterChain> filterChains) {
         ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
         for (FilterChain filterChain : filterChains) {
-          FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+          FilterChainMatch filterChainMatch = filterChain.filterChainMatch();
 
-          if (filterChainMatch.getDestinationPort()
+          if (filterChainMatch.destinationPort()
                   == UInt32Value.getDefaultInstance().getValue()) {
             filtered.add(filterChain);
           }
@@ -260,9 +259,9 @@ final class FilterChainMatchingProtocolNegotiators {
         ArrayList<FilterChain> filteredOnMatch = new ArrayList<>(filterChains.size());
         ArrayList<FilterChain> filteredOnEmpty = new ArrayList<>(filterChains.size());
         for (FilterChain filterChain : filterChains) {
-          FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+          FilterChainMatch filterChainMatch = filterChain.filterChainMatch();
 
-          List<Integer> sourcePortsToMatch = filterChainMatch.getSourcePorts();
+          List<Integer> sourcePortsToMatch = filterChainMatch.sourcePorts();
           if (sourcePortsToMatch.isEmpty()) {
             filteredOnEmpty.add(filterChain);
           } else if (sourcePortsToMatch.contains(sourcePort)) {
@@ -278,9 +277,9 @@ final class FilterChainMatchingProtocolNegotiators {
               InetAddress destAddress) {
         ArrayList<FilterChain> filtered = new ArrayList<>(filterChains.size());
         for (FilterChain filterChain : filterChains) {
-          FilterChainMatch filterChainMatch = filterChain.getFilterChainMatch();
+          FilterChainMatch filterChainMatch = filterChain.filterChainMatch();
           ConnectionSourceType sourceType =
-                  filterChainMatch.getConnectionSourceType();
+                  filterChainMatch.connectionSourceType();
 
           boolean matching = false;
           if (sourceType == ConnectionSourceType.SAME_IP_OR_LOOPBACK) {
@@ -305,18 +304,18 @@ final class FilterChainMatchingProtocolNegotiators {
         boolean isIPv6 = address instanceof Inet6Address;
         List<CidrRange> cidrRanges =
                 forDestination
-                        ? filterChainMatch.getPrefixRanges()
-                        : filterChainMatch.getSourcePrefixRanges();
+                        ? filterChainMatch.prefixRanges()
+                        : filterChainMatch.sourcePrefixRanges();
         int matchingPrefixLength;
         if (cidrRanges.isEmpty()) { // if there is no CidrRange assume 0-length match
           matchingPrefixLength = 0;
         } else {
           matchingPrefixLength = -1;
           for (CidrRange cidrRange : cidrRanges) {
-            InetAddress cidrAddr = cidrRange.getAddressPrefix();
+            InetAddress cidrAddr = cidrRange.addressPrefix();
             boolean cidrIsIpv6 = cidrAddr instanceof Inet6Address;
             if (isIPv6 == cidrIsIpv6) {
-              int prefixLen = cidrRange.getPrefixLen();
+              int prefixLen = cidrRange.prefixLen();
               CidrMatcher matcher = CidrMatcher.create(cidrAddr, prefixLen);
               if (matcher.matches(address) && prefixLen > matchingPrefixLength) {
                 matchingPrefixLength = prefixLen;
@@ -335,7 +334,7 @@ final class FilterChainMatchingProtocolNegotiators {
         int topMatchingPrefixLen = -1;
         for (FilterChain filterChain : filterChains) {
           int currentMatchingPrefixLen = getMatchingPrefixLength(
-                  filterChain.getFilterChainMatch(), address, forDestination);
+                  filterChain.filterChainMatch(), address, forDestination);
 
           if (currentMatchingPrefixLen >= 0) {
             if (currentMatchingPrefixLen < topMatchingPrefixLen) {

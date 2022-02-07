@@ -234,8 +234,8 @@ public class XdsServerWrapperTest {
     assertThat(xdsClient.ldsResource).isNull();
     assertThat(xdsClient.shutdown).isTrue();
     verify(mockServer).shutdown();
-    assertThat(f0.getSslContextProviderSupplier().isShutdown()).isTrue();
-    assertThat(f1.getSslContextProviderSupplier().isShutdown()).isTrue();
+    assertThat(f0.sslContextProviderSupplier().isShutdown()).isTrue();
+    assertThat(f1.sslContextProviderSupplier().isShutdown()).isTrue();
     when(mockServer.isTerminated()).thenReturn(true);
     when(mockServer.awaitTermination(anyLong(), any(TimeUnit.class))).thenReturn(true);
     assertThat(xdsServerWrapper.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
@@ -276,8 +276,8 @@ public class XdsServerWrapperTest {
     assertThat(xdsClient.ldsResource).isNull();
     assertThat(xdsClient.shutdown).isTrue();
     verify(mockServer).shutdown();
-    assertThat(f0.getSslContextProviderSupplier().isShutdown()).isTrue();
-    assertThat(f1.getSslContextProviderSupplier().isShutdown()).isTrue();
+    assertThat(f0.sslContextProviderSupplier().isShutdown()).isTrue();
+    assertThat(f1.sslContextProviderSupplier().isShutdown()).isTrue();
     assertThat(start.isDone()).isFalse(); //shall we set initialStatus when shutdown?
   }
 
@@ -335,7 +335,7 @@ public class XdsServerWrapperTest {
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     when(mockServer.start()).thenThrow(new IOException("error!"));
     FilterChain filterChain = createFilterChain("filter-chain-1", createRds("rds"));
-    SslContextProviderSupplier sslSupplier = filterChain.getSslContextProviderSupplier();
+    SslContextProviderSupplier sslSupplier = filterChain.sslContextProviderSupplier();
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
     xdsClient.rdsCount.await(5, TimeUnit.SECONDS);
     xdsClient.deliverRdsUpdate("rds",
@@ -437,7 +437,7 @@ public class XdsServerWrapperTest {
                     ImmutableMap.<String, FilterConfig>of());
     HttpConnectionManager httpConnectionManager = HttpConnectionManager.forVirtualHosts(
             0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
-    EnvoyServerProtoData.FilterChain filterChain = new EnvoyServerProtoData.FilterChain(
+    EnvoyServerProtoData.FilterChain filterChain = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-foo", createMatch(), httpConnectionManager, createTls(),
             mock(TlsContextManager.class));
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain), null);
@@ -509,7 +509,7 @@ public class XdsServerWrapperTest {
     assertThat(realConfig.virtualHosts()).isEqualTo(
         Collections.singletonList(createVirtualHost("virtual-host-2")));
     assertThat(selectorManager.getSelectorToUpdateSelector().getDefaultSslContextProviderSupplier())
-        .isEqualTo(f3.getSslContextProviderSupplier());
+        .isEqualTo(f3.sslContextProviderSupplier());
   }
 
   @Test
@@ -557,7 +557,7 @@ public class XdsServerWrapperTest {
         Collections.singletonList(createVirtualHost("virtual-host-0")));
     assertThat(realConfig.interceptors()).isEqualTo(ImmutableMap.of());
     assertThat(selectorManager.getSelectorToUpdateSelector().getDefaultSslContextProviderSupplier())
-        .isSameInstanceAs(f2.getSslContextProviderSupplier());
+        .isSameInstanceAs(f2.sslContextProviderSupplier());
 
     EnvoyServerProtoData.FilterChain f3 = createFilterChain("filter-chain-3", createRds("r0"));
     EnvoyServerProtoData.FilterChain f4 = createFilterChain("filter-chain-4", createRds("r1"));
@@ -587,7 +587,7 @@ public class XdsServerWrapperTest {
     assertThat(realConfig.interceptors()).isEqualTo(ImmutableMap.of());
 
     assertThat(selectorManager.getSelectorToUpdateSelector().getDefaultSslContextProviderSupplier())
-        .isSameInstanceAs(f4.getSslContextProviderSupplier());
+        .isSameInstanceAs(f4.sslContextProviderSupplier());
     verify(mockServer, times(1)).start();
     xdsServerWrapper.shutdown();
     verify(mockServer, times(1)).shutdown();
@@ -675,7 +675,7 @@ public class XdsServerWrapperTest {
     verify(listener, times(1)).onNotServing(any(StatusException.class));
     verify(mockBuilder, times(1)).build();
     FilterChain filterChain0 = createFilterChain("filter-chain-0", createRds("rds"));
-    SslContextProviderSupplier sslSupplier0 = filterChain0.getSslContextProviderSupplier();
+    SslContextProviderSupplier sslSupplier0 = filterChain0.sslContextProviderSupplier();
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain0), null);
     xdsClient.ldsWatcher.onError(Status.INTERNAL);
     assertThat(selectorManager.getSelectorToUpdateSelector())
@@ -688,7 +688,7 @@ public class XdsServerWrapperTest {
     when(mockServer.start()).thenThrow(new IOException("error!"))
             .thenReturn(mockServer);
     FilterChain filterChain1 = createFilterChain("filter-chain-1", createRds("rds"));
-    SslContextProviderSupplier sslSupplier1 = filterChain1.getSslContextProviderSupplier();
+    SslContextProviderSupplier sslSupplier1 = filterChain1.sslContextProviderSupplier();
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain1), null);
     assertThat(sslSupplier0.isShutdown()).isTrue();
     xdsClient.deliverRdsUpdate("rds",
@@ -752,7 +752,7 @@ public class XdsServerWrapperTest {
             .thenThrow(new IOException("error2!"))
             .thenReturn(mockServer);
     FilterChain filterChain2 = createFilterChain("filter-chain-2", createRds("rds"));
-    SslContextProviderSupplier sslSupplier2 = filterChain2.getSslContextProviderSupplier();
+    SslContextProviderSupplier sslSupplier2 = filterChain2.sslContextProviderSupplier();
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain2), null);
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
@@ -780,7 +780,7 @@ public class XdsServerWrapperTest {
 
     // serving after not serving
     FilterChain filterChain3 = createFilterChain("filter-chain-2", createRds("rds"));
-    SslContextProviderSupplier sslSupplier3 = filterChain3.getSslContextProviderSupplier();
+    SslContextProviderSupplier sslSupplier3 = filterChain3.sslContextProviderSupplier();
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain3), null);
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-1")));
@@ -1187,7 +1187,7 @@ public class XdsServerWrapperTest {
   }
 
   private static FilterChain createFilterChain(String name, HttpConnectionManager hcm) {
-    return new EnvoyServerProtoData.FilterChain(name, createMatch(),
+    return EnvoyServerProtoData.FilterChain.create(name, createMatch(),
             hcm, createTls(), mock(TlsContextManager.class));
   }
 
@@ -1207,15 +1207,15 @@ public class XdsServerWrapperTest {
   }
 
   private static EnvoyServerProtoData.FilterChainMatch createMatch() {
-    return new EnvoyServerProtoData.FilterChainMatch(
-            0,
-            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-            Arrays.<String>asList(),
-            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-            EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList(),
-            Arrays.<String>asList(),
-            null);
+    return EnvoyServerProtoData.FilterChainMatch.create(
+        0,
+        ImmutableList.of(),
+        ImmutableList.of(),
+        ImmutableList.of(),
+        EnvoyServerProtoData.ConnectionSourceType.ANY,
+        ImmutableList.of(),
+        ImmutableList.of(),
+        "");
   }
 
   private static ServerRoutingConfig createRoutingConfig(String path, String domain,

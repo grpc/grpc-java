@@ -16,17 +16,14 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
+import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Internal;
 import io.grpc.xds.internal.sds.SslContextProviderSupplier;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
@@ -142,47 +139,16 @@ public final class EnvoyServerProtoData {
     }
   }
 
-  static final class CidrRange {
-    private final InetAddress addressPrefix;
-    private final int prefixLen;
+  @AutoValue
+  abstract static class CidrRange {
 
-    CidrRange(String addressPrefix, int prefixLen) throws UnknownHostException {
-      this.addressPrefix = InetAddress.getByName(addressPrefix);
-      this.prefixLen = prefixLen;
-    }
+    abstract InetAddress addressPrefix();
 
-    public InetAddress getAddressPrefix() {
-      return addressPrefix;
-    }
+    abstract int prefixLen();
 
-    public int getPrefixLen() {
-      return prefixLen;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      CidrRange cidrRange = (CidrRange) o;
-      return prefixLen == cidrRange.prefixLen
-          && java.util.Objects.equals(addressPrefix, cidrRange.addressPrefix);
-    }
-
-    @Override
-    public int hashCode() {
-      return java.util.Objects.hash(addressPrefix, prefixLen);
-    }
-
-    @Override
-    public String toString() {
-      return "CidrRange{"
-          + "addressPrefix='" + addressPrefix + '\''
-          + ", prefixLen=" + prefixLen
-          + '}';
+    static CidrRange create(String addressPrefix, int prefixLen) throws UnknownHostException {
+      return new AutoValue_EnvoyServerProtoData_CidrRange(
+          InetAddress.getByName(addressPrefix), prefixLen);
     }
   }
 
@@ -201,189 +167,64 @@ public final class EnvoyServerProtoData {
    * Corresponds to Envoy proto message
    * {@link io.envoyproxy.envoy.api.v2.listener.FilterChainMatch}.
    */
-  static final class FilterChainMatch {
-    private final int destinationPort;
-    private final List<CidrRange> prefixRanges;
-    private final List<String> applicationProtocols;
-    private final List<CidrRange> sourcePrefixRanges;
-    private final ConnectionSourceType sourceType;
-    private final List<Integer> sourcePorts;
-    private final List<String> serverNames;
-    private final String transportProtocol;
+  @AutoValue
+  abstract static class FilterChainMatch {
 
-    @VisibleForTesting
-    FilterChainMatch(
-        int destinationPort,
-        List<CidrRange> prefixRanges,
-        List<String> applicationProtocols,
-        List<CidrRange> sourcePrefixRanges,
-        ConnectionSourceType sourceType,
-        List<Integer> sourcePorts,
-        List<String> serverNames,
-        String transportProtocol) {
-      this.destinationPort = destinationPort;
-      this.prefixRanges = Collections.unmodifiableList(prefixRanges);
-      this.applicationProtocols = Collections.unmodifiableList(applicationProtocols);
-      this.sourcePrefixRanges = sourcePrefixRanges;
-      this.sourceType = sourceType;
-      this.sourcePorts = sourcePorts;
-      this.serverNames = Collections.unmodifiableList(serverNames);
-      this.transportProtocol = transportProtocol;
-    }
+    abstract int destinationPort();
 
-    public int getDestinationPort() {
-      return destinationPort;
-    }
+    abstract ImmutableList<CidrRange> prefixRanges();
 
-    public List<CidrRange> getPrefixRanges() {
-      return prefixRanges;
-    }
+    abstract ImmutableList<String> applicationProtocols();
 
-    public List<String> getApplicationProtocols() {
-      return applicationProtocols;
-    }
+    abstract ImmutableList<CidrRange> sourcePrefixRanges();
 
-    public List<CidrRange> getSourcePrefixRanges() {
-      return sourcePrefixRanges;
-    }
+    abstract ConnectionSourceType connectionSourceType();
 
-    public ConnectionSourceType getConnectionSourceType() {
-      return sourceType;
-    }
+    abstract ImmutableList<Integer> sourcePorts();
 
-    public List<Integer> getSourcePorts() {
-      return sourcePorts;
-    }
+    abstract ImmutableList<String> serverNames();
 
-    public List<String> getServerNames() {
-      return serverNames;
-    }
+    abstract String transportProtocol();
 
-    public String getTransportProtocol() {
-      return transportProtocol;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      FilterChainMatch that = (FilterChainMatch) o;
-      return destinationPort == that.destinationPort
-          && Objects.equals(prefixRanges, that.prefixRanges)
-          && Objects.equals(applicationProtocols, that.applicationProtocols)
-          && Objects.equals(sourcePrefixRanges, that.sourcePrefixRanges)
-          && sourceType == that.sourceType
-          && Objects.equals(sourcePorts, that.sourcePorts)
-          && Objects.equals(serverNames, that.serverNames)
-          && Objects.equals(transportProtocol, that.transportProtocol);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(
-          destinationPort,
-          prefixRanges,
-          applicationProtocols,
-          sourcePrefixRanges,
-          sourceType,
-          sourcePorts,
-          serverNames,
-          transportProtocol);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-              .add("destinationPort", destinationPort)
-              .add("prefixRanges", prefixRanges)
-              .add("applicationProtocols", applicationProtocols)
-              .add("sourcePrefixRanges", sourcePrefixRanges)
-              .add("sourceType", sourceType)
-              .add("sourcePorts", sourcePorts)
-              .add("serverNames", serverNames)
-              .add("transportProtocol", transportProtocol)
-              .toString();
+    public static FilterChainMatch create(int destinationPort,
+        ImmutableList<CidrRange> prefixRanges,
+        ImmutableList<String> applicationProtocols, ImmutableList<CidrRange> sourcePrefixRanges,
+        ConnectionSourceType connectionSourceType, ImmutableList<Integer> sourcePorts,
+        ImmutableList<String> serverNames, String transportProtocol) {
+      return new AutoValue_EnvoyServerProtoData_FilterChainMatch(
+          destinationPort, prefixRanges, applicationProtocols, sourcePrefixRanges,
+          connectionSourceType, sourcePorts, serverNames, transportProtocol);
     }
   }
 
   /**
    * Corresponds to Envoy proto message {@link io.envoyproxy.envoy.api.v2.listener.FilterChain}.
    */
-  static final class FilterChain {
-    // possibly empty
-    private final String name;
-    // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.
-    private final FilterChainMatch filterChainMatch;
-    private final HttpConnectionManager httpConnectionManager;
-    @Nullable
-    private final SslContextProviderSupplier sslContextProviderSupplier;
+  @AutoValue
+  abstract static class FilterChain {
 
-    FilterChain(
+    // possibly empty
+    abstract String name();
+
+    // TODO(sanjaypujare): flatten structure by moving FilterChainMatch class members here.
+    abstract FilterChainMatch filterChainMatch();
+
+    abstract HttpConnectionManager httpConnectionManager();
+
+    @Nullable
+    abstract SslContextProviderSupplier sslContextProviderSupplier();
+
+    static FilterChain create(
         String name,
         FilterChainMatch filterChainMatch,
         HttpConnectionManager httpConnectionManager,
         @Nullable DownstreamTlsContext downstreamTlsContext,
         TlsContextManager tlsContextManager) {
-      SslContextProviderSupplier sslContextProviderSupplier1 = downstreamTlsContext == null ? null
-          : new SslContextProviderSupplier(downstreamTlsContext, tlsContextManager);
-      this.name = checkNotNull(name, "name");
-      // TODO(chengyuanzhang): enforce non-null, change tests to use a default/empty
-      //  FilterChainMatch instead of null, as that's how the proto is converted.
-      this.filterChainMatch = filterChainMatch;
-      this.sslContextProviderSupplier = sslContextProviderSupplier1;
-      this.httpConnectionManager = checkNotNull(httpConnectionManager, "httpConnectionManager");
-    }
-
-    String getName() {
-      return name;
-    }
-
-    public FilterChainMatch getFilterChainMatch() {
-      return filterChainMatch;
-    }
-
-    HttpConnectionManager getHttpConnectionManager() {
-      return httpConnectionManager;
-    }
-
-    @Nullable
-    public SslContextProviderSupplier getSslContextProviderSupplier() {
-      return sslContextProviderSupplier;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      FilterChain that = (FilterChain) o;
-      return Objects.equals(name, that.name)
-          && Objects.equals(filterChainMatch, that.filterChainMatch)
-          && Objects.equals(httpConnectionManager, that.httpConnectionManager)
-          && Objects.equals(sslContextProviderSupplier, that.sslContextProviderSupplier);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(
+      SslContextProviderSupplier sslContextProviderSupplier =
+          downstreamTlsContext == null
+              ? null : new SslContextProviderSupplier(downstreamTlsContext, tlsContextManager);
+      return new AutoValue_EnvoyServerProtoData_FilterChain(
           name, filterChainMatch, httpConnectionManager, sslContextProviderSupplier);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("name", name)
-          .add("filterChainMatch", filterChainMatch)
-          .add("httpConnectionManager", httpConnectionManager)
-          .add("sslContextProviderSupplier", sslContextProviderSupplier)
-          .toString();
     }
   }
 
@@ -391,69 +232,26 @@ public final class EnvoyServerProtoData {
    * Corresponds to Envoy proto message {@link io.envoyproxy.envoy.api.v2.Listener} & related
    * classes.
    */
-  public static final class Listener {
-    private final String name;
-    @Nullable
-    private final String address;
-    private final List<FilterChain> filterChains;
-    @Nullable
-    private final FilterChain defaultFilterChain;
+  @AutoValue
+  abstract static class Listener {
 
-    /** Construct a Listener. */
-    public Listener(String name, @Nullable String address,
-        List<FilterChain> filterChains, @Nullable FilterChain defaultFilterChain) {
-      this.name = checkNotNull(name, "name");
-      this.address = address;
-      this.filterChains = Collections.unmodifiableList(checkNotNull(filterChains, "filterChains"));
-      this.defaultFilterChain = defaultFilterChain;
-    }
-
-    public String getName() {
-      return name;
-    }
+    abstract String name();
 
     @Nullable
-    public String getAddress() {
-      return address;
-    }
+    abstract String address();
 
-    public List<FilterChain> getFilterChains() {
-      return filterChains;
-    }
+    abstract ImmutableList<FilterChain> filterChains();
 
     @Nullable
-    public FilterChain getDefaultFilterChain() {
-      return defaultFilterChain;
-    }
+    abstract FilterChain defaultFilterChain();
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      Listener listener = (Listener) o;
-      return Objects.equals(name, listener.name)
-          && Objects.equals(address, listener.address)
-          && Objects.equals(filterChains, listener.filterChains)
-          && Objects.equals(defaultFilterChain, listener.defaultFilterChain);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(name, address, filterChains, defaultFilterChain);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("name", name)
-          .add("address", address)
-          .add("filterChains", filterChains)
-          .add("defaultFilterChain", defaultFilterChain)
-          .toString();
+    static Listener create(
+        String name,
+        @Nullable String address,
+        ImmutableList<FilterChain> filterChains,
+        @Nullable FilterChain defaultFilterChain) {
+      return new AutoValue_EnvoyServerProtoData_Listener(name, address, filterChains,
+          defaultFilterChain);
     }
   }
 }
