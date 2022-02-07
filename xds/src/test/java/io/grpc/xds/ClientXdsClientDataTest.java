@@ -2180,7 +2180,7 @@ public class ClientXdsClientDataTest {
     EnvoyServerProtoData.FilterChain parsedFilterChain2 = ClientXdsClient.parseFilterChain(
         filterChain2, new HashSet<String>(), null, filterRegistry, null,
         null, true /* does not matter */);
-    assertThat(parsedFilterChain1.getName()).isEqualTo(parsedFilterChain2.getName());
+    assertThat(parsedFilterChain1.name()).isEqualTo(parsedFilterChain2.name());
   }
 
   @Test

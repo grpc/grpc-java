@@ -1282,10 +1282,10 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, packedListener, VERSION_1, "0000");
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
 
-    assertThat(ldsUpdateCaptor.getValue().listener().getFilterChains()).hasSize(1);
+    assertThat(ldsUpdateCaptor.getValue().listener().filterChains()).hasSize(1);
     FilterChain parsedFilterChain = Iterables.getOnlyElement(
-        ldsUpdateCaptor.getValue().listener().getFilterChains());
-    assertThat(parsedFilterChain.getHttpConnectionManager().rdsName()).isEqualTo(RDS_RESOURCE);
+        ldsUpdateCaptor.getValue().listener().filterChains());
+    assertThat(parsedFilterChain.httpConnectionManager().rdsName()).isEqualTo(RDS_RESOURCE);
     verifyResourceMetadataAcked(LDS, LISTENER_RESOURCE, packedListener, VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
@@ -1310,10 +1310,10 @@ public abstract class ClientXdsClientTestBase {
         Any.pack(mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain));
     call.sendResponse(LDS, packedListener, VERSION_2, "0001");
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().listener().getFilterChains()).hasSize(1);
+    assertThat(ldsUpdateCaptor.getValue().listener().filterChains()).hasSize(1);
     parsedFilterChain = Iterables.getOnlyElement(
-        ldsUpdateCaptor.getValue().listener().getFilterChains());
-    assertThat(parsedFilterChain.getHttpConnectionManager().virtualHosts()).hasSize(VHOST_SIZE);
+        ldsUpdateCaptor.getValue().listener().filterChains());
+    assertThat(parsedFilterChain.httpConnectionManager().virtualHosts()).hasSize(VHOST_SIZE);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
     verifyResourceMetadataAcked(
@@ -2608,15 +2608,15 @@ public abstract class ClientXdsClientTestBase {
         ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     EnvoyServerProtoData.Listener parsedListener = ldsUpdateCaptor.getValue().listener();
-    assertThat(parsedListener.getName()).isEqualTo(LISTENER_RESOURCE);
-    assertThat(parsedListener.getAddress()).isEqualTo("0.0.0.0:7000");
-    assertThat(parsedListener.getDefaultFilterChain()).isNull();
-    assertThat(parsedListener.getFilterChains()).hasSize(1);
-    FilterChain parsedFilterChain = Iterables.getOnlyElement(parsedListener.getFilterChains());
-    assertThat(parsedFilterChain.getFilterChainMatch().getApplicationProtocols()).isEmpty();
-    assertThat(parsedFilterChain.getHttpConnectionManager().rdsName())
+    assertThat(parsedListener.name()).isEqualTo(LISTENER_RESOURCE);
+    assertThat(parsedListener.address()).isEqualTo("0.0.0.0:7000");
+    assertThat(parsedListener.defaultFilterChain()).isNull();
+    assertThat(parsedListener.filterChains()).hasSize(1);
+    FilterChain parsedFilterChain = Iterables.getOnlyElement(parsedListener.filterChains());
+    assertThat(parsedFilterChain.filterChainMatch().applicationProtocols()).isEmpty();
+    assertThat(parsedFilterChain.httpConnectionManager().rdsName())
         .isEqualTo("route-foo.googleapis.com");
-    assertThat(parsedFilterChain.getHttpConnectionManager().httpFilterConfigs().get(0).filterConfig)
+    assertThat(parsedFilterChain.httpConnectionManager().httpFilterConfigs().get(0).filterConfig)
         .isEqualTo(RouterFilter.ROUTER_CONFIG);
 
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();

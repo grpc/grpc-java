@@ -49,6 +49,7 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
+import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.Filter.FilterConfig;
@@ -364,15 +365,15 @@ public class XdsSdsClientServerTest {
       String name, String address, DownstreamTlsContext tlsContext,
       TlsContextManager tlsContextManager) {
     EnvoyServerProtoData.FilterChainMatch filterChainMatch =
-        new EnvoyServerProtoData.FilterChainMatch(
+        EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-            Arrays.<String>asList(),
-            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-            null,
-            Arrays.<Integer>asList(),
-            Arrays.<String>asList(),
-            null);
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     String fullPath = "/" + SimpleServiceGrpc.SERVICE_NAME + "/" + "UnaryRpc";
     RouteMatch routeMatch =
             RouteMatch.create(
@@ -386,11 +387,11 @@ public class XdsSdsClientServerTest {
     HttpConnectionManager httpConnectionManager = HttpConnectionManager.forVirtualHosts(
             0L, Collections.singletonList(virtualHost),
             new ArrayList<NamedFilterConfig>());
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
         "filter-chain-foo", filterChainMatch, httpConnectionManager, tlsContext,
         tlsContextManager);
-    EnvoyServerProtoData.Listener listener =
-        new EnvoyServerProtoData.Listener(name, address, Arrays.asList(defaultFilterChain), null);
+    EnvoyServerProtoData.Listener listener = EnvoyServerProtoData.Listener.create(
+        name, address, ImmutableList.of(defaultFilterChain), null);
     return listener;
   }
 
