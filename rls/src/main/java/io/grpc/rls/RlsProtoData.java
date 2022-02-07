@@ -202,7 +202,7 @@ final class RlsProtoData {
       @Nullable
       abstract String method();
 
-      static Name create(String service, String method) {
+      static Name create(String service, @Nullable String method) {
         return new AutoValue_RlsProtoData_GrpcKeyBuilder_Name(service, method);
       }
     }
