@@ -2619,6 +2619,31 @@ public class ClientXdsClientDataTest {
         .isEqualTo(expectedCanonifiedName);
   }
 
+  /**
+   *  Tests compliance with RFC 3986 section 3.3
+   *  https://datatracker.ietf.org/doc/html/rfc3986#section-3.3
+   */
+  @Test
+  public void percentEncodePath()  {
+    String unreserved = "aAzZ09-._~";
+    assertThat(XdsClient.percentEncodePath(unreserved)).isEqualTo(unreserved);
+
+    String subDelims = "!$&'(*+,;/=";
+    assertThat(XdsClient.percentEncodePath(subDelims)).isEqualTo(subDelims);
+
+    String colonAndAt = ":@";
+    assertThat(XdsClient.percentEncodePath(colonAndAt)).isEqualTo(colonAndAt);
+
+    String needBeEncoded = "?#[]";
+    assertThat(XdsClient.percentEncodePath(needBeEncoded)).isEqualTo("%3F%23%5B%5D");
+
+    String ipv4 = "0.0.0.0:8080";
+    assertThat(XdsClient.percentEncodePath(ipv4)).isEqualTo(ipv4);
+
+    String ipv6 = "[::1]:8080";
+    assertThat(XdsClient.percentEncodePath(ipv6)).isEqualTo("%5B::1%5D:8080");
+  }
+
   private static Filter buildHttpConnectionManagerFilter(HttpFilter... httpFilters) {
     return Filter.newBuilder()
         .setName("envoy.http_connection_manager")
