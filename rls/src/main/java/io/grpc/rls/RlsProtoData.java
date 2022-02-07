@@ -262,52 +262,17 @@ final class RlsProtoData {
      * required and includes the proto package name. The method name may be omitted, in which case
      * any method on the given service is matched.
      */
-    static final class Name {
+    @AutoValue
+    @Immutable
+    abstract static class Name {
 
-      private final String service;
-
-      @Nullable
-      private final String method;
-
-      /** The primary constructor. */
-      Name(String service, @Nullable String method) {
-        this.service = service;
-        this.method = method;
-      }
-
-      String getService() {
-        return service;
-      }
+      abstract String service();
 
       @Nullable
-      String getMethod() {
-        return method;
-      }
+      abstract String method();
 
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-          return false;
-        }
-        Name name = (Name) o;
-        return Objects.equal(service, name.service)
-            && Objects.equal(method, name.method);
-      }
-
-      @Override
-      public int hashCode() {
-        return Objects.hashCode(service, method);
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this)
-            .add("service", service)
-            .add("method", method)
-            .toString();
+      static Name create(String service, String method) {
+        return new AutoValue_RlsProtoData_GrpcKeyBuilder_Name(service, method);
       }
     }
   }

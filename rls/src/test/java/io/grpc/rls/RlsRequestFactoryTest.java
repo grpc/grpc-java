@@ -39,27 +39,27 @@ public class RlsRequestFactoryTest {
       RouteLookupConfig.builder()
           .grpcKeyBuilders(ImmutableList.of(
               GrpcKeyBuilder.create(
-                  ImmutableList.of(new Name("com.google.service1", "Create")),
+                  ImmutableList.of(Name.create("com.google.service1", "Create")),
                   ImmutableList.of(
                       NameMatcher.create("user", ImmutableList.of("User", "Parent")),
                       NameMatcher.create("id", ImmutableList.of("X-Google-Id"))),
                   ExtraKeys.create("server-1", null, null),
                   ImmutableMap.of("const-key-1", "const-value-1")),
               GrpcKeyBuilder.create(
-                  ImmutableList.of(new Name("com.google.service1", "*")),
+                  ImmutableList.of(Name.create("com.google.service1", "*")),
                   ImmutableList.of(
                       NameMatcher.create("user", ImmutableList.of("User", "Parent")),
                       NameMatcher.create("password", ImmutableList.of("Password"))),
                   ExtraKeys.create(null, "service-2", null),
                   ImmutableMap.of("const-key-2", "const-value-2")),
               GrpcKeyBuilder.create(
-                  ImmutableList.of(new Name("com.google.service2", "*")),
+                  ImmutableList.of(Name.create("com.google.service2", "*")),
                   ImmutableList.of(
                       NameMatcher.create("password", ImmutableList.of("Password"))),
                   ExtraKeys.create(null, "service-3", "method-3"),
                   ImmutableMap.<String, String>of()),
               GrpcKeyBuilder.create(
-                  ImmutableList.of(new Name("com.google.service3", "*")),
+                  ImmutableList.of(Name.create("com.google.service3", "*")),
                   ImmutableList.of(
                       NameMatcher.create("user", ImmutableList.of("User", "Parent"))),
                   ExtraKeys.create(null, null, null),

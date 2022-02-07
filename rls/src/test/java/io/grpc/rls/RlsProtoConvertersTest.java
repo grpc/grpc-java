@@ -179,21 +179,21 @@ public class RlsProtoConvertersTest {
         RouteLookupConfig.builder()
             .grpcKeyBuilders(ImmutableList.of(
                 GrpcKeyBuilder.create(
-                    ImmutableList.of(new Name("service1", "create")),
+                    ImmutableList.of(Name.create("service1", "create")),
                     ImmutableList.of(
                         NameMatcher.create("user", ImmutableList.of("User", "Parent")),
                         NameMatcher.create("id", ImmutableList.of("X-Google-Id"))),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of()),
                 GrpcKeyBuilder.create(
-                    ImmutableList.of(new Name("service1", "*")),
+                    ImmutableList.of(Name.create("service1", "*")),
                     ImmutableList.of(
                         NameMatcher.create("user", ImmutableList.of("User", "Parent")),
                         NameMatcher.create("password", ImmutableList.of("Password"))),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of()),
                 GrpcKeyBuilder.create(
-                    ImmutableList.of(new Name("service3", "*")),
+                    ImmutableList.of(Name.create("service3", "*")),
                     ImmutableList.of(
                         NameMatcher.create("user", ImmutableList.of("User", "Parent"))),
                     ExtraKeys.create("host-key", "service-key", "method-key"),
@@ -347,7 +347,7 @@ public class RlsProtoConvertersTest {
         RouteLookupConfig.builder()
             .grpcKeyBuilders(ImmutableList.of(
                 GrpcKeyBuilder.create(
-                    ImmutableList.of(new Name("service1", null)),
+                    ImmutableList.of(Name.create("service1", null)),
                     ImmutableList.<NameMatcher>of(),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of())))
@@ -404,7 +404,7 @@ public class RlsProtoConvertersTest {
         RouteLookupConfig.builder()
             .grpcKeyBuilders(ImmutableList.of(
                 GrpcKeyBuilder.create(
-                    ImmutableList.of(new Name("service1", "create")),
+                    ImmutableList.of(Name.create("service1", "create")),
                     ImmutableList.of(
                         NameMatcher.create("user", ImmutableList.of("User", "Parent")),
                         NameMatcher.create("id", ImmutableList.of("X-Google-Id"))),

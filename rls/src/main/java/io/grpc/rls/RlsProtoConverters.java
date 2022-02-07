@@ -189,7 +189,7 @@ final class RlsProtoConverters {
       for (Map<String, ?> rawName : rawNames) {
         String serviceName = JsonUtil.getString(rawName, "service");
         checkArgument(!Strings.isNullOrEmpty(serviceName), "service must not be empty or null");
-        namesBuilder.add(new Name(serviceName, JsonUtil.getString(rawName, "method")));
+        namesBuilder.add(Name.create(serviceName, JsonUtil.getString(rawName, "method")));
       }
       List<?> rawRawHeaders = JsonUtil.getList(keyBuilder, "headers");
       List<Map<String, ?>> rawHeaders =
