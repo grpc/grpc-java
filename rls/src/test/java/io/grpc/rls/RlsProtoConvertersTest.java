@@ -53,7 +53,7 @@ public class RlsProtoConvertersTest {
 
     RlsProtoData.RouteLookupRequest object = converter.convert(proto);
 
-    assertThat(object.getKeyMap()).containsExactly("key1", "val1");
+    assertThat(object.keyMap()).containsExactly("key1", "val1");
   }
 
   @Test
@@ -61,7 +61,7 @@ public class RlsProtoConvertersTest {
     Converter<RlsProtoData.RouteLookupRequest, RouteLookupRequest> converter =
         new RouteLookupRequestConverter().reverse();
     RlsProtoData.RouteLookupRequest requestObject =
-        new RlsProtoData.RouteLookupRequest(ImmutableMap.of("key1", "val1"));
+        RlsProtoData.RouteLookupRequest.create(ImmutableMap.of("key1", "val1"));
 
     RouteLookupRequest proto = converter.convert(requestObject);
 
@@ -80,7 +80,7 @@ public class RlsProtoConvertersTest {
 
     RlsProtoData.RouteLookupResponse object = converter.convert(proto);
 
-    assertThat(object.getTargets()).containsExactly("target");
+    assertThat(object.targets()).containsExactly("target");
     assertThat(object.getHeaderData()).isEqualTo("some header data");
   }
 
@@ -90,7 +90,7 @@ public class RlsProtoConvertersTest {
         new RouteLookupResponseConverter().reverse();
 
     RlsProtoData.RouteLookupResponse object =
-        new RlsProtoData.RouteLookupResponse(ImmutableList.of("target"), "some header data");
+        RlsProtoData.RouteLookupResponse.create(ImmutableList.of("target"), "some header data");
 
     RouteLookupResponse proto = converter.convert(object);
 

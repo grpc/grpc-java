@@ -83,7 +83,7 @@ public class RlsRequestFactoryTest {
     metadata.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar");
 
     RouteLookupRequest request = factory.create("com.google.service1", "Create", metadata);
-    assertThat(request.getKeyMap()).containsExactly(
+    assertThat(request.keyMap()).containsExactly(
         "user", "test",
         "id", "123",
         "server-1", "bigtable.googleapis.com",
@@ -99,7 +99,7 @@ public class RlsRequestFactoryTest {
 
     RouteLookupRequest request = factory.create("com.google.service1" , "Update", metadata);
 
-    assertThat(request.getKeyMap()).containsExactly(
+    assertThat(request.keyMap()).containsExactly(
         "user", "test",
         "password", "hunter2",
         "service-2", "com.google.service1",
@@ -115,7 +115,7 @@ public class RlsRequestFactoryTest {
 
     RouteLookupRequest request = factory.create("com.google.service1", "Update", metadata);
 
-    assertThat(request.getKeyMap()).containsExactly(
+    assertThat(request.keyMap()).containsExactly(
         "user", "test",
         "service-2", "com.google.service1",
         "const-key-2", "const-value-2");
@@ -129,7 +129,7 @@ public class RlsRequestFactoryTest {
     metadata.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar");
 
     RouteLookupRequest request = factory.create("abc.def.service999", "Update", metadata);
-    assertThat(request.getKeyMap()).isEmpty();
+    assertThat(request.keyMap()).isEmpty();
   }
 
   @Test
@@ -141,7 +141,7 @@ public class RlsRequestFactoryTest {
 
     RouteLookupRequest request = factory.create("com.google.service3", "Update", metadata);
 
-    assertThat(request.getKeyMap()).containsExactly(
+    assertThat(request.keyMap()).containsExactly(
         "user", "test", "const-key-4", "const-value-4");
   }
 }

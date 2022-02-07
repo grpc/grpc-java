@@ -16,16 +16,9 @@
 
 package io.grpc.rls;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
-
 import com.google.auto.value.AutoValue;
-import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import java.util.List;
-import java.util.Map;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
@@ -35,101 +28,39 @@ final class RlsProtoData {
   private RlsProtoData() {}
 
   /** A request object sent to route lookup service. */
+  @AutoValue
   @Immutable
-  static final class RouteLookupRequest {
-
-    private final ImmutableMap<String, String> keyMap;
-
-    RouteLookupRequest(Map<String, String> keyMap) {
-      this.keyMap = ImmutableMap.copyOf(checkNotNull(keyMap, "keyMap"));
-    }
+  abstract static class RouteLookupRequest {
 
     /** Returns a map of key values extracted via key builders for the gRPC or HTTP request. */
-    ImmutableMap<String, String> getKeyMap() {
-      return keyMap;
-    }
+    abstract ImmutableMap<String, String> keyMap();
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      RouteLookupRequest that = (RouteLookupRequest) o;
-      return Objects.equal(keyMap, that.keyMap);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(keyMap);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("keyMap", keyMap)
-          .toString();
+    static RouteLookupRequest create(ImmutableMap<String, String> keyMap) {
+      return new AutoValue_RlsProtoData_RouteLookupRequest(keyMap);
     }
   }
 
   /** A response from route lookup service. */
+  @AutoValue
   @Immutable
-  static final class RouteLookupResponse {
-
-    private final ImmutableList<String> targets;
-
-    private final String headerData;
-
-    RouteLookupResponse(List<String> targets, String headerData) {
-      checkState(targets != null && !targets.isEmpty(), "targets cannot be empty or null");
-      this.targets = ImmutableList.copyOf(targets);
-      this.headerData = checkNotNull(headerData, "headerData");
-    }
+  abstract static class RouteLookupResponse {
 
     /**
      * Returns list of targets. Prioritized list (best one first) of addressable entities to use for
      * routing, using syntax requested by the request target_type. The targets will be tried in
      * order until a healthy one is found.
      */
-    ImmutableList<String> getTargets() {
-      return targets;
-    }
+    abstract ImmutableList<String> targets();
 
     /**
      * Returns optional header data to pass along to AFE in the X-Google-RLS-Data header. Cached
      * with "target" and sent with all requests that match the request key. Allows the RLS to pass
      * its work product to the eventual target.
      */
-    String getHeaderData() {
-      return headerData;
-    }
+    abstract String getHeaderData();
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      RouteLookupResponse that = (RouteLookupResponse) o;
-      return java.util.Objects.equals(targets, that.targets)
-          && java.util.Objects.equals(headerData, that.headerData);
-    }
-
-    @Override
-    public int hashCode() {
-      return java.util.Objects.hash(targets, headerData);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("targets", targets)
-          .add("headerData", headerData)
-          .toString();
+    static RouteLookupResponse create(ImmutableList<String> targets, String getHeaderData) {
+      return new AutoValue_RlsProtoData_RouteLookupResponse(targets, getHeaderData);
     }
   }
 
@@ -278,6 +209,7 @@ final class RlsProtoData {
   }
 
   @AutoValue
+  @Immutable
   abstract static class ExtraKeys {
     static final ExtraKeys DEFAULT = create(null, null, null);
 

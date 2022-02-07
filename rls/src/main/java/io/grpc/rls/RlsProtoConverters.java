@@ -63,7 +63,8 @@ final class RlsProtoConverters {
 
     @Override
     protected RlsProtoData.RouteLookupRequest doForward(RouteLookupRequest routeLookupRequest) {
-      return new RlsProtoData.RouteLookupRequest(routeLookupRequest.getKeyMapMap());
+      return RlsProtoData.RouteLookupRequest.create(
+          ImmutableMap.copyOf(routeLookupRequest.getKeyMapMap()));
     }
 
     @Override
@@ -71,7 +72,7 @@ final class RlsProtoConverters {
       return
           RouteLookupRequest.newBuilder()
               .setTargetType("grpc")
-              .putAllKeyMap(routeLookupRequest.getKeyMap())
+              .putAllKeyMap(routeLookupRequest.keyMap())
               .build();
     }
   }
@@ -86,15 +87,15 @@ final class RlsProtoConverters {
     @Override
     protected RlsProtoData.RouteLookupResponse doForward(RouteLookupResponse routeLookupResponse) {
       return
-          new RlsProtoData.RouteLookupResponse(
-              routeLookupResponse.getTargetsList(),
+          RlsProtoData.RouteLookupResponse.create(
+              ImmutableList.copyOf(routeLookupResponse.getTargetsList()),
               routeLookupResponse.getHeaderData());
     }
 
     @Override
     protected RouteLookupResponse doBackward(RlsProtoData.RouteLookupResponse routeLookupResponse) {
       return RouteLookupResponse.newBuilder()
-          .addAllTargets(routeLookupResponse.getTargets())
+          .addAllTargets(routeLookupResponse.targets())
           .setHeaderData(routeLookupResponse.getHeaderData())
           .build();
     }

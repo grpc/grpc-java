@@ -518,7 +518,7 @@ final class CachingRlsLbClient {
       // TODO(creamsoup) fallback to other targets if first one is not available
       childPolicyWrapper =
           refCountedChildPolicyWrapperFactory
-              .createOrGet(response.getTargets().get(0));
+              .createOrGet(response.targets().get(0));
       long now = timeProvider.currentTimeNanos();
       expireTime = now + maxAgeNanos;
       staleTime = now + staleAgeNanos;
@@ -576,7 +576,7 @@ final class CachingRlsLbClient {
     int getSizeBytes() {
       // size of strings and java object overhead, actual memory usage is more than this.
       return
-          (response.getTargets().get(0).length() + response.getHeaderData().length()) * 2 + 38 * 2;
+          (response.targets().get(0).length() + response.getHeaderData().length()) * 2 + 38 * 2;
     }
 
     @Override
