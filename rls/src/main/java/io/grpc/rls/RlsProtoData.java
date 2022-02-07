@@ -211,52 +211,18 @@ final class RlsProtoData {
    * The name must match one of the names listed in the "name" field. If the "required_match" field
    * is true, one of the specified names must be present for the keybuilder to match.
    */
+  @AutoValue
   @Immutable
-  static final class NameMatcher {
-
-    private final String key;
-
-    private final ImmutableList<String> names;
-
-    NameMatcher(String key, List<String> names) {
-      this.key = checkNotNull(key, "key");
-      this.names = ImmutableList.copyOf(checkNotNull(names, "names"));
-    }
+  abstract static class NameMatcher {
 
     /** The name that will be used in the RLS key_map to refer to this value. */
-    String getKey() {
-      return key;
-    }
+    abstract String key();
 
     /** Returns ordered list of names; the first non-empty value will be used. */
-    ImmutableList<String> names() {
-      return names;
-    }
+    abstract ImmutableList<String> names();
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      NameMatcher matcher = (NameMatcher) o;
-      return java.util.Objects.equals(key, matcher.key)
-          && java.util.Objects.equals(names, matcher.names);
-    }
-
-    @Override
-    public int hashCode() {
-      return java.util.Objects.hash(key, names);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("key", key)
-          .add("names", names)
-          .toString();
+    static NameMatcher create(String key, ImmutableList<String> names) {
+      return new AutoValue_RlsProtoData_NameMatcher(key, names);
     }
   }
 

@@ -181,21 +181,21 @@ public class RlsProtoConvertersTest {
                 GrpcKeyBuilder.create(
                     ImmutableList.of(new Name("service1", "create")),
                     ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent")),
-                        new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
+                        NameMatcher.create("user", ImmutableList.of("User", "Parent")),
+                        NameMatcher.create("id", ImmutableList.of("X-Google-Id"))),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of()),
                 GrpcKeyBuilder.create(
                     ImmutableList.of(new Name("service1", "*")),
                     ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent")),
-                        new NameMatcher("password", ImmutableList.of("Password"))),
+                        NameMatcher.create("user", ImmutableList.of("User", "Parent")),
+                        NameMatcher.create("password", ImmutableList.of("Password"))),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of()),
                 GrpcKeyBuilder.create(
                     ImmutableList.of(new Name("service3", "*")),
                     ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent"))),
+                        NameMatcher.create("user", ImmutableList.of("User", "Parent"))),
                     ExtraKeys.create("host-key", "service-key", "method-key"),
                     ImmutableMap.of("constKey1", "value1"))))
             .lookupService("service1")
@@ -406,8 +406,8 @@ public class RlsProtoConvertersTest {
                 GrpcKeyBuilder.create(
                     ImmutableList.of(new Name("service1", "create")),
                     ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent")),
-                        new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
+                        NameMatcher.create("user", ImmutableList.of("User", "Parent")),
+                        NameMatcher.create("id", ImmutableList.of("X-Google-Id"))),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of())))
             .lookupService("service1")

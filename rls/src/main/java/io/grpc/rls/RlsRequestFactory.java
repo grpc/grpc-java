@@ -104,7 +104,7 @@ final class RlsRequestFactory {
         }
       }
       if (value != null) {
-        rlsRequestHeaders.put(nameMatcher.getKey(), value);
+        rlsRequestHeaders.put(nameMatcher.key(), value);
       }
     }
     return rlsRequestHeaders;

@@ -430,8 +430,8 @@ public class CachingRlsLbClientTest {
             GrpcKeyBuilder.create(
                 ImmutableList.of(new Name("service1", "create")),
                 ImmutableList.of(
-                    new NameMatcher("user", ImmutableList.of("User", "Parent")),
-                    new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
+                    NameMatcher.create("user", ImmutableList.of("User", "Parent")),
+                    NameMatcher.create("id", ImmutableList.of("X-Google-Id"))),
                 ExtraKeys.create("server", "service-key", "method-key"),
                 ImmutableMap.<String, String>of())))
         .lookupService("service1")

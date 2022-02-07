@@ -201,8 +201,9 @@ final class RlsProtoConverters {
         checkArgument(
             requiredMatch == null || !requiredMatch,
             "requiredMatch shouldn't be specified for gRPC");
-        NameMatcher matcher = new NameMatcher(
-            JsonUtil.getString(rawHeader, "key"), (List<String>) rawHeader.get("names"));
+        NameMatcher matcher = NameMatcher.create(
+            JsonUtil.getString(rawHeader, "key"),
+            ImmutableList.copyOf((List<String>) rawHeader.get("names")));
         nameMatchersBuilder.add(matcher);
       }
       ExtraKeys extraKeys = ExtraKeys.DEFAULT;
@@ -228,7 +229,7 @@ final class RlsProtoConverters {
     Set<String> keys = new HashSet<>(constantKeys);
     keys.addAll(EXTRA_KEY_NAMES);
     for (NameMatcher nameMatcher :  nameMatchers) {
-      keys.add(nameMatcher.getKey());
+      keys.add(nameMatcher.key());
     }
     if (keys.size() != nameMatchers.size() + constantKeys.size() + EXTRA_KEY_NAMES.size()) {
       throw new IllegalArgumentException("keys in KeyBuilder must be unique");
