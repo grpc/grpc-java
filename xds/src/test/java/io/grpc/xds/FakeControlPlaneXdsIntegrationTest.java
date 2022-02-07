@@ -25,6 +25,7 @@ import static org.junit.Assert.assertEquals;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
+import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.core.v3.Address;
@@ -170,9 +171,9 @@ public class FakeControlPlaneXdsIntegrationTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_RDS,
         ImmutableMap.of(rdsName, rds(serverHostName)));
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS,
-        ImmutableMap.<String, Object>of(clusterName, cds()));
+        ImmutableMap.<String, Message>of(clusterName, cds()));
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS,
-        ImmutableMap.<String, Object>of(edsName, eds(testServerPort)));
+        ImmutableMap.<String, Message>of(edsName, eds(testServerPort)));
     startServer(defaultBootstrapOverride());
     serverHostName = "0.0.0.0:" + testServerPort;
     ManagedChannel channel = Grpc.newChannelBuilder(scheme + ":///" + serverHostName,

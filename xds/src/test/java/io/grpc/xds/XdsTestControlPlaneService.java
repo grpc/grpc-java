@@ -26,10 +26,10 @@ import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.SynchronizationContext;
 import io.grpc.stub.StreamObserver;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -43,6 +43,7 @@ class XdsTestControlPlaneService extends
         @Override
         public void uncaughtException(Thread t, Throwable e) {
           logger.log(Level.SEVERE, "Exception!" + e);
+          throw new AssertionError(e);
         }
       });
 
@@ -55,13 +56,13 @@ class XdsTestControlPlaneService extends
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment";
 
-  private final Map<String, HashMap<String, Object>> xdsResources = new HashMap<>();
-  private ImmutableMap<String, HashMap<StreamObserver<DiscoveryResponse>, List<String>>> subscribers
+  private final Map<String, HashMap<String, Message>> xdsResources = new HashMap<>();
+  private ImmutableMap<String, HashMap<StreamObserver<DiscoveryResponse>, Set<String>>> subscribers
       = ImmutableMap.of(
-          ADS_TYPE_URL_LDS, new HashMap<StreamObserver<DiscoveryResponse>, List<String>>(),
-          ADS_TYPE_URL_RDS, new HashMap<StreamObserver<DiscoveryResponse>, List<String>>(),
-          ADS_TYPE_URL_CDS, new HashMap<StreamObserver<DiscoveryResponse>, List<String>>(),
-          ADS_TYPE_URL_EDS, new HashMap<StreamObserver<DiscoveryResponse>, List<String>>()
+          ADS_TYPE_URL_LDS, new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
+          ADS_TYPE_URL_RDS, new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
+          ADS_TYPE_URL_CDS, new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>(),
+          ADS_TYPE_URL_EDS, new HashMap<StreamObserver<DiscoveryResponse>, Set<String>>()
           );
   private final ImmutableMap<String, AtomicInteger> xdsVersions = ImmutableMap.of(
       ADS_TYPE_URL_LDS, new AtomicInteger(1),
@@ -69,27 +70,33 @@ class XdsTestControlPlaneService extends
       ADS_TYPE_URL_CDS, new AtomicInteger(1),
       ADS_TYPE_URL_EDS, new AtomicInteger(1)
   );
-  private final ImmutableMap<String, AtomicInteger> xdsNonces = ImmutableMap.of(
-      ADS_TYPE_URL_LDS, new AtomicInteger(0),
-      ADS_TYPE_URL_RDS, new AtomicInteger(0),
-      ADS_TYPE_URL_CDS, new AtomicInteger(0),
-      ADS_TYPE_URL_EDS, new AtomicInteger(0)
+  private final ImmutableMap<String, HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>>
+      xdsNonces = ImmutableMap.of(
+      ADS_TYPE_URL_LDS, new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
+      ADS_TYPE_URL_RDS, new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
+      ADS_TYPE_URL_CDS, new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>(),
+      ADS_TYPE_URL_EDS, new HashMap<StreamObserver<DiscoveryResponse>, AtomicInteger>()
   );
 
 
   // treat all the resource types as state-of-the-world, send back all resources of a particular
   // type when any of them change.
-  public <T> void setXdsConfig(final String type, final Map<String, T> resources) {
+  public <T extends Message> void setXdsConfig(final String type, final Map<String, T> resources) {
     logger.log(Level.FINE, "setting config {0} {1}", new Object[]{type, resources});
     syncContext.execute(new Runnable() {
       @SuppressWarnings("unchecked")
       @Override
       public void run() {
-        HashMap<String, Object> copyResources = (HashMap<String, Object>) new HashMap<>(resources);
+        HashMap<String, Message> copyResources =  new HashMap<>(resources);
         xdsResources.put(type, copyResources);
-        for (Map.Entry<StreamObserver<DiscoveryResponse>, List<String>> entry :
+        String newVersionInfo = String.valueOf(xdsVersions.get(type).getAndDecrement());
+
+        for (Map.Entry<StreamObserver<DiscoveryResponse>, Set<String>> entry :
             subscribers.get(type).entrySet()) {
-          entry.getKey().onNext(generateResponse(type, entry.getValue()));
+          DiscoveryResponse response = generateResponse(type, newVersionInfo,
+              String.valueOf(xdsNonces.get(type).get(entry.getKey()).incrementAndGet()),
+              entry.getValue());
+          entry.getKey().onNext(response);
         }
       }
     });
@@ -120,15 +127,23 @@ class XdsTestControlPlaneService extends
               logger.log(Level.FINE, "Resource nonce does not match, ignore.");
               return;
             }
-            if (String.valueOf(xdsVersions.get(resourceType)).equals(value.getVersionInfo())) {
+            Set<String> requestedResourceNames = new HashSet<>(value.getResourceNamesList());
+            if (subscribers.get(resourceType).containsKey(responseObserver)
+                && subscribers.get(resourceType).get(responseObserver)
+                    .equals(requestedResourceNames)) {
               logger.log(Level.FINEST, "control plane received ack for resource: {0}",
                   value.getResourceNamesList());
               return;
             }
-            responseObserver.onNext(
-                generateResponse(resourceType, value.getResourceNamesList()));
-            subscribers.get(resourceType)
-                .put(responseObserver, new ArrayList<>(value.getResourceNamesList()));
+            if (!xdsNonces.get(resourceType).containsKey(responseObserver)) {
+              xdsNonces.get(resourceType).put(responseObserver, new AtomicInteger(0));
+            }
+            DiscoveryResponse response = generateResponse(resourceType,
+                String.valueOf(xdsVersions.get(resourceType)),
+                String.valueOf(xdsNonces.get(resourceType).get(responseObserver)),
+                requestedResourceNames);
+            responseObserver.onNext(response);
+            subscribers.get(resourceType).put(responseObserver, requestedResourceNames);
           }
         });
       }
@@ -150,18 +165,17 @@ class XdsTestControlPlaneService extends
   }
 
   //must run in syncContext
-  private DiscoveryResponse generateResponse(String resourceType, List<String> resourceNames) {
+  private DiscoveryResponse generateResponse(String resourceType, String version, String nonce,
+                                             Set<String> resourceNames) {
     DiscoveryResponse.Builder responseBuilder = DiscoveryResponse.newBuilder()
         .setTypeUrl(resourceType)
-        .setVersionInfo(String.valueOf(xdsVersions.get(resourceType).getAndDecrement()))
-        .setNonce(String.valueOf(xdsNonces.get(resourceType).incrementAndGet()));
+        .setVersionInfo(version)
+        .setNonce(nonce);
     for (String resourceName: resourceNames) {
       if (xdsResources.containsKey(resourceType)
           && xdsResources.get(resourceType).containsKey(resourceName)) {
-        responseBuilder.addResources(Any.pack(
-            (Message)xdsResources.get(resourceType).get(resourceName),
-            resourceType
-        ));
+        responseBuilder.addResources(Any.pack(xdsResources.get(resourceType).get(resourceName),
+            resourceType));
       }
     }
     return responseBuilder.build();
