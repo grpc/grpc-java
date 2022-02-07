@@ -135,6 +135,7 @@ final class RlsProtoData {
 
   /** A config object for gRPC RouteLookupService. */
   @AutoValue
+  @Immutable
   abstract static class RouteLookupConfig {
 
     /**
@@ -260,24 +261,9 @@ final class RlsProtoData {
   }
 
   /** GrpcKeyBuilder is a configuration to construct headers consumed by route lookup service. */
-  static final class GrpcKeyBuilder {
-
-    private final ImmutableList<Name> names;
-
-    private final ImmutableList<NameMatcher> headers;
-    private final ExtraKeys extraKeys;
-    private final ImmutableMap<String, String> constantKeys;
-
-    /** Constructor. All args should be nonnull. Headers should head unique keys. */
-    GrpcKeyBuilder(
-        List<Name> names, List<NameMatcher> headers, ExtraKeys extraKeys,
-        Map<String, String> constantKeys) {
-      checkState(names != null && !names.isEmpty(), "names cannot be empty");
-      this.names = ImmutableList.copyOf(names);
-      this.headers = ImmutableList.copyOf(headers);
-      this.extraKeys = checkNotNull(extraKeys, "extraKeys");
-      this.constantKeys = ImmutableMap.copyOf(checkNotNull(constantKeys, "constantKeys"));
-    }
+  @AutoValue
+  @Immutable
+  abstract static class GrpcKeyBuilder {
 
     /**
      * Returns names. To match, one of the given Name fields must match; the service and method
@@ -285,53 +271,23 @@ final class RlsProtoData {
      * package name. The method name may be omitted, in which case any method on the given service
      * is matched.
      */
-    ImmutableList<Name> getNames() {
-      return names;
-    }
+    abstract ImmutableList<Name> names();
 
     /**
      * Returns a list of NameMatchers for header. Extract keys from all listed headers. For gRPC, it
      * is an error to specify "required_match" on the NameMatcher protos, and we ignore it if set.
      */
-    ImmutableList<NameMatcher> getHeaders() {
-      return headers;
-    }
+    abstract ImmutableList<NameMatcher> headers();
 
-    ExtraKeys getExtraKeys() {
-      return extraKeys;
-    }
+    abstract ExtraKeys extraKeys();
 
-    ImmutableMap<String, String> getConstantKeys() {
-      return constantKeys;
-    }
+    abstract ImmutableMap<String, String> constantKeys();
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      GrpcKeyBuilder that = (GrpcKeyBuilder) o;
-      return Objects.equal(names, that.names) && Objects.equal(headers, that.headers)
-          && Objects.equal(extraKeys, that.extraKeys)
-          && Objects.equal(constantKeys, that.constantKeys);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(names, headers, extraKeys, constantKeys);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("names", names)
-          .add("headers", headers)
-          .add("extraKeys", extraKeys)
-          .add("constantKeys", constantKeys)
-          .toString();
+    static GrpcKeyBuilder create(
+        ImmutableList<Name> names,
+        ImmutableList<NameMatcher> headers,
+        ExtraKeys extraKeys, ImmutableMap<String, String> constantKeys) {
+      return new AutoValue_RlsProtoData_GrpcKeyBuilder(names, headers, extraKeys, constantKeys);
     }
 
     /**

@@ -427,7 +427,7 @@ public class CachingRlsLbClientTest {
   private static RouteLookupConfig getRouteLookupConfig() {
     return RouteLookupConfig.builder()
         .grpcKeyBuilders(ImmutableList.of(
-            new GrpcKeyBuilder(
+            GrpcKeyBuilder.create(
                 ImmutableList.of(new Name("service1", "create")),
                 ImmutableList.of(
                     new NameMatcher("user", ImmutableList.of("User", "Parent")),

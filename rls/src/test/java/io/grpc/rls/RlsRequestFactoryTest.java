@@ -38,27 +38,27 @@ public class RlsRequestFactoryTest {
   private static final RouteLookupConfig RLS_CONFIG =
       RouteLookupConfig.builder()
           .grpcKeyBuilders(ImmutableList.of(
-              new GrpcKeyBuilder(
+              GrpcKeyBuilder.create(
                   ImmutableList.of(new Name("com.google.service1", "Create")),
                   ImmutableList.of(
                       new NameMatcher("user", ImmutableList.of("User", "Parent")),
                       new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
                   ExtraKeys.create("server-1", null, null),
                   ImmutableMap.of("const-key-1", "const-value-1")),
-              new GrpcKeyBuilder(
+              GrpcKeyBuilder.create(
                   ImmutableList.of(new Name("com.google.service1", "*")),
                   ImmutableList.of(
                       new NameMatcher("user", ImmutableList.of("User", "Parent")),
                       new NameMatcher("password", ImmutableList.of("Password"))),
                   ExtraKeys.create(null, "service-2", null),
                   ImmutableMap.of("const-key-2", "const-value-2")),
-              new GrpcKeyBuilder(
+              GrpcKeyBuilder.create(
                   ImmutableList.of(new Name("com.google.service2", "*")),
                   ImmutableList.of(
                       new NameMatcher("password", ImmutableList.of("Password"))),
                   ExtraKeys.create(null, "service-3", "method-3"),
                   ImmutableMap.<String, String>of()),
-              new GrpcKeyBuilder(
+              GrpcKeyBuilder.create(
                   ImmutableList.of(new Name("com.google.service3", "*")),
                   ImmutableList.of(
                       new NameMatcher("user", ImmutableList.of("User", "Parent"))),

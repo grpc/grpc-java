@@ -178,21 +178,21 @@ public class RlsProtoConvertersTest {
     RouteLookupConfig expectedConfig =
         RouteLookupConfig.builder()
             .grpcKeyBuilders(ImmutableList.of(
-                new GrpcKeyBuilder(
+                GrpcKeyBuilder.create(
                     ImmutableList.of(new Name("service1", "create")),
                     ImmutableList.of(
                         new NameMatcher("user", ImmutableList.of("User", "Parent")),
                         new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of()),
-                new GrpcKeyBuilder(
+                GrpcKeyBuilder.create(
                     ImmutableList.of(new Name("service1", "*")),
                     ImmutableList.of(
                         new NameMatcher("user", ImmutableList.of("User", "Parent")),
                         new NameMatcher("password", ImmutableList.of("Password"))),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of()),
-                new GrpcKeyBuilder(
+                GrpcKeyBuilder.create(
                     ImmutableList.of(new Name("service3", "*")),
                     ImmutableList.of(
                         new NameMatcher("user", ImmutableList.of("User", "Parent"))),
@@ -346,7 +346,7 @@ public class RlsProtoConvertersTest {
     RouteLookupConfig expectedConfig =
         RouteLookupConfig.builder()
             .grpcKeyBuilders(ImmutableList.of(
-                new GrpcKeyBuilder(
+                GrpcKeyBuilder.create(
                     ImmutableList.of(new Name("service1", null)),
                     ImmutableList.<NameMatcher>of(),
                     ExtraKeys.DEFAULT,
@@ -403,7 +403,7 @@ public class RlsProtoConvertersTest {
     RouteLookupConfig expectedConfig =
         RouteLookupConfig.builder()
             .grpcKeyBuilders(ImmutableList.of(
-                new GrpcKeyBuilder(
+                GrpcKeyBuilder.create(
                     ImmutableList.of(new Name("service1", "create")),
                     ImmutableList.of(
                         new NameMatcher("user", ImmutableList.of("User", "Parent")),

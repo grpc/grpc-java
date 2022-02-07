@@ -114,7 +114,7 @@ final class RlsProtoConverters {
       checkArgument(!grpcKeyBuilders.isEmpty(), "must have at least one GrpcKeyBuilder");
       Set<Name> names = new HashSet<>();
       for (GrpcKeyBuilder keyBuilder : grpcKeyBuilders) {
-        for (Name name : keyBuilder.getNames()) {
+        for (Name name : keyBuilder.names()) {
           checkArgument(names.add(name), "duplicate names in grpc_keybuilders: " + name);
         }
       }
@@ -185,17 +185,17 @@ final class RlsProtoConverters {
           rawRawNames != null && !rawRawNames.isEmpty(),
           "each keyBuilder must have at least one name");
       List<Map<String, ?>> rawNames = JsonUtil.checkObjectList(rawRawNames);
-      List<Name> names = new ArrayList<>();
+      ImmutableList.Builder<Name> namesBuilder = ImmutableList.builder();
       for (Map<String, ?> rawName : rawNames) {
         String serviceName = JsonUtil.getString(rawName, "service");
         checkArgument(!Strings.isNullOrEmpty(serviceName), "service must not be empty or null");
-        names.add(new Name(serviceName, JsonUtil.getString(rawName, "method")));
+        namesBuilder.add(new Name(serviceName, JsonUtil.getString(rawName, "method")));
       }
       List<?> rawRawHeaders = JsonUtil.getList(keyBuilder, "headers");
       List<Map<String, ?>> rawHeaders =
           rawRawHeaders == null
               ? new ArrayList<Map<String, ?>>() : JsonUtil.checkObjectList(rawRawHeaders);
-      List<NameMatcher> nameMatchers = new ArrayList<>();
+      ImmutableList.Builder<NameMatcher> nameMatchersBuilder = ImmutableList.builder();
       for (Map<String, ?> rawHeader : rawHeaders) {
         Boolean requiredMatch = JsonUtil.getBoolean(rawHeader, "requiredMatch");
         checkArgument(
@@ -203,7 +203,7 @@ final class RlsProtoConverters {
             "requiredMatch shouldn't be specified for gRPC");
         NameMatcher matcher = new NameMatcher(
             JsonUtil.getString(rawHeader, "key"), (List<String>) rawHeader.get("names"));
-        nameMatchers.add(matcher);
+        nameMatchersBuilder.add(matcher);
       }
       ExtraKeys extraKeys = ExtraKeys.DEFAULT;
       Map<String, String> rawExtraKeys =
@@ -217,8 +217,10 @@ final class RlsProtoConverters {
       if (constantKeys == null) {
         constantKeys = ImmutableMap.of();
       }
+      ImmutableList<NameMatcher> nameMatchers = nameMatchersBuilder.build();
       checkUniqueKey(nameMatchers, constantKeys.keySet());
-      return new GrpcKeyBuilder(names, nameMatchers, extraKeys, constantKeys);
+      return GrpcKeyBuilder.create(
+          namesBuilder.build(), nameMatchers, extraKeys, ImmutableMap.copyOf(constantKeys));
     }
   }
 
