@@ -24,6 +24,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
+import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.Any;
 import io.grpc.Status;
@@ -104,6 +105,15 @@ abstract class XdsClient {
     Collections.sort(canonicalContextParams);
     String canonifiedQuery = Joiner.on('&').join(canonicalContextParams);
     return resourceName.replace(rawQuery, canonifiedQuery);
+  }
+
+  static String percentEncodePath(String input) {
+    Iterable<String> pathSegs = Splitter.on('/').split(input);
+    List<String> encodedSegs = new ArrayList<>();
+    for (String pathSeg : pathSegs) {
+      encodedSegs.add(UrlEscapers.urlPathSegmentEscaper().escape(pathSeg));
+    }
+    return Joiner.on('/').join(encodedSegs);
   }
 
   @AutoValue
