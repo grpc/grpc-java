@@ -108,7 +108,7 @@ final class RlsProtoConverters {
 
     @Override
     protected RouteLookupConfig doForward(Map<String, ?> json) {
-      List<GrpcKeyBuilder> grpcKeyBuilders =
+      ImmutableList<GrpcKeyBuilder> grpcKeyBuilders =
           GrpcKeyBuilderConverter.covertAll(
               checkNotNull(JsonUtil.getListOfObjects(json, "grpcKeyBuilders"), "grpcKeyBuilders"));
       checkArgument(!grpcKeyBuilders.isEmpty(), "must have at least one GrpcKeyBuilder");
@@ -145,14 +145,15 @@ final class RlsProtoConverters {
       checkArgument(cacheSize > 0, "cacheSize must be positive");
       cacheSize = Math.min(cacheSize, MAX_CACHE_SIZE);
       String defaultTarget = Strings.emptyToNull(JsonUtil.getString(json, "defaultTarget"));
-      return new RouteLookupConfig(
-          grpcKeyBuilders,
-          lookupService,
-          /* lookupServiceTimeoutInNanos= */ timeout,
-          /* maxAgeInNanos= */ maxAge,
-          /* staleAgeInNanos= */ staleAge,
-          /* cacheSizeBytes= */ cacheSize,
-          defaultTarget);
+      return RouteLookupConfig.builder()
+          .grpcKeyBuilders(grpcKeyBuilders)
+          .lookupService(lookupService)
+          .lookupServiceTimeoutInNanos(timeout)
+          .maxAgeInNanos(maxAge)
+          .staleAgeInNanos(staleAge)
+          .cacheSizeBytes(cacheSize)
+          .defaultTarget(defaultTarget)
+          .build();
     }
 
     private static <T> T orDefault(@Nullable T value, T defaultValue) {
@@ -169,12 +170,12 @@ final class RlsProtoConverters {
   }
 
   private static final class GrpcKeyBuilderConverter {
-    public static List<GrpcKeyBuilder> covertAll(List<Map<String, ?>> keyBuilders) {
-      List<GrpcKeyBuilder> keyBuilderList = new ArrayList<>();
+    public static ImmutableList<GrpcKeyBuilder> covertAll(List<Map<String, ?>> keyBuilders) {
+      ImmutableList.Builder<GrpcKeyBuilder> keyBuilderList = ImmutableList.builder();
       for (Map<String, ?> keyBuilder : keyBuilders) {
         keyBuilderList.add(convert(keyBuilder));
       }
-      return keyBuilderList;
+      return keyBuilderList.build();
     }
 
     @SuppressWarnings("unchecked")

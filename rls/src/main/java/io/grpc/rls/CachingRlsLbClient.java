@@ -115,14 +115,14 @@ final class CachingRlsLbClient {
     synchronizationContext = helper.getSynchronizationContext();
     lbPolicyConfig = checkNotNull(builder.lbPolicyConfig, "lbPolicyConfig");
     RouteLookupConfig rlsConfig = lbPolicyConfig.getRouteLookupConfig();
-    maxAgeNanos = rlsConfig.getMaxAgeInNanos();
-    staleAgeNanos = rlsConfig.getStaleAgeInNanos();
-    callTimeoutNanos = rlsConfig.getLookupServiceTimeoutInNanos();
+    maxAgeNanos = rlsConfig.maxAgeInNanos();
+    staleAgeNanos = rlsConfig.staleAgeInNanos();
+    callTimeoutNanos = rlsConfig.lookupServiceTimeoutInNanos();
     timeProvider = checkNotNull(builder.timeProvider, "timeProvider");
     throttler = checkNotNull(builder.throttler, "throttler");
     linkedHashLruCache =
         new RlsAsyncLruCache(
-            rlsConfig.getCacheSizeBytes(),
+            rlsConfig.cacheSizeBytes(),
             builder.evictionListener,
             scheduledExecutorService,
             timeProvider,
@@ -147,7 +147,7 @@ final class CachingRlsLbClient {
     // will be looked up differently than the backends; overrideAuthority(helper.getAuthority()) is
     // called to impose the authority security restrictions.
     ManagedChannelBuilder<?> rlsChannelBuilder = helper.createResolvingOobChannelBuilder(
-        rlsConfig.getLookupService(), helper.getUnsafeChannelCredentials());
+        rlsConfig.lookupService(), helper.getUnsafeChannelCredentials());
     rlsChannelBuilder.overrideAuthority(helper.getAuthority());
     Map<String, ?> routeLookupChannelServiceConfig =
         lbPolicyConfig.getRouteLookupChannelServiceConfig();
@@ -893,7 +893,7 @@ final class CachingRlsLbClient {
         headers.discardAll(RLS_DATA_KEY);
         headers.put(RLS_DATA_KEY, response.getHeaderData());
       }
-      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
+      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().defaultTarget();
       boolean hasFallback = defaultTarget != null && !defaultTarget.isEmpty();
       if (response.hasData()) {
         ChildPolicyWrapper childPolicyWrapper = response.getChildPolicyWrapper();
@@ -933,7 +933,7 @@ final class CachingRlsLbClient {
     }
 
     private void startFallbackChildPolicy() {
-      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
+      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().defaultTarget();
       logger.log(ChannelLogLevel.DEBUG, "starting fallback to {0}", defaultTarget);
       synchronized (lock) {
         if (fallbackChildPolicyWrapper != null) {
@@ -953,7 +953,7 @@ final class CachingRlsLbClient {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("target", lbPolicyConfig.getRouteLookupConfig().getLookupService())
+          .add("target", lbPolicyConfig.getRouteLookupConfig().lookupService())
           .toString();
     }
   }

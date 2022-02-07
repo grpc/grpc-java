@@ -50,7 +50,7 @@ final class RlsRequestFactory {
   private static Map<String, GrpcKeyBuilder> createKeyBuilderTable(
       RouteLookupConfig config) {
     Map<String, GrpcKeyBuilder> table = new HashMap<>();
-    for (GrpcKeyBuilder grpcKeyBuilder : config.getGrpcKeyBuilders()) {
+    for (GrpcKeyBuilder grpcKeyBuilder : config.grpcKeyBuilders()) {
       for (Name name : grpcKeyBuilder.getNames()) {
         boolean hasMethod = name.getMethod() == null || name.getMethod().isEmpty();
         String method = hasMethod ? "*" : name.getMethod();

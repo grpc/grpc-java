@@ -206,7 +206,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.hasData()).isTrue();
 
     // cache hit for staled entry
-    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.getStaleAgeInNanos(), TimeUnit.NANOSECONDS);
+    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.staleAgeInNanos(), TimeUnit.NANOSECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
@@ -222,7 +222,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.hasData()).isTrue();
 
     // existing cache expired
-    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.getMaxAgeInNanos(), TimeUnit.NANOSECONDS);
+    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.maxAgeInNanos(), TimeUnit.NANOSECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
 
@@ -425,21 +425,22 @@ public class CachingRlsLbClientTest {
   }
 
   private static RouteLookupConfig getRouteLookupConfig() {
-    return new RouteLookupConfig(
-        ImmutableList.of(
+    return RouteLookupConfig.builder()
+        .grpcKeyBuilders(ImmutableList.of(
             new GrpcKeyBuilder(
                 ImmutableList.of(new Name("service1", "create")),
                 ImmutableList.of(
                     new NameMatcher("user", ImmutableList.of("User", "Parent")),
                     new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
                 ExtraKeys.create("server", "service-key", "method-key"),
-                ImmutableMap.<String, String>of())),
-        /* lookupService= */ "service1",
-        /* lookupServiceTimeoutInNanos= */ TimeUnit.SECONDS.toNanos(2),
-        /* maxAgeInNanos= */ TimeUnit.SECONDS.toNanos(300),
-        /* staleAgeInNanos= */ TimeUnit.SECONDS.toNanos(240),
-        /* cacheSizeBytes= */ 1000,
-        DEFAULT_TARGET);
+                ImmutableMap.<String, String>of())))
+        .lookupService("service1")
+        .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(2))
+        .maxAgeInNanos(TimeUnit.SECONDS.toNanos(300))
+        .staleAgeInNanos(TimeUnit.SECONDS.toNanos(240))
+        .cacheSizeBytes(1000)
+        .defaultTarget(DEFAULT_TARGET)
+        .build();
   }
 
   private static BackoffPolicy createBackoffPolicy(final long delay, final TimeUnit unit) {

@@ -134,41 +134,8 @@ final class RlsProtoData {
   }
 
   /** A config object for gRPC RouteLookupService. */
-  @Immutable
-  static final class RouteLookupConfig {
-
-    private final ImmutableList<GrpcKeyBuilder> grpcKeyBuilders;
-
-    private final String lookupService;
-
-    private final long lookupServiceTimeoutInNanos;
-
-    private final long maxAgeInNanos;
-
-    private final long staleAgeInNanos;
-
-    private final long cacheSizeBytes;
-
-    @Nullable
-    private final String defaultTarget;
-
-    RouteLookupConfig(
-        List<GrpcKeyBuilder> grpcKeyBuilders,
-        String lookupService,
-        long lookupServiceTimeoutInNanos,
-        long maxAgeInNanos,
-        long staleAgeInNanos,
-        long cacheSizeBytes,
-        @Nullable
-        String defaultTarget) {
-      this.grpcKeyBuilders = ImmutableList.copyOf(grpcKeyBuilders);
-      this.lookupService = lookupService;
-      this.lookupServiceTimeoutInNanos = lookupServiceTimeoutInNanos;
-      this.maxAgeInNanos = maxAgeInNanos;
-      this.staleAgeInNanos = staleAgeInNanos;
-      this.cacheSizeBytes = cacheSizeBytes;
-      this.defaultTarget = defaultTarget;
-    }
+  @AutoValue
+  abstract static class RouteLookupConfig {
 
     /**
      * Returns unordered specifications for constructing keys for gRPC requests. All GrpcKeyBuilders
@@ -176,36 +143,25 @@ final class RlsProtoData {
      * keyed by name. If no GrpcKeyBuilder matches, an empty key_map will be sent to the lookup
      * service; it should likely reply with a global default route and raise an alert.
      */
-    ImmutableList<GrpcKeyBuilder> getGrpcKeyBuilders() {
-      return grpcKeyBuilders;
-    }
+    abstract ImmutableList<GrpcKeyBuilder> grpcKeyBuilders();
 
     /**
      * Returns the name of the lookup service as a gRPC URI. Typically, this will be a subdomain of
      * the target, such as "lookup.datastore.googleapis.com".
      */
-    String getLookupService() {
-      return lookupService;
-    }
+    abstract String lookupService();
 
     /** Returns the timeout value for lookup service requests. */
-    long getLookupServiceTimeoutInNanos() {
-      return lookupServiceTimeoutInNanos;
-    }
-
+    abstract long lookupServiceTimeoutInNanos();
 
     /** Returns the maximum age the result will be cached. */
-    long getMaxAgeInNanos() {
-      return maxAgeInNanos;
-    }
+    abstract long maxAgeInNanos();
 
     /**
      * Returns the time when an entry will be in a staled status. When cache is accessed whgen the
      * entry is in staled status, it will
      */
-    long getStaleAgeInNanos() {
-      return staleAgeInNanos;
-    }
+    abstract long staleAgeInNanos();
 
     /**
      * Returns a rough indicator of amount of memory to use for the client cache. Some of the data
@@ -213,9 +169,7 @@ final class RlsProtoData {
      * than this value.  If this field is omitted or set to zero, a client default will be used.
      * The value may be capped to a lower amount based on client configuration.
      */
-    long getCacheSizeBytes() {
-      return cacheSizeBytes;
-    }
+    abstract long cacheSizeBytes();
 
     /**
      * Returns the default target to use if needed.  If nonempty (implies request processing
@@ -224,51 +178,30 @@ final class RlsProtoData {
      * {@literal e.g.} "us_east_1.cloudbigtable.googleapis.com".
      */
     @Nullable
-    String getDefaultTarget() {
-      return defaultTarget;
+    abstract String defaultTarget();
+
+    static Builder builder() {
+      return new AutoValue_RlsProtoData_RouteLookupConfig.Builder();
     }
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      RouteLookupConfig that = (RouteLookupConfig) o;
-      return lookupServiceTimeoutInNanos == that.lookupServiceTimeoutInNanos
-          && maxAgeInNanos == that.maxAgeInNanos
-          && staleAgeInNanos == that.staleAgeInNanos
-          && cacheSizeBytes == that.cacheSizeBytes
-          && Objects.equal(grpcKeyBuilders, that.grpcKeyBuilders)
-          && Objects.equal(lookupService, that.lookupService)
-          && Objects.equal(defaultTarget, that.defaultTarget);
-    }
+    @AutoValue.Builder
+    abstract static class Builder {
 
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(
-          grpcKeyBuilders,
-          lookupService,
-          lookupServiceTimeoutInNanos,
-          maxAgeInNanos,
-          staleAgeInNanos,
-          cacheSizeBytes,
-          defaultTarget);
-    }
+      abstract Builder grpcKeyBuilders(ImmutableList<GrpcKeyBuilder> grpcKeyBuilders);
 
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("grpcKeyBuilders", grpcKeyBuilders)
-          .add("lookupService", lookupService)
-          .add("lookupServiceTimeoutInNanos", lookupServiceTimeoutInNanos)
-          .add("maxAgeInNanos", maxAgeInNanos)
-          .add("staleAgeInNanos", staleAgeInNanos)
-          .add("cacheSize", cacheSizeBytes)
-          .add("defaultTarget", defaultTarget)
-          .toString();
+      abstract Builder lookupService(String lookupService);
+
+      abstract Builder lookupServiceTimeoutInNanos(long lookupServiceTimeoutInNanos);
+
+      abstract Builder maxAgeInNanos(long maxAgeInNanos);
+
+      abstract Builder staleAgeInNanos(long staleAgeInNanos);
+
+      abstract Builder cacheSizeBytes(long cacheSizeBytes);
+
+      abstract Builder defaultTarget(@Nullable String defaultTarget);
+
+      abstract RouteLookupConfig build();
     }
   }
 

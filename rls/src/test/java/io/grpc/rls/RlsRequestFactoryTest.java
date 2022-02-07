@@ -36,8 +36,8 @@ import org.junit.runners.JUnit4;
 public class RlsRequestFactoryTest {
 
   private static final RouteLookupConfig RLS_CONFIG =
-      new RouteLookupConfig(
-          ImmutableList.of(
+      RouteLookupConfig.builder()
+          .grpcKeyBuilders(ImmutableList.of(
               new GrpcKeyBuilder(
                   ImmutableList.of(new Name("com.google.service1", "Create")),
                   ImmutableList.of(
@@ -63,13 +63,14 @@ public class RlsRequestFactoryTest {
                   ImmutableList.of(
                       new NameMatcher("user", ImmutableList.of("User", "Parent"))),
                   ExtraKeys.create(null, null, null),
-                  ImmutableMap.of("const-key-4", "const-value-4"))),
-          /* lookupService= */ "bigtable-rls.googleapis.com",
-          /* lookupServiceTimeoutInNanos= */ TimeUnit.SECONDS.toNanos(2),
-          /* maxAgeInNanos= */ TimeUnit.SECONDS.toNanos(300),
-          /* staleAgeInNanos= */ TimeUnit.SECONDS.toNanos(240),
-          /* cacheSizeBytes= */ 1000,
-          /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
+                  ImmutableMap.of("const-key-4", "const-value-4"))))
+          .lookupService("bigtable-rls.googleapis.com")
+          .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(2))
+          .maxAgeInNanos(TimeUnit.SECONDS.toNanos(300))
+          .staleAgeInNanos(TimeUnit.SECONDS.toNanos(240))
+          .cacheSizeBytes(1000)
+          .defaultTarget("us_east_1.cloudbigtable.googleapis.com")
+          .build();
 
   private final RlsRequestFactory factory = new RlsRequestFactory(
       RLS_CONFIG, "bigtable.googleapis.com");
