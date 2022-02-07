@@ -82,7 +82,7 @@ class LoadClient {
       channels[i] =
           Utils.newClientChannel(
               Epoll.isAvailable() ?  Transport.NETTY_EPOLL : Transport.NETTY_NIO,
-              Utils.parseSocketAddress(config.getServerTargets(i % config.getServerTargetsCount())),
+              config.getServerTargets(i % config.getServerTargetsCount()),
               config.hasSecurityParams(),
               config.hasSecurityParams() && config.getSecurityParams().getUseTestCa(),
               config.hasSecurityParams()

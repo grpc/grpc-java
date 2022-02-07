@@ -33,6 +33,11 @@ public interface SocketAddressValidator {
     public boolean isValidSocketAddress(SocketAddress address) {
       return address instanceof InetSocketAddress;
     }
+
+    @Override
+    public boolean isValidSocketAddress(String address) {
+      return !address.startsWith("unix://");
+    }
   };
 
   /**
@@ -43,10 +48,20 @@ public interface SocketAddressValidator {
     public boolean isValidSocketAddress(SocketAddress address) {
       return "DomainSocketAddress".equals(address.getClass().getSimpleName());
     }
+
+    @Override
+    public boolean isValidSocketAddress(String address) {
+      return address.startsWith("unix://");
+    }
   };
 
   /**
    * Returns {@code true} if the given address is valid.
    */
   boolean isValidSocketAddress(SocketAddress address);
+
+  /**
+   * Returns {@code true} if the given address is valid.
+   */
+  boolean isValidSocketAddress(String address);
 }
