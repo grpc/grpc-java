@@ -22,8 +22,6 @@ import static org.jetbrains.kotlinx.lincheck.strategy.managed.ManagedStrategyGua
 import io.grpc.servlet.AsyncServletOutputStreamWriter.ActionItem;
 import io.grpc.servlet.AsyncServletOutputStreamWriter.Log;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
@@ -45,6 +43,11 @@ import org.junit.runners.JUnit4;
  *
  * <p>This test should only call AsyncServletOutputStreamWriter's API surface and not rely on any
  * implementation detail such as whether it's using a lock-free approach or not.
+ *
+ * <p>The test executes two threads concurrently, one for write and flush, and the other for
+ * onWritePossible up to {@link #OPERATIONS_PER_THREAD} operations on each thread. Lincheck will
+ * test all possibly interleaves (on context switch) between the two threads, and then verify the
+ * operations are linearizable in each interleave scenario.
  */
 @ModelCheckingCTest
 @OpGroupConfig(name = "update", nonParallel = true)
@@ -52,15 +55,17 @@ import org.junit.runners.JUnit4;
 @Param(name = "keepReady", gen = BooleanGen.class)
 @RunWith(JUnit4.class)
 public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState {
+  private static final int OPERATIONS_PER_THREAD = 6;
 
   private final AsyncServletOutputStreamWriter writer;
-  private final List<Boolean> keepReadyList = Arrays.asList(new Boolean[6]);
+  private final boolean[] keepReadyArray = new boolean[OPERATIONS_PER_THREAD];
 
   private volatile boolean isReady;
   // when isReadyReturnedFalse, writer.onWritePossible() will be called.
   private volatile boolean isReadyReturnedFalse;
   private int producerIndex;
   private int consumerIndex;
+  private int bytesWritten;
 
   /** Public no-args constructor. */
   public AsyncServletOutputStreamWriterConcurrencyTest() {
@@ -71,6 +76,7 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
               .isTrue();
           // The byte to be written must equal to consumerIndex, otherwise execution order is wrong
           assertWithMessage("write in wrong order").that(bytes[0]).isEqualTo((byte) consumerIndex);
+          bytesWritten++;
           writeOrFlush();
         };
 
@@ -89,7 +95,7 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
   }
 
   private void writeOrFlush() {
-    boolean keepReady = keepReadyList.get(consumerIndex);
+    boolean keepReady = keepReadyArray[consumerIndex];
     if (!keepReady) {
       isReady = false;
     }
@@ -115,7 +121,7 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
   // @com.google.errorprone.annotations.Keep
   @Operation(group = "write")
   public void write(@Param(name = "keepReady") boolean keepReady) throws IOException {
-    keepReadyList.set(producerIndex, keepReady);
+    keepReadyArray[producerIndex] = keepReady;
     writer.writeBytes(new byte[]{(byte) producerIndex}, 1);
     producerIndex++;
   }
@@ -130,14 +136,14 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
   // @com.google.errorprone.annotations.Keep // called by lincheck reflectively
   @Operation(group = "write")
   public void flush(@Param(name = "keepReady") boolean keepReady) throws IOException {
-    keepReadyList.set(producerIndex, keepReady);
+    keepReadyArray[producerIndex] = keepReady;
     writer.flush();
     producerIndex++;
   }
 
   /** If the writer is not ready, let it turn ready and call writer.onWritePossible(). */
   // @com.google.errorprone.annotations.Keep // called by lincheck reflectively
-  @Operation(group = "update", handleExceptionsAsResult = IOException.class)
+  @Operation(group = "update")
   public void maybeOnWritePossible() throws IOException {
     if (isReadyReturnedFalse) {
       isReadyReturnedFalse = false;
@@ -148,7 +154,7 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
 
   @Override
   protected Object extractState() {
-    return keepReadyList;
+    return bytesWritten;
   }
 
   @Test
@@ -156,7 +162,7 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
     ModelCheckingOptions options = new ModelCheckingOptions()
         .actorsBefore(0)
         .threads(2)
-        .actorsPerThread(6)
+        .actorsPerThread(OPERATIONS_PER_THREAD)
         .actorsAfter(0)
         .addGuarantee(
             forClasses(
