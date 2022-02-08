@@ -2,6 +2,7 @@ plugins {
     id "java-library"
     id "maven-publish"
 
+    id "com.google.protobuf"
     id "ru.vyarus.animalsniffer"
 }
 
@@ -9,7 +10,9 @@ description = "gRPC: Observability"
 dependencies {
     api project(':grpc-api')
 
-    implementation libraries.guava
+    implementation libraries.guava,
+            project(':grpc-protobuf'),
+            project(':grpc-stub')
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
@@ -20,3 +23,6 @@ dependencies {
 
     signature "org.codehaus.mojo.signature:java18:1.0@signature"
 }
+
+configureProtoCompilation()
+
