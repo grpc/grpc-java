@@ -46,13 +46,13 @@ message GrpcLogRecord {
   }
   // The entity that generates the log entry
   enum EventLogger {
-    LOGGER_UNKONWN = 0;
+    LOGGER_UNKNOWN = 0;
     LOGGER_CLIENT = 1;
     LOGGER_SERVER = 2;
   }
   // The log severity level of the log entry
   enum LogLevel {
-    LOG_LEVEL_UNKONWN = 0;
+    LOG_LEVEL_UNKNOWN = 0;
     LOG_LEVEL_TRACE = 1;
     LOG_LEVEL_DEBUG = 2;
     LOG_LEVEL_INFO = 3;
