@@ -106,6 +106,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
    * <p>Note that local-only transparent retries are unlimited.
    */
   private final AtomicBoolean noMoreTransparentRetry = new AtomicBoolean();
+  private final AtomicInteger localOnlyTransparentRetries = new AtomicInteger();
 
   // Used for recording the share of buffer used for the current call out of the channel buffer.
   // This field would not be necessary if there is no channel buffer limit.
@@ -846,6 +847,24 @@ abstract class RetriableStream<ReqT> implements ClientStream {
                 public void run() {
                   isClosed = true;
                   masterListener.closed(status, rpcProgress, trailers);
+                }
+              });
+        }
+        return;
+      }
+      if (rpcProgress == RpcProgress.MISCARRIED
+          && localOnlyTransparentRetries.incrementAndGet() > 10_000) {
+        commitAndRun(substream);
+        if (state.winningSubstream == substream) {
+          Status tooManyTransparentRetries = Status.INTERNAL
+              .withDescription("Too many transparent retries. Might be a bug in gRPC")
+              .withCause(status.asRuntimeException());
+          listenerSerializeExecutor.execute(
+              new Runnable() {
+                @Override
+                public void run() {
+                  isClosed = true;
+                  masterListener.closed(tooManyTransparentRetries, rpcProgress, trailers);
                 }
               });
         }
