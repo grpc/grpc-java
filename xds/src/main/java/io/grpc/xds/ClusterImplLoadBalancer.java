@@ -319,9 +319,11 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           }
           final ClusterLocalityStats stats =
               result.getSubchannel().getAttributes().get(ATTR_CLUSTER_LOCALITY_STATS);
-          ClientStreamTracer.Factory tracerFactory = new CountingStreamTracerFactory(
-              stats, inFlights, result.getStreamTracerFactory());
-          return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
+          if (stats != null) {
+            ClientStreamTracer.Factory tracerFactory = new CountingStreamTracerFactory(
+                stats, inFlights, result.getStreamTracerFactory());
+            return PickResult.withSubchannel(result.getSubchannel(), tracerFactory);
+          }
         }
         return result;
       }
@@ -334,7 +336,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   }
 
   private static final class CountingStreamTracerFactory extends
-      ClientStreamTracer.InternalLimitedInfoFactory {
+      ClientStreamTracer.Factory {
     private ClusterLocalityStats stats;
     private final AtomicLong inFlights;
     @Nullable

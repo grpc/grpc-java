@@ -21,8 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Metadata;
-import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
 import io.grpc.rls.RlsProtoData.ExtraKeys;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
@@ -52,11 +50,11 @@ final class RlsRequestFactory {
   private static Map<String, GrpcKeyBuilder> createKeyBuilderTable(
       RouteLookupConfig config) {
     Map<String, GrpcKeyBuilder> table = new HashMap<>();
-    for (GrpcKeyBuilder grpcKeyBuilder : config.getGrpcKeyBuilders()) {
-      for (Name name : grpcKeyBuilder.getNames()) {
-        boolean hasMethod = name.getMethod() == null || name.getMethod().isEmpty();
-        String method = hasMethod ? "*" : name.getMethod();
-        String path = "/" + name.getService() + "/" + method;
+    for (GrpcKeyBuilder grpcKeyBuilder : config.grpcKeyBuilders()) {
+      for (Name name : grpcKeyBuilder.names()) {
+        boolean hasMethod = name.method() == null || name.method().isEmpty();
+        String method = hasMethod ? "*" : name.method();
+        String path = "/" + name.service() + "/" + method;
         table.put(path, grpcKeyBuilder);
       }
     }
@@ -75,12 +73,12 @@ final class RlsRequestFactory {
       grpcKeyBuilder = keyBuilderTable.get("/" + service + "/*");
     }
     if (grpcKeyBuilder == null) {
-      return new RouteLookupRequest(ImmutableMap.<String, String>of());
+      return RouteLookupRequest.create(ImmutableMap.<String, String>of());
     }
-    Map<String, String> rlsRequestHeaders =
-        createRequestHeaders(metadata, grpcKeyBuilder.getHeaders());
-    ExtraKeys extraKeys = grpcKeyBuilder.getExtraKeys();
-    Map<String, String> constantKeys = grpcKeyBuilder.getConstantKeys();
+    ImmutableMap.Builder<String, String> rlsRequestHeaders =
+        createRequestHeaders(metadata, grpcKeyBuilder.headers());
+    ExtraKeys extraKeys = grpcKeyBuilder.extraKeys();
+    Map<String, String> constantKeys = grpcKeyBuilder.constantKeys();
     if (extraKeys.host() != null) {
       rlsRequestHeaders.put(extraKeys.host(), target);
     }
@@ -91,12 +89,12 @@ final class RlsRequestFactory {
       rlsRequestHeaders.put(extraKeys.method(), method);
     }
     rlsRequestHeaders.putAll(constantKeys);
-    return new RouteLookupRequest(rlsRequestHeaders);
+    return RouteLookupRequest.create(rlsRequestHeaders.build());
   }
 
-  private Map<String, String> createRequestHeaders(
+  private ImmutableMap.Builder<String, String> createRequestHeaders(
       Metadata metadata, List<NameMatcher> keyBuilder) {
-    Map<String, String> rlsRequestHeaders = new HashMap<>();
+    ImmutableMap.Builder<String, String> rlsRequestHeaders = ImmutableMap.builder();
     for (NameMatcher nameMatcher : keyBuilder) {
       String value = null;
       for (String requestHeaderName : nameMatcher.names()) {
@@ -106,11 +104,7 @@ final class RlsRequestFactory {
         }
       }
       if (value != null) {
-        rlsRequestHeaders.put(nameMatcher.getKey(), value);
-      } else if (!nameMatcher.isOptional()) {
-        throw new StatusRuntimeException(
-            Status.INVALID_ARGUMENT.withDescription(
-                String.format("Missing mandatory metadata(%s) not found", nameMatcher.getKey())));
+        rlsRequestHeaders.put(nameMatcher.key(), value);
       }
     }
     return rlsRequestHeaders;

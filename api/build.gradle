@@ -2,7 +2,7 @@ plugins {
     id "java-library"
     id "maven-publish"
 
-    id "me.champeau.gradle.jmh"
+    id "me.champeau.jmh"
     id "ru.vyarus.animalsniffer"
 }
 
@@ -12,9 +12,9 @@ evaluationDependsOn(project(':grpc-context').path)
 
 dependencies {
     api project(':grpc-context'),
-            libraries.jsr305
-    implementation libraries.guava,
+            libraries.jsr305,
             libraries.errorprone
+    implementation libraries.guava
 
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),

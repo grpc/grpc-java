@@ -59,6 +59,7 @@ import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.internal.TimeProvider;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClientXdsClient.XdsChannelFactory;
@@ -114,6 +115,8 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public abstract class ClientXdsClientTestBase {
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
+  private static final String SERVER_URI_CUSTOME_AUTHORITY = "trafficdirector2.googleapis.com";
+  private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
   private static final String LDS_RESOURCE = "listener.googleapis.com";
   private static final String RDS_RESOURCE = "route-configuration.googleapis.com";
   private static final String CDS_RESOURCE = "cluster.googleapis.com";
@@ -202,8 +205,8 @@ public abstract class ClientXdsClientTestBase {
 
   // CDS test resources.
   private final Any testClusterRoundRobin =
-      Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null, false, null,
-          "envoy.transport_sockets.tls", null
+      Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null,
+          null, false, null, "envoy.transport_sockets.tls", null
       ));
 
   // EDS test resources.
@@ -250,9 +253,12 @@ public abstract class ClientXdsClientTestBase {
   private TlsContextManager tlsContextManager;
 
   private ManagedChannel channel;
+  private ManagedChannel channelForCustomAuthority;
+  private ManagedChannel channelForEmptyAuthority;
   private ClientXdsClient xdsClient;
   private boolean originalEnableFaultInjection;
   private boolean originalEnableRbac;
+  private boolean originalEnableLeastRequest;
 
   @Before
   public void setUp() throws IOException {
@@ -267,6 +273,8 @@ public abstract class ClientXdsClientTestBase {
     ClientXdsClient.enableFaultInjection = true;
     originalEnableRbac = ClientXdsClient.enableRbac;
     assertThat(originalEnableRbac).isTrue();
+    originalEnableLeastRequest = ClientXdsClient.enableLeastRequest;
+    ClientXdsClient.enableLeastRequest = true;
     final String serverName = InProcessServerBuilder.generateName();
     cleanupRule.register(
         InProcessServerBuilder
@@ -281,7 +289,24 @@ public abstract class ClientXdsClientTestBase {
     XdsChannelFactory xdsChannelFactory = new XdsChannelFactory() {
       @Override
       ManagedChannel create(ServerInfo serverInfo) {
-        return channel;
+        if (serverInfo.target().equals(SERVER_URI)) {
+          return channel;
+        }
+        if (serverInfo.target().equals(SERVER_URI_CUSTOME_AUTHORITY)) {
+          if (channelForCustomAuthority == null) {
+            channelForCustomAuthority = cleanupRule.register(
+                InProcessChannelBuilder.forName(serverName).directExecutor().build());
+          }
+          return channelForCustomAuthority;
+        }
+        if (serverInfo.target().equals(SERVER_URI_EMPTY_AUTHORITY)) {
+          if (channelForEmptyAuthority == null) {
+            channelForEmptyAuthority = cleanupRule.register(
+                InProcessChannelBuilder.forName(serverName).directExecutor().build());
+          }
+          return channelForEmptyAuthority;
+        }
+        throw new IllegalArgumentException("Can not create channel for " + serverInfo);
       }
     };
 
@@ -290,6 +315,17 @@ public abstract class ClientXdsClientTestBase {
             .servers(Arrays.asList(
                 Bootstrapper.ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, useProtocolV3())))
             .node(EnvoyProtoData.Node.newBuilder().build())
+            .authorities(ImmutableMap.of(
+                "authority.xds.com",
+                AuthorityInfo.create(
+                    "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
+                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                        SERVER_URI_CUSTOME_AUTHORITY, CHANNEL_CREDENTIALS, useProtocolV3()))),
+                "",
+                AuthorityInfo.create(
+                    "xdstp:///envoy.config.listener.v3.Listener/%s",
+                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                        SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS, useProtocolV3())))))
             .certProviders(ImmutableMap.of("cert-instance-name",
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
             .build();
@@ -312,6 +348,7 @@ public abstract class ClientXdsClientTestBase {
   public void tearDown() {
     ClientXdsClient.enableFaultInjection = originalEnableFaultInjection;
     ClientXdsClient.enableRbac = originalEnableRbac;
+    ClientXdsClient.enableLeastRequest = originalEnableLeastRequest;
     xdsClient.shutdown();
     channel.shutdown();  // channel not owned by XdsClient
     assertThat(adsEnded.get()).isTrue();
@@ -346,10 +383,23 @@ public abstract class ClientXdsClientTestBase {
 
   private void verifySubscribedResourcesMetadataSizes(
       int ldsSize, int cdsSize, int rdsSize, int edsSize) {
-    assertThat(xdsClient.getSubscribedResourcesMetadata(LDS)).hasSize(ldsSize);
-    assertThat(xdsClient.getSubscribedResourcesMetadata(CDS)).hasSize(cdsSize);
-    assertThat(xdsClient.getSubscribedResourcesMetadata(RDS)).hasSize(rdsSize);
-    assertThat(xdsClient.getSubscribedResourcesMetadata(EDS)).hasSize(edsSize);
+    Map<ResourceType, Map<String, ResourceMetadata>> subscribedResourcesMetadata =
+        awaitSubscribedResourcesMetadata();
+    assertThat(subscribedResourcesMetadata.get(LDS)).hasSize(ldsSize);
+    assertThat(subscribedResourcesMetadata.get(CDS)).hasSize(cdsSize);
+    assertThat(subscribedResourcesMetadata.get(RDS)).hasSize(rdsSize);
+    assertThat(subscribedResourcesMetadata.get(EDS)).hasSize(edsSize);
+  }
+
+  private Map<ResourceType, Map<String, ResourceMetadata>> awaitSubscribedResourcesMetadata() {
+    try {
+      return xdsClient.getSubscribedResourcesMetadataSnapshot().get(20, TimeUnit.SECONDS);
+    } catch (Exception e) {
+      if (e instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
+      throw new AssertionError(e);
+    }
   }
 
   /** Verify the resource requested, but not updated. */
@@ -401,22 +451,20 @@ public abstract class ClientXdsClientTestBase {
   private ResourceMetadata verifyResourceMetadata(
       ResourceType type, String resourceName, Any rawResource, ResourceMetadataStatus status,
       String versionInfo, long updateTimeNanos, boolean hasErrorState) {
-    ResourceMetadata resourceMetadata =
-        xdsClient.getSubscribedResourcesMetadata(type).get(resourceName);
-    assertThat(resourceMetadata).isNotNull();
+    ResourceMetadata metadata = awaitSubscribedResourcesMetadata().get(type).get(resourceName);
+    assertThat(metadata).isNotNull();
     String name = type.toString() + " resource '" + resourceName + "' metadata field ";
-    assertWithMessage(name + "status").that(resourceMetadata.getStatus()).isEqualTo(status);
-    assertWithMessage(name + "version").that(resourceMetadata.getVersion()).isEqualTo(versionInfo);
-    assertWithMessage(name + "rawResource").that(resourceMetadata.getRawResource())
-        .isEqualTo(rawResource);
-    assertWithMessage(name + "updateTimeNanos").that(resourceMetadata.getUpdateTimeNanos())
+    assertWithMessage(name + "status").that(metadata.getStatus()).isEqualTo(status);
+    assertWithMessage(name + "version").that(metadata.getVersion()).isEqualTo(versionInfo);
+    assertWithMessage(name + "rawResource").that(metadata.getRawResource()).isEqualTo(rawResource);
+    assertWithMessage(name + "updateTimeNanos").that(metadata.getUpdateTimeNanos())
         .isEqualTo(updateTimeNanos);
     if (hasErrorState) {
-      assertWithMessage(name + "errorState").that(resourceMetadata.getErrorState()).isNotNull();
+      assertWithMessage(name + "errorState").that(metadata.getErrorState()).isNotNull();
     } else {
-      assertWithMessage(name + "errorState").that(resourceMetadata.getErrorState()).isNull();
+      assertWithMessage(name + "errorState").that(metadata.getErrorState()).isNull();
     }
-    return resourceMetadata;
+    return metadata;
   }
 
   /**
@@ -706,6 +754,149 @@ public abstract class ClientXdsClientTestBase {
         .isEqualTo(RDS_RESOURCE);
     verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerRds, VERSION_2, TIME_INCREMENT * 2);
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+    assertThat(channelForCustomAuthority).isNull();
+    assertThat(channelForEmptyAuthority).isNull();
+  }
+
+  @Test
+  public void ldsResourceUpdated_withXdstpResourceName() {
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
+        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
+    DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+    verifyResourceMetadataRequested(LDS, ldsResourceName);
+
+    Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(ldsResourceName,
+        mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequest(LDS, ldsResourceName, VERSION_1, "0000", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
+        .hasSize(VHOST_SIZE);
+    verifyResourceMetadataAcked(
+        LDS, ldsResourceName, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+  }
+
+  @Test
+  public void ldsResourceUpdated_withXdstpResourceName_withEmptyAuthority() {
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp:///envoy.config.listener.v3.Listener/listener1"
+        : "xdstp:///envoy.api.v2.Listener/listener1";
+    DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
+    assertThat(channelForEmptyAuthority).isNotNull();
+    verifyResourceMetadataRequested(LDS, ldsResourceName);
+
+    Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(ldsResourceName,
+        mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequest(LDS, ldsResourceName, VERSION_1, "0000", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
+        .hasSize(VHOST_SIZE);
+    verifyResourceMetadataAcked(
+        LDS, ldsResourceName, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+  }
+
+  @Test
+  public void ldsResourceUpdated_withXdstpResourceName_witUnorderedContextParams() {
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?bar=2&foo=1"
+        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1/a?bar=2&foo=1";
+    DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String ldsResourceNameWithUnorderedContextParams = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?foo=1&bar=2"
+        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1/a?foo=1&bar=2";
+    Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(
+        ldsResourceNameWithUnorderedContextParams,
+        mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequest(
+        LDS, ldsResourceName, VERSION_1, "0000", NODE);
+  }
+
+  @Test
+  public void ldsResourceUpdated_withXdstpResourceName_withWrongType() {
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
+        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
+    DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String ldsResourceNameWithWrongType =
+        "xdstp://authority.xds.com/envoy.config.route.v3.RouteConfiguration/listener1";
+    Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(
+        ldsResourceNameWithWrongType,
+        mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequestNack(
+        LDS, ldsResourceName, "", "0000", NODE,
+        ImmutableList.of(
+            "Unsupported resource name: " +  ldsResourceNameWithWrongType + " for type: LDS"));
+  }
+
+  @Test
+  public void rdsResourceUpdated_withXdstpResourceName_withWrongType() {
+    String rdsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.route.v3.RouteConfiguration/route1"
+        : "xdstp://authority.xds.com/envoy.api.v2.RouteConfiguration/route1";
+    DiscoveryRpcCall call = startResourceWatcher(RDS, rdsResourceName, rdsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String rdsResourceNameWithWrongType =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/route1";
+    Any testRouteConfig = Any.pack(mf.buildRouteConfiguration(
+        rdsResourceNameWithWrongType, mf.buildOpaqueVirtualHosts(VHOST_SIZE)));
+    call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
+    call.verifyRequestNack(
+        RDS, rdsResourceName, "", "0000", NODE,
+        ImmutableList.of(
+            "Unsupported resource name: " + rdsResourceNameWithWrongType + " for type: RDS"));
+  }
+
+  @Test
+  public void cdsResourceUpdated_withXdstpResourceName_withWrongType() {
+    String cdsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.cluster.v3.Cluster/cluster1"
+        : "xdstp://authority.xds.com/envoy.api.v2.Cluster/cluster1";
+    DiscoveryRpcCall call = startResourceWatcher(CDS, cdsResourceName, cdsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String cdsResourceNameWithWrongType =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/cluster1";
+    Any testClusterConfig = Any.pack(mf.buildEdsCluster(
+        cdsResourceNameWithWrongType, null, "round_robin", null, null, false, null,
+        "envoy.transport_sockets.tls", null));
+    call.sendResponse(CDS, testClusterConfig, VERSION_1, "0000");
+    call.verifyRequestNack(
+        CDS, cdsResourceName, "", "0000", NODE,
+        ImmutableList.of(
+            "Unsupported resource name: " + cdsResourceNameWithWrongType + " for type: CDS"));
+  }
+
+  @Test
+  public void edsResourceUpdated_withXdstpResourceName_withWrongType() {
+    String edsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1"
+        : "xdstp://authority.xds.com/envoy.api.v2.ClusterLoadAssignment/cluster1";
+    DiscoveryRpcCall call = startResourceWatcher(EDS, edsResourceName, edsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String edsResourceNameWithWrongType =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/cluster1";
+    Any testEdsConfig = Any.pack(mf.buildClusterLoadAssignment(
+        edsResourceNameWithWrongType,
+        ImmutableList.of(mf.buildLocalityLbEndpoints(
+            "region2", "zone2", "subzone2",
+            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 0)),
+        ImmutableList.of()));
+    call.sendResponse(EDS, testEdsConfig, VERSION_1, "0000");
+    call.verifyRequestNack(
+        EDS, edsResourceName, "", "0000", NODE,
+        ImmutableList.of(
+            "Unsupported resource name: " + edsResourceNameWithWrongType + " for type: EDS"));
   }
 
   @Test
@@ -1180,9 +1371,9 @@ public abstract class ClientXdsClientTestBase {
 
     List<Any> clusters = ImmutableList.of(
         Any.pack(mf.buildEdsCluster("cluster-bar.googleapis.com", null, "round_robin", null,
-            false, null, "envoy.transport_sockets.tls", null)),
+            null, false, null, "envoy.transport_sockets.tls", null)),
         Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null,
-            false, null, "envoy.transport_sockets.tls", null)));
+            null, false, null, "envoy.transport_sockets.tls", null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
 
     // Client sent an ACK CDS request.
@@ -1256,13 +1447,13 @@ public abstract class ClientXdsClientTestBase {
 
     // CDS -> {A, B, C}, version 1
     ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
-        "A", Any.pack(mf.buildEdsCluster("A", "A.1", "round_robin", null, false, null,
+        "A", Any.pack(mf.buildEdsCluster("A", "A.1", "round_robin", null, null, false, null,
             "envoy.transport_sockets.tls", null
         )),
-        "B", Any.pack(mf.buildEdsCluster("B", "B.1", "round_robin", null, false, null,
+        "B", Any.pack(mf.buildEdsCluster("B", "B.1", "round_robin", null, null, false, null,
             "envoy.transport_sockets.tls", null
         )),
-        "C", Any.pack(mf.buildEdsCluster("C", "C.1", "round_robin", null, false, null,
+        "C", Any.pack(mf.buildEdsCluster("C", "C.1", "round_robin", null, null, false, null,
             "envoy.transport_sockets.tls", null
         )));
     call.sendResponse(CDS, resourcesV1.values().asList(), VERSION_1, "0000");
@@ -1275,7 +1466,7 @@ public abstract class ClientXdsClientTestBase {
     // CDS -> {A, B}, version 2
     // Failed to parse endpoint B
     ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
-        "A", Any.pack(mf.buildEdsCluster("A", "A.2", "round_robin", null, false, null,
+        "A", Any.pack(mf.buildEdsCluster("A", "A.2", "round_robin", null, null, false, null,
             "envoy.transport_sockets.tls", null
         )),
         "B", Any.pack(mf.buildClusterInvalid("B")));
@@ -1292,10 +1483,10 @@ public abstract class ClientXdsClientTestBase {
 
     // CDS -> {B, C} version 3
     ImmutableMap<String, Any> resourcesV3 = ImmutableMap.of(
-        "B", Any.pack(mf.buildEdsCluster("B", "B.3", "round_robin", null, false, null,
+        "B", Any.pack(mf.buildEdsCluster("B", "B.3", "round_robin", null, null, false, null,
             "envoy.transport_sockets.tls", null
         )),
-        "C", Any.pack(mf.buildEdsCluster("C", "C.3", "round_robin", null, false, null,
+        "C", Any.pack(mf.buildEdsCluster("C", "C.3", "round_robin", null, null, false, null,
             "envoy.transport_sockets.tls", null
         )));
     call.sendResponse(CDS, resourcesV3.values().asList(), VERSION_3, "0002");
@@ -1328,13 +1519,13 @@ public abstract class ClientXdsClientTestBase {
 
     // CDS -> {A, B, C}, version 1
     ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
-        "A", Any.pack(mf.buildEdsCluster("A", "A.1", "round_robin", null, false, null,
+        "A", Any.pack(mf.buildEdsCluster("A", "A.1", "round_robin", null, null, false, null,
             "envoy.transport_sockets.tls", null
         )),
-        "B", Any.pack(mf.buildEdsCluster("B", "B.1", "round_robin", null, false, null,
+        "B", Any.pack(mf.buildEdsCluster("B", "B.1", "round_robin", null, null, false, null,
             "envoy.transport_sockets.tls", null
         )),
-        "C", Any.pack(mf.buildEdsCluster("C", "C.1", "round_robin", null, false, null,
+        "C", Any.pack(mf.buildEdsCluster("C", "C.1", "round_robin", null, null, false, null,
             "envoy.transport_sockets.tls", null
         )));
     call.sendResponse(CDS, resourcesV1.values().asList(), VERSION_1, "0000");
@@ -1360,7 +1551,7 @@ public abstract class ClientXdsClientTestBase {
     // CDS -> {A, B}, version 2
     // Failed to parse endpoint B
     ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
-        "A", Any.pack(mf.buildEdsCluster("A", "A.2", "round_robin", null, false, null,
+        "A", Any.pack(mf.buildEdsCluster("A", "A.2", "round_robin", null, null, false, null,
             "envoy.transport_sockets.tls", null
         )),
         "B", Any.pack(mf.buildClusterInvalid("B")));
@@ -1406,12 +1597,39 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
+  public void cdsResourceFound_leastRequestLbPolicy() {
+    DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
+    Message leastRequestConfig = mf.buildLeastRequestLbConfig(3);
+    Any clusterRingHash = Any.pack(
+        mf.buildEdsCluster(CDS_RESOURCE, null, "least_request_experimental", null,
+            leastRequestConfig, false, null, "envoy.transport_sockets.tls", null
+        ));
+    call.sendResponse(ResourceType.CDS, clusterRingHash, VERSION_1, "0000");
+
+    // Client sent an ACK CDS request.
+    call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
+    assertThat(cdsUpdate.edsServiceName()).isNull();
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.LEAST_REQUEST);
+    assertThat(cdsUpdate.choiceCount()).isEqualTo(3);
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
+    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterRingHash, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+  }
+
+  @Test
   public void cdsResourceFound_ringHashLbPolicy() {
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
     Message ringHashConfig = mf.buildRingHashLbConfig("xx_hash", 10L, 100L);
     Any clusterRingHash = Any.pack(
-        mf.buildEdsCluster(CDS_RESOURCE, null, "ring_hash", ringHashConfig, false, null,
-            "envoy.transport_sockets.tls", null
+        mf.buildEdsCluster(CDS_RESOURCE, null, "ring_hash_experimental", ringHashConfig, null,
+            false, null, "envoy.transport_sockets.tls", null
         ));
     call.sendResponse(ResourceType.CDS, clusterRingHash, VERSION_1, "0000");
 
@@ -1439,7 +1657,7 @@ public abstract class ClientXdsClientTestBase {
     List<String> candidates = Arrays.asList(
         "cluster1.googleapis.com", "cluster2.googleapis.com", "cluster3.googleapis.com");
     Any clusterAggregate =
-        Any.pack(mf.buildAggregateCluster(CDS_RESOURCE, "round_robin", null, candidates));
+        Any.pack(mf.buildAggregateCluster(CDS_RESOURCE, "round_robin", null, null, candidates));
     call.sendResponse(CDS, clusterAggregate, VERSION_1, "0000");
 
     // Client sent an ACK CDS request.
@@ -1458,7 +1676,7 @@ public abstract class ClientXdsClientTestBase {
   public void cdsResponseWithCircuitBreakers() {
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
     Any clusterCircuitBreakers = Any.pack(
-        mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null, false, null,
+        mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null, null, false, null,
             "envoy.transport_sockets.tls", mf.buildCircuitBreakers(50, 200)));
     call.sendResponse(CDS, clusterCircuitBreakers, VERSION_1, "0000");
 
@@ -1490,15 +1708,15 @@ public abstract class ClientXdsClientTestBase {
     // Management server sends back CDS response with UpstreamTlsContext.
     Any clusterEds =
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
-            null, true,
+            null, null, true,
             mf.buildUpstreamTlsContext("cert-instance-name", "cert1"),
             "envoy.transport_sockets.tls", null));
     List<Any> clusters = ImmutableList.of(
         Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com",
-            "dns-service-bar.googleapis.com", 443, "round_robin", null, false, null, null)),
+            "dns-service-bar.googleapis.com", 443, "round_robin", null, null,false, null, null)),
         clusterEds,
-        Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null, false,
-            null, "envoy.transport_sockets.tls", null)));
+        Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null, null,
+            false, null, "envoy.transport_sockets.tls", null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
 
     // Client sent an ACK CDS request.
@@ -1526,15 +1744,15 @@ public abstract class ClientXdsClientTestBase {
     // Management server sends back CDS response with UpstreamTlsContext.
     Any clusterEds =
         Any.pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
-            null, true,
+            null, null,true,
             mf.buildNewUpstreamTlsContext("cert-instance-name", "cert1"),
             "envoy.transport_sockets.tls", null));
     List<Any> clusters = ImmutableList.of(
         Any.pack(mf.buildLogicalDnsCluster("cluster-bar.googleapis.com",
-            "dns-service-bar.googleapis.com", 443, "round_robin", null, false, null, null)),
+            "dns-service-bar.googleapis.com", 443, "round_robin", null, null, false, null, null)),
         clusterEds,
-        Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null, false,
-            null, "envoy.transport_sockets.tls", null)));
+        Any.pack(mf.buildEdsCluster("cluster-baz.googleapis.com", null, "round_robin", null, null,
+            false, null, "envoy.transport_sockets.tls", null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
 
     // Client sent an ACK CDS request.
@@ -1561,7 +1779,7 @@ public abstract class ClientXdsClientTestBase {
     // Management server sends back CDS response with UpstreamTlsContext.
     List<Any> clusters = ImmutableList.of(Any
         .pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
-            null, true,
+            null, null, true,
             mf.buildUpstreamTlsContext(null, null), "envoy.transport_sockets.tls", null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
 
@@ -1589,7 +1807,7 @@ public abstract class ClientXdsClientTestBase {
     // Management server sends back CDS response with UpstreamTlsContext.
     List<Any> clusters = ImmutableList.of(Any
         .pack(mf.buildEdsCluster(CDS_RESOURCE, "eds-cluster-foo.googleapis.com", "round_robin",
-            null, true,
+            null, null, true,
             mf.buildUpstreamTlsContext("secret1", "cert1"), "envoy.transport_sockets.bad", null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
 
@@ -1653,7 +1871,7 @@ public abstract class ClientXdsClientTestBase {
     int dnsHostPort = 443;
     Any clusterDns =
         Any.pack(mf.buildLogicalDnsCluster(CDS_RESOURCE, dnsHostAddr, dnsHostPort, "round_robin",
-            null, false, null, null));
+            null, null, false, null, null));
     call.sendResponse(CDS, clusterDns, VERSION_1, "0000");
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
@@ -1670,7 +1888,7 @@ public abstract class ClientXdsClientTestBase {
     // Updated CDS response.
     String edsService = "eds-service-bar.googleapis.com";
     Any clusterEds = Any.pack(
-        mf.buildEdsCluster(CDS_RESOURCE, edsService, "round_robin", null, true, null,
+        mf.buildEdsCluster(CDS_RESOURCE, edsService, "round_robin", null, null, true, null,
             "envoy.transport_sockets.tls", null
         ));
     call.sendResponse(CDS, clusterEds, VERSION_2, "0001");
@@ -1744,9 +1962,9 @@ public abstract class ClientXdsClientTestBase {
     String edsService = "eds-service-bar.googleapis.com";
     List<Any> clusters = ImmutableList.of(
         Any.pack(mf.buildLogicalDnsCluster(CDS_RESOURCE, dnsHostAddr, dnsHostPort, "round_robin",
-            null, false, null, null)),
-        Any.pack(mf.buildEdsCluster(cdsResourceTwo, edsService, "round_robin", null, true, null,
-            "envoy.transport_sockets.tls", null)));
+            null, null, false, null, null)),
+        Any.pack(mf.buildEdsCluster(cdsResourceTwo, edsService, "round_robin", null, null, true,
+            null, "envoy.transport_sockets.tls", null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
     verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
@@ -2007,11 +2225,11 @@ public abstract class ClientXdsClientTestBase {
 
     DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
     List<Any> clusters = ImmutableList.of(
-        Any.pack(mf.buildEdsCluster(resource, null, "round_robin", null, true, null,
+        Any.pack(mf.buildEdsCluster(resource, null, "round_robin", null, null, true, null,
             "envoy.transport_sockets.tls", null
         )),
-        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, EDS_RESOURCE, "round_robin", null, false, null,
-            "envoy.transport_sockets.tls", null)));
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, EDS_RESOURCE, "round_robin", null, null, false,
+            null, "envoy.transport_sockets.tls", null)));
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
     verify(cdsWatcher).onChanged(cdsUpdateCaptor.capture());
     CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
@@ -2056,9 +2274,9 @@ public abstract class ClientXdsClientTestBase {
     verifySubscribedResourcesMetadataSizes(0, 2, 0, 2);
 
     clusters = ImmutableList.of(
-        Any.pack(mf.buildEdsCluster(resource, null, "round_robin", null, true, null,
+        Any.pack(mf.buildEdsCluster(resource, null, "round_robin", null, null, true, null,
             "envoy.transport_sockets.tls", null)),  // no change
-        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null, false, null,
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null, null, false, null,
             "envoy.transport_sockets.tls", null
         )));
     call.sendResponse(CDS, clusters, VERSION_2, "0001");
@@ -2607,19 +2825,23 @@ public abstract class ClientXdsClientTestBase {
     protected abstract Message buildClusterInvalid(String name);
 
     protected abstract Message buildEdsCluster(String clusterName, @Nullable String edsServiceName,
-        String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
-        @Nullable Message upstreamTlsContext, String transportSocketName,
+        String lbPolicy, @Nullable Message ringHashLbConfig, @Nullable Message leastRequestLbConfig,
+        boolean enableLrs, @Nullable Message upstreamTlsContext, String transportSocketName,
         @Nullable Message circuitBreakers);
 
     protected abstract Message buildLogicalDnsCluster(String clusterName, String dnsHostAddr,
-        int dnsHostPort, String lbPolicy, @Nullable Message ringHashLbConfig, boolean enableLrs,
+        int dnsHostPort, String lbPolicy, @Nullable Message ringHashLbConfig,
+        @Nullable Message leastRequestLbConfig, boolean enableLrs,
         @Nullable Message upstreamTlsContext, @Nullable Message circuitBreakers);
 
     protected abstract Message buildAggregateCluster(String clusterName, String lbPolicy,
-        @Nullable Message ringHashLbConfig, List<String> clusters);
+        @Nullable Message ringHashLbConfig, @Nullable Message leastRequestLbConfig,
+        List<String> clusters);
 
     protected abstract Message buildRingHashLbConfig(String hashFunction, long minRingSize,
         long maxRingSize);
+
+    protected abstract Message buildLeastRequestLbConfig(int choiceCount);
 
     protected abstract Message buildUpstreamTlsContext(String instanceName, String certName);
 

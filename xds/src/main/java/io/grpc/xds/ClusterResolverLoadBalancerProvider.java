@@ -68,7 +68,8 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
   static final class ClusterResolverConfig {
     // Ordered list of clusters to be resolved.
     final List<DiscoveryMechanism> discoveryMechanisms;
-    // Endpoint-level load balancing policy with config (round_robin or ring_hash).
+    // Endpoint-level load balancing policy with config
+    // (round_robin, least_request_experimental or ring_hash_experimental).
     final PolicySelection lbPolicy;
 
     ClusterResolverConfig(List<DiscoveryMechanism> discoveryMechanisms, PolicySelection lbPolicy) {

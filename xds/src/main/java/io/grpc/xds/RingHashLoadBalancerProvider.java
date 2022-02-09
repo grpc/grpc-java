@@ -29,7 +29,7 @@ import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import java.util.Map;
 
 /**
- * The provider for the "ring_hash" balancing policy.
+ * The provider for the "ring_hash_experimental" balancing policy.
  */
 @Internal
 public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
@@ -66,7 +66,7 @@ public final class RingHashLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public String getPolicyName() {
-    return "ring_hash";
+    return "ring_hash_experimental";
   }
 
   @Override

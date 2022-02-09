@@ -3,11 +3,14 @@ plugins {
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
-    id "me.champeau.gradle.jmh"
+    id "me.champeau.jmh"
     id "ru.vyarus.animalsniffer"
 }
 
 description = 'gRPC: Context'
+
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
 
 dependencies {
     testImplementation libraries.jsr305

@@ -32,6 +32,7 @@ import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
+import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.XdsClient.CdsResourceWatcher;
 import io.grpc.xds.XdsClient.CdsUpdate;
@@ -187,8 +188,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       LoadBalancerProvider lbProvider = null;
       Object lbConfig = null;
       if (root.result.lbPolicy() == LbPolicy.RING_HASH) {
-        lbProvider = lbRegistry.getProvider("ring_hash");
+        lbProvider = lbRegistry.getProvider("ring_hash_experimental");
         lbConfig = new RingHashConfig(root.result.minRingSize(), root.result.maxRingSize());
+      }
+      if (root.result.lbPolicy() == LbPolicy.LEAST_REQUEST) {
+        lbProvider = lbRegistry.getProvider("least_request_experimental");
+        lbConfig = new LeastRequestConfig(root.result.choiceCount());
       }
       if (lbProvider == null) {
         lbProvider = lbRegistry.getProvider("round_robin");

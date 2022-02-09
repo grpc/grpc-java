@@ -1042,7 +1042,7 @@ public class Context {
      * Implements {@link io.grpc.Context#current}.
      *
      * <p>Caution: {@link Context} interprets a return value of {@code null} to mean the same
-     * thing as {@code Context{@link #ROOT}}.
+     * thing as {@link Context#ROOT}.
      *
      * <p>See also {@link #doAttach(Context)}.
      *

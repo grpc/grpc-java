@@ -14,17 +14,17 @@ repositories {
     mavenLocal()
 }
 
-sourceCompatibility = 1.7
-targetCompatibility = 1.7
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
 
 // IMPORTANT: You probably want the non-SNAPSHOT version of gRPC. Make sure you
 // are looking at a tagged version of the example and not "master"!
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.43.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.45.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def nettyTcNativeVersion = '2.0.31.Final'
-def protocVersion = '3.17.2'
+def protocVersion = '3.19.2'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
@@ -49,16 +49,16 @@ protobuf {
 startScripts.enabled = false
 
 task xdsHelloWorldClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworldxds.XdsHelloWorldClient'
+    mainClass = 'io.grpc.examples.helloworldxds.XdsHelloWorldClient'
     applicationName = 'xds-hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 
 task xdsHelloWorldServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworldxds.XdsHelloWorldServer'
+    mainClass = 'io.grpc.examples.helloworldxds.XdsHelloWorldServer'
     applicationName = 'xds-hello-world-server'
-    outputDir = new File(project.buildDir, 'tmp')
+    outputDir = new File(project.buildDir, 'tmp/scripts/' + name)
     classpath = startScripts.classpath
 }
 

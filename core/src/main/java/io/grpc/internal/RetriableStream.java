@@ -101,9 +101,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       false, 0);
 
   /**
-   * Either transparent retry happened or reached server's application logic.
+   * Either non-local transparent retry happened or reached server's application logic.
+   *
+   * <p>Note that local-only transparent retries are unlimited.
    */
   private final AtomicBoolean noMoreTransparentRetry = new AtomicBoolean();
+  private final AtomicInteger localOnlyTransparentRetries = new AtomicInteger();
 
   // Used for recording the share of buffer used for the current call out of the channel buffer.
   // This field would not be necessary if there is no channel buffer limit.
@@ -221,7 +224,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Substream sub = new Substream(previousAttemptCount);
     // one tracer per substream
     final ClientStreamTracer bufferSizeTracer = new BufferSizeTracer(sub);
-    ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.InternalLimitedInfoFactory() {
+    ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
       @Override
       public ClientStreamTracer newClientStreamTracer(
           ClientStreamTracer.StreamInfo info, Metadata headers) {
@@ -849,10 +852,29 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         }
         return;
       }
+      if (rpcProgress == RpcProgress.MISCARRIED
+          && localOnlyTransparentRetries.incrementAndGet() > 10_000) {
+        commitAndRun(substream);
+        if (state.winningSubstream == substream) {
+          Status tooManyTransparentRetries = Status.INTERNAL
+              .withDescription("Too many transparent retries. Might be a bug in gRPC")
+              .withCause(status.asRuntimeException());
+          listenerSerializeExecutor.execute(
+              new Runnable() {
+                @Override
+                public void run() {
+                  isClosed = true;
+                  masterListener.closed(tooManyTransparentRetries, rpcProgress, trailers);
+                }
+              });
+        }
+        return;
+      }
 
       if (state.winningSubstream == null) {
-        if (rpcProgress == RpcProgress.REFUSED
-            && noMoreTransparentRetry.compareAndSet(false, true)) {
+        if (rpcProgress == RpcProgress.MISCARRIED
+            || (rpcProgress == RpcProgress.REFUSED
+                && noMoreTransparentRetry.compareAndSet(false, true))) {
           // transparent retry
           final Substream newSubstream = createSubstream(substream.previousAttemptCount, true);
           if (isHedging) {

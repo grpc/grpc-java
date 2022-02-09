@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
@@ -192,7 +193,11 @@ final class XdsServerWrapper extends Server {
       xdsClient = xdsClientPool.returnObject(xdsClient);
       return;
     }
-    discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", listenerAddress));
+    String replacement = listenerAddress;
+    if (listenerTemplate.startsWith(XDSTP_SCHEME)) {
+      replacement = XdsClient.percentEncodePath(replacement);
+    }
+    discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", replacement));
   }
 
   @Override
@@ -224,6 +229,7 @@ final class XdsServerWrapper extends Server {
           delegate.shutdownNow();
         }
         internalShutdown();
+        initialStartFuture.set(new IOException("server is forcefully shut down"));
       }
     });
     return this;

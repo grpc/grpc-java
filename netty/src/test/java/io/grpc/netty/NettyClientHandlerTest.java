@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.ClientStreamListener.RpcProgress.MISCARRIED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
@@ -378,7 +379,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     channelRead(goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
 
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(streamListener).closed(captor.capture(), same(REFUSED),
+    verify(streamListener).closed(captor.capture(), same(MISCARRIED),
         ArgumentMatchers.<Metadata>notNull());
     assertEquals(Status.UNAVAILABLE.getCode(), captor.getValue().getCode());
     assertEquals(
@@ -469,6 +470,20 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         "GOAWAY closed buffered stream. HTTP/2 error code: CANCEL, "
           + "debug data: this is a test",
         status.getDescription());
+  }
+
+  @Test
+  public void channelClosureShouldFailBufferedStreams() throws Exception {
+    receiveMaxConcurrentStreams(0);
+
+    ChannelFuture future = enqueue(newCreateStreamCommand(grpcHeaders, streamTransportState));
+    channel().pipeline().fireChannelInactive();
+
+    assertTrue(future.isDone());
+    assertFalse(future.isSuccess());
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(streamListener).closed(captor.capture(), same(MISCARRIED), ArgumentMatchers.notNull());
+    assertEquals(Status.UNAVAILABLE.getCode(), captor.getValue().getCode());
   }
 
   @Test

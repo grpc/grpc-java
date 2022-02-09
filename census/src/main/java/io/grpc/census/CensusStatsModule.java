@@ -342,7 +342,6 @@ final class CensusStatsModule {
 
     @Override
     public void streamClosed(Status status) {
-      attemptsState.attemptEnded();
       stopwatch.stop();
       roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       Deadline deadline = info.getCallOptions().getDeadline();
@@ -355,6 +354,7 @@ final class CensusStatsModule {
           statusCode = Code.DEADLINE_EXCEEDED;
         }
       }
+      attemptsState.attemptEnded();
       if (inboundReceivedOrClosed.compareAndSet(false, true)) {
         if (module.recordFinishedRpcs) {
           // Stream is closed early. So no need to record metrics for any inbound events after this
@@ -397,7 +397,7 @@ final class CensusStatsModule {
 
   @VisibleForTesting
   static final class CallAttemptsTracerFactory extends
-      ClientStreamTracer.InternalLimitedInfoFactory {
+      ClientStreamTracer.Factory {
     static final MeasureLong RETRIES_PER_CALL =
         Measure.MeasureLong.create(
             "grpc.io/client/retries_per_call", "Number of retries per call", "1");
@@ -522,6 +522,8 @@ final class CensusStatsModule {
         tracer.statusCode = status.getCode();
         tracer.recordFinishedAttempt();
       } else if (inboundMetricTracer != null) {
+        // activeStreams has been decremented to 0 by attemptEnded(),
+        // so inboundMetricTracer.statusCode is guaranteed to be assigned already.
         inboundMetricTracer.recordFinishedAttempt();
       }
       if (!module.recordRetryMetrics) {

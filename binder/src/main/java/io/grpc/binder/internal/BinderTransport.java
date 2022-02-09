@@ -60,6 +60,8 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -185,6 +187,9 @@ public abstract class BinderTransport
   private final LeakSafeOneWayBinder incomingBinder;
 
   protected final ConcurrentHashMap<Integer, Inbound<?>> ongoingCalls;
+
+  @GuardedBy("this")
+  private final LinkedHashSet<Integer> callIdsToNotifyWhenReady = new LinkedHashSet<>();
 
   @GuardedBy("this")
   protected Attributes attributes;
@@ -323,17 +328,18 @@ public abstract class BinderTransport
   @GuardedBy("this")
   final void sendSetupTransaction(IBinder iBinder) {
     Parcel parcel = Parcel.obtain();
-    parcel.writeInt(WIRE_FORMAT_VERSION);
-    parcel.writeStrongBinder(incomingBinder);
     try {
+      parcel.writeInt(WIRE_FORMAT_VERSION);
+      parcel.writeStrongBinder(incomingBinder);
       if (!iBinder.transact(SETUP_TRANSPORT, parcel, null, IBinder.FLAG_ONEWAY)) {
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Failed sending SETUP_TRANSPORT transaction"), true);
       }
     } catch (RemoteException re) {
       shutdownInternal(statusFromRemoteException(re), true);
+    } finally {
+      parcel.recycle();
     }
-    parcel.recycle();
   }
 
   @GuardedBy("this")
@@ -346,11 +352,14 @@ public abstract class BinderTransport
       }
       Parcel parcel = Parcel.obtain();
       try {
+        // Send empty flags to avoid a memory leak linked to empty parcels (b/207778694).
+        parcel.writeInt(0);
         outgoingBinder.transact(SHUTDOWN_TRANSPORT, parcel, null, IBinder.FLAG_ONEWAY);
       } catch (RemoteException re) {
         // Ignore.
+      } finally {
+        parcel.recycle();
       }
-      parcel.recycle();
     }
   }
 
@@ -361,8 +370,8 @@ public abstract class BinderTransport
       throw Status.FAILED_PRECONDITION.withDescription("Transport not ready.").asException();
     } else {
       Parcel parcel = Parcel.obtain();
-      parcel.writeInt(id);
       try {
+        parcel.writeInt(id);
         outgoingBinder.transact(PING, parcel, null, IBinder.FLAG_ONEWAY);
       } catch (RemoteException re) {
         throw statusFromRemoteException(re).asException();
@@ -408,15 +417,16 @@ public abstract class BinderTransport
 
   final void sendOutOfBandClose(int callId, Status status) {
     Parcel parcel = Parcel.obtain();
-    parcel.writeInt(0); // Placeholder for flags. Will be filled in below.
-    int flags = TransactionUtils.writeStatus(parcel, status);
-    TransactionUtils.fillInFlags(parcel, flags | TransactionUtils.FLAG_OUT_OF_BAND_CLOSE);
     try {
+      parcel.writeInt(0); // Placeholder for flags. Will be filled in below.
+      int flags = TransactionUtils.writeStatus(parcel, status);
+      TransactionUtils.fillInFlags(parcel, flags | TransactionUtils.FLAG_OUT_OF_BAND_CLOSE);
       sendTransaction(callId, parcel);
     } catch (StatusException e) {
       logger.log(Level.WARNING, "Failed sending oob close transaction", e);
+    } finally {
+      parcel.recycle();
     }
-    parcel.recycle();
   }
 
   @Override
@@ -505,16 +515,17 @@ public abstract class BinderTransport
     long n = numIncomingBytes.get();
     acknowledgedIncomingBytes = n;
     Parcel parcel = Parcel.obtain();
-    parcel.writeLong(n);
     try {
+      parcel.writeLong(n);
       if (!iBinder.transact(ACKNOWLEDGE_BYTES, parcel, null, IBinder.FLAG_ONEWAY)) {
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Failed sending ack bytes transaction"), true);
       }
     } catch (RemoteException re) {
       shutdownInternal(statusFromRemoteException(re), true);
+    } finally {
+      parcel.recycle();
     }
-    parcel.recycle();
   }
 
   @GuardedBy("this")
@@ -523,9 +534,18 @@ public abstract class BinderTransport
       logger.log(
           Level.FINE,
           "handleAcknowledgedBytes: Transmit Window No-Longer Full. Unblock calls: " + this);
-      // We're ready again, and need to poke any waiting transactions.
-      for (Inbound<?> inbound : ongoingCalls.values()) {
-        inbound.onTransportReady();
+
+      // The LinkedHashSet contract guarantees that an id already present in this collection will
+      // not lose its priority if we re-insert it here.
+      callIdsToNotifyWhenReady.addAll(ongoingCalls.keySet());
+
+      Iterator<Integer> i = callIdsToNotifyWhenReady.iterator();
+      while (isReady() && i.hasNext()) {
+        Inbound<?> inbound = ongoingCalls.get(i.next());
+        i.remove();
+        if (inbound != null) { // Calls can be removed out from under us.
+          inbound.onTransportReady();
+        }
       }
     }
   }
@@ -907,3 +927,4 @@ public abstract class BinderTransport
     return Status.INTERNAL.withCause(e);
   }
 }
+

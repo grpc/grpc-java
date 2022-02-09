@@ -65,6 +65,7 @@ import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
@@ -135,7 +136,9 @@ public class ClusterResolverLoadBalancerTest {
   private final PolicySelection roundRobin =
       new PolicySelection(new FakeLoadBalancerProvider("round_robin"), null);
   private final PolicySelection ringHash = new PolicySelection(
-      new FakeLoadBalancerProvider("ring_hash"), new RingHashConfig(10L, 100L));
+      new FakeLoadBalancerProvider("ring_hash_experimental"), new RingHashConfig(10L, 100L));
+  private final PolicySelection leastRequest = new PolicySelection(
+      new FakeLoadBalancerProvider("least_request_experimental"), new LeastRequestConfig(3));
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
   private final List<FakeNameResolver> resolvers = new ArrayList<>();
   private final FakeXdsClient xdsClient = new FakeXdsClient();
@@ -260,11 +263,50 @@ public class ClusterResolverLoadBalancerTest {
     ClusterImplConfig clusterImplConfig =
         (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
     assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
-        tlsContext, Collections.<DropOverload>emptyList(), "ring_hash");
+        tlsContext, Collections.<DropOverload>emptyList(), "ring_hash_experimental");
     RingHashConfig ringHashConfig =
         (RingHashConfig) clusterImplConfig.childPolicy.getConfig();
     assertThat(ringHashConfig.minRingSize).isEqualTo(10L);
     assertThat(ringHashConfig.maxRingSize).isEqualTo(100L);
+  }
+
+  @Test
+  public void edsClustersWithLeastRequestEndpointLbPolicy() {
+    ClusterResolverConfig config = new ClusterResolverConfig(
+        Collections.singletonList(edsDiscoveryMechanism1), leastRequest);
+    deliverLbConfig(config);
+    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
+    assertThat(childBalancers).isEmpty();
+
+    // Simple case with one priority and one locality
+    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr-1");
+    LocalityLbEndpoints localityLbEndpoints =
+        LocalityLbEndpoints.create(
+            Arrays.asList(
+                LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true)),
+            100 /* localityWeight */, 1 /* priority */);
+    xdsClient.deliverClusterLoadAssignment(
+        EDS_SERVICE_NAME1,
+        ImmutableMap.of(locality1, localityLbEndpoints));
+    assertThat(childBalancers).hasSize(1);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(childBalancer.addresses).hasSize(1);
+    EquivalentAddressGroup addr = childBalancer.addresses.get(0);
+    assertThat(addr.getAddresses()).isEqualTo(endpoint.getAddresses());
+    assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
+    PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
+    assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER1 + "[priority1]");
+    PriorityChildConfig priorityChildConfig =
+        Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
+    assertThat(priorityChildConfig.policySelection.getProvider().getPolicyName())
+        .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
+    ClusterImplConfig clusterImplConfig =
+        (ClusterImplConfig) priorityChildConfig.policySelection.getConfig();
+    assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
+        tlsContext, Collections.<DropOverload>emptyList(), WEIGHTED_TARGET_POLICY_NAME);
+    WeightedTargetConfig weightedTargetConfig =
+        (WeightedTargetConfig) clusterImplConfig.childPolicy.getConfig();
+    assertThat(weightedTargetConfig.targets.keySet()).containsExactly(locality1.toString());
   }
 
   @Test

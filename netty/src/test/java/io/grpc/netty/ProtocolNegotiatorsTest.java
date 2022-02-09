@@ -48,6 +48,7 @@ import io.grpc.SecurityLevel;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
@@ -132,6 +133,7 @@ import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLHandshakeException;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManagerFactory;
 import org.junit.After;
@@ -415,7 +417,17 @@ public class ProtocolNegotiatorsTest {
         .trustManager(caCert)
         .build();
     Status status = expectFailedHandshake(channelCreds, serverCreds);
-    assertThat(status.getDescription()).isEqualTo("ssl exception");
+    assertEquals(Status.Code.UNAVAILABLE, status.getCode());
+    StatusException sre = status.asException();
+    // because of netty/netty#11604 we need to check for both TLSv1.2 and v1.3 behaviors
+    if (sre.getCause() instanceof SSLHandshakeException) {
+      assertThat(sre).hasCauseThat().isInstanceOf(SSLHandshakeException.class);
+      assertThat(sre).hasCauseThat().hasMessageThat().contains("SSLV3_ALERT_HANDSHAKE_FAILURE");
+    } else {
+      // Client cert verification is after handshake in TLSv1.3
+      assertThat(sre).hasCauseThat().hasCauseThat().isInstanceOf(SSLException.class);
+      assertThat(sre).hasCauseThat().hasMessageThat().contains("CERTIFICATE_REQUIRED");
+    }
   }
 
   @Test

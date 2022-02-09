@@ -50,7 +50,7 @@ public final class GoogleDefaultChannelCredentials {
   /**
    * Returns a new instance of {@link Builder}.
    *
-   * @since 1.42.0
+   * @since 1.43.0
    */
   public static Builder newBuilder() {
     return new Builder();
@@ -59,7 +59,7 @@ public final class GoogleDefaultChannelCredentials {
   /**
    * Builder for {@link GoogleDefaultChannelCredentials} instances.
    *
-   * @since 1.42.0
+   * @since 1.43.0
    */
   public static final class Builder {
     private CallCredentials callCredentials;

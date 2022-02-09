@@ -113,8 +113,8 @@ public final class ServiceConfigUtil {
     }
 
     // TODO(dapengzhang0): check if this is null.
-    float maxTokens = JsonUtil.getNumber(throttling, "maxTokens").floatValue();
-    float tokenRatio = JsonUtil.getNumber(throttling, "tokenRatio").floatValue();
+    float maxTokens = JsonUtil.getNumberAsDouble(throttling, "maxTokens").floatValue();
+    float tokenRatio = JsonUtil.getNumberAsDouble(throttling, "tokenRatio").floatValue();
     checkState(maxTokens > 0f, "maxToken should be greater than zero");
     checkState(tokenRatio > 0f, "tokenRatio should be greater than zero");
     return new Throttle(maxTokens, tokenRatio);
@@ -137,7 +137,7 @@ public final class ServiceConfigUtil {
 
   @Nullable
   static Double getBackoffMultiplierFromRetryPolicy(Map<String, ?> retryPolicy) {
-    return JsonUtil.getNumber(retryPolicy, "backoffMultiplier");
+    return JsonUtil.getNumberAsDouble(retryPolicy, "backoffMultiplier");
   }
 
   @Nullable

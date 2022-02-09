@@ -32,12 +32,12 @@ public class KeepAliveEnforcerTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void negativeTime() {
-    new KeepAliveEnforcer(true, -1, TimeUnit.NANOSECONDS);
+    KeepAliveEnforcer unused = new KeepAliveEnforcer(true, -1, TimeUnit.NANOSECONDS);
   }
 
   @Test(expected = NullPointerException.class)
   public void nullTimeUnit() {
-    new KeepAliveEnforcer(true, 1, null);
+    KeepAliveEnforcer unused = new KeepAliveEnforcer(true, 1, null);
   }
 
   @Test

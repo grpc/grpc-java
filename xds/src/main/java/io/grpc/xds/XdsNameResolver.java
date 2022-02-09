@@ -18,10 +18,12 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
@@ -45,9 +47,14 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.Bootstrapper.AuthorityInfo;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Filter.ClientInterceptorBuilder;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.NamedFilterConfig;
+import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.VirtualHost.Route.RouteAction;
@@ -66,13 +73,13 @@ import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -101,7 +108,9 @@ final class XdsNameResolver extends NameResolver {
 
   private final InternalLogId logId;
   private final XdsLogger logger;
-  private final String authority;
+  @Nullable
+  private final String targetAuthority;
+  private final String serviceAuthority;
   private final ServiceConfigParser serviceConfigParser;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService scheduler;
@@ -110,7 +119,8 @@ final class XdsNameResolver extends NameResolver {
   private final FilterRegistry filterRegistry;
   private final XxHash64 hashFunc = XxHash64.INSTANCE;
   // Clusters (with reference counts) to which new/existing requests can be/are routed.
-  private final ConcurrentMap<String, AtomicInteger> clusterRefs = new ConcurrentHashMap<>();
+  // put()/remove() must be called in SyncContext, and get() can be called in any thread.
+  private final ConcurrentMap<String, ClusterRefState> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
 
   private volatile RoutingConfig routingConfig = RoutingConfig.empty;
@@ -120,20 +130,23 @@ final class XdsNameResolver extends NameResolver {
   private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
 
-  XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
+  XdsNameResolver(
+      @Nullable String targetAuthority, String name, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       @Nullable Map<String, ?> bootstrapOverride) {
-    this(name, serviceConfigParser, syncContext, scheduler,
+    this(targetAuthority, name, serviceConfigParser, syncContext, scheduler,
         SharedXdsClientPoolProvider.getDefaultProvider(), ThreadSafeRandomImpl.instance,
         FilterRegistry.getDefaultRegistry(), bootstrapOverride);
   }
 
   @VisibleForTesting
-  XdsNameResolver(String name, ServiceConfigParser serviceConfigParser,
+  XdsNameResolver(
+      @Nullable String targetAuthority, String name, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride) {
-    authority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
+    this.targetAuthority = targetAuthority;
+    serviceAuthority = GrpcUtil.checkAuthority(checkNotNull(name, "name"));
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
@@ -149,7 +162,7 @@ final class XdsNameResolver extends NameResolver {
 
   @Override
   public String getServiceAuthority() {
-    return authority;
+    return serviceAuthority;
   }
 
   @Override
@@ -163,9 +176,38 @@ final class XdsNameResolver extends NameResolver {
       return;
     }
     xdsClient = xdsClientPool.getObject();
+    BootstrapInfo bootstrapInfo = xdsClient.getBootstrapInfo();
+    String listenerNameTemplate;
+    if (targetAuthority == null) {
+      listenerNameTemplate = bootstrapInfo.clientDefaultListenerResourceNameTemplate();
+    } else {
+      AuthorityInfo authorityInfo = bootstrapInfo.authorities().get(targetAuthority);
+      if (authorityInfo == null) {
+        listener.onError(Status.INVALID_ARGUMENT.withDescription(
+            "invalid target URI: target authority not found in the bootstrap"));
+        return;
+      }
+      listenerNameTemplate = authorityInfo.clientListenerResourceNameTemplate();
+    }
+    String replacement = serviceAuthority;
+    if (listenerNameTemplate.startsWith(XDSTP_SCHEME)) {
+      replacement = XdsClient.percentEncodePath(replacement);
+    }
+    String ldsResourceName = expandPercentS(listenerNameTemplate, replacement);
+    if (!XdsClient.isResourceNameValid(ldsResourceName, ResourceType.LDS.typeUrl())
+        && !XdsClient.isResourceNameValid(ldsResourceName, ResourceType.LDS.typeUrlV2())) {
+      listener.onError(Status.INVALID_ARGUMENT.withDescription(
+          "invalid listener resource URI for service authority: " + serviceAuthority));
+      return;
+    }
+    ldsResourceName = XdsClient.canonifyResourceName(ldsResourceName);
     callCounterProvider = SharedCallCounterMap.getInstance();
-    resolveState = new ResolveState();
+    resolveState = new ResolveState(ldsResourceName);
     resolveState.start();
+  }
+
+  private static String expandPercentS(String template, String replacement) {
+    return template.replace("%s", replacement);
   }
 
   @Override
@@ -216,30 +258,24 @@ final class XdsNameResolver extends NameResolver {
   }
 
   @VisibleForTesting
-  static Map<String, ?> generateServiceConfigWithLoadBalancingConfig(Collection<String> clusters) {
-    Map<String, Object> childPolicy = new HashMap<>();
-    for (String cluster : clusters) {
-      List<Map<String, Map<String, String>>> lbPolicy =
-          Collections.singletonList(
-              Collections.singletonMap(
-                  "cds_experimental", Collections.singletonMap("cluster", cluster)));
-      childPolicy.put(cluster, Collections.singletonMap("lbPolicy", lbPolicy));
-    }
-    return Collections.singletonMap("loadBalancingConfig",
-        Collections.singletonList(
-            Collections.singletonMap(
-                "cluster_manager_experimental", Collections.singletonMap(
-                    "childPolicy", Collections.unmodifiableMap(childPolicy)))));
-  }
-
-  @VisibleForTesting
   XdsClient getXdsClient() {
     return xdsClient;
   }
 
+  // called in syncContext
   private void updateResolutionResult() {
-    Map<String, ?> rawServiceConfig =
-        generateServiceConfigWithLoadBalancingConfig(clusterRefs.keySet());
+    syncContext.throwIfNotInThisSynchronizationContext();
+
+    ImmutableMap.Builder<String, Object> childPolicy = new ImmutableMap.Builder<>();
+    for (String name : clusterRefs.keySet()) {
+      Map<String, ?> lbPolicy = clusterRefs.get(name).toLbPolicy();
+      childPolicy.put(name, ImmutableMap.of("lbPolicy", ImmutableList.of(lbPolicy)));
+    }
+    Map<String, ?> rawServiceConfig = ImmutableMap.of(
+        "loadBalancingConfig",
+        ImmutableList.of(ImmutableMap.of(
+            "cluster_manager_experimental", ImmutableMap.of("childPolicy", childPolicy.build()))));
+
     if (logger.isLoggable(XdsLogLevel.INFO)) {
       logger.log(
           XdsLogLevel.INFO, "Generated service config:\n{0}", new Gson().toJson(rawServiceConfig));
@@ -390,7 +426,7 @@ final class XdsNameResolver extends NameResolver {
         }
         RouteAction action = selectedRoute.routeAction();
         if (action.cluster() != null) {
-          cluster = action.cluster();
+          cluster = prefixedClusterName(action.cluster());
         } else if (action.weightedClusters() != null) {
           int totalWeight = 0;
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
@@ -401,11 +437,14 @@ final class XdsNameResolver extends NameResolver {
           for (ClusterWeight weightedCluster : action.weightedClusters()) {
             accumulator += weightedCluster.weight();
             if (select < accumulator) {
-              cluster = weightedCluster.name();
+              cluster = prefixedClusterName(weightedCluster.name());
               selectedOverrideConfigs.putAll(weightedCluster.filterConfigOverrides());
               break;
             }
           }
+        } else if (action.namedClusterSpecifierPluginConfig() != null) {
+          cluster =
+              prefixedClusterSpecifierPluginName(action.namedClusterSpecifierPluginConfig().name());
         }
       } while (!retainCluster(cluster));
       Long timeoutNanos = null;
@@ -495,10 +534,11 @@ final class XdsNameResolver extends NameResolver {
     }
 
     private boolean retainCluster(String cluster) {
-      AtomicInteger refCount = clusterRefs.get(cluster);
-      if (refCount == null) {
+      ClusterRefState clusterRefState = clusterRefs.get(cluster);
+      if (clusterRefState == null) {
         return false;
       }
+      AtomicInteger refCount = clusterRefState.refCount;
       int count;
       do {
         count = refCount.get();
@@ -510,12 +550,12 @@ final class XdsNameResolver extends NameResolver {
     }
 
     private void releaseCluster(final String cluster) {
-      int count = clusterRefs.get(cluster).decrementAndGet();
+      int count = clusterRefs.get(cluster).refCount.decrementAndGet();
       if (count == 0) {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            if (clusterRefs.get(cluster).get() == 0) {
+            if (clusterRefs.get(cluster).refCount.get() == 0) {
               clusterRefs.remove(cluster);
               updateResolutionResult();
             }
@@ -616,6 +656,14 @@ final class XdsNameResolver extends NameResolver {
     return values == null ? null : Joiner.on(",").join(values);
   }
 
+  private static String prefixedClusterName(String name) {
+    return "cluster:" + name;
+  }
+
+  private static String prefixedClusterSpecifierPluginName(String pluginName) {
+    return "cluster_specifier_plugin:" + pluginName;
+  }
+
   private class ResolveState implements LdsResourceWatcher {
     private final ConfigOrError emptyServiceConfig =
         serviceConfigParser.parseServiceConfig(Collections.<String, Object>emptyMap());
@@ -624,11 +672,16 @@ final class XdsNameResolver extends NameResolver {
             .setServiceConfig(emptyServiceConfig)
             // let channel take action for no config selector
             .build();
+    private final String ldsResourceName;
     private boolean stopped;
     @Nullable
     private Set<String> existingClusters;  // clusters to which new requests can be routed
     @Nullable
     private RouteDiscoveryState routeDiscoveryState;
+
+    ResolveState(String ldsResourceName) {
+      this.ldsResourceName = ldsResourceName;
+    }
 
     @Override
     public void onChanged(final LdsUpdate update) {
@@ -686,23 +739,24 @@ final class XdsNameResolver extends NameResolver {
     }
 
     private void start() {
-      logger.log(XdsLogLevel.INFO, "Start watching LDS resource {0}", authority);
-      xdsClient.watchLdsResource(authority, this);
+      logger.log(XdsLogLevel.INFO, "Start watching LDS resource {0}", ldsResourceName);
+      xdsClient.watchLdsResource(ldsResourceName, this);
     }
 
     private void stop() {
-      logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", authority);
+      logger.log(XdsLogLevel.INFO, "Stop watching LDS resource {0}", ldsResourceName);
       stopped = true;
       cleanUpRouteDiscoveryState();
-      xdsClient.cancelLdsResourceWatch(authority, this);
+      xdsClient.cancelLdsResourceWatch(ldsResourceName, this);
     }
 
+    // called in syncContext
     private void updateRoutes(List<VirtualHost> virtualHosts, long httpMaxStreamDurationNano,
         @Nullable List<NamedFilterConfig> filterConfigs) {
-      VirtualHost virtualHost = findVirtualHostForHostName(virtualHosts, authority);
+      VirtualHost virtualHost = findVirtualHostForHostName(virtualHosts, ldsResourceName);
       if (virtualHost == null) {
         logger.log(XdsLogLevel.WARNING,
-            "Failed to find virtual host matching hostname {0}", authority);
+            "Failed to find virtual host matching hostname {0}", ldsResourceName);
         cleanUpRoutes();
         return;
       }
@@ -711,14 +765,31 @@ final class XdsNameResolver extends NameResolver {
 
       // Populate all clusters to which requests can be routed to through the virtual host.
       Set<String> clusters = new HashSet<>();
+      // uniqueName -> clusterName
+      Map<String, String> clusterNameMap = new HashMap<>();
+      // uniqueName -> pluginConfig
+      Map<String, RlsPluginConfig> rlsPluginConfigMap = new HashMap<>();
       for (Route route : routes) {
         RouteAction action = route.routeAction();
+        String prefixedName;
         if (action != null) {
           if (action.cluster() != null) {
-            clusters.add(action.cluster());
+            prefixedName = prefixedClusterName(action.cluster());
+            clusters.add(prefixedName);
+            clusterNameMap.put(prefixedName, action.cluster());
           } else if (action.weightedClusters() != null) {
             for (ClusterWeight weighedCluster : action.weightedClusters()) {
-              clusters.add(weighedCluster.name());
+              prefixedName = prefixedClusterName(weighedCluster.name());
+              clusters.add(prefixedName);
+              clusterNameMap.put(prefixedName, weighedCluster.name());
+            }
+          } else if (action.namedClusterSpecifierPluginConfig() != null) {
+            PluginConfig pluginConfig = action.namedClusterSpecifierPluginConfig().config();
+            if (pluginConfig instanceof RlsPluginConfig) {
+              prefixedName = prefixedClusterSpecifierPluginName(
+                  action.namedClusterSpecifierPluginConfig().name());
+              clusters.add(prefixedName);
+              rlsPluginConfigMap.put(prefixedName, (RlsPluginConfig) pluginConfig);
             }
           }
         }
@@ -734,9 +805,28 @@ final class XdsNameResolver extends NameResolver {
       existingClusters = clusters;
       for (String cluster : addedClusters) {
         if (clusterRefs.containsKey(cluster)) {
-          clusterRefs.get(cluster).incrementAndGet();
+          clusterRefs.get(cluster).refCount.incrementAndGet();
         } else {
-          clusterRefs.put(cluster, new AtomicInteger(1));
+          if (clusterNameMap.containsKey(cluster)) {
+            clusterRefs.put(
+                cluster,
+                ClusterRefState.forCluster(new AtomicInteger(1), clusterNameMap.get(cluster)));
+          }
+          if (rlsPluginConfigMap.containsKey(cluster)) {
+            clusterRefs.put(
+                cluster,
+                ClusterRefState.forRlsPlugin(
+                    new AtomicInteger(1), rlsPluginConfigMap.get(cluster)));
+          }
+          shouldUpdateResult = true;
+        }
+      }
+      for (String cluster : clusters) {
+        RlsPluginConfig rlsPluginConfig = rlsPluginConfigMap.get(cluster);
+        if (!Objects.equals(rlsPluginConfig, clusterRefs.get(cluster).rlsPluginConfig)) {
+          ClusterRefState newClusterRefState =
+              ClusterRefState.forRlsPlugin(clusterRefs.get(cluster).refCount, rlsPluginConfig);
+          clusterRefs.put(cluster, newClusterRefState);
           shouldUpdateResult = true;
         }
       }
@@ -752,7 +842,7 @@ final class XdsNameResolver extends NameResolver {
               virtualHost.filterConfigOverrides());
       shouldUpdateResult = false;
       for (String cluster : deletedClusters) {
-        int count = clusterRefs.get(cluster).decrementAndGet();
+        int count = clusterRefs.get(cluster).refCount.decrementAndGet();
         if (count == 0) {
           clusterRefs.remove(cluster);
           shouldUpdateResult = true;
@@ -766,7 +856,7 @@ final class XdsNameResolver extends NameResolver {
     private void cleanUpRoutes() {
       if (existingClusters != null) {
         for (String cluster : existingClusters) {
-          int count = clusterRefs.get(cluster).decrementAndGet();
+          int count = clusterRefs.get(cluster).refCount.decrementAndGet();
           if (count == 0) {
             clusterRefs.remove(cluster);
           }
@@ -867,6 +957,47 @@ final class XdsNameResolver extends NameResolver {
       checkArgument(filterChain == null || !filterChain.isEmpty(), "filterChain is empty");
       this.filterChain = filterChain == null ? null : Collections.unmodifiableList(filterChain);
       this.virtualHostOverrideConfig = Collections.unmodifiableMap(virtualHostOverrideConfig);
+    }
+  }
+
+  private static class ClusterRefState {
+    final AtomicInteger refCount;
+    @Nullable
+    final String traditionalCluster;
+    @Nullable
+    final RlsPluginConfig rlsPluginConfig;
+
+    private ClusterRefState(
+        AtomicInteger refCount, @Nullable String traditionalCluster,
+        @Nullable RlsPluginConfig rlsPluginConfig) {
+      this.refCount = refCount;
+      checkArgument(traditionalCluster == null ^ rlsPluginConfig == null,
+          "There must be exactly one non-null value in traditionalCluster and pluginConfig");
+      this.traditionalCluster = traditionalCluster;
+      this.rlsPluginConfig = rlsPluginConfig;
+    }
+
+    private Map<String, ?> toLbPolicy() {
+      if (traditionalCluster != null) {
+        return ImmutableMap.of("cds_experimental", ImmutableMap.of("cluster", traditionalCluster));
+      } else {
+        ImmutableMap<String, ?> rlsConfig = new ImmutableMap.Builder<String, Object>()
+            .put("routeLookupConfig", rlsPluginConfig.config())
+            .put(
+                "childPolicy",
+                ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())))
+            .put("childPolicyConfigTargetFieldName", "cluster")
+            .build();
+        return ImmutableMap.of("rls_experimental", rlsConfig);
+      }
+    }
+
+    static ClusterRefState forCluster(AtomicInteger refCount, String name) {
+      return new ClusterRefState(refCount, name, null);
+    }
+
+    static ClusterRefState forRlsPlugin(AtomicInteger refCount, RlsPluginConfig rlsPluginConfig) {
+      return new ClusterRefState(refCount, null, rlsPluginConfig);
     }
   }
 }

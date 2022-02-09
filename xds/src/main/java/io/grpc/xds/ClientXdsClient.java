@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.annotations.VisibleForTesting;
@@ -27,7 +28,10 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Any;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -40,14 +44,17 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.CustomClusterType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.LeastRequestLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.PortSpecifierCase;
 import io.envoyproxy.envoy.config.core.v3.TrafficDirection;
+import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
+import io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin;
 import io.envoyproxy.envoy.config.route.v3.RetryPolicy.RetryBackOff;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
@@ -70,7 +77,10 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
+import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.ServerInfo;
+import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
+import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -98,6 +108,7 @@ import io.grpc.xds.XdsLogger.XdsLogLevel;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -130,6 +141,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   @VisibleForTesting
   static final long DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE = 8 * 1024 * 1024L;
   @VisibleForTesting
+  static final int DEFAULT_LEAST_REQUEST_CHOICE_COUNT = 2;
+  @VisibleForTesting
   static final long MAX_RING_HASH_LB_POLICY_RING_SIZE = 8 * 1024 * 1024L;
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
@@ -147,7 +160,15 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   static boolean enableRbac =
       Strings.isNullOrEmpty(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"))
           || Boolean.parseBoolean(System.getenv("GRPC_XDS_EXPERIMENTAL_RBAC"));
-
+  @VisibleForTesting
+  static boolean enableRouteLookup =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"))
+          && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_RLS_LB"));
+  @VisibleForTesting
+  static boolean enableLeastRequest =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
+          ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
+          : Boolean.parseBoolean(System.getProperty("io.grpc.xds.experimentalEnableLeastRequest"));
   private static final String TYPE_URL_HTTP_CONNECTION_MANAGER_V2 =
       "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2"
           + ".HttpConnectionManager";
@@ -277,7 +298,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         errors.add("LDS response Resource index " + i + " - can't decode Listener: " + e);
         continue;
       }
-      String listenerName = listener.getName();
+      if (!isResourceNameValid(listener.getName(), resource.getTypeUrl())) {
+        errors.add(
+            "Unsupported resource name: " + listener.getName() + " for type: " + ResourceType.LDS);
+        continue;
+      }
+      String listenerName = canonifyResourceName(listener.getName());
       unpackedResources.add(listenerName);
 
       // Process Listener into LdsUpdate.
@@ -854,18 +880,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
     // Parse inlined RouteConfiguration or RDS.
     if (proto.hasRouteConfig()) {
-      List<VirtualHost> virtualHosts = new ArrayList<>();
-      for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
-          : proto.getRouteConfig().getVirtualHostsList()) {
-        StructOrError<VirtualHost> virtualHost =
-            parseVirtualHost(virtualHostProto, filterRegistry, parseHttpFilter);
-        if (virtualHost.getErrorDetail() != null) {
-          throw new ResourceInvalidException(
-              "HttpConnectionManager contains invalid virtual host: "
-                  + virtualHost.getErrorDetail());
-        }
-        virtualHosts.add(virtualHost.getStruct());
-      }
+      List<VirtualHost> virtualHosts = extractVirtualHosts(
+          proto.getRouteConfig(), filterRegistry, parseHttpFilter);
       return io.grpc.xds.HttpConnectionManager.forVirtualHosts(
           maxStreamDuration, virtualHosts, filterConfigs);
     }
@@ -875,9 +891,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         throw new ResourceInvalidException(
             "HttpConnectionManager contains invalid RDS: missing config_source");
       }
-      if (!rds.getConfigSource().hasAds()) {
+      if (!rds.getConfigSource().hasAds() && !rds.getConfigSource().hasSelf()) {
         throw new ResourceInvalidException(
-            "HttpConnectionManager contains invalid RDS: must specify ADS");
+            "HttpConnectionManager contains invalid RDS: must specify ADS or self ConfigSource");
       }
       // Collect the RDS resource referenced by this HttpConnectionManager.
       rdsResources.add(rds.getRouteConfigName());
@@ -947,11 +963,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   private static StructOrError<VirtualHost> parseVirtualHost(
       io.envoyproxy.envoy.config.route.v3.VirtualHost proto, FilterRegistry filterRegistry,
-      boolean parseHttpFilter) {
+      boolean parseHttpFilter, Map<String, PluginConfig> pluginConfigMap) {
     String name = proto.getName();
     List<Route> routes = new ArrayList<>(proto.getRoutesCount());
     for (io.envoyproxy.envoy.config.route.v3.Route routeProto : proto.getRoutesList()) {
-      StructOrError<Route> route = parseRoute(routeProto, filterRegistry, parseHttpFilter);
+      StructOrError<Route> route = parseRoute(
+          routeProto, filterRegistry, parseHttpFilter, pluginConfigMap);
       if (route == null) {
         continue;
       }
@@ -1036,7 +1053,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   @Nullable
   static StructOrError<Route> parseRoute(
       io.envoyproxy.envoy.config.route.v3.Route proto, FilterRegistry filterRegistry,
-      boolean parseHttpFilter) {
+      boolean parseHttpFilter, Map<String, PluginConfig> pluginConfigMap) {
     StructOrError<RouteMatch> routeMatch = parseRouteMatch(proto.getMatch());
     if (routeMatch == null) {
       return null;
@@ -1062,7 +1079,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     switch (proto.getActionCase()) {
       case ROUTE:
         StructOrError<RouteAction> routeAction =
-            parseRouteAction(proto.getRoute(), filterRegistry, parseHttpFilter);
+            parseRouteAction(proto.getRoute(), filterRegistry, parseHttpFilter, pluginConfigMap);
         if (routeAction == null) {
           return null;
         }
@@ -1215,7 +1232,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   @Nullable
   static StructOrError<RouteAction> parseRouteAction(
       io.envoyproxy.envoy.config.route.v3.RouteAction proto, FilterRegistry filterRegistry,
-      boolean parseHttpFilter) {
+      boolean parseHttpFilter, Map<String, PluginConfig> pluginConfigMap) {
     Long timeoutNano = null;
     if (proto.hasMaxStreamDuration()) {
       io.envoyproxy.envoy.config.route.v3.RouteAction.MaxStreamDuration maxStreamDuration
@@ -1294,6 +1311,20 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         // TODO(chengyuanzhang): validate if the sum of weights equals to total weight.
         return StructOrError.fromStruct(RouteAction.forWeightedClusters(
             weightedClusters, hashPolicies, timeoutNano, retryPolicy));
+      case CLUSTER_SPECIFIER_PLUGIN:
+        if (enableRouteLookup) {
+          String pluginName = proto.getClusterSpecifierPlugin();
+          PluginConfig pluginConfig = pluginConfigMap.get(pluginName);
+          if (pluginConfig == null) {
+            return StructOrError.fromError(
+                "ClusterSpecifierPlugin for [" + pluginName + "] not found");
+          }
+          NamedPluginConfig namedPluginConfig = NamedPluginConfig.create(pluginName, pluginConfig);
+          return StructOrError.fromStruct(RouteAction.forClusterSpecifierPlugin(
+              namedPluginConfig, hashPolicies, timeoutNano, retryPolicy));
+        } else {
+          return StructOrError.fromError("Support for ClusterSpecifierPlugin not enabled");
+        }
       case CLUSTERSPECIFIER_NOT_SET:
       default:
         return StructOrError.fromError(
@@ -1399,7 +1430,13 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         errors.add("RDS response Resource index " + i + " - can't decode RouteConfiguration: " + e);
         continue;
       }
-      String routeConfigName = routeConfig.getName();
+      if (!isResourceNameValid(routeConfig.getName(), resource.getTypeUrl())) {
+        errors.add(
+            "Unsupported resource name: " + routeConfig.getName() + " for type: "
+                + ResourceType.RDS);
+        continue;
+      }
+      String routeConfigName = canonifyResourceName(routeConfig.getName());
       unpackedResources.add(routeConfigName);
 
       // Process RouteConfiguration into RdsUpdate.
@@ -1429,18 +1466,74 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   private static RdsUpdate processRouteConfiguration(
       RouteConfiguration routeConfig, FilterRegistry filterRegistry, boolean parseHttpFilter)
       throws ResourceInvalidException {
+    return new RdsUpdate(extractVirtualHosts(routeConfig, filterRegistry, parseHttpFilter));
+  }
+
+  private static List<VirtualHost> extractVirtualHosts(
+      RouteConfiguration routeConfig, FilterRegistry filterRegistry, boolean parseHttpFilter)
+      throws ResourceInvalidException {
+    Map<String, PluginConfig> pluginConfigMap = new HashMap<>();
+    if (enableRouteLookup) {
+      List<ClusterSpecifierPlugin> plugins = routeConfig.getClusterSpecifierPluginsList();
+      for (ClusterSpecifierPlugin plugin : plugins) {
+        PluginConfig existing = pluginConfigMap.put(
+            plugin.getExtension().getName(), parseClusterSpecifierPlugin(plugin));
+        if (existing != null) {
+          throw new ResourceInvalidException(
+              "Multiple ClusterSpecifierPlugins with the same name: "
+                  + plugin.getExtension().getName());
+        }
+      }
+    }
     List<VirtualHost> virtualHosts = new ArrayList<>(routeConfig.getVirtualHostsCount());
     for (io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHostProto
         : routeConfig.getVirtualHostsList()) {
       StructOrError<VirtualHost> virtualHost =
-          parseVirtualHost(virtualHostProto, filterRegistry, parseHttpFilter);
+          parseVirtualHost(virtualHostProto, filterRegistry, parseHttpFilter, pluginConfigMap);
       if (virtualHost.getErrorDetail() != null) {
         throw new ResourceInvalidException(
             "RouteConfiguration contains invalid virtual host: " + virtualHost.getErrorDetail());
       }
       virtualHosts.add(virtualHost.getStruct());
     }
-    return new RdsUpdate(virtualHosts);
+    return virtualHosts;
+  }
+
+  private static PluginConfig parseClusterSpecifierPlugin(ClusterSpecifierPlugin pluginProto)
+      throws ResourceInvalidException {
+    return parseClusterSpecifierPlugin(
+        pluginProto, ClusterSpecifierPluginRegistry.getDefaultRegistry());
+  }
+
+  @VisibleForTesting
+  static PluginConfig parseClusterSpecifierPlugin(
+      ClusterSpecifierPlugin pluginProto, ClusterSpecifierPluginRegistry registry)
+      throws ResourceInvalidException {
+    TypedExtensionConfig extension = pluginProto.getExtension();
+    String pluginName = extension.getName();
+    Any anyConfig = extension.getTypedConfig();
+    String typeUrl = anyConfig.getTypeUrl();
+    Message rawConfig = anyConfig;
+    if (typeUrl.equals(TYPE_URL_TYPED_STRUCT_UDPA) || typeUrl.equals(TYPE_URL_TYPED_STRUCT)) {
+      try {
+        TypedStruct typedStruct = unpackCompatibleType(
+            anyConfig, TypedStruct.class, TYPE_URL_TYPED_STRUCT_UDPA, TYPE_URL_TYPED_STRUCT);
+        typeUrl = typedStruct.getTypeUrl();
+        rawConfig = typedStruct.getValue();
+      } catch (InvalidProtocolBufferException e) {
+        throw new ResourceInvalidException(
+            "ClusterSpecifierPlugin [" + pluginName + "] contains invalid proto", e);
+      }
+    }
+    io.grpc.xds.ClusterSpecifierPlugin plugin = registry.get(typeUrl);
+    if (plugin == null) {
+      throw new ResourceInvalidException("Unsupported ClusterSpecifierPlugin type: " + typeUrl);
+    }
+    ConfigOrError<? extends PluginConfig> pluginConfigOrError = plugin.parsePlugin(rawConfig);
+    if (pluginConfigOrError.errorDetail != null) {
+      throw new ResourceInvalidException(pluginConfigOrError.errorDetail);
+    }
+    return pluginConfigOrError.config;
   }
 
   @Override
@@ -1465,7 +1558,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         errors.add("CDS response Resource index " + i + " - can't decode Cluster: " + e);
         continue;
       }
-      String clusterName = cluster.getName();
+      if (!isResourceNameValid(cluster.getName(), resource.getTypeUrl())) {
+        errors.add(
+            "Unsupported resource name: " + cluster.getName() + " for type: " + ResourceType.CDS);
+        continue;
+      }
+      String clusterName = canonifyResourceName(cluster.getName());
 
       // Management server is required to always send newly requested resources, even if they
       // may have been sent previously (proactively). Thus, client does not need to cache
@@ -1482,7 +1580,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         if (getBootstrapInfo() != null && getBootstrapInfo().certProviders() != null) {
           certProviderInstances = getBootstrapInfo().certProviders().keySet();
         }
-        cdsUpdate = parseCluster(cluster, retainedEdsResources, certProviderInstances, serverInfo);
+        cdsUpdate =
+            processCluster(cluster, retainedEdsResources, certProviderInstances, serverInfo);
       } catch (ResourceInvalidException e) {
         errors.add(
             "CDS response Cluster '" + clusterName + "' validation error: " + e.getMessage());
@@ -1500,7 +1599,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   }
 
   @VisibleForTesting
-  static CdsUpdate parseCluster(Cluster cluster, Set<String> retainedEdsResources,
+  static CdsUpdate processCluster(Cluster cluster, Set<String> retainedEdsResources,
       Set<String> certProviderInstances, ServerInfo serverInfo)
       throws ResourceInvalidException {
     StructOrError<CdsUpdate.Builder> structOrError;
@@ -1541,6 +1640,17 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       updateBuilder.ringHashLbPolicy(minRingSize, maxRingSize);
     } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
       updateBuilder.roundRobinLbPolicy();
+    } else if (enableLeastRequest && cluster.getLbPolicy() == LbPolicy.LEAST_REQUEST) {
+      LeastRequestLbConfig lbConfig =  cluster.getLeastRequestLbConfig();
+      int choiceCount =
+              lbConfig.hasChoiceCount()
+                ? lbConfig.getChoiceCount().getValue()
+                : DEFAULT_LEAST_REQUEST_CHOICE_COUNT;
+      if (choiceCount < DEFAULT_LEAST_REQUEST_CHOICE_COUNT) {
+        throw new ResourceInvalidException(
+                "Cluster " + cluster.getName() + ": invalid least_request_lb_config: " + lbConfig);
+      }
+      updateBuilder.leastRequestLbPolicy(choiceCount);
     } else {
       throw new ResourceInvalidException(
           "Cluster " + cluster.getName() + ": unsupported lb policy: " + cluster.getLbPolicy());
@@ -1621,9 +1731,11 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       String edsServiceName = null;
       io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig edsClusterConfig =
           cluster.getEdsClusterConfig();
-      if (!edsClusterConfig.getEdsConfig().hasAds()) {
-        return StructOrError.fromError("Cluster " + clusterName
-            + ": field eds_cluster_config must be set to indicate to use EDS over ADS.");
+      if (!edsClusterConfig.getEdsConfig().hasAds()
+          && ! edsClusterConfig.getEdsConfig().hasSelf()) {
+        return StructOrError.fromError(
+            "Cluster " + clusterName + ": field eds_cluster_config must be set to indicate to use"
+                + " EDS over ADS or self ConfigSource");
       }
       // If the service_name field is set, that value will be used for the EDS request.
       if (!edsClusterConfig.getServiceName().isEmpty()) {
@@ -1697,7 +1809,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
             "EDS response Resource index " + i + " - can't decode ClusterLoadAssignment: " + e);
         continue;
       }
-      String clusterName = assignment.getClusterName();
+      if (!isResourceNameValid(assignment.getClusterName(), resource.getTypeUrl())) {
+        errors.add("Unsupported resource name: " + assignment.getClusterName() + " for type: "
+            + ResourceType.EDS);
+        continue;
+      }
+      String clusterName = canonifyResourceName(assignment.getClusterName());
 
       // Skip information for clusters not requested.
       // Management server is required to always send newly requested resources, even if they
@@ -1955,12 +2072,31 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   }
 
   @Override
-  Map<String, ResourceMetadata> getSubscribedResourcesMetadata(ResourceType type) {
-    Map<String, ResourceMetadata> metadataMap = new HashMap<>();
-    for (Map.Entry<String, ResourceSubscriber> entry : getSubscribedResourcesMap(type).entrySet()) {
-      metadataMap.put(entry.getKey(), entry.getValue().metadata);
-    }
-    return metadataMap;
+  ListenableFuture<Map<ResourceType, Map<String, ResourceMetadata>>>
+      getSubscribedResourcesMetadataSnapshot() {
+    final SettableFuture<Map<ResourceType, Map<String, ResourceMetadata>>> future =
+        SettableFuture.create();
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        // A map from a "resource type" to a map ("resource name": "resource metadata")
+        ImmutableMap.Builder<ResourceType, Map<String, ResourceMetadata>> metadataSnapshot =
+            ImmutableMap.builder();
+        for (ResourceType type : ResourceType.values()) {
+          if (type == ResourceType.UNKNOWN) {
+            continue;
+          }
+          ImmutableMap.Builder<String, ResourceMetadata> metadataMap = ImmutableMap.builder();
+          for (Map.Entry<String, ResourceSubscriber> resourceEntry
+              : getSubscribedResourcesMap(type).entrySet()) {
+            metadataMap.put(resourceEntry.getKey(), resourceEntry.getValue().metadata);
+          }
+          metadataSnapshot.put(type, metadataMap.build());
+        }
+        future.set(metadataSnapshot.build());
+      }
+    });
+    return future;
   }
 
   @Override
@@ -2268,7 +2404,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       syncContext.throwIfNotInThisSynchronizationContext();
       this.type = type;
       this.resource = resource;
-      this.serverInfo = getServerInfo();
+      this.serverInfo = getServerInfo(resource);
       // Initialize metadata in UNKNOWN state to cover the case when resource subscriber,
       // is created but not yet requested because the client is in backoff.
       this.metadata = ResourceMetadata.newResourceMetadataUnknown();
@@ -2280,8 +2416,16 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       restartTimer();
     }
 
-    // TODO(zdapeng): add resourceName arg and support xdstp:// resources
-    private ServerInfo getServerInfo() {
+    private ServerInfo getServerInfo(String resource) {
+      if (resource.startsWith(XDSTP_SCHEME)) {
+        URI uri = URI.create(resource);
+        String authority = uri.getAuthority();
+        if (authority == null) {
+          authority = "";
+        }
+        AuthorityInfo authorityInfo = bootstrapInfo.authorities().get(authority);
+        return authorityInfo.xdsServers().get(0);
+      }
       return bootstrapInfo.servers().get(0); // use first server
     }
 

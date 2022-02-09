@@ -23,24 +23,19 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Converter;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
-import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
-import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -51,7 +46,6 @@ import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc.RouteLookupServiceStub;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
 import io.grpc.rls.LbPolicyConfiguration.ChildLbStatusListener;
-import io.grpc.rls.LbPolicyConfiguration.ChildLoadBalancingPolicy;
 import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
 import io.grpc.rls.LruCache.EvictionListener;
@@ -87,13 +81,6 @@ final class CachingRlsLbClient {
   private static final Converter<RouteLookupResponse, io.grpc.lookup.v1.RouteLookupResponse>
       RESPONSE_CONVERTER = new RouteLookupResponseConverter().reverse();
 
-  // System property to use direct path enabled OobChannel, by default direct path is enabled.
-  private static final String RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY =
-      "io.grpc.rls.CachingRlsLbClient.enable_oobchannel_directpath";
-  @VisibleForTesting
-  static boolean enableOobChannelDirectPath =
-      Boolean.parseBoolean(System.getProperty(RLS_ENABLE_OOB_CHANNEL_DIRECTPATH_PROPERTY, "false"));
-
   // All cache status changes (pending, backoff, success) must be under this lock
   private final Object lock = new Object();
   // LRU cache based on access order (BACKOFF and actual data will be here)
@@ -128,17 +115,18 @@ final class CachingRlsLbClient {
     synchronizationContext = helper.getSynchronizationContext();
     lbPolicyConfig = checkNotNull(builder.lbPolicyConfig, "lbPolicyConfig");
     RouteLookupConfig rlsConfig = lbPolicyConfig.getRouteLookupConfig();
-    maxAgeNanos = TimeUnit.MILLISECONDS.toNanos(rlsConfig.getMaxAgeInMillis());
-    staleAgeNanos = TimeUnit.MILLISECONDS.toNanos(rlsConfig.getStaleAgeInMillis());
-    callTimeoutNanos = TimeUnit.MILLISECONDS.toNanos(rlsConfig.getLookupServiceTimeoutInMillis());
+    maxAgeNanos = rlsConfig.maxAgeInNanos();
+    staleAgeNanos = rlsConfig.staleAgeInNanos();
+    callTimeoutNanos = rlsConfig.lookupServiceTimeoutInNanos();
     timeProvider = checkNotNull(builder.timeProvider, "timeProvider");
     throttler = checkNotNull(builder.throttler, "throttler");
     linkedHashLruCache =
         new RlsAsyncLruCache(
-            rlsConfig.getCacheSizeBytes(),
+            rlsConfig.cacheSizeBytes(),
             builder.evictionListener,
             scheduledExecutorService,
-            timeProvider);
+            timeProvider,
+            lock);
     logger = helper.getChannelLogger();
     String serverHost = null;
     try {
@@ -159,16 +147,16 @@ final class CachingRlsLbClient {
     // will be looked up differently than the backends; overrideAuthority(helper.getAuthority()) is
     // called to impose the authority security restrictions.
     ManagedChannelBuilder<?> rlsChannelBuilder = helper.createResolvingOobChannelBuilder(
-        rlsConfig.getLookupService(), helper.getUnsafeChannelCredentials());
+        rlsConfig.lookupService(), helper.getUnsafeChannelCredentials());
     rlsChannelBuilder.overrideAuthority(helper.getAuthority());
-    if (enableOobChannelDirectPath) {
-      Map<String, ?> directPathServiceConfig =
-          getDirectPathServiceConfig(rlsConfig.getLookupService());
+    Map<String, ?> routeLookupChannelServiceConfig =
+        lbPolicyConfig.getRouteLookupChannelServiceConfig();
+    if (routeLookupChannelServiceConfig != null) {
       logger.log(
           ChannelLogLevel.DEBUG,
-          "RLS channel direct path enabled. RLS channel service config: {0}",
-          directPathServiceConfig);
-      rlsChannelBuilder.defaultServiceConfig(directPathServiceConfig);
+          "RLS channel service config: {0}",
+          routeLookupChannelServiceConfig);
+      rlsChannelBuilder.defaultServiceConfig(routeLookupChannelServiceConfig);
       rlsChannelBuilder.disableServiceConfigLookUp();
     }
     rlsChannel = rlsChannelBuilder.build();
@@ -181,23 +169,10 @@ final class CachingRlsLbClient {
         new ChildLoadBalancerHelperProvider(helper, new SubchannelStateManagerImpl(), rlsPicker);
     refCountedChildPolicyWrapperFactory =
         new RefCountedChildPolicyWrapperFactory(
-            childLbHelperProvider, new BackoffRefreshListener());
+            lbPolicyConfig.getLoadBalancingPolicy(), childLbResolvedAddressFactory,
+            childLbHelperProvider,
+            new BackoffRefreshListener());
     logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient created");
-  }
-
-  private static ImmutableMap<String, Object> getDirectPathServiceConfig(String serviceName) {
-    ImmutableMap<String, Object> pickFirstStrategy =
-        ImmutableMap.<String, Object>of("pick_first", ImmutableMap.of());
-
-    ImmutableMap<String, Object> childPolicy =
-        ImmutableMap.<String, Object>of(
-            "childPolicy", ImmutableList.of(pickFirstStrategy),
-            "serviceName", serviceName);
-
-    ImmutableMap<String, Object> grpcLbPolicy =
-        ImmutableMap.<String, Object>of("grpclb", childPolicy);
-
-    return ImmutableMap.<String, Object>of("loadBalancingConfig", ImmutableList.of(grpcLbPolicy));
   }
 
   @CheckReturnValue
@@ -536,39 +511,17 @@ final class CachingRlsLbClient {
     private final long staleTime;
     private final ChildPolicyWrapper childPolicyWrapper;
 
+    // GuardedBy CachingRlsLbClient.lock
     DataCacheEntry(RouteLookupRequest request, final RouteLookupResponse response) {
       super(request);
       this.response = checkNotNull(response, "response");
       // TODO(creamsoup) fallback to other targets if first one is not available
       childPolicyWrapper =
           refCountedChildPolicyWrapperFactory
-              .createOrGet(response.getTargets().get(0));
+              .createOrGet(response.targets().get(0));
       long now = timeProvider.currentTimeNanos();
       expireTime = now + maxAgeNanos;
       staleTime = now + staleAgeNanos;
-
-      if (childPolicyWrapper.getPicker() != null) {
-        childPolicyWrapper.refreshState();
-      } else {
-        createChildLbPolicy();
-      }
-    }
-
-    private void createChildLbPolicy() {
-      ChildLoadBalancingPolicy childPolicy = lbPolicyConfig.getLoadBalancingPolicy();
-      LoadBalancerProvider lbProvider = childPolicy.getEffectiveLbProvider();
-      ConfigOrError lbConfig =
-          lbProvider
-              .parseLoadBalancingPolicyConfig(
-                  childPolicy.getEffectiveChildPolicy(childPolicyWrapper.getTarget()));
-
-      LoadBalancer lb = lbProvider.newLoadBalancer(childPolicyWrapper.getHelper());
-      logger.log(
-          ChannelLogLevel.DEBUG,
-          "RLS child lb created. config: {0}",
-          lbConfig.getConfig());
-      lb.handleResolvedAddresses(childLbResolvedAddressFactory.create(lbConfig.getConfig()));
-      lb.requestConnection();
     }
 
     /**
@@ -623,7 +576,7 @@ final class CachingRlsLbClient {
     int getSizeBytes() {
       // size of strings and java object overhead, actual memory usage is more than this.
       return
-          (response.getTargets().get(0).length() + response.getHeaderData().length()) * 2 + 38 * 2;
+          (response.targets().get(0).length() + response.getHeaderData().length()) * 2 + 38 * 2;
     }
 
     @Override
@@ -637,7 +590,9 @@ final class CachingRlsLbClient {
 
     @Override
     void cleanup() {
-      refCountedChildPolicyWrapperFactory.release(childPolicyWrapper);
+      synchronized (lock) {
+        refCountedChildPolicyWrapperFactory.release(childPolicyWrapper);
+      }
     }
 
     @Override
@@ -856,14 +811,15 @@ final class CachingRlsLbClient {
 
     RlsAsyncLruCache(long maxEstimatedSizeBytes,
         @Nullable EvictionListener<RouteLookupRequest, CacheEntry> evictionListener,
-        ScheduledExecutorService ses, TimeProvider timeProvider) {
+        ScheduledExecutorService ses, TimeProvider timeProvider, Object lock) {
       super(
           maxEstimatedSizeBytes,
           new AutoCleaningEvictionListener(evictionListener),
           1,
           TimeUnit.MINUTES,
           ses,
-          timeProvider);
+          timeProvider,
+          lock);
     }
 
     @Override
@@ -937,7 +893,7 @@ final class CachingRlsLbClient {
         headers.discardAll(RLS_DATA_KEY);
         headers.put(RLS_DATA_KEY, response.getHeaderData());
       }
-      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
+      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().defaultTarget();
       boolean hasFallback = defaultTarget != null && !defaultTarget.isEmpty();
       if (response.hasData()) {
         ChildPolicyWrapper childPolicyWrapper = response.getChildPolicyWrapper();
@@ -977,7 +933,7 @@ final class CachingRlsLbClient {
     }
 
     private void startFallbackChildPolicy() {
-      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().getDefaultTarget();
+      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().defaultTarget();
       logger.log(ChannelLogLevel.DEBUG, "starting fallback to {0}", defaultTarget);
       synchronized (lock) {
         if (fallbackChildPolicyWrapper != null) {
@@ -985,27 +941,9 @@ final class CachingRlsLbClient {
         }
         fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
       }
-      LoadBalancerProvider lbProvider =
-          lbPolicyConfig.getLoadBalancingPolicy().getEffectiveLbProvider();
-      final LoadBalancer lb =
-          lbProvider.newLoadBalancer(fallbackChildPolicyWrapper.getHelper());
-      final ConfigOrError lbConfig =
-          lbProvider
-              .parseLoadBalancingPolicyConfig(
-                  lbPolicyConfig
-                      .getLoadBalancingPolicy()
-                      .getEffectiveChildPolicy(defaultTarget));
-      helper.getSynchronizationContext().execute(
-          new Runnable() {
-            @Override
-            public void run() {
-              lb.handleResolvedAddresses(
-                  childLbResolvedAddressFactory.create(lbConfig.getConfig()));
-              lb.requestConnection();
-            }
-          });
     }
 
+    // GuardedBy CachingRlsLbClient.lock
     void close() {
       if (fallbackChildPolicyWrapper != null) {
         refCountedChildPolicyWrapperFactory.release(fallbackChildPolicyWrapper);
@@ -1015,7 +953,7 @@ final class CachingRlsLbClient {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("target", lbPolicyConfig.getRouteLookupConfig().getLookupService())
+          .add("target", lbPolicyConfig.getRouteLookupConfig().lookupService())
           .toString();
     }
   }

@@ -302,7 +302,7 @@ public abstract class AbstractInteropTest {
       new LinkedBlockingQueue<>();
 
   private final ClientStreamTracer.Factory clientStreamTracerFactory =
-      new ClientStreamTracer.InternalLimitedInfoFactory() {
+      new ClientStreamTracer.Factory() {
         @Override
         public ClientStreamTracer newClientStreamTracer(
             ClientStreamTracer.StreamInfo info, Metadata headers) {

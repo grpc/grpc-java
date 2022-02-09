@@ -30,9 +30,9 @@ import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import java.util.Map;
 
 /**
- * The provider for the "rls-experimental" balancing policy.  This class should not be directly
+ * The provider for the "rls_experimental" balancing policy.  This class should not be directly
  * referenced in code.  The policy should be accessed through {@link
- * io.grpc.LoadBalancerRegistry#getProvider} with the name "rls-experimental".
+ * io.grpc.LoadBalancerRegistry#getProvider} with the name "rls_experimental".
  */
 @Internal
 public final class RlsLoadBalancerProvider extends LoadBalancerProvider {
@@ -49,7 +49,7 @@ public final class RlsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public String getPolicyName() {
-    return "rls-experimental";
+    return "rls_experimental";
   }
 
   @Override
@@ -62,28 +62,15 @@ public final class RlsLoadBalancerProvider extends LoadBalancerProvider {
     try {
       RouteLookupConfig routeLookupConfig = new RouteLookupConfigConverter()
           .convert(JsonUtil.getObject(rawLoadBalancingConfigPolicy, "routeLookupConfig"));
+      Map<String, ?> routeLookupChannelServiceConfig =
+          JsonUtil.getObject(rawLoadBalancingConfigPolicy, "routeLookupChannelServiceConfig");
       ChildLoadBalancingPolicy lbPolicy = ChildLoadBalancingPolicy
           .create(
               JsonUtil.getString(rawLoadBalancingConfigPolicy, "childPolicyConfigTargetFieldName"),
               JsonUtil.checkObjectList(
                   checkNotNull(JsonUtil.getList(rawLoadBalancingConfigPolicy, "childPolicy"))));
-      // Checking all valid targets to make sure the config is always valid. This strict check
-      // prevents child policy to handle invalid child policy.
-      for (String validTarget : routeLookupConfig.getValidTargets()) {
-        ConfigOrError childPolicyConfigOrError =
-            lbPolicy
-                .getEffectiveLbProvider()
-                .parseLoadBalancingPolicyConfig(lbPolicy.getEffectiveChildPolicy(validTarget));
-        if (childPolicyConfigOrError.getError() != null) {
-          return
-              ConfigOrError.fromError(
-                  childPolicyConfigOrError
-                      .getError()
-                      .augmentDescription(
-                          "failed to parse childPolicy for validTarget: " + validTarget));
-        }
-      }
-      return ConfigOrError.fromConfig(new LbPolicyConfiguration(routeLookupConfig, lbPolicy));
+      return ConfigOrError.fromConfig(
+          new LbPolicyConfiguration(routeLookupConfig, routeLookupChannelServiceConfig, lbPolicy));
     } catch (Exception e) {
       return ConfigOrError.fromError(
           Status.INVALID_ARGUMENT

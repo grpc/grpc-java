@@ -74,6 +74,7 @@ public final class GrpclbFallbackTestClient {
   private String serverUri;
   private String customCredentialsType;
   private String testCase;
+  private Boolean skipNetCmd = false;
 
   private ManagedChannel channel;
   private TestServiceGrpc.TestServiceBlockingStub blockingStub;
@@ -108,6 +109,8 @@ public final class GrpclbFallbackTestClient {
         blackholeLbAndBackendAddrsCmd = value;
       } else if ("custom_credentials_type".equals(key)) {
         customCredentialsType = value;
+      } else if ("skip_net_cmd".equals(key)) {
+        skipNetCmd = Boolean.valueOf(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -129,6 +132,10 @@ public final class GrpclbFallbackTestClient {
           + "\n  --blackhole_lb_and_backend_addrs_cmd  Shell command used to make "
           + "LB and backend addresses black holed. Default: "
           + c.blackholeLbAndBackendAddrsCmd
+          + "\n  --skip_net_cmd                        Skip unroute and blackhole "
+          + "shell command to allow setting the net config outside of the test "
+          + "client. Default: "
+          + c.skipNetCmd
           + "\n  --test_case=TEST_CASE        Test case to run. Valid options are:"
           + "\n      fast_fallback_before_startup : fallback before LB connection"
           + "\n      fast_fallback_after_startup : fallback after startup due to "
@@ -172,9 +179,14 @@ public final class GrpclbFallbackTestClient {
     }
   }
 
-  private static void runShellCmd(String cmd) throws Exception {
+  private void runShellCmd(String cmd) throws Exception {
+    if (skipNetCmd) {
+      logger.info("Skip net cmd because --skip_net_cmd is set to true");
+      return;
+    }
     logger.info("Run shell command: " + cmd);
-    ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd);
+    // Do not use bash -c here as bash may not exist in a container
+    ProcessBuilder pb = new ProcessBuilder(cmd.split(" "));
     pb.redirectErrorStream(true);
     Process process = pb.start();
     logger.info("Shell command merged stdout and stderr: "
@@ -211,7 +223,7 @@ public final class GrpclbFallbackTestClient {
 
   private void waitForFallbackAndDoRpcs(Deadline fallbackDeadline) throws Exception {
     int fallbackRetryCount = 0;
-    boolean fellBack = false;
+    boolean fallBack = false;
     while (!fallbackDeadline.isExpired()) {
       GrpclbRouteType grpclbRouteType = doRpcAndGetPath(
           Deadline.after(1, TimeUnit.SECONDS));
@@ -222,14 +234,14 @@ public final class GrpclbFallbackTestClient {
       if (grpclbRouteType == GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK) {
         logger.info("Made one successful RPC to a fallback. Now expect the "
             + "same for the rest.");
-        fellBack = true;
+        fallBack = true;
         break;
       } else {
         logger.info("Retryable RPC failure on iteration: " + fallbackRetryCount);
       }
       fallbackRetryCount++;
     }
-    if (!fellBack) {
+    if (!fallBack) {
       throw new AssertionError("Didn't fall back within deadline");
     }
     for (int i = 0; i < 30; i++) {

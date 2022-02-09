@@ -118,15 +118,11 @@ public class RlsLoadBalancerTest {
   private MethodDescriptor<Object, Object> fakeSearchMethod;
   private MethodDescriptor<Object, Object> fakeRescueMethod;
   private RlsLoadBalancer rlsLb;
-  private boolean existingEnableOobChannelDirectPath;
   private String defaultTarget = "defaultTarget";
 
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
-
-    existingEnableOobChannelDirectPath = CachingRlsLbClient.enableOobChannelDirectPath;
-    CachingRlsLbClient.enableOobChannelDirectPath = false;
 
     fakeSearchMethod =
         MethodDescriptor.newBuilder()
@@ -144,16 +140,16 @@ public class RlsLoadBalancerTest {
             .build();
     fakeRlsServerImpl.setLookupTable(
         ImmutableMap.of(
-            new RouteLookupRequest(ImmutableMap.of(
+            RouteLookupRequest.create(ImmutableMap.of(
                 "server", "fake-bigtable.googleapis.com",
                 "service-key", "com.google",
                 "method-key", "Search")),
-            new RouteLookupResponse(ImmutableList.of("wilderness"), "where are you?"),
-            new RouteLookupRequest(ImmutableMap.of(
+            RouteLookupResponse.create(ImmutableList.of("wilderness"), "where are you?"),
+            RouteLookupRequest.create(ImmutableMap.of(
                 "server", "fake-bigtable.googleapis.com",
                 "service-key", "com.google",
                 "method-key", "Rescue")),
-            new RouteLookupResponse(ImmutableList.of("civilization"), "you are safe")));
+            RouteLookupResponse.create(ImmutableList.of("civilization"), "you are safe")));
 
     rlsLb = (RlsLoadBalancer) provider.newLoadBalancer(helper);
     rlsLb.cachingRlsLbClientBuilderProvider = new CachingRlsLbClientBuilderProvider() {
@@ -168,7 +164,6 @@ public class RlsLoadBalancerTest {
   @After
   public void tearDown() throws Exception {
     rlsLb.shutdown();
-    CachingRlsLbClient.enableOobChannelDirectPath = existingEnableOobChannelDirectPath;
   }
 
   @Test
@@ -420,11 +415,11 @@ public class RlsLoadBalancerTest {
         + "    }\n"
         + "  ],\n"
         + "  \"lookupService\": \"localhost:8972\",\n"
-        + "  \"lookupServiceTimeout\": 2,\n"
-        + "  \"maxAge\": 300,\n"
-        + "  \"staleAge\": 240,\n"
+        + "  \"lookupServiceTimeout\": \"2s\",\n"
+        + "  \"maxAge\": \"300s\",\n"
+        + "  \"staleAge\": \"240s\",\n"
         + "  \"validTargets\": [\"localhost:9001\", \"localhost:9002\"],"
-        + "  \"cacheSizeBytes\": 1000,\n"
+        + "  \"cacheSizeBytes\": \"1000\",\n"
         + "  \"defaultTarget\": \"" + defaultTarget + "\",\n"
         + "  \"requestProcessingStrategy\": \"SYNC_LOOKUP_DEFAULT_TARGET_ON_ERROR\"\n"
         + "}";
