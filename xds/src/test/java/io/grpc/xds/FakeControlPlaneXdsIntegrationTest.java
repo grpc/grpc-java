@@ -64,7 +64,7 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
-import java.net.ServerSocket;
+
 import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
@@ -87,7 +87,7 @@ public class FakeControlPlaneXdsIntegrationTest {
   private static final Logger logger =
       Logger.getLogger(FakeControlPlaneXdsIntegrationTest.class.getName());
 
-  protected int testServerPort;
+  protected int testServerPort = 0;
   protected int controlPlaneServicePort;
   private Server server;
   private Server controlPlane;
@@ -95,8 +95,8 @@ public class FakeControlPlaneXdsIntegrationTest {
   protected SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub;
   private XdsNameResolverProvider nameResolverProvider;
   private static final String scheme = "test-xds";
-  private static final String SERVER_LISTENER_TEMPLATE =
-      "grpc/server?udpa.resource.listening_address=%s";
+  private static final String SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT =
+      "grpc/server?udpa.resource.listening_address=";
   private static final String rdsName = "route-config.googleapis.com";
   private static final String clusterName = "cluster0";
   private static final String edsName = "eds-service-0";
@@ -122,22 +122,20 @@ public class FakeControlPlaneXdsIntegrationTest {
                 "server_features", Collections.singletonList("xds_v3")
             )
         ),
-        "server_listener_resource_name_template", SERVER_LISTENER_TEMPLATE
+        "server_listener_resource_name_template", SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT
     );
   }
 
   /**
-   * 1. Start control plane server and get control plane port
-   * 2. Find an available port for xds server
-   * 3. Set control plane config using the port in 2
-   * 4. Start xds server using control plane port in 1 and available port in 2
+   * 1. Start control plane server and get control plane port.
+   * 2. Start xdsServer using no replacement server template, because we do not know the server
+   * port yet. Then get the server port.
+   * 3. Update control plane config using the port in 2 for necessary rds and eds resources to set
+   * up client and server communication for test cases.
    * */
   @Before
   public void setUp() throws Exception {
     startControlPlane();
-    ServerSocket serverSocket = new ServerSocket(0);
-    testServerPort = serverSocket.getLocalPort();
-    serverSocket.close();
     nameResolverProvider = XdsNameResolverProvider.createForTest(scheme,
         defaultBootstrapOverride());
     NameResolverRegistry.getDefaultRegistry().register(nameResolverProvider);
@@ -162,8 +160,12 @@ public class FakeControlPlaneXdsIntegrationTest {
 
   @Test
   public void pingPong() throws Exception {
+    String tcpListenerName = SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT;
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS, ImmutableMap.<String, Listener>of(
+        tcpListenerName, serverListener(tcpListenerName, "fake-authority-temporary")
+    ));
+    startServer(defaultBootstrapOverride());
     String serverHostName = "0.0.0.0:" + testServerPort;
-    String tcpListenerName = SERVER_LISTENER_TEMPLATE.replaceAll("%s", serverHostName);
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS, ImmutableMap.<String, Listener>of(
         tcpListenerName, serverListener(tcpListenerName, serverHostName),
         serverHostName, clientListener(serverHostName)
@@ -174,8 +176,6 @@ public class FakeControlPlaneXdsIntegrationTest {
         ImmutableMap.<String, Message>of(clusterName, cds()));
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS,
         ImmutableMap.<String, Message>of(edsName, eds(testServerPort)));
-    startServer(defaultBootstrapOverride());
-    serverHostName = "0.0.0.0:" + testServerPort;
     ManagedChannel channel = Grpc.newChannelBuilder(scheme + ":///" + serverHostName,
         InsecureChannelCredentials.create()).build();
     blockingStub = SimpleServiceGrpc.newBlockingStub(channel);
@@ -201,10 +201,11 @@ public class FakeControlPlaneXdsIntegrationTest {
         };
 
     XdsServerBuilder serverBuilder = XdsServerBuilder.forPort(
-        testServerPort, InsecureServerCredentials.create())
+        0, InsecureServerCredentials.create())
         .addService(simpleServiceImpl)
         .overrideBootstrapForTest(bootstrapOverride);
     server = serverBuilder.build().start();
+    testServerPort = server.getPort();
     logger.log(Level.FINE, "server started");
   }
 
