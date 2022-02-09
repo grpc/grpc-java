@@ -31,6 +31,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.AbstractClientStream;
+import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.Http2ClientStreamTransportState;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
@@ -152,12 +153,18 @@ class NettyClientStream extends AbstractClientStream {
             // Stream creation failed. Close the stream if not already closed.
             // When the channel is shutdown, the lifecycle manager has a better view of the failure,
             // especially before negotiation completes (because the negotiator commonly doesn't
-            // receive the execeptionCaught because NettyClientHandler does not propagate it).
+            // receive the exceptionCaught because NettyClientHandler does not propagate it).
             Status s = transportState().handler.getLifecycleManager().getShutdownStatus();
             if (s == null) {
               s = transportState().statusFromFailedFuture(future);
             }
-            transportState().transportReportStatus(s, true, new Metadata());
+            if (transportState().isNonExistent()) {
+              transportState().transportReportStatus(
+                  s, RpcProgress.MISCARRIED, true, new Metadata());
+            } else {
+              transportState().transportReportStatus(
+                  s, RpcProgress.PROCESSED, true, new Metadata());
+            }
           }
         }
       };
@@ -268,7 +275,7 @@ class NettyClientStream extends AbstractClientStream {
     }
 
     boolean isNonExistent() {
-      return this.id == NON_EXISTENT_ID;
+      return this.id == NON_EXISTENT_ID || this.id == 0;
     }
 
     /**

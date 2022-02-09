@@ -22,12 +22,10 @@ import static io.grpc.xds.Bootstrapper.XDSTP_SCHEME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
-import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-import com.google.common.net.UrlEscapers;
 import com.google.gson.Gson;
 import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
@@ -193,7 +191,7 @@ final class XdsNameResolver extends NameResolver {
     }
     String replacement = serviceAuthority;
     if (listenerNameTemplate.startsWith(XDSTP_SCHEME)) {
-      replacement = percentEncodePath(replacement);
+      replacement = XdsClient.percentEncodePath(replacement);
     }
     String ldsResourceName = expandPercentS(listenerNameTemplate, replacement);
     if (!XdsClient.isResourceNameValid(ldsResourceName, ResourceType.LDS.typeUrl())
@@ -206,16 +204,6 @@ final class XdsNameResolver extends NameResolver {
     callCounterProvider = SharedCallCounterMap.getInstance();
     resolveState = new ResolveState(ldsResourceName);
     resolveState.start();
-  }
-
-  @VisibleForTesting
-  static String percentEncodePath(String input) {
-    Iterable<String> pathSegs = Splitter.on('/').split(input);
-    List<String> encodedSegs = new ArrayList<>();
-    for (String pathSeg : pathSegs) {
-      encodedSegs.add(UrlEscapers.urlPathSegmentEscaper().escape(pathSeg));
-    }
-    return Joiner.on('/').join(encodedSegs);
   }
 
   private static String expandPercentS(String template, String replacement) {
