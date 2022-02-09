@@ -297,10 +297,12 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
       public void onAvailable(Network network) {
         delegate.enterIdle();
       }
+
       @Override
-      public void onBlockedStatusChanged (Network network, boolean blocked) {
-        if (!blocked)
+      public void onBlockedStatusChanged(Network network, boolean blocked) {
+        if (!blocked) {
           delegate.enterIdle();
+        }
       }
     }
 
