@@ -880,13 +880,14 @@ final class CachingRlsLbClient {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      String[] methodName = args.getMethodDescriptor().getFullMethodName().split("/", 2);
+      String serviceName = args.getMethodDescriptor().getServiceName();
+      String methodName = args.getMethodDescriptor().getBareMethodName();
       RouteLookupRequest request =
-          requestFactory.create(methodName[0], methodName[1], args.getHeaders());
+          requestFactory.create(serviceName, methodName, args.getHeaders());
       final CachedRouteLookupResponse response = CachingRlsLbClient.this.get(request);
       logger.log(ChannelLogLevel.DEBUG,
           "Got route lookup cache entry for service={0}, method={1}, headers={2}:\n {3}",
-          new Object[]{methodName[0], methodName[1], args.getHeaders(), response});
+          new Object[]{serviceName, methodName, args.getHeaders(), response});
 
       if (response.getHeaderData() != null && !response.getHeaderData().isEmpty()) {
         Metadata headers = args.getHeaders();
