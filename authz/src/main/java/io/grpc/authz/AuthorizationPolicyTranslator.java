@@ -36,7 +36,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Translates a gRPC SDK authorization policy in JSON string to Envoy RBAC policies.
+ * Translates a gRPC authorization policy in JSON string to Envoy RBAC policies.
  */
 class AuthorizationPolicyTranslator {
   private static final ImmutableList<String> UNSUPPORTED_HEADERS = ImmutableList.of(
@@ -155,7 +155,7 @@ class AuthorizationPolicyTranslator {
   }
 
   /** 
-  * Translates a gRPC SDK authorization policy in JSON string to Envoy RBAC policies.
+  * Translates a gRPC authorization policy in JSON string to Envoy RBAC policies.
   * On success, will return one of the following -
   * 1. One allow RBAC policy or,
   * 2. Two RBAC policies, deny policy followed by allow policy.
