@@ -42,11 +42,11 @@ public class ManualFlowControlServer {
         serverCallStreamObserver.disableAutoRequest();
 
         // Set up a back-pressure-aware consumer for the request stream. The onReadyHandler will be invoked
-        // when the sending side has enough buffer space to store more responses.
+        // when there is available buffer space to store more responses.
         //
         // Note: the onReadyHandler's invocation is serialized on the same thread pool as the incoming StreamObserver's
         // onNext(), onError(), and onComplete() handlers. Blocking the onReadyHandler will prevent additional messages
-        // from being processed by the sending StreamObserver. The onReadyHandler must return in a timely manner or
+        // from being processed by the incoming StreamObserver. The onReadyHandler must return in a timely manner or
         // else message processing throughput will suffer.
         class OnReadyHandler implements Runnable {
           // Guard against spurious onReady() calls caused by a race between onNext() and onReady(). If the transport
