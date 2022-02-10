@@ -165,7 +165,7 @@ public final class EnvoyServerProtoData {
 
   /**
    * Corresponds to Envoy proto message
-   * {@link io.envoyproxy.envoy.api.v2.listener.FilterChainMatch}.
+   * {@link io.envoyproxy.envoy.config.listener.v3.FilterChainMatch}.
    */
   @AutoValue
   abstract static class FilterChainMatch {
@@ -198,7 +198,7 @@ public final class EnvoyServerProtoData {
   }
 
   /**
-   * Corresponds to Envoy proto message {@link io.envoyproxy.envoy.api.v2.listener.FilterChain}.
+   * Corresponds to Envoy proto message {@link io.envoyproxy.envoy.config.listener.v3.FilterChain}.
    */
   @AutoValue
   abstract static class FilterChain {
@@ -229,8 +229,8 @@ public final class EnvoyServerProtoData {
   }
 
   /**
-   * Corresponds to Envoy proto message {@link io.envoyproxy.envoy.api.v2.Listener} & related
-   * classes.
+   * Corresponds to Envoy proto message {@link io.envoyproxy.envoy.config.listener.v3.Listener} and
+   * related classes.
    */
   @AutoValue
   abstract static class Listener {
