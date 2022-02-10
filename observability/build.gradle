@@ -9,10 +9,16 @@ plugins {
 description = "gRPC: Observability"
 dependencies {
     api project(':grpc-api')
+    def cloudLoggingVersion = '3.6.1'
 
     implementation libraries.guava,
             project(':grpc-protobuf'),
             project(':grpc-stub')
+
+    implementation ("com.google.cloud:google-cloud-logging:${cloudLoggingVersion}") {
+        exclude group: 'com.google.guava', module: 'guava'
+        exclude group: 'com.google.api.grpc', module: 'proto-google-common-protos'
+    }
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
@@ -25,4 +31,3 @@ dependencies {
 }
 
 configureProtoCompilation()
-
