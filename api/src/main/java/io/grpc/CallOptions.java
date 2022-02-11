@@ -359,8 +359,8 @@ public final class CallOptions {
   }
 
   /**
-   * Returns the executor used to handle the call if set with {@link #withExecutor}.
-   * Should avoid scheduling tasks on the executor after call is closed, see
+   * Returns the executor override to use for this specific call, or {@code null} if there is no
+   * override. The executor is only for servicing this one call, so is not safe to use after
    * {@link ClientCall.Listener#onClose}.
    */
   @Nullable
