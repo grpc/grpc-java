@@ -358,6 +358,11 @@ public final class CallOptions {
     return key.defaultValue;
   }
 
+  /**
+   * Returns the executor used to handle the call if set with {@link #withExecutor}.
+   * Should avoid scheduling tasks on the executor after call is closed, see
+   * {@link ClientCall.Listener#onClose}.
+   */
   @Nullable
   public Executor getExecutor() {
     return executor;
