@@ -358,6 +358,11 @@ public final class CallOptions {
     return key.defaultValue;
   }
 
+  /**
+   * Returns the executor override to use for this specific call, or {@code null} if there is no
+   * override. The executor is only for servicing this one call, so is not safe to use after
+   * {@link ClientCall.Listener#onClose}.
+   */
   @Nullable
   public Executor getExecutor() {
     return executor;
