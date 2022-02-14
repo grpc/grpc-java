@@ -49,6 +49,7 @@ include ":grpc-services"
 include ":grpc-xds"
 include ":grpc-bom"
 include ":grpc-rls"
+include ":grpc-authz"
 include ":grpc-observability"
 
 project(':grpc-api').projectDir = "$rootDir/api" as File
@@ -74,6 +75,7 @@ project(':grpc-services').projectDir = "$rootDir/services" as File
 project(':grpc-xds').projectDir = "$rootDir/xds" as File
 project(':grpc-bom').projectDir = "$rootDir/bom" as File
 project(':grpc-rls').projectDir = "$rootDir/rls" as File
+project(':grpc-authz').projectDir = "$rootDir/authz" as File
 project(':grpc-observability').projectDir = "$rootDir/observability" as File
 
 if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {
