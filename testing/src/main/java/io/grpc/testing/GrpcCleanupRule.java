@@ -175,6 +175,7 @@ public final class GrpcCleanupRule implements TestRule {
    * Releases all the registered resources.
    */
   private void teardown() {
+    stopwatch.reset();
     stopwatch.start();
 
     if (firstException == null) {
