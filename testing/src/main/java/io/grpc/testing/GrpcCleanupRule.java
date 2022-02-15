@@ -149,6 +149,7 @@ public final class GrpcCleanupRule implements TestRule {
     return new Statement() {
       @Override
       public void evaluate() throws Throwable {
+        firstException = null;
         try {
           base.evaluate();
         } catch (Throwable t) {
