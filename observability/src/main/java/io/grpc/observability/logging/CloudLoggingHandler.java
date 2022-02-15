@@ -43,17 +43,20 @@ import java.util.logging.LogRecord;
 @Internal
 public class CloudLoggingHandler extends Handler {
 
+  private static final String DEFAULT_LOG_NAME = "grpc-observability";
+  private static final Level DEFAULT_LOG_LEVEL = Level.ALL;
+
   private LoggingOptions loggingOptions;
   private volatile Logging logging;
   private final Level baseLevel;
-  private String logName;
+  private final String cloudLogName;
 
   /**
    * Creates a custom logging handler that publishes message to Cloud logging. Default log level is
    * set to Level.FINEST if level is not passed.
    */
   public CloudLoggingHandler() {
-    this(Level.ALL, null, null);
+    this(DEFAULT_LOG_LEVEL, null, null);
   }
 
   /**
@@ -79,16 +82,15 @@ public class CloudLoggingHandler extends Handler {
    * Creates a custom logging handler that publishes message to Cloud logging.
    *
    * @param level set the level for which message levels will be logged by the custom logger
-   * @param log the name of the log to which log entries are written
+   * @param logName the name of the log to which log entries are written
    * @param overrideProjectId the value of cloud project id to which logs are sent to by the custom
    *     logger
    */
-  public CloudLoggingHandler(Level level, String log, String overrideProjectId) {
-    baseLevel = level.equals(Level.ALL) ? Level.FINEST : level;
+  public CloudLoggingHandler(Level level, String logName, String overrideProjectId) {
+    baseLevel = level.equals(DEFAULT_LOG_LEVEL) ? Level.FINEST : level;
     setLevel(baseLevel);
 
-    String defaultLogName = "o11y-grpc-log";
-    logName = log != null ? log : defaultLogName;
+    cloudLogName = logName != null ? logName : DEFAULT_LOG_NAME;
 
     try {
       // TODO(dnvindhya) read the value from config instead of taking it as an argument
@@ -109,7 +111,7 @@ public class CloudLoggingHandler extends Handler {
   @Override
   public void publish(LogRecord record) {
     if (!(record instanceof LogRecordExtension)) {
-      throw new IllegalArgumentException("Wrong type of LogRecord");
+      throw new IllegalArgumentException("Expected record of type LogRecordExtension");
     }
 
     Level logLevel = record.getLevel();
@@ -120,13 +122,13 @@ public class CloudLoggingHandler extends Handler {
 
   private void writeLog(GrpcLogRecord logProto, Level logLevel) {
     try {
-      Severity cloudLogLevel = getCloudloggingLevel(logLevel);
+      Severity cloudLogLevel = getCloudLoggingLevel(logLevel);
       Map<String, Object> mapPayload = protoToMapConverter(logProto);
 
       LogEntry grpcLogEntry =
           LogEntry.newBuilder(JsonPayload.of(mapPayload))
               .setSeverity(cloudLogLevel)
-              .setLogName(logName)
+              .setLogName(cloudLogName)
               .setResource(MonitoredResource.newBuilder("global").build())
               .build();
 
@@ -147,8 +149,7 @@ public class CloudLoggingHandler extends Handler {
     JsonFormat.Printer printer = JsonFormat.printer().preservingProtoFieldNames();
     String recordJson = printer.print(logProto);
 
-    Map<String, Object> recordMap = (Map<String, Object>) JsonParser.parse(recordJson);
-    return recordMap;
+    return (Map<String, Object>) JsonParser.parse(recordJson);
   }
 
   @Override
@@ -168,28 +169,18 @@ public class CloudLoggingHandler extends Handler {
     }
   }
 
-  private Severity getCloudloggingLevel(Level recordLevel) {
+  private Severity getCloudLoggingLevel(Level recordLevel) {
     switch (recordLevel.intValue()) {
-      // FINEST
-      case 300:
+      case 300: // FINEST
+      case 400: // FINER
+      case 500: // FINE
         return Severity.DEBUG;
-      // FINER
-      case 400:
-        return Severity.DEBUG;
-      // FINE
-      case 500:
-        return Severity.DEBUG;
-      // CONFIG
-      case 700:
+      case 700: // CONFIG
+      case 800: // INFO
         return Severity.INFO;
-      // INFO
-      case 800:
-        return Severity.INFO;
-      // WARNING
-      case 900:
+      case 900: // WARNING
         return Severity.WARNING;
-      // SEVERE
-      case 1000:
+      case 1000: // SEVERE
         return Severity.ERROR;
       default:
         return Severity.DEFAULT;
