@@ -85,7 +85,10 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 final class GrpclbState {
-  static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
+  static final long FALLBACK_TIMEOUT_MS =
+      Long.parseLong(
+          System.getProperty(
+              "io.grpc.grpclb.FallbackTimeoutMS", Long.toString(TimeUnit.SECONDS.toMillis(10))));
   private static final Attributes LB_PROVIDED_BACKEND_ATTRS =
       Attributes.newBuilder().set(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND, true).build();
 
