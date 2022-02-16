@@ -46,8 +46,8 @@ public class CloudLoggingHandler extends Handler {
   private static final String DEFAULT_LOG_NAME = "grpc-observability";
   private static final Level DEFAULT_LOG_LEVEL = Level.ALL;
 
-  private LoggingOptions loggingOptions;
-  private volatile Logging logging;
+  private final LoggingOptions loggingOptions;
+  private final Logging loggingClient;
   private final Level baseLevel;
   private final String cloudLogName;
 
@@ -102,9 +102,10 @@ public class CloudLoggingHandler extends Handler {
         loggingOptions = LoggingOptions.getDefaultInstance();
       }
 
-      logging = loggingOptions.getService();
+      loggingClient = loggingOptions.getService();
     } catch (Exception ex) {
       reportError("Error in initializing Cloud Logging", ex, ErrorManager.OPEN_FAILURE);
+      throw ex;
     }
   }
 
@@ -132,7 +133,7 @@ public class CloudLoggingHandler extends Handler {
               .setResource(MonitoredResource.newBuilder("global").build())
               .build();
 
-      logging.write(Collections.singleton(grpcLogEntry));
+      loggingClient.write(Collections.singleton(grpcLogEntry));
     } catch (Exception ex) {
       getErrorManager().error("Error in writing logs to cloud logging", ex,
           ErrorManager.WRITE_FAILURE);
@@ -154,14 +155,14 @@ public class CloudLoggingHandler extends Handler {
 
   @Override
   public void flush() {
-    logging.flush();
+    loggingClient.flush();
   }
 
   @Override
   public synchronized void close() throws SecurityException {
-    if (logging != null) {
+    if (loggingClient != null) {
       try {
-        logging.close();
+        loggingClient.close();
       } catch (Exception ex) {
         getErrorManager().error("Error in closing cloud logging handler", ex,
             ErrorManager.CLOSE_FAILURE);
