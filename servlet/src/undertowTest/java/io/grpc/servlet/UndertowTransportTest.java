@@ -257,6 +257,7 @@ public class UndertowTransportTest extends AbstractTransportTest {
   // FIXME: https://github.com/grpc/grpc-java/issues/8925
   @Override
   @Ignore("flaky")
+  @Test
   public void clientCancelFromWithinMessageRead() {}
 
   // FIXME
