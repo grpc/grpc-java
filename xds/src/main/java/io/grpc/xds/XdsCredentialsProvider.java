@@ -21,8 +21,9 @@ import io.grpc.ExperimentalApi;
 import java.util.Map;
 
 /**
- * Provider of xds credentials which can then consumed by the xds clients through
- * the bootstrap.
+ * Provider of credentials which can be consumed by clients for xds communications. The actual
+ * credential to be used for a particular xds communication will be chosen based on the bootstrap
+ * configuration.
  *
  * <p>Implementations can be automatically discovered by gRPC via Java's SPI mechanism. For
  * automatic discovery, the implementation must have a zero-argument constructor and include

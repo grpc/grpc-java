@@ -21,8 +21,7 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.xds.XdsCredentialsProvider;
 import java.util.Map;
 
-public final class InsecureXdsCredentialsProvider extends XdsCredentialsProvider {
-    
+public final class InsecureXdsCredentialsProvider extends XdsCredentialsProvider { 
   private static final String CREDS_NAME = "insecure";
 
   @Override
