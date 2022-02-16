@@ -16,13 +16,11 @@
 
 package io.grpc.servlet;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import java.util.Enumeration;
@@ -38,8 +36,6 @@ import javax.servlet.http.HttpServletResponse;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.InOrder;
-import org.mockito.Mockito;
 
 /** Test for {@link ServletServerBuilder}. */
 @RunWith(JUnit4.class)
@@ -86,12 +82,10 @@ public class ServletServerBuilderTest {
 
     verify(asyncContext).setTimeout(1);
 
-    // The following just verifies that scheduler is populated to the transport, what tasks are
-    // actually scheduled doesn't matter.
-    InOrder inOrder = Mockito.inOrder(scheduler);
-    // DEFAULT_HANDSHAKE_TIMEOUT_MILLIS
-    inOrder.verify(scheduler).schedule(any(Runnable.class), eq(120000L), eq(MILLISECONDS));
-    // Request timeout/deadline
-    inOrder.verify(scheduler).schedule(any(Runnable.class), anyLong(), eq(NANOSECONDS));
+    // The following just verifies that scheduler is populated to the transport.
+    // It doesn't matter what tasks (such as handshake timeout and request deadline) are actually
+    // scheduled.
+    verify(scheduler, timeout(5000).atLeastOnce())
+        .schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
   }
 }
