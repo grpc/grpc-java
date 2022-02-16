@@ -254,6 +254,11 @@ public class UndertowTransportTest extends AbstractTransportTest {
   @Test
   public void shutdownNowKillsClientStream() {}
 
+  // FIXME: https://github.com/grpc/grpc-java/issues/8925
+  @Override
+  @Ignore("flaky")
+  public void clientCancelFromWithinMessageRead() {}
+
   // FIXME
   @Override
   @Ignore("Servlet flow control not implemented yet")
