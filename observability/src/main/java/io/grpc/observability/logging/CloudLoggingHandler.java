@@ -31,7 +31,6 @@ import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
-import java.util.logging.ErrorManager;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -83,30 +82,22 @@ public class CloudLoggingHandler extends Handler {
    *
    * @param level set the level for which message levels will be logged by the custom logger
    * @param logName the name of the log to which log entries are written
-   * @param overrideProjectId the value of cloud project id to which logs are sent to by the custom
-   *     logger
+   * @param destinationProjectId the value of cloud project id to which logs are sent to by the
+   *     custom logger
    */
-  public CloudLoggingHandler(Level level, String logName, String overrideProjectId) {
-    baseLevel = level.equals(DEFAULT_LOG_LEVEL) ? Level.FINEST : level;
+  public CloudLoggingHandler(Level level, String logName, String destinationProjectId) {
+    baseLevel =
+        (level != null) ? (level.equals(DEFAULT_LOG_LEVEL) ? Level.FINEST : level) : Level.FINEST;
     setLevel(baseLevel);
-
     cloudLogName = logName != null ? logName : DEFAULT_LOG_NAME;
 
-    try {
-      // TODO(dnvindhya) read the value from config instead of taking it as an argument
-      String projectId = overrideProjectId != null ? overrideProjectId : null;
-
-      if (!Strings.isNullOrEmpty(projectId)) {
-        loggingOptions = LoggingOptions.newBuilder().setProjectId(overrideProjectId).build();
-      } else {
-        loggingOptions = LoggingOptions.getDefaultInstance();
-      }
-
-      loggingClient = loggingOptions.getService();
-    } catch (Exception ex) {
-      reportError("Error in initializing Cloud Logging", ex, ErrorManager.OPEN_FAILURE);
-      throw ex;
+    // TODO(dnvindhya) read the value from config instead of taking it as an argument
+    if (Strings.isNullOrEmpty(destinationProjectId)) {
+      loggingOptions = LoggingOptions.getDefaultInstance();
+    } else {
+      loggingOptions = LoggingOptions.newBuilder().setProjectId(destinationProjectId).build();
     }
+    loggingClient = loggingOptions.getService();
   }
 
   @Override
@@ -114,14 +105,15 @@ public class CloudLoggingHandler extends Handler {
     if (!(record instanceof LogRecordExtension)) {
       throw new IllegalArgumentException("Expected record of type LogRecordExtension");
     }
-
     Level logLevel = record.getLevel();
     GrpcLogRecord protoRecord = ((LogRecordExtension) record).getGrpcLogRecord();
-
     writeLog(protoRecord, logLevel);
   }
 
   private void writeLog(GrpcLogRecord logProto, Level logLevel) {
+    if (loggingClient == null) {
+      throw new IllegalStateException("Logging client not initialized");
+    }
     try {
       Severity cloudLogLevel = getCloudLoggingLevel(logLevel);
       Map<String, Object> mapPayload = protoToMapConverter(logProto);
@@ -132,41 +124,37 @@ public class CloudLoggingHandler extends Handler {
               .setLogName(cloudLogName)
               .setResource(MonitoredResource.newBuilder("global").build())
               .build();
-
       loggingClient.write(Collections.singleton(grpcLogEntry));
-    } catch (Exception ex) {
-      getErrorManager().error("Error in writing logs to cloud logging", ex,
-          ErrorManager.WRITE_FAILURE);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
 
-  /* Google Cloud Logging API only accepts String payload or Json Payload
-  Adding all the grpc o11y logging values as string makes it difficult to look up or index
-  Hence we are going with the Json Payload approach
-   */
   @SuppressWarnings("unchecked")
   private Map<String, Object> protoToMapConverter(GrpcLogRecord logProto)
       throws InvalidProtocolBufferException, IOException {
     JsonFormat.Printer printer = JsonFormat.printer().preservingProtoFieldNames();
     String recordJson = printer.print(logProto);
-
     return (Map<String, Object>) JsonParser.parse(recordJson);
   }
 
   @Override
   public void flush() {
+    if (loggingClient == null) {
+      throw new IllegalStateException("Logging client not initialized");
+    }
     loggingClient.flush();
   }
 
   @Override
   public synchronized void close() throws SecurityException {
-    if (loggingClient != null) {
-      try {
-        loggingClient.close();
-      } catch (Exception ex) {
-        getErrorManager().error("Error in closing cloud logging handler", ex,
-            ErrorManager.CLOSE_FAILURE);
-      }
+    if (loggingClient == null) {
+      throw new IllegalStateException("Logging client not initialized");
+    }
+    try {
+      loggingClient.close();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
 

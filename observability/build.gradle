@@ -10,26 +10,20 @@ description = "gRPC: Observability"
 dependencies {
     def cloudLoggingVersion = '3.6.1'
 
-    api (project(':grpc-api')) {
-        exclude group: 'com.google.guava', module: 'guava'
-    }
+    api project(':grpc-api'),
+            project(':grpc-alts')
 
-    api (project(':grpc-alts')) {
-        exclude group: 'com.google.guava', module: 'guava'
-        exclude group: 'com.google.auth', module: 'google-auth-library-oauth2-http'
-    }
+    implementation project(':grpc-protobuf'),
+            project(':grpc-stub')
 
-    api 'com.google.guava:guava:31.0.1-jre',
+    implementation 'com.google.guava:guava:31.0.1-jre',
             'com.google.errorprone:error_prone_annotations:2.11.0',
-            'com.google.auth:google-auth-library-oauth2-http:1.3.0',
+            'com.google.auth:google-auth-library-credentials:1.4.0',
             'org.checkerframework:checker-qual:3.20.0',
             'com.google.auto.value:auto-value-annotations:1.9',
             'com.google.http-client:google-http-client:1.41.0',
             'com.google.http-client:google-http-client-gson:1.41.0',
             'com.google.api.grpc:proto-google-common-protos:2.7.1'
-
-    implementation project(':grpc-protobuf'),
-            project(':grpc-stub')
 
     implementation ("com.google.cloud:google-cloud-logging:${cloudLoggingVersion}")
 
