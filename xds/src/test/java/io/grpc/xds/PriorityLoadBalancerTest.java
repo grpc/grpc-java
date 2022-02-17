@@ -400,6 +400,99 @@ public class PriorityLoadBalancerTest {
   }
 
   @Test
+  public void idleToConnectingDoesNotTriggerFailOver() {
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
+    PriorityChildConfig priorityChildConfig1 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
+    PriorityLbConfig priorityLbConfig =
+        new PriorityLbConfig(
+            ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
+            ImmutableList.of("p0", "p1"));
+    priorityLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+    assertThat(fooBalancers).hasSize(1);
+    assertThat(fooHelpers).hasSize(1);
+    Helper helper0 = Iterables.getOnlyElement(fooHelpers);
+
+    // p0 gets IDLE.
+    helper0.updateBalancingState(
+        IDLE,
+        BUFFER_PICKER);
+    assertCurrentPickerIsBufferPicker();
+
+    // p0 goes to CONNECTING
+    helper0.updateBalancingState(
+        IDLE,
+        BUFFER_PICKER);
+    assertCurrentPickerIsBufferPicker();
+
+    // no failover happened
+    assertThat(fooBalancers).hasSize(1);
+    assertThat(fooHelpers).hasSize(1);
+  }
+
+  @Test
+  public void readyToConnectDoesNotFailOverButUpdatesPicker() {
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
+    PriorityChildConfig priorityChildConfig1 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
+    PriorityLbConfig priorityLbConfig =
+        new PriorityLbConfig(
+            ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
+            ImmutableList.of("p0", "p1"));
+    priorityLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+    assertThat(fooBalancers).hasSize(1);
+    assertThat(fooHelpers).hasSize(1);
+    Helper helper0 = Iterables.getOnlyElement(fooHelpers);
+
+    // p0 gets READY.
+    final Subchannel subchannel0 = mock(Subchannel.class);
+    helper0.updateBalancingState(
+        READY,
+        new SubchannelPicker() {
+          @Override
+          public PickResult pickSubchannel(PickSubchannelArgs args) {
+            return PickResult.withSubchannel(subchannel0);
+          }
+        });
+    assertCurrentPickerPicksSubchannel(subchannel0);
+
+    // p0 goes to CONNECTING
+    helper0.updateBalancingState(
+        IDLE,
+        BUFFER_PICKER);
+    assertCurrentPickerIsBufferPicker();
+
+    // no failover happened
+    assertThat(fooBalancers).hasSize(1);
+    assertThat(fooHelpers).hasSize(1);
+
+    // resolution update without priority change does not trigger failover
+    Attributes.Key<String> fooKey = Attributes.Key.create("fooKey");
+    priorityLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .setAttributes(Attributes.newBuilder().set(fooKey, "barVal").build())
+            .build());
+
+    assertCurrentPickerIsBufferPicker();
+
+    // no failover happened
+    assertThat(fooBalancers).hasSize(1);
+    assertThat(fooHelpers).hasSize(1);
+  }
+
+  @Test
   public void typicalPriorityFailOverFlowWithIdleUpdate() {
     PriorityChildConfig priorityChildConfig0 =
         new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
