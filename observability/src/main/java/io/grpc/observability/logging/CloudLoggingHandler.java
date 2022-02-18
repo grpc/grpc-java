@@ -54,6 +54,8 @@ public class CloudLoggingHandler extends Handler {
    * Creates a custom logging handler that publishes message to Cloud logging. Default log level is
    * set to Level.FINEST if level is not passed.
    */
+  // TODO(vindhyan): replace custom JUL handler with internal sink implementation to eliminate
+  //  JUL dependency
   public CloudLoggingHandler() {
     this(DEFAULT_LOG_LEVEL, null, null);
   }
@@ -118,6 +120,7 @@ public class CloudLoggingHandler extends Handler {
       Severity cloudLogLevel = getCloudLoggingLevel(logLevel);
       Map<String, Object> mapPayload = protoToMapConverter(logProto);
 
+      // TODO(vindhyan): make sure all (int, long) values are not displayed as double
       LogEntry grpcLogEntry =
           LogEntry.newBuilder(JsonPayload.of(mapPayload))
               .setSeverity(cloudLogLevel)
