@@ -31,6 +31,8 @@ import io.grpc.testing.integration.TestServiceGrpc;
 import io.grpc.testing.integration.TestServiceImpl;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.http2.parser.RateControl;
 import org.eclipse.jetty.http2.server.HTTP2CServerConnectionFactory;
 import org.eclipse.jetty.server.HttpConfiguration;
@@ -104,5 +106,19 @@ public class GrpcServletSmokeTest {
             .setPayload(Payload.newBuilder().setBody(ByteString.copyFromUtf8("hello foo")))
             .build());
     assertThat(response.getPayload().getBody().size()).isEqualTo(1234);
+  }
+
+  @Test
+  public void httpGetRequest() throws Exception {
+    HttpClient httpClient = new HttpClient();
+    try {
+      httpClient.start();
+      ContentResponse response =
+          httpClient.GET("http://" + HOST + ":" + port + MYAPP + "/UnaryCall");
+      assertThat(response.getStatus()).isEqualTo(405);
+      assertThat(response.getContentAsString()).contains("GET method not supported");
+    } finally {
+      httpClient.stop();
+    }
   }
 }

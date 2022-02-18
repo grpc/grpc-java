@@ -100,7 +100,7 @@ public final class ServletAdapter {
    * calling {@code resp.setBufferSize()} before invocation is allowed.
    */
   public void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-    // TODO(zdapeng)
+    resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED, "GET method not supported");
   }
 
   /**
