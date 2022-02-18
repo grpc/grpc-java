@@ -315,7 +315,7 @@ public class FakeControlPlaneXdsIntegrationTest {
   private static ClusterLoadAssignment eds(int port) {
     Address address = Address.newBuilder()
         .setSocketAddress(
-            SocketAddress.newBuilder().setAddress("0.0.0.0").setPortValue(port).build()).build();
+            SocketAddress.newBuilder().setAddress("127.0.0.1").setPortValue(port).build()).build();
     LocalityLbEndpoints endpoints = LocalityLbEndpoints.newBuilder()
         .setLoadBalancingWeight(UInt32Value.of(10))
         .setPriority(0)
