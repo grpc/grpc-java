@@ -39,6 +39,8 @@ import java.util.logging.LogRecord;
  * Custom logging handler that outputs logs generated using {@link java.util.logging.Logger} to
  * Cloud Logging.
  */
+// TODO(vindhyan): replace custom JUL handler with internal sink implementation to eliminate
+//  JUL dependency
 @Internal
 public class CloudLoggingHandler extends Handler {
 
@@ -54,8 +56,6 @@ public class CloudLoggingHandler extends Handler {
    * Creates a custom logging handler that publishes message to Cloud logging. Default log level is
    * set to Level.FINEST if level is not passed.
    */
-  // TODO(vindhyan): replace custom JUL handler with internal sink implementation to eliminate
-  //  JUL dependency
   public CloudLoggingHandler() {
     this(DEFAULT_LOG_LEVEL, null, null);
   }
