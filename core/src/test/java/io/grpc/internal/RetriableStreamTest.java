@@ -1709,6 +1709,23 @@ public class RetriableStreamTest {
     inOrder.verifyNoMoreInteractions();
     verify(retriableStreamRecorder, never()).postCommit();
     assertEquals(0, fakeClock.numPendingTasks());
+
+    ArgumentCaptor<ClientStreamListener> sublistenerCaptor = sublistenerCaptor3;
+    for (int i = 0; i < 9999; i++) {
+      ClientStream mockStream = mock(ClientStream.class);
+      doReturn(mockStream).when(retriableStreamRecorder).newSubstream(0);
+      sublistenerCaptor.getValue()
+          .closed(Status.fromCode(NON_RETRIABLE_STATUS_CODE), MISCARRIED, new Metadata());
+      if (i == 9998) {
+        verify(retriableStreamRecorder).postCommit();
+        verify(masterListener)
+            .closed(any(Status.class), any(RpcProgress.class), any(Metadata.class));
+      } else {
+        verify(retriableStreamRecorder, never()).postCommit();
+        sublistenerCaptor = ArgumentCaptor.forClass(ClientStreamListener.class);
+        verify(mockStream).start(sublistenerCaptor.capture());
+      }
+    }
   }
 
   @Test

@@ -188,12 +188,12 @@ public class CachingRlsLbClientTest {
   public void get_noError_lifeCycle() throws Exception {
     setUpRlsLbClient();
     InOrder inOrder = inOrder(evictionListener);
-    RouteLookupRequest routeLookupRequest = new RouteLookupRequest(ImmutableMap.of(
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
-            new RouteLookupResponse(ImmutableList.of("target"), "header")));
+            RouteLookupResponse.create(ImmutableList.of("target"), "header")));
 
     // initial request
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
@@ -206,7 +206,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.hasData()).isTrue();
 
     // cache hit for staled entry
-    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.getStaleAgeInNanos(), TimeUnit.NANOSECONDS);
+    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.staleAgeInNanos(), TimeUnit.NANOSECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
@@ -222,7 +222,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.hasData()).isTrue();
 
     // existing cache expired
-    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.getMaxAgeInNanos(), TimeUnit.NANOSECONDS);
+    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.maxAgeInNanos(), TimeUnit.NANOSECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
 
@@ -258,12 +258,12 @@ public class CachingRlsLbClientTest {
             .setThrottler(fakeThrottler)
             .setTimeProvider(fakeTimeProvider)
             .build();
-    RouteLookupRequest routeLookupRequest = new RouteLookupRequest(ImmutableMap.of(
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
-            new RouteLookupResponse(ImmutableList.of("target"), "header")));
+            RouteLookupResponse.create(ImmutableList.of("target"), "header")));
 
     // initial request
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
@@ -282,12 +282,12 @@ public class CachingRlsLbClientTest {
   @Test
   public void get_throttledAndRecover() throws Exception {
     setUpRlsLbClient();
-    RouteLookupRequest routeLookupRequest = new RouteLookupRequest(ImmutableMap.of(
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
-            new RouteLookupResponse(ImmutableList.of("target"), "header")));
+            RouteLookupResponse.create(ImmutableList.of("target"), "header")));
 
     fakeThrottler.nextResult = true;
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(10, TimeUnit.MILLISECONDS);
@@ -325,12 +325,12 @@ public class CachingRlsLbClientTest {
   public void get_updatesLbState() throws Exception {
     setUpRlsLbClient();
     InOrder inOrder = inOrder(helper);
-    RouteLookupRequest routeLookupRequest = new RouteLookupRequest(ImmutableMap.of(
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "service1", "method-key", "create"));
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
             routeLookupRequest,
-            new RouteLookupResponse(
+            RouteLookupResponse.create(
                 ImmutableList.of("primary.cloudbigtable.googleapis.com"),
                 "header-rls-data-value")));
 
@@ -366,7 +366,7 @@ public class CachingRlsLbClientTest {
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(100, TimeUnit.MILLISECONDS);
     // try to get invalid
     RouteLookupRequest invalidRouteLookupRequest =
-        new RouteLookupRequest(ImmutableMap.<String, String>of());
+        RouteLookupRequest.create(ImmutableMap.<String, String>of());
     CachedRouteLookupResponse errorResp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(errorResp.isPending()).isTrue();
     fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
@@ -392,14 +392,16 @@ public class CachingRlsLbClientTest {
   @Test
   public void get_childPolicyWrapper_reusedForSameTarget() throws Exception {
     setUpRlsLbClient();
-    RouteLookupRequest routeLookupRequest = new RouteLookupRequest(ImmutableMap.of(
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
-    RouteLookupRequest routeLookupRequest2 = new RouteLookupRequest(ImmutableMap.of(
+    RouteLookupRequest routeLookupRequest2 = RouteLookupRequest.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "baz"));
     rlsServerImpl.setLookupTable(
         ImmutableMap.of(
-            routeLookupRequest, new RouteLookupResponse(ImmutableList.of("target"), "header"),
-            routeLookupRequest2, new RouteLookupResponse(ImmutableList.of("target"), "header2")));
+            routeLookupRequest,
+            RouteLookupResponse.create(ImmutableList.of("target"), "header"),
+            routeLookupRequest2,
+            RouteLookupResponse.create(ImmutableList.of("target"), "header2")));
 
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.isPending()).isTrue();
@@ -425,21 +427,22 @@ public class CachingRlsLbClientTest {
   }
 
   private static RouteLookupConfig getRouteLookupConfig() {
-    return new RouteLookupConfig(
-        ImmutableList.of(
-            new GrpcKeyBuilder(
-                ImmutableList.of(new Name("service1", "create")),
+    return RouteLookupConfig.builder()
+        .grpcKeyBuilders(ImmutableList.of(
+            GrpcKeyBuilder.create(
+                ImmutableList.of(Name.create("service1", "create")),
                 ImmutableList.of(
-                    new NameMatcher("user", ImmutableList.of("User", "Parent")),
-                    new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
+                    NameMatcher.create("user", ImmutableList.of("User", "Parent")),
+                    NameMatcher.create("id", ImmutableList.of("X-Google-Id"))),
                 ExtraKeys.create("server", "service-key", "method-key"),
-                ImmutableMap.<String, String>of())),
-        /* lookupService= */ "service1",
-        /* lookupServiceTimeoutInNanos= */ TimeUnit.SECONDS.toNanos(2),
-        /* maxAgeInNanos= */ TimeUnit.SECONDS.toNanos(300),
-        /* staleAgeInNanos= */ TimeUnit.SECONDS.toNanos(240),
-        /* cacheSizeBytes= */ 1000,
-        DEFAULT_TARGET);
+                ImmutableMap.<String, String>of())))
+        .lookupService("service1")
+        .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(2))
+        .maxAgeInNanos(TimeUnit.SECONDS.toNanos(300))
+        .staleAgeInNanos(TimeUnit.SECONDS.toNanos(240))
+        .cacheSizeBytes(1000)
+        .defaultTarget(DEFAULT_TARGET)
+        .build();
   }
 
   private static BackoffPolicy createBackoffPolicy(final long delay, final TimeUnit unit) {

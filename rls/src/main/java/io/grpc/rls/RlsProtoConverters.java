@@ -63,7 +63,8 @@ final class RlsProtoConverters {
 
     @Override
     protected RlsProtoData.RouteLookupRequest doForward(RouteLookupRequest routeLookupRequest) {
-      return new RlsProtoData.RouteLookupRequest(routeLookupRequest.getKeyMapMap());
+      return RlsProtoData.RouteLookupRequest.create(
+          ImmutableMap.copyOf(routeLookupRequest.getKeyMapMap()));
     }
 
     @Override
@@ -71,7 +72,7 @@ final class RlsProtoConverters {
       return
           RouteLookupRequest.newBuilder()
               .setTargetType("grpc")
-              .putAllKeyMap(routeLookupRequest.getKeyMap())
+              .putAllKeyMap(routeLookupRequest.keyMap())
               .build();
     }
   }
@@ -86,15 +87,15 @@ final class RlsProtoConverters {
     @Override
     protected RlsProtoData.RouteLookupResponse doForward(RouteLookupResponse routeLookupResponse) {
       return
-          new RlsProtoData.RouteLookupResponse(
-              routeLookupResponse.getTargetsList(),
+          RlsProtoData.RouteLookupResponse.create(
+              ImmutableList.copyOf(routeLookupResponse.getTargetsList()),
               routeLookupResponse.getHeaderData());
     }
 
     @Override
     protected RouteLookupResponse doBackward(RlsProtoData.RouteLookupResponse routeLookupResponse) {
       return RouteLookupResponse.newBuilder()
-          .addAllTargets(routeLookupResponse.getTargets())
+          .addAllTargets(routeLookupResponse.targets())
           .setHeaderData(routeLookupResponse.getHeaderData())
           .build();
     }
@@ -108,13 +109,13 @@ final class RlsProtoConverters {
 
     @Override
     protected RouteLookupConfig doForward(Map<String, ?> json) {
-      List<GrpcKeyBuilder> grpcKeyBuilders =
+      ImmutableList<GrpcKeyBuilder> grpcKeyBuilders =
           GrpcKeyBuilderConverter.covertAll(
               checkNotNull(JsonUtil.getListOfObjects(json, "grpcKeyBuilders"), "grpcKeyBuilders"));
       checkArgument(!grpcKeyBuilders.isEmpty(), "must have at least one GrpcKeyBuilder");
       Set<Name> names = new HashSet<>();
       for (GrpcKeyBuilder keyBuilder : grpcKeyBuilders) {
-        for (Name name : keyBuilder.getNames()) {
+        for (Name name : keyBuilder.names()) {
           checkArgument(names.add(name), "duplicate names in grpc_keybuilders: " + name);
         }
       }
@@ -145,14 +146,15 @@ final class RlsProtoConverters {
       checkArgument(cacheSize > 0, "cacheSize must be positive");
       cacheSize = Math.min(cacheSize, MAX_CACHE_SIZE);
       String defaultTarget = Strings.emptyToNull(JsonUtil.getString(json, "defaultTarget"));
-      return new RouteLookupConfig(
-          grpcKeyBuilders,
-          lookupService,
-          /* lookupServiceTimeoutInNanos= */ timeout,
-          /* maxAgeInNanos= */ maxAge,
-          /* staleAgeInNanos= */ staleAge,
-          /* cacheSizeBytes= */ cacheSize,
-          defaultTarget);
+      return RouteLookupConfig.builder()
+          .grpcKeyBuilders(grpcKeyBuilders)
+          .lookupService(lookupService)
+          .lookupServiceTimeoutInNanos(timeout)
+          .maxAgeInNanos(maxAge)
+          .staleAgeInNanos(staleAge)
+          .cacheSizeBytes(cacheSize)
+          .defaultTarget(defaultTarget)
+          .build();
     }
 
     private static <T> T orDefault(@Nullable T value, T defaultValue) {
@@ -169,12 +171,12 @@ final class RlsProtoConverters {
   }
 
   private static final class GrpcKeyBuilderConverter {
-    public static List<GrpcKeyBuilder> covertAll(List<Map<String, ?>> keyBuilders) {
-      List<GrpcKeyBuilder> keyBuilderList = new ArrayList<>();
+    public static ImmutableList<GrpcKeyBuilder> covertAll(List<Map<String, ?>> keyBuilders) {
+      ImmutableList.Builder<GrpcKeyBuilder> keyBuilderList = ImmutableList.builder();
       for (Map<String, ?> keyBuilder : keyBuilders) {
         keyBuilderList.add(convert(keyBuilder));
       }
-      return keyBuilderList;
+      return keyBuilderList.build();
     }
 
     @SuppressWarnings("unchecked")
@@ -184,25 +186,26 @@ final class RlsProtoConverters {
           rawRawNames != null && !rawRawNames.isEmpty(),
           "each keyBuilder must have at least one name");
       List<Map<String, ?>> rawNames = JsonUtil.checkObjectList(rawRawNames);
-      List<Name> names = new ArrayList<>();
+      ImmutableList.Builder<Name> namesBuilder = ImmutableList.builder();
       for (Map<String, ?> rawName : rawNames) {
         String serviceName = JsonUtil.getString(rawName, "service");
         checkArgument(!Strings.isNullOrEmpty(serviceName), "service must not be empty or null");
-        names.add(new Name(serviceName, JsonUtil.getString(rawName, "method")));
+        namesBuilder.add(Name.create(serviceName, JsonUtil.getString(rawName, "method")));
       }
       List<?> rawRawHeaders = JsonUtil.getList(keyBuilder, "headers");
       List<Map<String, ?>> rawHeaders =
           rawRawHeaders == null
               ? new ArrayList<Map<String, ?>>() : JsonUtil.checkObjectList(rawRawHeaders);
-      List<NameMatcher> nameMatchers = new ArrayList<>();
+      ImmutableList.Builder<NameMatcher> nameMatchersBuilder = ImmutableList.builder();
       for (Map<String, ?> rawHeader : rawHeaders) {
         Boolean requiredMatch = JsonUtil.getBoolean(rawHeader, "requiredMatch");
         checkArgument(
             requiredMatch == null || !requiredMatch,
             "requiredMatch shouldn't be specified for gRPC");
-        NameMatcher matcher = new NameMatcher(
-            JsonUtil.getString(rawHeader, "key"), (List<String>) rawHeader.get("names"));
-        nameMatchers.add(matcher);
+        NameMatcher matcher = NameMatcher.create(
+            JsonUtil.getString(rawHeader, "key"),
+            ImmutableList.copyOf((List<String>) rawHeader.get("names")));
+        nameMatchersBuilder.add(matcher);
       }
       ExtraKeys extraKeys = ExtraKeys.DEFAULT;
       Map<String, String> rawExtraKeys =
@@ -216,8 +219,10 @@ final class RlsProtoConverters {
       if (constantKeys == null) {
         constantKeys = ImmutableMap.of();
       }
+      ImmutableList<NameMatcher> nameMatchers = nameMatchersBuilder.build();
       checkUniqueKey(nameMatchers, constantKeys.keySet());
-      return new GrpcKeyBuilder(names, nameMatchers, extraKeys, constantKeys);
+      return GrpcKeyBuilder.create(
+          namesBuilder.build(), nameMatchers, extraKeys, ImmutableMap.copyOf(constantKeys));
     }
   }
 
@@ -225,7 +230,7 @@ final class RlsProtoConverters {
     Set<String> keys = new HashSet<>(constantKeys);
     keys.addAll(EXTRA_KEY_NAMES);
     for (NameMatcher nameMatcher :  nameMatchers) {
-      keys.add(nameMatcher.getKey());
+      keys.add(nameMatcher.key());
     }
     if (keys.size() != nameMatchers.size() + constantKeys.size() + EXTRA_KEY_NAMES.size()) {
       throw new IllegalArgumentException("keys in KeyBuilder must be unique");

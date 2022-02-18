@@ -18,11 +18,13 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.Filter.FilterConfig;
@@ -61,13 +63,13 @@ public class XdsServerTestHelper {
                                      EnvoyServerProtoData.DownstreamTlsContext tlsContext,
                                      TlsContextManager tlsContextManager) {
     EnvoyServerProtoData.Listener listener = buildTestListener("listener1", "10.1.2.3",
-            Arrays.<Integer>asList(), tlsContext, null, tlsContextManager);
+        ImmutableList.of(), tlsContext, null, tlsContextManager);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.deliverLdsUpdate(listenerUpdate);
   }
 
   static void generateListenerUpdate(
-      FakeXdsClient xdsClient, List<Integer> sourcePorts,
+      FakeXdsClient xdsClient, ImmutableList<Integer> sourcePorts,
       EnvoyServerProtoData.DownstreamTlsContext tlsContext,
       EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain,
       TlsContextManager tlsContextManager) {
@@ -78,35 +80,45 @@ public class XdsServerTestHelper {
   }
 
   static EnvoyServerProtoData.Listener buildTestListener(
-      String name, String address, List<Integer> sourcePorts,
+      String name, String address, ImmutableList<Integer> sourcePorts,
       EnvoyServerProtoData.DownstreamTlsContext tlsContext,
       EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain,
       TlsContextManager tlsContextManager) {
     EnvoyServerProtoData.FilterChainMatch filterChainMatch1 =
-        new EnvoyServerProtoData.FilterChainMatch(
+        EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-            Arrays.<String>asList(),
-            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-            null,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ConnectionSourceType.ANY,
             sourcePorts,
-            Arrays.<String>asList(),
-            null);
+            ImmutableList.of(),
+            "");
+    EnvoyServerProtoData.FilterChainMatch defaultFilterChainMatch =
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     VirtualHost virtualHost =
             VirtualHost.create(
                     "virtual-host", Collections.singletonList("auth"), new ArrayList<Route>(),
                     ImmutableMap.<String, FilterConfig>of());
     HttpConnectionManager httpConnectionManager = HttpConnectionManager.forVirtualHosts(
             0L, Collections.singletonList(virtualHost), new ArrayList<NamedFilterConfig>());
-    EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
+    EnvoyServerProtoData.FilterChain filterChain1 = EnvoyServerProtoData.FilterChain.create(
         "filter-chain-foo", filterChainMatch1, httpConnectionManager, tlsContext,
         tlsContextManager);
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-        "filter-chain-bar", null, httpConnectionManager, tlsContextForDefaultFilterChain,
-        tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-bar", defaultFilterChainMatch, httpConnectionManager,
+        tlsContextForDefaultFilterChain, tlsContextManager);
     EnvoyServerProtoData.Listener listener =
-        new EnvoyServerProtoData.Listener(
-            name, address, Arrays.asList(filterChain1), defaultFilterChain);
+        EnvoyServerProtoData.Listener.create(
+            name, address, ImmutableList.of(filterChain1), defaultFilterChain);
     return listener;
   }
 
@@ -202,8 +214,8 @@ public class XdsServerTestHelper {
 
     void deliverLdsUpdate(List<FilterChain> filterChains,
                                        FilterChain defaultFilterChain) {
-      ldsWatcher.onChanged(LdsUpdate.forTcpListener(new Listener(
-              "listener", "0.0.0.0:1", filterChains, defaultFilterChain)));
+      ldsWatcher.onChanged(LdsUpdate.forTcpListener(Listener.create(
+              "listener", "0.0.0.0:1", ImmutableList.copyOf(filterChains), defaultFilterChain)));
     }
 
     void deliverLdsUpdate(LdsUpdate ldsUpdate) {

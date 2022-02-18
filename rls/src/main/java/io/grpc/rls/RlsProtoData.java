@@ -16,16 +16,9 @@
 
 package io.grpc.rls;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
-
 import com.google.auto.value.AutoValue;
-import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import java.util.List;
-import java.util.Map;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
@@ -35,140 +28,46 @@ final class RlsProtoData {
   private RlsProtoData() {}
 
   /** A request object sent to route lookup service. */
+  @AutoValue
   @Immutable
-  static final class RouteLookupRequest {
-
-    private final ImmutableMap<String, String> keyMap;
-
-    RouteLookupRequest(Map<String, String> keyMap) {
-      this.keyMap = ImmutableMap.copyOf(checkNotNull(keyMap, "keyMap"));
-    }
+  abstract static class RouteLookupRequest {
 
     /** Returns a map of key values extracted via key builders for the gRPC or HTTP request. */
-    ImmutableMap<String, String> getKeyMap() {
-      return keyMap;
-    }
+    abstract ImmutableMap<String, String> keyMap();
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      RouteLookupRequest that = (RouteLookupRequest) o;
-      return Objects.equal(keyMap, that.keyMap);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(keyMap);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("keyMap", keyMap)
-          .toString();
+    static RouteLookupRequest create(ImmutableMap<String, String> keyMap) {
+      return new AutoValue_RlsProtoData_RouteLookupRequest(keyMap);
     }
   }
 
   /** A response from route lookup service. */
+  @AutoValue
   @Immutable
-  static final class RouteLookupResponse {
-
-    private final ImmutableList<String> targets;
-
-    private final String headerData;
-
-    RouteLookupResponse(List<String> targets, String headerData) {
-      checkState(targets != null && !targets.isEmpty(), "targets cannot be empty or null");
-      this.targets = ImmutableList.copyOf(targets);
-      this.headerData = checkNotNull(headerData, "headerData");
-    }
+  abstract static class RouteLookupResponse {
 
     /**
      * Returns list of targets. Prioritized list (best one first) of addressable entities to use for
      * routing, using syntax requested by the request target_type. The targets will be tried in
      * order until a healthy one is found.
      */
-    ImmutableList<String> getTargets() {
-      return targets;
-    }
+    abstract ImmutableList<String> targets();
 
     /**
      * Returns optional header data to pass along to AFE in the X-Google-RLS-Data header. Cached
      * with "target" and sent with all requests that match the request key. Allows the RLS to pass
      * its work product to the eventual target.
      */
-    String getHeaderData() {
-      return headerData;
-    }
+    abstract String getHeaderData();
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      RouteLookupResponse that = (RouteLookupResponse) o;
-      return java.util.Objects.equals(targets, that.targets)
-          && java.util.Objects.equals(headerData, that.headerData);
-    }
-
-    @Override
-    public int hashCode() {
-      return java.util.Objects.hash(targets, headerData);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("targets", targets)
-          .add("headerData", headerData)
-          .toString();
+    static RouteLookupResponse create(ImmutableList<String> targets, String getHeaderData) {
+      return new AutoValue_RlsProtoData_RouteLookupResponse(targets, getHeaderData);
     }
   }
 
   /** A config object for gRPC RouteLookupService. */
+  @AutoValue
   @Immutable
-  static final class RouteLookupConfig {
-
-    private final ImmutableList<GrpcKeyBuilder> grpcKeyBuilders;
-
-    private final String lookupService;
-
-    private final long lookupServiceTimeoutInNanos;
-
-    private final long maxAgeInNanos;
-
-    private final long staleAgeInNanos;
-
-    private final long cacheSizeBytes;
-
-    @Nullable
-    private final String defaultTarget;
-
-    RouteLookupConfig(
-        List<GrpcKeyBuilder> grpcKeyBuilders,
-        String lookupService,
-        long lookupServiceTimeoutInNanos,
-        long maxAgeInNanos,
-        long staleAgeInNanos,
-        long cacheSizeBytes,
-        @Nullable
-        String defaultTarget) {
-      this.grpcKeyBuilders = ImmutableList.copyOf(grpcKeyBuilders);
-      this.lookupService = lookupService;
-      this.lookupServiceTimeoutInNanos = lookupServiceTimeoutInNanos;
-      this.maxAgeInNanos = maxAgeInNanos;
-      this.staleAgeInNanos = staleAgeInNanos;
-      this.cacheSizeBytes = cacheSizeBytes;
-      this.defaultTarget = defaultTarget;
-    }
+  abstract static class RouteLookupConfig {
 
     /**
      * Returns unordered specifications for constructing keys for gRPC requests. All GrpcKeyBuilders
@@ -176,36 +75,25 @@ final class RlsProtoData {
      * keyed by name. If no GrpcKeyBuilder matches, an empty key_map will be sent to the lookup
      * service; it should likely reply with a global default route and raise an alert.
      */
-    ImmutableList<GrpcKeyBuilder> getGrpcKeyBuilders() {
-      return grpcKeyBuilders;
-    }
+    abstract ImmutableList<GrpcKeyBuilder> grpcKeyBuilders();
 
     /**
      * Returns the name of the lookup service as a gRPC URI. Typically, this will be a subdomain of
      * the target, such as "lookup.datastore.googleapis.com".
      */
-    String getLookupService() {
-      return lookupService;
-    }
+    abstract String lookupService();
 
     /** Returns the timeout value for lookup service requests. */
-    long getLookupServiceTimeoutInNanos() {
-      return lookupServiceTimeoutInNanos;
-    }
-
+    abstract long lookupServiceTimeoutInNanos();
 
     /** Returns the maximum age the result will be cached. */
-    long getMaxAgeInNanos() {
-      return maxAgeInNanos;
-    }
+    abstract long maxAgeInNanos();
 
     /**
      * Returns the time when an entry will be in a staled status. When cache is accessed whgen the
      * entry is in staled status, it will
      */
-    long getStaleAgeInNanos() {
-      return staleAgeInNanos;
-    }
+    abstract long staleAgeInNanos();
 
     /**
      * Returns a rough indicator of amount of memory to use for the client cache. Some of the data
@@ -213,9 +101,7 @@ final class RlsProtoData {
      * than this value.  If this field is omitted or set to zero, a client default will be used.
      * The value may be capped to a lower amount based on client configuration.
      */
-    long getCacheSizeBytes() {
-      return cacheSizeBytes;
-    }
+    abstract long cacheSizeBytes();
 
     /**
      * Returns the default target to use if needed.  If nonempty (implies request processing
@@ -224,51 +110,30 @@ final class RlsProtoData {
      * {@literal e.g.} "us_east_1.cloudbigtable.googleapis.com".
      */
     @Nullable
-    String getDefaultTarget() {
-      return defaultTarget;
+    abstract String defaultTarget();
+
+    static Builder builder() {
+      return new AutoValue_RlsProtoData_RouteLookupConfig.Builder();
     }
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      RouteLookupConfig that = (RouteLookupConfig) o;
-      return lookupServiceTimeoutInNanos == that.lookupServiceTimeoutInNanos
-          && maxAgeInNanos == that.maxAgeInNanos
-          && staleAgeInNanos == that.staleAgeInNanos
-          && cacheSizeBytes == that.cacheSizeBytes
-          && Objects.equal(grpcKeyBuilders, that.grpcKeyBuilders)
-          && Objects.equal(lookupService, that.lookupService)
-          && Objects.equal(defaultTarget, that.defaultTarget);
-    }
+    @AutoValue.Builder
+    abstract static class Builder {
 
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(
-          grpcKeyBuilders,
-          lookupService,
-          lookupServiceTimeoutInNanos,
-          maxAgeInNanos,
-          staleAgeInNanos,
-          cacheSizeBytes,
-          defaultTarget);
-    }
+      abstract Builder grpcKeyBuilders(ImmutableList<GrpcKeyBuilder> grpcKeyBuilders);
 
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("grpcKeyBuilders", grpcKeyBuilders)
-          .add("lookupService", lookupService)
-          .add("lookupServiceTimeoutInNanos", lookupServiceTimeoutInNanos)
-          .add("maxAgeInNanos", maxAgeInNanos)
-          .add("staleAgeInNanos", staleAgeInNanos)
-          .add("cacheSize", cacheSizeBytes)
-          .add("defaultTarget", defaultTarget)
-          .toString();
+      abstract Builder lookupService(String lookupService);
+
+      abstract Builder lookupServiceTimeoutInNanos(long lookupServiceTimeoutInNanos);
+
+      abstract Builder maxAgeInNanos(long maxAgeInNanos);
+
+      abstract Builder staleAgeInNanos(long staleAgeInNanos);
+
+      abstract Builder cacheSizeBytes(long cacheSizeBytes);
+
+      abstract Builder defaultTarget(@Nullable String defaultTarget);
+
+      abstract RouteLookupConfig build();
     }
   }
 
@@ -277,74 +142,25 @@ final class RlsProtoData {
    * The name must match one of the names listed in the "name" field. If the "required_match" field
    * is true, one of the specified names must be present for the keybuilder to match.
    */
+  @AutoValue
   @Immutable
-  static final class NameMatcher {
-
-    private final String key;
-
-    private final ImmutableList<String> names;
-
-    NameMatcher(String key, List<String> names) {
-      this.key = checkNotNull(key, "key");
-      this.names = ImmutableList.copyOf(checkNotNull(names, "names"));
-    }
+  abstract static class NameMatcher {
 
     /** The name that will be used in the RLS key_map to refer to this value. */
-    String getKey() {
-      return key;
-    }
+    abstract String key();
 
     /** Returns ordered list of names; the first non-empty value will be used. */
-    ImmutableList<String> names() {
-      return names;
-    }
+    abstract ImmutableList<String> names();
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      NameMatcher matcher = (NameMatcher) o;
-      return java.util.Objects.equals(key, matcher.key)
-          && java.util.Objects.equals(names, matcher.names);
-    }
-
-    @Override
-    public int hashCode() {
-      return java.util.Objects.hash(key, names);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("key", key)
-          .add("names", names)
-          .toString();
+    static NameMatcher create(String key, ImmutableList<String> names) {
+      return new AutoValue_RlsProtoData_NameMatcher(key, names);
     }
   }
 
   /** GrpcKeyBuilder is a configuration to construct headers consumed by route lookup service. */
-  static final class GrpcKeyBuilder {
-
-    private final ImmutableList<Name> names;
-
-    private final ImmutableList<NameMatcher> headers;
-    private final ExtraKeys extraKeys;
-    private final ImmutableMap<String, String> constantKeys;
-
-    /** Constructor. All args should be nonnull. Headers should head unique keys. */
-    GrpcKeyBuilder(
-        List<Name> names, List<NameMatcher> headers, ExtraKeys extraKeys,
-        Map<String, String> constantKeys) {
-      checkState(names != null && !names.isEmpty(), "names cannot be empty");
-      this.names = ImmutableList.copyOf(names);
-      this.headers = ImmutableList.copyOf(headers);
-      this.extraKeys = checkNotNull(extraKeys, "extraKeys");
-      this.constantKeys = ImmutableMap.copyOf(checkNotNull(constantKeys, "constantKeys"));
-    }
+  @AutoValue
+  @Immutable
+  abstract static class GrpcKeyBuilder {
 
     /**
      * Returns names. To match, one of the given Name fields must match; the service and method
@@ -352,53 +168,23 @@ final class RlsProtoData {
      * package name. The method name may be omitted, in which case any method on the given service
      * is matched.
      */
-    ImmutableList<Name> getNames() {
-      return names;
-    }
+    abstract ImmutableList<Name> names();
 
     /**
      * Returns a list of NameMatchers for header. Extract keys from all listed headers. For gRPC, it
      * is an error to specify "required_match" on the NameMatcher protos, and we ignore it if set.
      */
-    ImmutableList<NameMatcher> getHeaders() {
-      return headers;
-    }
+    abstract ImmutableList<NameMatcher> headers();
 
-    ExtraKeys getExtraKeys() {
-      return extraKeys;
-    }
+    abstract ExtraKeys extraKeys();
 
-    ImmutableMap<String, String> getConstantKeys() {
-      return constantKeys;
-    }
+    abstract ImmutableMap<String, String> constantKeys();
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      GrpcKeyBuilder that = (GrpcKeyBuilder) o;
-      return Objects.equal(names, that.names) && Objects.equal(headers, that.headers)
-          && Objects.equal(extraKeys, that.extraKeys)
-          && Objects.equal(constantKeys, that.constantKeys);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(names, headers, extraKeys, constantKeys);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("names", names)
-          .add("headers", headers)
-          .add("extraKeys", extraKeys)
-          .add("constantKeys", constantKeys)
-          .toString();
+    static GrpcKeyBuilder create(
+        ImmutableList<Name> names,
+        ImmutableList<NameMatcher> headers,
+        ExtraKeys extraKeys, ImmutableMap<String, String> constantKeys) {
+      return new AutoValue_RlsProtoData_GrpcKeyBuilder(names, headers, extraKeys, constantKeys);
     }
 
     /**
@@ -407,57 +193,23 @@ final class RlsProtoData {
      * required and includes the proto package name. The method name may be omitted, in which case
      * any method on the given service is matched.
      */
-    static final class Name {
+    @AutoValue
+    @Immutable
+    abstract static class Name {
 
-      private final String service;
-
-      @Nullable
-      private final String method;
-
-      /** The primary constructor. */
-      Name(String service, @Nullable String method) {
-        this.service = service;
-        this.method = method;
-      }
-
-      String getService() {
-        return service;
-      }
+      abstract String service();
 
       @Nullable
-      String getMethod() {
-        return method;
-      }
+      abstract String method();
 
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-          return false;
-        }
-        Name name = (Name) o;
-        return Objects.equal(service, name.service)
-            && Objects.equal(method, name.method);
-      }
-
-      @Override
-      public int hashCode() {
-        return Objects.hashCode(service, method);
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this)
-            .add("service", service)
-            .add("method", method)
-            .toString();
+      static Name create(String service, @Nullable String method) {
+        return new AutoValue_RlsProtoData_GrpcKeyBuilder_Name(service, method);
       }
     }
   }
 
   @AutoValue
+  @Immutable
   abstract static class ExtraKeys {
     static final ExtraKeys DEFAULT = create(null, null, null);
 
