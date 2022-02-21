@@ -163,6 +163,15 @@ public class MatcherTest {
     assertThat(matcher.matches("1v2")).isFalse();
     assertThat(matcher.matches(null)).isFalse();
 
+    matcher = HeaderMatcher.forContains("version", "v1", false);
+    assertThat(matcher.matches("xv1")).isTrue();
+    assertThat(matcher.matches("1vx")).isFalse();
+    assertThat(matcher.matches(null)).isFalse();
+    matcher = HeaderMatcher.forContains("version", "v1", true);
+    assertThat(matcher.matches("xv1")).isFalse();
+    assertThat(matcher.matches("1vx")).isTrue();
+    assertThat(matcher.matches(null)).isFalse();
+
     matcher = HeaderMatcher.forSafeRegEx("version", Pattern.compile("v2.*"), false);
     assertThat(matcher.matches("v2..")).isTrue();
     assertThat(matcher.matches("v1")).isFalse();
@@ -179,6 +188,15 @@ public class MatcherTest {
     matcher = HeaderMatcher.forRange("version", Range.create(8080L, 8090L), true);
     assertThat(matcher.matches("1")).isTrue();
     assertThat(matcher.matches("8080")).isFalse();
+    assertThat(matcher.matches(null)).isFalse();
+
+    matcher = HeaderMatcher.forString("version", StringMatcher.forExact("v1", true), false);
+    assertThat(matcher.matches("v1")).isTrue();
+    assertThat(matcher.matches("v1x")).isFalse();
+    assertThat(matcher.matches(null)).isFalse();
+    matcher = HeaderMatcher.forString("version", StringMatcher.forExact("v1", true), true);
+    assertThat(matcher.matches("v1x")).isTrue();
+    assertThat(matcher.matches("v1")).isFalse();
     assertThat(matcher.matches(null)).isFalse();
   }
 }

@@ -62,6 +62,14 @@ public final class Matchers {
     @Nullable
     public abstract String suffix();
 
+    // Matches header value with the substring.
+    @Nullable
+    public abstract String contains();
+
+    // Matches header value with the string matcher.
+    @Nullable
+    public abstract StringMatcher stringMatcher();
+
     // Whether the matching semantics is inverted. E.g., present && !inverted -> !present
     public abstract boolean inverted();
 
@@ -69,50 +77,71 @@ public final class Matchers {
     public static HeaderMatcher forExactValue(String name, String exactValue, boolean inverted) {
       checkNotNull(name, "name");
       checkNotNull(exactValue, "exactValue");
-      return HeaderMatcher.create(name, exactValue, null, null, null, null, null, inverted);
+      return HeaderMatcher.create(
+        name, exactValue, null, null, null, null, null, null, null, inverted);
     }
 
     /** The request header value should match the regular expression pattern. */
     public static HeaderMatcher forSafeRegEx(String name, Pattern safeRegEx, boolean inverted) {
       checkNotNull(name, "name");
       checkNotNull(safeRegEx, "safeRegEx");
-      return HeaderMatcher.create(name, null, safeRegEx, null, null, null, null, inverted);
+      return HeaderMatcher.create(
+        name, null, safeRegEx, null, null, null, null, null, null, inverted);
     }
 
     /** The request header value should be within the range. */
     public static HeaderMatcher forRange(String name, Range range, boolean inverted) {
       checkNotNull(name, "name");
       checkNotNull(range, "range");
-      return HeaderMatcher.create(name, null, null, range, null, null, null, inverted);
+      return HeaderMatcher.create(name, null, null, range, null, null, null, null, null, inverted);
     }
 
     /** The request header value should exist. */
     public static HeaderMatcher forPresent(String name, boolean present, boolean inverted) {
       checkNotNull(name, "name");
-      return HeaderMatcher.create(name, null, null, null, present, null, null, inverted);
+      return HeaderMatcher.create(
+        name, null, null, null, present, null, null, null, null, inverted);
     }
 
     /** The request header value should have this prefix. */
     public static HeaderMatcher forPrefix(String name, String prefix, boolean inverted) {
       checkNotNull(name, "name");
       checkNotNull(prefix, "prefix");
-      return HeaderMatcher.create(name, null, null, null, null, prefix, null, inverted);
+      return HeaderMatcher.create(name, null, null, null, null, prefix, null, null, null, inverted);
     }
 
     /** The request header value should have this suffix. */
     public static HeaderMatcher forSuffix(String name, String suffix, boolean inverted) {
       checkNotNull(name, "name");
       checkNotNull(suffix, "suffix");
-      return HeaderMatcher.create(name, null, null, null, null, null, suffix, inverted);
+      return HeaderMatcher.create(name, null, null, null, null, null, suffix, null, null, inverted);
+    }
+
+    /** The request header value should have this substring. */
+    public static HeaderMatcher forContains(String name, String contains, boolean inverted) {
+      checkNotNull(name, "name");
+      checkNotNull(contains, "contains");
+      return HeaderMatcher.create(
+        name, null, null, null, null, null, null, contains, null, inverted);
+    }
+
+    /** The request header value should have this string matcher. */
+    public static HeaderMatcher forString(
+        String name, StringMatcher stringMatcher, boolean inverted) {
+      checkNotNull(name, "name");
+      checkNotNull(stringMatcher, "stringMatcher");
+      return HeaderMatcher.create(
+        name, null, null, null, null, null, null, null, stringMatcher, inverted);
     }
 
     private static HeaderMatcher create(String name, @Nullable String exactValue,
         @Nullable Pattern safeRegEx, @Nullable Range range,
         @Nullable Boolean present, @Nullable String prefix,
-        @Nullable String suffix, boolean inverted) {
+        @Nullable String suffix, @Nullable String contains,
+        @Nullable StringMatcher stringMatcher, boolean inverted) {
       checkNotNull(name, "name");
       return new AutoValue_Matchers_HeaderMatcher(name, exactValue, safeRegEx, range, present,
-          prefix, suffix, inverted);
+          prefix, suffix, contains, stringMatcher, inverted);
     }
 
     /** Returns the matching result. */
@@ -138,8 +167,12 @@ public final class Matchers {
         baseMatch = value.startsWith(prefix());
       } else if (present() != null) {
         baseMatch = present();
-      } else {
+      } else if (suffix() != null) {
         baseMatch = value.endsWith(suffix());
+      } else if (contains() != null) {
+        baseMatch = value.contains(contains());
+      } else {
+        baseMatch = stringMatcher().matches(value);
       }
       return baseMatch != inverted();
     }
