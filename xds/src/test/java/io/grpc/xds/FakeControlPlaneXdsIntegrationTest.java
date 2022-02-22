@@ -65,6 +65,7 @@ import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 
+import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
@@ -161,21 +162,20 @@ public class FakeControlPlaneXdsIntegrationTest {
   @Test
   public void pingPong() throws Exception {
     String tcpListenerName = SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT;
+    String serverHostName = "test-server";
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS, ImmutableMap.<String, Listener>of(
-        tcpListenerName, serverListener(tcpListenerName, "fake-authority-temporary")
-    ));
-    startServer(defaultBootstrapOverride());
-    String serverHostName = "0.0.0.0:" + testServerPort;
-    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS, ImmutableMap.<String, Listener>of(
-        tcpListenerName, serverListener(tcpListenerName, serverHostName),
+        tcpListenerName, serverListener(tcpListenerName),
         serverHostName, clientListener(serverHostName)
     ));
+    startServer(defaultBootstrapOverride());
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_RDS,
         ImmutableMap.of(rdsName, rds(serverHostName)));
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS,
         ImmutableMap.<String, Message>of(clusterName, cds()));
+    InetSocketAddress edsInetSocketAddress = (InetSocketAddress) server.getListenSockets().get(0);
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS,
-        ImmutableMap.<String, Message>of(edsName, eds(testServerPort)));
+        ImmutableMap.<String, Message>of(edsName, eds(edsInetSocketAddress.getHostName(),
+            edsInetSocketAddress.getPort())));
     ManagedChannel channel = Grpc.newChannelBuilder(scheme + ":///" + serverHostName,
         InsecureChannelCredentials.create()).build();
     blockingStub = SimpleServiceGrpc.newBlockingStub(channel);
@@ -242,7 +242,7 @@ public class FakeControlPlaneXdsIntegrationTest {
     return listener;
   }
 
-  private static Listener serverListener(String name, String authority) {
+  private static Listener serverListener(String name) {
     HttpFilter routerFilter = HttpFilter.newBuilder()
         .setName("terminal-filter")
         .setTypedConfig(
@@ -251,7 +251,7 @@ public class FakeControlPlaneXdsIntegrationTest {
         .build();
     VirtualHost virtualHost = io.envoyproxy.envoy.config.route.v3.VirtualHost.newBuilder()
         .setName("virtual-host-0")
-        .addDomains(authority)
+        .addDomains("*")
         .addRoutes(
             Route.newBuilder()
                 .setMatch(
@@ -312,10 +312,10 @@ public class FakeControlPlaneXdsIntegrationTest {
         .build();
   }
 
-  private static ClusterLoadAssignment eds(int port) {
+  private static ClusterLoadAssignment eds(String hostName, int port) {
     Address address = Address.newBuilder()
         .setSocketAddress(
-            SocketAddress.newBuilder().setAddress("127.0.0.1").setPortValue(port).build()).build();
+            SocketAddress.newBuilder().setAddress(hostName).setPortValue(port).build()).build();
     LocalityLbEndpoints endpoints = LocalityLbEndpoints.newBuilder()
         .setLoadBalancingWeight(UInt32Value.of(10))
         .setPriority(0)
