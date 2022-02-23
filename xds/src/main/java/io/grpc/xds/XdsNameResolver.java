@@ -129,6 +129,9 @@ final class XdsNameResolver extends NameResolver {
   private XdsClient xdsClient;
   private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
+  // Workaround for https://github.com/grpc/grpc-java/issues/8886 . This should be handled in
+  // XdsClient instead of here.
+  private boolean receivedConfig;
 
   XdsNameResolver(
       @Nullable String targetAuthority, String name, ServiceConfigParser serviceConfigParser,
@@ -293,6 +296,7 @@ final class XdsNameResolver extends NameResolver {
             .setServiceConfig(parsedServiceConfig)
             .build();
     listener.onResult(result);
+    receivedConfig = true;
   }
 
   @VisibleForTesting
@@ -715,7 +719,7 @@ final class XdsNameResolver extends NameResolver {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          if (stopped) {
+          if (stopped || receivedConfig) {
             return;
           }
           listener.onError(error);
@@ -865,6 +869,7 @@ final class XdsNameResolver extends NameResolver {
       }
       routingConfig = RoutingConfig.empty;
       listener.onResult(emptyResult);
+      receivedConfig = true;
     }
 
     private void cleanUpRouteDiscoveryState() {
