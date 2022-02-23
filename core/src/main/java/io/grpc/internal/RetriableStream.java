@@ -853,7 +853,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         return;
       }
       if (rpcProgress == RpcProgress.MISCARRIED
-          && localOnlyTransparentRetries.incrementAndGet() > 10_000) {
+          && localOnlyTransparentRetries.incrementAndGet() > 1_000) {
         commitAndRun(substream);
         if (state.winningSubstream == substream) {
           Status tooManyTransparentRetries = Status.INTERNAL
