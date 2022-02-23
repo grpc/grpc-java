@@ -917,7 +917,7 @@ final class XdsNameResolver extends NameResolver {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            if (RouteDiscoveryState.this != routeDiscoveryState) {
+            if (RouteDiscoveryState.this != routeDiscoveryState || receivedConfig) {
               return;
             }
             listener.onError(error);
