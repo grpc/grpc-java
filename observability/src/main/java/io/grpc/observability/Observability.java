@@ -20,6 +20,7 @@ import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelProvider.ProviderNotFoundException;
 import io.grpc.observability.interceptors.InternalLoggingChannelInterceptor;
 import io.grpc.observability.interceptors.InternalLoggingServerInterceptor;
+import io.grpc.observability.logging.GcpLogSink;
 
 /** The main class for gRPC Observability features. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
@@ -35,7 +36,8 @@ public final class Observability {
     if (initialized) {
       throw new IllegalStateException("Observability already initialized!");
     }
-    LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl());
+    GcpLogSink sink = GcpLogSink.getInstance();
+    LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl(sink));
     LoggingServerProvider.init(new InternalLoggingServerInterceptor.FactoryImpl());
     // TODO(sanjaypujare): initialize customTags map
     initialized = true;
@@ -48,6 +50,7 @@ public final class Observability {
     }
     LoggingChannelProvider.finish();
     LoggingServerProvider.finish();
+    GcpLogSink.getInstance().close();
     // TODO(sanjaypujare): finish customTags map
     initialized = false;
   }

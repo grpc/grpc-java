@@ -69,7 +69,7 @@ public class GcpLogSink implements ObservabilityLogSink {
   // TODO(dnvindhya) read the value from config instead of taking it as an argument
   public static GcpLogSink getInstance() {
     if (gcpLogSinkInstance == null) {
-      gcpLogSinkInstance = new GcpLogSink("grpc-testing", null);
+      gcpLogSinkInstance = new GcpLogSink(null, null);
     }
     return gcpLogSinkInstance;
   }
