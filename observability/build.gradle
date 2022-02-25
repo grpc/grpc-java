@@ -36,3 +36,5 @@ dependencies {
 }
 
 configureProtoCompilation()
+
+[publishMavenPublicationToMavenRepository]*.onlyIf { false }
