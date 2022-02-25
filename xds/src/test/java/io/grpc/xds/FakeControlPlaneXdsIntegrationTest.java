@@ -64,7 +64,6 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
-
 import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.Map;

@@ -25,7 +25,6 @@ import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.SynchronizationContext;
 import io.grpc.stub.StreamObserver;
-
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -34,7 +33,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-class XdsTestControlPlaneService extends
+final class XdsTestControlPlaneService extends
     AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase {
   private static final Logger logger = Logger.getLogger(XdsTestControlPlaneService.class.getName());
 
@@ -42,7 +41,6 @@ class XdsTestControlPlaneService extends
       new Thread.UncaughtExceptionHandler() {
         @Override
         public void uncaughtException(Thread t, Throwable e) {
-          logger.log(Level.SEVERE, "Exception!" + e);
           throw new AssertionError(e);
         }
       });
@@ -118,9 +116,6 @@ class XdsTestControlPlaneService extends
                   new Object[]{value.getResourceNamesList(), value.getErrorDetail()});
               return;
             }
-            if (value.getResourceNamesCount() <= 0) {
-              return;
-            }
             String resourceType = value.getTypeUrl();
             if (!value.getResponseNonce().isEmpty()
                 && !String.valueOf(xdsNonces.get(resourceType)).equals(value.getResponseNonce())) {
@@ -151,6 +146,7 @@ class XdsTestControlPlaneService extends
       @Override
       public void onError(Throwable t) {
         logger.log(Level.FINE, "Control plane error: {0} ", t);
+        onCompleted();
       }
 
       @Override
@@ -158,6 +154,7 @@ class XdsTestControlPlaneService extends
         responseObserver.onCompleted();
         for (String type : subscribers.keySet()) {
           subscribers.get(type).remove(responseObserver);
+          xdsNonces.get(type).remove(responseObserver);
         }
       }
     };
