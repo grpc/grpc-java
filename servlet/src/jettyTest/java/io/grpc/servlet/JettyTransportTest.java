@@ -66,8 +66,7 @@ public class JettyTransportTest extends AbstractTransportTest {
         delegate.start(listener);
         ScheduledExecutorService scheduler = fakeClock.getScheduledExecutorService();
         ServerTransportListener serverTransportListener =
-                listener.transportCreated(new ServletServerBuilder.ServerTransportImpl(scheduler,
-                        true));
+                listener.transportCreated(new ServletServerBuilder.ServerTransportImpl(scheduler));
         ServletAdapter adapter =
                 new ServletAdapter(serverTransportListener, streamTracerFactories,
                         Integer.MAX_VALUE);

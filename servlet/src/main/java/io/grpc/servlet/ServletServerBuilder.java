@@ -23,12 +23,14 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
+import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
+import io.grpc.Metadata;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
@@ -37,6 +39,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ServerImplBuilder;
 import io.grpc.internal.ServerListener;
+import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.SharedResourceHolder;
@@ -100,9 +103,10 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
   }
 
   private ServerTransportListener buildAndStart() {
+    Server server;
     try {
       internalCaller = true;
-      build().start();
+      server = build().start();
     } catch (IOException e) {
       // actually this should never happen
       throw new RuntimeException(e);
@@ -117,9 +121,29 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
     // Create only one "transport" for all requests because it has no knowledge of which request is
     // associated with which client socket. This "transport" does not do socket connection, the
     // container does.
-    ServerTransportImpl serverTransport =
-        new ServerTransportImpl(scheduler, usingCustomScheduler);
-    return internalServer.serverListener.transportCreated(serverTransport);
+    ServerTransportImpl serverTransport = new ServerTransportImpl(scheduler);
+    ServerTransportListener delegate =
+        internalServer.serverListener.transportCreated(serverTransport);
+    return new ServerTransportListener() {
+      @Override
+      public void streamCreated(ServerStream stream, String method, Metadata headers) {
+        delegate.streamCreated(stream, method, headers);
+      }
+
+      @Override
+      public Attributes transportReady(Attributes attributes) {
+        return delegate.transportReady(attributes);
+      }
+
+      @Override
+      public void transportTerminated() {
+        server.shutdown();
+        delegate.transportTerminated();
+        if (!usingCustomScheduler) {
+          SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, scheduler);
+        }
+      }
+    };
   }
 
   @VisibleForTesting
@@ -215,25 +239,16 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
 
     private final InternalLogId logId = InternalLogId.allocate(ServerTransportImpl.class, null);
     private final ScheduledExecutorService scheduler;
-    private final boolean usingCustomScheduler;
 
-    ServerTransportImpl(
-        ScheduledExecutorService scheduler, boolean usingCustomScheduler) {
+    ServerTransportImpl(ScheduledExecutorService scheduler) {
       this.scheduler = checkNotNull(scheduler, "scheduler");
-      this.usingCustomScheduler = usingCustomScheduler;
     }
 
     @Override
-    public void shutdown() {
-      if (!usingCustomScheduler) {
-        SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, scheduler);
-      }
-    }
+    public void shutdown() {}
 
     @Override
-    public void shutdownNow(Status reason) {
-      shutdown();
-    }
+    public void shutdownNow(Status reason) {}
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {

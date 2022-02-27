@@ -98,7 +98,7 @@ public class UndertowTransportTest extends AbstractTransportTest {
         delegate.start(listener);
         ScheduledExecutorService scheduler = fakeClock.getScheduledExecutorService();
         ServerTransportListener serverTransportListener =
-            listener.transportCreated(new ServerTransportImpl(scheduler, true));
+            listener.transportCreated(new ServerTransportImpl(scheduler));
         ServletAdapter adapter =
             new ServletAdapter(serverTransportListener, streamTracerFactories, Integer.MAX_VALUE);
         GrpcServlet grpcServlet = new GrpcServlet(adapter);
