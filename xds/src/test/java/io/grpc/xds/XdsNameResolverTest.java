@@ -435,6 +435,19 @@ public class XdsNameResolverTest {
   }
 
   @Test
+  public void resolving_translateErrorLds() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    Throwable t = new Throwable("no entity");
+    xdsClient.deliverError(Status.NOT_FOUND.withCause(t).withDescription("server unreachable"));
+    verify(mockListener).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(error.getDescription()).isEqualTo("server unreachable");
+    assertThat(error.getCause()).isEqualTo(t);
+  }
+
+  @Test
   public void resolving_encounterErrorLdsAndRdsWatchers() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();

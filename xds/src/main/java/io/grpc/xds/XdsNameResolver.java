@@ -722,7 +722,8 @@ final class XdsNameResolver extends NameResolver {
           if (stopped || receivedConfig) {
             return;
           }
-          listener.onError(error);
+          listener.onError(Status.UNAVAILABLE.withCause(error.getCause())
+              .withDescription(error.getDescription()));
         }
       });
     }
