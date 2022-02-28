@@ -924,7 +924,7 @@ final class XdsNameResolver extends NameResolver {
             }
             listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
                 String.format("Unable to load RDS %s. xDS server returned: %s. %s.",
-                    resourceName, error.getCode(), error.getDescription())));
+                resourceName, error.getCode(), error.getDescription())));
           }
         });
       }
