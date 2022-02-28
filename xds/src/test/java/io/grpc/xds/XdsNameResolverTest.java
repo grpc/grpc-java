@@ -431,20 +431,21 @@ public class XdsNameResolverTest {
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("server unreachable");
+    assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
+        + ". xDS server returned: UNAVAILABLE. server unreachable.");
   }
 
   @Test
   public void resolving_translateErrorLds() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
-    Throwable t = new Throwable("no entity");
-    xdsClient.deliverError(Status.NOT_FOUND.withCause(t).withDescription("server unreachable"));
+    xdsClient.deliverError(Status.NOT_FOUND.withDescription("server unreachable"));
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("server unreachable");
-    assertThat(error.getCause()).isEqualTo(t);
+    assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
+        + ". xDS server returned: NOT_FOUND. server unreachable.");
+    assertThat(error.getCause()).isNull();
   }
 
   @Test
@@ -454,10 +455,14 @@ public class XdsNameResolverTest {
     xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
     xdsClient.deliverError(Status.UNAVAILABLE.withDescription("server unreachable"));
     verify(mockListener, times(2)).onError(errorCaptor.capture());
-    for (Status error : errorCaptor.getAllValues()) {
-      assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-      assertThat(error.getDescription()).isEqualTo("server unreachable");
-    }
+    Status error = errorCaptor.getAllValues().get(0);
+    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
+        + ". xDS server returned: UNAVAILABLE. server unreachable.");
+    error = errorCaptor.getAllValues().get(1);
+    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(error.getDescription()).isEqualTo("Unable to load RDS " + RDS_RESOURCE_NAME
+        + ". xDS server returned: UNAVAILABLE. server unreachable.");
   }
 
   @Test
