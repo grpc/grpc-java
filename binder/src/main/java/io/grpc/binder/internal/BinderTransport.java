@@ -637,6 +637,12 @@ public abstract class BinderTransport
         ClientStreamTracer[] tracers) {
       if (isShutdown()) {
         return newFailingClientStream(shutdownStatus, attributes, headers, tracers);
+      } else if (!inState(TransportState.READY)) {
+        return newFailingClientStream(
+            Status.INTERNAL.withDescription("newStream() before transportReady()"),
+            attributes,
+            headers,
+            tracers);
       } else {
         int callId = latestCallId++;
         if (latestCallId == LAST_CALL_ID) {
