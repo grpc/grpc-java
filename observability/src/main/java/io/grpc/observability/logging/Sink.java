@@ -18,13 +18,12 @@ package io.grpc.observability.logging;
 
 import io.grpc.ExperimentalApi;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
-import java.io.Closeable;
 
 /**
  * Sink for GCP observability.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
-public interface ObservabilityLogSink extends Closeable {
+public interface Sink {
   /**
    * Writes the {@code message} to the destination.
    */

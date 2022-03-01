@@ -31,11 +31,11 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
-import io.grpc.observability.logging.GcpLogHelper;
-import io.grpc.observability.logging.GcpLogHelper.GcpLogSinkWriter;
-import io.grpc.observability.logging.GcpLogSink;
+import io.grpc.observability.interceptors.GcpLogHelper.GcpLogSinkWriter;
+import io.grpc.observability.logging.Sink;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -51,9 +51,9 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
   }
 
   public static class FactoryImpl implements Factory {
-    GcpLogSink sink;
+    Sink sink;
 
-    public FactoryImpl(GcpLogSink sink) {
+    public FactoryImpl(Sink sink) {
       this.sink = sink;
     }
 
@@ -63,16 +63,16 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
     }
   }
 
-  private InternalLoggingChannelInterceptor(GcpLogSink sink) {
+  private InternalLoggingChannelInterceptor(Sink sink) {
     this.writer = new GcpLogSinkWriter(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
   }
 
-  //TODO(dnvindhya): implement rpc_id
   @Override
   public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
       CallOptions callOptions, Channel next) {
 
     final AtomicLong seq = new AtomicLong(1);
+    final String rpcId = UUID.randomUUID().toString();
     final String authority = next.authority();
     final String serviceName = method.getServiceName();
     final String methodName = method.getBareMethodName();
@@ -95,6 +95,7 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
             timeout,
             headers,
             EventLogger.LOGGER_CLIENT,
+            rpcId,
             null);
 
         Listener<RespT> observabilityListener =
@@ -108,7 +109,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                     methodName,
                     EventType.GRPC_CALL_RESPONSE_MESSAGE,
                     message,
-                    EventLogger.LOGGER_CLIENT);
+                    EventLogger.LOGGER_CLIENT,
+                    rpcId);
                 super.onMessage(message);
               }
 
@@ -121,7 +123,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                     methodName,
                     headers,
                     EventLogger.LOGGER_CLIENT,
-                    GcpLogHelper.getPeerSocket(getAttributes()));
+                    rpcId,
+                    GcpLogHelper.getPeerAddress(getAttributes()));
                 super.onHeaders(headers);
               }
 
@@ -135,7 +138,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                     status,
                     trailers,
                     EventLogger.LOGGER_CLIENT,
-                    GcpLogHelper.getPeerSocket(getAttributes()));
+                    rpcId,
+                    GcpLogHelper.getPeerAddress(getAttributes()));
                 super.onClose(status, trailers);
               }
             };
@@ -151,7 +155,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
             methodName,
             EventType.GRPC_CALL_REQUEST_MESSAGE,
             message,
-            EventLogger.LOGGER_CLIENT);
+            EventLogger.LOGGER_CLIENT,
+            rpcId);
         super.sendMessage(message);
       }
 
@@ -162,7 +167,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
             seq.getAndIncrement(),
             serviceName,
             methodName,
-            EventLogger.LOGGER_CLIENT);
+            EventLogger.LOGGER_CLIENT,
+            rpcId);
         super.halfClose();
       }
 
@@ -173,7 +179,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
             seq.getAndIncrement(),
             serviceName,
             methodName,
-            EventLogger.LOGGER_CLIENT);
+            EventLogger.LOGGER_CLIENT,
+            rpcId);
         super.cancel(message, cause);
       }
     };

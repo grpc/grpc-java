@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.observability.logging;
+package io.grpc.observability.interceptors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -30,10 +30,15 @@ import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
+import io.grpc.observability.logging.Sink;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.Address;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.LogLevel;
+import java.net.Inet4Address;
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -42,7 +47,7 @@ import javax.annotation.Nullable;
 /**
  * Helper class for GCP observability logging.
  */
-public final class GcpLogHelper {
+final class GcpLogHelper {
   private static final Logger logger = Logger.getLogger(GcpLogHelper.class.getName());
   static final Metadata.Key<byte[]> STATUS_DETAILS_KEY =
       Metadata.Key.of(
@@ -52,51 +57,80 @@ public final class GcpLogHelper {
   /**
    *  Class for proto related helper methods.
    */
-  public static final class GcpLogSinkWriter {
-    private final GcpLogSink sink;
-    private TimeProvider timeProvider;
+  static final class GcpLogSinkWriter {
+    private final Sink sink;
+    private final TimeProvider timeProvider;
 
-    public GcpLogSinkWriter(GcpLogSink sink, TimeProvider timeProvider) {
+    GcpLogSinkWriter(Sink sink, TimeProvider timeProvider) {
       this.sink = sink;
       this.timeProvider = timeProvider;
     }
 
-    GrpcLogRecord.Builder newTimestampBuilder() {
+    GrpcLogRecord.Builder createTimestamp() {
       long nanos = timeProvider.currentTimeNanos();
       return GrpcLogRecord.newBuilder().setTimestamp(Timestamps.fromNanos(nanos));
     }
 
-    // TODO(dnvindhya) : Return header size as well
-    GrpcLogRecord.Metadata.Builder createMetadataProto(Metadata metadata) {
+    static final class PayloadBuilder<T> {
+      T proto;
+      int size;
+
+      private PayloadBuilder(T proto, int size) {
+        this.proto = proto;
+        this.size = size;
+      }
+    }
+
+    static PayloadBuilder<GrpcLogRecord.Metadata.Builder> createMetadataProto(Metadata metadata) {
       checkNotNull(metadata, "metadata");
       GrpcLogRecord.Metadata.Builder metadataBuilder = GrpcLogRecord.Metadata.newBuilder();
       byte[][] serialized = InternalMetadata.serialize(metadata);
+      int bytesAfterAdd = 0;
       if (serialized != null) {
-        // int curBytes = 0;
+        int curBytes = 0;
         for (int i = 0; i < serialized.length; i += 2) {
           String key = new String(serialized[i], Charsets.UTF_8);
           byte[] value = serialized[i + 1];
-          // int bytesAfterAdd = curBytes + key.length() + value.length;
+          bytesAfterAdd = curBytes + key.length() + value.length;
           metadataBuilder.addEntryBuilder()
               .setKey(key)
               .setValue(ByteString.copyFrom(value));
         }
       }
-      return metadataBuilder;
+      return new PayloadBuilder<>(metadataBuilder, bytesAfterAdd);
     }
 
     static Address socketToProto(SocketAddress address) {
       checkNotNull(address, "address");
       Address.Builder builder = Address.newBuilder();
-      // TODO(dnvindhya): Check for type of InetSockAddress
-      builder.setType(Address.Type.TYPE_UNKNOWN).setAddress(address.toString());
+      if (address instanceof InetSocketAddress) {
+        InetAddress inetAddress = ((InetSocketAddress) address).getAddress();
+        if (inetAddress instanceof Inet4Address) {
+          builder.setType(Address.Type.TYPE_IPV4)
+              .setAddress(InetAddressUtil.toAddrString(inetAddress));
+        } else if (inetAddress instanceof Inet6Address) {
+          builder.setType(Address.Type.TYPE_IPV6)
+              .setAddress(InetAddressUtil.toAddrString(inetAddress));
+        } else {
+          logger.log(Level.SEVERE, "unknown type of InetSocketAddress: {}", address);
+          builder.setAddress(address.toString());
+        }
+        builder.setIpPort(((InetSocketAddress) address).getPort());
+      } else if (address.getClass().getName().equals("io.netty.channel.unix.DomainSocketAddress")) {
+        // To avoid a compile time dependency on grpc-netty, we check against the
+        // runtime class name.
+        builder.setType(Address.Type.TYPE_UNIX)
+            .setAddress(address.toString());
+      } else {
+        builder.setType(Address.Type.TYPE_UNKNOWN).setAddress(address.toString());
+      }
       return builder.build();
     }
 
     /**
      * Logs the client header.
      */
-    public void logClientHeader(
+    void logClientHeader(
         long seqId,
         String serviceName,
         String methodName,
@@ -104,22 +138,26 @@ public final class GcpLogHelper {
         @Nullable Duration timeout,
         Metadata metadata,
         GrpcLogRecord.EventLogger eventLogger,
+        String rpcId,
         @Nullable SocketAddress peerAddress) {
       checkNotNull(serviceName, "serviceName");
       checkNotNull(methodName, "methodName");
+      checkNotNull(rpcId, "rpcId");
       checkArgument(
           peerAddress == null || eventLogger == GrpcLogRecord.EventLogger.LOGGER_SERVER,
           "peerAddress can only be specified by server");
 
-      GrpcLogRecord.Metadata.Builder metadataProto = createMetadataProto(metadata);
-      GrpcLogRecord.Builder logEntryBuilder = newTimestampBuilder()
+      PayloadBuilder<GrpcLogRecord.Metadata.Builder> pair = createMetadataProto(metadata);
+      GrpcLogRecord.Builder logEntryBuilder = createTimestamp()
           .setSequenceId(seqId)
           .setServiceName(serviceName)
           .setMethodName(methodName)
           .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
           .setEventLogger(eventLogger)
           .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
-          .setMetadata(metadataProto);
+          .setMetadata(pair.proto)
+          .setPayloadSize(pair.size)
+          .setRpcId(rpcId);
       if (authority != null) {
         logEntryBuilder.setAuthority(authority);
       }
@@ -136,28 +174,32 @@ public final class GcpLogHelper {
     /**
      * Logs the server header.
      */
-    public void logServerHeader(
+    void logServerHeader(
         long seqId,
         String serviceName,
         String methodName,
         Metadata metadata,
         GrpcLogRecord.EventLogger eventLogger,
+        String rpcId,
         @Nullable SocketAddress peerAddress) {
       checkNotNull(serviceName, "serviceName");
       checkNotNull(methodName, "methodName");
+      checkNotNull(rpcId, "rpcId");
       checkArgument(
           peerAddress == null || eventLogger == GrpcLogRecord.EventLogger.LOGGER_CLIENT,
           "peerAddress can only be specified for client");
 
-      GrpcLogRecord.Metadata.Builder metadataProto = createMetadataProto(metadata);
-      GrpcLogRecord.Builder logEntryBuilder = newTimestampBuilder()
+      PayloadBuilder<GrpcLogRecord.Metadata.Builder> pair = createMetadataProto(metadata);
+      GrpcLogRecord.Builder logEntryBuilder = createTimestamp()
           .setSequenceId(seqId)
           .setServiceName(serviceName)
           .setMethodName(methodName)
           .setEventType(EventType.GRPC_CALL_RESPONSE_HEADER)
           .setEventLogger(eventLogger)
           .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
-          .setMetadata(metadataProto);
+          .setMetadata(pair.proto)
+          .setPayloadSize(pair.size)
+          .setRpcId(rpcId);
       if (peerAddress != null) {
         logEntryBuilder.setPeerAddress(socketToProto(peerAddress));
       }
@@ -168,31 +210,35 @@ public final class GcpLogHelper {
     /**
      * Logs the server trailer.
      */
-    public void logTrailer(
+    void logTrailer(
         long seqId,
         String serviceName,
         String methodName,
         Status status,
         Metadata metadata,
         GrpcLogRecord.EventLogger eventLogger,
+        String rpcId,
         @Nullable SocketAddress peerAddress) {
       checkNotNull(serviceName, "serviceName");
       checkNotNull(methodName, "methodName");
       checkNotNull(status, "status");
+      checkNotNull(rpcId, "rpcId");
       checkArgument(
           peerAddress == null || eventLogger == GrpcLogRecord.EventLogger.LOGGER_CLIENT,
           "peerAddress can only be specified for client");
 
-      GrpcLogRecord.Metadata.Builder metadataProto = createMetadataProto(metadata);
-      GrpcLogRecord.Builder logEntryBuilder = newTimestampBuilder()
+      PayloadBuilder<GrpcLogRecord.Metadata.Builder> pair = createMetadataProto(metadata);
+      GrpcLogRecord.Builder logEntryBuilder = createTimestamp()
           .setSequenceId(seqId)
           .setServiceName(serviceName)
           .setMethodName(methodName)
           .setEventType(EventType.GRPC_CALL_TRAILER)
           .setEventLogger(eventLogger)
           .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
-          .setMetadata(metadataProto)
-          .setStatusCode(status.getCode().value());
+          .setMetadata(pair.proto)
+          .setPayloadSize(pair.size)
+          .setStatusCode(status.getCode().value())
+          .setRpcId(rpcId);
       String statusDescription = status.getDescription();
       if (statusDescription != null) {
         logEntryBuilder.setStatusMessage(statusDescription);
@@ -211,15 +257,17 @@ public final class GcpLogHelper {
     /**
      * Logs the RPC message.
      */
-    public <T> void logRpcMessage(
+    <T> void logRpcMessage(
         long seqId,
         String serviceName,
         String methodName,
         GrpcLogRecord.EventType eventType,
         T message,
-        GrpcLogRecord.EventLogger eventLogger) {
+        GrpcLogRecord.EventLogger eventLogger,
+        String rpcId) {
       checkNotNull(serviceName, "serviceName");
       checkNotNull(methodName, "methodName");
+      checkNotNull(rpcId, "rpcId");
       checkArgument(
           eventType == EventType.GRPC_CALL_REQUEST_MESSAGE
               || eventType == EventType.GRPC_CALL_RESPONSE_MESSAGE,
@@ -232,14 +280,14 @@ public final class GcpLogHelper {
       // ByteString messageData =
       // ByteString.copyFrom((byte[]) message, 0, ((byte[]) message).length);
 
-      GrpcLogRecord.Builder logEntryBuilder = newTimestampBuilder()
+      GrpcLogRecord.Builder logEntryBuilder = createTimestamp()
           .setSequenceId(seqId)
           .setServiceName(serviceName)
           .setMethodName(methodName)
           .setEventType(eventType)
           .setEventLogger(eventLogger)
-          .setPayloadSize(1)
-          .setLogLevel(LogLevel.LOG_LEVEL_DEBUG);
+          .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
+          .setRpcId(rpcId);
       logger.log(Level.FINE, "Writing RPC message to GcpLogSink");
       sink.write(logEntryBuilder.build());
     }
@@ -247,21 +295,24 @@ public final class GcpLogHelper {
     /**
      * Logs half close.
      */
-    public void logHalfClose(
+    void logHalfClose(
         long seqId,
         String serviceName,
         String methodName,
-        GrpcLogRecord.EventLogger eventLogger) {
+        GrpcLogRecord.EventLogger eventLogger,
+        String rpcId) {
       checkNotNull(serviceName, "serviceName");
       checkNotNull(methodName, "methodName");
+      checkNotNull(rpcId, "rpcId");
 
-      GrpcLogRecord.Builder logEntryBuilder = newTimestampBuilder()
+      GrpcLogRecord.Builder logEntryBuilder = createTimestamp()
           .setSequenceId(seqId)
           .setServiceName(serviceName)
           .setMethodName(methodName)
           .setEventType(EventType.GRPC_CALL_HALF_CLOSE)
           .setEventLogger(eventLogger)
-          .setLogLevel(LogLevel.LOG_LEVEL_DEBUG);
+          .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
+          .setRpcId(rpcId);
       logger.log(Level.FINE, "Writing Half Close event to GcpLogSink");
       sink.write(logEntryBuilder.build());
     }
@@ -269,38 +320,40 @@ public final class GcpLogHelper {
     /**
      * Logs cancellation.
      */
-    public void logCancel(
+    void logCancel(
         long seqId,
         String serviceName,
         String methodName,
-        GrpcLogRecord.EventLogger eventLogger) {
+        GrpcLogRecord.EventLogger eventLogger,
+        String rpcId) {
       checkNotNull(serviceName, "serviceName");
       checkNotNull(methodName, "methodName");
+      checkNotNull(rpcId, "rpcId");
 
-      GrpcLogRecord.Builder logEntryBuilder = newTimestampBuilder()
+      GrpcLogRecord.Builder logEntryBuilder = createTimestamp()
           .setSequenceId(seqId)
           .setServiceName(serviceName)
           .setMethodName(methodName)
           .setEventType(EventType.GRPC_CALL_CANCEL)
           .setEventLogger(eventLogger)
-          .setLogLevel(LogLevel.LOG_LEVEL_DEBUG);
+          .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
+          .setRpcId(rpcId);
       logger.log(Level.FINE, "Writing Cancel event to GcpLogSink");
       sink.write(logEntryBuilder.build());
     }
-
   }
 
   /**
    *  Retrieves socket address.
    */
-  public static SocketAddress getPeerSocket(Attributes streamAttributes) {
+  static SocketAddress getPeerAddress(Attributes streamAttributes) {
     return streamAttributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
   }
 
   /**
    * Checks deadline for timeout.
    */
-  public static Deadline min(@Nullable Deadline deadline0, @Nullable Deadline deadline1) {
+  static Deadline min(@Nullable Deadline deadline0, @Nullable Deadline deadline1) {
     if (deadline0 == null) {
       return deadline1;
     }
