@@ -71,61 +71,6 @@ final class GcpLogHelper {
       return GrpcLogRecord.newBuilder().setTimestamp(Timestamps.fromNanos(nanos));
     }
 
-    static final class PayloadBuilder<T> {
-      T proto;
-      int size;
-
-      private PayloadBuilder(T proto, int size) {
-        this.proto = proto;
-        this.size = size;
-      }
-    }
-
-    static PayloadBuilder<GrpcLogRecord.Metadata.Builder> createMetadataProto(Metadata metadata) {
-      checkNotNull(metadata, "metadata");
-      GrpcLogRecord.Metadata.Builder metadataBuilder = GrpcLogRecord.Metadata.newBuilder();
-      byte[][] serialized = InternalMetadata.serialize(metadata);
-      int bytesAfterAdd = 0;
-      if (serialized != null) {
-        int curBytes = 0;
-        for (int i = 0; i < serialized.length; i += 2) {
-          String key = new String(serialized[i], Charsets.UTF_8);
-          byte[] value = serialized[i + 1];
-          bytesAfterAdd = curBytes + key.length() + value.length;
-          metadataBuilder.addEntryBuilder()
-              .setKey(key)
-              .setValue(ByteString.copyFrom(value));
-        }
-      }
-      return new PayloadBuilder<>(metadataBuilder, bytesAfterAdd);
-    }
-
-    static Address socketToProto(SocketAddress address) {
-      checkNotNull(address, "address");
-      Address.Builder builder = Address.newBuilder();
-      if (address instanceof InetSocketAddress) {
-        InetAddress inetAddress = ((InetSocketAddress) address).getAddress();
-        if (inetAddress instanceof Inet4Address) {
-          builder.setType(Address.Type.TYPE_IPV4)
-              .setAddress(InetAddressUtil.toAddrString(inetAddress));
-        } else if (inetAddress instanceof Inet6Address) {
-          builder.setType(Address.Type.TYPE_IPV6)
-              .setAddress(InetAddressUtil.toAddrString(inetAddress));
-        } else {
-          logger.log(Level.SEVERE, "unknown type of InetSocketAddress: {}", address);
-          builder.setAddress(address.toString());
-        }
-        builder.setIpPort(((InetSocketAddress) address).getPort());
-      } else if (address.getClass().getName().equals("io.netty.channel.unix.DomainSocketAddress")) {
-        // To avoid a compile time dependency on grpc-netty, we check against the
-        // runtime class name.
-        builder.setType(Address.Type.TYPE_UNIX)
-            .setAddress(address.toString());
-      } else {
-        builder.setType(Address.Type.TYPE_UNKNOWN).setAddress(address.toString());
-      }
-      return builder.build();
-    }
 
     /**
      * Logs the client header.
@@ -341,6 +286,62 @@ final class GcpLogHelper {
       logger.log(Level.FINE, "Writing Cancel event to GcpLogSink");
       sink.write(logEntryBuilder.build());
     }
+  }
+
+  static final class PayloadBuilder<T> {
+    T proto;
+    int size;
+
+    private PayloadBuilder(T proto, int size) {
+      this.proto = proto;
+      this.size = size;
+    }
+  }
+
+  static PayloadBuilder<GrpcLogRecord.Metadata.Builder> createMetadataProto(Metadata metadata) {
+    checkNotNull(metadata, "metadata");
+    GrpcLogRecord.Metadata.Builder metadataBuilder = GrpcLogRecord.Metadata.newBuilder();
+    byte[][] serialized = InternalMetadata.serialize(metadata);
+    int bytesAfterAdd = 0;
+    if (serialized != null) {
+      int curBytes = 0;
+      for (int i = 0; i < serialized.length; i += 2) {
+        String key = new String(serialized[i], Charsets.UTF_8);
+        byte[] value = serialized[i + 1];
+        bytesAfterAdd = curBytes + key.length() + value.length;
+        metadataBuilder.addEntryBuilder()
+            .setKey(key)
+            .setValue(ByteString.copyFrom(value));
+      }
+    }
+    return new PayloadBuilder<>(metadataBuilder, bytesAfterAdd);
+  }
+
+  static Address socketToProto(SocketAddress address) {
+    checkNotNull(address, "address");
+    Address.Builder builder = Address.newBuilder();
+    if (address instanceof InetSocketAddress) {
+      InetAddress inetAddress = ((InetSocketAddress) address).getAddress();
+      if (inetAddress instanceof Inet4Address) {
+        builder.setType(Address.Type.TYPE_IPV4)
+            .setAddress(InetAddressUtil.toAddrString(inetAddress));
+      } else if (inetAddress instanceof Inet6Address) {
+        builder.setType(Address.Type.TYPE_IPV6)
+            .setAddress(InetAddressUtil.toAddrString(inetAddress));
+      } else {
+        logger.log(Level.SEVERE, "unknown type of InetSocketAddress: {}", address);
+        builder.setAddress(address.toString());
+      }
+      builder.setIpPort(((InetSocketAddress) address).getPort());
+    } else if (address.getClass().getName().equals("io.netty.channel.unix.DomainSocketAddress")) {
+      // To avoid a compile time dependency on grpc-netty, we check against the
+      // runtime class name.
+      builder.setType(Address.Type.TYPE_UNIX)
+          .setAddress(address.toString());
+    } else {
+      builder.setType(Address.Type.TYPE_UNKNOWN).setAddress(address.toString());
+    }
+    return builder.build();
   }
 
   /**
