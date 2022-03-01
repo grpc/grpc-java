@@ -18,42 +18,39 @@ package io.grpc.binder.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import android.app.Service;
 import android.content.Context;
-import android.content.Intent;
-import android.os.IBinder;
 import android.os.Parcel;
 import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
-import com.google.common.util.concurrent.testing.TestingExecutors;
 import com.google.protobuf.Empty;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.Server;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.binder.AndroidComponentAddress;
-import io.grpc.binder.BinderServerBuilder;
 import io.grpc.binder.BindServiceFlags;
+import io.grpc.binder.BinderServerBuilder;
 import io.grpc.binder.HostServices;
-import io.grpc.binder.IBinderReceiver;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicies;
+import io.grpc.binder.SecurityPolicy;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
-import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.StreamListener;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
 import io.grpc.stub.ServerCalls;
-import java.io.IOException;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -94,7 +91,7 @@ public final class BinderClientTransportTest {
   BinderTransport.BinderClientTransport transport;
 
   private final ObjectPool<ScheduledExecutorService> executorServicePool =
-      new FixedObjectPool<>(TestingExecutors.sameThreadScheduledExecutor());
+      new FixedObjectPool<>(Executors.newScheduledThreadPool(1));
   private final TestTransportListener transportListener = new TestTransportListener();
   private final TestStreamListener streamListener = new TestStreamListener();
 
@@ -127,39 +124,51 @@ public final class BinderClientTransportTest {
             .build();
 
     serverAddress = HostServices.allocateService(appContext);
-    HostServices.configureService(serverAddress,
+    HostServices.configureService(
+        serverAddress,
         HostServices.serviceParamsBuilder()
-          .setServerFactory((service, receiver) ->
-              BinderServerBuilder.forAddress(serverAddress, receiver)
-                .addService(serviceDef)
-                .build())
-          .build());
+            .setServerFactory(
+                (service, receiver) ->
+                    BinderServerBuilder.forAddress(serverAddress, receiver)
+                        .addService(serviceDef)
+                        .build())
+            .build());
+  }
 
-    transport =
-        new BinderTransport.BinderClientTransport(
-            appContext,
-            serverAddress,
-            BindServiceFlags.DEFAULTS,
-            ContextCompat.getMainExecutor(appContext),
-            executorServicePool,
-            executorServicePool,
-            SecurityPolicies.internalOnly(),
-            InboundParcelablePolicy.DEFAULT,
-            Attributes.EMPTY);
+  private class BinderClientTransportBuilder {
+    private SecurityPolicy securityPolicy = SecurityPolicies.internalOnly();
 
-    Runnable r = transport.start(transportListener);
-    r.run();
-    transportListener.awaitReady();
+    public BinderClientTransportBuilder setSecurityPolicy(SecurityPolicy securityPolicy) {
+      this.securityPolicy = securityPolicy;
+      return this;
+    }
+
+    public BinderTransport.BinderClientTransport build() {
+      return new BinderTransport.BinderClientTransport(
+          appContext,
+          serverAddress,
+          BindServiceFlags.DEFAULTS,
+          ContextCompat.getMainExecutor(appContext),
+          executorServicePool,
+          executorServicePool,
+          securityPolicy,
+          InboundParcelablePolicy.DEFAULT,
+          Attributes.EMPTY);
+    }
   }
 
   @After
   public void tearDown() throws Exception {
     transport.shutdownNow(Status.OK);
     HostServices.awaitServiceShutdown();
+    executorServicePool.getObject().shutdownNow();
   }
 
   @Test
   public void testShutdownBeforeStreamStart_b153326034() throws Exception {
+    transport = new BinderClientTransportBuilder().build();
+    transport.start(transportListener).run();
+    transportListener.awaitReady();
     ClientStream stream = transport.newStream(
         methodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
     transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
@@ -170,6 +179,9 @@ public final class BinderClientTransportTest {
 
   @Test
   public void testRequestWhileStreamIsWaitingOnCall_b154088869() throws Exception {
+    transport = new BinderClientTransportBuilder().build();
+    transport.start(transportListener).run();
+    transportListener.awaitReady();
     ClientStream stream =
         transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
 
@@ -188,6 +200,9 @@ public final class BinderClientTransportTest {
 
   @Test
   public void testTransactionForDiscardedCall_b155244043() throws Exception {
+    transport = new BinderClientTransportBuilder().build();
+    transport.start(transportListener).run();
+    transportListener.awaitReady();
     ClientStream stream =
         transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
 
@@ -206,6 +221,9 @@ public final class BinderClientTransportTest {
 
   @Test
   public void testBadTransactionStreamThroughput_b163053382() throws Exception {
+    transport = new BinderClientTransportBuilder().build();
+    transport.start(transportListener).run();
+    transportListener.awaitReady();
     ClientStream stream =
         transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
 
@@ -225,6 +243,9 @@ public final class BinderClientTransportTest {
 
   @Test
   public void testMessageProducerClosedAfterStream_b169313545() {
+    transport = new BinderClientTransportBuilder().build();
+    transport.start(transportListener).run();
+    transportListener.awaitReady();
     ClientStream stream =
         transport.newStream(methodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
 
@@ -241,6 +262,22 @@ public final class BinderClientTransportTest {
 
     // The message producer shouldn't throw an exception if we drain it now.
     streamListener.drainMessages();
+  }
+
+  @Test
+  public void testNewStreamBeforeTransportReadyFails() throws InterruptedException {
+    // Use a special SecurityPolicy that lets us act before the transport is setup/ready.
+    BlockingSecurityPolicy bsp = new BlockingSecurityPolicy();
+    transport = new BinderClientTransportBuilder().setSecurityPolicy(bsp).build();
+    transport.start(transportListener).run();
+    ClientStream stream =
+        transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
+    stream.start(streamListener);
+    assertThat(streamListener.awaitClose().getCode()).isEqualTo(Code.INTERNAL);
+
+    // Unblock the SETUP_TRANSPORT handshake and make sure it becomes ready in the usual way.
+    bsp.provideNextCheckAuthorizationResult(Status.OK);
+    transportListener.awaitReady();
   }
 
   private synchronized void awaitServerCallsCompleted(int calls) {
@@ -313,6 +350,17 @@ public final class BinderClientTransportTest {
       }
     }
 
+    public synchronized Status awaitClose() {
+      while (closedStatus == null) {
+        try {
+          wait(100);
+        } catch (InterruptedException inte) {
+          throw new AssertionError("Interrupted waiting for close");
+        }
+      }
+      return closedStatus;
+    }
+
     public int drainMessages() {
       int n = 0;
       while (messageProducer.next() != null) {
@@ -334,6 +382,23 @@ public final class BinderClientTransportTest {
     @Override
     public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
       this.closedStatus = status;
+    }
+  }
+
+  static class BlockingSecurityPolicy extends SecurityPolicy {
+    private final BlockingQueue<Status> results = new LinkedBlockingQueue<>();
+
+    public void provideNextCheckAuthorizationResult(Status status) {
+      results.add(status);
+    }
+
+    @Override
+    public Status checkAuthorization(int uid) {
+      try {
+        return results.take();
+      } catch (InterruptedException e) {
+        return Status.fromThrowable(e);
+      }
     }
   }
 }
