@@ -723,7 +723,7 @@ final class XdsNameResolver extends NameResolver {
             return;
           }
           listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
-              String.format("Unable to load LDS %s. xDS server returned: %s. %s.",
+              String.format("Unable to load LDS %s. xDS server returned: %s: %s.",
               ldsResourceName, error.getCode(), error.getDescription())));
         }
       });
@@ -923,7 +923,7 @@ final class XdsNameResolver extends NameResolver {
               return;
             }
             listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
-                String.format("Unable to load RDS %s. xDS server returned: %s. %s.",
+                String.format("Unable to load RDS %s. xDS server returned: %s: %s.",
                 resourceName, error.getCode(), error.getDescription())));
           }
         });

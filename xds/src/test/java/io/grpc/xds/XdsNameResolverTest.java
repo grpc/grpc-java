@@ -432,7 +432,7 @@ public class XdsNameResolverTest {
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
-        + ". xDS server returned: UNAVAILABLE. server unreachable.");
+        + ". xDS server returned: UNAVAILABLE: server unreachable.");
   }
 
   @Test
@@ -444,7 +444,7 @@ public class XdsNameResolverTest {
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
-        + ". xDS server returned: NOT_FOUND. server unreachable.");
+        + ". xDS server returned: NOT_FOUND: server unreachable.");
     assertThat(error.getCause()).isNull();
   }
 
@@ -458,11 +458,11 @@ public class XdsNameResolverTest {
     Status error = errorCaptor.getAllValues().get(0);
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
-        + ". xDS server returned: UNAVAILABLE. server unreachable.");
+        + ". xDS server returned: UNAVAILABLE: server unreachable.");
     error = errorCaptor.getAllValues().get(1);
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo("Unable to load RDS " + RDS_RESOURCE_NAME
-        + ". xDS server returned: UNAVAILABLE. server unreachable.");
+        + ". xDS server returned: UNAVAILABLE: server unreachable.");
   }
 
   @Test
