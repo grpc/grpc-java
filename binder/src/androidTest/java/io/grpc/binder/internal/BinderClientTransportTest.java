@@ -167,8 +167,7 @@ public final class BinderClientTransportTest {
   @Test
   public void testShutdownBeforeStreamStart_b153326034() throws Exception {
     transport = new BinderClientTransportBuilder().build();
-    transport.start(transportListener).run();
-    transportListener.awaitReady();
+    startAndAwaitReady(transport, transportListener);
     ClientStream stream = transport.newStream(
         methodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
     transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
@@ -180,8 +179,7 @@ public final class BinderClientTransportTest {
   @Test
   public void testRequestWhileStreamIsWaitingOnCall_b154088869() throws Exception {
     transport = new BinderClientTransportBuilder().build();
-    transport.start(transportListener).run();
-    transportListener.awaitReady();
+    startAndAwaitReady(transport, transportListener);
     ClientStream stream =
         transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
 
@@ -201,8 +199,7 @@ public final class BinderClientTransportTest {
   @Test
   public void testTransactionForDiscardedCall_b155244043() throws Exception {
     transport = new BinderClientTransportBuilder().build();
-    transport.start(transportListener).run();
-    transportListener.awaitReady();
+    startAndAwaitReady(transport, transportListener);
     ClientStream stream =
         transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
 
@@ -222,8 +219,7 @@ public final class BinderClientTransportTest {
   @Test
   public void testBadTransactionStreamThroughput_b163053382() throws Exception {
     transport = new BinderClientTransportBuilder().build();
-    transport.start(transportListener).run();
-    transportListener.awaitReady();
+    startAndAwaitReady(transport, transportListener);
     ClientStream stream =
         transport.newStream(streamingMethodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
 
@@ -244,8 +240,7 @@ public final class BinderClientTransportTest {
   @Test
   public void testMessageProducerClosedAfterStream_b169313545() {
     transport = new BinderClientTransportBuilder().build();
-    transport.start(transportListener).run();
-    transportListener.awaitReady();
+    startAndAwaitReady(transport, transportListener);
     ClientStream stream =
         transport.newStream(methodDesc, new Metadata(), CallOptions.DEFAULT, tracers);
 
@@ -288,6 +283,12 @@ public final class BinderClientTransportTest {
         throw new AssertionError("Interrupted waiting for servercalls");
       }
     }
+  }
+
+  private static void startAndAwaitReady(
+      BinderTransport.BinderClientTransport transport, TestTransportListener transportListener) {
+    transport.start(transportListener).run();
+    transportListener.awaitReady();
   }
 
   private static final class TestTransportListener implements ManagedClientTransport.Listener {
@@ -385,6 +386,9 @@ public final class BinderClientTransportTest {
     }
   }
 
+  /**
+   * A SecurityPolicy that blocks the transport authorization check until a test sets the outcome.
+   */
   static class BlockingSecurityPolicy extends SecurityPolicy {
     private final BlockingQueue<Status> results = new LinkedBlockingQueue<>();
 
