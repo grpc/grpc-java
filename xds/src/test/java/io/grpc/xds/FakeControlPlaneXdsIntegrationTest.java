@@ -86,14 +86,6 @@ public class FakeControlPlaneXdsIntegrationTest {
 
   private static final Logger logger =
       Logger.getLogger(FakeControlPlaneXdsIntegrationTest.class.getName());
-
-  protected int testServerPort = 0;
-  protected int controlPlaneServicePort;
-  private Server server;
-  private Server controlPlane;
-  private XdsTestControlPlaneService controlPlaneService;
-  protected SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub;
-  private XdsNameResolverProvider nameResolverProvider;
   private static final String SCHEME = "test-xds";
   private static final String SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT =
       "grpc/server?udpa.resource.listening_address=";
@@ -103,6 +95,15 @@ public class FakeControlPlaneXdsIntegrationTest {
   private static final String HTTP_CONNECTION_MANAGER_TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
+
+  private Server server;
+  private Server controlPlane;
+  private XdsTestControlPlaneService controlPlaneService;
+  private XdsNameResolverProvider nameResolverProvider;
+
+  protected int testServerPort = 0;
+  protected int controlPlaneServicePort;
+  protected SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub;
 
   /**
    * For test purpose, use boostrapOverride to programmatically provide bootstrap info.
