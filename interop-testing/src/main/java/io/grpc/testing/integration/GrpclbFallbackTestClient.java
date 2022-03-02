@@ -204,7 +204,8 @@ public final class GrpclbFallbackTestClient {
     assertEquals(0, exitCode);
   }
 
-  private GrpclbRouteType doRpcAndGetPath(TestServiceGrpc.TestServiceBlockingStub stub, Deadline deadline) {
+  private GrpclbRouteType doRpcAndGetPath(
+      TestServiceGrpc.TestServiceBlockingStub stub, Deadline deadline) {
     logger.info("doRpcAndGetPath deadline: " + deadline);
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillGrpclbRouteType(true)
