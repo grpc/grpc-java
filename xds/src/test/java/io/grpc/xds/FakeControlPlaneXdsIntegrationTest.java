@@ -78,12 +78,12 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Xds integration tests using a local control plane, implemented in
- * {@link XdsTestControlPlaneService}.
- * Test cases can inject xds configs to the control plane for testing.
+ * Xds integration tests using a local control plane, implemented in {@link
+ * XdsTestControlPlaneService}. Test cases can inject xds configs to the control plane for testing.
  */
 @RunWith(JUnit4.class)
 public class FakeControlPlaneXdsIntegrationTest {
+
   private static final Logger logger =
       Logger.getLogger(FakeControlPlaneXdsIntegrationTest.class.getName());
 
@@ -94,12 +94,12 @@ public class FakeControlPlaneXdsIntegrationTest {
   private XdsTestControlPlaneService controlPlaneService;
   protected SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub;
   private XdsNameResolverProvider nameResolverProvider;
-  private static final String scheme = "test-xds";
+  private static final String SCHEME = "test-xds";
   private static final String SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT =
       "grpc/server?udpa.resource.listening_address=";
-  private static final String rdsName = "route-config.googleapis.com";
-  private static final String clusterName = "cluster0";
-  private static final String edsName = "eds-service-0";
+  private static final String RDS_NAME = "route-config.googleapis.com";
+  private static final String CLUSTER_NAME = "cluster0";
+  private static final String EDS_NAME = "eds-service-0";
   private static final String HTTP_CONNECTION_MANAGER_TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
@@ -127,16 +127,15 @@ public class FakeControlPlaneXdsIntegrationTest {
   }
 
   /**
-   * 1. Start control plane server and get control plane port.
-   * 2. Start xdsServer using no replacement server template, because we do not know the server
-   * port yet. Then get the server port.
-   * 3. Update control plane config using the port in 2 for necessary rds and eds resources to set
-   * up client and server communication for test cases.
-   * */
+   * 1. Start control plane server and get control plane port. 2. Start xdsServer using no
+   * replacement server template, because we do not know the server port yet. Then get the server
+   * port. 3. Update control plane config using the port in 2 for necessary rds and eds resources to
+   * set up client and server communication for test cases.
+   */
   @Before
   public void setUp() throws Exception {
     startControlPlane();
-    nameResolverProvider = XdsNameResolverProvider.createForTest(scheme,
+    nameResolverProvider = XdsNameResolverProvider.createForTest(SCHEME,
         defaultBootstrapOverride());
     NameResolverRegistry.getDefaultRegistry().register(nameResolverProvider);
   }
@@ -162,20 +161,20 @@ public class FakeControlPlaneXdsIntegrationTest {
   public void pingPong() throws Exception {
     String tcpListenerName = SERVER_LISTENER_TEMPLATE_NO_REPLACEMENT;
     String serverHostName = "test-server";
-    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS, ImmutableMap.<String, Listener>of(
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS, ImmutableMap.of(
         tcpListenerName, serverListener(tcpListenerName),
         serverHostName, clientListener(serverHostName)
     ));
     startServer(defaultBootstrapOverride());
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_RDS,
-        ImmutableMap.of(rdsName, rds(serverHostName)));
+        ImmutableMap.of(RDS_NAME, rds(serverHostName)));
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS,
-        ImmutableMap.<String, Message>of(clusterName, cds()));
+        ImmutableMap.<String, Message>of(CLUSTER_NAME, cds()));
     InetSocketAddress edsInetSocketAddress = (InetSocketAddress) server.getListenSockets().get(0);
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS,
-        ImmutableMap.<String, Message>of(edsName, eds(edsInetSocketAddress.getHostName(),
+        ImmutableMap.<String, Message>of(EDS_NAME, eds(edsInetSocketAddress.getHostName(),
             edsInetSocketAddress.getPort())));
-    ManagedChannel channel = Grpc.newChannelBuilder(scheme + ":///" + serverHostName,
+    ManagedChannel channel = Grpc.newChannelBuilder(SCHEME + ":///" + serverHostName,
         InsecureChannelCredentials.create()).build();
     blockingStub = SimpleServiceGrpc.newBlockingStub(channel);
     SimpleRequest request = SimpleRequest.newBuilder()
@@ -200,7 +199,7 @@ public class FakeControlPlaneXdsIntegrationTest {
         };
 
     XdsServerBuilder serverBuilder = XdsServerBuilder.forPort(
-        0, InsecureServerCredentials.create())
+            0, InsecureServerCredentials.create())
         .addService(simpleServiceImpl)
         .overrideBootstrapForTest(bootstrapOverride);
     server = serverBuilder.build().start();
@@ -212,7 +211,7 @@ public class FakeControlPlaneXdsIntegrationTest {
     controlPlaneService = new XdsTestControlPlaneService();
     NettyServerBuilder controlPlaneServerBuilder =
         NettyServerBuilder.forPort(0)
-        .addService(controlPlaneService);
+            .addService(controlPlaneService);
     controlPlane = controlPlaneServerBuilder.build().start();
     controlPlaneServicePort = controlPlane.getPort();
   }
@@ -228,17 +227,16 @@ public class FakeControlPlaneXdsIntegrationTest {
             .HttpConnectionManager.newBuilder()
             .setRds(
                 Rds.newBuilder()
-                    .setRouteConfigName(rdsName)
+                    .setRouteConfigName(RDS_NAME)
                     .setConfigSource(
                         ConfigSource.newBuilder()
                             .setAds(AggregatedConfigSource.getDefaultInstance())))
             .addAllHttpFilters(Collections.singletonList(httpFilter))
             .build(),
         HTTP_CONNECTION_MANAGER_TYPE_URL)).build();
-    Listener listener = Listener.newBuilder()
+    return Listener.newBuilder()
         .setName(name)
         .setApiListener(apiListener).build();
-    return listener;
   }
 
   private static Listener serverListener(String name) {
@@ -291,17 +289,17 @@ public class FakeControlPlaneXdsIntegrationTest {
                 .setMatch(
                     RouteMatch.newBuilder().setPrefix("/").build())
                 .setRoute(
-                    RouteAction.newBuilder().setCluster(clusterName).build()).build()).build();
-    return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
+                    RouteAction.newBuilder().setCluster(CLUSTER_NAME).build()).build()).build();
+    return RouteConfiguration.newBuilder().setName(RDS_NAME).addVirtualHosts(virtualHost).build();
   }
 
   private static Cluster cds() {
     return Cluster.newBuilder()
-        .setName(clusterName)
+        .setName(CLUSTER_NAME)
         .setType(Cluster.DiscoveryType.EDS)
         .setEdsClusterConfig(
             Cluster.EdsClusterConfig.newBuilder()
-                .setServiceName(edsName)
+                .setServiceName(EDS_NAME)
                 .setEdsConfig(
                     ConfigSource.newBuilder()
                         .setAds(AggregatedConfigSource.newBuilder().build())
@@ -325,7 +323,7 @@ public class FakeControlPlaneXdsIntegrationTest {
                 .setHealthStatus(HealthStatus.HEALTHY)
                 .build()).build();
     return ClusterLoadAssignment.newBuilder()
-        .setClusterName(edsName)
+        .setClusterName(EDS_NAME)
         .addEndpoints(endpoints)
         .build();
   }
