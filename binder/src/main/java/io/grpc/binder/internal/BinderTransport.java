@@ -635,33 +635,39 @@ public abstract class BinderTransport
         final Metadata headers,
         final CallOptions callOptions,
         ClientStreamTracer[] tracers) {
-      if (isShutdown()) {
-        return newFailingClientStream(shutdownStatus, attributes, headers, tracers);
+      if (!inState(TransportState.READY)) {
+        return newFailingClientStream(
+            isShutdown()
+                ? shutdownStatus
+                : Status.INTERNAL.withDescription("newStream() before transportReady()"),
+            attributes,
+            headers,
+            tracers);
+      }
+
+      int callId = latestCallId++;
+      if (latestCallId == LAST_CALL_ID) {
+        latestCallId = FIRST_CALL_ID;
+      }
+      StatsTraceContext statsTraceContext =
+          StatsTraceContext.newClientContext(tracers, attributes, headers);
+      Inbound.ClientInbound inbound =
+          new Inbound.ClientInbound(
+              this, attributes, callId, GrpcUtil.shouldBeCountedForInUse(callOptions));
+      if (ongoingCalls.putIfAbsent(callId, inbound) != null) {
+        Status failure = Status.INTERNAL.withDescription("Clashing call IDs");
+        shutdownInternal(failure, true);
+        return newFailingClientStream(failure, attributes, headers, tracers);
       } else {
-        int callId = latestCallId++;
-        if (latestCallId == LAST_CALL_ID) {
-          latestCallId = FIRST_CALL_ID;
+        if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
+          clientTransportListener.transportInUse(true);
         }
-        StatsTraceContext statsTraceContext =
-            StatsTraceContext.newClientContext(tracers, attributes, headers);
-        Inbound.ClientInbound inbound =
-            new Inbound.ClientInbound(
-                this, attributes, callId, GrpcUtil.shouldBeCountedForInUse(callOptions));
-        if (ongoingCalls.putIfAbsent(callId, inbound) != null) {
-          Status failure = Status.INTERNAL.withDescription("Clashing call IDs");
-          shutdownInternal(failure, true);
-          return newFailingClientStream(failure, attributes, headers, tracers);
+        Outbound.ClientOutbound outbound =
+            new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
+        if (method.getType().clientSendsOneMessage()) {
+          return new SingleMessageClientStream(inbound, outbound, attributes);
         } else {
-          if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
-            clientTransportListener.transportInUse(true);
-          }
-          Outbound.ClientOutbound outbound =
-              new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
-          if (method.getType().clientSendsOneMessage()) {
-            return new SingleMessageClientStream(inbound, outbound, attributes);
-          } else {
-            return new MultiMessageClientStream(inbound, outbound, attributes);
-          }
+          return new MultiMessageClientStream(inbound, outbound, attributes);
         }
       }
     }
