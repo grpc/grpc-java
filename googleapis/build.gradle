@@ -1,0 +1,36 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "ru.vyarus.animalsniffer"
+}
+
+description = 'gRPC: googleapis'
+
+dependencies {
+    api project(':grpc-api')
+    implementation project(':grpc-alts'),
+                   project(':grpc-core'),
+                   project(':grpc-xds'),
+                   libraries.guava
+    testImplementation project(':grpc-core').sourceSets.test.output
+
+    signature "org.codehaus.mojo.signature:java17:1.0@signature"
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            pom {
+                withXml {
+                    // Since internal APIs are used, pin the version.
+                    asNode().dependencies.'*'.findAll() { dep ->
+                        dep.artifactId.text() in ['grpc-alts', 'grpc-xds']
+                    }.each() { core ->
+                        core.version*.value = "[" + core.version.text() + "]"
+                    }
+                }
+            }
+        }
+    }
+}
