@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.googleapis;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -32,7 +32,6 @@ import io.grpc.alts.InternalCheckGcpEnvironment;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
-import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -40,6 +39,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
 
@@ -70,7 +70,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   private final String authority;
   private final SynchronizationContext syncContext;
   private final Resource<Executor> executorResource;
-  private final XdsClientPoolFactory xdsClientPoolFactory;
+  private final BootstrapSetter bootstrapSetter;
   private final NameResolver delegate;
   private final Random rand;
   private final boolean usingExecutorResource;
@@ -84,17 +84,16 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   private boolean shutdown;
 
   GoogleCloudToProdNameResolver(URI targetUri, Args args, Resource<Executor> executorResource,
-      XdsClientPoolFactory xdsClientPoolFactory) {
-    this(targetUri, args, executorResource, new Random(), xdsClientPoolFactory,
+      BootstrapSetter bootstrapSetter) {
+    this(targetUri, args, executorResource, new Random(), bootstrapSetter,
         NameResolverRegistry.getDefaultRegistry().asFactory());
   }
 
   @VisibleForTesting
   GoogleCloudToProdNameResolver(URI targetUri, Args args, Resource<Executor> executorResource,
-      Random rand, XdsClientPoolFactory xdsClientPoolFactory,
-      NameResolver.Factory nameResolverFactory) {
+      Random rand, BootstrapSetter bootstrapSetter, NameResolver.Factory nameResolverFactory) {
     this.executorResource = checkNotNull(executorResource, "executorResource");
-    this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    this.bootstrapSetter = checkNotNull(bootstrapSetter, "bootstrapSetter");
     this.rand = checkNotNull(rand, "rand");
     String targetPath = checkNotNull(checkNotNull(targetUri, "targetUri").getPath(), "targetPath");
     Preconditions.checkArgument(
@@ -159,7 +158,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
             @Override
             public void run() {
               if (!shutdown && finalRawBootstrap != null) {
-                xdsClientPoolFactory.setBootstrapOverride(finalRawBootstrap);
+                bootstrapSetter.setBootstrap(finalRawBootstrap);
                 delegate.start(listener);
                 succeeded = true;
               }
@@ -283,5 +282,9 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   @VisibleForTesting
   interface HttpConnectionProvider {
     HttpURLConnection createConnection(String url) throws IOException;
+  }
+
+  public interface BootstrapSetter {
+    void setBootstrap(Map<String, ?> bootstrap);
   }
 }
