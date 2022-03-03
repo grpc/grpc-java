@@ -22,7 +22,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
-import io.grpc.Internal;
 import io.grpc.InternalLogId;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
@@ -44,8 +43,7 @@ import javax.annotation.Nullable;
 /**
  * A {@link Bootstrapper} implementation that reads xDS configurations from local file system.
  */
-@Internal
-public class BootstrapperImpl extends Bootstrapper {
+class BootstrapperImpl extends Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
   @VisibleForTesting
