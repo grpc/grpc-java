@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.googleapis;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.mock;
@@ -33,12 +33,10 @@ import io.grpc.NameResolverRegistry;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
+import io.grpc.googleapis.GoogleCloudToProdNameResolver.HttpConnectionProvider;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder.Resource;
-import io.grpc.xds.GoogleCloudToProdNameResolver.HttpConnectionProvider;
-import io.grpc.xds.XdsNameResolverProvider.XdsClientPoolFactory;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
@@ -50,7 +48,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -88,7 +85,7 @@ public class GoogleCloudToProdNameResolverTest {
       .setChannelLogger(mock(ChannelLogger.class))
       .build();
   private final FakeClock fakeExecutor = new FakeClock();
-  private final FakeXdsClientPoolFactory fakeXdsClientPoolFactory = new FakeXdsClientPoolFactory();
+  private final FakeBootstrapSetter fakeBootstrapSetter = new FakeBootstrapSetter();
   private final Resource<Executor> fakeExecutorResource = new Resource<Executor>() {
     @Override
     public Executor create() {
@@ -144,7 +141,7 @@ public class GoogleCloudToProdNameResolverTest {
       }
     };
     resolver = new GoogleCloudToProdNameResolver(
-        TARGET_URI, args, fakeExecutorResource, random, fakeXdsClientPoolFactory,
+        TARGET_URI, args, fakeExecutorResource, random, fakeBootstrapSetter,
         nsRegistry.asFactory());
     resolver.setHttpConnectionProvider(httpConnections);
   }
@@ -178,7 +175,7 @@ public class GoogleCloudToProdNameResolverTest {
     fakeExecutor.runDueTasks();
     assertThat(delegatedResolver.keySet()).containsExactly("xds");
     verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
-    Map<String, ?> bootstrap = fakeXdsClientPoolFactory.bootstrapRef.get();
+    Map<String, ?> bootstrap = fakeBootstrapSetter.bootstrapRef.get();
     Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
     assertThat(node).containsExactly(
         "id", "C2P-991614323",
@@ -246,23 +243,13 @@ public class GoogleCloudToProdNameResolverTest {
     }
   }
 
-  private static final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
+  private static final class FakeBootstrapSetter
+      implements GoogleCloudToProdNameResolver.BootstrapSetter {
     private final AtomicReference<Map<String, ?>> bootstrapRef = new AtomicReference<>();
 
     @Override
-    public void setBootstrapOverride(Map<String, ?> bootstrap) {
+    public void setBootstrap(Map<String, ?> bootstrap) {
       bootstrapRef.set(bootstrap);
-    }
-
-    @Override
-    @Nullable
-    public ObjectPool<XdsClient> get() {
-      throw new UnsupportedOperationException("Should not be called");
-    }
-
-    @Override
-    public ObjectPool<XdsClient> getOrCreate() {
-      throw new UnsupportedOperationException("Should not be called");
     }
   }
 }
