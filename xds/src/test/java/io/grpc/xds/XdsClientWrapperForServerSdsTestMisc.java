@@ -25,6 +25,7 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -83,6 +84,7 @@ import org.mockito.MockitoAnnotations;
 public class XdsClientWrapperForServerSdsTestMisc {
 
   private static final int PORT = 7000;
+  private static final int START_WAIT_AFTER_LISTENER_MILLIS = 100;
 
   private EmbeddedChannel channel;
   private ChannelPipeline pipeline;
@@ -158,15 +160,16 @@ public class XdsClientWrapperForServerSdsTestMisc {
     String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:" + PORT);
 
-    EnvoyServerProtoData.Listener listener =
+    EnvoyServerProtoData.Listener tcpListener =
         EnvoyServerProtoData.Listener.create(
             "listener1",
             "10.1.2.3",
             ImmutableList.of(),
             null);
-    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
+    LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(tcpListener);
     xdsClient.ldsWatcher.onChanged(listenerUpdate);
-    start.get(5, TimeUnit.SECONDS);
+    verify(listener, timeout(5000)).onServing();
+    start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
     FilterChainSelector selector = selectorManager.getSelectorToUpdateSelector();
     assertThat(getSslContextProviderSupplier(selector)).isNull();
   }
@@ -186,8 +189,9 @@ public class XdsClientWrapperForServerSdsTestMisc {
     });
     String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onResourceDoesNotExist(ldsWatched);
+    verify(listener, timeout(5000)).onNotServing(any());
     try {
-      start.get(5, TimeUnit.SECONDS);
+      start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
       fail("Start should throw exception");
     } catch (TimeoutException ex) {
       assertThat(start.isDone()).isFalse();
@@ -210,8 +214,9 @@ public class XdsClientWrapperForServerSdsTestMisc {
     });
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onError(Status.INTERNAL);
+    verify(listener, timeout(5000)).onNotServing(any());
     try {
-      start.get(5, TimeUnit.SECONDS);
+      start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
       fail("Start should throw exception");
     } catch (TimeoutException ex) {
       assertThat(start.isDone()).isFalse();
@@ -234,8 +239,9 @@ public class XdsClientWrapperForServerSdsTestMisc {
     });
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     xdsClient.ldsWatcher.onError(Status.PERMISSION_DENIED);
+    verify(listener, timeout(5000)).onNotServing(any());
     try {
-      start.get(5, TimeUnit.SECONDS);
+      start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
       fail("Start should throw exception");
     } catch (TimeoutException ex) {
       assertThat(start.isDone()).isFalse();
@@ -380,7 +386,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
     XdsServerTestHelper
             .generateListenerUpdate(xdsClient, ImmutableList.of(), tlsContext,
                     tlsContextForDefaultFilterChain, tlsContextManager);
-    start.get(5, TimeUnit.SECONDS);
+    verify(listener, timeout(5000)).onServing();
+    start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
     InetAddress ipRemoteAddress = InetAddress.getByName("10.4.5.6");
     final InetSocketAddress remoteAddress = new InetSocketAddress(ipRemoteAddress, 1234);
     channel = new EmbeddedChannel() {
