@@ -37,10 +37,12 @@ import java.util.logging.Logger;
  * Sink for Google Cloud Logging.
  */
 public class GcpLogSink implements Sink {
+
   private static final Logger logger = Logger.getLogger(Sink.class.getName());
 
   private static final String SERVICE_TO_EXCLUDE = "google.logging.v2.LoggingServiceV2";
-  private static final String DEFAULT_LOG_NAME = "grpc-observability";
+  private static final String DEFAULT_LOG_NAME = "grpc";
+
   private static GcpLogSink gcpLogSinkInstance = null;
   private final LoggingOptions gcpLoggingOptions;
   private final Logging gcpLoggingClient;
@@ -59,25 +61,27 @@ public class GcpLogSink implements Sink {
     gcpLoggingClient = gcpLoggingOptions.getService();
   }
 
-  // TODO(dnvindhya) implement builder for constructor based on the config parameters over
-  // method overrloading
   /**
-   * Return a single instance of GcpLogSink.
-   */
-  public static synchronized GcpLogSink getInstance() {
-    return getInstance(null);
-  }
-
-  /**
-   * Return a single instance of GcpLogSink.
+   * Initialize GcpLogSInk.
    *
    * @param projectId cloud project id to write logs
    */
   // TODO(dnvindhya) read the projectId value from config instead of taking
   // it as an argument
-  public static synchronized GcpLogSink getInstance(String projectId) {
+  public static synchronized GcpLogSink init(String projectId) {
+    if (gcpLogSinkInstance != null) {
+      throw new IllegalStateException("GcpLogSink already initialized");
+    }
+    gcpLogSinkInstance = new GcpLogSink(projectId);
+    return gcpLogSinkInstance;
+  }
+
+  /**
+   * Retrieves a single instance of GcpLogSink.
+   */
+  public static GcpLogSink getInstance() {
     if (gcpLogSinkInstance == null) {
-      gcpLogSinkInstance = new GcpLogSink(projectId);
+      throw new IllegalStateException("GcpLogSink not initialized");
     }
     return gcpLogSinkInstance;
   }
@@ -85,7 +89,7 @@ public class GcpLogSink implements Sink {
   @Override
   public synchronized void write(GrpcLogRecord logProto) {
     if (gcpLoggingClient == null) {
-      logger.log(Level.WARNING, "Attempt to write after GcpLogSink is closed.");
+      logger.log(Level.SEVERE, "Attempt to write after GcpLogSink is closed.");
       return;
     }
     if (SERVICE_TO_EXCLUDE.equals(logProto.getServiceName())) {
@@ -144,6 +148,8 @@ public class GcpLogSink implements Sink {
       gcpLoggingClient.close();
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Caught exception while closing", e);
+    } finally {
+      gcpLogSinkInstance = null;
     }
   }
 }

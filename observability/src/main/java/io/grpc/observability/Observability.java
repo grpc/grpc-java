@@ -37,7 +37,7 @@ public final class Observability {
     if (initialized) {
       throw new IllegalStateException("Observability already initialized!");
     }
-    Sink sink = GcpLogSink.getInstance();
+    Sink sink = GcpLogSink.init(null);
     LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl(sink));
     LoggingServerProvider.init(new InternalLoggingServerInterceptor.FactoryImpl());
     // TODO(sanjaypujare): initialize customTags map

@@ -28,6 +28,7 @@ import io.grpc.Deadline;
 import io.grpc.Grpc;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
 import io.grpc.observability.logging.Sink;
@@ -35,6 +36,11 @@ import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.Address;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.LogLevel;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -287,6 +293,63 @@ final class GcpLogHelper {
       sink.write(logEntryBuilder.build());
     }
   }
+
+  // Copied from internal
+  static final class ByteArrayMarshaller implements Marshaller<byte[]> {
+    @Override
+    public InputStream stream(byte[] value) {
+      return new ByteArrayInputStream(value);
+    }
+
+    @Override
+    public byte[] parse(InputStream stream) {
+      try {
+        return parseHelper(stream);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    private byte[] parseHelper(InputStream stream) throws IOException {
+      try {
+        return IoUtils.toByteArray(stream);
+      } finally {
+        stream.close();
+      }
+    }
+  }
+
+  // Copied from internal
+  static final class IoUtils {
+    /** maximum buffer to be read is 16 KB. */
+    private static final int MAX_BUFFER_LENGTH = 16384;
+
+    /** Returns the byte array. */
+    public static byte[] toByteArray(InputStream in) throws IOException {
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      copy(in, out);
+      return out.toByteArray();
+    }
+
+    /** Copies the data from input stream to output stream. */
+    public static long copy(InputStream from, OutputStream to) throws IOException {
+      // Copied from guava com.google.common.io.ByteStreams because its API is unstable (beta)
+      checkNotNull(from);
+      checkNotNull(to);
+      byte[] buf = new byte[MAX_BUFFER_LENGTH];
+      long total = 0;
+      while (true) {
+        int r = from.read(buf);
+        if (r == -1) {
+          break;
+        }
+        to.write(buf, 0, r);
+        total += r;
+      }
+      return total;
+    }
+  }
+
 
   static final class PayloadBuilder<T> {
     T proto;
