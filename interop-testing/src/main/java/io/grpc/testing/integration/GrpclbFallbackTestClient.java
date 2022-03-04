@@ -75,7 +75,7 @@ public final class GrpclbFallbackTestClient {
   private String customCredentialsType;
   private String testCase;
   private Boolean skipNetCmd = false;
-  private Integer numWarmupRpcs;
+  private int numWarmupRpcs;
 
   private ManagedChannel channel;
   private TestServiceGrpc.TestServiceBlockingStub blockingStub;
