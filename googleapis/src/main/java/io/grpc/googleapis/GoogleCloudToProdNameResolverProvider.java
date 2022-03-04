@@ -16,6 +16,7 @@
 
 package io.grpc.googleapis;
 
+import com.google.common.base.Preconditions;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Args;
@@ -31,11 +32,21 @@ import java.util.Map;
 @Internal
 public final class GoogleCloudToProdNameResolverProvider extends NameResolverProvider {
 
-  private static final String SCHEME = "google-c2p-experimental";
+  private static final String SCHEME = "google-c2p";
+
+  private final String scheme;
+
+  public GoogleCloudToProdNameResolverProvider() {
+    this(SCHEME);
+  }
+
+  GoogleCloudToProdNameResolverProvider(String scheme) {
+    this.scheme = Preconditions.checkNotNull(scheme, "scheme");
+  }
 
   @Override
   public NameResolver newNameResolver(URI targetUri, Args args) {
-    if (SCHEME.equals(targetUri.getScheme())) {
+    if (scheme.equals(targetUri.getScheme())) {
       return new GoogleCloudToProdNameResolver(
           targetUri, args, GrpcUtil.SHARED_CHANNEL_EXECUTOR,
           new SharedXdsClientPoolProviderBootstrapSetter());
@@ -45,7 +56,7 @@ public final class GoogleCloudToProdNameResolverProvider extends NameResolverPro
 
   @Override
   public String getDefaultScheme() {
-    return SCHEME;
+    return scheme;
   }
 
   @Override
