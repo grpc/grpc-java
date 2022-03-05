@@ -1,11 +1,8 @@
 /*
  * Forked from OkHttp 2.7.0
  */
-
 package io.grpc.okhttp.internal;
 
-import com.squareup.okhttp.Protocol;
-import com.squareup.okhttp.Response;
 import java.io.IOException;
 import java.net.ProtocolException;
 
@@ -24,10 +21,6 @@ public final class StatusLine {
     this.protocol = protocol;
     this.code = code;
     this.message = message;
-  }
-
-  public static StatusLine get(Response response) {
-    return new StatusLine(response.protocol(), response.code(), response.message());
   }
 
   public static StatusLine parse(String statusLine) throws IOException {
