@@ -17,9 +17,11 @@
  * Forked from OkHttp 2.7.0
  */
 
-package io.grpc.okhttp.internal;
+package io.grpc.okhttp.internal.proxy;
 
 import com.squareup.okhttp.internal.http.HttpMethod;
+import io.grpc.okhttp.internal.Headers;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.URL;

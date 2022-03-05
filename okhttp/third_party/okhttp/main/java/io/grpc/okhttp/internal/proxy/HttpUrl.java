@@ -17,7 +17,7 @@
  * Forked from OkHttp 2.7.0
  */
 
-package io.grpc.okhttp.internal;
+package io.grpc.okhttp.internal.proxy;
 
 import java.net.IDN;
 import java.net.InetAddress;
