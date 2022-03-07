@@ -31,11 +31,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import io.grpc.Status;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.TimeProvider;
 import io.grpc.xds.internal.certprovider.CertificateProvider.DistributorWatcher;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.File;
