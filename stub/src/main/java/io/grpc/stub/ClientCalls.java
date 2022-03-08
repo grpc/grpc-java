@@ -19,8 +19,10 @@ package io.grpc.stub;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.util.concurrent.AbstractFuture;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.CallOptions;
@@ -53,6 +55,11 @@ import javax.annotation.Nullable;
 public final class ClientCalls {
 
   private static final Logger logger = Logger.getLogger(ClientCalls.class.getName());
+
+  @VisibleForTesting
+  static boolean rejectRunnableOnExecutor =
+      !Strings.isNullOrEmpty(System.getenv("GRPC_CLIENT_CALL_REJECT_RUNNABLE"))
+          && Boolean.parseBoolean(System.getenv("GRPC_CLIENT_CALL_REJECT_RUNNABLE"));
 
   // Prevent instantiation
   private ClientCalls() {}
@@ -779,7 +786,7 @@ public final class ClientCalls {
       Object waiter = this.waiter;
       if (waiter != SHUTDOWN) {
         LockSupport.unpark((Thread) waiter); // no-op if null
-      } else if (remove(runnable)) {
+      } else if (remove(runnable) && rejectRunnableOnExecutor) {
         throw new RejectedExecutionException();
       }
     }
