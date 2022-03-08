@@ -259,7 +259,7 @@ public class ClientCallsTest {
     assertNotNull("callOptionsExecutor should not be null", interceptor.savedExecutor);
     ClientCalls.rejectRunnableOnExecutor = true;
     try {
-      interceptor.savedExecutor.execute(() -> {});
+      interceptor.savedExecutor.execute(() -> { });
       fail();
     } catch (Exception ex) {
       assertTrue(ex instanceof RejectedExecutionException);
