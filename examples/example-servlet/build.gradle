@@ -15,7 +15,7 @@ repositories {
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
-def grpcVersion = '1.45.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.46.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protocVersion = '3.19.2'
 
 dependencies {
