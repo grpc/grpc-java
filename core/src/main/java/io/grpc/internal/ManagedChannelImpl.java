@@ -1099,22 +1099,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       /** Called when it's ready to create a real call and reprocess the pending call. */
       void reprocess() {
-        getCallExecutor(callOptions).execute(
-            new Runnable() {
-              @Override
-              public void run() {
-                ClientCall<ReqT, RespT> realCall;
-                Context previous = context.attach();
-                try {
-                  realCall = newClientCall(method, callOptions);
-                } finally {
-                  context.detach(previous);
-                }
-                setCall(realCall);
-                syncContext.execute(new PendingCallRemoval());
-              }
-            }
-        );
+        ClientCall<ReqT, RespT> realCall;
+        Context previous = context.attach();
+        try {
+          realCall = newClientCall(method, callOptions);
+        } finally {
+          context.detach(previous);
+        }
+        Runnable toRun = setCall(realCall);
+        if (toRun != null) {
+          getCallExecutor(callOptions).execute(toRun);
+        }
+        syncContext.execute(new PendingCallRemoval());
       }
 
       @Override

@@ -64,11 +64,13 @@ public class DelayedClientCallTest {
     DelayedClientCall<String, Integer> delayedClientCall =
         new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null);
     delayedClientCall.setCall(mockRealCall);
+    delayedClientCall.start(listener, new Metadata());
     ForwardingTestUtil.testMethodsForwarded(
         ClientCall.class,
         mockRealCall,
         delayedClientCall,
-        Arrays.asList(ClientCall.class.getMethod("toString")),
+        Arrays.asList(ClientCall.class.getMethod("toString"),
+            ClientCall.class.getMethod("start", Listener.class, Metadata.class)),
         new ForwardingTestUtil.ArgumentProvider() {
           @Override
           public Object get(Method method, int argPos, Class<?> clazz) {

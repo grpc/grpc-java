@@ -64,6 +64,8 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
    * order, but also used if an error occurs before {@code realCall} is set.
    */
   private Listener<RespT> listener;
+  @GuardedBy("this")
+  private Metadata headers;
   // Must hold {@code this} lock when setting.
   private ClientCall<ReqT, RespT> realCall;
   @GuardedBy("this")
@@ -141,15 +143,34 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
    * <p>No-op if either this method or {@link #cancel} have already been called.
    */
   // When this method returns, passThrough is guaranteed to be true
-  public final void setCall(ClientCall<ReqT, RespT> call) {
+  public final Runnable setCall(ClientCall<ReqT, RespT> call) {
+    Listener<RespT> savedListener;
+    Metadata savedHeaders;
     synchronized (this) {
       // If realCall != null, then either setCall() or cancel() has been called.
       if (realCall != null) {
-        return;
+        return null;
       }
       setRealCall(checkNotNull(call, "call"));
+      savedListener = listener;
+      savedHeaders = headers;
+      if (savedListener == null) {
+        assert pendingRunnables.isEmpty();
+        pendingRunnables = null;
+        passThrough = true;
+      }
     }
-    drainPendingCalls();
+    if (savedListener == null) {
+      return null;
+    } else {
+      realCall.start(savedListener, savedHeaders);
+      return new Runnable() {
+        @Override
+        public void run() {
+          drainPendingCalls();
+        }
+      };
+    }
   }
 
   @Override
@@ -159,6 +180,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     boolean savedPassThrough;
     synchronized (this) {
       this.listener = checkNotNull(listener, "listener");
+      this.headers = headers;
       // If error != null, then cancel() has been called and was unable to close the listener
       savedError = error;
       savedPassThrough = passThrough;
@@ -172,20 +194,13 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
     if (savedPassThrough) {
       realCall.start(listener, headers);
-    } else {
-      final Listener<RespT> finalListener = listener;
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realCall.start(finalListener, headers);
-        }
-      });
-    }
+    } // else setCall will start the call.
   }
 
   // When this method returns, passThrough is guaranteed to be true
   @Override
   public final void cancel(@Nullable final String message, @Nullable final Throwable cause) {
+    checkState(listener != null, "May only be called after start");
     Status status = Status.CANCELLED;
     if (message != null) {
       status = status.withDescription(message);
@@ -312,6 +327,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public final void sendMessage(final ReqT message) {
+    checkState(listener != null, "May only be called after start");
     if (passThrough) {
       realCall.sendMessage(message);
     } else {
@@ -326,6 +342,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public final void setMessageCompression(final boolean enable) {
+    checkState(listener != null, "May only be called after start");
     if (passThrough) {
       realCall.setMessageCompression(enable);
     } else {
@@ -340,6 +357,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public final void request(final int numMessages) {
+    checkState(listener != null, "May only be called after start");
     if (passThrough) {
       realCall.request(numMessages);
     } else {
