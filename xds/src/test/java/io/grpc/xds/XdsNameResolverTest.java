@@ -270,12 +270,12 @@ public class XdsNameResolverTest {
         .node(Node.newBuilder().build())
         .authorities(
             ImmutableMap.of(targetAuthority, AuthorityInfo.create(
-                "xdstp://" + targetAuthority + "/envoy.config.listener.v3.Listener/%s",
+                "xdstp://" + targetAuthority + "/envoy.config.listener.v3.Listener/%s?foo=1&bar=2",
                 ImmutableList.<ServerInfo>of(ServerInfo.create(
                     "td.googleapis.com", InsecureChannelCredentials.create(), true)))))
         .build();
-    expectedLdsResourceName =
-        "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%5B::FFFF:129.144.52.38%5D:80";
+    expectedLdsResourceName = "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
+        + "%5B::FFFF:129.144.52.38%5D:80?bar=2&foo=1"; // query param canonified
     resolver = new XdsNameResolver(
         "xds.authority.com", serviceAuthority, serviceConfigParser, syncContext, scheduler,
         xdsClientPoolFactory, mockRandom, FilterRegistry.getDefaultRegistry(), null);
@@ -431,7 +431,21 @@ public class XdsNameResolverTest {
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo("server unreachable");
+    assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
+        + ". xDS server returned: UNAVAILABLE: server unreachable");
+  }
+
+  @Test
+  public void resolving_translateErrorLds() {
+    resolver.start(mockListener);
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverError(Status.NOT_FOUND.withDescription("server unreachable"));
+    verify(mockListener).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
+        + ". xDS server returned: NOT_FOUND: server unreachable");
+    assertThat(error.getCause()).isNull();
   }
 
   @Test
@@ -441,10 +455,14 @@ public class XdsNameResolverTest {
     xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
     xdsClient.deliverError(Status.UNAVAILABLE.withDescription("server unreachable"));
     verify(mockListener, times(2)).onError(errorCaptor.capture());
-    for (Status error : errorCaptor.getAllValues()) {
-      assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-      assertThat(error.getDescription()).isEqualTo("server unreachable");
-    }
+    Status error = errorCaptor.getAllValues().get(0);
+    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(error.getDescription()).isEqualTo("Unable to load LDS " + AUTHORITY
+        + ". xDS server returned: UNAVAILABLE: server unreachable");
+    error = errorCaptor.getAllValues().get(1);
+    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(error.getDescription()).isEqualTo("Unable to load RDS " + RDS_RESOURCE_NAME
+        + ". xDS server returned: UNAVAILABLE: server unreachable");
   }
 
   @Test

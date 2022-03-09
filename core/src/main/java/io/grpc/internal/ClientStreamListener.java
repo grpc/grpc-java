@@ -57,12 +57,16 @@ public interface ClientStreamListener extends StreamListener {
      */
     PROCESSED,
     /**
-     * The RPC is not processed by the server's application logic.
+     * The stream on the wire is created but not processed by the server's application logic.
      */
     REFUSED,
     /**
      * The RPC is dropped (by load balancer).
      */
-    DROPPED
+    DROPPED,
+    /**
+     * The stream is closed even before anything leaves the client.
+     */
+    MISCARRIED
   }
 }

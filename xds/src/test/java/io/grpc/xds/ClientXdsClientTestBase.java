@@ -760,8 +760,9 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName() {
-    String ldsResourceName =
-        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1";
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
+        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
     DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
     assertThat(channelForCustomAuthority).isNotNull();
     verifyResourceMetadataRequested(LDS, ldsResourceName);
@@ -779,8 +780,9 @@ public abstract class ClientXdsClientTestBase {
 
   @Test
   public void ldsResourceUpdated_withXdstpResourceName_withEmptyAuthority() {
-    String ldsResourceName =
-        "xdstp:///envoy.config.listener.v3.Listener/listener1";
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp:///envoy.config.listener.v3.Listener/listener1"
+        : "xdstp:///envoy.api.v2.Listener/listener1";
     DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
     assertThat(channelForEmptyAuthority).isNotNull();
     verifyResourceMetadataRequested(LDS, ldsResourceName);
@@ -794,6 +796,107 @@ public abstract class ClientXdsClientTestBase {
         .hasSize(VHOST_SIZE);
     verifyResourceMetadataAcked(
         LDS, ldsResourceName, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+  }
+
+  @Test
+  public void ldsResourceUpdated_withXdstpResourceName_witUnorderedContextParams() {
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?bar=2&foo=1"
+        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1/a?bar=2&foo=1";
+    DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String ldsResourceNameWithUnorderedContextParams = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1/a?foo=1&bar=2"
+        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1/a?foo=1&bar=2";
+    Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(
+        ldsResourceNameWithUnorderedContextParams,
+        mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequest(
+        LDS, ldsResourceName, VERSION_1, "0000", NODE);
+  }
+
+  @Test
+  public void ldsResourceUpdated_withXdstpResourceName_withWrongType() {
+    String ldsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/listener1"
+        : "xdstp://authority.xds.com/envoy.api.v2.Listener/listener1";
+    DiscoveryRpcCall call = startResourceWatcher(LDS, ldsResourceName, ldsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String ldsResourceNameWithWrongType =
+        "xdstp://authority.xds.com/envoy.config.route.v3.RouteConfiguration/listener1";
+    Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(
+        ldsResourceNameWithWrongType,
+        mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequestNack(
+        LDS, ldsResourceName, "", "0000", NODE,
+        ImmutableList.of(
+            "Unsupported resource name: " +  ldsResourceNameWithWrongType + " for type: LDS"));
+  }
+
+  @Test
+  public void rdsResourceUpdated_withXdstpResourceName_withWrongType() {
+    String rdsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.route.v3.RouteConfiguration/route1"
+        : "xdstp://authority.xds.com/envoy.api.v2.RouteConfiguration/route1";
+    DiscoveryRpcCall call = startResourceWatcher(RDS, rdsResourceName, rdsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String rdsResourceNameWithWrongType =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/route1";
+    Any testRouteConfig = Any.pack(mf.buildRouteConfiguration(
+        rdsResourceNameWithWrongType, mf.buildOpaqueVirtualHosts(VHOST_SIZE)));
+    call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
+    call.verifyRequestNack(
+        RDS, rdsResourceName, "", "0000", NODE,
+        ImmutableList.of(
+            "Unsupported resource name: " + rdsResourceNameWithWrongType + " for type: RDS"));
+  }
+
+  @Test
+  public void cdsResourceUpdated_withXdstpResourceName_withWrongType() {
+    String cdsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.cluster.v3.Cluster/cluster1"
+        : "xdstp://authority.xds.com/envoy.api.v2.Cluster/cluster1";
+    DiscoveryRpcCall call = startResourceWatcher(CDS, cdsResourceName, cdsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String cdsResourceNameWithWrongType =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/cluster1";
+    Any testClusterConfig = Any.pack(mf.buildEdsCluster(
+        cdsResourceNameWithWrongType, null, "round_robin", null, null, false, null,
+        "envoy.transport_sockets.tls", null));
+    call.sendResponse(CDS, testClusterConfig, VERSION_1, "0000");
+    call.verifyRequestNack(
+        CDS, cdsResourceName, "", "0000", NODE,
+        ImmutableList.of(
+            "Unsupported resource name: " + cdsResourceNameWithWrongType + " for type: CDS"));
+  }
+
+  @Test
+  public void edsResourceUpdated_withXdstpResourceName_withWrongType() {
+    String edsResourceName = useProtocolV3()
+        ? "xdstp://authority.xds.com/envoy.config.endpoint.v3.ClusterLoadAssignment/cluster1"
+        : "xdstp://authority.xds.com/envoy.api.v2.ClusterLoadAssignment/cluster1";
+    DiscoveryRpcCall call = startResourceWatcher(EDS, edsResourceName, edsResourceWatcher);
+    assertThat(channelForCustomAuthority).isNotNull();
+
+    String edsResourceNameWithWrongType =
+        "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/cluster1";
+    Any testEdsConfig = Any.pack(mf.buildClusterLoadAssignment(
+        edsResourceNameWithWrongType,
+        ImmutableList.of(mf.buildLocalityLbEndpoints(
+            "region2", "zone2", "subzone2",
+            mf.buildLbEndpoint("172.44.2.2", 8000, "unknown", 3), 2, 0)),
+        ImmutableList.of()));
+    call.sendResponse(EDS, testEdsConfig, VERSION_1, "0000");
+    call.verifyRequestNack(
+        EDS, edsResourceName, "", "0000", NODE,
+        ImmutableList.of(
+            "Unsupported resource name: " + edsResourceNameWithWrongType + " for type: EDS"));
   }
 
   @Test
@@ -1179,10 +1282,10 @@ public abstract class ClientXdsClientTestBase {
     call.sendResponse(LDS, packedListener, VERSION_1, "0000");
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
 
-    assertThat(ldsUpdateCaptor.getValue().listener().getFilterChains()).hasSize(1);
+    assertThat(ldsUpdateCaptor.getValue().listener().filterChains()).hasSize(1);
     FilterChain parsedFilterChain = Iterables.getOnlyElement(
-        ldsUpdateCaptor.getValue().listener().getFilterChains());
-    assertThat(parsedFilterChain.getHttpConnectionManager().rdsName()).isEqualTo(RDS_RESOURCE);
+        ldsUpdateCaptor.getValue().listener().filterChains());
+    assertThat(parsedFilterChain.httpConnectionManager().rdsName()).isEqualTo(RDS_RESOURCE);
     verifyResourceMetadataAcked(LDS, LISTENER_RESOURCE, packedListener, VERSION_1, TIME_INCREMENT);
     verifyResourceMetadataRequested(RDS, RDS_RESOURCE);
     verifySubscribedResourcesMetadataSizes(1, 0, 1, 0);
@@ -1207,10 +1310,10 @@ public abstract class ClientXdsClientTestBase {
         Any.pack(mf.buildListenerWithFilterChain(LISTENER_RESOURCE, 7000, "0.0.0.0", filterChain));
     call.sendResponse(LDS, packedListener, VERSION_2, "0001");
     verify(ldsResourceWatcher, times(2)).onChanged(ldsUpdateCaptor.capture());
-    assertThat(ldsUpdateCaptor.getValue().listener().getFilterChains()).hasSize(1);
+    assertThat(ldsUpdateCaptor.getValue().listener().filterChains()).hasSize(1);
     parsedFilterChain = Iterables.getOnlyElement(
-        ldsUpdateCaptor.getValue().listener().getFilterChains());
-    assertThat(parsedFilterChain.getHttpConnectionManager().virtualHosts()).hasSize(VHOST_SIZE);
+        ldsUpdateCaptor.getValue().listener().filterChains());
+    assertThat(parsedFilterChain.httpConnectionManager().virtualHosts()).hasSize(VHOST_SIZE);
     verify(rdsResourceWatcher).onResourceDoesNotExist(RDS_RESOURCE);
     verifyResourceMetadataDoesNotExist(RDS, RDS_RESOURCE);
     verifyResourceMetadataAcked(
@@ -2505,15 +2608,15 @@ public abstract class ClientXdsClientTestBase {
         ResourceType.LDS, Collections.singletonList(LISTENER_RESOURCE), "0", "0000", NODE);
     verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
     EnvoyServerProtoData.Listener parsedListener = ldsUpdateCaptor.getValue().listener();
-    assertThat(parsedListener.getName()).isEqualTo(LISTENER_RESOURCE);
-    assertThat(parsedListener.getAddress()).isEqualTo("0.0.0.0:7000");
-    assertThat(parsedListener.getDefaultFilterChain()).isNull();
-    assertThat(parsedListener.getFilterChains()).hasSize(1);
-    FilterChain parsedFilterChain = Iterables.getOnlyElement(parsedListener.getFilterChains());
-    assertThat(parsedFilterChain.getFilterChainMatch().getApplicationProtocols()).isEmpty();
-    assertThat(parsedFilterChain.getHttpConnectionManager().rdsName())
+    assertThat(parsedListener.name()).isEqualTo(LISTENER_RESOURCE);
+    assertThat(parsedListener.address()).isEqualTo("0.0.0.0:7000");
+    assertThat(parsedListener.defaultFilterChain()).isNull();
+    assertThat(parsedListener.filterChains()).hasSize(1);
+    FilterChain parsedFilterChain = Iterables.getOnlyElement(parsedListener.filterChains());
+    assertThat(parsedFilterChain.filterChainMatch().applicationProtocols()).isEmpty();
+    assertThat(parsedFilterChain.httpConnectionManager().rdsName())
         .isEqualTo("route-foo.googleapis.com");
-    assertThat(parsedFilterChain.getHttpConnectionManager().httpFilterConfigs().get(0).filterConfig)
+    assertThat(parsedFilterChain.httpConnectionManager().httpFilterConfigs().get(0).filterConfig)
         .isEqualTo(RouterFilter.ROUTER_CONFIG);
 
     assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();

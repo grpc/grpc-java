@@ -53,7 +53,7 @@ public class RlsProtoConvertersTest {
 
     RlsProtoData.RouteLookupRequest object = converter.convert(proto);
 
-    assertThat(object.getKeyMap()).containsExactly("key1", "val1");
+    assertThat(object.keyMap()).containsExactly("key1", "val1");
   }
 
   @Test
@@ -61,7 +61,7 @@ public class RlsProtoConvertersTest {
     Converter<RlsProtoData.RouteLookupRequest, RouteLookupRequest> converter =
         new RouteLookupRequestConverter().reverse();
     RlsProtoData.RouteLookupRequest requestObject =
-        new RlsProtoData.RouteLookupRequest(ImmutableMap.of("key1", "val1"));
+        RlsProtoData.RouteLookupRequest.create(ImmutableMap.of("key1", "val1"));
 
     RouteLookupRequest proto = converter.convert(requestObject);
 
@@ -80,7 +80,7 @@ public class RlsProtoConvertersTest {
 
     RlsProtoData.RouteLookupResponse object = converter.convert(proto);
 
-    assertThat(object.getTargets()).containsExactly("target");
+    assertThat(object.targets()).containsExactly("target");
     assertThat(object.getHeaderData()).isEqualTo("some header data");
   }
 
@@ -90,7 +90,7 @@ public class RlsProtoConvertersTest {
         new RouteLookupResponseConverter().reverse();
 
     RlsProtoData.RouteLookupResponse object =
-        new RlsProtoData.RouteLookupResponse(ImmutableList.of("target"), "some header data");
+        RlsProtoData.RouteLookupResponse.create(ImmutableList.of("target"), "some header data");
 
     RouteLookupResponse proto = converter.convert(object);
 
@@ -176,34 +176,35 @@ public class RlsProtoConvertersTest {
         + "}";
 
     RouteLookupConfig expectedConfig =
-        new RouteLookupConfig(
-            ImmutableList.of(
-                new GrpcKeyBuilder(
-                    ImmutableList.of(new Name("service1", "create")),
+        RouteLookupConfig.builder()
+            .grpcKeyBuilders(ImmutableList.of(
+                GrpcKeyBuilder.create(
+                    ImmutableList.of(Name.create("service1", "create")),
                     ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent")),
-                        new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
+                        NameMatcher.create("user", ImmutableList.of("User", "Parent")),
+                        NameMatcher.create("id", ImmutableList.of("X-Google-Id"))),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of()),
-                new GrpcKeyBuilder(
-                    ImmutableList.of(new Name("service1", "*")),
+                GrpcKeyBuilder.create(
+                    ImmutableList.of(Name.create("service1", "*")),
                     ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent")),
-                        new NameMatcher("password", ImmutableList.of("Password"))),
+                        NameMatcher.create("user", ImmutableList.of("User", "Parent")),
+                        NameMatcher.create("password", ImmutableList.of("Password"))),
                     ExtraKeys.DEFAULT,
                     ImmutableMap.<String, String>of()),
-                new GrpcKeyBuilder(
-                    ImmutableList.of(new Name("service3", "*")),
+                GrpcKeyBuilder.create(
+                    ImmutableList.of(Name.create("service3", "*")),
                     ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent"))),
+                        NameMatcher.create("user", ImmutableList.of("User", "Parent"))),
                     ExtraKeys.create("host-key", "service-key", "method-key"),
-                    ImmutableMap.of("constKey1", "value1"))),
-            /* lookupService= */ "service1",
-            /* lookupServiceTimeoutInNanos= */ TimeUnit.SECONDS.toNanos(2),
-            /* maxAgeInNanos= */ TimeUnit.SECONDS.toNanos(300),
-            /* staleAgeInNanos= */ TimeUnit.SECONDS.toNanos(240),
-            /* cacheSizeBytes= */ 1000,
-            /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
+                    ImmutableMap.of("constKey1", "value1"))))
+            .lookupService("service1")
+            .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(2))
+            .maxAgeInNanos(TimeUnit.SECONDS.toNanos(300))
+            .staleAgeInNanos(TimeUnit.SECONDS.toNanos(240))
+            .cacheSizeBytes(1000)
+            .defaultTarget("us_east_1.cloudbigtable.googleapis.com")
+            .build();
 
     RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
     @SuppressWarnings("unchecked")
@@ -343,19 +344,20 @@ public class RlsProtoConvertersTest {
         + "}";
 
     RouteLookupConfig expectedConfig =
-        new RouteLookupConfig(
-            ImmutableList.of(
-                new GrpcKeyBuilder(
-                    ImmutableList.of(new Name("service1", null)),
+        RouteLookupConfig.builder()
+            .grpcKeyBuilders(ImmutableList.of(
+                GrpcKeyBuilder.create(
+                    ImmutableList.of(Name.create("service1", null)),
                     ImmutableList.<NameMatcher>of(),
                     ExtraKeys.DEFAULT,
-                    ImmutableMap.<String, String>of())),
-            /* lookupService= */ "service1",
-            /* lookupServiceTimeoutInNanos= */ TimeUnit.SECONDS.toNanos(10),
-            /* maxAgeInNanos= */ TimeUnit.MINUTES.toNanos(5),
-            /* staleAgeInNanos= */ TimeUnit.MINUTES.toNanos(5),
-            /* cacheSizeBytes= */ 5 * 1024 * 1024,
-            /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
+                    ImmutableMap.<String, String>of())))
+            .lookupService("service1")
+            .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(10))
+            .maxAgeInNanos(TimeUnit.MINUTES.toNanos(5))
+            .staleAgeInNanos(TimeUnit.MINUTES.toNanos(5))
+            .cacheSizeBytes(5 * 1024 * 1024)
+            .defaultTarget("us_east_1.cloudbigtable.googleapis.com")
+            .build();
 
     RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
     @SuppressWarnings("unchecked")
@@ -399,21 +401,22 @@ public class RlsProtoConvertersTest {
         + "}";
 
     RouteLookupConfig expectedConfig =
-        new RouteLookupConfig(
-            ImmutableList.of(
-                new GrpcKeyBuilder(
-                    ImmutableList.of(new Name("service1", "create")),
+        RouteLookupConfig.builder()
+            .grpcKeyBuilders(ImmutableList.of(
+                GrpcKeyBuilder.create(
+                    ImmutableList.of(Name.create("service1", "create")),
                     ImmutableList.of(
-                        new NameMatcher("user", ImmutableList.of("User", "Parent")),
-                        new NameMatcher("id", ImmutableList.of("X-Google-Id"))),
+                        NameMatcher.create("user", ImmutableList.of("User", "Parent")),
+                        NameMatcher.create("id", ImmutableList.of("X-Google-Id"))),
                     ExtraKeys.DEFAULT,
-                    ImmutableMap.<String, String>of())),
-            /* lookupService= */ "service1",
-            /* lookupServiceTimeoutInNanos= */ TimeUnit.SECONDS.toNanos(2),
-            /* maxAgeInNanos= */ TimeUnit.SECONDS.toNanos(300),
-            /* staleAgeInNanos= */ TimeUnit.SECONDS.toNanos(300),
-            /* cacheSizeBytes= */ 1000,
-            /* defaultTarget= */ "us_east_1.cloudbigtable.googleapis.com");
+                    ImmutableMap.<String, String>of())))
+            .lookupService("service1")
+            .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(2))
+            .maxAgeInNanos(TimeUnit.SECONDS.toNanos(300))
+            .staleAgeInNanos(TimeUnit.SECONDS.toNanos(300))
+            .cacheSizeBytes(1000)
+            .defaultTarget("us_east_1.cloudbigtable.googleapis.com")
+            .build();
 
     RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
     @SuppressWarnings("unchecked")

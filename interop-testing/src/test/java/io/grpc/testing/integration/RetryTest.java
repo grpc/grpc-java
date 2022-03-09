@@ -74,7 +74,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -459,33 +458,41 @@ public class RetryTest {
     assertRetryStatsRecorded(0, 0, 0);
   }
 
-  @Ignore("flaky because old transportReportStatus() is not completely migrated yet")
   @Test
   public void transparentRetryStatsRecorded() throws Exception {
     startNewServer();
     createNewChannel();
 
-    final AtomicBoolean transparentRetryTriggered = new AtomicBoolean();
+    final AtomicBoolean originalAttemptFailed = new AtomicBoolean();
     class TransparentRetryTriggeringTracer extends ClientStreamTracer {
 
       @Override
       public void streamCreated(Attributes transportAttrs, Metadata metadata) {
-        if (transparentRetryTriggered.get()) {
+        if (originalAttemptFailed.get()) {
           return;
         }
+        // Send GOAWAY from server. The client may either receive GOAWAY or create the underlying
+        // netty stream and write headers first, even we await server termination as below.
+        // In the latter case, we rerun the test. We can also call localServer.shutdown() to trigger
+        // GOAWAY, but it takes a lot longer time to gracefully shut down.
         localServer.shutdownNow();
+        try {
+          localServer.awaitTermination();
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new AssertionError(e);
+        }
       }
 
       @Override
       public void streamClosed(Status status) {
-        if (transparentRetryTriggered.get()) {
+        if (originalAttemptFailed.get()) {
           return;
         }
-        transparentRetryTriggered.set(true);
+        originalAttemptFailed.set(true);
         try {
           startNewServer();
           channel.resetConnectBackoff();
-          channel.getState(true);
         } catch (Exception e) {
           throw new AssertionError("local server can not be restarted", e);
         }
@@ -502,13 +509,28 @@ public class RetryTest {
     CallOptions callOptions = CallOptions.DEFAULT
         .withWaitForReady()
         .withStreamTracerFactory(new TransparentRetryTracerFactory());
-    ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, callOptions);
-    call.start(mockCallListener, new Metadata());
-    assertRpcStartedRecorded();
-    assertRpcStatusRecorded(Code.UNAVAILABLE, 0, 0);
-    assertRpcStartedRecorded();
-    call.cancel("cancel", null);
-    assertRpcStatusRecorded(Code.CANCELLED, 0, 0);
+    while (true) {
+      ClientCall<String, Integer> call = channel.newCall(clientStreamingMethod, callOptions);
+      call.start(mockCallListener, new Metadata());
+      assertRpcStartedRecorded(); // original attempt
+      MetricsRecord record = clientStatsRecorder.pollRecord(5, SECONDS);
+      assertThat(record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT))
+          .isEqualTo(1);
+      TagValue statusTag = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_STATUS);
+      if (statusTag.asString().equals(Code.UNAVAILABLE.toString())) {
+        break;
+      } else {
+        // Due to race condition, GOAWAY is not received/processed before the stream is closed due
+        // to connection error. Rerun the test.
+        assertThat(statusTag.asString()).isEqualTo(Code.UNKNOWN.toString());
+        assertRetryStatsRecorded(0, 0, 0);
+        originalAttemptFailed.set(false);
+      }
+    }
+    assertRpcStartedRecorded(); // retry attempt
+    ServerCall<String, Integer> serverCall = serverCalls.poll(5, SECONDS);
+    serverCall.close(Status.INVALID_ARGUMENT, new Metadata());
+    assertRpcStatusRecorded(Code.INVALID_ARGUMENT, 0, 0);
     assertRetryStatsRecorded(0, 1, 0);
   }
 }

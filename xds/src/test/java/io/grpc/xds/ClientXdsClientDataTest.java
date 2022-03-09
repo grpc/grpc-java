@@ -111,6 +111,7 @@ import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
 import io.grpc.lookup.v1.NameMatcher;
 import io.grpc.lookup.v1.RouteLookupClusterSpecifier;
 import io.grpc.lookup.v1.RouteLookupConfig;
+import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.ClientXdsClient.ResourceInvalidException;
 import io.grpc.xds.ClientXdsClient.StructOrError;
@@ -2179,7 +2180,7 @@ public class ClientXdsClientDataTest {
     EnvoyServerProtoData.FilterChain parsedFilterChain2 = ClientXdsClient.parseFilterChain(
         filterChain2, new HashSet<String>(), null, filterRegistry, null,
         null, true /* does not matter */);
-    assertThat(parsedFilterChain1.getName()).isEqualTo(parsedFilterChain2.getName());
+    assertThat(parsedFilterChain1.name()).isEqualTo(parsedFilterChain2.name());
   }
 
   @Test
@@ -2571,6 +2572,76 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("common-tls-context is required in upstream-tls-context");
     ClientXdsClient.validateUpstreamTlsContext(upstreamTlsContext, null);
+  }
+
+  @Test
+  public void validateResourceName() {
+    String traditionalResource = "cluster1.google.com";
+    assertThat(XdsClient.isResourceNameValid(traditionalResource, ResourceType.CDS.typeUrl()))
+        .isTrue();
+    assertThat(XdsClient.isResourceNameValid(traditionalResource, ResourceType.RDS.typeUrlV2()))
+        .isTrue();
+
+    String invalidPath = "xdstp:/abc/efg";
+    assertThat(XdsClient.isResourceNameValid(invalidPath, ResourceType.CDS.typeUrl())).isFalse();
+
+    String invalidPath2 = "xdstp:///envoy.config.route.v3.RouteConfiguration";
+    assertThat(XdsClient.isResourceNameValid(invalidPath2, ResourceType.RDS.typeUrl())).isFalse();
+
+    String typeMatch = "xdstp:///envoy.config.route.v3.RouteConfiguration/foo/route1";
+    assertThat(XdsClient.isResourceNameValid(typeMatch, ResourceType.LDS.typeUrl())).isFalse();
+    assertThat(XdsClient.isResourceNameValid(typeMatch, ResourceType.RDS.typeUrl())).isTrue();
+    assertThat(XdsClient.isResourceNameValid(typeMatch, ResourceType.RDS.typeUrlV2())).isFalse();
+  }
+
+  @Test
+  public void canonifyResourceName() {
+    String traditionalResource = "cluster1.google.com";
+    assertThat(XdsClient.canonifyResourceName(traditionalResource))
+        .isEqualTo(traditionalResource);
+    assertThat(XdsClient.canonifyResourceName(traditionalResource))
+        .isEqualTo(traditionalResource);
+    assertThat(XdsClient.canonifyResourceName(traditionalResource))
+        .isEqualTo(traditionalResource);
+    assertThat(XdsClient.canonifyResourceName(traditionalResource))
+        .isEqualTo(traditionalResource);
+
+    String withNoQueries = "xdstp:///envoy.config.route.v3.RouteConfiguration/foo/route1";
+    assertThat(XdsClient.canonifyResourceName(withNoQueries)).isEqualTo(withNoQueries);
+
+    String withOneQueries = "xdstp:///envoy.config.route.v3.RouteConfiguration/foo/route1?name=foo";
+    assertThat(XdsClient.canonifyResourceName(withOneQueries)).isEqualTo(withOneQueries);
+
+    String withTwoQueries = "xdstp:///envoy.config.route.v3.RouteConfiguration/id/route1?b=1&a=1";
+    String expectedCanonifiedName =
+        "xdstp:///envoy.config.route.v3.RouteConfiguration/id/route1?a=1&b=1";
+    assertThat(XdsClient.canonifyResourceName(withTwoQueries))
+        .isEqualTo(expectedCanonifiedName);
+  }
+
+  /**
+   *  Tests compliance with RFC 3986 section 3.3
+   *  https://datatracker.ietf.org/doc/html/rfc3986#section-3.3
+   */
+  @Test
+  public void percentEncodePath()  {
+    String unreserved = "aAzZ09-._~";
+    assertThat(XdsClient.percentEncodePath(unreserved)).isEqualTo(unreserved);
+
+    String subDelims = "!$&'(*+,;/=";
+    assertThat(XdsClient.percentEncodePath(subDelims)).isEqualTo(subDelims);
+
+    String colonAndAt = ":@";
+    assertThat(XdsClient.percentEncodePath(colonAndAt)).isEqualTo(colonAndAt);
+
+    String needBeEncoded = "?#[]";
+    assertThat(XdsClient.percentEncodePath(needBeEncoded)).isEqualTo("%3F%23%5B%5D");
+
+    String ipv4 = "0.0.0.0:8080";
+    assertThat(XdsClient.percentEncodePath(ipv4)).isEqualTo(ipv4);
+
+    String ipv6 = "[::1]:8080";
+    assertThat(XdsClient.percentEncodePath(ipv6)).isEqualTo("%5B::1%5D:8080");
   }
 
   private static Filter buildHttpConnectionManagerFilter(HttpFilter... httpFilters) {

@@ -26,7 +26,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-import com.google.common.net.UrlEscapers;
 import com.google.gson.Gson;
 import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
@@ -48,6 +47,7 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
@@ -129,6 +129,9 @@ final class XdsNameResolver extends NameResolver {
   private XdsClient xdsClient;
   private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
+  // Workaround for https://github.com/grpc/grpc-java/issues/8886 . This should be handled in
+  // XdsClient instead of here.
+  private boolean receivedConfig;
 
   XdsNameResolver(
       @Nullable String targetAuthority, String name, ServiceConfigParser serviceConfigParser,
@@ -191,9 +194,16 @@ final class XdsNameResolver extends NameResolver {
     }
     String replacement = serviceAuthority;
     if (listenerNameTemplate.startsWith(XDSTP_SCHEME)) {
-      replacement = UrlEscapers.urlFragmentEscaper().escape(replacement);
+      replacement = XdsClient.percentEncodePath(replacement);
     }
     String ldsResourceName = expandPercentS(listenerNameTemplate, replacement);
+    if (!XdsClient.isResourceNameValid(ldsResourceName, ResourceType.LDS.typeUrl())
+        && !XdsClient.isResourceNameValid(ldsResourceName, ResourceType.LDS.typeUrlV2())) {
+      listener.onError(Status.INVALID_ARGUMENT.withDescription(
+          "invalid listener resource URI for service authority: " + serviceAuthority));
+      return;
+    }
+    ldsResourceName = XdsClient.canonifyResourceName(ldsResourceName);
     callCounterProvider = SharedCallCounterMap.getInstance();
     resolveState = new ResolveState(ldsResourceName);
     resolveState.start();
@@ -286,6 +296,7 @@ final class XdsNameResolver extends NameResolver {
             .setServiceConfig(parsedServiceConfig)
             .build();
     listener.onResult(result);
+    receivedConfig = true;
   }
 
   @VisibleForTesting
@@ -708,10 +719,12 @@ final class XdsNameResolver extends NameResolver {
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          if (stopped) {
+          if (stopped || receivedConfig) {
             return;
           }
-          listener.onError(error);
+          listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
+              String.format("Unable to load LDS %s. xDS server returned: %s: %s",
+              ldsResourceName, error.getCode(), error.getDescription())));
         }
       });
     }
@@ -858,6 +871,7 @@ final class XdsNameResolver extends NameResolver {
       }
       routingConfig = RoutingConfig.empty;
       listener.onResult(emptyResult);
+      receivedConfig = true;
     }
 
     private void cleanUpRouteDiscoveryState() {
@@ -905,10 +919,12 @@ final class XdsNameResolver extends NameResolver {
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
-            if (RouteDiscoveryState.this != routeDiscoveryState) {
+            if (RouteDiscoveryState.this != routeDiscoveryState || receivedConfig) {
               return;
             }
-            listener.onError(error);
+            listener.onError(Status.UNAVAILABLE.withCause(error.getCause()).withDescription(
+                String.format("Unable to load RDS %s. xDS server returned: %s: %s",
+                resourceName, error.getCode(), error.getDescription())));
           }
         });
       }

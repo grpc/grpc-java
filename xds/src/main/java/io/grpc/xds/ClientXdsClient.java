@@ -111,7 +111,6 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -298,7 +297,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         errors.add("LDS response Resource index " + i + " - can't decode Listener: " + e);
         continue;
       }
-      String listenerName = listener.getName();
+      if (!isResourceNameValid(listener.getName(), resource.getTypeUrl())) {
+        errors.add(
+            "Unsupported resource name: " + listener.getName() + " for type: " + ResourceType.LDS);
+        continue;
+      }
+      String listenerName = canonifyResourceName(listener.getName());
       unpackedResources.add(listenerName);
 
       // Process Listener into LdsUpdate.
@@ -393,7 +397,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       }
     }
 
-    List<FilterChain> filterChains = new ArrayList<>();
+    ImmutableList.Builder<FilterChain> filterChains = ImmutableList.builder();
     Set<FilterChainMatch> uniqueSet = new HashSet<>();
     for (io.envoyproxy.envoy.config.listener.v3.FilterChain fc : proto.getFilterChainsList()) {
       filterChains.add(
@@ -407,8 +411,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           null, certProviderInstances, parseHttpFilter);
     }
 
-    return new EnvoyServerProtoData.Listener(
-        proto.getName(), address, Collections.unmodifiableList(filterChains), defaultFilterChain);
+    return EnvoyServerProtoData.Listener.create(
+        proto.getName(), address, filterChains.build(), defaultFilterChain);
   }
 
   @VisibleForTesting
@@ -465,7 +469,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
     FilterChainMatch filterChainMatch = parseFilterChainMatch(proto.getFilterChainMatch());
     checkForUniqueness(uniqueSet, filterChainMatch);
-    return new FilterChain(
+    return FilterChain.create(
         proto.getName(),
         filterChainMatch,
         httpConnectionManager,
@@ -668,18 +672,18 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   private static List<FilterChainMatch> expandOnPrefixRange(FilterChainMatch filterChainMatch) {
     ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
-    if (filterChainMatch.getPrefixRanges().isEmpty()) {
+    if (filterChainMatch.prefixRanges().isEmpty()) {
       expandedList.add(filterChainMatch);
     } else {
-      for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getPrefixRanges()) {
-        expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
-            Arrays.asList(cidrRange),
-            Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
-            Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
-            filterChainMatch.getConnectionSourceType(),
-            Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
-            Collections.unmodifiableList(filterChainMatch.getServerNames()),
-            filterChainMatch.getTransportProtocol()));
+      for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.prefixRanges()) {
+        expandedList.add(FilterChainMatch.create(filterChainMatch.destinationPort(),
+            ImmutableList.of(cidrRange),
+            filterChainMatch.applicationProtocols(),
+            filterChainMatch.sourcePrefixRanges(),
+            filterChainMatch.connectionSourceType(),
+            filterChainMatch.sourcePorts(),
+            filterChainMatch.serverNames(),
+            filterChainMatch.transportProtocol()));
       }
     }
     return expandedList;
@@ -689,18 +693,18 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       Collection<FilterChainMatch> set) {
     ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
     for (FilterChainMatch filterChainMatch : set) {
-      if (filterChainMatch.getApplicationProtocols().isEmpty()) {
+      if (filterChainMatch.applicationProtocols().isEmpty()) {
         expandedList.add(filterChainMatch);
       } else {
-        for (String applicationProtocol : filterChainMatch.getApplicationProtocols()) {
-          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
-              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
-              Arrays.asList(applicationProtocol),
-              Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
-              filterChainMatch.getConnectionSourceType(),
-              Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
-              Collections.unmodifiableList(filterChainMatch.getServerNames()),
-              filterChainMatch.getTransportProtocol()));
+        for (String applicationProtocol : filterChainMatch.applicationProtocols()) {
+          expandedList.add(FilterChainMatch.create(filterChainMatch.destinationPort(),
+              filterChainMatch.prefixRanges(),
+              ImmutableList.of(applicationProtocol),
+              filterChainMatch.sourcePrefixRanges(),
+              filterChainMatch.connectionSourceType(),
+              filterChainMatch.sourcePorts(),
+              filterChainMatch.serverNames(),
+              filterChainMatch.transportProtocol()));
         }
       }
     }
@@ -711,18 +715,18 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       Collection<FilterChainMatch> set) {
     ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
     for (FilterChainMatch filterChainMatch : set) {
-      if (filterChainMatch.getSourcePrefixRanges().isEmpty()) {
+      if (filterChainMatch.sourcePrefixRanges().isEmpty()) {
         expandedList.add(filterChainMatch);
       } else {
-        for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.getSourcePrefixRanges()) {
-          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
-              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
-              Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
-              Arrays.asList(cidrRange),
-              filterChainMatch.getConnectionSourceType(),
-              Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
-              Collections.unmodifiableList(filterChainMatch.getServerNames()),
-              filterChainMatch.getTransportProtocol()));
+        for (EnvoyServerProtoData.CidrRange cidrRange : filterChainMatch.sourcePrefixRanges()) {
+          expandedList.add(FilterChainMatch.create(filterChainMatch.destinationPort(),
+              filterChainMatch.prefixRanges(),
+              filterChainMatch.applicationProtocols(),
+              ImmutableList.of(cidrRange),
+              filterChainMatch.connectionSourceType(),
+              filterChainMatch.sourcePorts(),
+              filterChainMatch.serverNames(),
+              filterChainMatch.transportProtocol()));
         }
       }
     }
@@ -732,18 +736,18 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   private static List<FilterChainMatch> expandOnSourcePorts(Collection<FilterChainMatch> set) {
     ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
     for (FilterChainMatch filterChainMatch : set) {
-      if (filterChainMatch.getSourcePorts().isEmpty()) {
+      if (filterChainMatch.sourcePorts().isEmpty()) {
         expandedList.add(filterChainMatch);
       } else {
-        for (Integer sourcePort : filterChainMatch.getSourcePorts()) {
-          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
-              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
-              Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
-              Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
-              filterChainMatch.getConnectionSourceType(),
-              Arrays.asList(sourcePort),
-              Collections.unmodifiableList(filterChainMatch.getServerNames()),
-              filterChainMatch.getTransportProtocol()));
+        for (Integer sourcePort : filterChainMatch.sourcePorts()) {
+          expandedList.add(FilterChainMatch.create(filterChainMatch.destinationPort(),
+              filterChainMatch.prefixRanges(),
+              filterChainMatch.applicationProtocols(),
+              filterChainMatch.sourcePrefixRanges(),
+              filterChainMatch.connectionSourceType(),
+              ImmutableList.of(sourcePort),
+              filterChainMatch.serverNames(),
+              filterChainMatch.transportProtocol()));
         }
       }
     }
@@ -753,18 +757,18 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   private static List<FilterChainMatch> expandOnServerNames(Collection<FilterChainMatch> set) {
     ArrayList<FilterChainMatch> expandedList = new ArrayList<>();
     for (FilterChainMatch filterChainMatch : set) {
-      if (filterChainMatch.getServerNames().isEmpty()) {
+      if (filterChainMatch.serverNames().isEmpty()) {
         expandedList.add(filterChainMatch);
       } else {
-        for (String serverName : filterChainMatch.getServerNames()) {
-          expandedList.add(new FilterChainMatch(filterChainMatch.getDestinationPort(),
-              Collections.unmodifiableList(filterChainMatch.getPrefixRanges()),
-              Collections.unmodifiableList(filterChainMatch.getApplicationProtocols()),
-              Collections.unmodifiableList(filterChainMatch.getSourcePrefixRanges()),
-              filterChainMatch.getConnectionSourceType(),
-              Collections.unmodifiableList(filterChainMatch.getSourcePorts()),
-              Arrays.asList(serverName),
-              filterChainMatch.getTransportProtocol()));
+        for (String serverName : filterChainMatch.serverNames()) {
+          expandedList.add(FilterChainMatch.create(filterChainMatch.destinationPort(),
+              filterChainMatch.prefixRanges(),
+              filterChainMatch.applicationProtocols(),
+              filterChainMatch.sourcePrefixRanges(),
+              filterChainMatch.connectionSourceType(),
+              filterChainMatch.sourcePorts(),
+              ImmutableList.of(serverName),
+              filterChainMatch.transportProtocol()));
         }
       }
     }
@@ -774,16 +778,17 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   private static FilterChainMatch parseFilterChainMatch(
       io.envoyproxy.envoy.config.listener.v3.FilterChainMatch proto)
       throws ResourceInvalidException {
-    List<CidrRange> prefixRanges = new ArrayList<>();
-    List<CidrRange> sourcePrefixRanges = new ArrayList<>();
+    ImmutableList.Builder<CidrRange> prefixRanges = ImmutableList.builder();
+    ImmutableList.Builder<CidrRange> sourcePrefixRanges = ImmutableList.builder();
     try {
       for (io.envoyproxy.envoy.config.core.v3.CidrRange range : proto.getPrefixRangesList()) {
-        prefixRanges.add(new CidrRange(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+        prefixRanges.add(
+            CidrRange.create(range.getAddressPrefix(), range.getPrefixLen().getValue()));
       }
       for (io.envoyproxy.envoy.config.core.v3.CidrRange range
           : proto.getSourcePrefixRangesList()) {
         sourcePrefixRanges.add(
-            new CidrRange(range.getAddressPrefix(), range.getPrefixLen().getValue()));
+            CidrRange.create(range.getAddressPrefix(), range.getPrefixLen().getValue()));
       }
     } catch (UnknownHostException e) {
       throw new ResourceInvalidException("Failed to create CidrRange", e);
@@ -802,14 +807,14 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       default:
         throw new ResourceInvalidException("Unknown source-type: " + proto.getSourceType());
     }
-    return new FilterChainMatch(
+    return FilterChainMatch.create(
         proto.getDestinationPort().getValue(),
-        prefixRanges,
-        proto.getApplicationProtocolsList(),
-        sourcePrefixRanges,
+        prefixRanges.build(),
+        ImmutableList.copyOf(proto.getApplicationProtocolsList()),
+        sourcePrefixRanges.build(),
         sourceType,
-        proto.getSourcePortsList(),
-        proto.getServerNamesList(),
+        ImmutableList.copyOf(proto.getSourcePortsList()),
+        ImmutableList.copyOf(proto.getServerNamesList()),
         proto.getTransportProtocol());
   }
 
@@ -1425,7 +1430,13 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         errors.add("RDS response Resource index " + i + " - can't decode RouteConfiguration: " + e);
         continue;
       }
-      String routeConfigName = routeConfig.getName();
+      if (!isResourceNameValid(routeConfig.getName(), resource.getTypeUrl())) {
+        errors.add(
+            "Unsupported resource name: " + routeConfig.getName() + " for type: "
+                + ResourceType.RDS);
+        continue;
+      }
+      String routeConfigName = canonifyResourceName(routeConfig.getName());
       unpackedResources.add(routeConfigName);
 
       // Process RouteConfiguration into RdsUpdate.
@@ -1547,7 +1558,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         errors.add("CDS response Resource index " + i + " - can't decode Cluster: " + e);
         continue;
       }
-      String clusterName = cluster.getName();
+      if (!isResourceNameValid(cluster.getName(), resource.getTypeUrl())) {
+        errors.add(
+            "Unsupported resource name: " + cluster.getName() + " for type: " + ResourceType.CDS);
+        continue;
+      }
+      String clusterName = canonifyResourceName(cluster.getName());
 
       // Management server is required to always send newly requested resources, even if they
       // may have been sent previously (proactively). Thus, client does not need to cache
@@ -1793,7 +1809,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
             "EDS response Resource index " + i + " - can't decode ClusterLoadAssignment: " + e);
         continue;
       }
-      String clusterName = assignment.getClusterName();
+      if (!isResourceNameValid(assignment.getClusterName(), resource.getTypeUrl())) {
+        errors.add("Unsupported resource name: " + assignment.getClusterName() + " for type: "
+            + ResourceType.EDS);
+        continue;
+      }
+      String clusterName = canonifyResourceName(assignment.getClusterName());
 
       // Skip information for clusters not requested.
       // Management server is required to always send newly requested resources, even if they
@@ -2382,10 +2403,6 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     ResourceSubscriber(ResourceType type, String resource) {
       syncContext.throwIfNotInThisSynchronizationContext();
       this.type = type;
-      // TODO(zdapeng): Validate authority in resource URI for new-style resource name
-      //   when parsing XDS response.
-      // TODO(zdapeng): Canonicalize the resource name by sorting the context params in normal
-      //   lexicographic order.
       this.resource = resource;
       this.serverInfo = getServerInfo(resource);
       // Initialize metadata in UNKNOWN state to cover the case when resource subscriber,

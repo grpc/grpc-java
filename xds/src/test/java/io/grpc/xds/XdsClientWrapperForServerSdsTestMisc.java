@@ -29,6 +29,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -66,8 +67,6 @@ import io.netty.handler.codec.http2.Http2Settings;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -160,10 +159,10 @@ public class XdsClientWrapperForServerSdsTestMisc {
     assertThat(ldsWatched).isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:" + PORT);
 
     EnvoyServerProtoData.Listener listener =
-        new EnvoyServerProtoData.Listener(
+        EnvoyServerProtoData.Listener.create(
             "listener1",
             "10.1.2.3",
-            Collections.<EnvoyServerProtoData.FilterChain>emptyList(),
+            ImmutableList.of(),
             null);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(listener);
     xdsClient.ldsWatcher.onChanged(listenerUpdate);
@@ -268,7 +267,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext1);
     callUpdateSslContext(returnedSupplier);
     XdsServerTestHelper
-        .generateListenerUpdate(xdsClient, Arrays.<Integer>asList(1234), tlsContext2,
+        .generateListenerUpdate(xdsClient, ImmutableList.of(1234), tlsContext2,
             tlsContext3, tlsContextManager);
     returnedSupplier = getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext2);
@@ -379,7 +378,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
     });
     xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
     XdsServerTestHelper
-            .generateListenerUpdate(xdsClient, Arrays.<Integer>asList(), tlsContext,
+            .generateListenerUpdate(xdsClient, ImmutableList.of(), tlsContext,
                     tlsContextForDefaultFilterChain, tlsContextManager);
     start.get(5, TimeUnit.SECONDS);
     InetAddress ipRemoteAddress = InetAddress.getByName("10.4.5.6");

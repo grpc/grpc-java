@@ -60,7 +60,6 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -90,6 +89,16 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   @Mock
   private ProtocolNegotiator mockDelegate;
   private FilterChainSelectorManager selectorManager = new FilterChainSelectorManager();
+  private static final EnvoyServerProtoData.FilterChainMatch DEFAULT_FILTER_CHAIN_MATCH =
+      EnvoyServerProtoData.FilterChainMatch.create(
+          0,
+          ImmutableList.of(),
+          ImmutableList.of(),
+          ImmutableList.of(),
+          EnvoyServerProtoData.ConnectionSourceType.ANY,
+          ImmutableList.of(),
+          ImmutableList.of(),
+          "");
   private static final HttpConnectionManager HTTP_CONNECTION_MANAGER = createRds("routing-config");
   private static final String LOCAL_IP = "10.1.2.3";  // dest
   private static final String REMOTE_IP = "10.4.2.3"; // source
@@ -188,18 +197,18 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   @Test
   public void singleFilterChainWithoutAlpn() throws Exception {
     EnvoyServerProtoData.FilterChainMatch filterChainMatch =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.DownstreamTlsContext tlsContext =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
-    EnvoyServerProtoData.FilterChain filterChain = new EnvoyServerProtoData.FilterChain(
+    EnvoyServerProtoData.FilterChain filterChain = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-foo", filterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext,
             tlsContextManager);
 
@@ -213,7 +222,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
     assertThat(sslSet.isDone()).isTrue();
-    assertThat(sslSet.get()).isEqualTo(filterChain.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(filterChain.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContext);
   }
@@ -221,28 +230,28 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
   @Test
   public void singleFilterChainWithAlpn() throws Exception {
     EnvoyServerProtoData.FilterChainMatch filterChainMatch =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.asList("managed-mtls"),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(),
+            ImmutableList.of("managed-mtls"),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.DownstreamTlsContext tlsContext =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
-    EnvoyServerProtoData.FilterChain filterChain = new EnvoyServerProtoData.FilterChain(
+    EnvoyServerProtoData.FilterChain filterChain = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-foo", filterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext,
             tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext defaultTlsContext =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-bar", null, HTTP_CONNECTION_MANAGER, defaultTlsContext,
-            tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-bar", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER, defaultTlsContext,
+        tlsContextManager);
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChain, randomConfig("no-match")),
-            defaultFilterChain.getSslContextProviderSupplier(), noopConfig));
+            defaultFilterChain.sslContextProviderSupplier(), noopConfig));
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
@@ -251,7 +260,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
-    assertThat(sslSet.get()).isEqualTo(defaultFilterChain.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(defaultFilterChain.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(defaultTlsContext);
   }
@@ -261,24 +270,24 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContextWithDestPort =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchWithDestPort =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    PORT,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.asList("managed-mtls"),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            PORT,
+            ImmutableList.of(),
+            ImmutableList.of("managed-mtls"),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainWithDestPort =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-foo", filterChainMatchWithDestPort, HTTP_CONNECTION_MANAGER,
                     tlsContextWithDestPort, tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChain defaultFilterChain =
-            new EnvoyServerProtoData.FilterChain(
-                    "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
+            EnvoyServerProtoData.FilterChain.create(
+                    "filter-chain-bar", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER,
                     tlsContextForDefaultFilterChain, tlsContextManager);
 
     ServerRoutingConfig routingConfig = ServerRoutingConfig.create(
@@ -287,7 +296,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainWithDestPort,
                 new AtomicReference<ServerRoutingConfig>(routingConfig)),
-            defaultFilterChain.getSslContextProviderSupplier(), noopConfig));
+            defaultFilterChain.sslContextProviderSupplier(), noopConfig));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
@@ -297,7 +306,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
-    assertThat(sslSet.get()).isEqualTo(defaultFilterChain.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(defaultFilterChain.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext())
             .isSameInstanceAs(tlsContextForDefaultFilterChain);
@@ -308,27 +317,27 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContextMatch =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchWithMatch =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.1.2.0", 24)),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
-    EnvoyServerProtoData.FilterChain filterChainWithMatch = new EnvoyServerProtoData.FilterChain(
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.1.2.0", 24)),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
+    EnvoyServerProtoData.FilterChain filterChainWithMatch = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-foo", filterChainMatchWithMatch, HTTP_CONNECTION_MANAGER,
             tlsContextMatch, tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+            "filter-chain-bar", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER,
             tlsContextForDefaultFilterChain, tlsContextManager);
 
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainWithMatch, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("no-match")));
+            defaultFilterChain.sslContextProviderSupplier(), randomConfig("no-match")));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
@@ -338,7 +347,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
-    assertThat(sslSet.get()).isEqualTo(filterChainWithMatch.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(filterChainWithMatch.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContextMatch);
   }
@@ -350,27 +359,27 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     // 10.2.2.0/24 doesn't match LOCAL_IP
     EnvoyServerProtoData.FilterChainMatch filterChainMatchWithMismatch =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.2.2.0", 24)),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.2.2.0", 24)),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainWithMismatch =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-foo", filterChainMatchWithMismatch, HTTP_CONNECTION_MANAGER,
                     tlsContextMismatch, tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+            "filter-chain-bar", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER,
             tlsContextForDefaultFilterChain, tlsContextManager);
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainWithMismatch, randomConfig("no-match")),
-            defaultFilterChain.getSslContextProviderSupplier(), noopConfig));
+            defaultFilterChain.sslContextProviderSupplier(), noopConfig));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
@@ -381,7 +390,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
     assertThat(sslSet.isDone()).isTrue();
-    assertThat(sslSet.get()).isEqualTo(defaultFilterChain.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(defaultFilterChain.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContextForDefaultFilterChain);
   }
@@ -393,27 +402,27 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     // 10.2.2.0/24 doesn't match LOCAL_IP
     EnvoyServerProtoData.FilterChainMatch filterChainMatch0Length =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.2.2.0", 0)),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
-    EnvoyServerProtoData.FilterChain filterChain0Length = new EnvoyServerProtoData.FilterChain(
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.2.2.0", 0)),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
+    EnvoyServerProtoData.FilterChain filterChain0Length = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-foo", filterChainMatch0Length, HTTP_CONNECTION_MANAGER,
             tlsContext0Length, tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+            "filter-chain-bar", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER,
             tlsContextForDefaultFilterChain, tlsContextManager);
 
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChain0Length, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(),
+            defaultFilterChain.sslContextProviderSupplier(),
         new AtomicReference<ServerRoutingConfig>()));
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
@@ -423,7 +432,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
-    assertThat(sslSet.get()).isEqualTo(filterChain0Length.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(filterChain0Length.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContext0Length);
   }
@@ -434,43 +443,44 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContextLessSpecific =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchLessSpecific =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.1.2.0", 24)),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.1.2.0", 24)),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-foo", filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER,
                     tlsContextLessSpecific, tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContextMoreSpecific =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchMoreSpecific =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.1.2.2", 31)),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.1.2.2", 31)),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainMoreSpecific =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-bar", filterChainMatchMoreSpecific, HTTP_CONNECTION_MANAGER,
                     tlsContextMoreSpecific,
                     tlsContextManager);
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+            "filter-chain-baz", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER, null,
+        tlsContextManager);
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainLessSpecific, randomConfig("no-match"),
                     filterChainMoreSpecific, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
+            defaultFilterChain.sslContextProviderSupplier(), randomConfig("default")));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
@@ -480,7 +490,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
-    assertThat(sslSet.get()).isEqualTo(filterChainMoreSpecific.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(filterChainMoreSpecific.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContextMoreSpecific);
   }
@@ -491,43 +501,44 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContextLessSpecific =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchLessSpecific =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-foo", filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER,
                     tlsContextLessSpecific, tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContextMoreSpecific =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchMoreSpecific =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("8.0.0.0", 5)),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("8.0.0.0", 5)),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainMoreSpecific =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-bar", filterChainMatchMoreSpecific, HTTP_CONNECTION_MANAGER,
                     tlsContextMoreSpecific,
                     tlsContextManager);
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-baz", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER, null,
+        tlsContextManager);
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainLessSpecific, randomConfig("no-match"),
                     filterChainMoreSpecific, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
+            defaultFilterChain.sslContextProviderSupplier(), randomConfig("default")));
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
@@ -536,7 +547,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
-    assertThat(sslSet.get()).isEqualTo(filterChainMoreSpecific.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(filterChainMoreSpecific.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContextMoreSpecific);
   }
@@ -547,42 +558,44 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContextLessSpecific =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchLessSpecific =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("FE80:0:0:0:0:0:0:0", 60)),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("FE80:0:0:0:0:0:0:0", 60)),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-foo", filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER,
                     tlsContextLessSpecific, tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContextMoreSpecific =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchMoreSpecific =
-        new EnvoyServerProtoData.FilterChainMatch(
+        EnvoyServerProtoData.FilterChainMatch.create(
             0,
-            Arrays.asList(new EnvoyServerProtoData.CidrRange("FE80:0000:0000:0000:0202:0:0:0", 80)),
-            Arrays.<String>asList(),
-            Arrays.<EnvoyServerProtoData.CidrRange>asList(),
+            ImmutableList.of(
+                EnvoyServerProtoData.CidrRange.create("FE80:0000:0000:0000:0202:0:0:0", 80)),
+            ImmutableList.of(),
+            ImmutableList.of(),
             EnvoyServerProtoData.ConnectionSourceType.ANY,
-            Arrays.<Integer>asList(),
-            Arrays.<String>asList(),
-            null);
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainMoreSpecific =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-bar", filterChainMatchMoreSpecific, HTTP_CONNECTION_MANAGER,
                     tlsContextMoreSpecific, tlsContextManager);
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-baz", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER, null,
+        tlsContextManager);
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainLessSpecific, randomConfig("no-match"),
                     filterChainMoreSpecific, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
+            defaultFilterChain.sslContextProviderSupplier(), randomConfig("default")));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
@@ -594,7 +607,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
-    assertThat(sslSet.get()).isEqualTo(filterChainMoreSpecific.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(filterChainMoreSpecific.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContextMoreSpecific);
   }
@@ -605,45 +618,46 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContextMoreSpecificWith2 =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchMoreSpecificWith2 =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(
-                            new EnvoyServerProtoData.CidrRange("10.1.2.0", 24),
-                            new EnvoyServerProtoData.CidrRange(LOCAL_IP, 32)),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(
+                EnvoyServerProtoData.CidrRange.create("10.1.2.0", 24),
+                EnvoyServerProtoData.CidrRange.create(LOCAL_IP, 32)),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainMoreSpecificWith2 =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-foo", filterChainMatchMoreSpecificWith2, HTTP_CONNECTION_MANAGER,
                     tlsContextMoreSpecificWith2, tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContextLessSpecific =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchLessSpecific =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.1.2.2", 31)),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.1.2.2", 31)),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-bar", filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER,
                     tlsContextLessSpecific, tlsContextManager);
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-baz", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER, null,
+        tlsContextManager);
 
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainMoreSpecificWith2, noopConfig,
                     filterChainLessSpecific, randomConfig("no-match")),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
+            defaultFilterChain.sslContextProviderSupplier(), randomConfig("default")));
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
@@ -653,7 +667,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
     assertThat(sslSet.get()).isEqualTo(
-            filterChainMoreSpecificWith2.getSslContextProviderSupplier());
+            filterChainMoreSpecificWith2.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContextMoreSpecificWith2);
   }
@@ -663,27 +677,27 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContextMismatch =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchWithMismatch =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.SAME_IP_OR_LOOPBACK,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.SAME_IP_OR_LOOPBACK,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainWithMismatch =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-foo", filterChainMatchWithMismatch, HTTP_CONNECTION_MANAGER,
                     tlsContextMismatch, tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-bar", null, HTTP_CONNECTION_MANAGER,tlsContextForDefaultFilterChain,
-            tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-bar", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER,
+        tlsContextForDefaultFilterChain, tlsContextManager);
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainWithMismatch, randomConfig("no-match")),
-            defaultFilterChain.getSslContextProviderSupplier(), noopConfig));
+            defaultFilterChain.sslContextProviderSupplier(), noopConfig));
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
 
@@ -693,7 +707,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
-    assertThat(sslSet.get()).isEqualTo(defaultFilterChain.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(defaultFilterChain.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContextForDefaultFilterChain);
   }
@@ -705,33 +719,33 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContextMatch =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchWithMatch =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.SAME_IP_OR_LOOPBACK,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
-    EnvoyServerProtoData.FilterChain filterChainWithMatch = new EnvoyServerProtoData.FilterChain(
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.SAME_IP_OR_LOOPBACK,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
+    EnvoyServerProtoData.FilterChain filterChainWithMatch = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-foo", filterChainMatchWithMatch, HTTP_CONNECTION_MANAGER, tlsContextMatch,
             tlsContextManager);
     EnvoyServerProtoData.DownstreamTlsContext tlsContextForDefaultFilterChain =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-bar", null, HTTP_CONNECTION_MANAGER, tlsContextForDefaultFilterChain,
-            tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-bar", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER,
+        tlsContextForDefaultFilterChain, tlsContextManager);
 
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainWithMatch, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
+            defaultFilterChain.sslContextProviderSupplier(), randomConfig("default")));
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
     setupChannel(LOCAL_IP, LOCAL_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
-    assertThat(sslSet.get()).isEqualTo(filterChainWithMatch.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(filterChainWithMatch.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContextMatch);
   }
@@ -745,45 +759,46 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContextMoreSpecificWith2 =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchMoreSpecificWith2 =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.<String>asList(),
-                    Arrays.asList(
-                            new EnvoyServerProtoData.CidrRange("10.4.2.0", 24),
-                            new EnvoyServerProtoData.CidrRange(REMOTE_IP, 32)),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(
+                EnvoyServerProtoData.CidrRange.create("10.4.2.0", 24),
+                EnvoyServerProtoData.CidrRange.create(REMOTE_IP, 32)),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainMoreSpecificWith2 =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-foo", filterChainMatchMoreSpecificWith2, HTTP_CONNECTION_MANAGER,
                     tlsContextMoreSpecificWith2, tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContextLessSpecific =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchLessSpecific =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.<String>asList(),
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.4.2.2", 31)),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.4.2.2", 31)),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainLessSpecific =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-bar", filterChainMatchLessSpecific, HTTP_CONNECTION_MANAGER,
                     tlsContextLessSpecific, tlsContextManager);
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-baz", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER, null,
+        tlsContextManager);
 
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainMoreSpecificWith2, noopConfig,
                     filterChainLessSpecific, randomConfig("no-match")),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
+            defaultFilterChain.sslContextProviderSupplier(), randomConfig("default")));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
@@ -791,7 +806,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
     assertThat(sslSet.get()).isEqualTo(
-            filterChainMoreSpecificWith2.getSslContextProviderSupplier());
+            filterChainMoreSpecificWith2.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContextMoreSpecificWith2);
   }
@@ -812,42 +827,42 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContext1 =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChainMatch filterChainMatch1 =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.<String>asList(),
-                    Arrays.asList(
-                            new EnvoyServerProtoData.CidrRange("10.4.2.0", 24),
-                            new EnvoyServerProtoData.CidrRange("192.168.10.2", 32)),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
-    EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(
+                EnvoyServerProtoData.CidrRange.create("10.4.2.0", 24),
+                EnvoyServerProtoData.CidrRange.create("192.168.10.2", 32)),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
+    EnvoyServerProtoData.FilterChain filterChain1 = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-foo", filterChainMatch1, HTTP_CONNECTION_MANAGER, tlsContext1,
             tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContext2 =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChainMatch filterChainMatch2 =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.<String>asList(),
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.4.2.0", 24)),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
-    EnvoyServerProtoData.FilterChain filterChain2 = new EnvoyServerProtoData.FilterChain(
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.4.2.0", 24)),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
+    EnvoyServerProtoData.FilterChain filterChain2 = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-bar", filterChainMatch2, HTTP_CONNECTION_MANAGER, tlsContext2,
             tlsContextManager);
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, null);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+            "filter-chain-baz", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER, null, null);
 
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChain1, noopConfig, filterChain2, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), noopConfig));
+            defaultFilterChain.sslContextProviderSupplier(), noopConfig));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
@@ -871,45 +886,46 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     EnvoyServerProtoData.DownstreamTlsContext tlsContextEmptySourcePorts =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchEmptySourcePorts =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.<String>asList(),
-                    Arrays.asList(
-                            new EnvoyServerProtoData.CidrRange("10.4.2.0", 24),
-                            new EnvoyServerProtoData.CidrRange("10.4.2.2", 31)),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(
+                EnvoyServerProtoData.CidrRange.create("10.4.2.0", 24),
+                EnvoyServerProtoData.CidrRange.create("10.4.2.2", 31)),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainEmptySourcePorts =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-foo", filterChainMatchEmptySourcePorts, HTTP_CONNECTION_MANAGER,
                     tlsContextEmptySourcePorts, tlsContextManager);
 
     EnvoyServerProtoData.DownstreamTlsContext tlsContextSourcePortMatch =
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT2", "VA2");
     EnvoyServerProtoData.FilterChainMatch filterChainMatchSourcePortMatch =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.<String>asList(),
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.4.2.2", 31)),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.asList(7000, 15000),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.4.2.2", 31)),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(7000, 15000),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChainSourcePortMatch =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-bar", filterChainMatchSourcePortMatch, HTTP_CONNECTION_MANAGER,
                     tlsContextSourcePortMatch, tlsContextManager);
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-baz", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-baz", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER, null,
+        tlsContextManager);
 
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChainEmptySourcePorts, randomConfig("no-match"),
                     filterChainSourcePortMatch, noopConfig),
-            defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
+            defaultFilterChain.sslContextProviderSupplier(), randomConfig("default")));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
@@ -918,7 +934,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
-    assertThat(sslSet.get()).isEqualTo(filterChainSourcePortMatch.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(filterChainSourcePortMatch.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContextSourcePortMatch);
   }
@@ -947,16 +963,16 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
 
     // has dest port and specific prefix ranges: gets eliminated in step 1
     EnvoyServerProtoData.FilterChainMatch filterChainMatch1 =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    PORT,
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    Arrays.<String>asList(),
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange(REMOTE_IP, 32)),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
-    EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
+        EnvoyServerProtoData.FilterChainMatch.create(
+            PORT,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create(REMOTE_IP, 32)),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
+    EnvoyServerProtoData.FilterChain filterChain1 = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-1", filterChainMatch1, HTTP_CONNECTION_MANAGER, tlsContext1,
             tlsContextManager);
 
@@ -964,94 +980,95 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
 
     // has single prefix range: and less specific source prefix range: gets eliminated in step 4
     EnvoyServerProtoData.FilterChainMatch filterChainMatch2 =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.1.2.0", 30)),
-                    Arrays.<String>asList(),
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.4.0.0", 16)),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
-    EnvoyServerProtoData.FilterChain filterChain2 = new EnvoyServerProtoData.FilterChain(
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.1.2.0", 30)),
+            ImmutableList.of(),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.4.0.0", 16)),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
+    EnvoyServerProtoData.FilterChain filterChain2 = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-2", filterChainMatch2, HTTP_CONNECTION_MANAGER, tlsContext2,
             tlsContextManager);
 
     // has prefix ranges with one not matching and source type local: gets eliminated in step 3
     EnvoyServerProtoData.FilterChainMatch filterChainMatch3 =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(
-                            new EnvoyServerProtoData.CidrRange("192.168.2.0", 24),
-                            new EnvoyServerProtoData.CidrRange("10.1.2.0", 30)),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.SAME_IP_OR_LOOPBACK,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
-    EnvoyServerProtoData.FilterChain filterChain3 = new EnvoyServerProtoData.FilterChain(
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(
+                EnvoyServerProtoData.CidrRange.create("192.168.2.0", 24),
+                EnvoyServerProtoData.CidrRange.create("10.1.2.0", 30)),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.SAME_IP_OR_LOOPBACK,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
+    EnvoyServerProtoData.FilterChain filterChain3 = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-3", filterChainMatch3, HTTP_CONNECTION_MANAGER, tlsContext3,
             tlsContextManager);
 
     // has prefix ranges with both matching and source type external but non matching source port:
     // gets eliminated in step 5
     EnvoyServerProtoData.FilterChainMatch filterChainMatch4 =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(
-                            new EnvoyServerProtoData.CidrRange("10.1.0.0", 16),
-                            new EnvoyServerProtoData.CidrRange("10.1.2.0", 30)),
-                    Arrays.<String>asList(),
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.4.2.0", 24)),
-                    EnvoyServerProtoData.ConnectionSourceType.EXTERNAL,
-                    Arrays.asList(16000, 9000),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(
+                EnvoyServerProtoData.CidrRange.create("10.1.0.0", 16),
+                EnvoyServerProtoData.CidrRange.create("10.1.2.0", 30)),
+            ImmutableList.of(),
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.4.2.0", 24)),
+            EnvoyServerProtoData.ConnectionSourceType.EXTERNAL,
+            ImmutableList.of(16000, 9000),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChain4 =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-4", filterChainMatch4, HTTP_CONNECTION_MANAGER, tlsContext4,
                     tlsContextManager);
 
     // has prefix ranges with both matching and source type external and matching source port: this
     // gets selected
     EnvoyServerProtoData.FilterChainMatch filterChainMatch5 =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(
-                            new EnvoyServerProtoData.CidrRange("10.1.0.0", 16),
-                            new EnvoyServerProtoData.CidrRange("10.1.2.0", 30)),
-                    Arrays.<String>asList(),
-                    Arrays.asList(
-                            new EnvoyServerProtoData.CidrRange("10.4.2.0", 24),
-                            new EnvoyServerProtoData.CidrRange("192.168.2.0", 24)),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.asList(15000, 8000),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(
+                EnvoyServerProtoData.CidrRange.create("10.1.0.0", 16),
+                EnvoyServerProtoData.CidrRange.create("10.1.2.0", 30)),
+            ImmutableList.of(),
+            ImmutableList.of(
+                EnvoyServerProtoData.CidrRange.create("10.4.2.0", 24),
+                EnvoyServerProtoData.CidrRange.create("192.168.2.0", 24)),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(15000, 8000),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChain5 =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-5", filterChainMatch5, HTTP_CONNECTION_MANAGER, tlsContext5,
                     tlsContextManager);
 
     // has prefix range with prefixLen of 29: gets eliminated in step 2
     EnvoyServerProtoData.FilterChainMatch filterChainMatch6 =
-            new EnvoyServerProtoData.FilterChainMatch(
-                    0,
-                    Arrays.asList(new EnvoyServerProtoData.CidrRange("10.1.2.0", 29)),
-                    Arrays.<String>asList(),
-                    Arrays.<EnvoyServerProtoData.CidrRange>asList(),
-                    EnvoyServerProtoData.ConnectionSourceType.ANY,
-                    Arrays.<Integer>asList(),
-                    Arrays.<String>asList(),
-                    null);
+        EnvoyServerProtoData.FilterChainMatch.create(
+            0,
+            ImmutableList.of(EnvoyServerProtoData.CidrRange.create("10.1.2.0", 29)),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            EnvoyServerProtoData.ConnectionSourceType.ANY,
+            ImmutableList.of(),
+            ImmutableList.of(),
+            "");
     EnvoyServerProtoData.FilterChain filterChain6 =
-            new EnvoyServerProtoData.FilterChain(
+            EnvoyServerProtoData.FilterChain.create(
                     "filter-chain-6", filterChainMatch6, HTTP_CONNECTION_MANAGER, tlsContext6,
                     tlsContextManager);
 
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
-            "filter-chain-7", null, HTTP_CONNECTION_MANAGER, null, tlsContextManager);
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
+        "filter-chain-7", DEFAULT_FILTER_CHAIN_MATCH, HTTP_CONNECTION_MANAGER, null,
+        tlsContextManager);
 
     Map<FilterChain, AtomicReference<ServerRoutingConfig>> map = new HashMap<>();
     map.put(filterChain1, randomConfig("1"));
@@ -1061,7 +1078,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     map.put(filterChain5, noopConfig);
     map.put(filterChain6, randomConfig("6"));
     selectorManager.updateSelector(new FilterChainSelector(
-            map, defaultFilterChain.getSslContextProviderSupplier(), randomConfig("default")));
+            map, defaultFilterChain.sslContextProviderSupplier(), randomConfig("default")));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
@@ -1071,7 +1088,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
-    assertThat(sslSet.get()).isEqualTo(filterChain5.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(filterChain5.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext()).isSameInstanceAs(tlsContext5);
   }
@@ -1087,54 +1104,54 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT3", "ROOTCA");
 
     EnvoyServerProtoData.FilterChainMatch filterChainMatch1 =
-        new EnvoyServerProtoData.FilterChainMatch(
+        EnvoyServerProtoData.FilterChainMatch.create(
             0 /* destinationPort */,
-            Collections.singletonList(
-                    new EnvoyServerProtoData.CidrRange("10.1.0.0", 16)) /* prefixRange */,
-            Arrays.asList("managed-mtls", "h2") /* applicationProtocol */,
-            Collections.<EnvoyServerProtoData.CidrRange>emptyList() /* sourcePrefixRanges */,
+            ImmutableList.of(
+                    EnvoyServerProtoData.CidrRange.create("10.1.0.0", 16)) /* prefixRange */,
+            ImmutableList.of("managed-mtls", "h2") /* applicationProtocol */,
+            ImmutableList.of() /* sourcePrefixRanges */,
             EnvoyServerProtoData.ConnectionSourceType.ANY /* sourceType */,
-            Collections.<Integer>emptyList() /* sourcePorts */,
-            Arrays.asList("server1", "server2") /* serverNames */,
+            ImmutableList.of() /* sourcePorts */,
+            ImmutableList.of("server1", "server2") /* serverNames */,
             "tls" /* transportProtocol */);
 
     EnvoyServerProtoData.FilterChainMatch filterChainMatch2 =
-        new EnvoyServerProtoData.FilterChainMatch(
+        EnvoyServerProtoData.FilterChainMatch.create(
             0 /* destinationPort */,
-            Collections.singletonList(
-                    new EnvoyServerProtoData.CidrRange("10.0.0.0", 8)) /* prefixRange */,
-            Collections.<String>emptyList() /* applicationProtocol */,
-            Collections.<EnvoyServerProtoData.CidrRange>emptyList() /* sourcePrefixRanges */,
+            ImmutableList.of(
+                    EnvoyServerProtoData.CidrRange.create("10.0.0.0", 8)) /* prefixRange */,
+            ImmutableList.of() /* applicationProtocol */,
+            ImmutableList.of() /* sourcePrefixRanges */,
             EnvoyServerProtoData.ConnectionSourceType.ANY /* sourceType */,
-            Collections.<Integer>emptyList() /* sourcePorts */,
-            Collections.<String>emptyList() /* serverNames */,
+            ImmutableList.of() /* sourcePorts */,
+            ImmutableList.of() /* serverNames */,
             "" /* transportProtocol */);
 
     EnvoyServerProtoData.FilterChainMatch defaultFilterChainMatch =
-        new EnvoyServerProtoData.FilterChainMatch(
+        EnvoyServerProtoData.FilterChainMatch.create(
             0 /* destinationPort */,
-            Collections.<EnvoyServerProtoData.CidrRange>emptyList() /* prefixRange */,
-            Collections.<String>emptyList() /* applicationProtocol */,
-            Collections.<EnvoyServerProtoData.CidrRange>emptyList() /* sourcePrefixRanges */,
+            ImmutableList.of() /* prefixRange */,
+            ImmutableList.of() /* applicationProtocol */,
+            ImmutableList.of() /* sourcePrefixRanges */,
             EnvoyServerProtoData.ConnectionSourceType.ANY /* sourceType */,
-            Collections.<Integer>emptyList() /* sourcePorts */,
-            Collections.<String>emptyList() /* serverNames */,
+            ImmutableList.of() /* sourcePorts */,
+            ImmutableList.of() /* serverNames */,
             "" /* transportProtocol */);
 
-    EnvoyServerProtoData.FilterChain filterChain1 = new EnvoyServerProtoData.FilterChain(
+    EnvoyServerProtoData.FilterChain filterChain1 = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-foo", filterChainMatch1, HTTP_CONNECTION_MANAGER, tlsContext1,
             mock(TlsContextManager.class));
-    EnvoyServerProtoData.FilterChain filterChain2 = new EnvoyServerProtoData.FilterChain(
+    EnvoyServerProtoData.FilterChain filterChain2 = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-bar", filterChainMatch2, HTTP_CONNECTION_MANAGER, tlsContext2,
             mock(TlsContextManager.class));
 
-    EnvoyServerProtoData.FilterChain defaultFilterChain = new EnvoyServerProtoData.FilterChain(
+    EnvoyServerProtoData.FilterChain defaultFilterChain = EnvoyServerProtoData.FilterChain.create(
             "filter-chain-baz", defaultFilterChainMatch, HTTP_CONNECTION_MANAGER, tlsContext3,
             mock(TlsContextManager.class));
 
     selectorManager.updateSelector(new FilterChainSelector(
             ImmutableMap.of(filterChain1, randomConfig("1"), filterChain2, randomConfig("2")),
-            defaultFilterChain.getSslContextProviderSupplier(), noopConfig));
+            defaultFilterChain.sslContextProviderSupplier(), noopConfig));
 
     FilterChainMatchingHandler filterChainMatchingHandler =
             new FilterChainMatchingHandler(grpcHandler, selectorManager, mockDelegate);
@@ -1143,7 +1160,7 @@ public class FilterChainMatchingProtocolNegotiatorsTest {
     setupChannel(LOCAL_IP, REMOTE_IP, 15000, filterChainMatchingHandler);
     pipeline.fireUserEventTriggered(event);
     channel.runPendingTasks();
-    assertThat(sslSet.get()).isEqualTo(defaultFilterChain.getSslContextProviderSupplier());
+    assertThat(sslSet.get()).isEqualTo(defaultFilterChain.sslContextProviderSupplier());
     assertThat(routingSettable.get()).isEqualTo(noopConfig);
     assertThat(sslSet.get().getTlsContext().getCommonTlsContext()
             .getTlsCertificateCertificateProviderInstance()

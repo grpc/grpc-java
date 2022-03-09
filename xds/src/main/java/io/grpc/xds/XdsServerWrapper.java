@@ -24,7 +24,6 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.InternalServerInterceptors;
@@ -196,7 +195,7 @@ final class XdsServerWrapper extends Server {
     }
     String replacement = listenerAddress;
     if (listenerTemplate.startsWith(XDSTP_SCHEME)) {
-      replacement = UrlEscapers.urlFragmentEscaper().escape(replacement);
+      replacement = XdsClient.percentEncodePath(replacement);
     }
     discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", replacement));
   }
@@ -387,8 +386,8 @@ final class XdsServerWrapper extends Server {
             releaseSuppliersInFlight();
             pendingRds.clear();
           }
-          filterChains = update.listener().getFilterChains();
-          defaultFilterChain = update.listener().getDefaultFilterChain();
+          filterChains = update.listener().filterChains();
+          defaultFilterChain = update.listener().defaultFilterChain();
           List<FilterChain> allFilterChains = filterChains;
           if (defaultFilterChain != null) {
             allFilterChains = new ArrayList<>(filterChains);
@@ -396,7 +395,7 @@ final class XdsServerWrapper extends Server {
           }
           Set<String> allRds = new HashSet<>();
           for (FilterChain filterChain : allFilterChains) {
-            HttpConnectionManager hcm = filterChain.getHttpConnectionManager();
+            HttpConnectionManager hcm = filterChain.httpConnectionManager();
             if (hcm.virtualHosts() == null) {
               RouteDiscoveryState rdsState = routeDiscoveryStates.get(hcm.rdsName());
               if (rdsState == null) {
@@ -479,7 +478,7 @@ final class XdsServerWrapper extends Server {
       }
       FilterChainSelector selector = new FilterChainSelector(
           Collections.unmodifiableMap(filterChainRouting),
-          defaultFilterChain == null ? null : defaultFilterChain.getSslContextProviderSupplier(),
+          defaultFilterChain == null ? null : defaultFilterChain.sslContextProviderSupplier(),
           defaultFilterChain == null ? new AtomicReference<ServerRoutingConfig>() :
               generateRoutingConfig(defaultFilterChain));
       List<SslContextProviderSupplier> toRelease = getSuppliersInUse();
@@ -492,7 +491,7 @@ final class XdsServerWrapper extends Server {
     }
 
     private AtomicReference<ServerRoutingConfig> generateRoutingConfig(FilterChain filterChain) {
-      HttpConnectionManager hcm = filterChain.getHttpConnectionManager();
+      HttpConnectionManager hcm = filterChain.httpConnectionManager();
       if (hcm.virtualHosts() != null) {
         ImmutableMap<Route, ServerInterceptor> interceptors = generatePerRouteInterceptors(
                 hcm.httpFilterConfigs(), hcm.virtualHosts());
@@ -603,8 +602,8 @@ final class XdsServerWrapper extends Server {
       FilterChainSelector selector = filterChainSelectorManager.getSelectorToUpdateSelector();
       if (selector != null) {
         for (FilterChain f: selector.getRoutingConfigs().keySet()) {
-          if (f.getSslContextProviderSupplier() != null) {
-            toRelease.add(f.getSslContextProviderSupplier());
+          if (f.sslContextProviderSupplier() != null) {
+            toRelease.add(f.sslContextProviderSupplier());
           }
         }
         SslContextProviderSupplier defaultSupplier =
@@ -619,13 +618,13 @@ final class XdsServerWrapper extends Server {
     private void releaseSuppliersInFlight() {
       SslContextProviderSupplier supplier;
       for (FilterChain filterChain : filterChains) {
-        supplier = filterChain.getSslContextProviderSupplier();
+        supplier = filterChain.sslContextProviderSupplier();
         if (supplier != null) {
           supplier.close();
         }
       }
       if (defaultFilterChain != null
-              && (supplier = defaultFilterChain.getSslContextProviderSupplier()) != null) {
+              && (supplier = defaultFilterChain.sslContextProviderSupplier()) != null) {
         supplier.close();
       }
     }
@@ -690,20 +689,20 @@ final class XdsServerWrapper extends Server {
 
       private void updateRdsRoutingConfig() {
         for (FilterChain filterChain : savedRdsRoutingConfigRef.keySet()) {
-          if (resourceName.equals(filterChain.getHttpConnectionManager().rdsName())) {
+          if (resourceName.equals(filterChain.httpConnectionManager().rdsName())) {
             ServerRoutingConfig updatedRoutingConfig;
             if (savedVirtualHosts == null) {
               updatedRoutingConfig = ServerRoutingConfig.FAILING_ROUTING_CONFIG;
             } else {
               ImmutableMap<Route, ServerInterceptor> updatedInterceptors =
                   generatePerRouteInterceptors(
-                      filterChain.getHttpConnectionManager().httpFilterConfigs(),
+                      filterChain.httpConnectionManager().httpFilterConfigs(),
                       savedVirtualHosts);
               updatedRoutingConfig = ServerRoutingConfig.create(savedVirtualHosts,
                   updatedInterceptors);
             }
             logger.log(Level.FINEST, "Updating filter chain {0} rds routing config: {1}",
-                new Object[]{filterChain.getName(), updatedRoutingConfig});
+                new Object[]{filterChain.name(), updatedRoutingConfig});
             savedRdsRoutingConfigRef.get(filterChain).set(updatedRoutingConfig);
           }
         }
