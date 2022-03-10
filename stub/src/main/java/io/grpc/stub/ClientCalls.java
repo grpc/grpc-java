@@ -58,8 +58,8 @@ public final class ClientCalls {
 
   @VisibleForTesting
   static boolean rejectRunnableOnExecutor =
-      !Strings.isNullOrEmpty(System.getenv("GRPC_CLIENT_CALL_REJECT_RUNNABLE"))
-          && Boolean.parseBoolean(System.getenv("GRPC_CLIENT_CALL_REJECT_RUNNABLE"));
+      Strings.isNullOrEmpty(System.getenv("GRPC_CLIENT_CALL_REJECT_RUNNABLE"))
+          || Boolean.parseBoolean(System.getenv("GRPC_CLIENT_CALL_REJECT_RUNNABLE"));
 
   // Prevent instantiation
   private ClientCalls() {}
