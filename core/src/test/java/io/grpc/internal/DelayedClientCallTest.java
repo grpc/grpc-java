@@ -31,12 +31,11 @@ import io.grpc.Deadline;
 import io.grpc.ForwardingTestUtil;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.concurrent.Executor;
-
-import io.grpc.StatusException;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
