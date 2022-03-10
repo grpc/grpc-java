@@ -21,6 +21,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.util.concurrent.MoreExecutors;
@@ -34,6 +35,8 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.concurrent.Executor;
+
+import io.grpc.StatusException;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -120,5 +123,74 @@ public class DelayedClientCallTest {
     realCallListener.onClose(Status.DATA_LOSS, trailer);
     verify(listener).onClose(statusCaptor.capture(), eq(trailer));
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.DATA_LOSS);
+  }
+
+  @Test
+  public void setCallThenStart() {
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    Runnable r = delayedClientCall.setCall(mockRealCall);
+    assertThat(r).isNull();
+    delayedClientCall.start(listener, new Metadata());
+    delayedClientCall.request(1);
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
+    verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
+    Listener<Integer> realCallListener = listenerCaptor.getValue();
+    verify(mockRealCall).request(1);
+    realCallListener.onMessage(1);
+    verify(listener).onMessage(1);
+  }
+
+  @Test
+  public void startThenSetCall() {
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    delayedClientCall.start(listener, new Metadata());
+    delayedClientCall.request(1);
+    Runnable r = delayedClientCall.setCall(mockRealCall);
+    assertThat(r).isNotNull();
+    r.run();
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
+    verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
+    Listener<Integer> realCallListener = listenerCaptor.getValue();
+    verify(mockRealCall).request(1);
+    realCallListener.onMessage(1);
+    verify(listener).onMessage(1);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void cancelThenSetCall() {
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    delayedClientCall.start(listener, new Metadata());
+    delayedClientCall.request(1);
+    delayedClientCall.cancel("cancel", new StatusException(Status.CANCELLED));
+    Runnable r = delayedClientCall.setCall(mockRealCall);
+    assertThat(r).isNull();
+    verify(mockRealCall, never()).start(any(Listener.class), any(Metadata.class));
+    verify(mockRealCall, never()).request(1);
+    verify(mockRealCall, never()).cancel(any(), any());
+    verify(listener).onClose(any(), any());
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void setCallThenCancel() {
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    delayedClientCall.start(listener, new Metadata());
+    delayedClientCall.request(1);
+    Runnable r = delayedClientCall.setCall(mockRealCall);
+    assertThat(r).isNotNull();
+    r.run();
+    delayedClientCall.cancel("cancel", new StatusException(Status.CANCELLED));
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
+    verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
+    Listener<Integer> realCallListener = listenerCaptor.getValue();
+    verify(mockRealCall).request(1);
+    verify(mockRealCall).cancel(any(), any());
+    realCallListener.onClose(Status.CANCELLED, null);
+    verify(listener).onClose(Status.CANCELLED, null);
   }
 }
