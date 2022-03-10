@@ -16,6 +16,7 @@
 
 package io.grpc.grpclb;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
@@ -28,22 +29,29 @@ final class GrpclbConfig {
   private final Mode mode;
   @Nullable
   private final String serviceName;
+  private final long fallbackTimeoutMs;
 
-  private GrpclbConfig(Mode mode, @Nullable String serviceName) {
+  private GrpclbConfig(Mode mode, @Nullable String serviceName, long fallbackTimeoutMs) {
     this.mode = checkNotNull(mode, "mode");
     this.serviceName = serviceName;
+    this.fallbackTimeoutMs = fallbackTimeoutMs;
   }
 
   static GrpclbConfig create(Mode mode) {
-    return create(mode, null);
+    return create(mode, null, GrpclbState.FALLBACK_TIMEOUT_MS);
   }
 
-  static GrpclbConfig create(Mode mode, @Nullable String serviceName) {
-    return new GrpclbConfig(mode, serviceName);
+  static GrpclbConfig create(Mode mode, @Nullable String serviceName, long fallbackTimeoutMs) {
+    checkArgument(fallbackTimeoutMs > 0, "Invalid timeout (%s)", fallbackTimeoutMs);
+    return new GrpclbConfig(mode, serviceName, fallbackTimeoutMs);
   }
 
   Mode getMode() {
     return mode;
+  }
+
+  long getFallbackTimeoutMs() {
+    return fallbackTimeoutMs;
   }
 
   /**
@@ -65,12 +73,14 @@ final class GrpclbConfig {
       return false;
     }
     GrpclbConfig that = (GrpclbConfig) o;
-    return mode == that.mode && Objects.equal(serviceName, that.serviceName);
+    return mode == that.mode
+        && Objects.equal(serviceName, that.serviceName)
+        && fallbackTimeoutMs == that.fallbackTimeoutMs;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(mode, serviceName);
+    return Objects.hashCode(mode, serviceName, fallbackTimeoutMs);
   }
 
   @Override
@@ -78,6 +88,7 @@ final class GrpclbConfig {
     return MoreObjects.toStringHelper(this)
         .add("mode", mode)
         .add("serviceName", serviceName)
+        .add("fallbackTimeoutMs", fallbackTimeoutMs)
         .toString();
   }
 }

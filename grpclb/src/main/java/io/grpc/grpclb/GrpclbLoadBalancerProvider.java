@@ -89,6 +89,13 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
     }
     String serviceName = JsonUtil.getString(rawLoadBalancingPolicyConfig, "serviceName");
     List<?> rawChildPolicies = JsonUtil.getList(rawLoadBalancingPolicyConfig, "childPolicy");
+    Long initialFallbackTimeoutNs =
+        JsonUtil.getStringAsDuration(rawLoadBalancingPolicyConfig, "initialFallbackTimeout");
+    long timeoutMs = GrpclbState.FALLBACK_TIMEOUT_MS;
+    if (initialFallbackTimeoutNs != null) {
+      timeoutMs = initialFallbackTimeoutNs / 1000000;
+    }
+
     List<LbConfig> childPolicies = null;
     if (rawChildPolicies != null) {
       childPolicies =
@@ -97,7 +104,8 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
     }
 
     if (childPolicies == null || childPolicies.isEmpty()) {
-      return ConfigOrError.fromConfig(GrpclbConfig.create(DEFAULT_MODE, serviceName));
+      return ConfigOrError.fromConfig(
+          GrpclbConfig.create(DEFAULT_MODE, serviceName, GrpclbState.FALLBACK_TIMEOUT_MS));
     }
 
     List<String> policiesTried = new ArrayList<>();
@@ -105,9 +113,11 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
       String childPolicyName = childPolicy.getPolicyName();
       switch (childPolicyName) {
         case "round_robin":
-          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.ROUND_ROBIN, serviceName));
+          return ConfigOrError.fromConfig(
+              GrpclbConfig.create(Mode.ROUND_ROBIN, serviceName, timeoutMs));
         case "pick_first":
-          return ConfigOrError.fromConfig(GrpclbConfig.create(Mode.PICK_FIRST, serviceName));
+          return ConfigOrError.fromConfig(
+              GrpclbConfig.create(Mode.PICK_FIRST, serviceName, timeoutMs));
         default:
           policiesTried.add(childPolicyName);
       }
