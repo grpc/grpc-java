@@ -48,6 +48,7 @@ final class ObservabilityConfig {
     parse(System.getenv(CONFIG_ENV_VAR_NAME));
   }
 
+  @SuppressWarnings("unchecked")
   void parse(String config) throws IOException {
     checkArgument(config != null, CONFIG_ENV_VAR_NAME + " value is null!");
     Map<String, ?> map = (Map<String, ?>) JsonParser.parse(config);
