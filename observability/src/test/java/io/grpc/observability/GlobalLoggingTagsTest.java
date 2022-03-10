@@ -23,7 +23,6 @@ import com.google.common.io.Files;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -32,6 +31,21 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class GlobalLoggingTagsTest {
+  private static String FILE_CONTENTS =
+      "12:perf_event:/kubepods/burstable/podc43b6442-0725-4fb8-bb1c-d17f5122155c/"
+          + "fe61ca6482b58f4a9831d08d6ea15db25f9fd19b4be19a54df8c6c0eab8742b7\n"
+          + "11:freezer:/kubepods/burstable/podc43b6442-0725-4fb8-bb1c-d17f5122155c/"
+          + "fe61ca6482b58f4a9831d08d6ea15db25f9fd19b4be19a54df8c6c0eab8742b7\n"
+          + "2:rdma:/\n"
+          + "1:name=systemd:/kubepods/burstable/podc43b6442-0725-4fb8-bb1c-d17f5122155c/"
+          + "fe61ca6482b58f4a9831d08d6ea15db25f9fd19b4be19a54df8c6c0eab8742b7\n"
+          + "0::/system.slice/containerd.service\n";
+
+  private static String FILE_CONTENTS_LAST_LINE =
+      "0::/system.slice/containerd.service\n"
+          + "6442-0725-4fb8-bb1c-d17f5122155cslslsl/fe61ca6482b58f4a9831d08d6ea15db25f\n"
+          + "\n"
+          + "12:perf_event:/kubepods/burstable/podc43b6442-0725-4fb8-bb1c-d17f5122155c/e19a54df\n";
 
   @Rule public TemporaryFolder namespaceFolder = new TemporaryFolder();
   @Rule public TemporaryFolder hostnameFolder = new TemporaryFolder();
@@ -39,11 +53,11 @@ public class GlobalLoggingTagsTest {
 
   @Test
   public void testPopulateFromMap() {
-    HashMap<String, String> customTags = new HashMap<>();
+    ImmutableMap.Builder<String, String> customTags = ImmutableMap.builder();
     GlobalLoggingTags.populateFromMap(
         ImmutableMap.of("GRPC_OBSERVABILITY_KEY1", "VALUE1", "ANOTHER_KEY2", "VALUE2",
             "GRPC_OBSERVABILITY_KEY3", "VALUE3"), customTags);
-    assertThat(customTags).containsExactly("KEY1", "VALUE1", "KEY3", "VALUE3");
+    assertThat(customTags.build()).containsExactly("KEY1", "VALUE1", "KEY3", "VALUE3");
   }
 
   @Test
@@ -78,27 +92,11 @@ public class GlobalLoggingTagsTest {
     Files.write("test-hostname2".getBytes(StandardCharsets.UTF_8), hostnameFile);
     Files.write(FILE_CONTENTS.getBytes(StandardCharsets.UTF_8), cgroupFile);
 
-    HashMap<String, String> customTags = new HashMap<>();
-    GlobalLoggingTags.populateKubernetesValues(customTags, namespaceFile.getAbsolutePath(),
+    ImmutableMap.Builder<String, String> customTags = ImmutableMap.builder();
+    GlobalLoggingTags.populateFromKubernetesValues(customTags, namespaceFile.getAbsolutePath(),
         hostnameFile.getAbsolutePath(), cgroupFile.getAbsolutePath());
-    assertThat(customTags).containsExactly("container_id",
+    assertThat(customTags.build()).containsExactly("container_id",
         "fe61ca6482b58f4a9831d08d6ea15db25f9fd19b4be19a54df8c6c0eab8742b7", "namespace_name",
         "test-namespace1", "pod_name", "test-hostname2");
   }
-
-  private static String FILE_CONTENTS =
-      "12:perf_event:/kubepods/burstable/podc43b6442-0725-4fb8-bb1c-d17f5122155c/"
-          + "fe61ca6482b58f4a9831d08d6ea15db25f9fd19b4be19a54df8c6c0eab8742b7\n"
-          + "11:freezer:/kubepods/burstable/podc43b6442-0725-4fb8-bb1c-d17f5122155c/"
-          + "fe61ca6482b58f4a9831d08d6ea15db25f9fd19b4be19a54df8c6c0eab8742b7\n"
-          + "2:rdma:/\n"
-          + "1:name=systemd:/kubepods/burstable/podc43b6442-0725-4fb8-bb1c-d17f5122155c/"
-          + "fe61ca6482b58f4a9831d08d6ea15db25f9fd19b4be19a54df8c6c0eab8742b7\n"
-          + "0::/system.slice/containerd.service\n";
-
-  private static String FILE_CONTENTS_LAST_LINE =
-      "0::/system.slice/containerd.service\n"
-          + "6442-0725-4fb8-bb1c-d17f5122155cslslsl/fe61ca6482b58f4a9831d08d6ea15db25f\n"
-          + "\n"
-          + "12:perf_event:/kubepods/burstable/podc43b6442-0725-4fb8-bb1c-d17f5122155c/e19a54df\n";
 }

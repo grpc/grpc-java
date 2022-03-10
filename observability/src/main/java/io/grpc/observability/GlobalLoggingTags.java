@@ -24,13 +24,10 @@ import com.google.auth.http.HttpTransportFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.observability.metadata.MetadataConfig;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.function.Function;
@@ -45,22 +42,25 @@ final class GlobalLoggingTags {
   private final Map<String, String> tags;
 
   GlobalLoggingTags() {
-    HashMap<String, String> temp = new HashMap<>();
-    populate(temp);
-    tags = ImmutableMap.copyOf(temp);
+    ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
+    populate(builder);
+    tags = builder.build();
   }
 
   Map<String, String> getTags() {
     return tags;
   }
 
-  @VisibleForTesting static void populateFromMetadataServer(HashMap<String, String> customTags) {
+  @VisibleForTesting
+  static void populateFromMetadataServer(ImmutableMap.Builder<String, String> customTags) {
     MetadataConfig metadataConfig = new MetadataConfig(new DefaultHttpTransportFactory());
+    metadataConfig.init();
     customTags.putAll(metadataConfig.getAllValues());
   }
 
   @VisibleForTesting
-  static void populateKubernetesValues(HashMap<String, String> customTags, String namespaceFile,
+  static void populateFromKubernetesValues(ImmutableMap.Builder<String, String> customTags,
+      String namespaceFile,
       String hostnameFile, String cgroupFile) {
     // namespace name: contents of file /var/run/secrets/kubernetes.io/serviceaccount/namespace
     populateFromFileContents(customTags, "namespace_name",
@@ -69,13 +69,13 @@ final class GlobalLoggingTags {
     // pod_name: hostname i.e. contents of /etc/hostname
     populateFromFileContents(customTags, "pod_name", hostnameFile, (value) -> value);
 
-    // container_id: parsed from /proc/self/cgroup
+    // container_id: parsed from /proc/self/cgroup . Note: only works for Linux-based containers
     populateFromFileContents(customTags, "container_id", cgroupFile,
         (value) -> getContainerIdFromFileContents(value));
   }
 
   @VisibleForTesting
-  static void populateFromFileContents(HashMap<String, String> customTags, String key,
+  static void populateFromFileContents(ImmutableMap.Builder<String, String> customTags, String key,
       String filePath, Function<String, String> parser) {
     String value = parser.apply(readFileContents(filePath));
     if (value != null) {
@@ -83,6 +83,13 @@ final class GlobalLoggingTags {
     }
   }
 
+  /**
+   * Parse from a line such as this.
+   * 1:name=systemd:/kubepods/burstable/podf5143dd2/de67c4419b20924eaa141813
+   *
+   * @param value file contents
+   * @return container-id parsed ("podf5143dd2/de67c4419b20924eaa141813" from the above snippet)
+   */
   @VisibleForTesting static String getContainerIdFromFileContents(String value) {
     if (value != null) {
       try (Scanner scanner = new Scanner(value)) {
@@ -116,12 +123,13 @@ final class GlobalLoggingTags {
     return null;
   }
 
-  private static void populateFromEnvironmentVars(HashMap<String, String> customTags) {
+  private static void populateFromEnvironmentVars(ImmutableMap.Builder<String, String> customTags) {
     populateFromMap(System.getenv(), customTags);
   }
 
   @VisibleForTesting
-  static void populateFromMap(Map<String, String> map, final HashMap<String, String> customTags) {
+  static void populateFromMap(Map<String, String> map,
+      final ImmutableMap.Builder<String, String> customTags) {
     checkNotNull(map);
     map.forEach((k, v) -> {
       if (k.startsWith(ENV_KEY_PREFIX)) {
@@ -131,10 +139,11 @@ final class GlobalLoggingTags {
     });
   }
 
-  static void populate(HashMap<String, String> customTags) {
+  static void populate(ImmutableMap.Builder<String, String> customTags) {
     populateFromEnvironmentVars(customTags);
     populateFromMetadataServer(customTags);
-    populateKubernetesValues(customTags, "/var/run/secrets/kubernetes.io/serviceaccount/namespace",
+    populateFromKubernetesValues(customTags,
+        "/var/run/secrets/kubernetes.io/serviceaccount/namespace",
         "/etc/hostname", "/proc/self/cgroup");
   }
 

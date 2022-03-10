@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.observability.metadata;
+package io.grpc.observability;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.when;
@@ -22,6 +22,7 @@ import static org.mockito.Mockito.when;
 import com.google.api.client.testing.http.MockHttpTransport;
 import com.google.api.client.testing.http.MockLowLevelHttpResponse;
 import com.google.auth.http.HttpTransportFactory;
+import io.grpc.observability.MetadataConfig;
 import java.io.IOException;
 import org.junit.Before;
 import org.junit.Test;
@@ -41,7 +42,7 @@ public class MetadataConfigTest {
   }
 
   @Test
-  public void testGetAllValues() throws IOException {
+  public void testGetAttribute() throws IOException {
     MockHttpTransport.Builder builder = new MockHttpTransport.Builder();
     MockLowLevelHttpResponse response = new MockLowLevelHttpResponse();
     response.setContent("foo");
@@ -49,6 +50,7 @@ public class MetadataConfigTest {
     MockHttpTransport httpTransport = builder.build();
     when(httpTransportFactory.create()).thenReturn(httpTransport);
     MetadataConfig metadataConfig = new MetadataConfig(httpTransportFactory);
+    metadataConfig.init();
     String val = metadataConfig.getAttribute("instance/attributes/cluster-name");
     assertThat(val).isEqualTo("foo");
   }

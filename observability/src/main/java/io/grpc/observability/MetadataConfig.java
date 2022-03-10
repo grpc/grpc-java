@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.observability.metadata;
+package io.grpc.observability;
 
 import com.google.api.client.http.GenericUrl;
 import com.google.api.client.http.HttpHeaders;
@@ -25,52 +25,55 @@ import com.google.api.client.http.HttpStatusCodes;
 import com.google.api.client.http.HttpTransport;
 import com.google.auth.http.HttpTransportFactory;
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.Internal;
+import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /** Class to read Google Metadata Server values. */
-@Internal
-public final class MetadataConfig {
+final class MetadataConfig {
   private static final Logger logger = Logger.getLogger(MetadataConfig.class.getName());
 
   private static final int TIMEOUT_MS = 5000;
   private static final String METADATA_URL = "http://metadata.google.internal/computeMetadata/v1/";
-  HttpRequestFactory requestFactory;
+  private HttpRequestFactory requestFactory;
+  private HttpTransportFactory transportFactory;
 
   @VisibleForTesting public MetadataConfig(HttpTransportFactory transportFactory) {
+    this.transportFactory = transportFactory;
+
+  }
+
+  void init() {
     HttpTransport httpTransport = transportFactory.create();
     requestFactory = httpTransport.createRequestFactory();
   }
 
   /** gets all the values from the MDS we need to set in our logging tags. */
-  public Map<String, String> getAllValues() {
-    HashMap<String, String> map = new HashMap<>();
-    //addValueFor(map, "instance/hostname", "GCE_INSTANCE_HOSTNAME");
-    addValueFor(map, "instance/id", "gke_node_id");
-    //addValueFor(map, "instance/zone", "GCE_INSTANCE_ZONE");
-    addValueFor(map, "project/project-id", "project_id");
-    addValueFor(map, "project/numeric-project-id", "project_numeric_id");
-    addValueFor(map, "instance/attributes/cluster-name", "cluster_name");
-    addValueFor(map, "instance/attributes/cluster-uid", "cluster_uid");
-    addValueFor(map, "instance/attributes/cluster-location", "location");
+  ImmutableMap<String, String> getAllValues() {
+    ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
+    //addValueFor(builder, "instance/hostname", "GCE_INSTANCE_HOSTNAME");
+    addValueFor(builder, "instance/id", "gke_node_id");
+    //addValueFor(builder, "instance/zone", "GCE_INSTANCE_ZONE");
+    addValueFor(builder, "project/project-id", "project_id");
+    addValueFor(builder, "project/numeric-project-id", "project_numeric_id");
+    addValueFor(builder, "instance/attributes/cluster-name", "cluster_name");
+    addValueFor(builder, "instance/attributes/cluster-uid", "cluster_uid");
+    addValueFor(builder, "instance/attributes/cluster-location", "location");
     try {
       requestFactory.getTransport().shutdown();
     } catch (IOException e) {
       logger.log(Level.FINE, "Calling HttpTransport.shutdown()", e);
     }
-    return map;
+    return builder.build();
   }
 
-  void addValueFor(Map<String, String> map, String attribute, String key) {
+  void addValueFor(ImmutableMap.Builder<String, String> builder, String attribute, String key) {
     try {
       String value = getAttribute(attribute);
       if (value != null) {
-        map.put(key, value);
+        builder.put(key, value);
       }
     } catch (IOException e) {
       logger.log(Level.FINE, "Calling getAttribute('" + attribute +  "')", e);
