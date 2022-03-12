@@ -31,7 +31,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
-import io.grpc.observability.interceptors.GcpLogHelper.GcpLogSinkWriter;
+import io.grpc.observability.interceptors.LogHelper.LogSinkWriter;
 import io.grpc.observability.logging.Sink;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Internal
 public final class InternalLoggingChannelInterceptor implements ClientInterceptor {
-  private final GcpLogSinkWriter writer;
+  private final LogSinkWriter writer;
 
   public interface Factory {
     ClientInterceptor create();
@@ -64,7 +64,7 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
   }
 
   private InternalLoggingChannelInterceptor(Sink sink) {
-    this.writer = new GcpLogSinkWriter(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
+    this.writer = new LogSinkWriter(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
   }
 
   @Override
@@ -76,7 +76,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
     final String authority = next.authority();
     final String serviceName = method.getServiceName();
     final String methodName = method.getBareMethodName();
-    final Deadline deadline = GcpLogHelper.min(callOptions.getDeadline(),
+    // Get the stricter deadline to calculate the timeout once the call starts
+    final Deadline deadline = LogHelper.min(callOptions.getDeadline(),
         Context.current().getDeadline());
 
     return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
@@ -84,10 +85,12 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
       @Override
       public void start(Listener<RespT> responseListener, Metadata headers) {
         // Event: EventType.GRPC_CALL_REQUEST_HEADER
+        // The timeout should reflect the time remaining when the call is started, so compute
+        // remaining time here.
         final Duration timeout = deadline == null ? null
             : Durations.fromNanos(deadline.timeRemaining(TimeUnit.NANOSECONDS));
 
-        writer.logClientHeader(
+        writer.logRequestHeader(
             seq.getAndIncrement(),
             serviceName,
             methodName,
@@ -117,14 +120,14 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
               @Override
               public void onHeaders(Metadata headers) {
                 // Event: EventType.GRPC_CALL_RESPONSE_HEADER
-                writer.logServerHeader(
+                writer.logResponseHeader(
                     seq.getAndIncrement(),
                     serviceName,
                     methodName,
                     headers,
                     EventLogger.LOGGER_CLIENT,
                     rpcId,
-                    GcpLogHelper.getPeerAddress(getAttributes()));
+                    LogHelper.getPeerAddress(getAttributes()));
                 super.onHeaders(headers);
               }
 
@@ -139,7 +142,7 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                     trailers,
                     EventLogger.LOGGER_CLIENT,
                     rpcId,
-                    GcpLogHelper.getPeerAddress(getAttributes()));
+                    LogHelper.getPeerAddress(getAttributes()));
                 super.onClose(status, trailers);
               }
             };

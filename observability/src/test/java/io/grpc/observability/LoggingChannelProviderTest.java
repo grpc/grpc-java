@@ -58,17 +58,16 @@ public class LoggingChannelProviderTest {
   public void initTwiceCausesException() {
     ManagedChannelProvider prevProvider = ManagedChannelProvider.provider();
     assertThat(prevProvider).isNotInstanceOf(LoggingChannelProvider.class);
-    Sink initializedSink = GcpLogSink.init(null);
-    LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl(initializedSink));
+    Sink mockSink = mock(GcpLogSink.class);
+    LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl(mockSink));
     assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
     try {
       LoggingChannelProvider.init(
-          new InternalLoggingChannelInterceptor.FactoryImpl(initializedSink));
+          new InternalLoggingChannelInterceptor.FactoryImpl(mockSink));
       fail("should have failed for calling init() again");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("LoggingChannelProvider already initialized!");
     }
-    GcpLogSink.getInstance().close();
     LoggingChannelProvider.finish();
     assertThat(ManagedChannelProvider.provider()).isSameInstanceAs(prevProvider);
   }
@@ -132,7 +131,6 @@ public class LoggingChannelProviderTest {
   }
 
   private static class NoopInterceptor implements ClientInterceptor {
-
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions, Channel next) {

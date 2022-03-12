@@ -16,6 +16,7 @@
 
 package io.grpc.observability.interceptors;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.same;
@@ -25,10 +26,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.protobuf.Duration;
+import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
+import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -36,7 +41,7 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.NoopClientCall;
-import io.grpc.observability.interceptors.GcpLogHelper.ByteArrayMarshaller;
+import io.grpc.observability.interceptors.LogHelper.ByteArrayMarshaller;
 import io.grpc.observability.logging.GcpLogSink;
 import io.grpc.observability.logging.Sink;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
@@ -45,6 +50,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.Charset;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
@@ -89,7 +95,7 @@ public class InternalLoggingChannelInterceptorTest {
   }
 
   @Test
-  public void internalLoggingChannelInterceptor()  throws Exception {
+  public void internalLoggingChannelInterceptor() throws Exception {
     Channel channel = new Channel() {
       @Override
       public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
@@ -236,5 +242,90 @@ public class InternalLoggingChannelInterceptorTest {
           expectedCancelEvent);
       cancelCalled.get(1, TimeUnit.SECONDS);
     }
+  }
+
+  @Test
+  public void clientDeadLineLogged_deadlineSetViaCallOption() {
+    MethodDescriptor<byte[], byte[]> method =
+        MethodDescriptor.<byte[], byte[]>newBuilder()
+            .setType(MethodType.UNKNOWN)
+            .setFullMethodName("service/method")
+            .setRequestMarshaller(BYTEARRAY_MARSHALLER)
+            .setResponseMarshaller(BYTEARRAY_MARSHALLER)
+            .build();
+    @SuppressWarnings("unchecked")
+    ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
+
+    ClientCall<byte[], byte[]> interceptedLoggingCall =
+        factory.create()
+            .interceptCall(
+                method,
+                CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS),
+                new Channel() {
+                  @Override
+                  public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+                      MethodDescriptor<RequestT, ResponseT> methodDescriptor,
+                      CallOptions callOptions) {
+                    return new NoopClientCall<>();
+                  }
+
+                  @Override
+                  public String authority() {
+                    return "the-authority";
+                  }
+                });
+    interceptedLoggingCall.start(mockListener, new Metadata());
+    ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
+    verify(mockSink, times(1)).write(captor.capture());
+    Duration timeout = captor.getValue().getTimeout();
+    assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+  }
+
+  @Test
+  public void clientDeadlineLogged_deadlineSetViaContext() throws Exception {
+    final SettableFuture<ClientCall<byte[], byte[]>> callFuture = SettableFuture.create();
+    Context.current()
+        .withDeadline(
+            Deadline.after(1, TimeUnit.SECONDS), Executors.newSingleThreadScheduledExecutor())
+        .run(new Runnable() {
+          @Override
+          public void run() {
+            MethodDescriptor<byte[], byte[]> method =
+                MethodDescriptor.<byte[], byte[]>newBuilder()
+                    .setType(MethodType.UNKNOWN)
+                    .setFullMethodName("service/method")
+                    .setRequestMarshaller(BYTEARRAY_MARSHALLER)
+                    .setResponseMarshaller(BYTEARRAY_MARSHALLER)
+                    .build();
+
+            callFuture.set(
+                factory.create()
+                    .interceptCall(
+                        method,
+                        CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS),
+                        new Channel() {
+                          @Override
+                          public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+                              MethodDescriptor<RequestT, ResponseT> methodDescriptor,
+                              CallOptions callOptions) {
+                            return new NoopClientCall<>();
+                          }
+
+                          @Override
+                          public String authority() {
+                            return "the-authority";
+                          }
+                        }));
+          }
+        });
+    @SuppressWarnings("unchecked")
+    ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
+    callFuture.get().start(mockListener, new Metadata());
+    ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
+    verify(mockSink, times(1)).write(captor.capture());
+    Duration timeout = captor.getValue().getTimeout();
+    assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
   }
 }

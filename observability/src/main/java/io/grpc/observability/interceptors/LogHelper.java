@@ -53,8 +53,9 @@ import javax.annotation.Nullable;
 /**
  * Helper class for GCP observability logging.
  */
-final class GcpLogHelper {
-  private static final Logger logger = Logger.getLogger(GcpLogHelper.class.getName());
+class LogHelper {
+  private static final Logger logger = Logger.getLogger(LogHelper.class.getName());
+  // TODO(dnvindhya): Define it in one places(TBD) to make it easily accessible from everywhere
   static final Metadata.Key<byte[]> STATUS_DETAILS_KEY =
       Metadata.Key.of(
           "grpc-status-details-bin",
@@ -63,11 +64,11 @@ final class GcpLogHelper {
   /**
    *  Class for proto related helper methods.
    */
-  static final class GcpLogSinkWriter {
+  static final class LogSinkWriter {
     private final Sink sink;
     private final TimeProvider timeProvider;
 
-    GcpLogSinkWriter(Sink sink, TimeProvider timeProvider) {
+    LogSinkWriter(Sink sink, TimeProvider timeProvider) {
       this.sink = sink;
       this.timeProvider = timeProvider;
     }
@@ -79,17 +80,19 @@ final class GcpLogHelper {
 
 
     /**
-     * Logs the client header.
+     * Logs the request header.
+     * Binary logging equivalent of logClientHeader.
      */
-    void logClientHeader(
+    void logRequestHeader(
         long seqId,
         String serviceName,
         String methodName,
-        @Nullable String authority,
+        String authority,
         @Nullable Duration timeout,
         Metadata metadata,
         GrpcLogRecord.EventLogger eventLogger,
         String rpcId,
+        // null on client side
         @Nullable SocketAddress peerAddress) {
       checkNotNull(serviceName, "serviceName");
       checkNotNull(methodName, "methodName");
@@ -103,29 +106,28 @@ final class GcpLogHelper {
           .setSequenceId(seqId)
           .setServiceName(serviceName)
           .setMethodName(methodName)
+          .setAuthority(authority)
           .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
           .setEventLogger(eventLogger)
           .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
           .setMetadata(pair.proto)
           .setPayloadSize(pair.size)
           .setRpcId(rpcId);
-      if (authority != null) {
-        logEntryBuilder.setAuthority(authority);
-      }
       if (timeout != null) {
         logEntryBuilder.setTimeout(timeout);
       }
       if (peerAddress != null) {
-        logEntryBuilder.setPeerAddress(socketToProto(peerAddress));
+        logEntryBuilder.setPeerAddress(socketAddressToProto(peerAddress));
       }
-      logger.log(Level.FINE, "Writing Request Header to GcpLogSink");
+      logger.log(Level.FINEST, "Writing Request Header to GcpLogSink");
       sink.write(logEntryBuilder.build());
     }
 
     /**
-     * Logs the server header.
+     * Logs the reponse header.
+     * Binary logging equivalent of logServerHeader.
      */
-    void logServerHeader(
+    void logResponseHeader(
         long seqId,
         String serviceName,
         String methodName,
@@ -152,9 +154,9 @@ final class GcpLogHelper {
           .setPayloadSize(pair.size)
           .setRpcId(rpcId);
       if (peerAddress != null) {
-        logEntryBuilder.setPeerAddress(socketToProto(peerAddress));
+        logEntryBuilder.setPeerAddress(socketAddressToProto(peerAddress));
       }
-      logger.log(Level.FINE, "Writing Response Header to GcpLogSink");
+      logger.log(Level.FINEST, "Writing Response Header to GcpLogSink");
       sink.write(logEntryBuilder.build());
     }
 
@@ -199,9 +201,9 @@ final class GcpLogHelper {
         logEntryBuilder.setStatusDetails(ByteString.copyFrom(statusDetailBytes));
       }
       if (peerAddress != null) {
-        logEntryBuilder.setPeerAddress(socketToProto(peerAddress));
+        logEntryBuilder.setPeerAddress(socketAddressToProto(peerAddress));
       }
-      logger.log(Level.FINE, "Writing Server Trailer to GcpLogSink");
+      logger.log(Level.FINEST, "Writing Server Trailer to GcpLogSink");
       sink.write(logEntryBuilder.build());
     }
 
@@ -239,7 +241,7 @@ final class GcpLogHelper {
           .setEventLogger(eventLogger)
           .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
           .setRpcId(rpcId);
-      logger.log(Level.FINE, "Writing RPC message to GcpLogSink");
+      logger.log(Level.FINEST, "Writing RPC message to GcpLogSink");
       sink.write(logEntryBuilder.build());
     }
 
@@ -264,7 +266,7 @@ final class GcpLogHelper {
           .setEventLogger(eventLogger)
           .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
           .setRpcId(rpcId);
-      logger.log(Level.FINE, "Writing Half Close event to GcpLogSink");
+      logger.log(Level.FINEST, "Writing Half Close event to GcpLogSink");
       sink.write(logEntryBuilder.build());
     }
 
@@ -289,7 +291,7 @@ final class GcpLogHelper {
           .setEventLogger(eventLogger)
           .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
           .setRpcId(rpcId);
-      logger.log(Level.FINE, "Writing Cancel event to GcpLogSink");
+      logger.log(Level.FINEST, "Writing Cancel event to GcpLogSink");
       sink.write(logEntryBuilder.build());
     }
   }
@@ -364,23 +366,27 @@ final class GcpLogHelper {
   static PayloadBuilder<GrpcLogRecord.Metadata.Builder> createMetadataProto(Metadata metadata) {
     checkNotNull(metadata, "metadata");
     GrpcLogRecord.Metadata.Builder metadataBuilder = GrpcLogRecord.Metadata.newBuilder();
+    // This code is tightly coupled with io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata's
+    // implementation
     byte[][] serialized = InternalMetadata.serialize(metadata);
-    int bytesAfterAdd = 0;
+    int totalMetadataBytes = 0;
     if (serialized != null) {
-      int curBytes = 0;
+      int singleMetadataEntryBytes = 0;
+      // Calculate bytes for each GrpcLogRecord.Metadata.MetadataEntry
       for (int i = 0; i < serialized.length; i += 2) {
         String key = new String(serialized[i], Charsets.UTF_8);
         byte[] value = serialized[i + 1];
-        bytesAfterAdd = curBytes + key.length() + value.length;
+        singleMetadataEntryBytes = totalMetadataBytes + key.length() + value.length;
         metadataBuilder.addEntryBuilder()
             .setKey(key)
             .setValue(ByteString.copyFrom(value));
+        totalMetadataBytes = singleMetadataEntryBytes;
       }
     }
-    return new PayloadBuilder<>(metadataBuilder, bytesAfterAdd);
+    return new PayloadBuilder<>(metadataBuilder, totalMetadataBytes);
   }
 
-  static Address socketToProto(SocketAddress address) {
+  static Address socketAddressToProto(SocketAddress address) {
     checkNotNull(address, "address");
     Address.Builder builder = Address.newBuilder();
     if (address instanceof InetSocketAddress) {

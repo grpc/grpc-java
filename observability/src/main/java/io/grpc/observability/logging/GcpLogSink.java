@@ -22,8 +22,8 @@ import com.google.cloud.logging.Logging;
 import com.google.cloud.logging.LoggingOptions;
 import com.google.cloud.logging.Payload.JsonPayload;
 import com.google.cloud.logging.Severity;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.internal.JsonParser;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
@@ -37,51 +37,45 @@ import java.util.logging.Logger;
  * Sink for Google Cloud Logging.
  */
 public class GcpLogSink implements Sink {
-
-  private static final Logger logger = Logger.getLogger(Sink.class.getName());
+  private final Logger logger = Logger.getLogger(GcpLogSink.class.getName());
 
   private static final String SERVICE_TO_EXCLUDE = "google.logging.v2.LoggingServiceV2";
   private static final String DEFAULT_LOG_NAME = "grpc";
-
-  private static GcpLogSink gcpLogSinkInstance = null;
-  private final LoggingOptions gcpLoggingOptions;
+  private static volatile GcpLogSink gcpLogSinkInstance = null;
   private final Logging gcpLoggingClient;
 
   /**
    * Constructor for custom sink.
-   *
-   * @param destinationProjectId cloud project id to write logs
    */
-  private GcpLogSink(String destinationProjectId) {
-    if (Strings.isNullOrEmpty(destinationProjectId)) {
-      gcpLoggingOptions = LoggingOptions.getDefaultInstance();
-    } else {
-      gcpLoggingOptions = LoggingOptions.newBuilder().setProjectId(destinationProjectId).build();
+  private GcpLogSink(String projectId) {
+    LoggingOptions.Builder builder = LoggingOptions.newBuilder();
+    if (!Strings.isNullOrEmpty(projectId)) {
+      builder.setProjectId(projectId);
     }
-    gcpLoggingClient = gcpLoggingOptions.getService();
+    gcpLoggingClient =  builder.build().getService();
   }
 
-  /**
-   * Initialize GcpLogSInk.
-   *
-   * @param projectId cloud project id to write logs
-   */
-  // TODO(dnvindhya) read the projectId value from config instead of taking
-  // it as an argument
-  public static synchronized GcpLogSink init(String projectId) {
-    if (gcpLogSinkInstance != null) {
-      throw new IllegalStateException("GcpLogSink already initialized");
-    }
-    gcpLogSinkInstance = new GcpLogSink(projectId);
-    return gcpLogSinkInstance;
+  private GcpLogSink(Logging client) {
+    gcpLoggingClient = client;
+  }
+
+  @VisibleForTesting
+  static void setInstance(Logging loggingClient) {
+    gcpLogSinkInstance = new GcpLogSink(loggingClient);
   }
 
   /**
    * Retrieves a single instance of GcpLogSink.
+   *
+   * @param destinationProjectId cloud project id to write logs
    */
-  public static GcpLogSink getInstance() {
+  public static GcpLogSink getInstance(String destinationProjectId) {
     if (gcpLogSinkInstance == null) {
-      throw new IllegalStateException("GcpLogSink not initialized");
+      synchronized (GcpLogSink.class) {
+        if (gcpLogSinkInstance == null) {
+          gcpLogSinkInstance = new GcpLogSink(destinationProjectId);
+        }
+      }
     }
     return gcpLogSinkInstance;
   }
@@ -113,7 +107,7 @@ public class GcpLogSink implements Sink {
 
   @SuppressWarnings("unchecked")
   private Map<String, Object> protoToMapConverter(GrpcLogRecord logProto)
-      throws InvalidProtocolBufferException, IOException {
+      throws IOException {
     JsonFormat.Printer printer = JsonFormat.printer().preservingProtoFieldNames();
     String recordJson = printer.print(logProto);
     return (Map<String, Object>) JsonParser.parse(recordJson);
@@ -148,8 +142,6 @@ public class GcpLogSink implements Sink {
       gcpLoggingClient.close();
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Caught exception while closing", e);
-    } finally {
-      gcpLogSinkInstance = null;
     }
   }
 }

@@ -16,6 +16,7 @@
 
 package io.grpc.observability.interceptors;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -32,8 +33,8 @@ import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
-import io.grpc.observability.interceptors.GcpLogHelper.GcpLogSinkWriter;
-import io.grpc.observability.interceptors.GcpLogHelper.PayloadBuilder;
+import io.grpc.observability.interceptors.LogHelper.LogSinkWriter;
+import io.grpc.observability.interceptors.LogHelper.PayloadBuilder;
 import io.grpc.observability.logging.GcpLogSink;
 import io.grpc.observability.logging.Sink;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
@@ -52,9 +53,12 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Tests for {@link GcpLogHelper}. */
+/**
+ * Tests for {@link LogHelper}.
+ */
 @RunWith(JUnit4.class)
-public class GcpLogHelperTest {
+public class LogHelperTest {
+
   private static final Charset US_ASCII = Charset.forName("US-ASCII");
   private static final String DATA_A = "aaaaaaaaa";
   private static final String DATA_B = "bbbbbbbbb";
@@ -84,8 +88,9 @@ public class GcpLogHelperTest {
           .setValue(ByteString.copyFrom(DATA_C.getBytes(US_ASCII)))
           .build();
 
+
   private final Metadata nonEmptyMetadata = new Metadata();
-  private final int nonEmptyMetadataSize = 10;
+  private final int nonEmptyMetadataSize = 30;
   private final Sink sink = mock(GcpLogSink.class);
   private final Timestamp timestamp
       = Timestamp.newBuilder().setSeconds(9876).setNanos(54321).build();
@@ -95,19 +100,18 @@ public class GcpLogHelperTest {
       return TimeUnit.SECONDS.toNanos(9876) + 54321;
     }
   };
-  private final GcpLogSinkWriter sinkWriter =
-      new GcpLogSinkWriter(
+  private final LogSinkWriter sinkWriter =
+      new LogSinkWriter(
           sink,
           timeProvider);
   private final byte[] message = new byte[100];
-  private SocketAddress peer;
+
 
   @Before
   public void setUp() throws Exception {
     nonEmptyMetadata.put(KEY_A, DATA_A);
     nonEmptyMetadata.put(KEY_B, DATA_B);
     nonEmptyMetadata.put(KEY_C, DATA_C);
-    peer = new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 1234);
   }
 
   @Test
@@ -122,7 +126,7 @@ public class GcpLogHelperTest {
             .setAddress("127.0.0.1")
             .setIpPort(12345)
             .build(),
-        GcpLogHelper.socketToProto(socketAddress));
+        LogHelper.socketAddressToProto(socketAddress));
   }
 
   @Test
@@ -138,7 +142,7 @@ public class GcpLogHelperTest {
             .setAddress("2001:db8::2:1") // RFC 5952 section 4: ipv6 canonical form required
             .setIpPort(12345)
             .build(),
-        GcpLogHelper.socketToProto(socketAddress));
+        LogHelper.socketAddressToProto(socketAddress));
   }
 
   @Test
@@ -154,7 +158,7 @@ public class GcpLogHelperTest {
             .setType(Address.Type.TYPE_UNKNOWN)
             .setAddress("some-socket-address")
             .build(),
-        GcpLogHelper.socketToProto(unknownSocket));
+        LogHelper.socketAddressToProto(unknownSocket));
   }
 
   @Test
@@ -163,7 +167,7 @@ public class GcpLogHelperTest {
         GrpcLogRecord.newBuilder()
             .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
             .setMetadata(
-                    GrpcLogRecord.Metadata.getDefaultInstance())
+                GrpcLogRecord.Metadata.getDefaultInstance())
             .build(),
         metadataToProtoTestHelper(
             EventType.GRPC_CALL_REQUEST_HEADER, new Metadata()));
@@ -175,12 +179,12 @@ public class GcpLogHelperTest {
         GrpcLogRecord.newBuilder()
             .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
             .setMetadata(
-                    GrpcLogRecord.Metadata
-                        .newBuilder()
-                        .addEntry(ENTRY_A)
-                        .addEntry(ENTRY_B)
-                        .addEntry(ENTRY_C)
-                        .build())
+                GrpcLogRecord.Metadata
+                    .newBuilder()
+                    .addEntry(ENTRY_A)
+                    .addEntry(ENTRY_B)
+                    .addEntry(ENTRY_C)
+                    .build())
             .setPayloadSize(nonEmptyMetadataSize)
             .build(),
         metadataToProtoTestHelper(
@@ -188,7 +192,7 @@ public class GcpLogHelperTest {
   }
 
   @Test
-  public void logClientHeader() throws Exception {
+  public void logRequestHeader() throws Exception {
     long seqId = 1;
     String serviceName = "service";
     String methodName = "method";
@@ -216,7 +220,7 @@ public class GcpLogHelperTest {
 
     // logged on client
     {
-      sinkWriter.logClientHeader(
+      sinkWriter.logRequestHeader(
           seqId,
           serviceName,
           methodName,
@@ -231,7 +235,7 @@ public class GcpLogHelperTest {
 
     // logged on server
     {
-      sinkWriter.logClientHeader(
+      sinkWriter.logRequestHeader(
           seqId,
           serviceName,
           methodName,
@@ -243,32 +247,32 @@ public class GcpLogHelperTest {
           peerAddress);
       verify(sink).write(
           base.toBuilder()
-              .setPeerAddress(GcpLogHelper.socketToProto(peerAddress))
+              .setPeerAddress(LogHelper.socketAddressToProto(peerAddress))
               .setEventLogger(EventLogger.LOGGER_SERVER)
               .build());
     }
 
-    //authority is null
-    {
-      sinkWriter.logClientHeader(
-          seqId,
-          serviceName,
-          methodName,
-          null,
-          timeout,
-          nonEmptyMetadata,
-          EventLogger.LOGGER_CLIENT,
-          rpcId,
-          null);
-      verify(sink).write(
-          base.toBuilder()
-              .clearAuthority()
-              .build());
-    }
+    // //authority is null
+    // {
+    //   sinkWriter.logRequestHeader(
+    //       seqId,
+    //       serviceName,
+    //       methodName,
+    //       null,
+    //       timeout,
+    //       nonEmptyMetadata,
+    //       EventLogger.LOGGER_CLIENT,
+    //       rpcId,
+    //       null);
+    //   verify(sink).write(
+    //       base.toBuilder()
+    //           .clearAuthority()
+    //           .build());
+    // }
 
     // timeout is null
     {
-      sinkWriter.logClientHeader(
+      sinkWriter.logRequestHeader(
           seqId,
           serviceName,
           methodName,
@@ -286,7 +290,7 @@ public class GcpLogHelperTest {
 
     // peerAddress is not null (error on client)
     try {
-      sinkWriter.logClientHeader(
+      sinkWriter.logRequestHeader(
           seqId,
           serviceName,
           methodName,
@@ -298,12 +302,12 @@ public class GcpLogHelperTest {
           peerAddress);
       fail();
     } catch (IllegalArgumentException expected) {
-      // noop
+      assertThat(expected).hasMessageThat().contains("peerAddress can only be specified by server");
     }
   }
 
   @Test
-  public void logServerHeader() throws Exception {
+  public void logResponseHeader() throws Exception {
     long seqId = 1;
     String serviceName = "service";
     String methodName = "method";
@@ -323,12 +327,12 @@ public class GcpLogHelperTest {
             .setEventLogger(EventLogger.LOGGER_CLIENT)
             .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
             .setRpcId(rpcId);
-    builder.setPeerAddress(GcpLogHelper.socketToProto(peerAddress));
+    builder.setPeerAddress(LogHelper.socketAddressToProto(peerAddress));
     GrpcLogRecord base = builder.build();
 
     // logged on client
     {
-      sinkWriter.logServerHeader(
+      sinkWriter.logResponseHeader(
           seqId,
           serviceName,
           methodName,
@@ -341,7 +345,7 @@ public class GcpLogHelperTest {
 
     // logged on server
     {
-      sinkWriter.logServerHeader(
+      sinkWriter.logResponseHeader(
           seqId,
           serviceName,
           methodName,
@@ -358,7 +362,7 @@ public class GcpLogHelperTest {
 
     // peerAddress is not null (error on server)
     try {
-      sinkWriter.logServerHeader(
+      sinkWriter.logResponseHeader(
           seqId,
           serviceName,
           methodName,
@@ -368,7 +372,8 @@ public class GcpLogHelperTest {
           peerAddress);
       fail();
     } catch (IllegalArgumentException expected) {
-      // noop
+      assertThat(expected).hasMessageThat()
+          .contains("peerAddress can only be specified for client");
     }
   }
 
@@ -396,7 +401,7 @@ public class GcpLogHelperTest {
             .setStatusCode(Status.INTERNAL.getCode().value())
             .setStatusMessage("test description")
             .setRpcId(rpcId);
-    builder.setPeerAddress(GcpLogHelper.socketToProto(peerAddress));
+    builder.setPeerAddress(LogHelper.socketAddressToProto(peerAddress));
     GrpcLogRecord base = builder.build();
 
     // logged on client
@@ -431,7 +436,7 @@ public class GcpLogHelperTest {
               .build());
     }
 
-    // peer address in null
+    // peer address is null
     {
       sinkWriter.logTrailer(
           seqId,
@@ -474,14 +479,14 @@ public class GcpLogHelperTest {
     String rpcId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
 
     GrpcLogRecord.Builder builder = GrpcLogRecord.newBuilder()
-            .setTimestamp(timestamp)
-            .setSequenceId(seqId)
-            .setServiceName(serviceName)
-            .setMethodName(methodName)
-            .setEventType(EventType.GRPC_CALL_REQUEST_MESSAGE)
-            .setEventLogger(EventLogger.LOGGER_CLIENT)
-            .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
-            .setRpcId(rpcId);
+        .setTimestamp(timestamp)
+        .setSequenceId(seqId)
+        .setServiceName(serviceName)
+        .setMethodName(methodName)
+        .setEventType(EventType.GRPC_CALL_REQUEST_MESSAGE)
+        .setEventLogger(EventLogger.LOGGER_CLIENT)
+        .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
+        .setRpcId(rpcId);
     GrpcLogRecord base = builder.build();
     // request message
     {
@@ -544,11 +549,12 @@ public class GcpLogHelperTest {
   }
 
   @Test
-  public void getPeerAddressTest() {
-    assertNull(GcpLogHelper.getPeerAddress(Attributes.EMPTY));
+  public void getPeerAddressTest() throws Exception {
+    SocketAddress peer = new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 1234);
+    assertNull(LogHelper.getPeerAddress(Attributes.EMPTY));
     assertSame(
         peer,
-        GcpLogHelper.getPeerAddress(
+        LogHelper.getPeerAddress(
             Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, peer).build()));
   }
 
@@ -556,7 +562,7 @@ public class GcpLogHelperTest {
       EventType type, Metadata metadata) {
     GrpcLogRecord.Builder builder = GrpcLogRecord.newBuilder();
     PayloadBuilder<GrpcLogRecord.Metadata.Builder> pair
-        = GcpLogHelper.createMetadataProto(metadata);
+        = LogHelper.createMetadataProto(metadata);
     builder.setMetadata(pair.proto);
     builder.setPayloadSize(pair.size);
     builder.setEventType(type);
