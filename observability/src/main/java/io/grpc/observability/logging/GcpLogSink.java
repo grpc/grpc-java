@@ -60,7 +60,7 @@ public class GcpLogSink implements Sink {
   }
 
   @VisibleForTesting
-  static void setInstance(Logging loggingClient) {
+  public static void setInstance(Logging loggingClient) {
     gcpLogSinkInstance = new GcpLogSink(loggingClient);
   }
 

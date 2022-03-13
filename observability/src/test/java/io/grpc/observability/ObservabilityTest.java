@@ -18,7 +18,10 @@ package io.grpc.observability;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
 
+import com.google.cloud.logging.Logging;
+import io.grpc.observability.logging.GcpLogSink;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -28,6 +31,8 @@ public class ObservabilityTest {
   
   @Test
   public void initFinish() {
+    Logging loggingClient = mock(Logging.class);
+    GcpLogSink.setInstance(loggingClient);
     Observability.grpcInit();
     try {
       Observability.grpcInit();
@@ -38,7 +43,7 @@ public class ObservabilityTest {
     Observability.grpcFinish();
     try {
       Observability.grpcFinish();
-      fail("should have failed for calling grpcFinit() on uninitialized");
+      fail("should have failed for calling grpcFinish() on uninitialized");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("Observability not initialized!");
     }

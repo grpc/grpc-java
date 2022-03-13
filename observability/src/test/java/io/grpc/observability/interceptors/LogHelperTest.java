@@ -252,24 +252,6 @@ public class LogHelperTest {
               .build());
     }
 
-    // //authority is null
-    // {
-    //   sinkWriter.logRequestHeader(
-    //       seqId,
-    //       serviceName,
-    //       methodName,
-    //       null,
-    //       timeout,
-    //       nonEmptyMetadata,
-    //       EventLogger.LOGGER_CLIENT,
-    //       rpcId,
-    //       null);
-    //   verify(sink).write(
-    //       base.toBuilder()
-    //           .clearAuthority()
-    //           .build());
-    // }
-
     // timeout is null
     {
       sinkWriter.logRequestHeader(
