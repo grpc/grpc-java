@@ -65,8 +65,7 @@ public class DelayedClientCallTest {
   public void allMethodsForwarded() throws Exception {
     DelayedClientCall<String, Integer> delayedClientCall =
         new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null);
-    delayedClientCall.setCall(mockRealCall);
-    delayedClientCall.start(listener, new Metadata());
+    callMeMaybe(delayedClientCall.setCall(mockRealCall));
     ForwardingTestUtil.testMethodsForwarded(
         ClientCall.class,
         mockRealCall,
@@ -105,7 +104,7 @@ public class DelayedClientCallTest {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
         callExecutor, fakeClock.getScheduledExecutorService(), Deadline.after(10, SECONDS));
     delayedClientCall.start(listener, new Metadata());
-    delayedClientCall.setCall(mockRealCall);
+    callMeMaybe(delayedClientCall.setCall(mockRealCall));
     ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
     verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
     Listener<Integer> realCallListener = listenerCaptor.getValue();
@@ -128,8 +127,7 @@ public class DelayedClientCallTest {
   public void setCallThenStart() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
         callExecutor, fakeClock.getScheduledExecutorService(), null);
-    Runnable r = delayedClientCall.setCall(mockRealCall);
-    assertThat(r).isNull();
+    callMeMaybe(delayedClientCall.setCall(mockRealCall));
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
     ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(null);
@@ -191,5 +189,11 @@ public class DelayedClientCallTest {
     verify(mockRealCall).cancel(any(), any());
     realCallListener.onClose(Status.CANCELLED, null);
     verify(listener).onClose(Status.CANCELLED, null);
+  }
+
+  private void callMeMaybe(Runnable r) {
+    if (r != null) {
+      r.run();
+    }
   }
 }

@@ -1107,10 +1107,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
           context.detach(previous);
         }
         Runnable toRun = setCall(realCall);
-        if (toRun != null) {
-          getCallExecutor(callOptions).execute(toRun);
+        if (toRun == null) {
+          syncContext.execute(new PendingCallRemoval());
+        } else {
+          getCallExecutor(callOptions).execute(new Runnable() {
+            @Override
+            public void run() {
+              toRun.run();
+              syncContext.execute(new PendingCallRemoval());
+            }
+          });
         }
-        syncContext.execute(new PendingCallRemoval());
       }
 
       @Override
