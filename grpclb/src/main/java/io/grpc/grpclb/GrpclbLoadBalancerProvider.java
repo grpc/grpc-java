@@ -105,7 +105,7 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
 
     if (childPolicies == null || childPolicies.isEmpty()) {
       return ConfigOrError.fromConfig(
-          GrpclbConfig.create(DEFAULT_MODE, serviceName, GrpclbState.FALLBACK_TIMEOUT_MS));
+          GrpclbConfig.create(DEFAULT_MODE, serviceName, timeoutMs));
     }
 
     List<String> policiesTried = new ArrayList<>();
