@@ -35,13 +35,22 @@ final class ObservabilityConfig {
   private LogFilter[] logFilters;
   private GrpcLogRecord.EventType[] eventTypes;
 
-  public static class LogFilter {
-    public String pattern;
-    public Integer headerBytes;
-    public Integer messageBytes;
-  }
+  /** POJO for representing a filter used in configuration. */
+  static class LogFilter {
+    /** Pattern indicating which service/method to log. */
+    public final String pattern;
 
-  ObservabilityConfig() {
+    /** Number of bytes of each header to log.  */
+    public final Integer headerBytes;
+
+    /** Number of bytes of each header to log. */
+    public final Integer messageBytes;
+
+    LogFilter(String pattern, Integer headerBytes, Integer messageBytes) {
+      this.pattern = pattern;
+      this.headerBytes = headerBytes;
+      this.messageBytes = messageBytes;
+    }
   }
 
   void read() throws IOException {
@@ -51,9 +60,8 @@ final class ObservabilityConfig {
   @SuppressWarnings("unchecked")
   void parse(String config) throws IOException {
     checkArgument(config != null, CONFIG_ENV_VAR_NAME + " value is null!");
-    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(config);
-
-    parseLoggingConfig(JsonUtil.getObject(map, "logging_config"));
+    parseLoggingConfig(
+        JsonUtil.getObject((Map<String, ?>) JsonParser.parse(config), "logging_config"));
   }
 
   private void parseLoggingConfig(Map<String,?> loggingConfig) {
@@ -65,24 +73,24 @@ final class ObservabilityConfig {
       destinationProjectId = JsonUtil.getString(loggingConfig, "destination_project_id");
       List<?> rawList = JsonUtil.getList(loggingConfig, "log_filters");
       if (rawList != null) {
-        List<Map<String, ?>> logFilters = JsonUtil.checkObjectList(rawList);
-        this.logFilters = new LogFilter[logFilters.size()];
-        for (int i = 0; i < logFilters.size(); i++) {
-          this.logFilters[i] = parseLogFilter(logFilters.get(i));
+        List<Map<String, ?>> jsonLogFilters = JsonUtil.checkObjectList(rawList);
+        this.logFilters = new LogFilter[jsonLogFilters.size()];
+        for (int i = 0; i < jsonLogFilters.size(); i++) {
+          this.logFilters[i] = parseJsonLogFilter(jsonLogFilters.get(i));
         }
       }
       rawList = JsonUtil.getList(loggingConfig, "event_types");
       if (rawList != null) {
-        List<String> enumTypes = JsonUtil.checkStringList(rawList);
-        this.eventTypes = new GrpcLogRecord.EventType[enumTypes.size()];
-        for (int i = 0; i < enumTypes.size(); i++) {
-          this.eventTypes[i] = convert(enumTypes.get(i));
+        List<String> jsonEventTypes = JsonUtil.checkStringList(rawList);
+        this.eventTypes = new GrpcLogRecord.EventType[jsonEventTypes.size()];
+        for (int i = 0; i < jsonEventTypes.size(); i++) {
+          this.eventTypes[i] = convertEventType(jsonEventTypes.get(i));
         }
       }
     }
   }
 
-  private GrpcLogRecord.EventType convert(String val) {
+  private GrpcLogRecord.EventType convertEventType(String val) {
     switch (val) {
       case "GRPC_CALL_UNKNOWN":
         return GrpcLogRecord.EventType.GRPC_CALL_UNKNOWN;
@@ -105,12 +113,10 @@ final class ObservabilityConfig {
     }
   }
 
-  private LogFilter parseLogFilter(Map<String,?> map) {
-    LogFilter logFilter = new LogFilter();
-    logFilter.pattern = JsonUtil.getString(map, "pattern");
-    logFilter.headerBytes = JsonUtil.getNumberAsInteger(map, "header_bytes");
-    logFilter.messageBytes = JsonUtil.getNumberAsInteger(map, "message_bytes");
-    return logFilter;
+  private LogFilter parseJsonLogFilter(Map<String,?> map) {
+    return new LogFilter(JsonUtil.getString(map, "pattern"),
+        JsonUtil.getNumberAsInteger(map, "header_bytes"),
+        JsonUtil.getNumberAsInteger(map, "message_bytes"));
   }
 
   public boolean isEnableCloudLogging() {

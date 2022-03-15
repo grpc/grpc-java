@@ -30,7 +30,42 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class ObservabilityConfigTest {
-  
+  private static final String EVENT_TYPES = "{\n"
+      + "  \"logging_config\": {\n"
+      + "    \"enable_cloud_logging\": false,\n"
+      + "    \"event_types\": "
+      + "[\"GRPC_CALL_REQUEST_HEADER\", \"GRPC_CALL_HALF_CLOSE\", \"GRPC_CALL_TRAILER\"]\n"
+      + "  }\n"
+      + "}";
+
+  private static final String LOG_FILTERS = "{\n"
+      + "  \"logging_config\": {\n"
+      + "    \"enable_cloud_logging\": true,\n"
+      + "    \"destination_project_id\": \"grpc-testing\",\n"
+      + "    \"log_filters\": [{\n"
+      + "        \"pattern\": \"*/*\",\n"
+      + "        \"header_bytes\": 4096,\n"
+      + "        \"message_bytes\": 2048\n"
+      + "    },"
+      + "   {\n"
+      + "        \"pattern\": \"service1/Method2\"\n"
+      + "    }"
+      + "    ]\n"
+      + "  }\n"
+      + "}";
+
+  private static final String DEST_PROJECT_ID = "{\n"
+      + "  \"logging_config\": {\n"
+      + "    \"enable_cloud_logging\": true,\n"
+      + "    \"destination_project_id\": \"grpc-testing\"\n"
+      + "  }\n"
+      + "}";
+
+  private static final String DISABLE_CLOUD_LOGGING = "{\n"
+      + "  \"logging_config\": {\n"
+      + "    \"enable_cloud_logging\": false\n" + "  }\n"
+      + "}";
+
   ObservabilityConfig observabilityConfig = new ObservabilityConfig();
 
   @Test
@@ -90,41 +125,4 @@ public class ObservabilityConfigTest {
         new EventType[]{EventType.GRPC_CALL_REQUEST_HEADER, EventType.GRPC_CALL_HALF_CLOSE,
             EventType.GRPC_CALL_TRAILER});
   }
-
-  private static final String EVENT_TYPES = "{\n"
-      + "  \"logging_config\": {\n"
-      + "    \"enable_cloud_logging\": false,\n"
-      + "    \"event_types\": "
-      + "[\"GRPC_CALL_REQUEST_HEADER\", \"GRPC_CALL_HALF_CLOSE\", \"GRPC_CALL_TRAILER\"]\n"
-      + "  }\n"
-      + "}";
-
-  private static final String LOG_FILTERS = "{\n"
-      + "  \"logging_config\": {\n"
-      + "    \"enable_cloud_logging\": true,\n"
-      + "    \"destination_project_id\": \"grpc-testing\",\n"
-      + "    \"log_filters\": [{\n"
-      + "        \"pattern\": \"*/*\",\n"
-      + "        \"header_bytes\": 4096,\n"
-      + "        \"message_bytes\": 2048\n"
-      + "    },"
-      + "   {\n"
-      + "        \"pattern\": \"service1/Method2\"\n"
-      + "    }"
-      + "    ]\n"
-      + "  }\n"
-      + "}";
-
-  private static final String DEST_PROJECT_ID = "{\n"
-      + "  \"logging_config\": {\n"
-      + "    \"enable_cloud_logging\": true,\n"
-      + "    \"destination_project_id\": \"grpc-testing\"\n"
-      + "  }\n"
-      + "}";
-
-  private static final String DISABLE_CLOUD_LOGGING = "{\n"
-      + "  \"logging_config\": {\n"
-      + "    \"enable_cloud_logging\": false\n" + "  }\n"
-      + "}";
-
 }
