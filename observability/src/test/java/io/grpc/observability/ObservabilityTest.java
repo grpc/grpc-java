@@ -18,10 +18,7 @@ package io.grpc.observability;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.mock;
 
-import com.google.cloud.logging.Logging;
-import io.grpc.observability.logging.GcpLogSink;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -31,8 +28,6 @@ public class ObservabilityTest {
   
   @Test
   public void initFinish() {
-    Logging loggingClient = mock(Logging.class);
-    GcpLogSink.setInstance(loggingClient);
     Observability.grpcInit();
     try {
       Observability.grpcInit();

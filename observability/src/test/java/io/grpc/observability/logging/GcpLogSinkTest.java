@@ -49,7 +49,6 @@ public class GcpLogSinkTest {
   @Rule
   public final MockitoRule mockito = MockitoJUnit.rule();
 
-  private static final String PROJECT = "project";
   private Logging mockLogging;
 
   @Before
@@ -58,20 +57,15 @@ public class GcpLogSinkTest {
   }
 
   @Test
-  public void getInstance() {
-    GcpLogSink.setInstance(mockLogging);
-    Sink firstSink = GcpLogSink.getInstance(PROJECT);
-    assertThat(firstSink).isInstanceOf(GcpLogSink.class);
-    Sink secondSink = GcpLogSink.getInstance(PROJECT);
-    assertThat(secondSink).isSameInstanceAs(firstSink);
+  public void createSink() {
+    Sink mockSink = new GcpLogSink(mockLogging);
+    assertThat(mockSink).isInstanceOf(GcpLogSink.class);
   }
 
   @Test
   @SuppressWarnings("unchecked")
   public void verifyWrite() throws Exception {
-    GcpLogSink.setInstance(mockLogging);
-    Sink mockSink = GcpLogSink.getInstance(PROJECT);
-
+    Sink mockSink = new GcpLogSink(mockLogging);
     GrpcLogRecord logProto = GrpcLogRecord.newBuilder()
         .setRpcId("1234")
         .build();
@@ -92,14 +86,13 @@ public class GcpLogSinkTest {
 
   @Test
   public void verifyClose() throws Exception {
-    GcpLogSink.setInstance(mockLogging);
-    Sink mockSink = GcpLogSink.getInstance(PROJECT);
+    Sink mockSink = new GcpLogSink(mockLogging);
     GrpcLogRecord logProto = GrpcLogRecord.newBuilder()
         .setRpcId("1234")
         .build();
     mockSink.write(logProto);
     verify(mockLogging, times(1)).write(anyIterable());
-    GcpLogSink.getInstance(PROJECT).close();
+    mockSink.close();
     verify(mockLogging).close();
     verifyNoMoreInteractions(mockLogging);
   }

@@ -28,4 +28,9 @@ public interface Sink {
    * Writes the {@code message} to the destination.
    */
   void write(GrpcLogRecord message);
+
+  /**
+   * Closes the sink.
+   */
+  void close();
 }

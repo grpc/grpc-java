@@ -39,29 +39,17 @@ import java.util.logging.Logger;
 public class GcpLogSink implements Sink {
   private final Logger logger = Logger.getLogger(GcpLogSink.class.getName());
 
+  // TODO (dnvindhya): Make cloud logging service a configurable value
   private static final String SERVICE_TO_EXCLUDE = "google.logging.v2.LoggingServiceV2";
   private static final String DEFAULT_LOG_NAME = "grpc";
-  private static volatile GcpLogSink gcpLogSinkInstance = null;
   private final Logging gcpLoggingClient;
 
-  /**
-   * Constructor for custom sink.
-   */
-  private GcpLogSink(String projectId) {
+  private static Logging createLoggingClient(String projectId) {
     LoggingOptions.Builder builder = LoggingOptions.newBuilder();
     if (!Strings.isNullOrEmpty(projectId)) {
       builder.setProjectId(projectId);
     }
-    gcpLoggingClient =  builder.build().getService();
-  }
-
-  private GcpLogSink(Logging client) {
-    gcpLoggingClient = client;
-  }
-
-  @VisibleForTesting
-  public static void setInstance(Logging loggingClient) {
-    gcpLogSinkInstance = new GcpLogSink(loggingClient);
+    return builder.build().getService();
   }
 
   /**
@@ -69,19 +57,17 @@ public class GcpLogSink implements Sink {
    *
    * @param destinationProjectId cloud project id to write logs
    */
-  public static GcpLogSink getInstance(String destinationProjectId) {
-    if (gcpLogSinkInstance == null) {
-      synchronized (GcpLogSink.class) {
-        if (gcpLogSinkInstance == null) {
-          gcpLogSinkInstance = new GcpLogSink(destinationProjectId);
-        }
-      }
-    }
-    return gcpLogSinkInstance;
+  public GcpLogSink(String destinationProjectId) {
+    this(createLoggingClient(destinationProjectId));
+  }
+
+  @VisibleForTesting
+  GcpLogSink(Logging client) {
+    this.gcpLoggingClient = client;
   }
 
   @Override
-  public synchronized void write(GrpcLogRecord logProto) {
+  public void write(GrpcLogRecord logProto) {
     if (gcpLoggingClient == null) {
       logger.log(Level.SEVERE, "Attempt to write after GcpLogSink is closed.");
       return;
@@ -99,7 +85,9 @@ public class GcpLogSink implements Sink {
               .setLogName(DEFAULT_LOG_NAME)
               .setResource(MonitoredResource.newBuilder("global").build())
               .build();
-      gcpLoggingClient.write(Collections.singleton(grpcLogEntry));
+      synchronized (this) {
+        gcpLoggingClient.write(Collections.singleton(grpcLogEntry));
+      }
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Caught exception while writing to cloud logging", e);
     }
@@ -134,6 +122,7 @@ public class GcpLogSink implements Sink {
   /**
    * Closes Cloud Logging Client.
    */
+  @Override
   public synchronized void close() {
     if (gcpLoggingClient == null) {
       return;

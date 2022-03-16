@@ -26,6 +26,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.Duration;
 import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
@@ -46,6 +47,8 @@ import io.grpc.observability.logging.GcpLogSink;
 import io.grpc.observability.logging.Sink;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
+
+import io.grpc.observabilitylog.v1.GrpcLogRecord.MetadataEntry;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -82,6 +85,7 @@ public class InternalLoggingChannelInterceptorTest {
   private SettableFuture<Void> cancelCalled;
   private SocketAddress peer;
   private final Sink mockSink = mock(GcpLogSink.class);
+  private LogHelper mockHelper = mock(LogHelper.class);
 
   @Before
   public void setup() throws Exception {
@@ -158,10 +162,40 @@ public class InternalLoggingChannelInterceptorTest {
       EventType expectedRequestHeaderEvent = EventType.GRPC_CALL_REQUEST_HEADER;
       ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
       Metadata clientInitial = new Metadata();
+      String dataA = "aaaaaaaaa";
+      String dataB = "bbbbbbbbb";
+      Metadata.Key<String> keyA =
+          Metadata.Key.of("a", Metadata.ASCII_STRING_MARSHALLER);
+      Metadata.Key<String> keyB =
+          Metadata.Key.of("b", Metadata.ASCII_STRING_MARSHALLER);
+      MetadataEntry entryA =
+          MetadataEntry
+              .newBuilder()
+              .setKey(keyA.name())
+              .setValue(ByteString.copyFrom(dataA.getBytes(US_ASCII)))
+              .build();
+      MetadataEntry entryB =
+          MetadataEntry
+              .newBuilder()
+              .setKey(keyB.name())
+              .setValue(ByteString.copyFrom(dataB.getBytes(US_ASCII)))
+              .build();
+      clientInitial.put(keyA, dataA);
+      clientInitial.put(keyB, dataB);
+      GrpcLogRecord.Metadata expectedMetadata = GrpcLogRecord.Metadata
+          .newBuilder()
+          .addEntry(entryA)
+          .addEntry(entryB)
+          .build();
       interceptedLoggingCall.start(mockListener, clientInitial);
       verify(mockSink).write(captor.capture());
       assertEquals(captor.getValue().getEventType(),
           expectedRequestHeaderEvent);
+      assertEquals(captor.getValue().getSequenceId(), 1L);
+      assertEquals(captor.getValue().getServiceName(), "service");
+      assertEquals(captor.getValue().getMethodName(), "method");
+      assertEquals(captor.getValue().getAuthority(), "the-authority");
+      assertEquals(captor.getValue().getMetadata(), expectedMetadata);
       verifyNoMoreInteractions(mockSink);
       assertSame(clientInitial, actualClientInitial.get());
     }
@@ -326,6 +360,59 @@ public class InternalLoggingChannelInterceptorTest {
     verify(mockSink, times(1)).write(captor.capture());
     Duration timeout = captor.getValue().getTimeout();
     assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+  }
+
+  @Test
+  public void clientDeadlineLogged_deadlineSetViaContextAndCallOptions() throws Exception {
+    Deadline contextDeadline = Deadline.after(10, TimeUnit.SECONDS);
+    Deadline callOptionsDeadline = CallOptions.DEFAULT
+        .withDeadlineAfter(15, TimeUnit.SECONDS).getDeadline();
+
+    final SettableFuture<ClientCall<byte[], byte[]>> callFuture = SettableFuture.create();
+    Context.current()
+        .withDeadline(
+            contextDeadline, Executors.newSingleThreadScheduledExecutor())
+        .run(new Runnable() {
+          @Override
+          public void run() {
+            MethodDescriptor<byte[], byte[]> method =
+                MethodDescriptor.<byte[], byte[]>newBuilder()
+                    .setType(MethodType.UNKNOWN)
+                    .setFullMethodName("service/method")
+                    .setRequestMarshaller(BYTEARRAY_MARSHALLER)
+                    .setResponseMarshaller(BYTEARRAY_MARSHALLER)
+                    .build();
+
+            callFuture.set(
+                factory.create()
+                    .interceptCall(
+                        method,
+                        CallOptions.DEFAULT.withDeadlineAfter(15, TimeUnit.SECONDS),
+                        new Channel() {
+                          @Override
+                          public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+                              MethodDescriptor<RequestT, ResponseT> methodDescriptor,
+                              CallOptions callOptions) {
+                            return new NoopClientCall<>();
+                          }
+
+                          @Override
+                          public String authority() {
+                            return "the-authority";
+                          }
+                        }));
+          }
+        });
+    @SuppressWarnings("unchecked")
+    ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
+    callFuture.get().start(mockListener, new Metadata());
+    ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
+    verify(mockSink, times(1)).write(captor.capture());
+    Duration timeout = captor.getValue().getTimeout();
+    assertThat(LogHelper.min(contextDeadline, callOptionsDeadline))
+        .isSameInstanceAs(contextDeadline);
+    assertThat(TimeUnit.SECONDS.toNanos(10) - Durations.toNanos(timeout))
         .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
   }
 }

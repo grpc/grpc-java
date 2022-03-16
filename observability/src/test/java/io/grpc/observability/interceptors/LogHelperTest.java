@@ -33,7 +33,6 @@ import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
-import io.grpc.observability.interceptors.LogHelper.LogSinkWriter;
 import io.grpc.observability.interceptors.LogHelper.PayloadBuilder;
 import io.grpc.observability.logging.GcpLogSink;
 import io.grpc.observability.logging.Sink;
@@ -100,8 +99,8 @@ public class LogHelperTest {
       return TimeUnit.SECONDS.toNanos(9876) + 54321;
     }
   };
-  private final LogSinkWriter sinkWriter =
-      new LogSinkWriter(
+  private final LogHelper logHelper =
+      new LogHelper(
           sink,
           timeProvider);
   private final byte[] message = new byte[100];
@@ -220,7 +219,7 @@ public class LogHelperTest {
 
     // logged on client
     {
-      sinkWriter.logRequestHeader(
+      logHelper.logRequestHeader(
           seqId,
           serviceName,
           methodName,
@@ -235,7 +234,7 @@ public class LogHelperTest {
 
     // logged on server
     {
-      sinkWriter.logRequestHeader(
+      logHelper.logRequestHeader(
           seqId,
           serviceName,
           methodName,
@@ -254,7 +253,7 @@ public class LogHelperTest {
 
     // timeout is null
     {
-      sinkWriter.logRequestHeader(
+      logHelper.logRequestHeader(
           seqId,
           serviceName,
           methodName,
@@ -272,7 +271,7 @@ public class LogHelperTest {
 
     // peerAddress is not null (error on client)
     try {
-      sinkWriter.logRequestHeader(
+      logHelper.logRequestHeader(
           seqId,
           serviceName,
           methodName,
@@ -314,7 +313,7 @@ public class LogHelperTest {
 
     // logged on client
     {
-      sinkWriter.logResponseHeader(
+      logHelper.logResponseHeader(
           seqId,
           serviceName,
           methodName,
@@ -327,7 +326,7 @@ public class LogHelperTest {
 
     // logged on server
     {
-      sinkWriter.logResponseHeader(
+      logHelper.logResponseHeader(
           seqId,
           serviceName,
           methodName,
@@ -344,7 +343,7 @@ public class LogHelperTest {
 
     // peerAddress is not null (error on server)
     try {
-      sinkWriter.logResponseHeader(
+      logHelper.logResponseHeader(
           seqId,
           serviceName,
           methodName,
@@ -388,7 +387,7 @@ public class LogHelperTest {
 
     // logged on client
     {
-      sinkWriter.logTrailer(
+      logHelper.logTrailer(
           seqId,
           serviceName,
           methodName,
@@ -402,7 +401,7 @@ public class LogHelperTest {
 
     // logged on server
     {
-      sinkWriter.logTrailer(
+      logHelper.logTrailer(
           seqId,
           serviceName,
           methodName,
@@ -420,7 +419,7 @@ public class LogHelperTest {
 
     // peer address is null
     {
-      sinkWriter.logTrailer(
+      logHelper.logTrailer(
           seqId,
           serviceName,
           methodName,
@@ -437,7 +436,7 @@ public class LogHelperTest {
 
     // status description is null
     {
-      sinkWriter.logTrailer(
+      logHelper.logTrailer(
           seqId,
           serviceName,
           methodName,
@@ -472,7 +471,7 @@ public class LogHelperTest {
     GrpcLogRecord base = builder.build();
     // request message
     {
-      sinkWriter.logRpcMessage(
+      logHelper.logRpcMessage(
           seqId,
           serviceName,
           methodName,
@@ -484,7 +483,7 @@ public class LogHelperTest {
     }
     // response message, logged on client
     {
-      sinkWriter.logRpcMessage(
+      logHelper.logRpcMessage(
           seqId,
           serviceName,
           methodName,
@@ -499,7 +498,7 @@ public class LogHelperTest {
     }
     // request message, logged on server
     {
-      sinkWriter.logRpcMessage(
+      logHelper.logRpcMessage(
           seqId,
           serviceName,
           methodName,
@@ -514,7 +513,7 @@ public class LogHelperTest {
     }
     // response message, logged on server
     {
-      sinkWriter.logRpcMessage(
+      logHelper.logRpcMessage(
           seqId,
           serviceName,
           methodName,
