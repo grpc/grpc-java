@@ -145,7 +145,7 @@ public final class GrpclbFallbackTestClient {
           + c.fallbackDeadlineSeconds
           + "\n  --test_case=TEST_CASE        Test case to run. Valid options are:"
           + "\n      fallback_before_startup : fallback before startup e.g. due to "
-          + "LB/backend addresses being unreachable
+          + "LB/backend addresses being unreachable"
           + "\n      fallback_after_startup : fallback after startup e.g. due to "
           + "LB/backend addresses becoming unreachable"
           + "\n      Default: " + c.testCase
