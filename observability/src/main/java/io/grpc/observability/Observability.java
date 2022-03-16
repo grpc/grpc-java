@@ -38,6 +38,7 @@ public final class Observability {
     if (initialized) {
       throw new IllegalStateException("Observability already initialized!");
     }
+    // TODO(dnvindhya): PROJECT_ID to be replaced with configured destinationProjectId
     Sink sink = new GcpLogSink(PROJECT_ID);
     LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl(sink));
     LoggingServerProvider.init(new InternalLoggingServerInterceptor.FactoryImpl());
