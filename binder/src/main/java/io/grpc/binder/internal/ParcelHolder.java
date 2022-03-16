@@ -3,6 +3,7 @@ package io.grpc.binder.internal;
 import static com.google.common.base.Preconditions.checkState;
 
 import android.os.Parcel;
+import com.google.common.annotations.VisibleForTesting;
 import java.io.Closeable;
 import javax.annotation.Nullable;
 
@@ -64,7 +65,11 @@ class ParcelHolder implements Closeable {
    * Returns true iff this container no longer owns a {@link Parcel}.
    *
    * <p>{@link #isEmpty()} is true after all call to {@link #close()} or {@link #release()}.
+   *
+   * <p>Typically only used for debugging or testing since Parcel-owning code should be calling
+   * {@link #close()} unconditionally.
    */
+  @VisibleForTesting
   public boolean isEmpty() {
     return parcel == null;
   }

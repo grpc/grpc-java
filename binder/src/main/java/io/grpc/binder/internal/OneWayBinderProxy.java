@@ -12,11 +12,18 @@ import java.util.logging.Logger;
 /**
  * Wraps an {@link IBinder} with a safe and uniformly asynchronous transaction API.
  *
- * <p>The android.os.Binder implementation of {@link IBinder} is problematic for clients that want
- * "oneway" transaction semantics because it implements transact() by invoking onTransact() on the
- * caller's thread, even when the {@link IBinder#FLAG_ONEWAY} flag is set. Even though this behavior
- * is documented, it's surprising and dangerous. Wrap your {@link IBinder}s with an instance of this
- * class to ensure the following out-of-process "oneway" semantics are always in effect:
+ * <p>When the target of your bindService() call is hosted in a different process, Android supplies
+ * you with an {@link IBinder} that proxies your transactions to the remote {@link
+ * android.os.Binder} instance. But when the target Service is hosted in the same process, Android
+ * supplies you with that local instance of {@link android.os.Binder} directly. This in-process
+ * implementation of {@link IBinder} is problematic for clients that want "oneway" transaction
+ * semantics because its transact() method simply invokes onTransact() on the caller's thread, even
+ * when the {@link IBinder#FLAG_ONEWAY} flag is set. Even though this behavior is documented, its
+ * consequences with respect to reentrancy, locking, and transaction dispatch order can be
+ * surprising and dangerous.
+ *
+ * <p>Wrap your {@link IBinder}s with an instance of this class to ensure the following
+ * out-of-process "oneway" semantics are always in effect:
  *
  * <ul>
  *   <li>transact() merely enqueues the transaction for processing. It doesn't wait for onTransact()
@@ -47,12 +54,13 @@ public abstract class OneWayBinderProxy {
    * Returns a new instance of {@link OneWayBinderProxy} that wraps {@code iBinder}.
    *
    * @param iBinder the binder to wrap
-   * @param executor a non-direct Executor used to dispatch calls to onTransact(), if necessary
+   * @param inProcessThreadHopExecutor a non-direct Executor used to dispatch calls to onTransact(),
+   *     if necessary
    * @return a new instance of {@link OneWayBinderProxy}
    */
-  public static OneWayBinderProxy wrap(IBinder iBinder, Executor executor) {
+  public static OneWayBinderProxy wrap(IBinder iBinder, Executor inProcessThreadHopExecutor) {
     return (iBinder instanceof Binder)
-        ? new InProcessImpl(iBinder, executor)
+        ? new InProcessImpl(iBinder, inProcessThreadHopExecutor)
         : new OutOfProcessImpl(iBinder);
   }
 
