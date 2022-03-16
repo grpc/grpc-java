@@ -53,8 +53,10 @@ final class ObservabilityConfig {
     }
   }
 
-  void read() throws IOException {
-    parse(System.getenv(CONFIG_ENV_VAR_NAME));
+  static ObservabilityConfig getInstance() throws IOException {
+    ObservabilityConfig config = new ObservabilityConfig();
+    config.parse(System.getenv(CONFIG_ENV_VAR_NAME));
+    return config;
   }
 
   @SuppressWarnings("unchecked")
@@ -113,10 +115,10 @@ final class ObservabilityConfig {
     }
   }
 
-  private LogFilter parseJsonLogFilter(Map<String,?> map) {
-    return new LogFilter(JsonUtil.getString(map, "pattern"),
-        JsonUtil.getNumberAsInteger(map, "header_bytes"),
-        JsonUtil.getNumberAsInteger(map, "message_bytes"));
+  private LogFilter parseJsonLogFilter(Map<String,?> logFilterMap) {
+    return new LogFilter(JsonUtil.getString(logFilterMap, "pattern"),
+        JsonUtil.getNumberAsInteger(logFilterMap, "header_bytes"),
+        JsonUtil.getNumberAsInteger(logFilterMap, "message_bytes"));
   }
 
   public boolean isEnableCloudLogging() {
