@@ -27,6 +27,7 @@ import io.grpc.observability.logging.Sink;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class Observability {
   private static boolean initialized = false;
+  private static final String PROJECT_ID = "PROJECT";
 
   /**
    * Initialize grpc-observability.
@@ -37,7 +38,7 @@ public final class Observability {
     if (initialized) {
       throw new IllegalStateException("Observability already initialized!");
     }
-    Sink sink = new GcpLogSink(null);
+    Sink sink = new GcpLogSink(PROJECT_ID);
     LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl(sink));
     LoggingServerProvider.init(new InternalLoggingServerInterceptor.FactoryImpl());
     // TODO(sanjaypujare): initialize customTags map

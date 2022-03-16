@@ -17,6 +17,7 @@
 package io.grpc.observability.interceptors;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.observability.interceptors.LogHelperTest.BYTEARRAY_MARSHALLER;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.same;
@@ -38,11 +39,9 @@ import io.grpc.Deadline;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.NoopClientCall;
-import io.grpc.observability.interceptors.LogHelper.ByteArrayMarshaller;
 import io.grpc.observability.logging.GcpLogSink;
 import io.grpc.observability.logging.Sink;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
@@ -74,7 +73,6 @@ public class InternalLoggingChannelInterceptorTest {
   @Rule
   public final MockitoRule mockito = MockitoJUnit.rule();
 
-  public static final Marshaller<byte[]> BYTEARRAY_MARSHALLER = new ByteArrayMarshaller();
   private static final Charset US_ASCII = Charset.forName("US-ASCII");
 
   private InternalLoggingChannelInterceptor.Factory factory;
@@ -85,7 +83,6 @@ public class InternalLoggingChannelInterceptorTest {
   private SettableFuture<Void> cancelCalled;
   private SocketAddress peer;
   private final Sink mockSink = mock(GcpLogSink.class);
-  private LogHelper mockHelper = mock(LogHelper.class);
 
   @Before
   public void setup() throws Exception {

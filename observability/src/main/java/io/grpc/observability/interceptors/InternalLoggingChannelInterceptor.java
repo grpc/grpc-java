@@ -45,7 +45,8 @@ import java.util.logging.Logger;
  */
 @Internal
 public final class InternalLoggingChannelInterceptor implements ClientInterceptor {
-  private static final Logger logger = Logger.getLogger(InternalLoggingChannelInterceptor.class.getName());
+  private static final Logger logger = Logger
+      .getLogger(InternalLoggingChannelInterceptor.class.getName());
 
   private final LogHelper helper;
 

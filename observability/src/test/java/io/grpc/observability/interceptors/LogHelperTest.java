@@ -16,6 +16,7 @@
 
 package io.grpc.observability.interceptors;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -31,6 +32,7 @@ import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
 import io.grpc.observability.interceptors.LogHelper.PayloadBuilder;
@@ -42,6 +44,11 @@ import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.LogLevel;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.MetadataEntry;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -59,6 +66,7 @@ import org.junit.runners.JUnit4;
 public class LogHelperTest {
 
   private static final Charset US_ASCII = Charset.forName("US-ASCII");
+  public static final Marshaller<byte[]> BYTEARRAY_MARSHALLER = new ByteArrayMarshaller();
   private static final String DATA_A = "aaaaaaaaa";
   private static final String DATA_B = "bbbbbbbbb";
   private static final String DATA_C = "ccccccccc";
@@ -549,4 +557,62 @@ public class LogHelperTest {
     builder.setEventType(type);
     return builder.build();
   }
+
+  // Used only in tests
+  // Copied from internal
+  static final class ByteArrayMarshaller implements Marshaller<byte[]> {
+    @Override
+    public InputStream stream(byte[] value) {
+      return new ByteArrayInputStream(value);
+    }
+
+    @Override
+    public byte[] parse(InputStream stream) {
+      try {
+        return parseHelper(stream);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    private byte[] parseHelper(InputStream stream) throws IOException {
+      try {
+        return IoUtils.toByteArray(stream);
+      } finally {
+        stream.close();
+      }
+    }
+  }
+
+  // Copied from internal
+  static final class IoUtils {
+    /** maximum buffer to be read is 16 KB. */
+    private static final int MAX_BUFFER_LENGTH = 16384;
+
+    /** Returns the byte array. */
+    public static byte[] toByteArray(InputStream in) throws IOException {
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      copy(in, out);
+      return out.toByteArray();
+    }
+
+    /** Copies the data from input stream to output stream. */
+    public static long copy(InputStream from, OutputStream to) throws IOException {
+      // Copied from guava com.google.common.io.ByteStreams because its API is unstable (beta)
+      checkNotNull(from);
+      checkNotNull(to);
+      byte[] buf = new byte[MAX_BUFFER_LENGTH];
+      long total = 0;
+      while (true) {
+        int r = from.read(buf);
+        if (r == -1) {
+          break;
+        }
+        to.write(buf, 0, r);
+        total += r;
+      }
+      return total;
+    }
+  }
+
 }
