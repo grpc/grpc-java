@@ -197,6 +197,7 @@ public class InternalLoggingChannelInterceptorTest {
       assertSame(clientInitial, actualClientInitial.get());
     }
 
+    // TODO(dnvindhya) : Add a helper method to verify other fields of GrpcLogRecord for all events
     // receive server header
     {
       EventType expectedResponseHeaderEvent = EventType.GRPC_CALL_RESPONSE_HEADER;

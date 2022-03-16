@@ -47,6 +47,8 @@ public final class Observability {
   }
 
   /** Un-initialize or finish grpc-observability. */
+  // TODO(sanjaypujare): Once Observability is made into Singleton object,
+  //  close() on sink will be called as part of grpcFinish()
   public static synchronized void grpcFinish() {
     if (!initialized) {
       throw new IllegalStateException("Observability not initialized!");

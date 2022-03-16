@@ -72,8 +72,13 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
       return new InternalLoggingChannelInterceptor(helper);
     }
 
+    /**
+     * Closes the sink instance.
+     */
     public void close() {
-      sink.close();
+      if (sink != null) {
+        sink.close();
+      }
     }
   }
 
@@ -121,12 +126,14 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
               EventLogger.LOGGER_CLIENT,
               rpcId,
               null);
-        } catch (IllegalArgumentException e1) {
-          logger.log(Level.SEVERE, "Unable to log request header", e1);
-        } catch (NullPointerException e2) {
-          logger.log(Level.SEVERE, "Unable to log request header", e2);
-        } catch (Exception e3) {
-          logger.log(Level.SEVERE, "Unable to log request header", e3);
+        } catch (Exception e) {
+          // Catching generic exceptions instead of specific ones for all the events.
+          // This way we can catch both expected and unexpected exceptions instead of re-throwing
+          // exceptions to callers which will lead to RPC getting aborted.
+          // Expected exceptions to be caught:
+          // 1. IllegalArgumentException
+          // 2. NullPointerException
+          logger.log(Level.SEVERE, "Unable to log request header", e);
         }
 
         Listener<RespT> observabilityListener =
@@ -143,12 +150,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                       message,
                       EventLogger.LOGGER_CLIENT,
                       rpcId);
-                } catch (IllegalArgumentException e1) {
-                  logger.log(Level.SEVERE, "Unable to log response message", e1);
-                } catch (NullPointerException e2) {
-                  logger.log(Level.SEVERE, "Unable to log response message", e2);
-                } catch (Exception e3) {
-                  logger.log(Level.SEVERE, "Unable to log response message", e3);
+                } catch (Exception e) {
+                  logger.log(Level.SEVERE, "Unable to log response message", e);
                 }
                 super.onMessage(message);
               }
@@ -165,12 +168,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                       EventLogger.LOGGER_CLIENT,
                       rpcId,
                       LogHelper.getPeerAddress(getAttributes()));
-                } catch (IllegalArgumentException e1) {
-                  logger.log(Level.SEVERE, "Unable to log response header", e1);
-                } catch (NullPointerException e2) {
-                  logger.log(Level.SEVERE, "Unable to log response header", e2);
-                } catch (Exception e3) {
-                  logger.log(Level.SEVERE, "Unable to log response header", e3);
+                } catch (Exception e) {
+                  logger.log(Level.SEVERE, "Unable to log response header", e);
                 }
                 super.onHeaders(headers);
               }
@@ -188,12 +187,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                       EventLogger.LOGGER_CLIENT,
                       rpcId,
                       LogHelper.getPeerAddress(getAttributes()));
-                } catch (IllegalArgumentException e1) {
-                  logger.log(Level.SEVERE, "Unable to log trailer", e1);
-                } catch (NullPointerException e2) {
-                  logger.log(Level.SEVERE, "Unable to log trailer", e2);
-                } catch (Exception e3) {
-                  logger.log(Level.SEVERE, "Unable to log trailer", e3);
+                } catch (Exception e) {
+                  logger.log(Level.SEVERE, "Unable to log trailer", e);
                 }
                 super.onClose(status, trailers);
               }
@@ -213,12 +208,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
               message,
               EventLogger.LOGGER_CLIENT,
               rpcId);
-        } catch (IllegalArgumentException e1) {
-          logger.log(Level.SEVERE, "Unable to log request message", e1);
-        } catch (NullPointerException e2) {
-          logger.log(Level.SEVERE, "Unable to log request message", e2);
-        } catch (Exception e3) {
-          logger.log(Level.SEVERE, "Unable to log request message", e3);
+        } catch (Exception e) {
+          logger.log(Level.SEVERE, "Unable to log request message", e);
         }
         super.sendMessage(message);
       }
@@ -233,10 +224,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
               methodName,
               EventLogger.LOGGER_CLIENT,
               rpcId);
-        } catch (NullPointerException e2) {
-          logger.log(Level.SEVERE, "Unable to log half close", e2);
-        } catch (Exception e3) {
-          logger.log(Level.SEVERE, "Unable to log half close", e3);
+        } catch (Exception e) {
+          logger.log(Level.SEVERE, "Unable to log half close", e);
         }
         super.halfClose();
       }
@@ -251,10 +240,8 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
               methodName,
               EventLogger.LOGGER_CLIENT,
               rpcId);
-        } catch (NullPointerException e2) {
-          logger.log(Level.SEVERE, "Unable to log cancel", e2);
-        } catch (Exception e3) {
-          logger.log(Level.SEVERE, "Unable to log cancel", e3);
+        } catch (Exception e) {
+          logger.log(Level.SEVERE, "Unable to log cancel", e);
         }
         super.cancel(message, cause);
       }

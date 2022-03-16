@@ -104,7 +104,6 @@ class LogHelper {
     if (peerAddress != null) {
       logEntryBuilder.setPeerAddress(socketAddressToProto(peerAddress));
     }
-    logger.log(Level.FINEST, "Writing Request Header to GcpLogSink");
     sink.write(logEntryBuilder.build());
   }
 
@@ -143,7 +142,6 @@ class LogHelper {
     if (peerAddress != null) {
       logEntryBuilder.setPeerAddress(socketAddressToProto(peerAddress));
     }
-    logger.log(Level.FINEST, "Writing Response Header to GcpLogSink");
     sink.write(logEntryBuilder.build());
   }
 
@@ -190,7 +188,6 @@ class LogHelper {
     if (peerAddress != null) {
       logEntryBuilder.setPeerAddress(socketAddressToProto(peerAddress));
     }
-    logger.log(Level.FINEST, "Writing Server Trailer to GcpLogSink");
     sink.write(logEntryBuilder.build());
   }
 
@@ -214,7 +211,7 @@ class LogHelper {
         "event type must correspond to client message or server message");
     checkNotNull(message, "message");
 
-    // TODO(dnvindhya): Convert message to bystestring
+    // TODO(dnvindhya): Convert message to bystestring and also log the message
     // byte[] messageArray = (byte[])message;
     // int messageLength = messageArray.length;
     // ByteString messageData =
@@ -228,7 +225,6 @@ class LogHelper {
         .setEventLogger(eventLogger)
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
         .setRpcId(rpcId);
-    logger.log(Level.FINEST, "Writing RPC message to GcpLogSink");
     sink.write(logEntryBuilder.build());
   }
 
@@ -253,7 +249,6 @@ class LogHelper {
         .setEventLogger(eventLogger)
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
         .setRpcId(rpcId);
-    logger.log(Level.FINEST, "Writing Half Close event to GcpLogSink");
     sink.write(logEntryBuilder.build());
   }
 
@@ -278,7 +273,6 @@ class LogHelper {
         .setEventLogger(eventLogger)
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
         .setRpcId(rpcId);
-    logger.log(Level.FINEST, "Writing Cancel event to GcpLogSink");
     sink.write(logEntryBuilder.build());
   }
 
@@ -297,6 +291,7 @@ class LogHelper {
     }
   }
 
+  // TODO(dnvindhya): Create a unit test for the metadata conversion
   static PayloadBuilder<GrpcLogRecord.Metadata.Builder> createMetadataProto(Metadata metadata) {
     checkNotNull(metadata, "metadata");
     GrpcLogRecord.Metadata.Builder metadataBuilder = GrpcLogRecord.Metadata.newBuilder();
@@ -368,6 +363,7 @@ class LogHelper {
   }
 
   // TODO (dnvindhya) : Implement service and method name filtering
+  // Add unit tests for the method as part of filtering implementation
   boolean isMethodToBeLogged(String fullMethodName) {
     return true;
   }

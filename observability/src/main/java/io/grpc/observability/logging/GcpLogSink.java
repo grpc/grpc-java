@@ -76,20 +76,21 @@ public class GcpLogSink implements Sink {
       return;
     }
     try {
-      Map<String, Object> mapPayload = protoToMapConverter(logProto);
+      GrpcLogRecord.EventType event = logProto.getEventType();
       Severity logEntrySeverity = getCloudLoggingLevel(logProto.getLogLevel());
       // TODO(vindhyan): make sure all (int, long) values are not displayed as double
       LogEntry grpcLogEntry =
-          LogEntry.newBuilder(JsonPayload.of(mapPayload))
+          LogEntry.newBuilder(JsonPayload.of(protoToMapConverter(logProto)))
               .setSeverity(logEntrySeverity)
               .setLogName(DEFAULT_LOG_NAME)
               .setResource(MonitoredResource.newBuilder("global").build())
               .build();
       synchronized (this) {
+        logger.log(Level.FINEST, "Writing gRPC event : {0} to Cloud Logging", event);
         gcpLoggingClient.write(Collections.singleton(grpcLogEntry));
       }
     } catch (Exception e) {
-      logger.log(Level.SEVERE, "Caught exception while writing to cloud logging", e);
+      logger.log(Level.SEVERE, "Caught exception while writing to Cloud Logging", e);
     }
   }
 
@@ -125,6 +126,7 @@ public class GcpLogSink implements Sink {
   @Override
   public synchronized void close() {
     if (gcpLoggingClient == null) {
+      logger.log(Level.WARNING, "Attempt to close after GcpLogSink is closed.");
       return;
     }
     try {
