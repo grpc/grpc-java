@@ -17,6 +17,7 @@
 package io.grpc.observability.interceptors;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.observability.interceptors.LogHelperTest.BYTEARRAY_MARSHALLER;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.same;
@@ -32,13 +33,11 @@ import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.Status;
 import io.grpc.internal.NoopServerCall;
-import io.grpc.observability.interceptors.LogHelper.ByteArrayMarshaller;
 import io.grpc.observability.logging.GcpLogSink;
 import io.grpc.observability.logging.Sink;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
@@ -68,7 +67,6 @@ public class InternalLoggingServerInterceptorTest {
   @Rule
   public final MockitoRule mockito = MockitoJUnit.rule();
 
-  public static final Marshaller<byte[]> BYTEARRAY_MARSHALLER = new ByteArrayMarshaller();
   private static final Charset US_ASCII = Charset.forName("US-ASCII");
 
   private InternalLoggingServerInterceptor.Factory factory;

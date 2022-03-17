@@ -29,6 +29,7 @@ import io.grpc.observability.logging.Sink;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.io.IOException;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -42,9 +43,14 @@ public class LoggingTest {
 
   private static final String PROJECT_ID = "project-id";
 
+  /**
+   * Cloud logging test using LoggingChannelProvider and LoggingServerProvider.
+   */
+  @Ignore
+  @Test
   public void clientServer_interceptorCalled()
       throws IOException {
-    Sink sink = GcpLogSink.getInstance(PROJECT_ID);
+    Sink sink = new GcpLogSink(PROJECT_ID);
     LoggingServerProvider.init(
         new InternalLoggingServerInterceptor.FactoryImpl(sink));
     Server server = ServerBuilder.forPort(0).addService(new LoggingTestHelper.SimpleServiceImpl())
@@ -58,7 +64,7 @@ public class LoggingTest {
         cleanupRule.register(channel));
     assertThat(LoggingTestHelper.unaryRpc("buddy", stub))
         .isEqualTo("Hello buddy");
-    GcpLogSink.getInstance(PROJECT_ID).close();
+    sink.close();
     LoggingChannelProvider.finish();
     LoggingServerProvider.finish();
   }
