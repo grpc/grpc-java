@@ -38,7 +38,7 @@ public class ObservabilityTest {
     Observability.grpcFinish();
     try {
       Observability.grpcFinish();
-      fail("should have failed for calling grpcFinit() on uninitialized");
+      fail("should have failed for calling grpcFinish() on uninitialized");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("Observability not initialized!");
     }

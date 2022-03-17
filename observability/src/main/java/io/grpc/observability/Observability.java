@@ -20,11 +20,14 @@ import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelProvider.ProviderNotFoundException;
 import io.grpc.observability.interceptors.InternalLoggingChannelInterceptor;
 import io.grpc.observability.interceptors.InternalLoggingServerInterceptor;
+import io.grpc.observability.logging.GcpLogSink;
+import io.grpc.observability.logging.Sink;
 
 /** The main class for gRPC Observability features. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class Observability {
   private static boolean initialized = false;
+  private static final String PROJECT_ID = "PROJECT";
 
   /**
    * Initialize grpc-observability.
@@ -35,13 +38,17 @@ public final class Observability {
     if (initialized) {
       throw new IllegalStateException("Observability already initialized!");
     }
-    LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl());
+    // TODO(dnvindhya): PROJECT_ID to be replaced with configured destinationProjectId
+    Sink sink = new GcpLogSink(PROJECT_ID);
+    LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl(sink));
     LoggingServerProvider.init(new InternalLoggingServerInterceptor.FactoryImpl());
     // TODO(sanjaypujare): initialize customTags map
     initialized = true;
   }
 
   /** Un-initialize or finish grpc-observability. */
+  // TODO(sanjaypujare): Once Observability is made into Singleton object,
+  //  close() on sink will be called as part of grpcFinish()
   public static synchronized void grpcFinish() {
     if (!initialized) {
       throw new IllegalStateException("Observability not initialized!");

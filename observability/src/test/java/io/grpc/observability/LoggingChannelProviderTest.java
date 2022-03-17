@@ -35,6 +35,8 @@ import io.grpc.ManagedChannelProvider;
 import io.grpc.MethodDescriptor;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.observability.interceptors.InternalLoggingChannelInterceptor;
+import io.grpc.observability.logging.GcpLogSink;
+import io.grpc.observability.logging.Sink;
 import io.grpc.testing.TestMethodDescriptors;
 import org.junit.Rule;
 import org.junit.Test;
@@ -46,6 +48,7 @@ import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class LoggingChannelProviderTest {
+
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -55,10 +58,12 @@ public class LoggingChannelProviderTest {
   public void initTwiceCausesException() {
     ManagedChannelProvider prevProvider = ManagedChannelProvider.provider();
     assertThat(prevProvider).isNotInstanceOf(LoggingChannelProvider.class);
-    LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl());
+    Sink mockSink = mock(GcpLogSink.class);
+    LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl(mockSink));
     assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
     try {
-      LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl());
+      LoggingChannelProvider.init(
+          new InternalLoggingChannelInterceptor.FactoryImpl(mockSink));
       fail("should have failed for calling init() again");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("LoggingChannelProvider already initialized!");
