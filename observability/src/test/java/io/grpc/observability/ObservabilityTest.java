@@ -18,7 +18,14 @@ package io.grpc.observability;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
+import io.grpc.ManagedChannelProvider;
+import io.grpc.ServerProvider;
+import io.grpc.observability.interceptors.InternalLoggingChannelInterceptor;
+import io.grpc.observability.interceptors.InternalLoggingServerInterceptor;
+import io.grpc.observability.logging.Sink;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -28,19 +35,30 @@ public class ObservabilityTest {
   
   @Test
   public void initFinish() {
-    Observability.grpcInit();
+    ManagedChannelProvider prevChannelProvider = ManagedChannelProvider.provider();
+    ServerProvider prevServerProvider = ServerProvider.provider();
+    Sink sink = mock(Sink.class);
+    InternalLoggingChannelInterceptor.Factory channelInterceptorFactory = mock(
+        InternalLoggingChannelInterceptor.Factory.class);
+    InternalLoggingServerInterceptor.Factory serverInterceptorFactory = mock(
+        InternalLoggingServerInterceptor.Factory.class);
+    Observability observability = Observability.grpcInit(sink, channelInterceptorFactory,
+        serverInterceptorFactory);
+    assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
+    assertThat(ServerProvider.provider()).isInstanceOf(ServerProvider.class);
+    Observability observability1 = Observability.grpcInit(sink, channelInterceptorFactory,
+        serverInterceptorFactory);
+    assertThat(observability1).isSameInstanceAs(observability);
+
+    observability.grpcShutdown();
+    verify(sink).close();
+    assertThat(ManagedChannelProvider.provider()).isSameInstanceAs(prevChannelProvider);
+    assertThat(ServerProvider.provider()).isSameInstanceAs(prevServerProvider);
     try {
-      Observability.grpcInit();
-      fail("should have failed for calling grpcInit() again");
+      observability.grpcShutdown();
+      fail("should have failed for calling grpcShutdown() second time");
     } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().contains("Observability already initialized!");
-    }
-    Observability.grpcFinish();
-    try {
-      Observability.grpcFinish();
-      fail("should have failed for calling grpcFinish() on uninitialized");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().contains("Observability not initialized!");
+      assertThat(e).hasMessageThat().contains("Observability already shutdown!");
     }
   }
 }
