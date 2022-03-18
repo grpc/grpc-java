@@ -41,7 +41,7 @@ public final class Observability {
     // TODO(dnvindhya): PROJECT_ID to be replaced with configured destinationProjectId
     Sink sink = new GcpLogSink(PROJECT_ID);
     LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl(sink));
-    LoggingServerProvider.init(new InternalLoggingServerInterceptor.FactoryImpl());
+    LoggingServerProvider.init(new InternalLoggingServerInterceptor.FactoryImpl(sink));
     // TODO(sanjaypujare): initialize customTags map
     initialized = true;
   }
