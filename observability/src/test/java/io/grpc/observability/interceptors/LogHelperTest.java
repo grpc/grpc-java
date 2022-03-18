@@ -111,8 +111,6 @@ public class LogHelperTest {
       new LogHelper(
           sink,
           timeProvider);
-  private final byte[] message = new byte[100];
-
 
   @Before
   public void setUp() throws Exception {
@@ -466,8 +464,10 @@ public class LogHelperTest {
     String serviceName = "service";
     String methodName = "method";
     String rpcId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
+    byte[] message = new byte[100];
 
-    GrpcLogRecord.Builder builder = GrpcLogRecord.newBuilder()
+    GrpcLogRecord.Builder builder = messageTestHelper(message)
+        .toBuilder()
         .setTimestamp(timestamp)
         .setSequenceId(seqId)
         .setServiceName(serviceName)
@@ -552,9 +552,18 @@ public class LogHelperTest {
     GrpcLogRecord.Builder builder = GrpcLogRecord.newBuilder();
     PayloadBuilder<GrpcLogRecord.Metadata.Builder> pair
         = LogHelper.createMetadataProto(metadata);
-    builder.setMetadata(pair.proto);
+    builder.setMetadata(pair.payload);
     builder.setPayloadSize(pair.size);
     builder.setEventType(type);
+    return builder.build();
+  }
+
+  private static GrpcLogRecord messageTestHelper(byte[] message) {
+    GrpcLogRecord.Builder builder = GrpcLogRecord.newBuilder();
+    PayloadBuilder<ByteString> pair
+        = LogHelper.createMesageProto(message);
+    builder.setMessage(pair.payload);
+    builder.setPayloadSize(pair.size);
     return builder.build();
   }
 
@@ -614,5 +623,4 @@ public class LogHelperTest {
       return total;
     }
   }
-
 }

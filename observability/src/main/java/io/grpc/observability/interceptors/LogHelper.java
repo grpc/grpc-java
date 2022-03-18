@@ -33,6 +33,7 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.observability.logging.Sink;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.Address;
+import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.LogLevel;
 import java.net.Inet4Address;
@@ -65,8 +66,7 @@ class LogHelper {
   }
 
   /**
-   * Logs the request header.
-   * Binary logging equivalent of logClientHeader.
+   * Logs the request header. Binary logging equivalent of logClientHeader.
    */
   void logRequestHeader(
       long seqId,
@@ -95,7 +95,7 @@ class LogHelper {
         .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
         .setEventLogger(eventLogger)
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
-        .setMetadata(pair.proto)
+        .setMetadata(pair.payload)
         .setPayloadSize(pair.size)
         .setRpcId(rpcId);
     if (timeout != null) {
@@ -108,8 +108,7 @@ class LogHelper {
   }
 
   /**
-   * Logs the reponse header.
-   * Binary logging equivalent of logServerHeader.
+   * Logs the reponse header. Binary logging equivalent of logServerHeader.
    */
   void logResponseHeader(
       long seqId,
@@ -136,7 +135,7 @@ class LogHelper {
         .setEventType(EventType.GRPC_CALL_RESPONSE_HEADER)
         .setEventLogger(eventLogger)
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
-        .setMetadata(pair.proto)
+        .setMetadata(pair.payload)
         .setPayloadSize(pair.size)
         .setRpcId(rpcId);
     if (peerAddress != null) {
@@ -173,7 +172,7 @@ class LogHelper {
         .setEventType(EventType.GRPC_CALL_TRAILER)
         .setEventLogger(eventLogger)
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
-        .setMetadata(pair.proto)
+        .setMetadata(pair.payload)
         .setPayloadSize(pair.size)
         .setStatusCode(status.getCode().value())
         .setRpcId(rpcId);
@@ -198,9 +197,9 @@ class LogHelper {
       long seqId,
       String serviceName,
       String methodName,
-      GrpcLogRecord.EventType eventType,
+      EventType eventType,
       T message,
-      GrpcLogRecord.EventLogger eventLogger,
+      EventLogger eventLogger,
       String rpcId) {
     checkNotNull(serviceName, "serviceName");
     checkNotNull(methodName, "methodName");
@@ -211,11 +210,23 @@ class LogHelper {
         "event type must correspond to client message or server message");
     checkNotNull(message, "message");
 
-    // TODO(dnvindhya): Convert message to bystestring and also log the message
-    // byte[] messageArray = (byte[])message;
-    // int messageLength = messageArray.length;
-    // ByteString messageData =
-    // ByteString.copyFrom((byte[]) message, 0, ((byte[]) message).length);
+    // TODO(dnvindhya): Implement conversion of generics to ByteString
+    // Following is a temporary workaround to log if message is of following types :
+    // 1. com.google.protobuf.Message
+    // 2. byte[]
+    byte[] messageBytesArray = null;
+    if (message instanceof com.google.protobuf.Message) {
+      messageBytesArray = ((com.google.protobuf.Message)message).toByteArray();
+    } else if (message instanceof byte[]) {
+      messageBytesArray = (byte[]) message;
+    } else {
+      logger.log(Level.WARNING, "message is of UNKNOWN type, message and payload_size fields"
+          + "of GrpcLogRecord proto will not be logged");
+    }
+    PayloadBuilder<ByteString> pair = null;
+    if (messageBytesArray != null) {
+      pair = createMesageProto(messageBytesArray);
+    }
 
     GrpcLogRecord.Builder logEntryBuilder = createTimestamp()
         .setSequenceId(seqId)
@@ -225,6 +236,12 @@ class LogHelper {
         .setEventLogger(eventLogger)
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
         .setRpcId(rpcId);
+    if (pair != null && pair.size != 0) {
+      logEntryBuilder.setPayloadSize(pair.size);
+    }
+    if (pair != null && pair.payload != null) {
+      logEntryBuilder.setMessage(pair.payload);
+    }
     sink.write(logEntryBuilder.build());
   }
 
@@ -282,11 +299,11 @@ class LogHelper {
   }
 
   static final class PayloadBuilder<T> {
-    T proto;
+    T payload;
     int size;
 
-    private PayloadBuilder(T proto, int size) {
-      this.proto = proto;
+    private PayloadBuilder(T payload, int size) {
+      this.payload = payload;
       this.size = size;
     }
   }
@@ -313,6 +330,13 @@ class LogHelper {
       }
     }
     return new PayloadBuilder<>(metadataBuilder, totalMetadataBytes);
+  }
+
+  static PayloadBuilder<ByteString> createMesageProto(byte[] message) {
+    int messageLength = message.length;
+    ByteString messageData =
+        ByteString.copyFrom(message, 0, messageLength);
+    return new PayloadBuilder<ByteString>(messageData, messageLength);
   }
 
   static Address socketAddressToProto(SocketAddress address) {
@@ -343,7 +367,7 @@ class LogHelper {
   }
 
   /**
-   *  Retrieves socket address.
+   * Retrieves socket address.
    */
   static SocketAddress getPeerAddress(Attributes streamAttributes) {
     return streamAttributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
@@ -367,5 +391,4 @@ class LogHelper {
   boolean isMethodToBeLogged(String fullMethodName) {
     return true;
   }
-
 }
