@@ -62,6 +62,7 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
+import io.envoyproxy.envoy.service.discovery.v3.Resource;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.ChannelCredentials;
@@ -188,6 +189,9 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       "type.googleapis.com/xds.type.v3.TypedStruct";
   private static final String TYPE_URL_FILTER_CONFIG =
       "type.googleapis.com/envoy.config.route.v3.FilterConfig";
+  private static final String TYPE_URL_RESOURCE_V2 = "type.googleapis.com/envoy.api.v2.Resource";
+  private static final String TYPE_URL_RESOURCE_V3 =
+      "type.googleapis.com/envoy.service.discovery.v3.Resource";
   // TODO(zdapeng): need to discuss how to handle unsupported values.
   private static final Set<Code> SUPPORTED_RETRYABLE_CODES =
       Collections.unmodifiableSet(EnumSet.of(
@@ -274,6 +278,17 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     serverLrsClientMap.put(serverInfo, lrsClient);
   }
 
+  private Any maybeUnwrapResources(Any resource)
+      throws InvalidProtocolBufferException {
+    if (resource.getTypeUrl().equals(TYPE_URL_RESOURCE_V2)
+        || resource.getTypeUrl().equals(TYPE_URL_RESOURCE_V3)) {
+      return unpackCompatibleType(resource, Resource.class, TYPE_URL_RESOURCE_V3,
+          TYPE_URL_RESOURCE_V2).getResource();
+    } else {
+      return resource;
+    }
+  }
+
   @Override
   public void handleLdsResponse(
       ServerInfo serverInfo, String versionInfo, List<Any> resources, String nonce) {
@@ -287,10 +302,12 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     for (int i = 0; i < resources.size(); i++) {
       Any resource = resources.get(i);
 
-      // Unpack the Listener.
-      boolean isResourceV3 = resource.getTypeUrl().equals(ResourceType.LDS.typeUrl());
+      boolean isResourceV3;
       Listener listener;
       try {
+        resource = maybeUnwrapResources(resource);
+        // Unpack the Listener.
+        isResourceV3 = resource.getTypeUrl().equals(ResourceType.LDS.typeUrl());
         listener = unpackCompatibleType(resource, Listener.class, ResourceType.LDS.typeUrl(),
             ResourceType.LDS.typeUrlV2());
       } catch (InvalidProtocolBufferException e) {
@@ -1424,6 +1441,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       // Unpack the RouteConfiguration.
       RouteConfiguration routeConfig;
       try {
+        resource = maybeUnwrapResources(resource);
         routeConfig = unpackCompatibleType(resource, RouteConfiguration.class,
             ResourceType.RDS.typeUrl(), ResourceType.RDS.typeUrlV2());
       } catch (InvalidProtocolBufferException e) {
@@ -1552,6 +1570,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       // Unpack the Cluster.
       Cluster cluster;
       try {
+        resource = maybeUnwrapResources(resource);
         cluster = unpackCompatibleType(
             resource, Cluster.class, ResourceType.CDS.typeUrl(), ResourceType.CDS.typeUrlV2());
       } catch (InvalidProtocolBufferException e) {
@@ -1801,6 +1820,7 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
       // Unpack the ClusterLoadAssignment.
       ClusterLoadAssignment assignment;
       try {
+        resource = maybeUnwrapResources(resource);
         assignment =
             unpackCompatibleType(resource, ClusterLoadAssignment.class, ResourceType.EDS.typeUrl(),
                 ResourceType.EDS.typeUrlV2());
