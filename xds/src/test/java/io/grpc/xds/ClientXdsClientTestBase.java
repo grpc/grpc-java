@@ -2920,7 +2920,6 @@ public abstract class ClientXdsClientTestBase {
     protected abstract Message buildClusterLoadAssignment(String cluster,
         List<Message> localityLbEndpoints, List<Message> dropOverloads);
 
-
     protected abstract Message buildClusterLoadAssignmentInvalid(String cluster);
 
     protected abstract Message buildLocalityLbEndpoints(String region, String zone, String subZone,
