@@ -36,7 +36,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
-
   private static final Logger logger = Logger.getLogger(OrcaServiceImpl.class.getName());
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -46,7 +45,6 @@ public final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImpl
           logger.log(Level.SEVERE, "Exception!" + e);
         }
       });
-
   // Empty or invalid (non-positive) minInterval config in will be treated to this default value.
   private static final long DEFAULT_MIN_REPORT_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(30);
   private final long minReportIntervalNanos;

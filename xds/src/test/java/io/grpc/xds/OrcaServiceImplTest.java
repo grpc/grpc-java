@@ -55,7 +55,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-
 @RunWith(JUnit4.class)
 public class OrcaServiceImplTest {
   @Rule
