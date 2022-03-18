@@ -35,7 +35,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
-import io.grpc.ServerCallHandler;
 import io.grpc.Status;
 import io.grpc.internal.NoopServerCall;
 import io.grpc.observability.logging.GcpLogSink;
@@ -143,14 +142,9 @@ public class InternalLoggingServerInterceptorTest {
                   }
                 },
                 clientInitial,
-                new ServerCallHandler<byte[], byte[]>() {
-                  @Override
-                  public ServerCall.Listener<byte[]> startCall(
-                      ServerCall<byte[], byte[]> call,
-                      Metadata headers) {
-                    interceptedLoggingCall.set(call);
-                    return mockListener;
-                  }
+                (call, headers) -> {
+                  interceptedLoggingCall.set(call);
+                  return mockListener;
                 });
     // receive request header
     {
@@ -261,26 +255,20 @@ public class InternalLoggingServerInterceptorTest {
         return "the-authority";
       }
     };
-    final ServerCallHandler<byte[], byte[]> noopHandler = new ServerCallHandler<byte[], byte[]>() {
-      @Override
-      public ServerCall.Listener<byte[]> startCall(
-          ServerCall<byte[], byte[]> call,
-          Metadata headers) {
-        return new ServerCall.Listener<byte[]>() {};
-      }
-    };
 
     // We expect the contents of the "grpc-timeout" header to be installed the context
     Context.current()
         .withDeadlineAfter(1, TimeUnit.SECONDS, Executors.newSingleThreadScheduledExecutor())
-        .run(new Runnable() {
-          @Override
-          public void run() {
-            ServerCall.Listener<byte[]> unused =
-                factory.create()
-                    .interceptCall(noopServerCall, new Metadata(), noopHandler);
-          }
-        });
+        .run(
+            () -> {
+              ServerCall.Listener<byte[]> unused =
+                  factory.create()
+                      .interceptCall(noopServerCall,
+                          new Metadata(),
+                          (call, headers) -> {
+                            return new ServerCall.Listener<byte[]>() {};
+                          });
+            });
     ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
     verify(mockSink, times(1)).write(captor.capture());
     verifyNoMoreInteractions(mockSink);

@@ -236,10 +236,10 @@ class LogHelper {
         .setEventLogger(eventLogger)
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
         .setRpcId(rpcId);
-    if ((pair != null) && (pair.size != 0)) {
+    if (pair != null && pair.size != 0) {
       logEntryBuilder.setPayloadSize(pair.size);
     }
-    if ((pair != null) && (pair.payload != null)) {
+    if (pair != null && pair.payload != null) {
       logEntryBuilder.setMessage(pair.payload);
     }
     sink.write(logEntryBuilder.build());

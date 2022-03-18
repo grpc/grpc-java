@@ -16,20 +16,14 @@
 
 package io.grpc.observability;
 
-import io.grpc.ServerCallHandler;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
-import org.mockito.ArgumentMatchers;
 
 public class LoggingTestHelper {
 
-  static ServerCallHandler<String, Integer> anyCallHandler() {
-    return ArgumentMatchers.any();
-  }
-
-  static String unaryRpc(
+  static String makeUnaryRpcViaClientStub(
       String requestMessage, SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub) {
     SimpleRequest request = SimpleRequest.newBuilder().setRequestMessage(requestMessage).build();
     SimpleResponse response = blockingStub.unaryRpc(request);

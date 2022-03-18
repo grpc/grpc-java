@@ -86,7 +86,6 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
   @Override
   public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
       Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-    // TODO(dnvindhya) implement the interceptor
     final AtomicLong seq = new AtomicLong(1);
     final String rpcId = UUID.randomUUID().toString();
     final String authority = call.getAuthority();
@@ -128,24 +127,6 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
     ServerCall<ReqT, RespT> wrapperCall =
         new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
-          public void sendMessage(RespT message) {
-            // Event: EventType.GRPC_CALL_RESPONSE_MESSAGE
-            try {
-              helper.logRpcMessage(
-                  seq.getAndIncrement(),
-                  serviceName,
-                  methodName,
-                  EventType.GRPC_CALL_RESPONSE_MESSAGE,
-                  message,
-                  EventLogger.LOGGER_SERVER,
-                  rpcId);
-            } catch (Exception e) {
-              logger.log(Level.SEVERE, "Unable to log response message", e);
-            }
-            super.sendMessage(message);
-          }
-
-          @Override
           public void sendHeaders(Metadata headers) {
             // Event: EventType.GRPC_CALL_RESPONSE_HEADER
             try {
@@ -161,6 +142,24 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
               logger.log(Level.SEVERE, "Unable to log response header", e);
             }
             super.sendHeaders(headers);
+          }
+
+          @Override
+          public void sendMessage(RespT message) {
+            // Event: EventType.GRPC_CALL_RESPONSE_MESSAGE
+            try {
+              helper.logRpcMessage(
+                  seq.getAndIncrement(),
+                  serviceName,
+                  methodName,
+                  EventType.GRPC_CALL_RESPONSE_MESSAGE,
+                  message,
+                  EventLogger.LOGGER_SERVER,
+                  rpcId);
+            } catch (Exception e) {
+              logger.log(Level.SEVERE, "Unable to log response message", e);
+            }
+            super.sendMessage(message);
           }
 
           @Override

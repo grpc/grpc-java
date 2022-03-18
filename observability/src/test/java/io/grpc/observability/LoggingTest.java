@@ -62,7 +62,7 @@ public class LoggingTest {
         .usePlaintext().build();
     SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(
         cleanupRule.register(channel));
-    assertThat(LoggingTestHelper.unaryRpc("buddy", stub))
+    assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
         .isEqualTo("Hello buddy");
     sink.close();
     LoggingChannelProvider.finish();
