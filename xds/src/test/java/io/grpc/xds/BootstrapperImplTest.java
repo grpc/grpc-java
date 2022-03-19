@@ -827,6 +827,7 @@ public class BootstrapperImplTest {
             .setBuildVersion(buildVersion.toString())
             .setUserAgentName(buildVersion.getUserAgent())
             .setUserAgentVersion(buildVersion.getImplementationVersion())
-            .addClientFeatures(BootstrapperImpl.CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
+            .addClientFeatures(BootstrapperImpl.CLIENT_FEATURE_DISABLE_OVERPROVISIONING)
+            .addClientFeatures(BootstrapperImpl.CLIENT_FEATURE_RESOURCE_IN_SOTW);
   }
 }

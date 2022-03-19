@@ -62,6 +62,8 @@ class BootstrapperImpl extends Bootstrapper {
   static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
       "envoy.lb.does_not_support_overprovisioning";
   @VisibleForTesting
+  static final String CLIENT_FEATURE_RESOURCE_IN_SOTW = "xds.config.resource-in-sotw";
+  @VisibleForTesting
   static boolean enableFederation =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
           && Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"));
@@ -177,6 +179,7 @@ class BootstrapperImpl extends Bootstrapper {
     nodeBuilder.setUserAgentName(buildVersion.getUserAgent());
     nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
     nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
+    nodeBuilder.addClientFeatures(CLIENT_FEATURE_RESOURCE_IN_SOTW);
     builder.node(nodeBuilder.build());
 
     Map<String, ?> certProvidersBlob = JsonUtil.getObject(rawData, "certificate_providers");
