@@ -371,24 +371,28 @@ class GrpcHttp2HeadersUtils {
     @Override
     protected CharSequence get(AsciiString name) {
       if (isPseudoHeader(name)) {
-        if (equals(PATH_HEADER, name)) {
-          return path;
-        }
-        if (equals(AUTHORITY_HEADER, name)) {
-          return authority;
-        }
-        if (equals(METHOD_HEADER, name)) {
-          return method;
-        }
-        if (equals(SCHEME_HEADER, name)) {
-          return scheme;
-        }
-        return null;
+        return getPseudoHeader(name);
       }
       if (equals(TE_HEADER, name)) {
         return te;
       }
       return super.get(name);
+    }
+
+    private CharSequence getPseudoHeader(AsciiString name) {
+      if (equals(PATH_HEADER, name)) {
+        return path;
+      }
+      if (equals(AUTHORITY_HEADER, name)) {
+        return authority;
+      }
+      if (equals(METHOD_HEADER, name)) {
+        return method;
+      }
+      if (equals(SCHEME_HEADER, name)) {
+        return scheme;
+      }
+      return null;
     }
 
     @CanIgnoreReturnValue
@@ -445,12 +449,10 @@ class GrpcHttp2HeadersUtils {
 
     @Override
     protected List<CharSequence> getAll(AsciiString name) {
-      if (isPseudoHeader(name)) {
-        CharSequence value = get(name);
+      boolean isPseudo = isPseudoHeader(name);
+      if (isPseudo || equals(TE_HEADER, name)) {
+        CharSequence value = isPseudo ? get(name) : te;
         return value != null ? Collections.singletonList(value) : Collections.emptyList();
-      }
-      if (equals(TE_HEADER, name)) {
-        return te != null ? Collections.singletonList(te) : Collections.emptyList();
       }
       return super.getAll(name);
     }
