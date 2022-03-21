@@ -60,11 +60,11 @@ public class LoggingChannelProviderTest {
     assertThat(prevProvider).isNotInstanceOf(LoggingChannelProvider.class);
     Sink mockSink = mock(GcpLogSink.class);
     LoggingChannelProvider.init(
-        new InternalLoggingChannelInterceptor.FactoryImpl(mockSink, null, null));
+        new InternalLoggingChannelInterceptor.FactoryImpl(mockSink, null, null, null));
     assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
     try {
       LoggingChannelProvider.init(
-          new InternalLoggingChannelInterceptor.FactoryImpl(mockSink, null, null));
+          new InternalLoggingChannelInterceptor.FactoryImpl(mockSink, null, null, null));
       fail("should have failed for calling init() again");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("LoggingChannelProvider already initialized!");

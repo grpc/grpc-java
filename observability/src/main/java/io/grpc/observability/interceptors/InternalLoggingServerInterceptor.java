@@ -58,10 +58,11 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
     private final LogHelper helper;
 
     /** Create the {@link Factory} we need to create our {@link ServerInterceptor}s. */
-    public FactoryImpl(Sink sink, Map<String, String> globalTags,
+    public FactoryImpl(Sink sink, Map<String, String> locationTags,
+        Map<String, String> customTags,
         ObservabilityConfig observabilityConfig) {
       this.sink = sink;
-      this.helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER, globalTags,
+      this.helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER, locationTags, customTags,
           observabilityConfig);
     }
 

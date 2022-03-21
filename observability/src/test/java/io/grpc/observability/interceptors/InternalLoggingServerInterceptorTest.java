@@ -83,7 +83,7 @@ public class InternalLoggingServerInterceptorTest {
   @Before
   @SuppressWarnings("unchecked")
   public void setup() throws Exception {
-    factory = new InternalLoggingServerInterceptor.FactoryImpl(mockSink, null, null);
+    factory = new InternalLoggingServerInterceptor.FactoryImpl(mockSink, null, null, null);
     interceptedLoggingCall = new AtomicReference<>();
     mockListener = mock(ServerCall.Listener.class);
     actualServerInitial = new AtomicReference<>();

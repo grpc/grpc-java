@@ -104,12 +104,13 @@ public class LogHelperTest {
   private final Timestamp timestamp
       = Timestamp.newBuilder().setSeconds(9876).setNanos(54321).build();
   private final TimeProvider timeProvider = () -> TimeUnit.SECONDS.toNanos(9876) + 54321;
-  @SuppressWarnings("unchecked") private final Map<String, String> globalTags = mock(Map.class);
+  @SuppressWarnings("unchecked") private final Map<String, String> locationTags = mock(Map.class);
+  @SuppressWarnings("unchecked") private final Map<String, String> customTags = mock(Map.class);
   private final ObservabilityConfig observabilityConfig = mock(ObservabilityConfig.class);
   private final LogHelper logHelper =
       new LogHelper(
           sink,
-          timeProvider, globalTags, observabilityConfig);
+          timeProvider, locationTags, customTags, observabilityConfig);
 
   @Before
   public void setUp() throws Exception {

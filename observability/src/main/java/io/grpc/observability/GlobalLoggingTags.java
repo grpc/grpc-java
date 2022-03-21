@@ -39,16 +39,23 @@ final class GlobalLoggingTags {
   private static final Logger logger = Logger.getLogger(GlobalLoggingTags.class.getName());
 
   private static final String ENV_KEY_PREFIX = "GRPC_OBSERVABILITY_";
-  private final Map<String, String> tags;
+  private final Map<String, String> locationTags;
+  private final Map<String, String> customTags;
 
   GlobalLoggingTags() {
-    ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
-    populate(builder);
-    tags = builder.build();
+    ImmutableMap.Builder<String, String> locationTagsBuilder = ImmutableMap.builder();
+    ImmutableMap.Builder<String, String> customTagsBuilder = ImmutableMap.builder();
+    populate(locationTagsBuilder, customTagsBuilder);
+    locationTags = locationTagsBuilder.build();
+    customTags = customTagsBuilder.build();
   }
 
-  Map<String, String> getTags() {
-    return tags;
+  Map<String, String> getLocationTags() {
+    return locationTags;
+  }
+
+  Map<String, String> getCustomTags() {
+    return customTags;
   }
 
   @VisibleForTesting
@@ -139,10 +146,11 @@ final class GlobalLoggingTags {
     });
   }
 
-  static void populate(ImmutableMap.Builder<String, String> customTags) {
+  static void populate(ImmutableMap.Builder<String, String> locationTags,
+      ImmutableMap.Builder<String, String> customTags) {
     populateFromEnvironmentVars(customTags);
-    populateFromMetadataServer(customTags);
-    populateFromKubernetesValues(customTags,
+    populateFromMetadataServer(locationTags);
+    populateFromKubernetesValues(locationTags,
         "/var/run/secrets/kubernetes.io/serviceaccount/namespace",
         "/etc/hostname", "/proc/self/cgroup");
   }

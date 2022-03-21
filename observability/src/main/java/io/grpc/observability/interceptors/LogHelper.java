@@ -62,14 +62,16 @@ class LogHelper {
   private final Sink sink;
   private final TimeProvider timeProvider;
   // TODO(DNvindhya) remove unused annotation once the following 2 are actually used
-  @SuppressWarnings({"unused"}) private final Map<String, String> globalTags;
+  @SuppressWarnings({"unused"}) private final Map<String, String> locationTags;
+  @SuppressWarnings({"unused"}) private final Map<String, String> customTags;
   @SuppressWarnings({"unused"}) private final ObservabilityConfig observabilityConfig;
 
-  LogHelper(Sink sink, TimeProvider timeProvider, Map<String, String> globalTags,
-      ObservabilityConfig observabilityConfig) {
+  LogHelper(Sink sink, TimeProvider timeProvider, Map<String, String> locationTags,
+      Map<String, String> customTags, ObservabilityConfig observabilityConfig) {
     this.sink = sink;
     this.timeProvider = timeProvider;
-    this.globalTags = globalTags;
+    this.locationTags = locationTags;
+    this.customTags = customTags;
     this.observabilityConfig = observabilityConfig;
   }
 

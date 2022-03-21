@@ -52,12 +52,12 @@ public class LoggingTest {
       throws IOException {
     Sink sink = new GcpLogSink(PROJECT_ID);
     LoggingServerProvider.init(
-        new InternalLoggingServerInterceptor.FactoryImpl(sink, null, null));
+        new InternalLoggingServerInterceptor.FactoryImpl(sink, null, null, null));
     Server server = ServerBuilder.forPort(0).addService(new LoggingTestHelper.SimpleServiceImpl())
         .build().start();
     int port = cleanupRule.register(server).getPort();
     LoggingChannelProvider.init(
-        new InternalLoggingChannelInterceptor.FactoryImpl(sink, null, null));
+        new InternalLoggingChannelInterceptor.FactoryImpl(sink, null, null, null));
     ManagedChannel channel = ManagedChannelBuilder.forAddress("localhost", port)
         .usePlaintext().build();
     SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(

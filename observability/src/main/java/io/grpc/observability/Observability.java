@@ -45,9 +45,11 @@ public final class Observability {
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
       Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId());
       instance = grpcInit(sink,
-          new InternalLoggingChannelInterceptor.FactoryImpl(sink, globalLoggingTags.getTags(),
+          new InternalLoggingChannelInterceptor.FactoryImpl(sink,
+              globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags(),
               observabilityConfig),
-          new InternalLoggingServerInterceptor.FactoryImpl(sink, globalLoggingTags.getTags(),
+          new InternalLoggingServerInterceptor.FactoryImpl(sink,
+              globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags(),
               observabilityConfig));
     }
     return instance;

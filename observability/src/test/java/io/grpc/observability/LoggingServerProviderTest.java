@@ -61,11 +61,11 @@ public class LoggingServerProviderTest {
     assertThat(prevProvider).isNotInstanceOf(LoggingServerProvider.class);
     Sink mockSink = mock(GcpLogSink.class);
     LoggingServerProvider.init(
-        new InternalLoggingServerInterceptor.FactoryImpl(mockSink, null, null));
+        new InternalLoggingServerInterceptor.FactoryImpl(mockSink, null, null, null));
     assertThat(ServerProvider.provider()).isInstanceOf(ServerProvider.class);
     try {
       LoggingServerProvider.init(
-          new InternalLoggingServerInterceptor.FactoryImpl(mockSink, null, null));
+          new InternalLoggingServerInterceptor.FactoryImpl(mockSink, null, null, null));
       fail("should have failed for calling init() again");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("LoggingServerProvider already initialized!");
