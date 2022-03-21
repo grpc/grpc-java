@@ -22,6 +22,7 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
 import static io.netty.util.AsciiString.of;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import com.google.common.collect.Iterables;
 import com.google.common.io.BaseEncoding;
@@ -232,6 +233,29 @@ public class GrpcHttp2HeadersUtilsTest {
         .containsExactly(AsciiString.of("mymethod2"));
     assertThat(http2Headers.getAll(AsciiString.of(":scheme")))
         .containsExactly(AsciiString.of("myscheme2"));
+  }
+
+  @Test
+  public void GrpcHttp2RequestHeaders_pseudoHeaders_addWhenPresent_throws() {
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    http2Headers.add(AsciiString.of(":path"), AsciiString.of("mypath"));
+    try {
+      http2Headers.add(AsciiString.of(":path"), AsciiString.of("mypath2"));
+      fail("Expected exception");
+    } catch (Exception ex) {
+      // expected
+    }
+  }
+
+  @Test
+  public void GrpcHttp2RequestHeaders_pseudoHeaders_addInvalid_throws() {
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    try {
+      http2Headers.add(AsciiString.of(":status"), AsciiString.of("mystatus"));
+      fail("Expected exception");
+    } catch (Exception ex) {
+      // expected
+    }
   }
 
   @Test
