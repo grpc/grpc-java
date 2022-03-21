@@ -64,14 +64,16 @@ public final class Observability {
   }
 
   /** Un-initialize/shutdown grpc-observability. */
-  public synchronized void grpcShutdown() {
-    if (instance == null) {
-      throw new IllegalStateException("Observability already shutdown!");
+  public void grpcShutdown() {
+    synchronized (Observability.class) {
+      if (instance == null) {
+        throw new IllegalStateException("Observability already shutdown!");
+      }
+      LoggingChannelProvider.shutdown();
+      LoggingServerProvider.shutdown();
+      sink.close();
+      instance = null;
     }
-    LoggingChannelProvider.shutdown();
-    LoggingServerProvider.shutdown();
-    sink.close();
-    instance = null;
   }
 
   private Observability(Sink sink,
