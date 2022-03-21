@@ -210,22 +210,28 @@ public class GrpcHttp2HeadersUtilsTest {
     http2Headers.set(AsciiString.of(":method"), AsciiString.of("mymethod"));
     http2Headers.set(AsciiString.of(":scheme"), AsciiString.of("myscheme"));
 
-    assertThat(http2Headers.get(AsciiString.of(":path"))).isEqualTo(AsciiString.of("mypath"));
-    assertThat(http2Headers.get(AsciiString.of(":authority")))
-        .isEqualTo(AsciiString.of("myauthority"));
-    assertThat(http2Headers.get(AsciiString.of(":method"))).isEqualTo(AsciiString.of("mymethod"));
-    assertThat(http2Headers.get(AsciiString.of(":scheme"))).isEqualTo(AsciiString.of("myscheme"));
+    assertThat(http2Headers.getAll(AsciiString.of(":path")))
+        .containsExactly(AsciiString.of("mypath"));
+    assertThat(http2Headers.getAll(AsciiString.of(":authority")))
+        .containsExactly(AsciiString.of("myauthority"));
+    assertThat(http2Headers.getAll(AsciiString.of(":method")))
+        .containsExactly(AsciiString.of("mymethod"));
+    assertThat(http2Headers.getAll(AsciiString.of(":scheme")))
+        .containsExactly(AsciiString.of("myscheme"));
 
     http2Headers.set(AsciiString.of(":path"), AsciiString.of("mypath2"));
     http2Headers.set(AsciiString.of(":authority"), AsciiString.of("myauthority2"));
     http2Headers.set(AsciiString.of(":method"), AsciiString.of("mymethod2"));
     http2Headers.set(AsciiString.of(":scheme"), AsciiString.of("myscheme2"));
 
-    assertThat(http2Headers.get(AsciiString.of(":path"))).isEqualTo(AsciiString.of("mypath2"));
-    assertThat(http2Headers.get(AsciiString.of(":authority")))
-        .isEqualTo(AsciiString.of("myauthority2"));
-    assertThat(http2Headers.get(AsciiString.of(":method"))).isEqualTo(AsciiString.of("mymethod2"));
-    assertThat(http2Headers.get(AsciiString.of(":scheme"))).isEqualTo(AsciiString.of("myscheme2"));
+    assertThat(http2Headers.getAll(AsciiString.of(":path")))
+        .containsExactly(AsciiString.of("mypath2"));
+    assertThat(http2Headers.getAll(AsciiString.of(":authority")))
+        .containsExactly(AsciiString.of("myauthority2"));
+    assertThat(http2Headers.getAll(AsciiString.of(":method")))
+        .containsExactly(AsciiString.of("mymethod2"));
+    assertThat(http2Headers.getAll(AsciiString.of(":scheme")))
+        .containsExactly(AsciiString.of("myscheme2"));
   }
 
   @Test
