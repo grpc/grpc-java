@@ -133,6 +133,101 @@ public class GrpcHttp2HeadersUtilsTest {
     assertThat(decodedHeaders.toString()).contains("[]");
   }
 
+  // contains is used by Netty 4.1.75+. https://github.com/grpc/grpc-java/issues/8981
+  // Just implement everything pseudo headers for all methods; too many recent breakages.
+  @Test
+  public void GrpcHttp2RequestHeaders_pseudoHeaders_notPresent() {
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    assertThat(http2Headers.get(AsciiString.of(":path"))).isNull();
+    assertThat(http2Headers.get(AsciiString.of(":authority"))).isNull();
+    assertThat(http2Headers.get(AsciiString.of(":method"))).isNull();
+    assertThat(http2Headers.get(AsciiString.of(":scheme"))).isNull();
+    assertThat(http2Headers.get(AsciiString.of(":status"))).isNull();
+
+    assertThat(http2Headers.getAll(AsciiString.of(":path"))).isEmpty();
+    assertThat(http2Headers.getAll(AsciiString.of(":authority"))).isEmpty();
+    assertThat(http2Headers.getAll(AsciiString.of(":method"))).isEmpty();
+    assertThat(http2Headers.getAll(AsciiString.of(":scheme"))).isEmpty();
+    assertThat(http2Headers.getAll(AsciiString.of(":status"))).isEmpty();
+
+    assertThat(http2Headers.contains(AsciiString.of(":path"))).isFalse();
+    assertThat(http2Headers.contains(AsciiString.of(":authority"))).isFalse();
+    assertThat(http2Headers.contains(AsciiString.of(":method"))).isFalse();
+    assertThat(http2Headers.contains(AsciiString.of(":scheme"))).isFalse();
+    assertThat(http2Headers.contains(AsciiString.of(":status"))).isFalse();
+
+    assertThat(http2Headers.remove(AsciiString.of(":path"))).isFalse();
+    assertThat(http2Headers.remove(AsciiString.of(":authority"))).isFalse();
+    assertThat(http2Headers.remove(AsciiString.of(":method"))).isFalse();
+    assertThat(http2Headers.remove(AsciiString.of(":scheme"))).isFalse();
+    assertThat(http2Headers.remove(AsciiString.of(":status"))).isFalse();
+  }
+
+  @Test
+  public void GrpcHttp2RequestHeaders_pseudoHeaders_present() {
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    http2Headers.add(AsciiString.of(":path"), AsciiString.of("mypath"));
+    http2Headers.add(AsciiString.of(":authority"), AsciiString.of("myauthority"));
+    http2Headers.add(AsciiString.of(":method"), AsciiString.of("mymethod"));
+    http2Headers.add(AsciiString.of(":scheme"), AsciiString.of("myscheme"));
+
+    assertThat(http2Headers.get(AsciiString.of(":path"))).isEqualTo(AsciiString.of("mypath"));
+    assertThat(http2Headers.get(AsciiString.of(":authority")))
+        .isEqualTo(AsciiString.of("myauthority"));
+    assertThat(http2Headers.get(AsciiString.of(":method"))).isEqualTo(AsciiString.of("mymethod"));
+    assertThat(http2Headers.get(AsciiString.of(":scheme"))).isEqualTo(AsciiString.of("myscheme"));
+
+    assertThat(http2Headers.getAll(AsciiString.of(":path")))
+        .containsExactly(AsciiString.of("mypath"));
+    assertThat(http2Headers.getAll(AsciiString.of(":authority")))
+        .containsExactly(AsciiString.of("myauthority"));
+    assertThat(http2Headers.getAll(AsciiString.of(":method")))
+        .containsExactly(AsciiString.of("mymethod"));
+    assertThat(http2Headers.getAll(AsciiString.of(":scheme")))
+        .containsExactly(AsciiString.of("myscheme"));
+
+    assertThat(http2Headers.contains(AsciiString.of(":path"))).isTrue();
+    assertThat(http2Headers.contains(AsciiString.of(":authority"))).isTrue();
+    assertThat(http2Headers.contains(AsciiString.of(":method"))).isTrue();
+    assertThat(http2Headers.contains(AsciiString.of(":scheme"))).isTrue();
+
+    assertThat(http2Headers.remove(AsciiString.of(":path"))).isTrue();
+    assertThat(http2Headers.remove(AsciiString.of(":authority"))).isTrue();
+    assertThat(http2Headers.remove(AsciiString.of(":method"))).isTrue();
+    assertThat(http2Headers.remove(AsciiString.of(":scheme"))).isTrue();
+
+    assertThat(http2Headers.contains(AsciiString.of(":path"))).isFalse();
+    assertThat(http2Headers.contains(AsciiString.of(":authority"))).isFalse();
+    assertThat(http2Headers.contains(AsciiString.of(":method"))).isFalse();
+    assertThat(http2Headers.contains(AsciiString.of(":scheme"))).isFalse();
+  }
+
+  @Test
+  public void GrpcHttp2RequestHeaders_pseudoHeaders_set() {
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
+    http2Headers.set(AsciiString.of(":path"), AsciiString.of("mypath"));
+    http2Headers.set(AsciiString.of(":authority"), AsciiString.of("myauthority"));
+    http2Headers.set(AsciiString.of(":method"), AsciiString.of("mymethod"));
+    http2Headers.set(AsciiString.of(":scheme"), AsciiString.of("myscheme"));
+
+    assertThat(http2Headers.get(AsciiString.of(":path"))).isEqualTo(AsciiString.of("mypath"));
+    assertThat(http2Headers.get(AsciiString.of(":authority")))
+        .isEqualTo(AsciiString.of("myauthority"));
+    assertThat(http2Headers.get(AsciiString.of(":method"))).isEqualTo(AsciiString.of("mymethod"));
+    assertThat(http2Headers.get(AsciiString.of(":scheme"))).isEqualTo(AsciiString.of("myscheme"));
+
+    http2Headers.set(AsciiString.of(":path"), AsciiString.of("mypath2"));
+    http2Headers.set(AsciiString.of(":authority"), AsciiString.of("myauthority2"));
+    http2Headers.set(AsciiString.of(":method"), AsciiString.of("mymethod2"));
+    http2Headers.set(AsciiString.of(":scheme"), AsciiString.of("myscheme2"));
+
+    assertThat(http2Headers.get(AsciiString.of(":path"))).isEqualTo(AsciiString.of("mypath2"));
+    assertThat(http2Headers.get(AsciiString.of(":authority")))
+        .isEqualTo(AsciiString.of("myauthority2"));
+    assertThat(http2Headers.get(AsciiString.of(":method"))).isEqualTo(AsciiString.of("mymethod2"));
+    assertThat(http2Headers.get(AsciiString.of(":scheme"))).isEqualTo(AsciiString.of("myscheme2"));
+  }
+
   @Test
   public void dupBinHeadersWithComma() {
     Key<byte[]> key = Key.of("bytes-bin", BINARY_BYTE_MARSHALLER);
