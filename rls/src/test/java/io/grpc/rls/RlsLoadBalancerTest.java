@@ -392,7 +392,7 @@ public class RlsLoadBalancerTest {
 
   private String getRlsConfigJsonStr() {
     return "{\n"
-        + "  \"grpcKeyBuilders\": [\n"
+        + "  \"grpcKeybuilders\": [\n"
         + "    {\n"
         + "      \"names\": [\n"
         + "        {\n"

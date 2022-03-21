@@ -37,7 +37,7 @@ public class RlsRequestFactoryTest {
 
   private static final RouteLookupConfig RLS_CONFIG =
       RouteLookupConfig.builder()
-          .grpcKeyBuilders(ImmutableList.of(
+          .grpcKeybuilders(ImmutableList.of(
               GrpcKeyBuilder.create(
                   ImmutableList.of(Name.create("com.google.service1", "Create")),
                   ImmutableList.of(
