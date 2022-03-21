@@ -133,7 +133,7 @@ public class GrpcHttp2HeadersUtilsTest {
     assertThat(decodedHeaders.toString()).contains("[]");
   }
 
-  // contains is used by Netty 4.1.75+. https://github.com/grpc/grpc-java/issues/8981
+  // contains() is used by Netty 4.1.75+. https://github.com/grpc/grpc-java/issues/8981
   // Just implement everything pseudo headers for all methods; too many recent breakages.
   @Test
   public void GrpcHttp2RequestHeaders_pseudoHeaders_notPresent() {
