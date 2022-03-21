@@ -29,10 +29,12 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
+import io.grpc.observability.ObservabilityConfig;
 import io.grpc.observability.logging.Sink;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.net.SocketAddress;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -55,13 +57,13 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
     private final Sink sink;
     private final LogHelper helper;
 
-    static LogHelper createLogHelper(Sink sink, TimeProvider provider) {
-      return new LogHelper(sink, provider);
-    }
-
-    public FactoryImpl(Sink sink) {
+    /** Create the {@link Factory} we need to create our {@link ServerInterceptor}s. */
+    public FactoryImpl(Sink sink, Map<String, String> locationTags,
+        Map<String, String> customTags,
+        ObservabilityConfig observabilityConfig) {
       this.sink = sink;
-      this.helper = createLogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
+      this.helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER, locationTags, customTags,
+          observabilityConfig);
     }
 
     @Override

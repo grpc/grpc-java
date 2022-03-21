@@ -52,12 +52,12 @@ public class LoggingTest {
       throws IOException {
     Sink sink = new GcpLogSink(PROJECT_ID);
     LoggingServerProvider.init(
-        new InternalLoggingServerInterceptor.FactoryImpl(sink));
+        new InternalLoggingServerInterceptor.FactoryImpl(sink, null, null, null));
     Server server = ServerBuilder.forPort(0).addService(new LoggingTestHelper.SimpleServiceImpl())
         .build().start();
     int port = cleanupRule.register(server).getPort();
     LoggingChannelProvider.init(
-        new InternalLoggingChannelInterceptor.FactoryImpl(sink));
+        new InternalLoggingChannelInterceptor.FactoryImpl(sink, null, null, null));
     ManagedChannel channel = ManagedChannelBuilder.forAddress("localhost", port)
         .usePlaintext().build();
     SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(
@@ -65,7 +65,7 @@ public class LoggingTest {
     assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
         .isEqualTo("Hello buddy");
     sink.close();
-    LoggingChannelProvider.finish();
-    LoggingServerProvider.finish();
+    LoggingChannelProvider.shutdown();
+    LoggingServerProvider.shutdown();
   }
 }

@@ -30,6 +30,7 @@ import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
+import io.grpc.observability.ObservabilityConfig;
 import io.grpc.observability.logging.Sink;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.Address;
@@ -41,6 +42,7 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -59,10 +61,18 @@ class LogHelper {
 
   private final Sink sink;
   private final TimeProvider timeProvider;
+  // TODO(DNvindhya) remove unused annotation once the following 2 are actually used
+  @SuppressWarnings({"unused"}) private final Map<String, String> locationTags;
+  @SuppressWarnings({"unused"}) private final Map<String, String> customTags;
+  @SuppressWarnings({"unused"}) private final ObservabilityConfig observabilityConfig;
 
-  LogHelper(Sink sink, TimeProvider timeProvider) {
+  LogHelper(Sink sink, TimeProvider timeProvider, Map<String, String> locationTags,
+      Map<String, String> customTags, ObservabilityConfig observabilityConfig) {
     this.sink = sink;
     this.timeProvider = timeProvider;
+    this.locationTags = locationTags;
+    this.customTags = customTags;
+    this.observabilityConfig = observabilityConfig;
   }
 
   /**

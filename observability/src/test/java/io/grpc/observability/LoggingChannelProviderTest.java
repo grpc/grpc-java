@@ -59,16 +59,17 @@ public class LoggingChannelProviderTest {
     ManagedChannelProvider prevProvider = ManagedChannelProvider.provider();
     assertThat(prevProvider).isNotInstanceOf(LoggingChannelProvider.class);
     Sink mockSink = mock(GcpLogSink.class);
-    LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl(mockSink));
+    LoggingChannelProvider.init(
+        new InternalLoggingChannelInterceptor.FactoryImpl(mockSink, null, null, null));
     assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
     try {
       LoggingChannelProvider.init(
-          new InternalLoggingChannelInterceptor.FactoryImpl(mockSink));
+          new InternalLoggingChannelInterceptor.FactoryImpl(mockSink, null, null, null));
       fail("should have failed for calling init() again");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("LoggingChannelProvider already initialized!");
     }
-    LoggingChannelProvider.finish();
+    LoggingChannelProvider.shutdown();
     assertThat(ManagedChannelProvider.provider()).isSameInstanceAs(prevProvider);
   }
 
@@ -88,7 +89,7 @@ public class LoggingChannelProviderTest {
     verify(interceptor)
         .interceptCall(same(method), same(callOptions), ArgumentMatchers.<Channel>any());
     channel.shutdownNow();
-    LoggingChannelProvider.finish();
+    LoggingChannelProvider.shutdown();
   }
 
   @Test
@@ -107,7 +108,7 @@ public class LoggingChannelProviderTest {
     verify(interceptor)
         .interceptCall(same(method), same(callOptions), ArgumentMatchers.<Channel>any());
     channel.shutdownNow();
-    LoggingChannelProvider.finish();
+    LoggingChannelProvider.shutdown();
   }
 
   @Test
@@ -127,7 +128,7 @@ public class LoggingChannelProviderTest {
     verify(interceptor)
         .interceptCall(same(method), same(callOptions), ArgumentMatchers.<Channel>any());
     channel.shutdownNow();
-    LoggingChannelProvider.finish();
+    LoggingChannelProvider.shutdown();
   }
 
   private static class NoopInterceptor implements ClientInterceptor {

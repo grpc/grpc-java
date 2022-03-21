@@ -60,15 +60,17 @@ public class LoggingServerProviderTest {
     ServerProvider prevProvider = ServerProvider.provider();
     assertThat(prevProvider).isNotInstanceOf(LoggingServerProvider.class);
     Sink mockSink = mock(GcpLogSink.class);
-    LoggingServerProvider.init(new InternalLoggingServerInterceptor.FactoryImpl(mockSink));
+    LoggingServerProvider.init(
+        new InternalLoggingServerInterceptor.FactoryImpl(mockSink, null, null, null));
     assertThat(ServerProvider.provider()).isInstanceOf(ServerProvider.class);
     try {
-      LoggingServerProvider.init(new InternalLoggingServerInterceptor.FactoryImpl(mockSink));
+      LoggingServerProvider.init(
+          new InternalLoggingServerInterceptor.FactoryImpl(mockSink, null, null, null));
       fail("should have failed for calling init() again");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("LoggingServerProvider already initialized!");
     }
-    LoggingServerProvider.finish();
+    LoggingServerProvider.shutdown();
     assertThat(ServerProvider.provider()).isSameInstanceAs(prevProvider);
   }
 
@@ -100,7 +102,7 @@ public class LoggingServerProviderTest {
         cleanupRule.register(channel));
     assertThat(unaryRpc("buddy", stub)).isEqualTo("Hello buddy");
     verify(interceptor).interceptCall(any(ServerCall.class), any(Metadata.class), anyCallHandler());
-    LoggingServerProvider.finish();
+    LoggingServerProvider.shutdown();
   }
 
   private ServerCallHandler<String, Integer> anyCallHandler() {

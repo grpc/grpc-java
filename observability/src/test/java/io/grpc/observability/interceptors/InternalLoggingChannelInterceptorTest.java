@@ -86,7 +86,7 @@ public class InternalLoggingChannelInterceptorTest {
 
   @Before
   public void setup() throws Exception {
-    factory = new InternalLoggingChannelInterceptor.FactoryImpl(mockSink);
+    factory = new InternalLoggingChannelInterceptor.FactoryImpl(mockSink, null, null, null);
     interceptedListener = new AtomicReference<>();
     actualClientInitial = new AtomicReference<>();
     actualRequest = new AtomicReference<>();

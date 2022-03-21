@@ -29,7 +29,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class ObservabilityConfigTest {
+public class ObservabilityConfigImplTest {
   private static final String EVENT_TYPES = "{\n"
       + "  \"logging_config\": {\n"
       + "    \"enable_cloud_logging\": false,\n"
@@ -66,7 +66,7 @@ public class ObservabilityConfigTest {
       + "    \"enable_cloud_logging\": false\n" + "  }\n"
       + "}";
 
-  ObservabilityConfig observabilityConfig = new ObservabilityConfig();
+  ObservabilityConfigImpl observabilityConfig = new ObservabilityConfigImpl();
 
   @Test
   public void nullConfig() throws IOException {

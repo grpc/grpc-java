@@ -35,6 +35,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
+import io.grpc.observability.ObservabilityConfig;
 import io.grpc.observability.interceptors.LogHelper.PayloadBuilder;
 import io.grpc.observability.logging.GcpLogSink;
 import io.grpc.observability.logging.Sink;
@@ -53,6 +54,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.Charset;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
@@ -101,16 +103,14 @@ public class LogHelperTest {
   private final Sink sink = mock(GcpLogSink.class);
   private final Timestamp timestamp
       = Timestamp.newBuilder().setSeconds(9876).setNanos(54321).build();
-  private final TimeProvider timeProvider = new TimeProvider() {
-    @Override
-    public long currentTimeNanos() {
-      return TimeUnit.SECONDS.toNanos(9876) + 54321;
-    }
-  };
+  private final TimeProvider timeProvider = () -> TimeUnit.SECONDS.toNanos(9876) + 54321;
+  @SuppressWarnings("unchecked") private final Map<String, String> locationTags = mock(Map.class);
+  @SuppressWarnings("unchecked") private final Map<String, String> customTags = mock(Map.class);
+  private final ObservabilityConfig observabilityConfig = mock(ObservabilityConfig.class);
   private final LogHelper logHelper =
       new LogHelper(
           sink,
-          timeProvider);
+          timeProvider, locationTags, customTags, observabilityConfig);
 
   @Before
   public void setUp() throws Exception {

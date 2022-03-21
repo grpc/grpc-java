@@ -45,7 +45,7 @@ final class LoggingServerProvider extends ServerProvider {
     ServerRegistry.getDefaultRegistry().register(instance);
   }
 
-  static synchronized void finish() {
+  static synchronized void shutdown() {
     if (instance == null) {
       throw new IllegalStateException("LoggingServerProvider not initialized!");
     }
