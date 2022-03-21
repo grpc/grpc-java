@@ -30,7 +30,6 @@ import java.io.IOException;
 /** The main class for gRPC Observability features. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class Observability {
-  private boolean shutdown = false;
   private static Observability instance = null;
   private final Sink sink;
 
@@ -66,13 +65,13 @@ public final class Observability {
 
   /** Un-initialize/shutdown grpc-observability. */
   public synchronized void grpcShutdown() {
-    if (shutdown) {
+    if (instance == null) {
       throw new IllegalStateException("Observability already shutdown!");
     }
     LoggingChannelProvider.shutdown();
     LoggingServerProvider.shutdown();
     sink.close();
-    shutdown = true;
+    instance = null;
   }
 
   private Observability(Sink sink,
