@@ -137,7 +137,7 @@ public class GrpcHttp2HeadersUtilsTest {
   // contains() is used by Netty 4.1.75+. https://github.com/grpc/grpc-java/issues/8981
   // Just implement everything pseudo headers for all methods; too many recent breakages.
   @Test
-  public void GrpcHttp2RequestHeaders_pseudoHeaders_notPresent() {
+  public void grpcHttp2RequestHeaders_pseudoHeaders_notPresent() {
     Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
     assertThat(http2Headers.get(AsciiString.of(":path"))).isNull();
     assertThat(http2Headers.get(AsciiString.of(":authority"))).isNull();
@@ -165,7 +165,7 @@ public class GrpcHttp2HeadersUtilsTest {
   }
 
   @Test
-  public void GrpcHttp2RequestHeaders_pseudoHeaders_present() {
+  public void grpcHttp2RequestHeaders_pseudoHeaders_present() {
     Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
     http2Headers.add(AsciiString.of(":path"), AsciiString.of("mypath"));
     http2Headers.add(AsciiString.of(":authority"), AsciiString.of("myauthority"));
@@ -204,7 +204,7 @@ public class GrpcHttp2HeadersUtilsTest {
   }
 
   @Test
-  public void GrpcHttp2RequestHeaders_pseudoHeaders_set() {
+  public void grpcHttp2RequestHeaders_pseudoHeaders_set() {
     Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
     http2Headers.set(AsciiString.of(":path"), AsciiString.of("mypath"));
     http2Headers.set(AsciiString.of(":authority"), AsciiString.of("myauthority"));
@@ -236,7 +236,7 @@ public class GrpcHttp2HeadersUtilsTest {
   }
 
   @Test
-  public void GrpcHttp2RequestHeaders_pseudoHeaders_addWhenPresent_throws() {
+  public void grpcHttp2RequestHeaders_pseudoHeaders_addWhenPresent_throws() {
     Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
     http2Headers.add(AsciiString.of(":path"), AsciiString.of("mypath"));
     try {
@@ -248,7 +248,7 @@ public class GrpcHttp2HeadersUtilsTest {
   }
 
   @Test
-  public void GrpcHttp2RequestHeaders_pseudoHeaders_addInvalid_throws() {
+  public void grpcHttp2RequestHeaders_pseudoHeaders_addInvalid_throws() {
     Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
     try {
       http2Headers.add(AsciiString.of(":status"), AsciiString.of("mystatus"));
