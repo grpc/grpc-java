@@ -29,6 +29,7 @@ import com.github.xds.service.orca.v3.OpenRcaServiceGrpc;
 import com.github.xds.service.orca.v3.OrcaLoadReportRequest;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Duration;
+import io.grpc.BindableService;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ManagedChannel;
@@ -55,7 +56,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-
 @RunWith(JUnit4.class)
 public class OrcaServiceImplTest {
   @Rule
@@ -63,7 +63,7 @@ public class OrcaServiceImplTest {
   private ManagedChannel channel;
   private Server oobserver;
   private final FakeClock fakeClock = new FakeClock();
-  private OrcaServiceImpl defaultTestService;
+  private OrcaOobService defaultTestService;
   private final Random random = new Random();
   @Mock
   ClientCall.Listener<OrcaLoadReport> listener;
@@ -71,9 +71,9 @@ public class OrcaServiceImplTest {
   @Before
   public void setup() throws Exception {
     MockitoAnnotations.initMocks(this);
-    defaultTestService = new OrcaServiceImpl(1, TimeUnit.SECONDS,
+    defaultTestService = new OrcaOobService(1, TimeUnit.SECONDS,
         fakeClock.getScheduledExecutorService());
-    startServerAndGetChannel(defaultTestService);
+    startServerAndGetChannel(defaultTestService.getService());
   }
 
   @After
@@ -92,7 +92,7 @@ public class OrcaServiceImplTest {
     }
   }
 
-  private void startServerAndGetChannel(OrcaServiceImpl orcaService) throws Exception {
+  private void startServerAndGetChannel(BindableService orcaService) throws Exception {
     oobserver = grpcCleanup.register(
         InProcessServerBuilder.forName("orca-service-test")
             .addService(orcaService)
@@ -111,14 +111,14 @@ public class OrcaServiceImplTest {
         .streamCoreMetrics(OrcaLoadReportRequest.newBuilder().build());
     assertThat(reports.next()).isEqualTo(
         OrcaLoadReport.newBuilder().setCpuUtilization(0.1).build());
-    assertThat(defaultTestService.clients.size()).isEqualTo(1);
+    assertThat(defaultTestService.getClientsCount()).isEqualTo(1);
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(1);
     assertThat(reports.next()).isEqualTo(
         OrcaLoadReport.newBuilder().setCpuUtilization(0.1).build());
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(1);
     channel.shutdownNow();
-    assertThat(defaultTestService.clients.size()).isEqualTo(0);
+    assertThat(defaultTestService.getClientsCount()).isEqualTo(0);
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(0);
   }
 
@@ -134,12 +134,12 @@ public class OrcaServiceImplTest {
     call.halfClose();
     call.request(1);
     OrcaLoadReport expect = OrcaLoadReport.newBuilder().putUtilization("buffer", 0.2).build();
-    assertThat(defaultTestService.clients.size()).isEqualTo(1);
+    assertThat(defaultTestService.getClientsCount()).isEqualTo(1);
     verify(listener).onMessage(eq(expect));
     reset(listener);
     oobserver.shutdownNow();
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(0);
-    assertThat(defaultTestService.clients.size()).isEqualTo(0);
+    assertThat(defaultTestService.getClientsCount()).isEqualTo(0);
     ArgumentCaptor<Status> callCloseCaptor = ArgumentCaptor.forClass(null);
     verify(listener).onClose(callCloseCaptor.capture(), any());
     assertThat(callCloseCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
@@ -192,9 +192,9 @@ public class OrcaServiceImplTest {
   @Test
   @SuppressWarnings("unchecked")
   public void testRequestIntervalDefault() throws Exception {
-    defaultTestService = new OrcaServiceImpl(fakeClock.getScheduledExecutorService());
+    defaultTestService = new OrcaOobService(fakeClock.getScheduledExecutorService());
     oobserver.shutdownNow();
-    startServerAndGetChannel(defaultTestService);
+    startServerAndGetChannel(defaultTestService.getService());
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
     defaultTestService.setUtilizationMetric("buffer", 0.2);
@@ -234,11 +234,11 @@ public class OrcaServiceImplTest {
     call2.request(1);
     expect = OrcaLoadReport.newBuilder(expect).setMemUtilization(0.5).build();
     verify(listener).onMessage(eq(expect));
-    assertThat(defaultTestService.clients.size()).isEqualTo(2);
+    assertThat(defaultTestService.getClientsCount()).isEqualTo(2);
     assertThat(fakeClock.getPendingTasks().size()).isEqualTo(2);
     channel.shutdownNow();
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(0);
-    assertThat(defaultTestService.clients.size()).isEqualTo(0);
+    assertThat(defaultTestService.getClientsCount()).isEqualTo(0);
     ArgumentCaptor<Status> callCloseCaptor = ArgumentCaptor.forClass(null);
     verify(listener, times(2)).onClose(callCloseCaptor.capture(), any());
     assertThat(callCloseCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);

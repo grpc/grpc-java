@@ -35,8 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
-
+final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
   private static final Logger logger = Logger.getLogger(OrcaServiceImpl.class.getName());
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -47,8 +46,6 @@ public final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImpl
         }
       });
 
-  // Empty or invalid (non-positive) minInterval config in will be treated to this default value.
-  private static final long DEFAULT_MIN_REPORT_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(30);
   private final long minReportIntervalNanos;
   private final ScheduledExecutorService timeService;
   private volatile ConcurrentHashMap<String, Double> metricsData = new ConcurrentHashMap<>();
@@ -57,24 +54,8 @@ public final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImpl
   @VisibleForTesting
   final List<OrcaClient> clients = new ArrayList<>();
 
-  /**
-   * Construct an OOB metrics reporting service.
-   *
-   * @param minInterval configures the minimum metrics reporting interval for the service. Bad
-   *        configuration (non-positive) will be overridden to service default (30s).
-   *        Minimum metrics reporting interval means, if the setting in the client's
-   *        request is invalid (non-positive) or below this value, they will be treated
-   *        as this value.
-   */
-  public OrcaServiceImpl(long minInterval, TimeUnit timeUnit,
-                         ScheduledExecutorService timeService) {
-    this.minReportIntervalNanos = minInterval > 0 ? timeUnit.toNanos(minInterval)
-        : DEFAULT_MIN_REPORT_INTERVAL_NANOS;
-    this.timeService = checkNotNull(timeService);
-  }
-
-  public OrcaServiceImpl(ScheduledExecutorService timeService) {
-    this.minReportIntervalNanos = DEFAULT_MIN_REPORT_INTERVAL_NANOS;
+  public OrcaServiceImpl(long minReportIntervalNanos, ScheduledExecutorService timeService) {
+    this.minReportIntervalNanos = minReportIntervalNanos;
     this.timeService = checkNotNull(timeService);
   }
 
@@ -137,31 +118,31 @@ public final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImpl
         .build();
   }
 
-  public void setUtilizationMetric(String key, double value) {
+  void setUtilizationMetric(String key, double value) {
     metricsData.put(key, value);
   }
 
-  public void setAllUtilizationMetrics(Map<String, Double> metrics) {
+  void setAllUtilizationMetrics(Map<String, Double> metrics) {
     metricsData = new ConcurrentHashMap<>(metrics);
   }
 
-  public void deleteUtilizationMetric(String key) {
+  void deleteUtilizationMetric(String key) {
     metricsData.remove(key);
   }
 
-  public void setCpuUtilizationMetric(double value) {
+  void setCpuUtilizationMetric(double value) {
     cpuUtilization = value;
   }
 
-  public void deleteCpuUtilizationMetric() {
+  void deleteCpuUtilizationMetric() {
     cpuUtilization = 0;
   }
 
-  public void setMemoryUtilizationMetric(double value) {
+  void setMemoryUtilizationMetric(double value) {
     memoryUtilization = value;
   }
 
-  public void deleteMemoryUtilizationMetric() {
+  void deleteMemoryUtilizationMetric() {
     memoryUtilization = 0;
   }
 }
