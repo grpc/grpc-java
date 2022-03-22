@@ -45,7 +45,6 @@ final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
           logger.log(Level.SEVERE, "Exception!" + e);
         }
       });
-
   private final long minReportIntervalNanos;
   private final ScheduledExecutorService timeService;
   private volatile ConcurrentHashMap<String, Double> metricsData = new ConcurrentHashMap<>();
