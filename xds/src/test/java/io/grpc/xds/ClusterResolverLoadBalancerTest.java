@@ -851,6 +851,24 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
+  public void resolutionErrorBeforeChildLbCreated_edsOnly_returnErrorPicker() {
+    ClusterResolverConfig config = new ClusterResolverConfig(
+        Arrays.asList(edsDiscoveryMechanism1), roundRobin);
+    deliverLbConfig(config);
+    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
+    assertThat(childBalancers).isEmpty();
+    reset(helper);
+    xdsClient.deliverError(Status.RESOURCE_EXHAUSTED.withDescription("OOM"));
+    assertThat(childBalancers).isEmpty();
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    Status actualStatus = result.getStatus();
+    assertThat(actualStatus.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(actualStatus.getDescription()).contains("RESOURCE_EXHAUSTED: OOM");
+  }
+
+  @Test
   public void handleNameResolutionErrorFromUpstream_beforeChildLbCreated_returnErrorPicker() {
     ClusterResolverConfig config = new ClusterResolverConfig(
         Arrays.asList(edsDiscoveryMechanism1, logicalDnsDiscoveryMechanism), roundRobin);
