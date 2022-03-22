@@ -246,7 +246,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
 
       @Override
-      public void onError(final Status error) {
+      public void onError(Status error) {
+        Status status = Status.UNAVAILABLE
+            .withDescription(
+                String.format("Unable to load CDS %s. xDS server returned: %s: %s",
+                  name, error.getCode(), error.getDescription()))
+            .withCause(error.getCause());
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
@@ -255,7 +260,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             }
             // All watchers should receive the same error, so we only propagate it once.
             if (ClusterState.this == root) {
-              handleClusterDiscoveryError(error);
+              handleClusterDiscoveryError(status);
             }
           }
         });
