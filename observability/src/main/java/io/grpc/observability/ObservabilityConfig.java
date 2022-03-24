@@ -16,6 +16,7 @@
 
 package io.grpc.observability;
 
+import com.google.common.collect.ImmutableList;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 
 public interface ObservabilityConfig {
@@ -26,10 +27,10 @@ public interface ObservabilityConfig {
   String getDestinationProjectId();
 
   /** Get filters set for logging. */
-  LogFilter[] getLogFilters();
+  ImmutableList<LogFilter> getLogFilters();
 
   /** Get event types to log. */
-  EventType[] getEventTypes();
+  ImmutableList<EventType> getEventTypes();
 
   /**
    * POJO for representing a filter used in configuration.
@@ -44,7 +45,14 @@ public interface ObservabilityConfig {
     /** Number of bytes of each header to log. */
     public final Integer messageBytes;
 
-    LogFilter(String pattern, Integer headerBytes, Integer messageBytes) {
+    /**
+     * Object used to represent filter used in configuration.
+     *
+     * @param pattern Pattern indicating which service/method to log
+     * @param headerBytes Number of bytes of each header to log
+     * @param messageBytes Number of bytes of each header to log
+     */
+    public LogFilter(String pattern, Integer headerBytes, Integer messageBytes) {
       this.pattern = pattern;
       this.headerBytes = headerBytes;
       this.messageBytes = messageBytes;

@@ -18,14 +18,18 @@ package io.grpc.observability;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
+import com.google.common.collect.ImmutableList;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-/** gRPC Observability configuration processor. */
+/**
+ * gRPC Observability configuration processor.
+ */
 final class ObservabilityConfigImpl implements ObservabilityConfig {
   private static final String CONFIG_ENV_VAR_NAME = "GRPC_CONFIG_OBSERVABILITY";
 
@@ -47,7 +51,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         JsonUtil.getObject((Map<String, ?>) JsonParser.parse(config), "logging_config"));
   }
 
-  private void parseLoggingConfig(Map<String,?> loggingConfig) {
+  private void parseLoggingConfig(Map<String, ?> loggingConfig) {
     if (loggingConfig != null) {
       Boolean value = JsonUtil.getBoolean(loggingConfig, "enable_cloud_logging");
       if (value != null) {
@@ -81,7 +85,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         return EventType.GRPC_CALL_REQUEST_HEADER;
       case "GRPC_CALL_RESPONSE_HEADER":
         return EventType.GRPC_CALL_RESPONSE_HEADER;
-      case"GRPC_CALL_REQUEST_MESSAGE":
+      case "GRPC_CALL_REQUEST_MESSAGE":
         return EventType.GRPC_CALL_REQUEST_MESSAGE;
       case "GRPC_CALL_RESPONSE_MESSAGE":
         return EventType.GRPC_CALL_RESPONSE_MESSAGE;
@@ -96,7 +100,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
     }
   }
 
-  private LogFilter parseJsonLogFilter(Map<String,?> logFilterMap) {
+  private LogFilter parseJsonLogFilter(Map<String, ?> logFilterMap) {
     return new LogFilter(JsonUtil.getString(logFilterMap, "pattern"),
         JsonUtil.getNumberAsInteger(logFilterMap, "header_bytes"),
         JsonUtil.getNumberAsInteger(logFilterMap, "message_bytes"));
@@ -113,12 +117,18 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   }
 
   @Override
-  public LogFilter[] getLogFilters() {
-    return logFilters;
+  public ImmutableList<LogFilter> getLogFilters() {
+    if (logFilters == null) {
+      return null;
+    }
+    return ImmutableList.<LogFilter>builder().addAll(Arrays.asList(logFilters)).build();
   }
 
   @Override
-  public EventType[] getEventTypes() {
-    return eventTypes;
+  public ImmutableList<EventType> getEventTypes() {
+    if (eventTypes == null) {
+      return null;
+    }
+    return ImmutableList.<EventType>builder().addAll(Arrays.asList(eventTypes)).build();
   }
 }

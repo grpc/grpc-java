@@ -18,6 +18,7 @@ package io.grpc.observability.logging;
 
 import io.grpc.ExperimentalApi;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
+import java.util.Map;
 
 /**
  * Sink for GCP observability.
@@ -28,6 +29,15 @@ public interface Sink {
    * Writes the {@code message} to the destination.
    */
   void write(GrpcLogRecord message);
+
+  /**
+   * Writes the {@code message} to the destination.
+   * locationTgs to identify the source of logs
+   * customTags tags added by user
+   */
+  void write(GrpcLogRecord message,
+      Map<String, String> locationTags,
+      Map<String, String> customTags);
 
   /**
    * Closes the sink.

@@ -30,12 +30,9 @@ import io.grpc.Internal;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.internal.TimeProvider;
-import io.grpc.observability.ObservabilityConfig;
-import io.grpc.observability.logging.Sink;
+import io.grpc.observability.interceptors.ConfigFilterHelper.MethodFilterParams;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -51,40 +48,31 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
       .getLogger(InternalLoggingChannelInterceptor.class.getName());
 
   private final LogHelper helper;
+  private final ConfigFilterHelper filterHelper;
 
   public interface Factory {
     ClientInterceptor create();
   }
 
   public static class FactoryImpl implements Factory {
-    private final Sink sink;
     private final LogHelper helper;
+    private final ConfigFilterHelper filterHelper;
 
     /** Create the {@link Factory} we need to create our {@link ClientInterceptor}s. */
-    public FactoryImpl(Sink sink, Map<String, String> locationTags, Map<String, String> customTags,
-        ObservabilityConfig observabilityConfig) {
-      this.sink = sink;
-      this.helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER, locationTags, customTags,
-          observabilityConfig);
+    public FactoryImpl(LogHelper helper, ConfigFilterHelper filterHelper) {
+      this.helper = helper;
+      this.filterHelper = filterHelper;
     }
 
     @Override
     public ClientInterceptor create() {
-      return new InternalLoggingChannelInterceptor(helper);
-    }
-
-    /**
-     * Closes the sink instance.
-     */
-    public void close() {
-      if (sink != null) {
-        sink.close();
-      }
+      return new InternalLoggingChannelInterceptor(helper, filterHelper);
     }
   }
 
-  private InternalLoggingChannelInterceptor(LogHelper helper) {
+  private InternalLoggingChannelInterceptor(LogHelper helper, ConfigFilterHelper filterHelper) {
     this.helper = helper;
+    this.filterHelper = filterHelper;
   }
 
   @Override
@@ -100,11 +88,13 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
     final Deadline deadline = LogHelper.min(callOptions.getDeadline(),
         Context.current().getDeadline());
 
-    // TODO (dnvindhya): implement isMethodToBeLogged() to check for methods to be logged
-    // according to config. Until then always return true.
-    if (!helper.isMethodToBeLogged(method.getFullMethodName())) {
+    if (!filterHelper.isMethodToBeLogged(method.getFullMethodName()).log) {
       return next.newCall(method, callOptions);
     }
+
+    MethodFilterParams filterParams = filterHelper.isMethodToBeLogged(method.getFullMethodName());
+    final int maxHeaderBytes = filterParams.headerBytes;
+    final int maxMessageBytes = filterParams.messageBytes;
 
     return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
 
@@ -124,6 +114,7 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
               authority,
               timeout,
               headers,
+              maxHeaderBytes,
               EventLogger.LOGGER_CLIENT,
               rpcId,
               null);
@@ -149,6 +140,7 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                       methodName,
                       EventType.GRPC_CALL_RESPONSE_MESSAGE,
                       message,
+                      maxMessageBytes,
                       EventLogger.LOGGER_CLIENT,
                       rpcId);
                 } catch (Exception e) {
@@ -166,6 +158,7 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                       serviceName,
                       methodName,
                       headers,
+                      maxHeaderBytes,
                       EventLogger.LOGGER_CLIENT,
                       rpcId,
                       LogHelper.getPeerAddress(getAttributes()));
@@ -185,6 +178,7 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
                       methodName,
                       status,
                       trailers,
+                      maxHeaderBytes,
                       EventLogger.LOGGER_CLIENT,
                       rpcId,
                       LogHelper.getPeerAddress(getAttributes()));
@@ -207,6 +201,7 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
               methodName,
               EventType.GRPC_CALL_REQUEST_MESSAGE,
               message,
+              maxMessageBytes,
               EventLogger.LOGGER_CLIENT,
               rpcId);
         } catch (Exception e) {

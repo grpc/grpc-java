@@ -28,13 +28,10 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
-import io.grpc.internal.TimeProvider;
-import io.grpc.observability.ObservabilityConfig;
-import io.grpc.observability.logging.Sink;
+import io.grpc.observability.interceptors.ConfigFilterHelper.MethodFilterParams;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.net.SocketAddress;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -48,41 +45,31 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
       .getLogger(InternalLoggingServerInterceptor.class.getName());
 
   private final LogHelper helper;
+  private final ConfigFilterHelper filterHelper;
 
   public interface Factory {
     ServerInterceptor create();
   }
 
   public static class FactoryImpl implements Factory {
-    private final Sink sink;
     private final LogHelper helper;
+    private final ConfigFilterHelper filterHelper;
 
     /** Create the {@link Factory} we need to create our {@link ServerInterceptor}s. */
-    public FactoryImpl(Sink sink, Map<String, String> locationTags,
-        Map<String, String> customTags,
-        ObservabilityConfig observabilityConfig) {
-      this.sink = sink;
-      this.helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER, locationTags, customTags,
-          observabilityConfig);
+    public FactoryImpl(LogHelper helper, ConfigFilterHelper filterHelper) {
+      this.helper = helper;
+      this.filterHelper = filterHelper;
     }
 
     @Override
     public ServerInterceptor create() {
-      return new InternalLoggingServerInterceptor(helper);
-    }
-
-    /**
-     * Closes the sink instance.
-     */
-    public void close() {
-      if (sink != null) {
-        sink.close();
-      }
+      return new InternalLoggingServerInterceptor(helper, filterHelper);
     }
   }
 
-  private InternalLoggingServerInterceptor(LogHelper helper) {
+  private InternalLoggingServerInterceptor(LogHelper helper, ConfigFilterHelper filterHelper) {
     this.helper = helper;
+    this.filterHelper = filterHelper;
   }
 
   @Override
@@ -98,11 +85,13 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
     final Duration timeout = deadline == null ? null
         : Durations.fromNanos(deadline.timeRemaining(TimeUnit.NANOSECONDS));
 
-    // TODO (dnvindhya): implement isMethodToBeLogged() to check for methods to be logged
-    // according to config. Until then always return true.
-    if (!helper.isMethodToBeLogged(call.getMethodDescriptor().getFullMethodName())) {
+    if (!filterHelper.isMethodToBeLogged(call.getMethodDescriptor().getFullMethodName()).log) {
       return next.startCall(call, headers);
     }
+    MethodFilterParams filterParams = filterHelper.isMethodToBeLogged(
+        call.getMethodDescriptor().getFullMethodName());
+    final int maxHeaderBytes = filterParams.headerBytes;
+    final int maxMessageBytes = filterParams.messageBytes;
 
     // Event: EventType.GRPC_CALL_REQUEST_HEADER
     try {
@@ -113,6 +102,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
           authority,
           timeout,
           headers,
+          maxHeaderBytes,
           EventLogger.LOGGER_SERVER,
           rpcId,
           peerAddress);
@@ -137,6 +127,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
                   serviceName,
                   methodName,
                   headers,
+                  maxHeaderBytes,
                   EventLogger.LOGGER_SERVER,
                   rpcId,
                   null);
@@ -156,6 +147,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
                   methodName,
                   EventType.GRPC_CALL_RESPONSE_MESSAGE,
                   message,
+                  maxMessageBytes,
                   EventLogger.LOGGER_SERVER,
                   rpcId);
             } catch (Exception e) {
@@ -174,6 +166,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
                   methodName,
                   status,
                   trailers,
+                  maxHeaderBytes,
                   EventLogger.LOGGER_SERVER,
                   rpcId,
                   null);
@@ -196,6 +189,7 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
               methodName,
               EventType.GRPC_CALL_REQUEST_MESSAGE,
               message,
+              maxMessageBytes,
               EventLogger.LOGGER_SERVER,
               rpcId);
         } catch (Exception e) {

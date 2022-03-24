@@ -21,8 +21,11 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelProvider.ProviderNotFoundException;
+import io.grpc.internal.TimeProvider;
+import io.grpc.observability.interceptors.ConfigFilterHelper;
 import io.grpc.observability.interceptors.InternalLoggingChannelInterceptor;
 import io.grpc.observability.interceptors.InternalLoggingServerInterceptor;
+import io.grpc.observability.interceptors.LogHelper;
 import io.grpc.observability.logging.GcpLogSink;
 import io.grpc.observability.logging.Sink;
 import java.io.IOException;
@@ -43,13 +46,12 @@ public final class Observability {
       GlobalLoggingTags globalLoggingTags = new GlobalLoggingTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
       Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId());
+      LogHelper helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER,
+          globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags());
+      ConfigFilterHelper configFilterHelper = ConfigFilterHelper.getInstance(observabilityConfig);
       instance = grpcInit(sink,
-          new InternalLoggingChannelInterceptor.FactoryImpl(sink,
-              globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags(),
-              observabilityConfig),
-          new InternalLoggingServerInterceptor.FactoryImpl(sink,
-              globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags(),
-              observabilityConfig));
+          new InternalLoggingChannelInterceptor.FactoryImpl(helper, configFilterHelper),
+          new InternalLoggingServerInterceptor.FactoryImpl(helper, configFilterHelper));
     }
     return instance;
   }

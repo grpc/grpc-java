@@ -35,9 +35,9 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerProvider;
+import io.grpc.observability.interceptors.ConfigFilterHelper;
 import io.grpc.observability.interceptors.InternalLoggingServerInterceptor;
-import io.grpc.observability.logging.GcpLogSink;
-import io.grpc.observability.logging.Sink;
+import io.grpc.observability.interceptors.LogHelper;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
@@ -59,13 +59,14 @@ public class LoggingServerProviderTest {
   public void initTwiceCausesException() {
     ServerProvider prevProvider = ServerProvider.provider();
     assertThat(prevProvider).isNotInstanceOf(LoggingServerProvider.class);
-    Sink mockSink = mock(GcpLogSink.class);
+    LogHelper mockLogHelper = mock(LogHelper.class);
+    ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
     LoggingServerProvider.init(
-        new InternalLoggingServerInterceptor.FactoryImpl(mockSink, null, null, null));
+        new InternalLoggingServerInterceptor.FactoryImpl(mockLogHelper, mockFilterHelper));
     assertThat(ServerProvider.provider()).isInstanceOf(ServerProvider.class);
     try {
       LoggingServerProvider.init(
-          new InternalLoggingServerInterceptor.FactoryImpl(mockSink, null, null, null));
+          new InternalLoggingServerInterceptor.FactoryImpl(mockLogHelper, mockFilterHelper));
       fail("should have failed for calling init() again");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("LoggingServerProvider already initialized!");

@@ -34,9 +34,9 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.MethodDescriptor;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.observability.interceptors.ConfigFilterHelper;
 import io.grpc.observability.interceptors.InternalLoggingChannelInterceptor;
-import io.grpc.observability.logging.GcpLogSink;
-import io.grpc.observability.logging.Sink;
+import io.grpc.observability.interceptors.LogHelper;
 import io.grpc.testing.TestMethodDescriptors;
 import org.junit.Rule;
 import org.junit.Test;
@@ -58,13 +58,14 @@ public class LoggingChannelProviderTest {
   public void initTwiceCausesException() {
     ManagedChannelProvider prevProvider = ManagedChannelProvider.provider();
     assertThat(prevProvider).isNotInstanceOf(LoggingChannelProvider.class);
-    Sink mockSink = mock(GcpLogSink.class);
+    LogHelper mockLogHelper = mock(LogHelper.class);
+    ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
     LoggingChannelProvider.init(
-        new InternalLoggingChannelInterceptor.FactoryImpl(mockSink, null, null, null));
+        new InternalLoggingChannelInterceptor.FactoryImpl(mockLogHelper, mockFilterHelper));
     assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
     try {
       LoggingChannelProvider.init(
-          new InternalLoggingChannelInterceptor.FactoryImpl(mockSink, null, null, null));
+          new InternalLoggingChannelInterceptor.FactoryImpl(mockLogHelper, mockFilterHelper));
       fail("should have failed for calling init() again");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("LoggingChannelProvider already initialized!");

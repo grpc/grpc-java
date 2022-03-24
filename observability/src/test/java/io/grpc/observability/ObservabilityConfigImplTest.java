@@ -22,6 +22,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.google.common.collect.ImmutableList;
+import io.grpc.observability.ObservabilityConfig.LogFilter;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.io.IOException;
 import org.junit.Test;
@@ -106,23 +108,23 @@ public class ObservabilityConfigImplTest {
     observabilityConfig.parse(LOG_FILTERS);
     assertTrue(observabilityConfig.isEnableCloudLogging());
     assertThat(observabilityConfig.getDestinationProjectId()).isEqualTo("grpc-testing");
-    ObservabilityConfig.LogFilter[] logFilters = observabilityConfig.getLogFilters();
-    assertThat(logFilters).hasLength(2);
-    assertThat(logFilters[0].pattern).isEqualTo("*/*");
-    assertThat(logFilters[0].headerBytes).isEqualTo(4096);
-    assertThat(logFilters[0].messageBytes).isEqualTo(2048);
-    assertThat(logFilters[1].pattern).isEqualTo("service1/Method2");
-    assertThat(logFilters[1].headerBytes).isNull();
-    assertThat(logFilters[1].messageBytes).isNull();
+    ImmutableList<LogFilter> logFilters = observabilityConfig.getLogFilters();
+    assertThat(logFilters).hasSize(2);
+    assertThat(logFilters.get(0).pattern).isEqualTo("*/*");
+    assertThat(logFilters.get(0).headerBytes).isEqualTo(4096);
+    assertThat(logFilters.get(0).messageBytes).isEqualTo(2048);
+    assertThat(logFilters.get(1).pattern).isEqualTo("service1/Method2");
+    assertThat(logFilters.get(1).headerBytes).isNull();
+    assertThat(logFilters.get(1).messageBytes).isNull();
   }
 
   @Test
   public void eventTypes() throws IOException {
     observabilityConfig.parse(EVENT_TYPES);
     assertFalse(observabilityConfig.isEnableCloudLogging());
-    EventType[] eventTypes = observabilityConfig.getEventTypes();
+    ImmutableList<EventType> eventTypes = observabilityConfig.getEventTypes();
     assertThat(eventTypes).isEqualTo(
-        new EventType[]{EventType.GRPC_CALL_REQUEST_HEADER, EventType.GRPC_CALL_HALF_CLOSE,
-            EventType.GRPC_CALL_TRAILER});
+        ImmutableList.of(EventType.GRPC_CALL_REQUEST_HEADER, EventType.GRPC_CALL_HALF_CLOSE,
+            EventType.GRPC_CALL_TRAILER));
   }
 }

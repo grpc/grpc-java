@@ -18,13 +18,18 @@ package io.grpc.observability.interceptors;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.observability.interceptors.LogHelperTest.BYTEARRAY_MARSHALLER;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.protobuf.Duration;
 import com.google.protobuf.util.Durations;
@@ -37,9 +42,8 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.NoopServerCall;
-import io.grpc.observability.logging.GcpLogSink;
-import io.grpc.observability.logging.Sink;
-import io.grpc.observabilitylog.v1.GrpcLogRecord;
+import io.grpc.observability.interceptors.ConfigFilterHelper.MethodFilterParams;
+import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -54,6 +58,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -77,13 +83,15 @@ public class InternalLoggingServerInterceptorTest {
   private AtomicReference<byte[]> actualResponse;
   private AtomicReference<Status> actualStatus;
   private AtomicReference<Metadata> actualTrailers;
-  private final Sink mockSink = mock(GcpLogSink.class);
+  private final LogHelper mockLogHelper = mock(LogHelper.class);
+  private final ConfigFilterHelper mockFilterHelper = mock(ConfigFilterHelper.class);
   private SocketAddress peer;
+  private MethodFilterParams filterParams;
 
   @Before
   @SuppressWarnings("unchecked")
   public void setup() throws Exception {
-    factory = new InternalLoggingServerInterceptor.FactoryImpl(mockSink, null, null, null);
+    factory = new InternalLoggingServerInterceptor.FactoryImpl(mockLogHelper, mockFilterHelper);
     interceptedLoggingCall = new AtomicReference<>();
     mockListener = mock(ServerCall.Listener.class);
     actualServerInitial = new AtomicReference<>();
@@ -91,6 +99,8 @@ public class InternalLoggingServerInterceptorTest {
     actualStatus = new AtomicReference<>();
     actualTrailers = new AtomicReference<>();
     peer = new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 1234);
+    filterParams = new MethodFilterParams(true, 0, 0);
+    when(mockFilterHelper.isMethodToBeLogged("service/method")).thenReturn(filterParams);
   }
 
   @Test
@@ -148,89 +158,113 @@ public class InternalLoggingServerInterceptorTest {
                 });
     // receive request header
     {
-      EventType expectedRequestHeaderEvent = EventType.GRPC_CALL_REQUEST_HEADER;
-      ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
-      verify(mockSink).write(captor.capture());
-      assertEquals(captor.getValue().getEventType(),
-          expectedRequestHeaderEvent);
-      verifyNoMoreInteractions(mockSink);
+      verify(mockLogHelper).logRequestHeader(
+          /*seq=*/ eq(1L),
+          eq("service"),
+          eq("method"),
+          eq("the-authority"),
+          ArgumentMatchers.<Duration>isNull(),
+          same(clientInitial),
+          eq(filterParams.headerBytes),
+          eq(EventLogger.LOGGER_SERVER),
+          anyString(),
+          same(peer));
+      verifyNoMoreInteractions(mockLogHelper);
     }
 
     // send response header
     {
-      EventType expectedResponseHeaderEvent = EventType.GRPC_CALL_RESPONSE_HEADER;
-      ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
-      Metadata serverInital = new Metadata();
-      interceptedLoggingCall.get().sendHeaders(serverInital);
-      verify(mockSink, times(2)).write(captor.capture());
-      assertEquals(captor.getValue().getEventType(),
-          expectedResponseHeaderEvent);
-      verifyNoMoreInteractions(mockSink);
-      assertSame(serverInital, actualServerInitial.get());
+      Metadata serverInitial = new Metadata();
+      interceptedLoggingCall.get().sendHeaders(serverInitial);
+      verify(mockLogHelper).logResponseHeader(
+          /*seq=*/ eq(2L),
+          eq("service"),
+          eq("method"),
+          same(serverInitial),
+          eq(filterParams.headerBytes),
+          eq(EventLogger.LOGGER_SERVER),
+          anyString(),
+          ArgumentMatchers.<SocketAddress>isNull());
+      verifyNoMoreInteractions(mockLogHelper);
+      assertSame(serverInitial, actualServerInitial.get());
     }
 
     // receive request message
     {
-      EventType expectedRequestMessageEvent = EventType.GRPC_CALL_REQUEST_MESSAGE;
-      ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
       byte[] request = "this is a request".getBytes(US_ASCII);
       capturedListener.onMessage(request);
-      verify(mockSink, times(3)).write(captor.capture());
-      assertEquals(captor.getValue().getEventType(),
-          expectedRequestMessageEvent);
-      verifyNoMoreInteractions(mockSink);
+      verify(mockLogHelper).logRpcMessage(
+          /*seq=*/ eq(3L),
+          eq("service"),
+          eq("method"),
+          eq(EventType.GRPC_CALL_REQUEST_MESSAGE),
+          same(request),
+          eq(filterParams.messageBytes),
+          eq(EventLogger.LOGGER_SERVER),
+          anyString());
+      verifyNoMoreInteractions(mockLogHelper);
       verify(mockListener).onMessage(same(request));
     }
 
     // client half close
     {
-      EventType expectedHalfCloseEvent = EventType.GRPC_CALL_HALF_CLOSE;
-      ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
       capturedListener.onHalfClose();
-      verify(mockSink, times(4)).write(captor.capture());
-      assertEquals(captor.getValue().getEventType(),
-          expectedHalfCloseEvent);
-      verifyNoMoreInteractions(mockSink);
+      verify(mockLogHelper).logHalfClose(
+          /*seq=*/ eq(4L),
+          eq("service"),
+          eq("method"),
+          eq(EventLogger.LOGGER_SERVER),
+          anyString());
+      verifyNoMoreInteractions(mockLogHelper);
       verify(mockListener).onHalfClose();
     }
 
     // send response message
     {
-      EventType expectedResponseMessageEvent = EventType.GRPC_CALL_RESPONSE_MESSAGE;
-      ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
       byte[] response = "this is a response".getBytes(US_ASCII);
       interceptedLoggingCall.get().sendMessage(response);
-      verify(mockSink, times(5)).write(captor.capture());
-      assertEquals(captor.getValue().getEventType(),
-          expectedResponseMessageEvent);
-      verifyNoMoreInteractions(mockSink);
+      verify(mockLogHelper).logRpcMessage(
+          /*seq=*/ eq(5L),
+          eq("service"),
+          eq("method"),
+          eq(EventType.GRPC_CALL_RESPONSE_MESSAGE),
+          same(response),
+          eq(filterParams.messageBytes),
+          eq(EventLogger.LOGGER_SERVER),
+          anyString());
+      verifyNoMoreInteractions(mockLogHelper);
       assertSame(response, actualResponse.get());
     }
 
     // send trailer
     {
-      EventType expectedTrailerEvent = EventType.GRPC_CALL_TRAILER;
-      ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
       Status status = Status.INTERNAL.withDescription("trailer description");
       Metadata trailers = new Metadata();
-
       interceptedLoggingCall.get().close(status, trailers);
-      verify(mockSink, times(6)).write(captor.capture());
-      assertEquals(captor.getValue().getEventType(),
-          expectedTrailerEvent);
-      verifyNoMoreInteractions(mockSink);
+      verify(mockLogHelper).logTrailer(
+          /*seq=*/ eq(6L),
+          eq("service"),
+          eq("method"),
+          same(status),
+          same(trailers),
+          eq(filterParams.headerBytes),
+          eq(EventLogger.LOGGER_SERVER),
+          anyString(),
+          ArgumentMatchers.<SocketAddress>isNull());
+      verifyNoMoreInteractions(mockLogHelper);
       assertSame(status, actualStatus.get());
       assertSame(trailers, actualTrailers.get());
     }
 
     // cancel
     {
-      EventType expectedCancelEvent = EventType.GRPC_CALL_CANCEL;
-      ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
       capturedListener.onCancel();
-      verify(mockSink, times(7)).write(captor.capture());
-      assertEquals(captor.getValue().getEventType(),
-          expectedCancelEvent);
+      verify(mockLogHelper).logCancel(
+          /*seq=*/ eq(7L),
+          eq("service"),
+          eq("method"),
+          eq(EventLogger.LOGGER_SERVER),
+          anyString());
       verify(mockListener).onCancel();
     }
   }
@@ -269,11 +303,158 @@ public class InternalLoggingServerInterceptorTest {
                             return new ServerCall.Listener<byte[]>() {};
                           });
             });
-    ArgumentCaptor<GrpcLogRecord> captor = ArgumentCaptor.forClass(GrpcLogRecord.class);
-    verify(mockSink, times(1)).write(captor.capture());
-    verifyNoMoreInteractions(mockSink);
-    Duration timeout = captor.getValue().getTimeout();
+    ArgumentCaptor<Duration> timeoutCaptor = ArgumentCaptor.forClass(Duration.class);
+    verify(mockLogHelper, times(1))
+        .logRequestHeader(
+        /*seq=*/ eq(1L),
+        eq("service"),
+        eq("method"),
+        eq("the-authority"),
+        timeoutCaptor.capture(),
+        any(Metadata.class),
+        eq(filterParams.headerBytes),
+        eq(EventLogger.LOGGER_SERVER),
+        anyString(),
+        ArgumentMatchers.<SocketAddress>isNull());
+    verifyNoMoreInteractions(mockLogHelper);
+    Duration timeout = timeoutCaptor.getValue();
     assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
         .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+  }
+
+  @Test
+  public void serverMethodOrServiceFilter_disabled() {
+    MethodFilterParams noFilterParams
+        = new MethodFilterParams(false, 0, 0);
+    when(mockFilterHelper.isMethodToBeLogged("service/method"))
+        .thenReturn(noFilterParams);
+
+    Metadata clientInitial = new Metadata();
+    final MethodDescriptor<byte[], byte[]> method =
+        MethodDescriptor.<byte[], byte[]>newBuilder()
+            .setType(MethodType.UNKNOWN)
+            .setFullMethodName("service/method")
+            .setRequestMarshaller(BYTEARRAY_MARSHALLER)
+            .setResponseMarshaller(BYTEARRAY_MARSHALLER)
+            .build();
+    capturedListener =
+        factory.create()
+            .interceptCall(
+                new NoopServerCall<byte[], byte[]>() {
+                  @Override
+                  public void sendHeaders(Metadata headers) {
+                    actualServerInitial.set(headers);
+                  }
+
+                  @Override
+                  public void sendMessage(byte[] message) {
+                    actualResponse.set(message);
+                  }
+
+                  @Override
+                  public void close(Status status, Metadata trailers) {
+                    actualStatus.set(status);
+                    actualTrailers.set(trailers);
+                  }
+
+                  @Override
+                  public MethodDescriptor<byte[], byte[]> getMethodDescriptor() {
+                    return method;
+                  }
+
+                  @Override
+                  public Attributes getAttributes() {
+                    return Attributes
+                        .newBuilder()
+                        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, peer)
+                        .build();
+                  }
+
+                  @Override
+                  public String getAuthority() {
+                    return "the-authority";
+                  }
+                },
+                clientInitial,
+                (call, headers) -> {
+                  interceptedLoggingCall.set(call);
+                  return mockListener;
+                });
+    verifyNoInteractions(mockLogHelper);
+  }
+
+  @Test
+  public void serverMethodOrServiceFilter_enabled() {
+    MethodFilterParams noFilterParams
+        = new MethodFilterParams(true, 10, 10);
+    when(mockFilterHelper.isMethodToBeLogged("service/method"))
+        .thenReturn(noFilterParams);
+
+    Metadata clientInitial = new Metadata();
+    final MethodDescriptor<byte[], byte[]> method =
+        MethodDescriptor.<byte[], byte[]>newBuilder()
+            .setType(MethodType.UNKNOWN)
+            .setFullMethodName("service/method")
+            .setRequestMarshaller(BYTEARRAY_MARSHALLER)
+            .setResponseMarshaller(BYTEARRAY_MARSHALLER)
+            .build();
+    capturedListener =
+        factory.create()
+            .interceptCall(
+                new NoopServerCall<byte[], byte[]>() {
+                  @Override
+                  public void sendHeaders(Metadata headers) {
+                    actualServerInitial.set(headers);
+                  }
+
+                  @Override
+                  public void sendMessage(byte[] message) {
+                    actualResponse.set(message);
+                  }
+
+                  @Override
+                  public void close(Status status, Metadata trailers) {
+                    actualStatus.set(status);
+                    actualTrailers.set(trailers);
+                  }
+
+                  @Override
+                  public MethodDescriptor<byte[], byte[]> getMethodDescriptor() {
+                    return method;
+                  }
+
+                  @Override
+                  public Attributes getAttributes() {
+                    return Attributes
+                        .newBuilder()
+                        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, peer)
+                        .build();
+                  }
+
+                  @Override
+                  public String getAuthority() {
+                    return "the-authority";
+                  }
+                },
+                clientInitial,
+                (call, headers) -> {
+                  interceptedLoggingCall.set(call);
+                  return mockListener;
+                });
+
+    {
+      interceptedLoggingCall.get().sendHeaders(new Metadata());
+      byte[] request = "this is a request".getBytes(US_ASCII);
+      capturedListener.onMessage(request);
+      capturedListener.onHalfClose();
+      byte[] response = "this is a response".getBytes(US_ASCII);
+      interceptedLoggingCall.get().sendMessage(response);
+      Status status = Status.INTERNAL.withDescription("trailer description");
+      Metadata trailers = new Metadata();
+      interceptedLoggingCall.get().close(status, trailers);
+      capturedListener.onCancel();
+      assertTrue("LogHelper should be invoked seven times equal to number of events",
+          Mockito.mockingDetails(mockLogHelper).getInvocations().size() == 7 );
+    }
   }
 }

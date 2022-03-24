@@ -24,13 +24,16 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.cloud.MonitoredResource;
 import com.google.cloud.logging.LogEntry;
 import com.google.cloud.logging.Logging;
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.Map;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -79,6 +82,41 @@ public class GcpLogSinkTest {
     verify(mockLogging, times(1)).write(logEntrySetCaptor.capture());
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
+      assertEquals(entry.getPayload().getData(), expectedStructLogProto);
+    }
+    verifyNoMoreInteractions(mockLogging);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void verifyWriteWithTags() {
+    GcpLogSink mockSink = new GcpLogSink(mockLogging);
+    Map<String, String> locationTags = ImmutableMap.of("project_id", "PROJECT",
+        "location", "us-central1-c",
+        "cluster_name", "grpc-observability-cluster",
+        "namespace_name", "default" ,
+        "pod_name", "app1-6c7c58f897-n92c5");
+    Map<String, String> customTags = ImmutableMap.of("KEY1", "Value1",
+        "KEY2", "VALUE2");
+    GrpcLogRecord logProto = GrpcLogRecord.newBuilder()
+        .setRpcId("1234")
+        .build();
+
+    MonitoredResource expectedMonitoredResource = mockSink.getResource(locationTags);
+    Struct expectedStructLogProto = Struct.newBuilder().putFields(
+        "rpc_id", Value.newBuilder().setStringValue("1234").build()
+    ).build();
+
+    mockSink.write(logProto, locationTags, customTags);
+
+    ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
+        (Class) Collection.class);
+    verify(mockLogging, times(1)).write(logEntrySetCaptor.capture());
+    System.out.println(logEntrySetCaptor.getValue());
+    for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
+      LogEntry entry = it.next();
+      assertEquals(entry.getResource(), expectedMonitoredResource);
+      assertEquals(entry.getLabels(), customTags);
       assertEquals(entry.getPayload().getData(), expectedStructLogProto);
     }
     verifyNoMoreInteractions(mockLogging);
