@@ -55,6 +55,10 @@ configureProtoCompilation()
 import net.ltgt.gradle.errorprone.CheckSeverity
 
 compileJava {
+    // opencensus ContextUtils in AbstractInteropTest has been deprecated
+    it.options.compilerArgs += [
+            "-Xlint:-deprecation"
+    ]
     // This isn't a library; it can use beta APIs
     options.errorprone.check("BetaApi", CheckSeverity.OFF)
 }
