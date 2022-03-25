@@ -31,15 +31,12 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ObservabilityConfigImplTest {
   private static final String EVENT_TYPES = "{\n"
-      + "  \"logging_config\": {\n"
       + "    \"enable_cloud_logging\": false,\n"
       + "    \"event_types\": "
       + "[\"GRPC_CALL_REQUEST_HEADER\", \"GRPC_CALL_HALF_CLOSE\", \"GRPC_CALL_TRAILER\"]\n"
-      + "  }\n"
       + "}";
 
   private static final String LOG_FILTERS = "{\n"
-      + "  \"logging_config\": {\n"
       + "    \"enable_cloud_logging\": true,\n"
       + "    \"destination_project_id\": \"grpc-testing\",\n"
       + "    \"log_filters\": [{\n"
@@ -51,19 +48,15 @@ public class ObservabilityConfigImplTest {
       + "        \"pattern\": \"service1/Method2\"\n"
       + "    }"
       + "    ]\n"
-      + "  }\n"
       + "}";
 
   private static final String DEST_PROJECT_ID = "{\n"
-      + "  \"logging_config\": {\n"
       + "    \"enable_cloud_logging\": true,\n"
       + "    \"destination_project_id\": \"grpc-testing\"\n"
-      + "  }\n"
       + "}";
 
   private static final String DISABLE_CLOUD_LOGGING = "{\n"
-      + "  \"logging_config\": {\n"
-      + "    \"enable_cloud_logging\": false\n" + "  }\n"
+      + "    \"enable_cloud_logging\": false\n"
       + "}";
 
   ObservabilityConfigImpl observabilityConfig = new ObservabilityConfigImpl();
