@@ -1548,6 +1548,7 @@ public abstract class AbstractInteropTest {
   }
 
   @Test(timeout = 10000)
+  @SuppressWarnings("deprecation")
   public void censusContextsPropagated() {
     Assume.assumeTrue("Skip the test because server is not in the same process.", server != null);
     Assume.assumeTrue(customCensusModulePresent());
