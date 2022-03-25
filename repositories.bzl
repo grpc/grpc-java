@@ -98,7 +98,7 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "57e3feb08995c9757421755cc6f3625483e22c1371967da3873fbe41b57f713e",
+        sha256 = "25680843adf0c3302648d35f744e38cc3b6b05a6c77a927de5aea3e1c2e36106",
         strip_prefix = "protobuf-3.19.4",
         urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.19.4.zip"],
     )
@@ -107,7 +107,7 @@ def com_google_protobuf_javalite():
     # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
     http_archive(
         name = "com_google_protobuf_javalite",
-        sha256 = "57e3feb08995c9757421755cc6f3625483e22c1371967da3873fbe41b57f713e",
+        sha256 = "25680843adf0c3302648d35f744e38cc3b6b05a6c77a927de5aea3e1c2e36106",
         strip_prefix = "protobuf-3.19.4",
         urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.19.4.zip"],
     )
