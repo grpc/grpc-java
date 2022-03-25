@@ -26,32 +26,24 @@ import com.google.protobuf.util.Durations;
 import io.grpc.SynchronizationContext;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
   private static final Logger logger = Logger.getLogger(OrcaServiceImpl.class.getName());
 
-  private final SynchronizationContext syncContext = new SynchronizationContext(
-      new Thread.UncaughtExceptionHandler() {
-        @Override
-        public void uncaughtException(Thread t, Throwable e) {
-          logger.log(Level.SEVERE, "Exception!" + e);
-        }
-      });
   private final long minReportIntervalNanos;
   private final ScheduledExecutorService timeService;
   private volatile ConcurrentHashMap<String, Double> metricsData = new ConcurrentHashMap<>();
   private volatile double cpuUtilization;
   private volatile double memoryUtilization;
   @VisibleForTesting
-  final List<OrcaClient> clients = new ArrayList<>();
+  final AtomicInteger clientCount = new AtomicInteger(0);
 
   public OrcaServiceImpl(long minReportIntervalNanos, ScheduledExecutorService timeService) {
     this.minReportIntervalNanos = minReportIntervalNanos;
@@ -62,13 +54,8 @@ final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
   public void streamCoreMetrics(
       OrcaLoadReportRequest request, StreamObserver<OrcaLoadReport> responseObserver) {
     OrcaClient client = new OrcaClient(request, responseObserver);
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        clients.add(client);
-        client.run();
-      }
-    });
+    client.run();
+    clientCount.getAndIncrement();
   }
 
   private final class OrcaClient implements Runnable {
@@ -76,6 +63,13 @@ final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
     final ServerCallStreamObserver<OrcaLoadReport> responseObserver;
     SynchronizationContext.ScheduledHandle periodicReportTimer;
     final long reportIntervalNanos;
+    final SynchronizationContext syncContext = new SynchronizationContext(
+        new Thread.UncaughtExceptionHandler() {
+          @Override
+          public void uncaughtException(Thread t, Throwable e) {
+            logger.log(Level.SEVERE, "Exception!" + e);
+          }
+        });
 
     OrcaClient(OrcaLoadReportRequest request, StreamObserver<OrcaLoadReport> responseObserver) {
       this.request = checkNotNull(request);
@@ -91,7 +85,7 @@ final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
               if (periodicReportTimer != null) {
                 periodicReportTimer.cancel();
               }
-              clients.remove(OrcaClient.this);
+              clientCount.getAndDecrement();
             }
           });
         }

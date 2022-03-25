@@ -25,13 +25,13 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Implements the service/APIs for Our-of-Band metrics reporting, only for utilization metrics.
+ * Implements the service/APIs for Out-of-Band metrics reporting, only for utilization metrics.
  * Register the returned service {@link #getService()} to the server, then a client can request
  * for periodic load reports. A user should use the public set-APIs to update the server machine's
  * utilization metrics data.
  */
 @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9006")
-public class OrcaOobService {
+public final class OrcaOobService {
   /**
    * Empty or invalid (non-positive) minInterval config in will be treated to this default value.
    */
@@ -67,7 +67,7 @@ public class OrcaOobService {
 
   @VisibleForTesting
   int getClientsCount() {
-    return orcaService.clients.size();
+    return orcaService.clientCount.get();
   }
 
   /**
