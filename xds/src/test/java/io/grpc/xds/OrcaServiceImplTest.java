@@ -61,7 +61,7 @@ public class OrcaServiceImplTest {
   @Rule
   public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
   private ManagedChannel channel;
-  private Server oobserver;
+  private Server oobServer;
   private final FakeClock fakeClock = new FakeClock();
   private OrcaOobService defaultTestService;
   private final Random random = new Random();
@@ -78,22 +78,11 @@ public class OrcaServiceImplTest {
 
   @After
   public void teardown() throws Exception {
-    if (channel != null) {
-      channel.shutdownNow();
-    }
-    if (oobserver != null) {
-      oobserver.shutdownNow();
-    }
-    try {
-      channel.awaitTermination(5, TimeUnit.SECONDS);
-      oobserver.awaitTermination();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+    channel.shutdownNow();
   }
 
   private void startServerAndGetChannel(BindableService orcaService) throws Exception {
-    oobserver = grpcCleanup.register(
+    oobServer = grpcCleanup.register(
         InProcessServerBuilder.forName("orca-service-test")
             .addService(orcaService)
             .directExecutor()
@@ -137,7 +126,7 @@ public class OrcaServiceImplTest {
     assertThat(defaultTestService.getClientsCount()).isEqualTo(1);
     verify(listener).onMessage(eq(expect));
     reset(listener);
-    oobserver.shutdownNow();
+    oobServer.shutdownNow();
     assertThat(fakeClock.forwardTime(1, TimeUnit.SECONDS)).isEqualTo(0);
     assertThat(defaultTestService.getClientsCount()).isEqualTo(0);
     ArgumentCaptor<Status> callCloseCaptor = ArgumentCaptor.forClass(null);
@@ -193,7 +182,7 @@ public class OrcaServiceImplTest {
   @SuppressWarnings("unchecked")
   public void testRequestIntervalDefault() throws Exception {
     defaultTestService = new OrcaOobService(fakeClock.getScheduledExecutorService());
-    oobserver.shutdownNow();
+    oobServer.shutdownNow();
     startServerAndGetChannel(defaultTestService.getService());
     ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call = channel.newCall(
         OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
