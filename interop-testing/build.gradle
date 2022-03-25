@@ -43,6 +43,7 @@ dependencies {
     runtimeOnly libraries.opencensus_impl,
             libraries.netty_tcnative,
             project(':grpc-grpclb')
+    runtimeOnly project(':grpc-rls')
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-core').sourceSets.test.output,
