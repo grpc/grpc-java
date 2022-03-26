@@ -21,7 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.ExperimentalApi;
+import io.grpc.Internal;
 import io.grpc.InternalServiceProviders;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,10 +39,9 @@ import javax.annotation.concurrent.ThreadSafe;
  * Registry of {@link XdsCredentialsProvider}s. The {@link #getDefaultRegistry default
  * instance} loads providers at runtime through the Java service provider mechanism.
  */
-// TODO(anramach): Create a tracker issue for marking this experimental. 
-@ExperimentalApi("")
+@Internal
 @ThreadSafe
-public final class XdsCredentialsRegistry {
+final class XdsCredentialsRegistry {
   private static final Logger logger = Logger.getLogger(XdsCredentialsRegistry.class.getName());
   private static XdsCredentialsRegistry instance;
 
@@ -117,8 +116,7 @@ public final class XdsCredentialsRegistry {
               new XdsCredentialsProviderPriorityAccessor());
       if (providerList.isEmpty()) {
         logger.warning("No XdsCredsRegistry found via ServiceLoader, including for GoogleDefault, "
-            + "TLS and Insecure. This is probably due to a broken build. If using ProGuard, check "
-            + "your configuration");
+            + "TLS and Insecure. This is probably due to a broken build.");
       }
       instance = new XdsCredentialsRegistry();
       for (XdsCredentialsProvider provider : providerList) {
