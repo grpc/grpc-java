@@ -20,8 +20,8 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import io.grpc.InternalServiceProviders;
 import io.grpc.CompositeChannelCredentials;
+import io.grpc.InternalServiceProviders;
 import io.grpc.xds.XdsCredentialsProvider;
 import org.junit.Test;
 import org.junit.runner.RunWith;
