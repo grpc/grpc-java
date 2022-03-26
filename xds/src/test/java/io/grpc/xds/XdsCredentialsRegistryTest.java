@@ -90,14 +90,14 @@ public class XdsCredentialsRegistryTest {
     registry.register(
         new BaseCredsProvider(true, 5, credsName) {
         @Override
-        public ChannelCredentials getChannelCredentials(Map<String, ?> config) {
+        public ChannelCredentials newChannelCredentials(Map<String, ?> config) {
           return new SampleChannelCredentials(config);
         }
       });
 
     Map<String, String> sampleConfig = ImmutableMap.of("a", "b");
     ChannelCredentials creds = registry.providers().get(credsName)
-        .getChannelCredentials(sampleConfig);
+        .newChannelCredentials(sampleConfig);
     assertSame(SampleChannelCredentials.class, creds.getClass());
     assertEquals(sampleConfig, ((SampleChannelCredentials)creds).getConfig());
   }
@@ -110,7 +110,7 @@ public class XdsCredentialsRegistryTest {
     registry.register(
         new BaseCredsProvider(true, 5, credsName1) {
         @Override
-        public ChannelCredentials getChannelCredentials(Map<String, ?> config) {
+        public ChannelCredentials newChannelCredentials(Map<String, ?> config) {
           return null;
         }
       });
@@ -118,14 +118,14 @@ public class XdsCredentialsRegistryTest {
     registry.register(
         new BaseCredsProvider(true, 7, credsName2) {
         @Override
-        public ChannelCredentials getChannelCredentials(Map<String, ?> config) {
+        public ChannelCredentials newChannelCredentials(Map<String, ?> config) {
           return new SampleChannelCredentials(config);
         }
       });
 
-    assertThat(registry.getProvider(credsName1).getChannelCredentials(null)).isNull();
+    assertThat(registry.getProvider(credsName1).newChannelCredentials(null)).isNull();
     assertThat(registry.getProvider(credsName1).getName()).isEqualTo(credsName1);
-    assertThat(registry.getProvider(credsName2).getChannelCredentials(null)).isNotNull();
+    assertThat(registry.getProvider(credsName2).newChannelCredentials(null)).isNotNull();
     assertThat(registry.getProvider(credsName2).getName()).isEqualTo(credsName2);
   }
 
@@ -189,7 +189,7 @@ public class XdsCredentialsRegistryTest {
     }
 
     @Override
-    public ChannelCredentials getChannelCredentials(Map<String, ?> config) {
+    public ChannelCredentials newChannelCredentials(Map<String, ?> config) {
       throw new UnsupportedOperationException();
     }
   }

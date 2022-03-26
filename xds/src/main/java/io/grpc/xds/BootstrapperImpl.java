@@ -326,7 +326,12 @@ public class BootstrapperImpl extends Bootstrapper {
       XdsCredentialsProvider provider =  XdsCredentialsRegistry.getDefaultRegistry()
           .getProvider(type);
       if (provider != null) {
-        return provider.getChannelCredentials(channelCreds);
+        Map<String, ?> config = JsonUtil.getObject(channelCreds, "config");
+        if (config == null) {
+          config = ImmutableMap.of();
+        }
+
+        return provider.newChannelCredentials(config);
       }
     }
     return null;

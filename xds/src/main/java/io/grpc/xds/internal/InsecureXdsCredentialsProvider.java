@@ -21,11 +21,15 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.xds.XdsCredentialsProvider;
 import java.util.Map;
 
-public final class InsecureXdsCredentialsProvider extends XdsCredentialsProvider { 
+/**
+ * A wrapper class that supports {@link InsecureChannelCredentials} for Xds
+ * by implementing {@link XdsCredentialsProvider}.
+ */
+public final class InsecureXdsCredentialsProvider extends XdsCredentialsProvider {
   private static final String CREDS_NAME = "insecure";
 
   @Override
-  protected ChannelCredentials getChannelCredentials(Map<String, ?> jsonConfig) {
+  protected ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig) {
     return InsecureChannelCredentials.create();
   }
 

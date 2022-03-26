@@ -18,8 +18,11 @@ package io.grpc.xds.internal;
 
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
+import io.grpc.InternalServiceProviders;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.xds.XdsCredentialsProvider;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -30,6 +33,18 @@ public class TlsXdsCredentialsProviderTest {
   private TlsXdsCredentialsProvider provider = new TlsXdsCredentialsProvider();
 
   @Test
+  public void provided() {
+    for (XdsCredentialsProvider current
+        : InternalServiceProviders.getCandidatesViaServiceLoader(
+          XdsCredentialsProvider.class, getClass().getClassLoader())) {
+      if (current instanceof TlsXdsCredentialsProvider) {
+        return;
+      }
+    }
+    fail("ServiceLoader unable to load TlsXdsCredentialsProvider");
+  }
+
+  @Test
   public void isAvailable() {
     assertTrue(provider.isAvailable());
   }
@@ -37,6 +52,6 @@ public class TlsXdsCredentialsProviderTest {
   @Test
   public void channelCredentials() {
     assertSame(TlsChannelCredentials.class,
-        provider.getChannelCredentials(null).getClass());
+        provider.newChannelCredentials(null).getClass());
   }
 }

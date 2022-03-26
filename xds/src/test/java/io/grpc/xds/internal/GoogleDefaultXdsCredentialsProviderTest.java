@@ -18,8 +18,11 @@ package io.grpc.xds.internal;
 
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
+import io.grpc.InternalServiceProviders;
 import io.grpc.CompositeChannelCredentials;
+import io.grpc.xds.XdsCredentialsProvider;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -30,6 +33,18 @@ public class GoogleDefaultXdsCredentialsProviderTest {
   private GoogleDefaultXdsCredentialsProvider provider = new GoogleDefaultXdsCredentialsProvider();
 
   @Test
+  public void provided() {
+    for (XdsCredentialsProvider current
+        : InternalServiceProviders.getCandidatesViaServiceLoader(
+          XdsCredentialsProvider.class, getClass().getClassLoader())) {
+      if (current instanceof GoogleDefaultXdsCredentialsProvider) {
+        return;
+      }
+    }
+    fail("ServiceLoader unable to load GoogleDefaultXdsCredentialsProvider");
+  }
+
+  @Test
   public void isAvailable() {
     assertTrue(provider.isAvailable());
   }
@@ -37,6 +52,6 @@ public class GoogleDefaultXdsCredentialsProviderTest {
   @Test
   public void channelCredentials() {
     assertSame(CompositeChannelCredentials.class,
-        provider.getChannelCredentials(null).getClass());
+        provider.newChannelCredentials(null).getClass());
   }
 }

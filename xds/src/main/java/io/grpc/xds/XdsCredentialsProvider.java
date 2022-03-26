@@ -17,7 +17,7 @@
 package io.grpc.xds;
 
 import io.grpc.ChannelCredentials;
-import io.grpc.ExperimentalApi;
+import io.grpc.Internal;
 import java.util.Map;
 
 /**
@@ -36,8 +36,7 @@ import java.util.Map;
  * exceptions may reasonably occur for implementation-specific reasons, implementations should
  * generally handle the exception gracefully and return {@code false} from {@link #isAvailable()}.
  */
-// TODO(anramach): Create a tracker issue for marking this experimental. 
-@ExperimentalApi("")
+@Internal
 public abstract class XdsCredentialsProvider {
   /**
   * Creates a {@link ChannelCredentials} from the given jsonConfig, or
@@ -48,7 +47,7 @@ public abstract class XdsCredentialsProvider {
   *                   the channel credentials
   *
   */
-  protected abstract ChannelCredentials getChannelCredentials(Map<String, ?> jsonConfig);
+  protected abstract ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig);
 
   /**
    * Returns the xDS credential name associated with this provider which makes it selectable
@@ -60,7 +59,7 @@ public abstract class XdsCredentialsProvider {
   /**
    * Whether this provider is available for use, taking the current environment
    * into consideration.
-   * If {@code false}, {@link #getChannelCredentials} is not safe to be called.
+   * If {@code false}, {@link #newChannelCredentials} is not safe to be called.
    */
   public abstract boolean isAvailable();
 

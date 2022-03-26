@@ -21,11 +21,15 @@ import io.grpc.TlsChannelCredentials;
 import io.grpc.xds.XdsCredentialsProvider;
 import java.util.Map;
 
+/**
+ * A wrapper class that supports {@link TlsChannelCredentials} for Xds
+ * by implementing {@link XdsCredentialsProvider}.
+ */
 public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
   private static final String CREDS_NAME = "tls";
 
   @Override
-  protected ChannelCredentials getChannelCredentials(Map<String, ?> jsonConfig) {
+  protected ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig) {
     return TlsChannelCredentials.create();
   }
 

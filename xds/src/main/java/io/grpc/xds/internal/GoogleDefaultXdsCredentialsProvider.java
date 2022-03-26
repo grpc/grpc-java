@@ -21,11 +21,15 @@ import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.xds.XdsCredentialsProvider;
 import java.util.Map;
 
+/**
+ * A wrapper class that supports {@link GoogleDefaultChannelCredentials} for
+ * Xds by implementing {@link XdsCredentialsProvider}.
+ */
 public final class GoogleDefaultXdsCredentialsProvider extends XdsCredentialsProvider {
   private static final String CREDS_NAME = "google_default";
 
   @Override
-  protected ChannelCredentials getChannelCredentials(Map<String, ?> jsonConfig) {
+  protected ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig) {
     return GoogleDefaultChannelCredentials.create();
   }
 
