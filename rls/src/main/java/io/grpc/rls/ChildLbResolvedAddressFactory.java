@@ -16,7 +16,6 @@
 
 package io.grpc.rls;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.Attributes;
@@ -33,8 +32,7 @@ final class ChildLbResolvedAddressFactory implements ResolvedAddressFactory {
 
   ChildLbResolvedAddressFactory(
       List<EquivalentAddressGroup> addresses, Attributes attributes) {
-    checkArgument(addresses != null && !addresses.isEmpty(), "Address must be provided");
-    this.addresses = Collections.unmodifiableList(addresses);
+    this.addresses = Collections.unmodifiableList(checkNotNull(addresses, "addresses"));
     this.attributes = checkNotNull(attributes, "attributes");
   }
 

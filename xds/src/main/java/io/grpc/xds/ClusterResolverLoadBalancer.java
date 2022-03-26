@@ -461,7 +461,11 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             if (shutdown) {
               return;
             }
-            status = error;
+            String resourceName = edsServiceName != null ? edsServiceName : name;
+            status = Status.UNAVAILABLE
+                .withDescription(String.format("Unable to load EDS %s. xDS server returned: %s: %s",
+                      resourceName, error.getCode(), error.getDescription()))
+                .withCause(error.getCause());
             logger.log(XdsLogLevel.WARNING, "Received EDS error: {0}", error);
             handleEndpointResolutionError();
           }

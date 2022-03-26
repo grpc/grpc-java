@@ -21,7 +21,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelCredentials;
-import io.grpc.Internal;
 import io.grpc.InternalLogId;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
@@ -41,8 +40,7 @@ import javax.annotation.Nullable;
 /**
  * A {@link Bootstrapper} implementation that reads xDS configurations from local file system.
  */
-@Internal
-public class BootstrapperImpl extends Bootstrapper {
+class BootstrapperImpl extends Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
   @VisibleForTesting
@@ -60,6 +58,8 @@ public class BootstrapperImpl extends Bootstrapper {
   @VisibleForTesting
   static final String CLIENT_FEATURE_DISABLE_OVERPROVISIONING =
       "envoy.lb.does_not_support_overprovisioning";
+  @VisibleForTesting
+  static final String CLIENT_FEATURE_RESOURCE_IN_SOTW = "xds.config.resource-in-sotw";
   @VisibleForTesting
   static boolean enableFederation =
       !Strings.isNullOrEmpty(System.getenv("GRPC_EXPERIMENTAL_XDS_FEDERATION"))
@@ -176,6 +176,7 @@ public class BootstrapperImpl extends Bootstrapper {
     nodeBuilder.setUserAgentName(buildVersion.getUserAgent());
     nodeBuilder.setUserAgentVersion(buildVersion.getImplementationVersion());
     nodeBuilder.addClientFeatures(CLIENT_FEATURE_DISABLE_OVERPROVISIONING);
+    nodeBuilder.addClientFeatures(CLIENT_FEATURE_RESOURCE_IN_SOTW);
     builder.node(nodeBuilder.build());
 
     Map<String, ?> certProvidersBlob = JsonUtil.getObject(rawData, "certificate_providers");

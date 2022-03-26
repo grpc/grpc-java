@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.googleapis;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;

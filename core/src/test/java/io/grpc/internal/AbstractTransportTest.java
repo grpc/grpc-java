@@ -1145,7 +1145,7 @@ public abstract class AbstractTransportTest {
   public void earlyServerClose_serverFailure_withClientCancelOnListenerClosed() throws Exception {
     server.start(serverListener);
     client = newClientTransport(server);
-    runIfNotNull(client.start(mockClientTransportListener));
+    startTransport(client, mockClientTransportListener);
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     serverTransport = serverTransportListener.transport;

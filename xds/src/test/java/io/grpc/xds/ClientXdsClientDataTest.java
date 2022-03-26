@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.envoyproxy.envoy.config.route.v3.RouteAction.ClusterSpecifierCase.CLUSTER_SPECIFIER_PLUGIN;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.google.common.collect.ImmutableMap;
@@ -799,6 +800,30 @@ public class ClientXdsClientDataTest {
 
     assertThat(policies.get(1).type()).isEqualTo(HashPolicy.Type.CHANNEL_ID);
     assertThat(policies.get(1).isTerminal()).isFalse();
+  }
+
+  @Test
+  public void parseRouteAction_clusterSpecifier_routeLookupDisabled() {
+    ClientXdsClient.enableRouteLookup = false;
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setClusterSpecifierPlugin(CLUSTER_SPECIFIER_PLUGIN.name())
+            .build();
+    StructOrError<RouteAction> struct =
+        ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
+            ImmutableMap.<String, PluginConfig>of());
+    assertThat(struct).isNull();
+  }
+
+  @Test
+  public void parseRouteAction_custerSpecifierNotSet() {
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .build();
+    StructOrError<RouteAction> struct =
+        ClientXdsClient.parseRouteAction(proto, filterRegistry, false,
+            ImmutableMap.<String, PluginConfig>of());
+    assertThat(struct).isNull();
   }
 
   @Test

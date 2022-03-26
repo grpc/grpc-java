@@ -69,7 +69,7 @@ message GrpcLogRecord {
   // Each call may have several log entries. They will all have the same rpc_id.
   // Nothing is guaranteed about their value other than they are unique across
   // different RPCs in the same gRPC process.
-  uint64 rpc_id = 2;
+  string rpc_id = 2;
 
   EventType event_type = 3;      // one of the above EventType enum
   EventLogger event_logger = 4;  // one of the above EventLogger enum

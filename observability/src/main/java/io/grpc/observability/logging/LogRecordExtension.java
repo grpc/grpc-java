@@ -18,19 +18,23 @@ package io.grpc.observability.logging;
 
 import io.grpc.Internal;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
+import java.util.logging.Level;
 import java.util.logging.LogRecord;
 
-/** An extension of java.util.logging.LogRecord which includes gRPC observability logging
- * specific fields. */
+/**
+ * An extension of java.util.logging.LogRecord which includes gRPC observability logging specific
+ * fields.
+ */
 @Internal
 public final class LogRecordExtension extends LogRecord {
-  public final GrpcLogRecord grpcLogRecord;
 
-  public LogRecordExtension(GrpcLogRecord record) {
-    super(null, null);
+  private final GrpcLogRecord grpcLogRecord;
+
+  public LogRecordExtension(Level recordLevel, GrpcLogRecord record) {
+    super(recordLevel, null);
     this.grpcLogRecord = record;
   }
-  
+
   public GrpcLogRecord getGrpcLogRecord() {
     return grpcLogRecord;
   }

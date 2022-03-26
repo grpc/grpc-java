@@ -687,6 +687,21 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
+  public void wrappedLdsResource() {
+    DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
+
+    // Client sends an ACK LDS request.
+    call.sendResponse(LDS, mf.buildWrappedResource(testListenerVhosts), VERSION_1, "0000");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(ldsResourceWatcher).onChanged(ldsUpdateCaptor.capture());
+    assertThat(ldsUpdateCaptor.getValue().httpConnectionManager().virtualHosts())
+        .hasSize(VHOST_SIZE);
+    assertThat(fakeClock.getPendingTasks(LDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataAcked(LDS, LDS_RESOURCE, testListenerVhosts, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
+  }
+
+  @Test
   public void ldsResourceFound_containsRdsName() {
     DiscoveryRpcCall call = startResourceWatcher(LDS, LDS_RESOURCE, ldsResourceWatcher);
     call.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
@@ -1166,6 +1181,20 @@ public abstract class ClientXdsClientTestBase {
   }
 
   @Test
+  public void wrappedRdsResource() {
+    DiscoveryRpcCall call = startResourceWatcher(RDS, RDS_RESOURCE, rdsResourceWatcher);
+    call.sendResponse(RDS, mf.buildWrappedResource(testRouteConfig), VERSION_1, "0000");
+
+    // Client sends an ACK RDS request.
+    call.verifyRequest(RDS, RDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(rdsResourceWatcher).onChanged(rdsUpdateCaptor.capture());
+    assertThat(rdsUpdateCaptor.getValue().virtualHosts).hasSize(VHOST_SIZE);
+    assertThat(fakeClock.getPendingTasks(RDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataAcked(RDS, RDS_RESOURCE, testRouteConfig, VERSION_1, TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 0, 1, 0);
+  }
+
+  @Test
   public void cachedRdsResource_data() {
     DiscoveryRpcCall call = startResourceWatcher(RDS, RDS_RESOURCE, rdsResourceWatcher);
     call.sendResponse(RDS, testRouteConfig, VERSION_1, "0000");
@@ -1578,6 +1607,28 @@ public abstract class ClientXdsClientTestBase {
   public void cdsResourceFound() {
     DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
     call.sendResponse(CDS, testClusterRoundRobin, VERSION_1, "0000");
+
+    // Client sent an ACK CDS request.
+    call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(cdsResourceWatcher).onChanged(cdsUpdateCaptor.capture());
+    CdsUpdate cdsUpdate = cdsUpdateCaptor.getValue();
+    assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
+    assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
+    assertThat(cdsUpdate.edsServiceName()).isNull();
+    assertThat(cdsUpdate.lbPolicy()).isEqualTo(LbPolicy.ROUND_ROBIN);
+    assertThat(cdsUpdate.lrsServerInfo()).isNull();
+    assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
+    assertThat(cdsUpdate.upstreamTlsContext()).isNull();
+    assertThat(fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER)).isEmpty();
+    verifyResourceMetadataAcked(CDS, CDS_RESOURCE, testClusterRoundRobin, VERSION_1,
+        TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
+  }
+
+  @Test
+  public void wrappedCdsResource() {
+    DiscoveryRpcCall call = startResourceWatcher(CDS, CDS_RESOURCE, cdsResourceWatcher);
+    call.sendResponse(CDS, mf.buildWrappedResource(testClusterRoundRobin), VERSION_1, "0000");
 
     // Client sent an ACK CDS request.
     call.verifyRequest(CDS, CDS_RESOURCE, VERSION_1, "0000", NODE);
@@ -2131,6 +2182,20 @@ public abstract class ClientXdsClientTestBase {
   public void edsResourceFound() {
     DiscoveryRpcCall call = startResourceWatcher(EDS, EDS_RESOURCE, edsResourceWatcher);
     call.sendResponse(EDS, testClusterLoadAssignment, VERSION_1, "0000");
+
+    // Client sent an ACK EDS request.
+    call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
+    verify(edsResourceWatcher).onChanged(edsUpdateCaptor.capture());
+    validateTestClusterLoadAssigment(edsUpdateCaptor.getValue());
+    verifyResourceMetadataAcked(EDS, EDS_RESOURCE, testClusterLoadAssignment, VERSION_1,
+        TIME_INCREMENT);
+    verifySubscribedResourcesMetadataSizes(0, 0, 0, 1);
+  }
+
+  @Test
+  public void wrappedEdsResourceFound() {
+    DiscoveryRpcCall call = startResourceWatcher(EDS, EDS_RESOURCE, edsResourceWatcher);
+    call.sendResponse(EDS, mf.buildWrappedResource(testClusterLoadAssignment), VERSION_1, "0000");
 
     // Client sent an ACK EDS request.
     call.verifyRequest(EDS, EDS_RESOURCE, VERSION_1, "0000", NODE);
@@ -2788,6 +2853,8 @@ public abstract class ClientXdsClientTestBase {
   protected abstract static class MessageFactory {
     /** Throws {@link InvalidProtocolBufferException} on {@link Any#unpack(Class)}. */
     protected static final Any FAILING_ANY = Any.newBuilder().setTypeUrl("fake").build();
+
+    protected abstract Any buildWrappedResource(Any originalResource);
 
     protected Message buildListenerWithApiListener(String name, Message routeConfiguration) {
       return buildListenerWithApiListener(
