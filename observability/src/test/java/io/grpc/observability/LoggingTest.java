@@ -25,7 +25,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
-import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -101,10 +100,9 @@ public class LoggingTest {
     int port = cleanupRule.register(server).getPort();
     LoggingChannelProvider.init(
         new InternalLoggingChannelInterceptor.FactoryImpl(spyLogHelper, mockFilterHelper));
-    ManagedChannel channel = ManagedChannelBuilder.forAddress("localhost", port)
-        .usePlaintext().build();
     SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(
-        cleanupRule.register(channel));
+        cleanupRule.register(ManagedChannelBuilder.forAddress("localhost", port)
+            .usePlaintext().build()));
     assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
         .isEqualTo("Hello buddy");
     assertTrue("spyLogHelper should be used invoked six times from both client and server "
@@ -173,10 +171,9 @@ public class LoggingTest {
     int port = cleanupRule.register(server).getPort();
     LoggingChannelProvider.init(
         new InternalLoggingChannelInterceptor.FactoryImpl(mockLogHelper, mockFilterHelper2));
-    ManagedChannel channel = ManagedChannelBuilder.forAddress("localhost", port)
-        .usePlaintext().build();
     SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc.newBlockingStub(
-        cleanupRule.register(channel));
+        cleanupRule.register(ManagedChannelBuilder.forAddress("localhost", port)
+            .usePlaintext().build()));
     assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
         .isEqualTo("Hello buddy");
     assertTrue("LogHelper should be invoked eight times equal to number of events "

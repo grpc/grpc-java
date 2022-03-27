@@ -35,8 +35,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -127,11 +125,8 @@ public class ConfigFilterHelperTest {
 
   @Test
   public void checkMethodAlwaysLogged() {
-    List<LogFilter> sampleFilters = Stream.of(
-            new LogFilter("*", 4096, 4096))
-        .collect(Collectors.toList());
-    ImmutableList<LogFilter> sampleLogFilters =
-        ImmutableList.copyOf(sampleFilters);
+    List<LogFilter> sampleLogFilters = ImmutableList.of(
+            new LogFilter("*", 4096, 4096));
     when(mockConfig.getLogFilters()).thenReturn(sampleLogFilters);
     configFilterHelper.setMethodOrServiceFilterMaps();
 
@@ -145,12 +140,9 @@ public class ConfigFilterHelperTest {
 
   @Test
   public void checkMethodNotToBeLogged() {
-    List<LogFilter> sampleFilters = Stream.of(
+    List<LogFilter> sampleLogFilters = ImmutableList.of(
             new LogFilter("service1/Method2", 1024, 1024),
-            new LogFilter("service2/*", 2048, 1024))
-        .collect(Collectors.toList());
-    ImmutableList<LogFilter> sampleLogFilters =
-        ImmutableList.copyOf(sampleFilters);
+            new LogFilter("service2/*", 2048, 1024));
     when(mockConfig.getLogFilters()).thenReturn(sampleLogFilters);
     configFilterHelper.setMethodOrServiceFilterMaps();
 
