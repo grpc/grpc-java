@@ -27,7 +27,6 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Duration;
@@ -57,7 +56,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.Charset;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
@@ -101,15 +99,6 @@ public class LogHelperTest {
           .build();
   private static final int HEADER_LIMIT = 10;
   private static final int MESSAGE_LIMIT = Integer.MAX_VALUE;
-  private static final Map<String, String> locationTags = ImmutableMap.of(
-      "project_id", "PROJECT",
-      "location", "us-central1-c",
-      "cluster_name", "grpc-observability-cluster",
-      "namespace_name", "default" ,
-      "pod_name", "app1-6c7c58f897-n92c5");
-  private static final Map<String, String> customTags = ImmutableMap.of(
-      "KEY1", "Value1",
-      "KEY2", "VALUE2");
 
   private final Metadata nonEmptyMetadata = new Metadata();
   private final int nonEmptyMetadataSize = 30;
@@ -117,10 +106,7 @@ public class LogHelperTest {
   private final Timestamp timestamp
       = Timestamp.newBuilder().setSeconds(9876).setNanos(54321).build();
   private final TimeProvider timeProvider = () -> TimeUnit.SECONDS.toNanos(9876) + 54321;
-  private final LogHelper logHelper =
-      new LogHelper(
-          sink,
-          timeProvider, locationTags, customTags);
+  private final LogHelper logHelper = new LogHelper(sink, timeProvider);
 
   @Before
   public void setUp() throws Exception {
@@ -337,7 +323,7 @@ public class LogHelperTest {
           EventLogger.LOGGER_CLIENT,
           rpcId,
           null);
-      verify(sink).write(base, locationTags, customTags);
+      verify(sink).write(base);
     }
 
     // logged on server
@@ -357,8 +343,7 @@ public class LogHelperTest {
           base.toBuilder()
               .setPeerAddress(LogHelper.socketAddressToProto(peerAddress))
               .setEventLogger(EventLogger.LOGGER_SERVER)
-              .build(),
-          locationTags, customTags);
+              .build());
     }
 
     // timeout is null
@@ -377,8 +362,7 @@ public class LogHelperTest {
       verify(sink).write(
           base.toBuilder()
               .clearTimeout()
-              .build(),
-          locationTags, customTags);
+              .build());
     }
 
     // peerAddress is not null (error on client)
@@ -436,7 +420,7 @@ public class LogHelperTest {
           EventLogger.LOGGER_CLIENT,
           rpcId,
           peerAddress);
-      verify(sink).write(base, locationTags, customTags);
+      verify(sink).write(base);
     }
 
     // logged on server
@@ -454,8 +438,7 @@ public class LogHelperTest {
           base.toBuilder()
               .setEventLogger(EventLogger.LOGGER_SERVER)
               .clearPeerAddress()
-              .build(),
-          locationTags, customTags);
+              .build());
     }
 
     // peerAddress is not null (error on server)
@@ -469,6 +452,7 @@ public class LogHelperTest {
           EventLogger.LOGGER_SERVER,
           rpcId,
           peerAddress);
+
       fail();
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat()
@@ -516,7 +500,7 @@ public class LogHelperTest {
           EventLogger.LOGGER_CLIENT,
           rpcId,
           peerAddress);
-      verify(sink).write(base, locationTags, customTags);
+      verify(sink).write(base);
     }
 
     // logged on server
@@ -535,8 +519,7 @@ public class LogHelperTest {
           base.toBuilder()
               .clearPeerAddress()
               .setEventLogger(EventLogger.LOGGER_SERVER)
-              .build(),
-          locationTags, customTags);
+              .build());
     }
 
     // peer address is null
@@ -554,8 +537,7 @@ public class LogHelperTest {
       verify(sink).write(
           base.toBuilder()
               .clearPeerAddress()
-              .build(),
-          locationTags, customTags);
+              .build());
     }
 
     // status description is null
@@ -573,8 +555,7 @@ public class LogHelperTest {
       verify(sink).write(
           base.toBuilder()
               .clearStatusMessage()
-              .build(),
-          locationTags, customTags);
+              .build());
     }
   }
 
@@ -636,7 +617,7 @@ public class LogHelperTest {
           MESSAGE_LIMIT,
           EventLogger.LOGGER_CLIENT,
           rpcId);
-      verify(sink).write(base, locationTags, customTags);
+      verify(sink).write(base);
     }
     // response message, logged on client
     {
@@ -652,8 +633,7 @@ public class LogHelperTest {
       verify(sink).write(
           base.toBuilder()
               .setEventType(EventType.GRPC_CALL_RESPONSE_MESSAGE)
-              .build(),
-          locationTags, customTags);
+              .build());
     }
     // request message, logged on server
     {
@@ -669,8 +649,7 @@ public class LogHelperTest {
       verify(sink).write(
           base.toBuilder()
               .setEventLogger(EventLogger.LOGGER_SERVER)
-              .build(),
-          locationTags, customTags);
+              .build());
     }
     // response message, logged on server
     {
@@ -687,8 +666,7 @@ public class LogHelperTest {
           base.toBuilder()
               .setEventType(EventType.GRPC_CALL_RESPONSE_MESSAGE)
               .setEventLogger(EventLogger.LOGGER_SERVER)
-              .build(),
-          locationTags, customTags);
+              .build());
     }
   }
 
@@ -754,23 +732,17 @@ public class LogHelperTest {
   // Copied from internal
   static final class IoUtils {
 
-    /**
-     * maximum buffer to be read is 16 KB.
-     */
+    /** maximum buffer to be read is 16 KB. */
     private static final int MAX_BUFFER_LENGTH = 16384;
 
-    /**
-     * Returns the byte array.
-     */
+    /** Returns the byte array. */
     public static byte[] toByteArray(InputStream in) throws IOException {
       ByteArrayOutputStream out = new ByteArrayOutputStream();
       copy(in, out);
       return out.toByteArray();
     }
 
-    /**
-     * Copies the data from input stream to output stream.
-     */
+    /** Copies the data from input stream to output stream. */
     public static long copy(InputStream from, OutputStream to) throws IOException {
       // Copied from guava com.google.common.io.ByteStreams because its API is unstable (beta)
       checkNotNull(from);

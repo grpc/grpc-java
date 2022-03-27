@@ -16,8 +16,8 @@
 
 package io.grpc.observability;
 
-import com.google.common.collect.ImmutableList;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
+import java.util.List;
 
 public interface ObservabilityConfig {
   /** Is Cloud Logging enabled. */
@@ -27,10 +27,10 @@ public interface ObservabilityConfig {
   String getDestinationProjectId();
 
   /** Get filters set for logging. */
-  ImmutableList<LogFilter> getLogFilters();
+  List<LogFilter> getLogFilters();
 
   /** Get event types to log. */
-  ImmutableList<EventType> getEventTypes();
+  List<EventType> getEventTypes();
 
   /**
    * POJO for representing a filter used in configuration.

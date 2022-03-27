@@ -51,11 +51,11 @@ final class GlobalLoggingTags {
   }
 
   Map<String, String> getLocationTags() {
-    return ImmutableMap.<String, String>builder().putAll(locationTags).build();
+    return locationTags;
   }
 
   Map<String, String> getCustomTags() {
-    return ImmutableMap.<String, String>builder().putAll(customTags).build();
+    return customTags;
   }
 
   @VisibleForTesting

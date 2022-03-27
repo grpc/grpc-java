@@ -117,7 +117,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   }
 
   @Override
-  public ImmutableList<LogFilter> getLogFilters() {
+  public List<LogFilter> getLogFilters() {
     if (logFilters == null) {
       return null;
     }
@@ -125,7 +125,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   }
 
   @Override
-  public ImmutableList<EventType> getEventTypes() {
+  public List<EventType> getEventTypes() {
     if (eventTypes == null) {
       return null;
     }

@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.anyIterable;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -28,10 +29,15 @@ import com.google.cloud.MonitoredResource;
 import com.google.cloud.logging.LogEntry;
 import com.google.cloud.logging.Logging;
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Duration;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+import com.google.protobuf.util.Durations;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
+import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
+import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import org.junit.Before;
@@ -52,6 +58,42 @@ public class GcpLogSinkTest {
   @Rule
   public final MockitoRule mockito = MockitoJUnit.rule();
 
+  private static final Map<String, String> locationTags = ImmutableMap.of("project_id", "PROJECT",
+      "location", "us-central1-c",
+      "cluster_name", "grpc-observability-cluster",
+      "namespace_name", "default" ,
+      "pod_name", "app1-6c7c58f897-n92c5");
+  private static final Map<String, String> customTags = ImmutableMap.of("KEY1", "Value1",
+      "KEY2", "VALUE2");
+  private static final int flushLimit = 10;
+  private final long seqId = 1;
+  private final String serviceName = "service";
+  private final String methodName = "method";
+  private final String authority = "authority";
+  private final Duration timeout = Durations.fromMillis(1234);
+  private final String rpcId = "d155e885-9587-4e77-81f7-3aa5a443d47f";
+  private final GrpcLogRecord logProto = GrpcLogRecord.newBuilder()
+      .setSequenceId(seqId)
+      .setServiceName(serviceName)
+      .setMethodName(methodName)
+      .setAuthority(authority)
+      .setTimeout(timeout)
+      .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
+      .setEventLogger(EventLogger.LOGGER_CLIENT)
+      .setRpcId(rpcId)
+      .build();
+  private final Struct expectedStructLogProto = Struct.newBuilder()
+      .putFields("sequence_id", Value.newBuilder().setStringValue(String.valueOf(seqId)).build())
+      .putFields("service_name", Value.newBuilder().setStringValue(serviceName).build())
+      .putFields("method_name", Value.newBuilder().setStringValue(methodName).build())
+      .putFields("authority", Value.newBuilder().setStringValue(authority).build())
+      .putFields("timeout", Value.newBuilder().setStringValue("1.234s").build())
+      .putFields("event_type", Value.newBuilder().setStringValue(
+          String.valueOf(EventType.GRPC_CALL_REQUEST_HEADER)).build())
+      .putFields("event_logger", Value.newBuilder().setStringValue(
+          String.valueOf(EventLogger.LOGGER_CLIENT)).build())
+      .putFields("rpc_id", Value.newBuilder().setStringValue(rpcId).build())
+      .build();
   private Logging mockLogging;
 
   @Before
@@ -61,27 +103,22 @@ public class GcpLogSinkTest {
 
   @Test
   public void createSink() {
-    Sink mockSink = new GcpLogSink(mockLogging);
+    Sink mockSink = new GcpLogSink(mockLogging, locationTags, customTags, flushLimit);
     assertThat(mockSink).isInstanceOf(GcpLogSink.class);
   }
 
   @Test
   @SuppressWarnings("unchecked")
   public void verifyWrite() throws Exception {
-    Sink mockSink = new GcpLogSink(mockLogging);
-    GrpcLogRecord logProto = GrpcLogRecord.newBuilder()
-        .setRpcId("1234")
-        .build();
-    Struct expectedStructLogProto = Struct.newBuilder().putFields(
-        "rpc_id", Value.newBuilder().setStringValue("1234").build()
-    ).build();
-
+    Sink mockSink = new GcpLogSink(mockLogging, locationTags, customTags, flushLimit);
     mockSink.write(logProto);
+
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
         (Class) Collection.class);
     verify(mockLogging, times(1)).write(logEntrySetCaptor.capture());
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
+      System.out.println(entry);
       assertEquals(entry.getPayload().getData(), expectedStructLogProto);
     }
     verifyNoMoreInteractions(mockLogging);
@@ -90,24 +127,9 @@ public class GcpLogSinkTest {
   @Test
   @SuppressWarnings("unchecked")
   public void verifyWriteWithTags() {
-    GcpLogSink mockSink = new GcpLogSink(mockLogging);
-    Map<String, String> locationTags = ImmutableMap.of("project_id", "PROJECT",
-        "location", "us-central1-c",
-        "cluster_name", "grpc-observability-cluster",
-        "namespace_name", "default" ,
-        "pod_name", "app1-6c7c58f897-n92c5");
-    Map<String, String> customTags = ImmutableMap.of("KEY1", "Value1",
-        "KEY2", "VALUE2");
-    GrpcLogRecord logProto = GrpcLogRecord.newBuilder()
-        .setRpcId("1234")
-        .build();
-
-    MonitoredResource expectedMonitoredResource = mockSink.getResource(locationTags);
-    Struct expectedStructLogProto = Struct.newBuilder().putFields(
-        "rpc_id", Value.newBuilder().setStringValue("1234").build()
-    ).build();
-
-    mockSink.write(logProto, locationTags, customTags);
+    GcpLogSink mockSink = new GcpLogSink(mockLogging, locationTags, customTags, flushLimit);
+    MonitoredResource expectedMonitoredResource = GcpLogSink.getResource(locationTags);
+    mockSink.write(logProto);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
         (Class) Collection.class);
@@ -123,11 +145,39 @@ public class GcpLogSinkTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
+  public void emptyCustomTags_labelsNotSet() {
+    Map<String, String> emptyCustomTags = null;
+    Map<String, String> expectedEmptyLabels = new HashMap<>();
+    GcpLogSink mockSink = new GcpLogSink(mockLogging, locationTags, emptyCustomTags, flushLimit);
+    mockSink.write(logProto);
+
+    ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
+        (Class) Collection.class);
+    verify(mockLogging, times(1)).write(logEntrySetCaptor.capture());
+    for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
+      LogEntry entry = it.next();
+      assertEquals(entry.getLabels(), expectedEmptyLabels);
+      assertEquals(entry.getPayload().getData(), expectedStructLogProto);
+    }
+  }
+
+  @Test
+  public void verifyFlush() {
+    int lowerFlushLimit = 2;
+    GcpLogSink mockSink = new GcpLogSink(mockLogging, locationTags, customTags, lowerFlushLimit);
+    mockSink.write(logProto);
+    verify(mockLogging, never()).flush();
+    mockSink.write(logProto);
+    verify(mockLogging, times(1)).flush();
+    mockSink.write(logProto);
+    mockSink.write(logProto);
+    verify(mockLogging, times(2)).flush();
+  }
+
+  @Test
   public void verifyClose() throws Exception {
-    Sink mockSink = new GcpLogSink(mockLogging);
-    GrpcLogRecord logProto = GrpcLogRecord.newBuilder()
-        .setRpcId("1234")
-        .build();
+    Sink mockSink = new GcpLogSink(mockLogging, locationTags, customTags, flushLimit);
     mockSink.write(logProto);
     verify(mockLogging, times(1)).write(anyIterable());
     mockSink.close();

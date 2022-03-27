@@ -45,10 +45,10 @@ public final class Observability {
     if (instance == null) {
       GlobalLoggingTags globalLoggingTags = new GlobalLoggingTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
-      Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId());
-      LogHelper helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER,
-          globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags());
-      ConfigFilterHelper configFilterHelper = ConfigFilterHelper.getInstance(observabilityConfig);
+      Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId(),
+          globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags(), 10);
+      LogHelper helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
+      ConfigFilterHelper configFilterHelper = ConfigFilterHelper.factory(observabilityConfig);
       instance = grpcInit(sink,
           new InternalLoggingChannelInterceptor.FactoryImpl(helper, configFilterHelper),
           new InternalLoggingServerInterceptor.FactoryImpl(helper, configFilterHelper));

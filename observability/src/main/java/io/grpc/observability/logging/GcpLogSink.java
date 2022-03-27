@@ -30,6 +30,7 @@ import io.grpc.internal.JsonParser;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
@@ -48,7 +49,13 @@ public class GcpLogSink implements Sink {
   private static final Set<String> kubernetesResourceLabelSet
       = ImmutableSet.of("project_id", "location", "cluster_name", "namespace_name",
       "pod_name", "container_name");
+  private static final int FALLBACK_FLUSH_LIMIT = 100;
+  private final Map<String, String> locationTags;
+  private final Map<String, String> customTags;
   private final Logging gcpLoggingClient;
+  private final MonitoredResource kubernetesResource;
+  private final int flushLimit;
+  private int flushCounter;
 
   private static Logging createLoggingClient(String projectId) {
     LoggingOptions.Builder builder = LoggingOptions.newBuilder();
@@ -63,30 +70,30 @@ public class GcpLogSink implements Sink {
    *
    * @param destinationProjectId cloud project id to write logs
    */
-  public GcpLogSink(String destinationProjectId) {
-    this(createLoggingClient(destinationProjectId));
+  public GcpLogSink(String destinationProjectId, Map<String, String> locationTags,
+      Map<String, String> customTags, int flushLimit) {
+    this(createLoggingClient(destinationProjectId), locationTags, customTags, flushLimit);
+
   }
 
   @VisibleForTesting
-  GcpLogSink(Logging client) {
+  GcpLogSink(Logging client, Map<String, String> locationTags, Map<String, String> customTags,
+      int flushLimit) {
     this.gcpLoggingClient = client;
-  }
-
-  @Override
-  public void write(GrpcLogRecord logProto) {
-    this.write(logProto, null, null);
+    this.locationTags = locationTags;
+    this.customTags = customTags != null ? customTags : new HashMap<>();
+    this.kubernetesResource = getResource(this.locationTags);
+    this.flushLimit = flushLimit != 0 ? flushLimit : FALLBACK_FLUSH_LIMIT;
+    this.flushCounter = 0;
   }
 
   /**
    * Writes logs to GCP Cloud Logging.
    *
    * @param logProto gRPC logging proto containing the message to be logged
-   * @param locationTags Key-value pairs to identify GCP compute resource
-   * @param customTags User specified key-value pairs to be attached to every log record
    */
   @Override
-  public void write(GrpcLogRecord logProto, Map<String, String> locationTags,
-      Map<String, String> customTags) {
+  public void write(GrpcLogRecord logProto) {
     if (gcpLoggingClient == null) {
       logger.log(Level.SEVERE, "Attempt to write after GcpLogSink is closed.");
       return;
@@ -97,20 +104,25 @@ public class GcpLogSink implements Sink {
     try {
       GrpcLogRecord.EventType event = logProto.getEventType();
       Severity logEntrySeverity = getCloudLoggingLevel(logProto.getLogLevel());
-      MonitoredResource resource = getResource(locationTags);
       // TODO(vindhyan): make sure all (int, long) values are not displayed as double
+      // For now, every value is being converted as string because of JsonFormat.printer().print
       LogEntry.Builder grpcLogEntryBuilder =
           LogEntry.newBuilder(JsonPayload.of(protoToMapConverter(logProto)))
               .setSeverity(logEntrySeverity)
               .setLogName(DEFAULT_LOG_NAME)
-              .setResource(resource);
-      if ((customTags != null) && !customTags.isEmpty()) {
+              .setResource(kubernetesResource);
+      if (!customTags.isEmpty()) {
         grpcLogEntryBuilder.setLabels(customTags);
       }
       LogEntry grpcLogEntry = grpcLogEntryBuilder.build();
       synchronized (this) {
         logger.log(Level.FINEST, "Writing gRPC event : {0} to Cloud Logging", event);
         gcpLoggingClient.write(Collections.singleton(grpcLogEntry));
+        flushCounter += 1;
+        if (flushCounter >= flushLimit) {
+          gcpLoggingClient.flush();
+          flushCounter = 0;
+        }
       }
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Caught exception while writing to Cloud Logging", e);
@@ -118,7 +130,7 @@ public class GcpLogSink implements Sink {
   }
 
   @VisibleForTesting
-  MonitoredResource getResource(Map<String, String> resourceTags) {
+  static MonitoredResource getResource(Map<String, String> resourceTags) {
     MonitoredResource.Builder builder = MonitoredResource.newBuilder(K8S_MONITORED_RESOURCE_TYPE);
     if ((resourceTags != null) && !resourceTags.isEmpty()) {
       for (Map.Entry<String, String> entry : resourceTags.entrySet()) {
@@ -127,7 +139,6 @@ public class GcpLogSink implements Sink {
           builder.addLabel(resourceKey, entry.getValue());
         }
       }
-      // builder.setLabels(resourceTags);
     }
     return builder.build();
   }

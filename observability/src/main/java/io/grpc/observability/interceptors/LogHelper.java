@@ -43,7 +43,6 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -53,6 +52,7 @@ import javax.annotation.Nullable;
  * Helper class for GCP observability logging.
  */
 public class LogHelper {
+
   private static final Logger logger = Logger.getLogger(LogHelper.class.getName());
 
   // TODO(dnvindhya): Define it in one places(TBD) to make it easily accessible from everywhere
@@ -63,22 +63,16 @@ public class LogHelper {
 
   private final Sink sink;
   private final TimeProvider timeProvider;
-  private final Map<String, String> locationTags;
-  private final Map<String, String> customTags;
 
   /**
    * Creates a LogHelper instance.
+   *
    * @param sink sink
    * @param timeProvider timeprovider
-   * @param locationTags resource tags
-   * @param customTags user provided tags
    */
-  public LogHelper(Sink sink, TimeProvider timeProvider, Map<String, String> locationTags,
-      Map<String, String> customTags) {
+  public LogHelper(Sink sink, TimeProvider timeProvider) {
     this.sink = sink;
     this.timeProvider = timeProvider;
-    this.locationTags = locationTags;
-    this.customTags = customTags;
   }
 
   /**
@@ -123,7 +117,7 @@ public class LogHelper {
     if (peerAddress != null) {
       logEntryBuilder.setPeerAddress(socketAddressToProto(peerAddress));
     }
-    sink.write(logEntryBuilder.build(), locationTags, customTags);
+    sink.write(logEntryBuilder.build());
   }
 
   /**
@@ -163,7 +157,7 @@ public class LogHelper {
     if (peerAddress != null) {
       logEntryBuilder.setPeerAddress(socketAddressToProto(peerAddress));
     }
-    sink.write(logEntryBuilder.build(), locationTags, customTags);
+    sink.write(logEntryBuilder.build());
   }
 
   /**
@@ -212,7 +206,7 @@ public class LogHelper {
     if (peerAddress != null) {
       logEntryBuilder.setPeerAddress(socketAddressToProto(peerAddress));
     }
-    sink.write(logEntryBuilder.build(), locationTags, customTags);
+    sink.write(logEntryBuilder.build());
   }
 
   /**
@@ -242,7 +236,7 @@ public class LogHelper {
     // 2. byte[]
     byte[] messageBytesArray = null;
     if (message instanceof com.google.protobuf.Message) {
-      messageBytesArray = ((com.google.protobuf.Message)message).toByteArray();
+      messageBytesArray = ((com.google.protobuf.Message) message).toByteArray();
     } else if (message instanceof byte[]) {
       messageBytesArray = (byte[]) message;
     } else {
@@ -269,7 +263,7 @@ public class LogHelper {
       logEntryBuilder.setMessage(pair.payload)
           .setPayloadTruncated(pair.truncated);
     }
-    sink.write(logEntryBuilder.build(), locationTags, customTags);
+    sink.write(logEntryBuilder.build());
   }
 
   /**
@@ -293,7 +287,7 @@ public class LogHelper {
         .setEventLogger(eventLogger)
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
         .setRpcId(rpcId);
-    sink.write(logEntryBuilder.build(), locationTags, customTags);
+    sink.write(logEntryBuilder.build());
   }
 
   /**
@@ -317,7 +311,7 @@ public class LogHelper {
         .setEventLogger(eventLogger)
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
         .setRpcId(rpcId);
-    sink.write(logEntryBuilder.build(), locationTags, customTags);
+    sink.write(logEntryBuilder.build());
   }
 
   GrpcLogRecord.Builder createTimestamp() {
@@ -327,13 +321,15 @@ public class LogHelper {
 
   private static final Set<String> NEVER_INCLUDED_METADATA = new HashSet<>(
       Collections.singletonList(
-          // grpc-status-details-bin is already logged in a field of the binlog proto
+          // grpc-status-details-bin is already logged in `status_details` field of the
+          // observabilitylog proto
           STATUS_DETAILS_KEY.name()));
   private static final Set<String> ALWAYS_INCLUDED_METADATA = new HashSet<>(
       Collections.singletonList(
           "grpc-trace-bin"));
 
   static final class PayloadBuilder<T> {
+
     T payload;
     int size;
     boolean truncated;
@@ -345,7 +341,6 @@ public class LogHelper {
     }
   }
 
-  // TODO(dnvindhya): Create a unit test for the metadata conversion
   static PayloadBuilder<GrpcLogRecord.Metadata.Builder> createMetadataProto(Metadata metadata,
       int maxHeaderBytes) {
     checkNotNull(metadata, "metadata");
@@ -394,7 +389,7 @@ public class LogHelper {
     ByteString messageData =
         ByteString.copyFrom(message, 0, desiredBytes);
 
-    return new PayloadBuilder<ByteString>(messageData, messageLength,
+    return new PayloadBuilder<>(messageData, messageLength,
         maxMessageBytes < message.length);
   }
 

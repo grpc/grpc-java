@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.observability.ObservabilityConfig.LogFilter;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.io.IOException;
+import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -108,7 +109,7 @@ public class ObservabilityConfigImplTest {
     observabilityConfig.parse(LOG_FILTERS);
     assertTrue(observabilityConfig.isEnableCloudLogging());
     assertThat(observabilityConfig.getDestinationProjectId()).isEqualTo("grpc-testing");
-    ImmutableList<LogFilter> logFilters = observabilityConfig.getLogFilters();
+    List<LogFilter> logFilters = observabilityConfig.getLogFilters();
     assertThat(logFilters).hasSize(2);
     assertThat(logFilters.get(0).pattern).isEqualTo("*/*");
     assertThat(logFilters.get(0).headerBytes).isEqualTo(4096);
@@ -122,7 +123,7 @@ public class ObservabilityConfigImplTest {
   public void eventTypes() throws IOException {
     observabilityConfig.parse(EVENT_TYPES);
     assertFalse(observabilityConfig.isEnableCloudLogging());
-    ImmutableList<EventType> eventTypes = observabilityConfig.getEventTypes();
+    List<EventType> eventTypes = observabilityConfig.getEventTypes();
     assertThat(eventTypes).isEqualTo(
         ImmutableList.of(EventType.GRPC_CALL_REQUEST_HEADER, EventType.GRPC_CALL_HALF_CLOSE,
             EventType.GRPC_CALL_TRAILER));
