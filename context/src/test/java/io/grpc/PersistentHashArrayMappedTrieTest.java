@@ -84,15 +84,23 @@ public class PersistentHashArrayMappedTrieTest {
     assertEquals(2, ret.size());
   }
 
-  @Test(expected = AssertionError.class)
+  @Test
   public void collisionLeaf_assertKeysDifferent() {
     Key key1 = new Key(0);
-    new CollisionLeaf<>(key1, new Object(), key1, new Object());
+    try {
+      new CollisionLeaf<>(key1, new Object(), key1, new Object());
+      throw new Error();
+    } catch (AssertionError expected) {
+    }
   }
 
-  @Test(expected = AssertionError.class)
+  @Test
   public void collisionLeaf_assertHashesSame() {
-    new CollisionLeaf<>(new Key(0), new Object(), new Key(1), new Object());
+    try {
+      new CollisionLeaf<>(new Key(0), new Object(), new Key(1), new Object());
+      throw new Error();
+    } catch (AssertionError expected) {
+    }
   }
 
   @Test

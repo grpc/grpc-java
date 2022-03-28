@@ -122,7 +122,7 @@ final class RlsProtoConverters {
       String lookupService = JsonUtil.getString(json, "lookupService");
       checkArgument(!Strings.isNullOrEmpty(lookupService), "lookupService must not be empty");
       try {
-        new URI(lookupService);
+        URI unused = new URI(lookupService);
       } catch (URISyntaxException e) {
         throw new IllegalArgumentException(
             "The lookupService field is not valid URI: " + lookupService, e);
