@@ -25,6 +25,9 @@ import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelCredentials;
 import io.grpc.xds.XdsCredentialsProvider;
 import io.grpc.xds.XdsCredentialsRegistry;
+import io.grpc.xds.internal.GoogleDefaultXdsCredentialsProvider;
+import io.grpc.xds.internal.InsecureXdsCredentialsProvider;
+import io.grpc.xds.internal.TlsXdsCredentialsProvider;
 import java.util.List;
 import java.util.Map;
 import org.junit.Test;
@@ -95,7 +98,7 @@ public class XdsCredentialsRegistryTest {
         }
       });
 
-    Map<String, String> sampleConfig = ImmutableMap.of("a", "b");
+    ImmutableMap<String, String> sampleConfig = ImmutableMap.of("a", "b");
     ChannelCredentials creds = registry.providers().get(credsName)
         .newChannelCredentials(sampleConfig);
     assertSame(SampleChannelCredentials.class, creds.getClass());
@@ -135,20 +138,20 @@ public class XdsCredentialsRegistryTest {
             XdsCredentialsRegistry.getDefaultRegistry().providers();
     assertThat(providers).hasSize(3);
     assertThat(providers.get("google_default").getClass())
-        .isEqualTo(io.grpc.xds.internal.GoogleDefaultXdsCredentialsProvider.class);
+        .isEqualTo(GoogleDefaultXdsCredentialsProvider.class);
     assertThat(providers.get("insecure").getClass())
-        .isEqualTo(io.grpc.xds.internal.InsecureXdsCredentialsProvider.class);
+        .isEqualTo(InsecureXdsCredentialsProvider.class);
     assertThat(providers.get("tls").getClass())
-        .isEqualTo(io.grpc.xds.internal.TlsXdsCredentialsProvider.class);
+        .isEqualTo(TlsXdsCredentialsProvider.class);
   }
 
   @Test
   public void getClassesViaHardcoded_classesPresent() throws Exception {
     List<Class<?>> classes = XdsCredentialsRegistry.getHardCodedClasses();
     assertThat(classes).containsExactly(
-        io.grpc.xds.internal.GoogleDefaultXdsCredentialsProvider.class,
-        io.grpc.xds.internal.InsecureXdsCredentialsProvider.class,
-        io.grpc.xds.internal.TlsXdsCredentialsProvider.class);
+        GoogleDefaultXdsCredentialsProvider.class,
+        InsecureXdsCredentialsProvider.class,
+        TlsXdsCredentialsProvider.class);
   }
 
   @Test
