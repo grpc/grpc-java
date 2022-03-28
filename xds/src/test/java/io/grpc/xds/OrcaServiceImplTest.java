@@ -274,6 +274,9 @@ public class OrcaServiceImplTest {
         latch.countDown();
       }
     });
+    defaultTestService.setMemoryUtilizationMetric(0.4);
+    defaultTestService.deleteUtilizationMetric("util");
+    defaultTestService.setAllUtilizationMetrics(firstUtilization);
     latch.await(5, TimeUnit.SECONDS);
     goldenReport = OrcaLoadReport.newBuilder()
         .putAllUtilization(firstUtilization)
