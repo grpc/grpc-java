@@ -39,7 +39,6 @@ import javax.annotation.concurrent.ThreadSafe;
  * Registry of {@link XdsCredentialsProvider}s. The {@link #getDefaultRegistry default
  * instance} loads providers at runtime through the Java service provider mechanism.
  */
-@Internal
 @ThreadSafe
 final class XdsCredentialsRegistry {
   private static final Logger logger = Logger.getLogger(XdsCredentialsRegistry.class.getName());
