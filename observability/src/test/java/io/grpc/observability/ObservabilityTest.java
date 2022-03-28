@@ -42,23 +42,24 @@ public class ObservabilityTest {
         InternalLoggingChannelInterceptor.Factory.class);
     InternalLoggingServerInterceptor.Factory serverInterceptorFactory = mock(
         InternalLoggingServerInterceptor.Factory.class);
-    Observability observability = Observability.grpcInit(sink, channelInterceptorFactory,
-        serverInterceptorFactory);
-    assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
-    assertThat(ServerProvider.provider()).isInstanceOf(ServerProvider.class);
-    Observability observability1 = Observability.grpcInit(sink, channelInterceptorFactory,
-        serverInterceptorFactory);
-    assertThat(observability1).isSameInstanceAs(observability);
+    Observability observability1;
+    try (Observability observability = Observability.grpcInit(sink, channelInterceptorFactory,
+        serverInterceptorFactory)) {
+      assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
+      assertThat(ServerProvider.provider()).isInstanceOf(ServerProvider.class);
+      observability1 = Observability.grpcInit(sink, channelInterceptorFactory,
+              serverInterceptorFactory);
+      assertThat(observability1).isSameInstanceAs(observability);
 
-    observability.grpcShutdown();
+    }
     verify(sink).close();
     assertThat(ManagedChannelProvider.provider()).isSameInstanceAs(prevChannelProvider);
     assertThat(ServerProvider.provider()).isSameInstanceAs(prevServerProvider);
     try {
-      observability.grpcShutdown();
-      fail("should have failed for calling grpcShutdown() second time");
+      observability1.close();
+      fail("should have failed for calling close() second time");
     } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().contains("Observability already shutdown!");
+      assertThat(e).hasMessageThat().contains("Observability already closed!");
     }
   }
 }
