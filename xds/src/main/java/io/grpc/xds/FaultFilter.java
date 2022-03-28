@@ -400,7 +400,10 @@ final class FaultFilter implements Filter, ClientInterceptorBuilder {
                   activeFaultCounter.decrementAndGet();
                 }
               }
-              setCall(callSupplier.get());
+              Runnable toRun = setCall(callSupplier.get());
+              if (toRun != null) {
+                toRun.run();
+              }
             }
           },
           delayNanos,

@@ -16,42 +16,71 @@
 
 package io.grpc.observability;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelProvider.ProviderNotFoundException;
 import io.grpc.observability.interceptors.InternalLoggingChannelInterceptor;
 import io.grpc.observability.interceptors.InternalLoggingServerInterceptor;
+import io.grpc.observability.logging.GcpLogSink;
+import io.grpc.observability.logging.Sink;
+import java.io.IOException;
 
 /** The main class for gRPC Observability features. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class Observability {
-  private static boolean initialized = false;
+  private static Observability instance = null;
+  private final Sink sink;
 
   /**
    * Initialize grpc-observability.
    *
    * @throws ProviderNotFoundException if no underlying channel/server provider is available.
    */
-  public static synchronized void grpcInit() {
-    if (initialized) {
-      throw new IllegalStateException("Observability already initialized!");
+  public static synchronized Observability grpcInit() throws IOException {
+    if (instance == null) {
+      GlobalLoggingTags globalLoggingTags = new GlobalLoggingTags();
+      ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
+      Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId());
+      instance = grpcInit(sink,
+          new InternalLoggingChannelInterceptor.FactoryImpl(sink,
+              globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags(),
+              observabilityConfig),
+          new InternalLoggingServerInterceptor.FactoryImpl(sink,
+              globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags(),
+              observabilityConfig));
     }
-    LoggingChannelProvider.init(new InternalLoggingChannelInterceptor.FactoryImpl());
-    LoggingServerProvider.init(new InternalLoggingServerInterceptor.FactoryImpl());
-    // TODO(sanjaypujare): initialize customTags map
-    initialized = true;
+    return instance;
   }
 
-  /** Un-initialize or finish grpc-observability. */
-  public static synchronized void grpcFinish() {
-    if (!initialized) {
-      throw new IllegalStateException("Observability not initialized!");
+  @VisibleForTesting static Observability grpcInit(Sink sink,
+      InternalLoggingChannelInterceptor.Factory channelInterceptorFactory,
+      InternalLoggingServerInterceptor.Factory serverInterceptorFactory) {
+    if (instance == null) {
+      instance = new Observability(sink, channelInterceptorFactory, serverInterceptorFactory);
     }
-    LoggingChannelProvider.finish();
-    LoggingServerProvider.finish();
-    // TODO(sanjaypujare): finish customTags map
-    initialized = false;
+    return instance;
   }
 
-  private Observability() {
+  /** Un-initialize/shutdown grpc-observability. */
+  public void grpcShutdown() {
+    synchronized (Observability.class) {
+      if (instance == null) {
+        throw new IllegalStateException("Observability already shutdown!");
+      }
+      LoggingChannelProvider.shutdown();
+      LoggingServerProvider.shutdown();
+      sink.close();
+      instance = null;
+    }
+  }
+
+  private Observability(Sink sink,
+      InternalLoggingChannelInterceptor.Factory channelInterceptorFactory,
+      InternalLoggingServerInterceptor.Factory serverInterceptorFactory) {
+    this.sink = checkNotNull(sink);
+    LoggingChannelProvider.init(checkNotNull(channelInterceptorFactory));
+    LoggingServerProvider.init(checkNotNull(serverInterceptorFactory));
   }
 }
