@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.Internal;
 import io.grpc.InternalServiceProviders;
 import java.util.ArrayList;
 import java.util.Collections;
