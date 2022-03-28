@@ -14,14 +14,16 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.googleapis;
 
 import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.xds.InternalSharedXdsClientPoolProvider;
 import java.net.URI;
+import java.util.Map;
 
 /**
  * A provider for {@link GoogleCloudToProdNameResolver}.
@@ -36,7 +38,7 @@ public final class GoogleCloudToProdNameResolverProvider extends NameResolverPro
     if (SCHEME.equals(targetUri.getScheme())) {
       return new GoogleCloudToProdNameResolver(
           targetUri, args, GrpcUtil.SHARED_CHANNEL_EXECUTOR,
-          SharedXdsClientPoolProvider.getDefaultProvider());
+          new SharedXdsClientPoolProviderBootstrapSetter());
     }
     return null;
   }
@@ -54,5 +56,13 @@ public final class GoogleCloudToProdNameResolverProvider extends NameResolverPro
   @Override
   protected int priority() {
     return 4;
+  }
+
+  private static final class SharedXdsClientPoolProviderBootstrapSetter
+      implements GoogleCloudToProdNameResolver.BootstrapSetter {
+    @Override
+    public void setBootstrap(Map<String, ?> bootstrap) {
+      InternalSharedXdsClientPoolProvider.setDefaultProviderBootstrapOverride(bootstrap);
+    }
   }
 }

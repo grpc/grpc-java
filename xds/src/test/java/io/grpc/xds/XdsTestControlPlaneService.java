@@ -82,7 +82,6 @@ final class XdsTestControlPlaneService extends
   public <T extends Message> void setXdsConfig(final String type, final Map<String, T> resources) {
     logger.log(Level.FINE, "setting config {0} {1}", new Object[]{type, resources});
     syncContext.execute(new Runnable() {
-      @SuppressWarnings("unchecked")
       @Override
       public void run() {
         HashMap<String, Message> copyResources =  new HashMap<>(resources);

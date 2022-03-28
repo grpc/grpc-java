@@ -45,6 +45,7 @@ import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
+import io.envoyproxy.envoy.api.v2.Resource;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
 import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
@@ -252,6 +253,13 @@ public class ClientXdsClientV2Test extends ClientXdsClientTestBase {
   }
 
   private static class MessageFactoryV2 extends MessageFactory {
+
+    @Override
+    protected Any buildWrappedResource(Any originalResource) {
+      return Any.pack(Resource.newBuilder()
+          .setResource(originalResource)
+          .build());
+    }
 
     @SuppressWarnings("unchecked")
     @Override

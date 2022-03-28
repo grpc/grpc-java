@@ -132,23 +132,21 @@ of Android SDK being installed is shown at `Android SDK Location` at the same pa
 The default is `$HOME/Library/Android/sdk` for Mac OS and `$HOME/Android/Sdk` for Linux. 
 You can change this to a custom location.
 
-### Install via Android SDK Manager
-Go to [Android SDK](https://developer.android.com/studio) and navigate to __Command line tools only__.
-Download and unzip the package for your build machine OS into somewhere easy to find 
-(e.g., `$HOME/Android/sdk`). This will be your Android SDK home directory. 
-The Android SDK Manager tool is in `tools/bin/sdkmanager`.
+### Install via Command line tools only
+Go to [Android SDK](https://developer.android.com/studio#command-tools) and
+download the commandlinetools package for your build machine OS. Decide where
+you want the Android SDK to be stored. `$HOME/Library/Android/sdk` is typical on
+Mac OS and `$HOME/Android/Sdk` for Linux.
 
-Run the `sdkmanager` tool:
-```
-$ tools/bin/sdkmanager --update
-$ tools/bin/sdkmanager "platforms;android-28"
-```
-This installs Android SDK 28 into `platforms/android-28` of your Android SDK home directory.
-More usage of `sdkmanager` can be found at [Android User Guide](https://developer.android.com/studio/command-line/sdkmanager).
+```sh
+export ANDROID_HOME=$HOME/Android/Sdk # Adjust to your liking
+mkdir $HOME/Android
+mkdir $ANDROID_HOME
+mkdir $ANDROID_HOME/cmdline-tools
+unzip -d $ANDROID_HOME/cmdline-tools DOWNLOADS/commandlinetools-*.zip
+mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+# Android SDK is now ready. Now accept licenses so the build can auto-download packages
+$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
-
-After Android SDK is installed, you need to set the `ANDROID_HOME` environment variable to your
-Android SDK home directory:
-```
-$ export ANDROID_HOME=<path-to-your-android-sdk>
+# Add 'export ANDROID_HOME=$HOME/Android/Sdk' to your .bashrc or equivalent
 ```

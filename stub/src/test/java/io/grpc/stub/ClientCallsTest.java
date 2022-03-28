@@ -19,6 +19,7 @@ package io.grpc.stub;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -58,6 +59,8 @@ import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -97,10 +100,12 @@ public class ClientCallsTest {
   private ArgumentCaptor<MethodDescriptor<?, ?>> methodDescriptorCaptor;
   @Captor
   private ArgumentCaptor<CallOptions> callOptionsCaptor;
+  private boolean originalRejectRunnableOnExecutor;
 
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
+    originalRejectRunnableOnExecutor = ClientCalls.rejectRunnableOnExecutor;
   }
 
   @After
@@ -111,6 +116,7 @@ public class ClientCallsTest {
     if (channel != null) {
       channel.shutdownNow();
     }
+    ClientCalls.rejectRunnableOnExecutor = originalRejectRunnableOnExecutor;
   }
 
   @Test
@@ -215,6 +221,49 @@ public class ClientCallsTest {
     }
     assertTrue("onCloseCalled", interceptor.onCloseCalled);
     assertTrue("context not cancelled", methodImpl.observer.isCancelled());
+  }
+
+  @Test
+  public void blockingUnaryCall2_rejectExecutionOnClose() throws Exception {
+    Integer req = 2;
+
+    class NoopUnaryMethod implements UnaryMethod<Integer, Integer> {
+      ServerCallStreamObserver<Integer> observer;
+
+      @Override public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
+        observer = (ServerCallStreamObserver<Integer>) responseObserver;
+      }
+    }
+
+    NoopUnaryMethod methodImpl = new NoopUnaryMethod();
+    server = InProcessServerBuilder.forName("noop").directExecutor()
+        .addService(ServerServiceDefinition.builder("some")
+            .addMethod(UNARY_METHOD, ServerCalls.asyncUnaryCall(methodImpl))
+            .build())
+        .build().start();
+
+    InterruptInterceptor interceptor = new InterruptInterceptor();
+    channel = InProcessChannelBuilder.forName("noop")
+        .directExecutor()
+        .intercept(interceptor)
+        .build();
+    try {
+      ClientCalls.blockingUnaryCall(channel, UNARY_METHOD, CallOptions.DEFAULT, req);
+      fail();
+    } catch (StatusRuntimeException ex) {
+      assertTrue(Thread.interrupted());
+      assertTrue("interrupted", ex.getCause() instanceof InterruptedException);
+    }
+    assertTrue("onCloseCalled", interceptor.onCloseCalled);
+    assertTrue("context not cancelled", methodImpl.observer.isCancelled());
+    assertNotNull("callOptionsExecutor should not be null", interceptor.savedExecutor);
+    ClientCalls.rejectRunnableOnExecutor = true;
+    try {
+      interceptor.savedExecutor.execute(() -> { });
+      fail();
+    } catch (Exception ex) {
+      assertTrue(ex instanceof RejectedExecutionException);
+    }
   }
 
   @Test
@@ -858,6 +907,7 @@ public class ClientCallsTest {
   // Used for blocking tests to check interrupt behavior and make sure onClose is still called.
   class InterruptInterceptor implements ClientInterceptor {
     boolean onCloseCalled;
+    Executor savedExecutor;
 
     @Override
     public <ReqT,RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -867,6 +917,7 @@ public class ClientCallsTest {
           super.start(new SimpleForwardingClientCallListener<RespT>(listener) {
             @Override public void onClose(Status status, Metadata trailers) {
               onCloseCalled = true;
+              savedExecutor = callOptions.getExecutor();
               super.onClose(status, trailers);
             }
           }, headers);

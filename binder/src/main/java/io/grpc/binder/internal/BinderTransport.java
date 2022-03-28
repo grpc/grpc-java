@@ -201,7 +201,7 @@ public abstract class BinderTransport
   @Nullable
   protected Status shutdownStatus;
 
-  @Nullable private IBinder outgoingBinder;
+  @Nullable private OneWayBinderProxy outgoingBinder;
 
   private final FlowController flowController;
 
@@ -278,10 +278,10 @@ public abstract class BinderTransport
   }
 
   @GuardedBy("this")
-  protected boolean setOutgoingBinder(IBinder binder) {
+  protected boolean setOutgoingBinder(OneWayBinderProxy binder) {
     this.outgoingBinder = binder;
     try {
-      binder.linkToDeath(this, 0);
+      binder.getDelegate().linkToDeath(this, 0);
       return true;
     } catch (RemoteException re) {
       return false;
@@ -326,19 +326,13 @@ public abstract class BinderTransport
   }
 
   @GuardedBy("this")
-  final void sendSetupTransaction(IBinder iBinder) {
-    Parcel parcel = Parcel.obtain();
-    try {
-      parcel.writeInt(WIRE_FORMAT_VERSION);
-      parcel.writeStrongBinder(incomingBinder);
-      if (!iBinder.transact(SETUP_TRANSPORT, parcel, null, IBinder.FLAG_ONEWAY)) {
-        shutdownInternal(
-            Status.UNAVAILABLE.withDescription("Failed sending SETUP_TRANSPORT transaction"), true);
-      }
+  final void sendSetupTransaction(OneWayBinderProxy iBinder) {
+    try (ParcelHolder parcel = ParcelHolder.obtain()) {
+      parcel.get().writeInt(WIRE_FORMAT_VERSION);
+      parcel.get().writeStrongBinder(incomingBinder);
+      iBinder.transact(SETUP_TRANSPORT, parcel);
     } catch (RemoteException re) {
       shutdownInternal(statusFromRemoteException(re), true);
-    } finally {
-      parcel.recycle();
     }
   }
 
@@ -346,19 +340,16 @@ public abstract class BinderTransport
   private final void sendShutdownTransaction() {
     if (outgoingBinder != null) {
       try {
-        outgoingBinder.unlinkToDeath(this, 0);
+        outgoingBinder.getDelegate().unlinkToDeath(this, 0);
       } catch (NoSuchElementException e) {
         // Ignore.
       }
-      Parcel parcel = Parcel.obtain();
-      try {
+      try (ParcelHolder parcel = ParcelHolder.obtain()) {
         // Send empty flags to avoid a memory leak linked to empty parcels (b/207778694).
-        parcel.writeInt(0);
-        outgoingBinder.transact(SHUTDOWN_TRANSPORT, parcel, null, IBinder.FLAG_ONEWAY);
+        parcel.get().writeInt(0);
+        outgoingBinder.transact(SHUTDOWN_TRANSPORT, parcel);
       } catch (RemoteException re) {
         // Ignore.
-      } finally {
-        parcel.recycle();
       }
     }
   }
@@ -369,14 +360,11 @@ public abstract class BinderTransport
     } else if (outgoingBinder == null) {
       throw Status.FAILED_PRECONDITION.withDescription("Transport not ready.").asException();
     } else {
-      Parcel parcel = Parcel.obtain();
-      try {
-        parcel.writeInt(id);
-        outgoingBinder.transact(PING, parcel, null, IBinder.FLAG_ONEWAY);
+      try (ParcelHolder parcel = ParcelHolder.obtain()) {
+        parcel.get().writeInt(id);
+        outgoingBinder.transact(PING, parcel);
       } catch (RemoteException re) {
         throw statusFromRemoteException(re).asException();
-      } finally {
-        parcel.recycle();
       }
     }
   }
@@ -401,12 +389,10 @@ public abstract class BinderTransport
     }
   }
 
-  final void sendTransaction(int callId, Parcel parcel) throws StatusException {
-    int dataSize = parcel.dataSize();
+  final void sendTransaction(int callId, ParcelHolder parcel) throws StatusException {
+    int dataSize = parcel.get().dataSize();
     try {
-      if (!outgoingBinder.transact(callId, parcel, null, IBinder.FLAG_ONEWAY)) {
-        throw Status.UNAVAILABLE.withDescription("Failed sending transaction").asException();
-      }
+      outgoingBinder.transact(callId, parcel);
     } catch (RemoteException re) {
       throw statusFromRemoteException(re).asException();
     }
@@ -416,16 +402,13 @@ public abstract class BinderTransport
   }
 
   final void sendOutOfBandClose(int callId, Status status) {
-    Parcel parcel = Parcel.obtain();
-    try {
-      parcel.writeInt(0); // Placeholder for flags. Will be filled in below.
-      int flags = TransactionUtils.writeStatus(parcel, status);
-      TransactionUtils.fillInFlags(parcel, flags | TransactionUtils.FLAG_OUT_OF_BAND_CLOSE);
+    try (ParcelHolder parcel = ParcelHolder.obtain()) {
+      parcel.get().writeInt(0); // Placeholder for flags. Will be filled in below.
+      int flags = TransactionUtils.writeStatus(parcel.get(), status);
+      TransactionUtils.fillInFlags(parcel.get(), flags | TransactionUtils.FLAG_OUT_OF_BAND_CLOSE);
       sendTransaction(callId, parcel);
     } catch (StatusException e) {
       logger.log(Level.WARNING, "Failed sending oob close transaction", e);
-    } finally {
-      parcel.recycle();
     }
   }
 
@@ -496,10 +479,12 @@ public abstract class BinderTransport
   protected void handleSetupTransport(Parcel parcel) {}
 
   @GuardedBy("this")
-  private final void handlePing(Parcel parcel) {
+  private final void handlePing(Parcel requestParcel) {
+    int id = requestParcel.readInt();
     if (transportState == TransportState.READY) {
-      try {
-        outgoingBinder.transact(PING_RESPONSE, parcel, null, IBinder.FLAG_ONEWAY);
+      try (ParcelHolder replyParcel = ParcelHolder.obtain()) {
+        replyParcel.get().writeInt(id);
+        outgoingBinder.transact(PING_RESPONSE, replyParcel);
       } catch (RemoteException re) {
         // Ignore.
       }
@@ -510,21 +495,15 @@ public abstract class BinderTransport
   protected void handlePingResponse(Parcel parcel) {}
 
   @GuardedBy("this")
-  private void sendAcknowledgeBytes(IBinder iBinder) {
+  private void sendAcknowledgeBytes(OneWayBinderProxy iBinder) {
     // Send a transaction to acknowledge reception of incoming data.
     long n = numIncomingBytes.get();
     acknowledgedIncomingBytes = n;
-    Parcel parcel = Parcel.obtain();
-    try {
-      parcel.writeLong(n);
-      if (!iBinder.transact(ACKNOWLEDGE_BYTES, parcel, null, IBinder.FLAG_ONEWAY)) {
-        shutdownInternal(
-            Status.UNAVAILABLE.withDescription("Failed sending ack bytes transaction"), true);
-      }
+    try (ParcelHolder parcel = ParcelHolder.obtain()) {
+      parcel.get().writeLong(n);
+      iBinder.transact(ACKNOWLEDGE_BYTES, parcel);
     } catch (RemoteException re) {
       shutdownInternal(statusFromRemoteException(re), true);
-    } finally {
-      parcel.recycle();
     }
   }
 
@@ -607,7 +586,7 @@ public abstract class BinderTransport
 
     @Override
     public synchronized void onBound(IBinder binder) {
-      sendSetupTransaction(binder);
+      sendSetupTransaction(OneWayBinderProxy.wrap(binder, offloadExecutor));
     }
 
     @Override
@@ -635,33 +614,39 @@ public abstract class BinderTransport
         final Metadata headers,
         final CallOptions callOptions,
         ClientStreamTracer[] tracers) {
-      if (isShutdown()) {
-        return newFailingClientStream(shutdownStatus, attributes, headers, tracers);
+      if (!inState(TransportState.READY)) {
+        return newFailingClientStream(
+            isShutdown()
+                ? shutdownStatus
+                : Status.INTERNAL.withDescription("newStream() before transportReady()"),
+            attributes,
+            headers,
+            tracers);
+      }
+
+      int callId = latestCallId++;
+      if (latestCallId == LAST_CALL_ID) {
+        latestCallId = FIRST_CALL_ID;
+      }
+      StatsTraceContext statsTraceContext =
+          StatsTraceContext.newClientContext(tracers, attributes, headers);
+      Inbound.ClientInbound inbound =
+          new Inbound.ClientInbound(
+              this, attributes, callId, GrpcUtil.shouldBeCountedForInUse(callOptions));
+      if (ongoingCalls.putIfAbsent(callId, inbound) != null) {
+        Status failure = Status.INTERNAL.withDescription("Clashing call IDs");
+        shutdownInternal(failure, true);
+        return newFailingClientStream(failure, attributes, headers, tracers);
       } else {
-        int callId = latestCallId++;
-        if (latestCallId == LAST_CALL_ID) {
-          latestCallId = FIRST_CALL_ID;
+        if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
+          clientTransportListener.transportInUse(true);
         }
-        StatsTraceContext statsTraceContext =
-            StatsTraceContext.newClientContext(tracers, attributes, headers);
-        Inbound.ClientInbound inbound =
-            new Inbound.ClientInbound(
-                this, attributes, callId, GrpcUtil.shouldBeCountedForInUse(callOptions));
-        if (ongoingCalls.putIfAbsent(callId, inbound) != null) {
-          Status failure = Status.INTERNAL.withDescription("Clashing call IDs");
-          shutdownInternal(failure, true);
-          return newFailingClientStream(failure, attributes, headers, tracers);
+        Outbound.ClientOutbound outbound =
+            new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
+        if (method.getType().clientSendsOneMessage()) {
+          return new SingleMessageClientStream(inbound, outbound, attributes);
         } else {
-          if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
-            clientTransportListener.transportInUse(true);
-          }
-          Outbound.ClientOutbound outbound =
-              new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
-          if (method.getType().clientSendsOneMessage()) {
-            return new SingleMessageClientStream(inbound, outbound, attributes);
-          } else {
-            return new MultiMessageClientStream(inbound, outbound, attributes);
-          }
+          return new MultiMessageClientStream(inbound, outbound, attributes);
         }
       }
     }
@@ -742,7 +727,7 @@ public abstract class BinderTransport
         if (inState(TransportState.SETUP)) {
           if (!authorization.isOk()) {
             shutdownInternal(authorization, true);
-          } else if (!setOutgoingBinder(binder)) {
+          } else if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
             shutdownInternal(
                 Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
           } else {
@@ -821,7 +806,8 @@ public abstract class BinderTransport
         IBinder callbackBinder) {
       super(executorServicePool, attributes, buildLogId(attributes));
       this.streamTracerFactories = streamTracerFactories;
-      setOutgoingBinder(callbackBinder);
+      // TODO(jdcormie): Plumb in the Server's executor() and use it here instead.
+      setOutgoingBinder(OneWayBinderProxy.wrap(callbackBinder, getScheduledExecutorService()));
     }
 
     public synchronized void setServerTransportListener(ServerTransportListener serverTransportListener) {

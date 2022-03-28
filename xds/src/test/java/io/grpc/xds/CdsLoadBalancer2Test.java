@@ -459,7 +459,10 @@ public class CdsLoadBalancer2Test {
     xdsClient.deliverError(error);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertPicker(pickerCaptor.getValue(), error, null);
+    Status expectedError = Status.UNAVAILABLE.withDescription(
+        "Unable to load CDS cluster-foo.googleapis.com. xDS server returned: "
+        + "RESOURCE_EXHAUSTED: OOM");
+    assertPicker(pickerCaptor.getValue(), expectedError, null);
     assertThat(childBalancers).isEmpty();
   }
 
@@ -481,7 +484,8 @@ public class CdsLoadBalancer2Test {
 
     Status error = Status.RESOURCE_EXHAUSTED.withDescription("OOM");
     xdsClient.deliverError(error);
-    assertThat(childLb.upstreamError).isEqualTo(error);
+    assertThat(childLb.upstreamError.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(childLb.upstreamError.getDescription()).contains("RESOURCE_EXHAUSTED: OOM");
     assertThat(childLb.shutdown).isFalse();  // child LB may choose to keep working
   }
 

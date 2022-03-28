@@ -166,7 +166,15 @@ main() {
   build_docker_images_if_needed
   # Run tests
   cd "${TEST_DRIVER_FULL_DIR}"
-  run_test api_listener_test
+  local failed_tests=0
+  test_suites=("api_listener_test" "change_backend_service_test" "failover_test" "remove_neg_test" "round_robin_test" "affinity_test")
+  for test in "${test_suites[@]}"; do
+    run_test $test || (( failed_tests++ ))
+  done
+  echo "Failed test suites: ${failed_tests}"
+  if (( failed_tests > 0 )); then
+    exit 1
+  fi
 }
 
 main "$@"
