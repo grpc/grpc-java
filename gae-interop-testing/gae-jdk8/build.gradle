@@ -52,7 +52,7 @@ dependencies {
     }
     implementation libraries.junit
     implementation libraries.protobuf.java
-    runtimeOnly libraries.netty.tcnative
+    runtimeOnly libraries.netty.tcnative, libraries.netty.tcnative.classes
 }
 
 compileJava {

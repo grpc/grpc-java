@@ -387,7 +387,7 @@ If you are running in a runtime environment that also uses Netty (e.g., Hadoop, 
 Below are known to work version combinations:
 
 grpc-netty version | netty-handler version | netty-tcnative-boringssl-static version
------------------- | --------------------- | ---------------------------------------
+------------------ |-----------------------| ---------------------------------------
 1.0.0-1.0.1        | 4.1.3.Final           | 1.1.33.Fork19
 1.0.2-1.0.3        | 4.1.6.Final           | 1.1.33.Fork23
 1.1.x-1.3.x        | 4.1.8.Final           | 1.1.33.Fork26
@@ -410,7 +410,8 @@ grpc-netty version | netty-handler version | netty-tcnative-boringssl-static ver
 1.32.x-1.34.x      | 4.1.51.Final          | 2.0.31.Final
 1.35.x-1.41.x      | 4.1.52.Final          | 2.0.34.Final
 1.42.x-1.43.x      | 4.1.63.Final          | 2.0.38.Final
-1.44.x             | 4.1.72.Final          | 2.0.46.Final
+1.44.x-1.45.x      | 4.1.72.Final          | 2.0.46.Final
+1.46.x-            | 4.1.77.Final          | 2.0.52.Final
 
 _(grpc-netty-shaded avoids issues with keeping these versions in sync.)_
 
