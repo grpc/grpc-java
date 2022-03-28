@@ -43,8 +43,7 @@ import io.grpc.testing.GrpcCleanupRule;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
@@ -264,20 +263,30 @@ public class OrcaServiceImplTest {
     fakeClock.forwardTime(1, TimeUnit.SECONDS);
     assertThat(reports.next()).isEqualTo(goldenReport);
 
-    CountDownLatch latch = new CountDownLatch(1);
-    Executors.newSingleThreadExecutor().execute(new Runnable() {
+    CyclicBarrier barrier = new CyclicBarrier(2);
+    new Thread(new Runnable() {
       @Override
       public void run() {
+        try {
+          barrier.await();
+        } catch (Exception ex) {
+          throw new AssertionError(ex);
+        }
         defaultTestService.deleteUtilizationMetric("util");
         defaultTestService.setMemoryUtilizationMetric(0.4);
         defaultTestService.setAllUtilizationMetrics(firstUtilization);
-        latch.countDown();
+        try {
+          barrier.await();
+        } catch (Exception ex) {
+          throw new AssertionError(ex);
+        }
       }
-    });
+    }).start();
+    barrier.await();
     defaultTestService.setMemoryUtilizationMetric(0.4);
     defaultTestService.deleteUtilizationMetric("util");
     defaultTestService.setAllUtilizationMetrics(firstUtilization);
-    latch.await(5, TimeUnit.SECONDS);
+    barrier.await();
     goldenReport = OrcaLoadReport.newBuilder()
         .putAllUtilization(firstUtilization)
         .setMemUtilization(0.4)
