@@ -2526,9 +2526,13 @@ public abstract class ClientXdsClientTestBase {
     verify(edsResourceWatcher, times(3)).onError(errorCaptor.capture());
     assertThat(errorCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
 
-    // Reset backoff sequence and retry immediately.
+    // Reset backoff sequence and retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
-    fakeClock.runDueTasks();
+    inOrder.verify(backoffPolicy2).nextBackoffNanos();
+    retryTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
+    assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(20L);
+    fakeClock.forwardNanos(20L);
     call = resourceDiscoveryCalls.poll();
     call.verifyRequest(LDS, LDS_RESOURCE, "63", "", NODE);
     call.verifyRequest(RDS, RDS_RESOURCE, "5", "", NODE);
@@ -2550,8 +2554,8 @@ public abstract class ClientXdsClientTestBase {
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
     retryTask =
         Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
-    assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(20L);
-    fakeClock.forwardNanos(20L);
+    assertThat(retryTask.getDelay(TimeUnit.NANOSECONDS)).isEqualTo(200L);
+    fakeClock.forwardNanos(200L);
     call = resourceDiscoveryCalls.poll();
     call.verifyRequest(LDS, LDS_RESOURCE, "63", "", NODE);
     call.verifyRequest(RDS, RDS_RESOURCE, "5", "", NODE);
