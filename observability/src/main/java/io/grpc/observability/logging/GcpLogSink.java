@@ -42,7 +42,7 @@ import java.util.logging.Logger;
 public class GcpLogSink implements Sink {
   private final Logger logger = Logger.getLogger(GcpLogSink.class.getName());
 
-  // TODO (dnvindhya): Make cloud logging service a configurable value
+  // TODO(DNVindhya): Make cloud logging service a configurable value
   private static final String SERVICE_TO_EXCLUDE = "google.logging.v2.LoggingServiceV2";
   private static final String DEFAULT_LOG_NAME = "grpc";
   private static final String K8S_MONITORED_RESOURCE_TYPE = "k8s_container";
@@ -50,7 +50,6 @@ public class GcpLogSink implements Sink {
       = ImmutableSet.of("project_id", "location", "cluster_name", "namespace_name",
       "pod_name", "container_name");
   private static final int FALLBACK_FLUSH_LIMIT = 100;
-  private final Map<String, String> locationTags;
   private final Map<String, String> customTags;
   private final Logging gcpLoggingClient;
   private final MonitoredResource kubernetesResource;
@@ -80,9 +79,8 @@ public class GcpLogSink implements Sink {
   GcpLogSink(Logging client, Map<String, String> locationTags, Map<String, String> customTags,
       int flushLimit) {
     this.gcpLoggingClient = client;
-    this.locationTags = locationTags;
     this.customTags = customTags != null ? customTags : new HashMap<>();
-    this.kubernetesResource = getResource(this.locationTags);
+    this.kubernetesResource = getResource(locationTags);
     this.flushLimit = flushLimit != 0 ? flushLimit : FALLBACK_FLUSH_LIMIT;
     this.flushCounter = 0;
   }
@@ -104,7 +102,7 @@ public class GcpLogSink implements Sink {
     try {
       GrpcLogRecord.EventType event = logProto.getEventType();
       Severity logEntrySeverity = getCloudLoggingLevel(logProto.getLogLevel());
-      // TODO(vindhyan): make sure all (int, long) values are not displayed as double
+      // TODO(DNVindhya): make sure all (int, long) values are not displayed as double
       // For now, every value is being converted as string because of JsonFormat.printer().print
       LogEntry.Builder grpcLogEntryBuilder =
           LogEntry.newBuilder(JsonPayload.of(protoToMapConverter(logProto)))

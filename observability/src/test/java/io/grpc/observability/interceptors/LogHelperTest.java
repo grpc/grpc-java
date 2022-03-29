@@ -56,6 +56,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Test;
@@ -68,7 +70,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class LogHelperTest {
 
-  private static final Charset US_ASCII = Charset.forName("US-ASCII");
+  private static final Charset US_ASCII = StandardCharsets.US_ASCII;
   public static final Marshaller<byte[]> BYTEARRAY_MARSHALLER = new ByteArrayMarshaller();
   private static final String DATA_A = "aaaaaaaaa";
   private static final String DATA_B = "bbbbbbbbb";
@@ -101,7 +103,6 @@ public class LogHelperTest {
   private static final int MESSAGE_LIMIT = Integer.MAX_VALUE;
 
   private final Metadata nonEmptyMetadata = new Metadata();
-  private final int nonEmptyMetadataSize = 30;
   private final Sink sink = mock(GcpLogSink.class);
   private final Timestamp timestamp
       = Timestamp.newBuilder().setSeconds(9876).setNanos(54321).build();
@@ -109,7 +110,7 @@ public class LogHelperTest {
   private final LogHelper logHelper = new LogHelper(sink, timeProvider);
 
   @Before
-  public void setUp() throws Exception {
+  public void setUp() {
     nonEmptyMetadata.put(KEY_A, DATA_A);
     nonEmptyMetadata.put(KEY_B, DATA_B);
     nonEmptyMetadata.put(KEY_C, DATA_C);
@@ -147,7 +148,7 @@ public class LogHelperTest {
   }
 
   @Test
-  public void socketToProto_unknown() throws Exception {
+  public void socketToProto_unknown() {
     SocketAddress unknownSocket = new SocketAddress() {
       @Override
       public String toString() {
@@ -163,7 +164,7 @@ public class LogHelperTest {
   }
 
   @Test
-  public void metadataToProto_empty() throws Exception {
+  public void metadataToProto_empty() {
     assertEquals(
         GrpcLogRecord.newBuilder()
             .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
@@ -175,7 +176,8 @@ public class LogHelperTest {
   }
 
   @Test
-  public void metadataToProto() throws Exception {
+  public void metadataToProto() {
+    int nonEmptyMetadataSize = 30;
     assertEquals(
         GrpcLogRecord.newBuilder()
             .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
@@ -193,12 +195,12 @@ public class LogHelperTest {
   }
 
   @Test
-  public void metadataToProto_setsTruncated() throws Exception {
+  public void metadataToProto_setsTruncated() {
     assertTrue(LogHelper.createMetadataProto(nonEmptyMetadata, 0).truncated);
   }
 
   @Test
-  public void metadataToProto_truncated() throws Exception {
+  public void metadataToProto_truncated() {
     // 0 byte limit not enough for any metadata
     assertEquals(
         io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata.getDefaultInstance(),
@@ -248,7 +250,7 @@ public class LogHelperTest {
   }
 
   @Test
-  public void messageToProto() throws Exception {
+  public void messageToProto() {
     byte[] bytes
         = "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes(US_ASCII);
     assertEquals(
@@ -260,7 +262,7 @@ public class LogHelperTest {
   }
 
   @Test
-  public void messageToProto_truncated() throws Exception {
+  public void messageToProto_truncated() {
     byte[] bytes
         = "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes(US_ASCII);
     assertEquals(
@@ -560,7 +562,7 @@ public class LogHelperTest {
   }
 
   @Test
-  public void alwaysLoggedMetadata_grpcTraceBin() throws Exception {
+  public void alwaysLoggedMetadata_grpcTraceBin() {
     Metadata.Key<byte[]> key
         = Metadata.Key.of("grpc-trace-bin", Metadata.BINARY_BYTE_MARSHALLER);
     Metadata metadata = new Metadata();
@@ -570,12 +572,13 @@ public class LogHelperTest {
         LogHelper.createMetadataProto(metadata, zeroHeaderBytes);
     assertEquals(
         key.name(),
-        Iterables.getOnlyElement(pair.payload.getEntryBuilderList()).getKey());
+        Objects.requireNonNull(Iterables.getOnlyElement(pair.payload.getEntryBuilderList()))
+            .getKey());
     assertFalse(pair.truncated);
   }
 
   @Test
-  public void neverLoggedMetadata_grpcStatusDetailsBin() throws Exception {
+  public void neverLoggedMetadata_grpcStatusDetailsBin() {
     Metadata.Key<byte[]> key
         = Metadata.Key.of("grpc-status-details-bin", Metadata.BINARY_BYTE_MARSHALLER);
     Metadata metadata = new Metadata();
@@ -588,7 +591,7 @@ public class LogHelperTest {
   }
 
   @Test
-  public void logRpcMessage() throws Exception {
+  public void logRpcMessage() {
     long seqId = 1;
     String serviceName = "service";
     String methodName = "method";
@@ -695,7 +698,7 @@ public class LogHelperTest {
   private static GrpcLogRecord messageTestHelper(byte[] message, int maxMessageBytes) {
     GrpcLogRecord.Builder builder = GrpcLogRecord.newBuilder();
     PayloadBuilder<ByteString> pair
-        = LogHelper.createMesageProto(message, maxMessageBytes);
+        = LogHelper.createMessageProto(message, maxMessageBytes);
     builder.setMessage(pair.payload);
     builder.setPayloadSize(pair.size);
     builder.setPayloadTruncated(pair.truncated);

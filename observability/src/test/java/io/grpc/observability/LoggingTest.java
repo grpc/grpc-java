@@ -17,6 +17,7 @@
 package io.grpc.observability;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -71,8 +72,7 @@ public class LoggingTest {
   /**
    * Cloud logging test using LoggingChannelProvider and LoggingServerProvider.
    * 
-   * <p> Ignoring test, cos it calls external CLoud Logging APIs which is not required everytime
-   * we build.
+   * <p> Ignoring test, because it calls external CLoud Logging APIs.
    * To test cloud logging setup, 
    * 1. Set up Cloud Logging Auth credentials
    * 2. Assign permissions to service account to write logs to project specified by 
@@ -176,10 +176,13 @@ public class LoggingTest {
             .usePlaintext().build()));
     assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
         .isEqualTo("Hello buddy");
-    assertTrue("LogHelper should be invoked eight times equal to number of events "
-            + "excluding request message and response message events",
-        Mockito.mockingDetails(mockLogHelper).getInvocations().size() == 8 );
-    System.out.println(Mockito.mockingDetails(mockLogHelper).getInvocations().size());
+    // Total number of calls should have been 14 (6 from client and 6 from server)
+    // Since cancel is not invoked, it will be 12.
+    // Request message(Total count:2 (1 from client and 1 from server) and Response message(count:2)
+    // events are not in the event_types list, i.e  14 - 2(cancel) - 2(req_msg) - 2(resp_msg) = 8
+    assertEquals("LogHelper should be invoked eight times equal to number of events "
+            + "excluding request message and response message events", 8,
+        Mockito.mockingDetails(mockLogHelper).getInvocations().size());
     LoggingChannelProvider.shutdown();
     LoggingServerProvider.shutdown();
   }

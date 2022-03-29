@@ -52,10 +52,9 @@ import javax.annotation.Nullable;
  * Helper class for GCP observability logging.
  */
 public class LogHelper {
-
   private static final Logger logger = Logger.getLogger(LogHelper.class.getName());
 
-  // TODO(dnvindhya): Define it in one places(TBD) to make it easily accessible from everywhere
+  // TODO(DNVindhya): Define it in one places(TBD) to make it easily accessible from everywhere
   static final Metadata.Key<byte[]> STATUS_DETAILS_KEY =
       Metadata.Key.of(
           "grpc-status-details-bin",
@@ -121,7 +120,7 @@ public class LogHelper {
   }
 
   /**
-   * Logs the reponse header. Binary logging equivalent of logServerHeader.
+   * Logs the response header. Binary logging equivalent of logServerHeader.
    */
   void logResponseHeader(
       long seqId,
@@ -230,7 +229,7 @@ public class LogHelper {
         "event type must correspond to client message or server message");
     checkNotNull(message, "message");
 
-    // TODO(dnvindhya): Implement conversion of generics to ByteString
+    // TODO(DNVindhya): Implement conversion of generics to ByteString
     // Following is a temporary workaround to log if message is of following types :
     // 1. com.google.protobuf.Message
     // 2. byte[]
@@ -245,7 +244,7 @@ public class LogHelper {
     }
     PayloadBuilder<ByteString> pair = null;
     if (messageBytesArray != null) {
-      pair = createMesageProto(messageBytesArray, maxMessageBytes);
+      pair = createMessageProto(messageBytesArray, maxMessageBytes);
     }
 
     GrpcLogRecord.Builder logEntryBuilder = createTimestamp()
@@ -319,6 +318,8 @@ public class LogHelper {
     return GrpcLogRecord.newBuilder().setTimestamp(Timestamps.fromNanos(nanos));
   }
 
+  // TODO(DNVindhya): Evaluate if we need following clause for metadata logging in Observability
+  // Leaving the implementation for now as is to have same behavior across Java and Go
   private static final Set<String> NEVER_INCLUDED_METADATA = new HashSet<>(
       Collections.singletonList(
           // grpc-status-details-bin is already logged in `status_details` field of the
@@ -329,7 +330,6 @@ public class LogHelper {
           "grpc-trace-bin"));
 
   static final class PayloadBuilder<T> {
-
     T payload;
     int size;
     boolean truncated;
@@ -347,7 +347,7 @@ public class LogHelper {
     checkArgument(maxHeaderBytes >= 0,
         "maxHeaderBytes must be non negative");
     GrpcLogRecord.Metadata.Builder metadataBuilder = GrpcLogRecord.Metadata.newBuilder();
-    // This code is tightly coupled with io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata's
+    // This code is tightly coupled with io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
     // implementation
     byte[][] serialized = InternalMetadata.serialize(metadata);
     boolean truncated = false;
@@ -378,7 +378,7 @@ public class LogHelper {
     return new PayloadBuilder<>(metadataBuilder, totalMetadataBytes, truncated);
   }
 
-  static PayloadBuilder<ByteString> createMesageProto(byte[] message, int maxMessageBytes) {
+  static PayloadBuilder<ByteString> createMessageProto(byte[] message, int maxMessageBytes) {
     checkArgument(maxMessageBytes >= 0,
         "maxMessageBytes must be non negative");
     int desiredBytes = 0;
@@ -410,7 +410,7 @@ public class LogHelper {
       }
       builder.setIpPort(((InetSocketAddress) address).getPort());
     } else if (address.getClass().getName().equals("io.netty.channel.unix.DomainSocketAddress")) {
-      // To avoid a compile time dependency on grpc-netty, we check against the
+      // To avoid a compiled time dependency on grpc-netty, we check against the
       // runtime class name.
       builder.setType(Address.Type.TYPE_UNIX)
           .setAddress(address.toString());

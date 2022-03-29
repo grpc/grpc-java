@@ -31,6 +31,7 @@ import io.grpc.observability.ObservabilityConfig.LogFilter;
 import io.grpc.observability.interceptors.ConfigFilterHelper.FilterParams;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import io.grpc.testing.TestMethodDescriptors;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,7 +54,7 @@ public class ConfigFilterHelperTest {
           EventType.GRPC_CALL_HALF_CLOSE,
           EventType.GRPC_CALL_TRAILER);
 
-  private MethodDescriptor.Builder<Void, Void> builder = TestMethodDescriptors.voidMethod()
+  private final MethodDescriptor.Builder<Void, Void> builder = TestMethodDescriptors.voidMethod()
       .toBuilder();
   private MethodDescriptor<Void, Void> method;
 
@@ -61,7 +62,7 @@ public class ConfigFilterHelperTest {
   private ConfigFilterHelper configFilterHelper;
 
   @Before
-  public void setup() throws Exception {
+  public void setup() {
     mockConfig = mock(ObservabilityConfig.class);
     configFilterHelper = new ConfigFilterHelper(mockConfig);
   }
@@ -119,8 +120,8 @@ public class ConfigFilterHelperTest {
         FilterParams.create(true, 1024, 1024));
     assertEquals(configFilterHelper.perMethodFilters, expectedMethodFilters);
 
-    Set<EventType> expectedlogEventTypeSet = ImmutableSet.copyOf(configEventTypes);
-    assertEquals(configFilterHelper.logEventTypeSet, expectedlogEventTypeSet);
+    Set<EventType> expectedLogEventTypeSet = ImmutableSet.copyOf(configEventTypes);
+    assertEquals(configFilterHelper.logEventTypeSet, expectedLogEventTypeSet);
   }
 
   @Test
@@ -175,7 +176,23 @@ public class ConfigFilterHelperTest {
   }
 
   @Test
-  public void checkEventToBeLogged() {
+  public void checkEventToBeLogged_defaultLogAllEventTypes() {
+    List<EventType> eventList = new ArrayList<>();
+    eventList.add(EventType.GRPC_CALL_REQUEST_HEADER);
+    eventList.add(EventType.GRPC_CALL_RESPONSE_HEADER);
+    eventList.add(EventType.GRPC_CALL_REQUEST_MESSAGE);
+    eventList.add(EventType.GRPC_CALL_RESPONSE_MESSAGE);
+    eventList.add(EventType.GRPC_CALL_HALF_CLOSE);
+    eventList.add(EventType.GRPC_CALL_TRAILER);
+    eventList.add(EventType.GRPC_CALL_CANCEL);
+
+    for (EventType event : eventList) {
+      assertTrue(configFilterHelper.isEventToBeLogged(event));
+    }
+  }
+
+  @Test
+  public void checkEventToBeLogged_withEventTypesFromConfig() {
     when(mockConfig.getEventTypes()).thenReturn(configEventTypes);
     configFilterHelper.setEventFilterSet();
 

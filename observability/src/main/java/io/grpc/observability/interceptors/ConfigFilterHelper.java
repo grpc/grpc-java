@@ -27,7 +27,6 @@ import io.grpc.observability.ObservabilityConfig.LogFilter;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.util.HashMap;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
@@ -97,10 +96,8 @@ public class ConfigFilterHelper {
     Map<String, FilterParams> perServiceFilters = new HashMap<>();
     Map<String, FilterParams> perMethodFilters = new HashMap<>();
 
-    ListIterator<LogFilter> logFilterIterator = logFilters.listIterator();
-    while (logFilterIterator.hasNext()) {
+    for (LogFilter currentFilter : logFilters) {
       // '*' for global, 'service/*' for service glob, or 'service/method' for fully qualified
-      LogFilter currentFilter = logFilterIterator.next();
       String methodOrServicePattern = currentFilter.pattern;
       int currentHeaderBytes
           = currentFilter.headerBytes != null ? currentFilter.headerBytes : 0;
@@ -108,7 +105,7 @@ public class ConfigFilterHelper {
           = currentFilter.messageBytes != null ? currentFilter.messageBytes : 0;
       if (methodOrServicePattern.equals("*")) {
         // parse config for global, e.g. "*"
-        if (globalLog == true) {
+        if (globalLog) {
           logger.log(Level.WARNING, "Duplicate entry : {0}", methodOrServicePattern);
           continue;
         }
@@ -174,32 +171,47 @@ public class ConfigFilterHelper {
   }
 
   /**
-   * Checks if the corresponding service/method passed needs to be logged as per the user
-   * provided configuration.
+   * Checks if the corresponding service/method passed needs to be logged as per the user provided
+   * configuration.
    *
    * @param method the fully qualified name of the method
-   * @return MethodFilterParams object
-   *     1. specifies if the corresponding method needs to be logged (log field will be set to true)
-   *     2. values of payload limits retrieved from configuration
+   * @return MethodFilterParams object 1. specifies if the corresponding method needs to be logged
+   *     (log field will be set to true) 2. values of payload limits retrieved from configuration
    */
   public FilterParams isMethodToBeLogged(MethodDescriptor<?, ?> method) {
+    FilterParams params = NO_FILTER_PARAMS;
     String fullMethodName = method.getFullMethodName();
     if (methodOrServiceFilterPresent) {
       if (!perMethodFilters.isEmpty() && perMethodFilters.containsKey(fullMethodName)) {
-        return perMethodFilters.get(fullMethodName);
-      }
-      String serviceName = method.getServiceName();
-      if (!perServiceFilters.isEmpty() && perServiceFilters.containsKey(serviceName)) {
-        return perServiceFilters.get(serviceName);
-      }
-      if (globalLog) {
-        return globalParams;
+        params = perMethodFilters.get(fullMethodName);
+      } else {
+        String serviceName = method.getServiceName();
+        if (!perServiceFilters.isEmpty() && perServiceFilters.containsKey(serviceName)) {
+          params = perServiceFilters.get(serviceName);
+        } else if (globalLog) {
+          params = globalParams;
+        }
       }
     }
-    return NO_FILTER_PARAMS;
+    return params;
   }
 
+  /**
+   * Checks if the corresponding event passed needs to be logged as per the user provided
+   * configuration.
+   *
+   * <p> All events are logged by default if event_types is not specified or {} in configuration.
+   * If event_types is specified, only the events specified in the configuration will be logged.
+   * </p>
+   *
+   * @param event gRPC observability event
+   * @return true if event needs to be logged, false otherwise
+   */
   public boolean isEventToBeLogged(EventType event) {
-    return logEventTypeSet.contains(event);
+    boolean logEvent = true;
+    if (!logEventTypeSet.isEmpty()) {
+      logEvent = logEventTypeSet.contains(event);
+    }
+    return logEvent;
   }
 }

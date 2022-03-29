@@ -18,8 +18,8 @@ package io.grpc.observability.interceptors;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.observability.interceptors.LogHelperTest.BYTEARRAY_MARSHALLER;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -53,6 +53,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -77,7 +78,7 @@ public class InternalLoggingServerInterceptorTest {
   @Rule
   public final MockitoRule mockito = MockitoJUnit.rule();
 
-  private static final Charset US_ASCII = Charset.forName("US-ASCII");
+  private static final Charset US_ASCII = StandardCharsets.US_ASCII;
 
   private InternalLoggingServerInterceptor.Factory factory;
   private AtomicReference<ServerCall<byte[], byte[]>> interceptedLoggingCall;
@@ -91,7 +92,6 @@ public class InternalLoggingServerInterceptorTest {
   private LogHelper mockLogHelper;
   private ConfigFilterHelper mockFilterHelper;
   private SocketAddress peer;
-  private FilterParams filterParams;
 
   @Before
   @SuppressWarnings("unchecked")
@@ -106,12 +106,12 @@ public class InternalLoggingServerInterceptorTest {
     actualStatus = new AtomicReference<>();
     actualTrailers = new AtomicReference<>();
     peer = new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 1234);
-    filterParams = FilterParams.create(true, 0, 0);
     when(mockFilterHelper.isEventToBeLogged(any(GrpcLogRecord.EventType.class)))
         .thenReturn(true);
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void internalLoggingServerInterceptor() {
     Metadata clientInitial = new Metadata();
     final MethodDescriptor<byte[], byte[]> method =
@@ -121,7 +121,7 @@ public class InternalLoggingServerInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    filterParams = FilterParams.create(true, 0, 0);
+    FilterParams filterParams = FilterParams.create(true, 0, 0);
     when(mockFilterHelper.isMethodToBeLogged(method)).thenReturn(filterParams);
     capturedListener =
         factory.create()
@@ -173,7 +173,7 @@ public class InternalLoggingServerInterceptorTest {
           eq("service"),
           eq("method"),
           eq("the-authority"),
-          ArgumentMatchers.<Duration>isNull(),
+          ArgumentMatchers.isNull(),
           same(clientInitial),
           eq(filterParams.headerBytes()),
           eq(EventLogger.LOGGER_SERVER),
@@ -185,6 +185,7 @@ public class InternalLoggingServerInterceptorTest {
     // send response header
     {
       reset(mockLogHelper);
+      reset(mockListener);
       Metadata serverInitial = new Metadata();
       interceptedLoggingCall.get().sendHeaders(serverInitial);
       verify(mockLogHelper).logResponseHeader(
@@ -195,7 +196,7 @@ public class InternalLoggingServerInterceptorTest {
           eq(filterParams.headerBytes()),
           eq(EventLogger.LOGGER_SERVER),
           anyString(),
-          ArgumentMatchers.<SocketAddress>isNull());
+          ArgumentMatchers.isNull());
       verifyNoMoreInteractions(mockLogHelper);
       assertSame(serverInitial, actualServerInitial.get());
     }
@@ -203,6 +204,7 @@ public class InternalLoggingServerInterceptorTest {
     // receive request message
     {
       reset(mockLogHelper);
+      reset(mockListener);
       byte[] request = "this is a request".getBytes(US_ASCII);
       capturedListener.onMessage(request);
       verify(mockLogHelper).logRpcMessage(
@@ -221,6 +223,7 @@ public class InternalLoggingServerInterceptorTest {
     // client half close
     {
       reset(mockLogHelper);
+      reset(mockListener);
       capturedListener.onHalfClose();
       verify(mockLogHelper).logHalfClose(
           /*seq=*/ eq(4L),
@@ -235,6 +238,7 @@ public class InternalLoggingServerInterceptorTest {
     // send response message
     {
       reset(mockLogHelper);
+      reset(mockListener);
       byte[] response = "this is a response".getBytes(US_ASCII);
       interceptedLoggingCall.get().sendMessage(response);
       verify(mockLogHelper).logRpcMessage(
@@ -253,6 +257,7 @@ public class InternalLoggingServerInterceptorTest {
     // send trailer
     {
       reset(mockLogHelper);
+      reset(mockListener);
       Status status = Status.INTERNAL.withDescription("trailer description");
       Metadata trailers = new Metadata();
       interceptedLoggingCall.get().close(status, trailers);
@@ -265,7 +270,7 @@ public class InternalLoggingServerInterceptorTest {
           eq(filterParams.headerBytes()),
           eq(EventLogger.LOGGER_SERVER),
           anyString(),
-          ArgumentMatchers.<SocketAddress>isNull());
+          ArgumentMatchers.isNull());
       verifyNoMoreInteractions(mockLogHelper);
       assertSame(status, actualStatus.get());
       assertSame(trailers, actualTrailers.get());
@@ -274,6 +279,7 @@ public class InternalLoggingServerInterceptorTest {
     // cancel
     {
       reset(mockLogHelper);
+      reset(mockListener);
       capturedListener.onCancel();
       verify(mockLogHelper).logCancel(
           /*seq=*/ eq(7L),
@@ -294,7 +300,7 @@ public class InternalLoggingServerInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    filterParams = FilterParams.create(true, 0, 0);
+    FilterParams filterParams = FilterParams.create(true, 0, 0);
     when(mockFilterHelper.isMethodToBeLogged(method)).thenReturn(filterParams);
     final ServerCall<byte[], byte[]> noopServerCall = new NoopServerCall<byte[], byte[]>() {
       @Override
@@ -317,9 +323,7 @@ public class InternalLoggingServerInterceptorTest {
                   factory.create()
                       .interceptCall(noopServerCall,
                           new Metadata(),
-                          (call, headers) -> {
-                            return new ServerCall.Listener<byte[]>() {};
-                          });
+                          (call, headers) -> new ServerCall.Listener<byte[]>() {});
             });
     ArgumentCaptor<Duration> timeoutCaptor = ArgumentCaptor.forClass(Duration.class);
     verify(mockLogHelper, times(1))
@@ -333,7 +337,7 @@ public class InternalLoggingServerInterceptorTest {
         eq(filterParams.headerBytes()),
         eq(EventLogger.LOGGER_SERVER),
         anyString(),
-        ArgumentMatchers.<SocketAddress>isNull());
+        ArgumentMatchers.isNull());
     verifyNoMoreInteractions(mockLogHelper);
     Duration timeout = timeoutCaptor.getValue();
     assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
@@ -350,9 +354,7 @@ public class InternalLoggingServerInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    FilterParams noFilterParams
-        = FilterParams.create(false, 0, 0);
-    when(mockFilterHelper.isMethodToBeLogged(method)).thenReturn(noFilterParams);
+    when(mockFilterHelper.isMethodToBeLogged(method)).thenReturn(FilterParams.create(false, 0, 0));
     capturedListener =
         factory.create()
             .interceptCall(
@@ -409,10 +411,8 @@ public class InternalLoggingServerInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    FilterParams noFilterParams
-        = FilterParams.create(true, 10, 10);
     when(mockFilterHelper.isMethodToBeLogged(method))
-        .thenReturn(noFilterParams);
+        .thenReturn(FilterParams.create(true, 10, 10));
 
     capturedListener =
         factory.create()
@@ -469,8 +469,8 @@ public class InternalLoggingServerInterceptorTest {
       Metadata trailers = new Metadata();
       interceptedLoggingCall.get().close(status, trailers);
       capturedListener.onCancel();
-      assertTrue("LogHelper should be invoked seven times equal to number of events",
-          Mockito.mockingDetails(mockLogHelper).getInvocations().size() == 7 );
+      assertEquals("LogHelper should be invoked seven times equal to number of events", 7,
+          Mockito.mockingDetails(mockLogHelper).getInvocations().size());
     }
   }
 
@@ -486,10 +486,8 @@ public class InternalLoggingServerInterceptorTest {
             .setRequestMarshaller(BYTEARRAY_MARSHALLER)
             .setResponseMarshaller(BYTEARRAY_MARSHALLER)
             .build();
-    FilterParams noFilterParams
-        = FilterParams.create(true, 10, 10);
     when(mockFilterHelper.isMethodToBeLogged(method))
-        .thenReturn(noFilterParams);
+        .thenReturn(FilterParams.create(true, 10, 10));
 
     capturedListener =
         factory.create()
@@ -547,13 +545,13 @@ public class InternalLoggingServerInterceptorTest {
       interceptedLoggingCall.get().close(status, trailers);
       verify(mockLogHelper, never()).logHalfClose(
           anyLong(),
-          AdditionalMatchers.or(ArgumentMatchers.<String>isNull(), anyString()),
-          AdditionalMatchers.or(ArgumentMatchers.<String>isNull(), anyString()),
+          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
+          AdditionalMatchers.or(ArgumentMatchers.isNull(), anyString()),
           any(GrpcLogRecord.EventLogger.class),
           anyString());
       capturedListener.onCancel();
-      assertTrue("LogHelper should be invoked seven times equal to number of events",
-          Mockito.mockingDetails(mockLogHelper).getInvocations().size() == 6 );
+      assertEquals("LogHelper should be invoked seven times equal to number of events", 6,
+          Mockito.mockingDetails(mockLogHelper).getInvocations().size());
     }
   }
 }
