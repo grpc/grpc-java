@@ -16,6 +16,7 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-alts'),
             libraries.google_auth_oauth2_http,
+            libraries.perfmark,
             ('com.google.guava:guava:31.0.1-jre'),
             ('com.google.errorprone:error_prone_annotations:2.11.0'),
             ('com.google.auth:google-auth-library-credentials:1.4.0'),
