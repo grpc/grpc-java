@@ -133,7 +133,7 @@ final class XdsCredentialsRegistry {
    * XdsCredsProvider of that scheme. 
    */
   @VisibleForTesting
-  synchronized ImmutableMap<String, XdsCredentialsProvider> providers() {
+  synchronized Map<String, XdsCredentialsProvider> providers() {
     return effectiveProviders;
   }
 
