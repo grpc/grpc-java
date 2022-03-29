@@ -21,10 +21,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelCredentials;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.InternalLogId;
-import io.grpc.TlsChannelCredentials;
-import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
@@ -327,14 +324,15 @@ class BootstrapperImpl extends Bootstrapper {
         throw new XdsInitializationException(
             "Invalid bootstrap: server " + serverUri + " with 'channel_creds' type unspecified");
       }
-      switch (type) {
-        case "google_default":
-          return GoogleDefaultChannelCredentials.create();
-        case "insecure":
-          return InsecureChannelCredentials.create();
-        case "tls":
-          return TlsChannelCredentials.create();
-        default:
+      XdsCredentialsProvider provider =  XdsCredentialsRegistry.getDefaultRegistry()
+          .getProvider(type);
+      if (provider != null) {
+        Map<String, ?> config = JsonUtil.getObject(channelCreds, "config");
+        if (config == null) {
+          config = ImmutableMap.of();
+        }
+
+        return provider.newChannelCredentials(config);
       }
     }
     return null;

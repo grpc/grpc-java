@@ -46,8 +46,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   @SuppressWarnings("unchecked")
   void parse(String config) throws IOException {
     checkArgument(config != null, CONFIG_ENV_VAR_NAME + " value is null!");
-    parseLoggingConfig(
-        JsonUtil.getObject((Map<String, ?>) JsonParser.parse(config), "logging_config"));
+    parseLoggingConfig((Map<String, ?>) JsonParser.parse(config));
   }
 
   private void parseLoggingConfig(Map<String, ?> loggingConfig) {

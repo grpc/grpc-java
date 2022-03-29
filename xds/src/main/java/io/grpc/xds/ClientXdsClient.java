@@ -1340,12 +1340,11 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
           return StructOrError.fromStruct(RouteAction.forClusterSpecifierPlugin(
               namedPluginConfig, hashPolicies, timeoutNano, retryPolicy));
         } else {
-          return StructOrError.fromError("Support for ClusterSpecifierPlugin not enabled");
+          return null;
         }
       case CLUSTERSPECIFIER_NOT_SET:
       default:
-        return StructOrError.fromError(
-            "Unknown cluster specifier: " + proto.getClusterSpecifierCase());
+        return null;
     }
   }
 

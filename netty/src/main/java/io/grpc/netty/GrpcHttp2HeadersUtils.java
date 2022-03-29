@@ -340,7 +340,12 @@ class GrpcHttp2HeadersUtils {
       AsciiString name = validateName(requireAsciiString(csName));
       AsciiString value = requireAsciiString(csValue);
       if (isPseudoHeader(name)) {
-        addPseudoHeader(name, value);
+        AsciiString previous = getPseudoHeader(name);
+        if (previous != null) {
+          PlatformDependent.throwException(
+              connectionError(PROTOCOL_ERROR, "Duplicate %s header", name));
+        }
+        setPseudoHeader(name, value);
         return this;
       }
       if (equals(TE_HEADER, name)) {
@@ -353,44 +358,42 @@ class GrpcHttp2HeadersUtils {
     @Override
     public CharSequence get(CharSequence csName) {
       AsciiString name = requireAsciiString(csName);
-      checkArgument(!isPseudoHeader(name), "Use direct accessor methods for pseudo headers.");
+      if (isPseudoHeader(name)) {
+        return getPseudoHeader(name);
+      }
       if (equals(TE_HEADER, name)) {
         return te;
       }
       return get(name);
     }
 
-    private void addPseudoHeader(CharSequence csName, CharSequence csValue) {
-      AsciiString name = requireAsciiString(csName);
-      AsciiString value = requireAsciiString(csValue);
-
+    private AsciiString getPseudoHeader(AsciiString name) {
       if (equals(PATH_HEADER, name)) {
-        if (path != null) {
-          PlatformDependent.throwException(
-              connectionError(PROTOCOL_ERROR, "Duplicate :path header"));
-        }
+        return path;
+      } else if (equals(AUTHORITY_HEADER, name)) {
+        return authority;
+      } else if (equals(METHOD_HEADER, name)) {
+        return method;
+      } else if (equals(SCHEME_HEADER, name)) {
+        return scheme;
+      } else {
+        return null;
+      }
+    }
+
+    private void setPseudoHeader(AsciiString name, AsciiString value) {
+      if (equals(PATH_HEADER, name)) {
         path = value;
       } else if (equals(AUTHORITY_HEADER, name)) {
-        if (authority != null) {
-          PlatformDependent.throwException(
-              connectionError(PROTOCOL_ERROR, "Duplicate :authority header"));
-        }
         authority = value;
       } else if (equals(METHOD_HEADER, name)) {
-        if (method != null) {
-          PlatformDependent.throwException(
-              connectionError(PROTOCOL_ERROR, "Duplicate :method header"));
-        }
         method = value;
       } else if (equals(SCHEME_HEADER, name)) {
-        if (scheme != null) {
-          PlatformDependent.throwException(
-              connectionError(PROTOCOL_ERROR, "Duplicate :scheme header"));
-        }
         scheme = value;
       } else {
         PlatformDependent.throwException(
             connectionError(PROTOCOL_ERROR, "Illegal pseudo-header '%s' in request.", name));
+        throw new AssertionError(); // Make flow control obvious to javac
       }
     }
 
@@ -418,8 +421,12 @@ class GrpcHttp2HeadersUtils {
     public List<CharSequence> getAll(CharSequence csName) {
       AsciiString name = requireAsciiString(csName);
       if (isPseudoHeader(name)) {
-        // This code should never be reached.
-        throw new IllegalArgumentException("Use direct accessor methods for pseudo headers.");
+        AsciiString value = getPseudoHeader(name);
+        if (value == null) {
+          return Collections.emptyList();
+        } else {
+          return Collections.singletonList(value);
+        }
       }
       if (equals(TE_HEADER, name)) {
         return Collections.singletonList((CharSequence) te);
@@ -431,8 +438,12 @@ class GrpcHttp2HeadersUtils {
     public boolean remove(CharSequence csName) {
       AsciiString name = requireAsciiString(csName);
       if (isPseudoHeader(name)) {
-        // This code should never be reached.
-        throw new IllegalArgumentException("Use direct accessor methods for pseudo headers.");
+        if (getPseudoHeader(name) == null) {
+          return false;
+        } else {
+          setPseudoHeader(name, null);
+          return true;
+        }
       }
       if (equals(TE_HEADER, name)) {
         boolean wasPresent = te != null;
