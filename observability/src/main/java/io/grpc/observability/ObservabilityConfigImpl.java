@@ -23,7 +23,6 @@ import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -35,8 +34,8 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
 
   private boolean enableCloudLogging = true;
   private String destinationProjectId = null;
-  private LogFilter[] logFilters;
-  private EventType[] eventTypes;
+  private List<LogFilter> logFilters;
+  private List<EventType> eventTypes;
 
   static ObservabilityConfigImpl getInstance() throws IOException {
     ObservabilityConfigImpl config = new ObservabilityConfigImpl();
@@ -61,18 +60,20 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
       List<?> rawList = JsonUtil.getList(loggingConfig, "log_filters");
       if (rawList != null) {
         List<Map<String, ?>> jsonLogFilters = JsonUtil.checkObjectList(rawList);
-        this.logFilters = new LogFilter[jsonLogFilters.size()];
-        for (int i = 0; i < jsonLogFilters.size(); i++) {
-          this.logFilters[i] = parseJsonLogFilter(jsonLogFilters.get(i));
+        ImmutableList.Builder<LogFilter> logFiltersBuilder = new ImmutableList.Builder<>();
+        for (Map<String, ?> jsonLogFilter : jsonLogFilters) {
+          logFiltersBuilder.add(parseJsonLogFilter(jsonLogFilter));
         }
+        this.logFilters = logFiltersBuilder.build();
       }
       rawList = JsonUtil.getList(loggingConfig, "event_types");
       if (rawList != null) {
         List<String> jsonEventTypes = JsonUtil.checkStringList(rawList);
-        this.eventTypes = new EventType[jsonEventTypes.size()];
-        for (int i = 0; i < jsonEventTypes.size(); i++) {
-          this.eventTypes[i] = convertEventType(jsonEventTypes.get(i));
+        ImmutableList.Builder<EventType> eventTypesBuilder = new ImmutableList.Builder<>();
+        for (String jsonEventType : jsonEventTypes) {
+          eventTypesBuilder.add(convertEventType(jsonEventType));
         }
+        this.eventTypes = eventTypesBuilder.build();
       }
     }
   }
@@ -118,17 +119,11 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
 
   @Override
   public List<LogFilter> getLogFilters() {
-    if (logFilters == null) {
-      return null;
-    }
-    return ImmutableList.<LogFilter>builder().addAll(Arrays.asList(logFilters)).build();
+    return logFilters;
   }
 
   @Override
   public List<EventType> getEventTypes() {
-    if (eventTypes == null) {
-      return null;
-    }
-    return ImmutableList.<EventType>builder().addAll(Arrays.asList(eventTypes)).build();
+    return eventTypes;
   }
 }

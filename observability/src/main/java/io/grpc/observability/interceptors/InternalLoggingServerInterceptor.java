@@ -52,7 +52,6 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
   private final ConfigFilterHelper filterHelper;
 
   public interface Factory {
-
     ServerInterceptor create();
   }
 

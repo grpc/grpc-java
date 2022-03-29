@@ -18,7 +18,6 @@ package io.grpc.observability.interceptors;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.observability.interceptors.LogHelperTest.BYTEARRAY_MARSHALLER;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -201,10 +200,11 @@ public class InternalLoggingChannelInterceptorTest {
       assertSame(clientInitial, actualClientInitial.get());
     }
 
+    reset(mockLogHelper);
+    reset(mockListener);
+
     // receive response header
     {
-      reset(mockLogHelper);
-      reset(mockListener);
       Metadata serverInitial = new Metadata();
       interceptedListener.get().onHeaders(serverInitial);
       verify(mockLogHelper).logResponseHeader(
@@ -220,10 +220,11 @@ public class InternalLoggingChannelInterceptorTest {
       verify(mockListener).onHeaders(same(serverInitial));
     }
 
+    reset(mockLogHelper);
+    reset(mockListener);
+
     // send request message
     {
-      reset(mockLogHelper);
-      reset(mockListener);
       byte[] request = "this is a request".getBytes(US_ASCII);
       interceptedLoggingCall.sendMessage(request);
       verify(mockLogHelper).logRpcMessage(
@@ -239,10 +240,11 @@ public class InternalLoggingChannelInterceptorTest {
       assertSame(request, actualRequest.get());
     }
 
+    reset(mockLogHelper);
+    reset(mockListener);
+
     // client half close
     {
-      reset(mockLogHelper);
-      reset(mockListener);
       interceptedLoggingCall.halfClose();
       verify(mockLogHelper).logHalfClose(
           /*seq=*/ eq(4L),
@@ -254,10 +256,11 @@ public class InternalLoggingChannelInterceptorTest {
       verifyNoMoreInteractions(mockLogHelper);
     }
 
+    reset(mockLogHelper);
+    reset(mockListener);
+
     // receive response message
     {
-      reset(mockLogHelper);
-      reset(mockListener);
       byte[] response = "this is a response".getBytes(US_ASCII);
       interceptedListener.get().onMessage(response);
       verify(mockLogHelper).logRpcMessage(
@@ -273,10 +276,11 @@ public class InternalLoggingChannelInterceptorTest {
       verify(mockListener).onMessage(same(response));
     }
 
+    reset(mockLogHelper);
+    reset(mockListener);
+
     // receive trailer
     {
-      reset(mockLogHelper);
-      reset(mockListener);
       Status status = Status.INTERNAL.withDescription("trailer description");
       Metadata trailers = new Metadata();
       interceptedListener.get().onClose(status, trailers);
@@ -294,10 +298,11 @@ public class InternalLoggingChannelInterceptorTest {
       verify(mockListener).onClose(same(status), same(trailers));
     }
 
+    reset(mockLogHelper);
+    reset(mockListener);
+
     // cancel
     {
-      reset(mockLogHelper);
-      reset(mockListener);
       interceptedLoggingCall.cancel(null, null);
       verify(mockLogHelper).logCancel(
           /*seq=*/ eq(7L),
@@ -622,8 +627,7 @@ public class InternalLoggingChannelInterceptorTest {
       Metadata trailers = new Metadata();
       interceptedListener.get().onClose(status, trailers);
       interceptedLoggingCall.cancel(null, null);
-      assertEquals("LogHelper should be invoked seven times equal to number of events", 7,
-          Mockito.mockingDetails(mockLogHelper).getInvocations().size());
+      assertThat(Mockito.mockingDetails(mockLogHelper).getInvocations().size()).isEqualTo(7);
     }
   }
 
@@ -724,8 +728,7 @@ public class InternalLoggingChannelInterceptorTest {
       Metadata trailers = new Metadata();
       interceptedListener.get().onClose(status, trailers);
       interceptedLoggingCall.cancel(null, null);
-      assertEquals("LogHelper should be invoked seven times equal to number of events", 5,
-          Mockito.mockingDetails(mockLogHelper).getInvocations().size());
+      assertThat(Mockito.mockingDetails(mockLogHelper).getInvocations().size()).isEqualTo(5);
     }
   }
 }

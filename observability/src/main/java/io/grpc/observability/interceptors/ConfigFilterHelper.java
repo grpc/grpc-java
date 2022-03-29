@@ -37,20 +37,17 @@ import java.util.logging.Logger;
  */
 @Internal
 public class ConfigFilterHelper {
+
   private static final Logger logger = Logger.getLogger(ConfigFilterHelper.class.getName());
 
   public static final FilterParams NO_FILTER_PARAMS
       = FilterParams.create(false, 0, 0);
+  public static final String globalPattern = "*";
 
   private final ObservabilityConfig config;
   @VisibleForTesting
   boolean methodOrServiceFilterPresent;
   // Flag to log every service and method
-  @VisibleForTesting
-  boolean globalLog;
-  // Filter parameters for pattern:*/*
-  @VisibleForTesting
-  FilterParams globalParams;
   @VisibleForTesting
   Map<String, FilterParams> perServiceFilters;
   @VisibleForTesting
@@ -61,12 +58,9 @@ public class ConfigFilterHelper {
   @VisibleForTesting
   ConfigFilterHelper(ObservabilityConfig config) {
     this.config = config;
-    this.globalLog = false;
-    this.globalParams = NO_FILTER_PARAMS;
     this.methodOrServiceFilterPresent = false;
     this.perServiceFilters = new HashMap<>();
     this.perMethodFilters = new HashMap<>();
-    this.logEventTypeSet = ImmutableSet.of();
   }
 
   /**
@@ -91,8 +85,6 @@ public class ConfigFilterHelper {
       return;
     }
 
-    boolean globalLog = false;
-    FilterParams globalParams = null;
     Map<String, FilterParams> perServiceFilters = new HashMap<>();
     Map<String, FilterParams> perMethodFilters = new HashMap<>();
 
@@ -105,13 +97,13 @@ public class ConfigFilterHelper {
           = currentFilter.messageBytes != null ? currentFilter.messageBytes : 0;
       if (methodOrServicePattern.equals("*")) {
         // parse config for global, e.g. "*"
-        if (globalLog) {
+        if (perServiceFilters.containsKey(globalPattern)) {
           logger.log(Level.WARNING, "Duplicate entry : {0}", methodOrServicePattern);
           continue;
         }
-        globalLog = true;
-        globalParams = FilterParams.create(true,
+        FilterParams params = FilterParams.create(true,
             currentHeaderBytes, currentMessageBytes);
+        perServiceFilters.put(globalPattern, params);
       } else if (methodOrServicePattern.endsWith("/*")) {
         // TODO(DNVindhya): check if service name is a valid string for a service name
         // parse config for a service, e.g. "service/*"
@@ -135,17 +127,21 @@ public class ConfigFilterHelper {
         perMethodFilters.put(methodOrServicePattern, params);
       }
     }
-    this.globalLog = globalLog;
-    this.globalParams = globalParams;
     this.perServiceFilters = ImmutableMap.copyOf(perServiceFilters);
     this.perMethodFilters = ImmutableMap.copyOf(perMethodFilters);
-    this.methodOrServiceFilterPresent = true;
+    if (!perServiceFilters.isEmpty() || !perMethodFilters.isEmpty()) {
+      this.methodOrServiceFilterPresent = true;
+    }
   }
 
   @VisibleForTesting
   void setEventFilterSet() {
     List<EventType> eventFilters = config.getEventTypes();
     if (eventFilters == null) {
+      return;
+    }
+    if (eventFilters.isEmpty()) {
+      this.logEventTypeSet = ImmutableSet.of();
       return;
     }
     this.logEventTypeSet = ImmutableSet.copyOf(eventFilters);
@@ -157,6 +153,7 @@ public class ConfigFilterHelper {
    */
   @AutoValue
   public abstract static class FilterParams {
+
     abstract boolean log();
 
     abstract int headerBytes();
@@ -180,16 +177,16 @@ public class ConfigFilterHelper {
    */
   public FilterParams isMethodToBeLogged(MethodDescriptor<?, ?> method) {
     FilterParams params = NO_FILTER_PARAMS;
-    String fullMethodName = method.getFullMethodName();
     if (methodOrServiceFilterPresent) {
-      if (!perMethodFilters.isEmpty() && perMethodFilters.containsKey(fullMethodName)) {
+      String fullMethodName = method.getFullMethodName();
+      if (perMethodFilters.containsKey(fullMethodName)) {
         params = perMethodFilters.get(fullMethodName);
       } else {
         String serviceName = method.getServiceName();
-        if (!perServiceFilters.isEmpty() && perServiceFilters.containsKey(serviceName)) {
+        if (perServiceFilters.containsKey(serviceName)) {
           params = perServiceFilters.get(serviceName);
-        } else if (globalLog) {
-          params = globalParams;
+        } else if (perServiceFilters.containsKey(globalPattern)) {
+          params = perServiceFilters.get(globalPattern);
         }
       }
     }
@@ -201,15 +198,22 @@ public class ConfigFilterHelper {
    * configuration.
    *
    * <p> All events are logged by default if event_types is not specified or {} in configuration.
-   * If event_types is specified, only the events specified in the configuration will be logged.
+   * If event_types is specified as [], no events will be logged.
+   * If events types is specified as a non-empty list, only the events specified in the
+   * list will be logged.
    * </p>
    *
    * @param event gRPC observability event
    * @return true if event needs to be logged, false otherwise
    */
   public boolean isEventToBeLogged(EventType event) {
-    boolean logEvent = true;
-    if (!logEventTypeSet.isEmpty()) {
+    if (logEventTypeSet == null) {
+      return true;
+    }
+    boolean logEvent;
+    if (logEventTypeSet.isEmpty()) {
+      logEvent = false;
+    } else {
       logEvent = logEventTypeSet.contains(event);
     }
     return logEvent;

@@ -40,7 +40,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 public class ConfigFilterHelperTest {
-
   private static final ImmutableList<LogFilter> configLogFilters =
       ImmutableList.of(
           new LogFilter("service1/Method2",1024,1024),
@@ -70,12 +69,11 @@ public class ConfigFilterHelperTest {
   @Test
   public void disableCloudLogging_emptyLogFilters() {
     when(mockConfig.isEnableCloudLogging()).thenReturn(false);
-    assertFalse(configFilterHelper.globalLog);
     assertFalse(configFilterHelper.methodOrServiceFilterPresent);
     assertThat(configFilterHelper.perServiceFilters).isEmpty();
     assertThat(configFilterHelper.perServiceFilters).isEmpty();
     assertThat(configFilterHelper.perMethodFilters).isEmpty();
-    assertThat(configFilterHelper.logEventTypeSet).isEmpty();
+    assertThat(configFilterHelper.logEventTypeSet).isNull();
   }
 
   @Test
@@ -86,12 +84,11 @@ public class ConfigFilterHelperTest {
     configFilterHelper.setMethodOrServiceFilterMaps();
     configFilterHelper.setEventFilterSet();
 
-    assertFalse(configFilterHelper.globalLog);
     assertFalse(configFilterHelper.methodOrServiceFilterPresent);
     assertThat(configFilterHelper.perServiceFilters).isEmpty();
     assertThat(configFilterHelper.perServiceFilters).isEmpty();
     assertThat(configFilterHelper.perMethodFilters).isEmpty();
-    assertThat(configFilterHelper.logEventTypeSet).isEmpty();
+    assertThat(configFilterHelper.logEventTypeSet).isNull();
   }
 
   @Test
@@ -103,14 +100,11 @@ public class ConfigFilterHelperTest {
     configFilterHelper.setMethodOrServiceFilterMaps();
     configFilterHelper.setEventFilterSet();
 
-    assertTrue(configFilterHelper.globalLog);
-    FilterParams expectedGlobalParams =
-        FilterParams.create(true, 128, 128);
-    assertEquals(configFilterHelper.globalParams, expectedGlobalParams);
-
     assertTrue(configFilterHelper.methodOrServiceFilterPresent);
 
     Map<String, FilterParams> expectedServiceFilters = new HashMap<>();
+    expectedServiceFilters.put("*",
+        FilterParams.create(true, 128, 128));
     expectedServiceFilters.put("service2",
         FilterParams.create(true, 2048, 1024));
     assertEquals(configFilterHelper.perServiceFilters, expectedServiceFilters);
@@ -132,7 +126,7 @@ public class ConfigFilterHelperTest {
     configFilterHelper.setMethodOrServiceFilterMaps();
 
     FilterParams expectedParams =
-        configFilterHelper.globalParams;
+        FilterParams.create(true, 4096, 4096);
     method = builder.setFullMethodName("service1/Method6").build();
     FilterParams resultParams
         = configFilterHelper.isMethodToBeLogged(method);
@@ -176,7 +170,7 @@ public class ConfigFilterHelperTest {
   }
 
   @Test
-  public void checkEventToBeLogged_defaultLogAllEventTypes() {
+  public void checkEventToBeLogged_noFilter_defaultLogAllEventTypes() {
     List<EventType> eventList = new ArrayList<>();
     eventList.add(EventType.GRPC_CALL_REQUEST_HEADER);
     eventList.add(EventType.GRPC_CALL_RESPONSE_HEADER);
@@ -188,6 +182,26 @@ public class ConfigFilterHelperTest {
 
     for (EventType event : eventList) {
       assertTrue(configFilterHelper.isEventToBeLogged(event));
+    }
+  }
+
+
+  @Test
+  public void checkEventToBeLogged_emptyFilter_doNotLogEventTypes() {
+    when(mockConfig.getEventTypes()).thenReturn(new ArrayList<>());
+    configFilterHelper.setEventFilterSet();
+
+    List<EventType> eventList = new ArrayList<>();
+    eventList.add(EventType.GRPC_CALL_REQUEST_HEADER);
+    eventList.add(EventType.GRPC_CALL_RESPONSE_HEADER);
+    eventList.add(EventType.GRPC_CALL_REQUEST_MESSAGE);
+    eventList.add(EventType.GRPC_CALL_RESPONSE_MESSAGE);
+    eventList.add(EventType.GRPC_CALL_HALF_CLOSE);
+    eventList.add(EventType.GRPC_CALL_TRAILER);
+    eventList.add(EventType.GRPC_CALL_CANCEL);
+
+    for (EventType event : eventList) {
+      assertFalse(configFilterHelper.isEventToBeLogged(event));
     }
   }
 

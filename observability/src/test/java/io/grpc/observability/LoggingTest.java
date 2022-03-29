@@ -17,8 +17,6 @@
 package io.grpc.observability;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -105,9 +103,7 @@ public class LoggingTest {
             .usePlaintext().build()));
     assertThat(LoggingTestHelper.makeUnaryRpcViaClientStub("buddy", stub))
         .isEqualTo("Hello buddy");
-    assertTrue("spyLogHelper should be used invoked six times from both client and server "
-            + "interceptors respectively",
-        Mockito.mockingDetails(spyLogHelper).getInvocations().size() >= 12);
+    assertThat(Mockito.mockingDetails(spyLogHelper).getInvocations().size()).isGreaterThan(11);
     sink.close();
     LoggingChannelProvider.shutdown();
     LoggingServerProvider.shutdown();
@@ -180,9 +176,7 @@ public class LoggingTest {
     // Since cancel is not invoked, it will be 12.
     // Request message(Total count:2 (1 from client and 1 from server) and Response message(count:2)
     // events are not in the event_types list, i.e  14 - 2(cancel) - 2(req_msg) - 2(resp_msg) = 8
-    assertEquals("LogHelper should be invoked eight times equal to number of events "
-            + "excluding request message and response message events", 8,
-        Mockito.mockingDetails(mockLogHelper).getInvocations().size());
+    assertThat(Mockito.mockingDetails(mockLogHelper).getInvocations().size()).isEqualTo(8);
     LoggingChannelProvider.shutdown();
     LoggingServerProvider.shutdown();
   }

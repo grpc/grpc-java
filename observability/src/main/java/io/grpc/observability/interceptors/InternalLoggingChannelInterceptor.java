@@ -52,11 +52,10 @@ public final class InternalLoggingChannelInterceptor implements ClientIntercepto
   private final ConfigFilterHelper filterHelper;
 
   public interface Factory {
-
     ClientInterceptor create();
   }
 
-  public static class FactoryImpl implements Factory {
+  public static classg FactoryImpl implements Factory {
 
     private final LogHelper helper;
     private final ConfigFilterHelper filterHelper;

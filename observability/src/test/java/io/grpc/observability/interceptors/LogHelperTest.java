@@ -55,7 +55,6 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -69,8 +68,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class LogHelperTest {
-
-  private static final Charset US_ASCII = StandardCharsets.US_ASCII;
   public static final Marshaller<byte[]> BYTEARRAY_MARSHALLER = new ByteArrayMarshaller();
   private static final String DATA_A = "aaaaaaaaa";
   private static final String DATA_B = "bbbbbbbbb";
@@ -85,19 +82,19 @@ public class LogHelperTest {
       MetadataEntry
           .newBuilder()
           .setKey(KEY_A.name())
-          .setValue(ByteString.copyFrom(DATA_A.getBytes(US_ASCII)))
+          .setValue(ByteString.copyFrom(DATA_A.getBytes(StandardCharsets.US_ASCII)))
           .build();
   private static final MetadataEntry ENTRY_B =
       MetadataEntry
           .newBuilder()
           .setKey(KEY_B.name())
-          .setValue(ByteString.copyFrom(DATA_B.getBytes(US_ASCII)))
+          .setValue(ByteString.copyFrom(DATA_B.getBytes(StandardCharsets.US_ASCII)))
           .build();
   private static final MetadataEntry ENTRY_C =
       MetadataEntry
           .newBuilder()
           .setKey(KEY_C.name())
-          .setValue(ByteString.copyFrom(DATA_C.getBytes(US_ASCII)))
+          .setValue(ByteString.copyFrom(DATA_C.getBytes(StandardCharsets.US_ASCII)))
           .build();
   private static final int HEADER_LIMIT = 10;
   private static final int MESSAGE_LIMIT = Integer.MAX_VALUE;
@@ -252,7 +249,8 @@ public class LogHelperTest {
   @Test
   public void messageToProto() {
     byte[] bytes
-        = "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes(US_ASCII);
+        = "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes(
+        StandardCharsets.US_ASCII);
     assertEquals(
         GrpcLogRecord.newBuilder()
             .setMessage(ByteString.copyFrom(bytes))
@@ -264,7 +262,8 @@ public class LogHelperTest {
   @Test
   public void messageToProto_truncated() {
     byte[] bytes
-        = "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes(US_ASCII);
+        = "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes(
+        StandardCharsets.US_ASCII);
     assertEquals(
         GrpcLogRecord.newBuilder()
             .setPayloadSize(bytes.length)
@@ -276,7 +275,7 @@ public class LogHelperTest {
     String truncatedMessage = "this is a ";
     assertEquals(
         GrpcLogRecord.newBuilder()
-            .setMessage(ByteString.copyFrom(truncatedMessage.getBytes(US_ASCII)))
+            .setMessage(ByteString.copyFrom(truncatedMessage.getBytes(StandardCharsets.US_ASCII)))
             .setPayloadSize(bytes.length)
             .setPayloadTruncated(true)
             .build(),
