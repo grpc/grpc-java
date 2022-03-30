@@ -30,7 +30,6 @@ import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.TimeProvider;
-import io.grpc.observability.ObservabilityConfig;
 import io.grpc.observability.logging.Sink;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.Address;
@@ -42,7 +41,9 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.Map;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -50,10 +51,10 @@ import javax.annotation.Nullable;
 /**
  * Helper class for GCP observability logging.
  */
-class LogHelper {
+public class LogHelper {
   private static final Logger logger = Logger.getLogger(LogHelper.class.getName());
 
-  // TODO(dnvindhya): Define it in one places(TBD) to make it easily accessible from everywhere
+  // TODO(DNVindhya): Define it in one places(TBD) to make it easily accessible from everywhere
   static final Metadata.Key<byte[]> STATUS_DETAILS_KEY =
       Metadata.Key.of(
           "grpc-status-details-bin",
@@ -61,18 +62,16 @@ class LogHelper {
 
   private final Sink sink;
   private final TimeProvider timeProvider;
-  // TODO(DNvindhya) remove unused annotation once the following 2 are actually used
-  @SuppressWarnings({"unused"}) private final Map<String, String> locationTags;
-  @SuppressWarnings({"unused"}) private final Map<String, String> customTags;
-  @SuppressWarnings({"unused"}) private final ObservabilityConfig observabilityConfig;
 
-  LogHelper(Sink sink, TimeProvider timeProvider, Map<String, String> locationTags,
-      Map<String, String> customTags, ObservabilityConfig observabilityConfig) {
+  /**
+   * Creates a LogHelper instance.
+   *
+   * @param sink sink
+   * @param timeProvider timeprovider
+   */
+  public LogHelper(Sink sink, TimeProvider timeProvider) {
     this.sink = sink;
     this.timeProvider = timeProvider;
-    this.locationTags = locationTags;
-    this.customTags = customTags;
-    this.observabilityConfig = observabilityConfig;
   }
 
   /**
@@ -85,6 +84,7 @@ class LogHelper {
       String authority,
       @Nullable Duration timeout,
       Metadata metadata,
+      int maxHeaderBytes,
       GrpcLogRecord.EventLogger eventLogger,
       String rpcId,
       // null on client side
@@ -96,7 +96,8 @@ class LogHelper {
         peerAddress == null || eventLogger == GrpcLogRecord.EventLogger.LOGGER_SERVER,
         "peerAddress can only be specified by server");
 
-    PayloadBuilder<GrpcLogRecord.Metadata.Builder> pair = createMetadataProto(metadata);
+    PayloadBuilder<GrpcLogRecord.Metadata.Builder> pair =
+        createMetadataProto(metadata, maxHeaderBytes);
     GrpcLogRecord.Builder logEntryBuilder = createTimestamp()
         .setSequenceId(seqId)
         .setServiceName(serviceName)
@@ -107,6 +108,7 @@ class LogHelper {
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
         .setMetadata(pair.payload)
         .setPayloadSize(pair.size)
+        .setPayloadTruncated(pair.truncated)
         .setRpcId(rpcId);
     if (timeout != null) {
       logEntryBuilder.setTimeout(timeout);
@@ -118,13 +120,14 @@ class LogHelper {
   }
 
   /**
-   * Logs the reponse header. Binary logging equivalent of logServerHeader.
+   * Logs the response header. Binary logging equivalent of logServerHeader.
    */
   void logResponseHeader(
       long seqId,
       String serviceName,
       String methodName,
       Metadata metadata,
+      int maxHeaderBytes,
       GrpcLogRecord.EventLogger eventLogger,
       String rpcId,
       @Nullable SocketAddress peerAddress) {
@@ -137,7 +140,8 @@ class LogHelper {
         peerAddress == null || eventLogger == GrpcLogRecord.EventLogger.LOGGER_CLIENT,
         "peerAddress can only be specified for client");
 
-    PayloadBuilder<GrpcLogRecord.Metadata.Builder> pair = createMetadataProto(metadata);
+    PayloadBuilder<GrpcLogRecord.Metadata.Builder> pair =
+        createMetadataProto(metadata, maxHeaderBytes);
     GrpcLogRecord.Builder logEntryBuilder = createTimestamp()
         .setSequenceId(seqId)
         .setServiceName(serviceName)
@@ -147,6 +151,7 @@ class LogHelper {
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
         .setMetadata(pair.payload)
         .setPayloadSize(pair.size)
+        .setPayloadTruncated(pair.truncated)
         .setRpcId(rpcId);
     if (peerAddress != null) {
       logEntryBuilder.setPeerAddress(socketAddressToProto(peerAddress));
@@ -163,6 +168,7 @@ class LogHelper {
       String methodName,
       Status status,
       Metadata metadata,
+      int maxHeaderBytes,
       GrpcLogRecord.EventLogger eventLogger,
       String rpcId,
       @Nullable SocketAddress peerAddress) {
@@ -174,7 +180,8 @@ class LogHelper {
         peerAddress == null || eventLogger == GrpcLogRecord.EventLogger.LOGGER_CLIENT,
         "peerAddress can only be specified for client");
 
-    PayloadBuilder<GrpcLogRecord.Metadata.Builder> pair = createMetadataProto(metadata);
+    PayloadBuilder<GrpcLogRecord.Metadata.Builder> pair =
+        createMetadataProto(metadata, maxHeaderBytes);
     GrpcLogRecord.Builder logEntryBuilder = createTimestamp()
         .setSequenceId(seqId)
         .setServiceName(serviceName)
@@ -184,6 +191,7 @@ class LogHelper {
         .setLogLevel(LogLevel.LOG_LEVEL_DEBUG)
         .setMetadata(pair.payload)
         .setPayloadSize(pair.size)
+        .setPayloadTruncated(pair.truncated)
         .setStatusCode(status.getCode().value())
         .setRpcId(rpcId);
     String statusDescription = status.getDescription();
@@ -209,6 +217,7 @@ class LogHelper {
       String methodName,
       EventType eventType,
       T message,
+      int maxMessageBytes,
       EventLogger eventLogger,
       String rpcId) {
     checkNotNull(serviceName, "serviceName");
@@ -220,13 +229,13 @@ class LogHelper {
         "event type must correspond to client message or server message");
     checkNotNull(message, "message");
 
-    // TODO(dnvindhya): Implement conversion of generics to ByteString
+    // TODO(DNVindhya): Implement conversion of generics to ByteString
     // Following is a temporary workaround to log if message is of following types :
     // 1. com.google.protobuf.Message
     // 2. byte[]
     byte[] messageBytesArray = null;
     if (message instanceof com.google.protobuf.Message) {
-      messageBytesArray = ((com.google.protobuf.Message)message).toByteArray();
+      messageBytesArray = ((com.google.protobuf.Message) message).toByteArray();
     } else if (message instanceof byte[]) {
       messageBytesArray = (byte[]) message;
     } else {
@@ -235,7 +244,7 @@ class LogHelper {
     }
     PayloadBuilder<ByteString> pair = null;
     if (messageBytesArray != null) {
-      pair = createMesageProto(messageBytesArray);
+      pair = createMessageProto(messageBytesArray, maxMessageBytes);
     }
 
     GrpcLogRecord.Builder logEntryBuilder = createTimestamp()
@@ -250,7 +259,8 @@ class LogHelper {
       logEntryBuilder.setPayloadSize(pair.size);
     }
     if (pair != null && pair.payload != null) {
-      logEntryBuilder.setMessage(pair.payload);
+      logEntryBuilder.setMessage(pair.payload)
+          .setPayloadTruncated(pair.truncated);
     }
     sink.write(logEntryBuilder.build());
   }
@@ -308,45 +318,79 @@ class LogHelper {
     return GrpcLogRecord.newBuilder().setTimestamp(Timestamps.fromNanos(nanos));
   }
 
+  // TODO(DNVindhya): Evaluate if we need following clause for metadata logging in Observability
+  // Leaving the implementation for now as is to have same behavior across Java and Go
+  private static final Set<String> NEVER_INCLUDED_METADATA = new HashSet<>(
+      Collections.singletonList(
+          // grpc-status-details-bin is already logged in `status_details` field of the
+          // observabilitylog proto
+          STATUS_DETAILS_KEY.name()));
+  private static final Set<String> ALWAYS_INCLUDED_METADATA = new HashSet<>(
+      Collections.singletonList(
+          "grpc-trace-bin"));
+
   static final class PayloadBuilder<T> {
     T payload;
     int size;
+    boolean truncated;
 
-    private PayloadBuilder(T payload, int size) {
+    private PayloadBuilder(T payload, int size, boolean truncated) {
       this.payload = payload;
       this.size = size;
+      this.truncated = truncated;
     }
   }
 
-  // TODO(dnvindhya): Create a unit test for the metadata conversion
-  static PayloadBuilder<GrpcLogRecord.Metadata.Builder> createMetadataProto(Metadata metadata) {
+  static PayloadBuilder<GrpcLogRecord.Metadata.Builder> createMetadataProto(Metadata metadata,
+      int maxHeaderBytes) {
     checkNotNull(metadata, "metadata");
+    checkArgument(maxHeaderBytes >= 0,
+        "maxHeaderBytes must be non negative");
     GrpcLogRecord.Metadata.Builder metadataBuilder = GrpcLogRecord.Metadata.newBuilder();
-    // This code is tightly coupled with io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata's
+    // This code is tightly coupled with io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
     // implementation
     byte[][] serialized = InternalMetadata.serialize(metadata);
+    boolean truncated = false;
     int totalMetadataBytes = 0;
     if (serialized != null) {
-      int singleMetadataEntryBytes = 0;
       // Calculate bytes for each GrpcLogRecord.Metadata.MetadataEntry
       for (int i = 0; i < serialized.length; i += 2) {
         String key = new String(serialized[i], Charsets.UTF_8);
         byte[] value = serialized[i + 1];
-        singleMetadataEntryBytes = totalMetadataBytes + key.length() + value.length;
+        if (NEVER_INCLUDED_METADATA.contains(key)) {
+          continue;
+        }
+        boolean forceInclude = ALWAYS_INCLUDED_METADATA.contains(key);
+        int metadataBytesAfterAdd = totalMetadataBytes + key.length() + value.length;
+        if (!forceInclude && metadataBytesAfterAdd > maxHeaderBytes) {
+          truncated = true;
+          continue;
+        }
         metadataBuilder.addEntryBuilder()
             .setKey(key)
             .setValue(ByteString.copyFrom(value));
-        totalMetadataBytes = singleMetadataEntryBytes;
+        if (!forceInclude) {
+          // force included keys do not count towards the size limit
+          totalMetadataBytes = metadataBytesAfterAdd;
+        }
       }
     }
-    return new PayloadBuilder<>(metadataBuilder, totalMetadataBytes);
+    return new PayloadBuilder<>(metadataBuilder, totalMetadataBytes, truncated);
   }
 
-  static PayloadBuilder<ByteString> createMesageProto(byte[] message) {
+  static PayloadBuilder<ByteString> createMessageProto(byte[] message, int maxMessageBytes) {
+    checkArgument(maxMessageBytes >= 0,
+        "maxMessageBytes must be non negative");
+    int desiredBytes = 0;
     int messageLength = message.length;
+    if (maxMessageBytes > 0) {
+      desiredBytes = Math.min(maxMessageBytes, messageLength);
+    }
     ByteString messageData =
-        ByteString.copyFrom(message, 0, messageLength);
-    return new PayloadBuilder<ByteString>(messageData, messageLength);
+        ByteString.copyFrom(message, 0, desiredBytes);
+
+    return new PayloadBuilder<>(messageData, messageLength,
+        maxMessageBytes < message.length);
   }
 
   static Address socketAddressToProto(SocketAddress address) {
@@ -366,7 +410,7 @@ class LogHelper {
       }
       builder.setIpPort(((InetSocketAddress) address).getPort());
     } else if (address.getClass().getName().equals("io.netty.channel.unix.DomainSocketAddress")) {
-      // To avoid a compile time dependency on grpc-netty, we check against the
+      // To avoid a compiled time dependency on grpc-netty, we check against the
       // runtime class name.
       builder.setType(Address.Type.TYPE_UNIX)
           .setAddress(address.toString());
@@ -394,11 +438,5 @@ class LogHelper {
       return deadline0;
     }
     return deadline0.minimum(deadline1);
-  }
-
-  // TODO (dnvindhya) : Implement service and method name filtering
-  // Add unit tests for the method as part of filtering implementation
-  boolean isMethodToBeLogged(String fullMethodName) {
-    return true;
   }
 }

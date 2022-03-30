@@ -28,61 +28,55 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
-import io.grpc.internal.TimeProvider;
-import io.grpc.observability.ObservabilityConfig;
-import io.grpc.observability.logging.Sink;
+
+import io.grpc.observability.interceptors.ConfigFilterHelper.FilterParams;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventLogger;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.net.SocketAddress;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** A logging interceptor for {@code LoggingServerProvider}. */
+/**
+ * A logging interceptor for {@code LoggingServerProvider}.
+ */
 @Internal
 public final class InternalLoggingServerInterceptor implements ServerInterceptor {
+
   private static final Logger logger = Logger
       .getLogger(InternalLoggingServerInterceptor.class.getName());
 
   private final LogHelper helper;
+  private final ConfigFilterHelper filterHelper;
 
   public interface Factory {
     ServerInterceptor create();
   }
 
   public static class FactoryImpl implements Factory {
-    private final Sink sink;
-    private final LogHelper helper;
 
-    /** Create the {@link Factory} we need to create our {@link ServerInterceptor}s. */
-    public FactoryImpl(Sink sink, Map<String, String> locationTags,
-        Map<String, String> customTags,
-        ObservabilityConfig observabilityConfig) {
-      this.sink = sink;
-      this.helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER, locationTags, customTags,
-          observabilityConfig);
+    private final LogHelper helper;
+    private final ConfigFilterHelper filterHelper;
+
+    /**
+     * Create the {@link Factory} we need to create our {@link ServerInterceptor}s.
+     */
+    public FactoryImpl(LogHelper helper, ConfigFilterHelper filterHelper) {
+      this.helper = helper;
+      this.filterHelper = filterHelper;
     }
 
     @Override
     public ServerInterceptor create() {
-      return new InternalLoggingServerInterceptor(helper);
-    }
-
-    /**
-     * Closes the sink instance.
-     */
-    public void close() {
-      if (sink != null) {
-        sink.close();
-      }
+      return new InternalLoggingServerInterceptor(helper, filterHelper);
     }
   }
 
-  private InternalLoggingServerInterceptor(LogHelper helper) {
+  private InternalLoggingServerInterceptor(LogHelper helper, ConfigFilterHelper filterHelper) {
     this.helper = helper;
+    this.filterHelper = filterHelper;
   }
 
   @Override
@@ -98,32 +92,37 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
     final Duration timeout = deadline == null ? null
         : Durations.fromNanos(deadline.timeRemaining(TimeUnit.NANOSECONDS));
 
-    // TODO (dnvindhya): implement isMethodToBeLogged() to check for methods to be logged
-    // according to config. Until then always return true.
-    if (!helper.isMethodToBeLogged(call.getMethodDescriptor().getFullMethodName())) {
+    FilterParams filterParams = filterHelper.isMethodToBeLogged(call.getMethodDescriptor());
+    if (!filterParams.log()) {
       return next.startCall(call, headers);
     }
 
+    final int maxHeaderBytes = filterParams.headerBytes();
+    final int maxMessageBytes = filterParams.messageBytes();
+
     // Event: EventType.GRPC_CALL_REQUEST_HEADER
-    try {
-      helper.logRequestHeader(
-          seq.getAndIncrement(),
-          serviceName,
-          methodName,
-          authority,
-          timeout,
-          headers,
-          EventLogger.LOGGER_SERVER,
-          rpcId,
-          peerAddress);
-    } catch (Exception e) {
-      // Catching generic exceptions instead of specific ones for all the events.
-      // This way we can catch both expected and unexpected exceptions instead of re-throwing
-      // exceptions to callers which will lead to RPC getting aborted.
-      // Expected exceptions to be caught:
-      // 1. IllegalArgumentException
-      // 2. NullPointerException
-      logger.log(Level.SEVERE, "Unable to log request header", e);
+    if (filterHelper.isEventToBeLogged(EventType.GRPC_CALL_REQUEST_HEADER)) {
+      try {
+        helper.logRequestHeader(
+            seq.getAndIncrement(),
+            serviceName,
+            methodName,
+            authority,
+            timeout,
+            headers,
+            maxHeaderBytes,
+            EventLogger.LOGGER_SERVER,
+            rpcId,
+            peerAddress);
+      } catch (Exception e) {
+        // Catching generic exceptions instead of specific ones for all the events.
+        // This way we can catch both expected and unexpected exceptions instead of re-throwing
+        // exceptions to callers which will lead to RPC getting aborted.
+        // Expected exceptions to be caught:
+        // 1. IllegalArgumentException
+        // 2. NullPointerException
+        logger.log(Level.SEVERE, "Unable to log request header", e);
+      }
     }
 
     ServerCall<ReqT, RespT> wrapperCall =
@@ -131,17 +130,20 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
           @Override
           public void sendHeaders(Metadata headers) {
             // Event: EventType.GRPC_CALL_RESPONSE_HEADER
-            try {
-              helper.logResponseHeader(
-                  seq.getAndIncrement(),
-                  serviceName,
-                  methodName,
-                  headers,
-                  EventLogger.LOGGER_SERVER,
-                  rpcId,
-                  null);
-            } catch (Exception e) {
-              logger.log(Level.SEVERE, "Unable to log response header", e);
+            if (filterHelper.isEventToBeLogged(EventType.GRPC_CALL_RESPONSE_HEADER)) {
+              try {
+                helper.logResponseHeader(
+                    seq.getAndIncrement(),
+                    serviceName,
+                    methodName,
+                    headers,
+                    maxHeaderBytes,
+                    EventLogger.LOGGER_SERVER,
+                    rpcId,
+                    null);
+              } catch (Exception e) {
+                logger.log(Level.SEVERE, "Unable to log response header", e);
+              }
             }
             super.sendHeaders(headers);
           }
@@ -149,17 +151,21 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
           @Override
           public void sendMessage(RespT message) {
             // Event: EventType.GRPC_CALL_RESPONSE_MESSAGE
-            try {
-              helper.logRpcMessage(
-                  seq.getAndIncrement(),
-                  serviceName,
-                  methodName,
-                  EventType.GRPC_CALL_RESPONSE_MESSAGE,
-                  message,
-                  EventLogger.LOGGER_SERVER,
-                  rpcId);
-            } catch (Exception e) {
-              logger.log(Level.SEVERE, "Unable to log response message", e);
+            EventType responseMessageType = EventType.GRPC_CALL_RESPONSE_MESSAGE;
+            if (filterHelper.isEventToBeLogged(responseMessageType)) {
+              try {
+                helper.logRpcMessage(
+                    seq.getAndIncrement(),
+                    serviceName,
+                    methodName,
+                    responseMessageType,
+                    message,
+                    maxMessageBytes,
+                    EventLogger.LOGGER_SERVER,
+                    rpcId);
+              } catch (Exception e) {
+                logger.log(Level.SEVERE, "Unable to log response message", e);
+              }
             }
             super.sendMessage(message);
           }
@@ -167,18 +173,21 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
           @Override
           public void close(Status status, Metadata trailers) {
             // Event: EventType.GRPC_CALL_TRAILER
-            try {
-              helper.logTrailer(
-                  seq.getAndIncrement(),
-                  serviceName,
-                  methodName,
-                  status,
-                  trailers,
-                  EventLogger.LOGGER_SERVER,
-                  rpcId,
-                  null);
-            } catch (Exception e) {
-              logger.log(Level.SEVERE, "Unable to log trailer", e);
+            if (filterHelper.isEventToBeLogged(EventType.GRPC_CALL_TRAILER)) {
+              try {
+                helper.logTrailer(
+                    seq.getAndIncrement(),
+                    serviceName,
+                    methodName,
+                    status,
+                    trailers,
+                    maxHeaderBytes,
+                    EventLogger.LOGGER_SERVER,
+                    rpcId,
+                    null);
+              } catch (Exception e) {
+                logger.log(Level.SEVERE, "Unable to log trailer", e);
+              }
             }
             super.close(status, trailers);
           }
@@ -189,17 +198,21 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
       @Override
       public void onMessage(ReqT message) {
         // Event: EventType.GRPC_CALL_REQUEST_MESSAGE
-        try {
-          helper.logRpcMessage(
-              seq.getAndIncrement(),
-              serviceName,
-              methodName,
-              EventType.GRPC_CALL_REQUEST_MESSAGE,
-              message,
-              EventLogger.LOGGER_SERVER,
-              rpcId);
-        } catch (Exception e) {
-          logger.log(Level.SEVERE, "Unable to log request message", e);
+        EventType requestMessageType = EventType.GRPC_CALL_REQUEST_MESSAGE;
+        if (filterHelper.isEventToBeLogged(requestMessageType)) {
+          try {
+            helper.logRpcMessage(
+                seq.getAndIncrement(),
+                serviceName,
+                methodName,
+                requestMessageType,
+                message,
+                maxMessageBytes,
+                EventLogger.LOGGER_SERVER,
+                rpcId);
+          } catch (Exception e) {
+            logger.log(Level.SEVERE, "Unable to log request message", e);
+          }
         }
         super.onMessage(message);
       }
@@ -207,15 +220,17 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
       @Override
       public void onHalfClose() {
         // Event: EventType.GRPC_CALL_HALF_CLOSE
-        try {
-          helper.logHalfClose(
-              seq.getAndIncrement(),
-              serviceName,
-              methodName,
-              EventLogger.LOGGER_SERVER,
-              rpcId);
-        } catch (Exception e) {
-          logger.log(Level.SEVERE, "Unable to log half close", e);
+        if (filterHelper.isEventToBeLogged(EventType.GRPC_CALL_HALF_CLOSE)) {
+          try {
+            helper.logHalfClose(
+                seq.getAndIncrement(),
+                serviceName,
+                methodName,
+                EventLogger.LOGGER_SERVER,
+                rpcId);
+          } catch (Exception e) {
+            logger.log(Level.SEVERE, "Unable to log half close", e);
+          }
         }
         super.onHalfClose();
       }
@@ -223,15 +238,17 @@ public final class InternalLoggingServerInterceptor implements ServerInterceptor
       @Override
       public void onCancel() {
         // Event: EventType.GRPC_CALL_CANCEL
-        try {
-          helper.logCancel(
-              seq.getAndIncrement(),
-              serviceName,
-              methodName,
-              EventLogger.LOGGER_SERVER,
-              rpcId);
-        } catch (Exception e) {
-          logger.log(Level.SEVERE, "Unable to log cancel", e);
+        if (filterHelper.isEventToBeLogged(EventType.GRPC_CALL_CANCEL)) {
+          try {
+            helper.logCancel(
+                seq.getAndIncrement(),
+                serviceName,
+                methodName,
+                EventLogger.LOGGER_SERVER,
+                rpcId);
+          } catch (Exception e) {
+            logger.log(Level.SEVERE, "Unable to log cancel", e);
+          }
         }
         super.onCancel();
       }

@@ -7,15 +7,29 @@ plugins {
 }
 
 description = "gRPC: Observability"
+
+[compileJava].each() {
+    it.options.compilerArgs += [
+            // only has AutoValue annotation processor
+            "-Xlint:-processing"
+    ]
+    appendToProperty(
+            it.options.errorprone.excludedPaths,
+            ".*/build/generated/sources/annotationProcessor/java/.*",
+            "|")
+}
+
 dependencies {
     def cloudLoggingVersion = '3.6.1'
 
+    annotationProcessor libraries.autovalue
     api project(':grpc-api')
 
     implementation project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-alts'),
             libraries.google_auth_oauth2_http,
+            libraries.autovalue_annotation,
             libraries.perfmark,
             ('com.google.guava:guava:31.0.1-jre'),
             ('com.google.errorprone:error_prone_annotations:2.11.0'),
