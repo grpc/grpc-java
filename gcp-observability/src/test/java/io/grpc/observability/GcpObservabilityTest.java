@@ -31,7 +31,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class ObservabilityTest {
+public class GcpObservabilityTest {
   
   @Test
   public void initFinish() {
@@ -42,12 +42,12 @@ public class ObservabilityTest {
         InternalLoggingChannelInterceptor.Factory.class);
     InternalLoggingServerInterceptor.Factory serverInterceptorFactory = mock(
         InternalLoggingServerInterceptor.Factory.class);
-    Observability observability1;
-    try (Observability observability = Observability.grpcInit(sink, channelInterceptorFactory,
+    GcpObservability observability1;
+    try (GcpObservability observability = GcpObservability.grpcInit(sink, channelInterceptorFactory,
         serverInterceptorFactory)) {
       assertThat(ManagedChannelProvider.provider()).isInstanceOf(LoggingChannelProvider.class);
       assertThat(ServerProvider.provider()).isInstanceOf(ServerProvider.class);
-      observability1 = Observability.grpcInit(sink, channelInterceptorFactory,
+      observability1 = GcpObservability.grpcInit(sink, channelInterceptorFactory,
               serverInterceptorFactory);
       assertThat(observability1).isSameInstanceAs(observability);
 
@@ -59,7 +59,7 @@ public class ObservabilityTest {
       observability1.close();
       fail("should have failed for calling close() second time");
     } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().contains("Observability already closed!");
+      assertThat(e).hasMessageThat().contains("GcpObservability already closed!");
     }
   }
 }

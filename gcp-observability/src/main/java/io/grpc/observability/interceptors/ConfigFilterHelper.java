@@ -33,7 +33,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Parses gRPC Observability configuration filters for interceptors usage.
+ * Parses gRPC GcpObservability configuration filters for interceptors usage.
  */
 @Internal
 public class ConfigFilterHelper {

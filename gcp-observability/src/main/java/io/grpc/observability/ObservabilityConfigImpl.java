@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * gRPC Observability configuration processor.
+ * gRPC GcpObservability configuration processor.
  */
 final class ObservabilityConfigImpl implements ObservabilityConfig {
   private static final String CONFIG_ENV_VAR_NAME = "GRPC_CONFIG_OBSERVABILITY";

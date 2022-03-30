@@ -318,7 +318,7 @@ public class LogHelper {
     return GrpcLogRecord.newBuilder().setTimestamp(Timestamps.fromNanos(nanos));
   }
 
-  // TODO(DNVindhya): Evaluate if we need following clause for metadata logging in Observability
+  // TODO(DNVindhya): Evaluate if we need following clause for metadata logging in GcpObservability
   // Leaving the implementation for now as is to have same behavior across Java and Go
   private static final Set<String> NEVER_INCLUDED_METADATA = new HashSet<>(
       Collections.singletonList(

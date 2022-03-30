@@ -6,7 +6,7 @@ plugins {
     id "ru.vyarus.animalsniffer"
 }
 
-description = "gRPC: Observability"
+description = "gRPC: GcpObservability"
 
 [compileJava].each() {
     it.options.compilerArgs += [
@@ -52,5 +52,3 @@ dependencies {
 }
 
 configureProtoCompilation()
-
-[publishMavenPublicationToMavenRepository]*.onlyIf { false }

@@ -30,10 +30,10 @@ import io.grpc.observability.logging.GcpLogSink;
 import io.grpc.observability.logging.Sink;
 import java.io.IOException;
 
-/** The main class for gRPC Observability features. */
+/** The main class for gRPC GcpObservability features. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
-public final class Observability implements AutoCloseable {
-  private static Observability instance = null;
+public final class GcpObservability implements AutoCloseable {
+  private static GcpObservability instance = null;
   private final Sink sink;
 
   /**
@@ -41,7 +41,7 @@ public final class Observability implements AutoCloseable {
    *
    * @throws ProviderNotFoundException if no underlying channel/server provider is available.
    */
-  public static synchronized Observability grpcInit() throws IOException {
+  public static synchronized GcpObservability grpcInit() throws IOException {
     if (instance == null) {
       GlobalLoggingTags globalLoggingTags = new GlobalLoggingTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
@@ -56,11 +56,11 @@ public final class Observability implements AutoCloseable {
     return instance;
   }
 
-  @VisibleForTesting static Observability grpcInit(Sink sink,
+  @VisibleForTesting static GcpObservability grpcInit(Sink sink,
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory,
       InternalLoggingServerInterceptor.Factory serverInterceptorFactory) {
     if (instance == null) {
-      instance = new Observability(sink, channelInterceptorFactory, serverInterceptorFactory);
+      instance = new GcpObservability(sink, channelInterceptorFactory, serverInterceptorFactory);
     }
     return instance;
   }
@@ -68,9 +68,9 @@ public final class Observability implements AutoCloseable {
   /** Un-initialize/shutdown grpc-observability. */
   @Override
   public void close() {
-    synchronized (Observability.class) {
+    synchronized (GcpObservability.class) {
       if (instance == null) {
-        throw new IllegalStateException("Observability already closed!");
+        throw new IllegalStateException("GcpObservability already closed!");
       }
       LoggingChannelProvider.shutdown();
       LoggingServerProvider.shutdown();
@@ -79,7 +79,7 @@ public final class Observability implements AutoCloseable {
     }
   }
 
-  private Observability(Sink sink,
+  private GcpObservability(Sink sink,
       InternalLoggingChannelInterceptor.Factory channelInterceptorFactory,
       InternalLoggingServerInterceptor.Factory serverInterceptorFactory) {
     this.sink = checkNotNull(sink);
