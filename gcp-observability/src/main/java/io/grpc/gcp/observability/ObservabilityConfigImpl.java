@@ -34,6 +34,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
 
   private boolean enableCloudLogging = true;
   private String destinationProjectId = null;
+  private Long flushMessageCount = null;
   private List<LogFilter> logFilters;
   private List<EventType> eventTypes;
 
@@ -56,6 +57,7 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
         enableCloudLogging = value;
       }
       destinationProjectId = JsonUtil.getString(loggingConfig, "destination_project_id");
+      flushMessageCount = JsonUtil.getNumberAsLong(loggingConfig, "flush_message_count");
       List<?> rawList = JsonUtil.getList(loggingConfig, "log_filters");
       if (rawList != null) {
         List<Map<String, ?>> jsonLogFilters = JsonUtil.checkObjectList(rawList);
@@ -114,6 +116,11 @@ final class ObservabilityConfigImpl implements ObservabilityConfig {
   @Override
   public String getDestinationProjectId() {
     return destinationProjectId;
+  }
+
+  @Override
+  public Long getFlushMessageCount() {
+    return flushMessageCount;
   }
 
   @Override

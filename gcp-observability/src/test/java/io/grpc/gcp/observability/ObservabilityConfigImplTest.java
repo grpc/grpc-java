@@ -42,6 +42,7 @@ public class ObservabilityConfigImplTest {
   private static final String LOG_FILTERS = "{\n"
       + "    \"enable_cloud_logging\": true,\n"
       + "    \"destination_project_id\": \"grpc-testing\",\n"
+      + "    \"flush_message_count\": \"1000\",\n"
       + "    \"log_filters\": [{\n"
       + "        \"pattern\": \"*/*\",\n"
       + "        \"header_bytes\": 4096,\n"
@@ -56,6 +57,11 @@ public class ObservabilityConfigImplTest {
   private static final String DEST_PROJECT_ID = "{\n"
       + "    \"enable_cloud_logging\": true,\n"
       + "    \"destination_project_id\": \"grpc-testing\"\n"
+      + "}";
+
+  private static final String FLUSH_MESSAGE_COUNT = "{\n"
+      + "    \"enable_cloud_logging\": true,\n"
+      + "    \"flush_message_count\": \"500\"\n"
       + "}";
 
   private static final String DISABLE_CLOUD_LOGGING = "{\n"
@@ -79,6 +85,7 @@ public class ObservabilityConfigImplTest {
     observabilityConfig.parse("{}");
     assertTrue(observabilityConfig.isEnableCloudLogging());
     assertNull(observabilityConfig.getDestinationProjectId());
+    assertNull(observabilityConfig.getFlushMessageCount());
     assertNull(observabilityConfig.getLogFilters());
   }
 
@@ -87,6 +94,7 @@ public class ObservabilityConfigImplTest {
     observabilityConfig.parse(DISABLE_CLOUD_LOGGING);
     assertFalse(observabilityConfig.isEnableCloudLogging());
     assertNull(observabilityConfig.getDestinationProjectId());
+    assertNull(observabilityConfig.getFlushMessageCount());
     assertNull(observabilityConfig.getLogFilters());
   }
 
@@ -98,10 +106,18 @@ public class ObservabilityConfigImplTest {
   }
 
   @Test
+  public void flushMessageCount() throws Exception {
+    observabilityConfig.parse(FLUSH_MESSAGE_COUNT);
+    assertTrue(observabilityConfig.isEnableCloudLogging());
+    assertThat(observabilityConfig.getFlushMessageCount()).isEqualTo(500L);
+  }
+
+  @Test
   public void logFilters() throws IOException {
     observabilityConfig.parse(LOG_FILTERS);
     assertTrue(observabilityConfig.isEnableCloudLogging());
     assertThat(observabilityConfig.getDestinationProjectId()).isEqualTo("grpc-testing");
+    assertThat(observabilityConfig.getFlushMessageCount()).isEqualTo(1000L);
     List<LogFilter> logFilters = observabilityConfig.getLogFilters();
     assertThat(logFilters).hasSize(2);
     assertThat(logFilters.get(0).pattern).isEqualTo("*/*");

@@ -26,6 +26,9 @@ public interface ObservabilityConfig {
   /** Get destination project ID - where logs will go. */
   String getDestinationProjectId();
 
+  /** Get message count threshold to flush - flush once message count is reached. */
+  Long getFlushMessageCount();
+
   /** Get filters set for logging. */
   List<LogFilter> getLogFilters();
 

@@ -46,7 +46,8 @@ public final class GcpObservability implements AutoCloseable {
       GlobalLoggingTags globalLoggingTags = new GlobalLoggingTags();
       ObservabilityConfigImpl observabilityConfig = ObservabilityConfigImpl.getInstance();
       Sink sink = new GcpLogSink(observabilityConfig.getDestinationProjectId(),
-          globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags(), 10);
+          globalLoggingTags.getLocationTags(), globalLoggingTags.getCustomTags(),
+          observabilityConfig.getFlushMessageCount());
       LogHelper helper = new LogHelper(sink, TimeProvider.SYSTEM_TIME_PROVIDER);
       ConfigFilterHelper configFilterHelper = ConfigFilterHelper.factory(observabilityConfig);
       instance = grpcInit(sink,

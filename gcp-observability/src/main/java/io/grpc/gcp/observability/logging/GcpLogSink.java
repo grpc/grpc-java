@@ -49,12 +49,12 @@ public class GcpLogSink implements Sink {
   private static final Set<String> kubernetesResourceLabelSet
       = ImmutableSet.of("project_id", "location", "cluster_name", "namespace_name",
       "pod_name", "container_name");
-  private static final int FALLBACK_FLUSH_LIMIT = 100;
+  private static final long FALLBACK_FLUSH_LIMIT = 200;
   private final Map<String, String> customTags;
   private final Logging gcpLoggingClient;
   private final MonitoredResource kubernetesResource;
-  private final int flushLimit;
-  private int flushCounter;
+  private final Long flushLimit;
+  private long flushCounter;
 
   private static Logging createLoggingClient(String projectId) {
     LoggingOptions.Builder builder = LoggingOptions.newBuilder();
@@ -70,19 +70,19 @@ public class GcpLogSink implements Sink {
    * @param destinationProjectId cloud project id to write logs
    */
   public GcpLogSink(String destinationProjectId, Map<String, String> locationTags,
-      Map<String, String> customTags, int flushLimit) {
+      Map<String, String> customTags, Long flushLimit) {
     this(createLoggingClient(destinationProjectId), locationTags, customTags, flushLimit);
 
   }
 
   @VisibleForTesting
   GcpLogSink(Logging client, Map<String, String> locationTags, Map<String, String> customTags,
-      int flushLimit) {
+      Long flushLimit) {
     this.gcpLoggingClient = client;
     this.customTags = customTags != null ? customTags : new HashMap<>();
     this.kubernetesResource = getResource(locationTags);
-    this.flushLimit = flushLimit != 0 ? flushLimit : FALLBACK_FLUSH_LIMIT;
-    this.flushCounter = 0;
+    this.flushLimit = flushLimit != null ? flushLimit : FALLBACK_FLUSH_LIMIT;
+    this.flushCounter = 0L;
   }
 
   /**
@@ -116,10 +116,10 @@ public class GcpLogSink implements Sink {
       synchronized (this) {
         logger.log(Level.FINEST, "Writing gRPC event : {0} to Cloud Logging", event);
         gcpLoggingClient.write(Collections.singleton(grpcLogEntry));
-        flushCounter += 1;
+        flushCounter = ++flushCounter;
         if (flushCounter >= flushLimit) {
           gcpLoggingClient.flush();
-          flushCounter = 0;
+          flushCounter = 0L;
         }
       }
     } catch (Exception e) {
