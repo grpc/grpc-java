@@ -30,7 +30,7 @@ import io.grpc.observability.logging.GcpLogSink;
 import io.grpc.observability.logging.Sink;
 import java.io.IOException;
 
-/** The main class for gRPC GcpObservability features. */
+/** The main class for gRPC Google Cloud Platform Observability features. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
 public final class GcpObservability implements AutoCloseable {
   private static GcpObservability instance = null;
