@@ -41,7 +41,6 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.GrpcCleanupRule;
 import java.util.Iterator;
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
@@ -53,12 +52,15 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class OrcaServiceImplTest {
   @Rule
   public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
   private ManagedChannel channel;
   private Server oobServer;
   private final FakeClock fakeClock = new FakeClock();
@@ -69,7 +71,6 @@ public class OrcaServiceImplTest {
 
   @Before
   public void setup() throws Exception {
-    MockitoAnnotations.initMocks(this);
     defaultTestService = new OrcaOobService(1, TimeUnit.SECONDS,
         fakeClock.getScheduledExecutorService());
     startServerAndGetChannel(defaultTestService.getService());
@@ -234,7 +235,7 @@ public class OrcaServiceImplTest {
 
   @Test
   public void testApis() throws Exception {
-    Map<String, Double> firstUtilization = ImmutableMap.of("util", 0.1);
+    ImmutableMap<String, Double> firstUtilization = ImmutableMap.of("util", 0.1);
     OrcaLoadReport goldenReport = OrcaLoadReport.newBuilder()
         .setCpuUtilization(random.nextDouble())
         .setMemUtilization(random.nextDouble())

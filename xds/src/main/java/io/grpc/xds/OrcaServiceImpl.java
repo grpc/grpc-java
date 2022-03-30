@@ -59,7 +59,6 @@ final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
   }
 
   private final class OrcaClient implements Runnable {
-    final OrcaLoadReportRequest request;
     final ServerCallStreamObserver<OrcaLoadReport> responseObserver;
     SynchronizationContext.ScheduledHandle periodicReportTimer;
     final long reportIntervalNanos;
@@ -72,9 +71,8 @@ final class OrcaServiceImpl extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {
         });
 
     OrcaClient(OrcaLoadReportRequest request, StreamObserver<OrcaLoadReport> responseObserver) {
-      this.request = checkNotNull(request);
-      this.reportIntervalNanos = Math.max(Durations.toNanos(request.getReportInterval()),
-          minReportIntervalNanos);
+      this.reportIntervalNanos = Math.max(Durations.toNanos(
+          checkNotNull(request).getReportInterval()), minReportIntervalNanos);
       this.responseObserver = (ServerCallStreamObserver<OrcaLoadReport>) responseObserver;
       this.responseObserver.setOnCancelHandler(new Runnable() {
         @Override
