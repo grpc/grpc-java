@@ -55,33 +55,14 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
   private static final String LOG_TAG = "AndroidChannelBuilder";
 
-  @Nullable private static final Object OKHTTP_CHANNEL_PROVIDER = findOkHttp();
+  @Nullable private static final Class<?> OKHTTP_CHANNEL_BUILDER_CLASS = findOkHttp();
 
-  private static Object findOkHttp() {
-    Class<?> klass;
+  private static Class<?> findOkHttp() {
     try {
-      klass = Class.forName("io.grpc.okhttp.OkHttpChannelProvider");
+      return Class.forName("io.grpc.okhttp.OkHttpChannelBuilder");
     } catch (ClassNotFoundException e) {
-      Log.w(LOG_TAG, "Failed to find OkHttpChannelProvider", e);
       return null;
     }
-    Object provider;
-    try {
-      provider = klass.getConstructor().newInstance();
-    } catch (Exception e) {
-      Log.w(LOG_TAG, "Failed to construct OkHttpChannelProvider", e);
-      return null;
-    }
-    try {
-      if (!(Boolean) klass.getMethod("isAvailable").invoke(provider)) {
-        Log.w(LOG_TAG, "OkHttpChannelProvider.isAvailable() returned false");
-        return null;
-      }
-    } catch (Exception e) {
-      Log.w(LOG_TAG, "Failed to check OkHttpChannelProvider.isAvailable()", e);
-      return null;
-    }
-    return provider;
   }
 
   private final ManagedChannelBuilder<?> delegateBuilder;
@@ -132,15 +113,15 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
   }
 
   private AndroidChannelBuilder(String target) {
-    if (OKHTTP_CHANNEL_PROVIDER == null) {
-      throw new UnsupportedOperationException("Unable to load OkHttpChannelProvider");
+    if (OKHTTP_CHANNEL_BUILDER_CLASS == null) {
+      throw new UnsupportedOperationException("No ManagedChannelBuilder found on the classpath");
     }
     try {
       delegateBuilder =
           (ManagedChannelBuilder)
-              OKHTTP_CHANNEL_PROVIDER.getClass()
-                  .getMethod("builderForTarget", String.class)
-                  .invoke(OKHTTP_CHANNEL_PROVIDER, target);
+              OKHTTP_CHANNEL_BUILDER_CLASS
+                  .getMethod("forTarget", String.class)
+                  .invoke(null, target);
     } catch (Exception e) {
       throw new RuntimeException("Failed to create ManagedChannelBuilder", e);
     }
