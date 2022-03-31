@@ -11,18 +11,17 @@ description = "gRPC: OkHttp"
 evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
-    api project(':grpc-core')
+    api project(':grpc-core'),
+            libraries.okhttp
     implementation libraries.okio,
             libraries.guava,
             libraries.perfmark
     // Make okhttp dependencies compile only
-    compileOnly libraries.okhttp
     // Tests depend on base class defined by core module.
     testImplementation project(':grpc-core').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
-            project(':grpc-netty'),
-            libraries.okhttp
+            project(':grpc-netty')
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
