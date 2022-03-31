@@ -65,7 +65,7 @@ public class GcpLogSinkTest {
       "pod_name", "app1-6c7c58f897-n92c5");
   private static final Map<String, String> customTags = ImmutableMap.of("KEY1", "Value1",
       "KEY2", "VALUE2");
-  private static final int flushLimit = 10;
+  private static final long flushLimit = 10L;
   private final long seqId = 1;
   private final String serviceName = "service";
   private final String methodName = "method";
@@ -164,7 +164,7 @@ public class GcpLogSinkTest {
 
   @Test
   public void verifyFlush() {
-    int lowerFlushLimit = 2;
+    long lowerFlushLimit = 2L;
     GcpLogSink mockSink = new GcpLogSink(mockLogging, locationTags, customTags, lowerFlushLimit);
     mockSink.write(logProto);
     verify(mockLogging, never()).flush();

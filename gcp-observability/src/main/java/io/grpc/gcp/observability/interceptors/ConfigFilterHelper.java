@@ -210,12 +210,6 @@ public class ConfigFilterHelper {
     if (logEventTypeSet == null) {
       return true;
     }
-    boolean logEvent;
-    if (logEventTypeSet.isEmpty()) {
-      logEvent = false;
-    } else {
-      logEvent = logEventTypeSet.contains(event);
-    }
-    return logEvent;
+    return logEventTypeSet.contains(event);
   }
 }
