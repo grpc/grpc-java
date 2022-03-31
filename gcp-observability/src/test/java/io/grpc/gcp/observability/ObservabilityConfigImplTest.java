@@ -42,7 +42,7 @@ public class ObservabilityConfigImplTest {
   private static final String LOG_FILTERS = "{\n"
       + "    \"enable_cloud_logging\": true,\n"
       + "    \"destination_project_id\": \"grpc-testing\",\n"
-      + "    \"flush_message_count\": \"1000\",\n"
+      + "    \"flush_message_count\": 1000,\n"
       + "    \"log_filters\": [{\n"
       + "        \"pattern\": \"*/*\",\n"
       + "        \"header_bytes\": 4096,\n"
@@ -61,7 +61,7 @@ public class ObservabilityConfigImplTest {
 
   private static final String FLUSH_MESSAGE_COUNT = "{\n"
       + "    \"enable_cloud_logging\": true,\n"
-      + "    \"flush_message_count\": \"500\"\n"
+      + "    \"flush_message_count\": 500\n"
       + "}";
 
   private static final String DISABLE_CLOUD_LOGGING = "{\n"
@@ -87,6 +87,7 @@ public class ObservabilityConfigImplTest {
     assertNull(observabilityConfig.getDestinationProjectId());
     assertNull(observabilityConfig.getFlushMessageCount());
     assertNull(observabilityConfig.getLogFilters());
+    assertNull(observabilityConfig.getEventTypes());
   }
 
   @Test
@@ -96,6 +97,7 @@ public class ObservabilityConfigImplTest {
     assertNull(observabilityConfig.getDestinationProjectId());
     assertNull(observabilityConfig.getFlushMessageCount());
     assertNull(observabilityConfig.getLogFilters());
+    assertNull(observabilityConfig.getEventTypes());
   }
 
   @Test

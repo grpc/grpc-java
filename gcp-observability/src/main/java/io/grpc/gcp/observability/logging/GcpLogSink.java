@@ -49,7 +49,7 @@ public class GcpLogSink implements Sink {
   private static final Set<String> kubernetesResourceLabelSet
       = ImmutableSet.of("project_id", "location", "cluster_name", "namespace_name",
       "pod_name", "container_name");
-  private static final long FALLBACK_FLUSH_LIMIT = 200;
+  private static final long FALLBACK_FLUSH_LIMIT = 100L;
   private final Map<String, String> customTags;
   private final Logging gcpLoggingClient;
   private final MonitoredResource kubernetesResource;
