@@ -155,7 +155,7 @@ public class CachingRlsLbClientTest {
             .setHelper(helper)
             .setLbPolicyConfig(lbPolicyConfiguration)
             .setThrottler(fakeThrottler)
-            .setTimeProvider(fakeClock.getTimeProvider())
+            .setTicker(fakeClock.getTicker())
             .build();
   }
 
@@ -253,7 +253,7 @@ public class CachingRlsLbClientTest {
             .setHelper(helper)
             .setLbPolicyConfig(lbPolicyConfiguration)
             .setThrottler(fakeThrottler)
-            .setTimeProvider(fakeClock.getTimeProvider())
+            .setTicker(fakeClock.getTicker())
             .build();
     RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
