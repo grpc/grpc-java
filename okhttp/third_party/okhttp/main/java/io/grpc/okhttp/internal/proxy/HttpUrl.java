@@ -433,7 +433,8 @@ public final class HttpUrl {
   }
 
   static void canonicalize(Buffer out, String input, int pos, int limit,
-                           String encodeSet, boolean alreadyEncoded, boolean plusIsSpace, boolean asciiOnly) {
+                           String encodeSet, boolean alreadyEncoded, boolean plusIsSpace, boolean asciiOnly)
+      throws Exception {
     Buffer utf8Buffer = null; // Lazily allocated.
     int codePoint;
     for (int i = pos; i < limit; i += Character.charCount(codePoint)) {
