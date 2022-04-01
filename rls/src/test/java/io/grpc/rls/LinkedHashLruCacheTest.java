@@ -19,11 +19,10 @@ package io.grpc.rls;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.CALLS_REAL_METHODS;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import io.grpc.rls.DoNotUseDirectScheduledExecutorService.FakeTimeProvider;
+import io.grpc.internal.FakeClock;
+import io.grpc.internal.TimeProvider;
 import io.grpc.rls.LruCache.EvictionListener;
 import io.grpc.rls.LruCache.EvictionType;
 import java.util.Objects;
@@ -45,9 +44,8 @@ public class LinkedHashLruCacheTest {
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private final DoNotUseDirectScheduledExecutorService fakeScheduledService =
-      mock(DoNotUseDirectScheduledExecutorService.class, CALLS_REAL_METHODS);
-  private final FakeTimeProvider timeProvider = fakeScheduledService.getFakeTimeProvider();
+  private final FakeClock fakeClock = new FakeClock();
+  private final TimeProvider timeProvider = fakeClock.getTimeProvider();
 
   @Mock
   private EvictionListener<Integer, Entry> evictionListener;
@@ -60,8 +58,8 @@ public class LinkedHashLruCacheTest {
         evictionListener,
         10,
         TimeUnit.NANOSECONDS,
-        fakeScheduledService,
-        timeProvider,
+        fakeClock.getScheduledExecutorService(),
+        fakeClock.getTimeProvider(),
         new Object()) {
       @Override
       protected boolean isExpired(Integer key, Entry value, long nowNanos) {
@@ -108,10 +106,10 @@ public class LinkedHashLruCacheTest {
     cache.cache(0, toBeEvicted);
     cache.cache(1, survivor);
 
-    timeProvider.forwardTime(10, TimeUnit.NANOSECONDS);
+    fakeClock.forwardTime(10, TimeUnit.NANOSECONDS);
     verify(evictionListener).onEviction(0, toBeEvicted, EvictionType.EXPIRED);
 
-    timeProvider.forwardTime(10, TimeUnit.NANOSECONDS);
+    fakeClock.forwardTime(10, TimeUnit.NANOSECONDS);
     verify(evictionListener).onEviction(1, survivor, EvictionType.EXPIRED);
   }
 
