@@ -21,8 +21,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.base.Ticker;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.TimeProvider;
 import io.grpc.rls.LruCache.EvictionListener;
 import io.grpc.rls.LruCache.EvictionType;
 import java.util.Objects;
@@ -45,7 +45,7 @@ public class LinkedHashLruCacheTest {
   public final MockitoRule mocks = MockitoJUnit.rule();
 
   private final FakeClock fakeClock = new FakeClock();
-  private final TimeProvider timeProvider = fakeClock.getTimeProvider();
+  private final Ticker ticker = fakeClock.getTicker();
 
   @Mock
   private EvictionListener<Integer, Entry> evictionListener;
@@ -59,7 +59,7 @@ public class LinkedHashLruCacheTest {
         10,
         TimeUnit.NANOSECONDS,
         fakeClock.getScheduledExecutorService(),
-        fakeClock.getTimeProvider(),
+        fakeClock.getTicker(),
         new Object()) {
       @Override
       protected boolean isExpired(Integer key, Entry value, long nowNanos) {
@@ -86,8 +86,8 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void size() {
-    Entry entry1 = new Entry("Entry0", timeProvider.currentTimeNanos() + 10);
-    Entry entry2 = new Entry("Entry1", timeProvider.currentTimeNanos() + 20);
+    Entry entry1 = new Entry("Entry0", ticker.read() + 10);
+    Entry entry2 = new Entry("Entry1", ticker.read() + 20);
     cache.cache(0, entry1);
     cache.cache(1, entry2);
     assertThat(cache.estimatedSize()).isEqualTo(2);
@@ -101,8 +101,8 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void eviction_expire() {
-    Entry toBeEvicted = new Entry("Entry0", timeProvider.currentTimeNanos() + 10);
-    Entry survivor = new Entry("Entry1", timeProvider.currentTimeNanos() + 20);
+    Entry toBeEvicted = new Entry("Entry0", ticker.read() + 10);
+    Entry survivor = new Entry("Entry1", ticker.read() + 20);
     cache.cache(0, toBeEvicted);
     cache.cache(1, survivor);
 
@@ -115,8 +115,8 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void eviction_explicit() {
-    Entry toBeEvicted = new Entry("Entry0", timeProvider.currentTimeNanos() + 10);
-    Entry survivor = new Entry("Entry1", timeProvider.currentTimeNanos() + 20);
+    Entry toBeEvicted = new Entry("Entry0", ticker.read() + 10);
+    Entry survivor = new Entry("Entry1", ticker.read() + 20);
     cache.cache(0, toBeEvicted);
     cache.cache(1, survivor);
 
@@ -127,8 +127,8 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void eviction_replaced() {
-    Entry toBeEvicted = new Entry("Entry0", timeProvider.currentTimeNanos() + 10);
-    Entry survivor = new Entry("Entry1", timeProvider.currentTimeNanos() + 20);
+    Entry toBeEvicted = new Entry("Entry0", ticker.read() + 10);
+    Entry survivor = new Entry("Entry1", ticker.read() + 20);
     cache.cache(0, toBeEvicted);
     cache.cache(0, survivor);
 
@@ -139,7 +139,7 @@ public class LinkedHashLruCacheTest {
   public void eviction_size_shouldEvictAlreadyExpired() {
     for (int i = 1; i <= MAX_SIZE; i++) {
       // last two entries are <= current time (already expired)
-      cache.cache(i, new Entry("Entry" + i, timeProvider.currentTimeNanos() + MAX_SIZE - i - 1));
+      cache.cache(i, new Entry("Entry" + i, ticker.read() + MAX_SIZE - i - 1));
     }
     cache.cache(MAX_SIZE + 1, new Entry("should kick the first", Long.MAX_VALUE));
 
@@ -153,7 +153,7 @@ public class LinkedHashLruCacheTest {
   public void eviction_get_shouldNotReturnAlreadyExpired() {
     for (int i = 1; i <= MAX_SIZE; i++) {
       // last entry is already expired when added
-      cache.cache(i, new Entry("Entry" + i, timeProvider.currentTimeNanos() + MAX_SIZE - i));
+      cache.cache(i, new Entry("Entry" + i, ticker.read() + MAX_SIZE - i));
     }
 
     assertThat(cache.estimatedSize()).isEqualTo(MAX_SIZE);
@@ -164,7 +164,7 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void updateEntrySize() {
-    Entry entry = new Entry("Entry", timeProvider.currentTimeNanos() + 10);
+    Entry entry = new Entry("Entry", ticker.read() + 10);
 
     cache.cache(1, entry);
 
@@ -183,8 +183,8 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void updateEntrySize_multipleEntries() {
-    Entry entry1 = new Entry("Entry", timeProvider.currentTimeNanos() + 10, 2);
-    Entry entry2 = new Entry("Entry2", timeProvider.currentTimeNanos() + 10, 3);
+    Entry entry1 = new Entry("Entry", ticker.read() + 10, 2);
+    Entry entry2 = new Entry("Entry2", ticker.read() + 10, 3);
 
     cache.cache(1, entry1);
     cache.cache(2, entry2);
@@ -200,8 +200,8 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void invalidateAll() {
-    Entry entry1 = new Entry("Entry", timeProvider.currentTimeNanos() + 10);
-    Entry entry2 = new Entry("Entry2", timeProvider.currentTimeNanos() + 10);
+    Entry entry1 = new Entry("Entry", ticker.read() + 10);
+    Entry entry2 = new Entry("Entry2", ticker.read() + 10);
 
     cache.cache(1, entry1);
     cache.cache(2, entry2);
@@ -215,9 +215,9 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void resize() {
-    Entry entry1 = new Entry("Entry", timeProvider.currentTimeNanos() + 10);
-    Entry entry2 = new Entry("Entry2", timeProvider.currentTimeNanos() + 10);
-    Entry entry3 = new Entry("Entry3", timeProvider.currentTimeNanos() + 10);
+    Entry entry1 = new Entry("Entry", ticker.read() + 10);
+    Entry entry2 = new Entry("Entry2", ticker.read() + 10);
+    Entry entry3 = new Entry("Entry3", ticker.read() + 10);
 
     cache.cache(1, entry1);
     cache.cache(2, entry2);
