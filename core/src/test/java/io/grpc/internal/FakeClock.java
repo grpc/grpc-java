@@ -80,9 +80,7 @@ public final class FakeClock {
       new TimeProvider() {
         @Override
         public long currentTimeNanos() {
-          // TimeProvider uses the same clock as currentTimeMillis(), and typically doesn't have
-          // nanosecond precision.
-          return TimeUnit.MILLISECONDS.toNanos(currentTimeMillis());
+          return currentTimeNanos;
         }
       };
 

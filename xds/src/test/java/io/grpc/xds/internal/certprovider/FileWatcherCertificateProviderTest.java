@@ -33,7 +33,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.Status;
-import io.grpc.internal.FakeClock;
+import io.grpc.internal.TimeProvider;
 import io.grpc.xds.internal.certprovider.CertificateProvider.DistributorWatcher;
 import io.grpc.xds.internal.sds.CommonTlsContextTestsUtil;
 import java.io.File;
@@ -75,7 +75,7 @@ public class FileWatcherCertificateProviderTest {
 
   @Mock private CertificateProvider.Watcher mockWatcher;
   @Mock private ScheduledExecutorService timeService;
-  private FakeClock fakeClock = new FakeClock();
+  private final FakeTimeProvider timeProvider = new FakeTimeProvider();
 
   @Rule public TemporaryFolder tempFolder = new TemporaryFolder();
 
@@ -97,8 +97,7 @@ public class FileWatcherCertificateProviderTest {
     rootFile = new File(tempFolder.getRoot(), ROOT_FILE).getAbsolutePath();
     provider =
         new FileWatcherCertificateProvider(
-            watcher, true, certFile, keyFile, rootFile, 600L, timeService,
-            fakeClock.getTimeProvider());
+            watcher, true, certFile, keyFile, rootFile, 600L, timeService, timeProvider);
   }
 
   private void populateTarget(
@@ -116,7 +115,7 @@ public class FileWatcherCertificateProviderTest {
       certFileSource = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(certFileSource);
       Files.copy(Paths.get(certFileSource), Paths.get(certFile), REPLACE_EXISTING);
       Files.setLastModifiedTime(
-          Paths.get(certFile), FileTime.fromMillis(fakeClock.currentTimeMillis()));
+          Paths.get(certFile), FileTime.fromMillis(timeProvider.currentTimeMillis()));
     }
     if (deleteCurKey) {
       Files.delete(Paths.get(keyFile));
@@ -125,7 +124,7 @@ public class FileWatcherCertificateProviderTest {
       keyFileSource = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(keyFileSource);
       Files.copy(Paths.get(keyFileSource), Paths.get(keyFile), REPLACE_EXISTING);
       Files.setLastModifiedTime(
-          Paths.get(keyFile), FileTime.fromMillis(fakeClock.currentTimeMillis()));
+          Paths.get(keyFile), FileTime.fromMillis(timeProvider.currentTimeMillis()));
     }
     if (deleteCurRoot) {
       Files.delete(Paths.get(rootFile));
@@ -134,7 +133,7 @@ public class FileWatcherCertificateProviderTest {
       rootFileSource = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(rootFileSource);
       Files.copy(Paths.get(rootFileSource), Paths.get(rootFile), REPLACE_EXISTING);
       Files.setLastModifiedTime(
-          Paths.get(rootFile), FileTime.fromMillis(fakeClock.currentTimeMillis()));
+          Paths.get(rootFile), FileTime.fromMillis(timeProvider.currentTimeMillis()));
     }
   }
 
@@ -173,7 +172,7 @@ public class FileWatcherCertificateProviderTest {
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+    timeProvider.forwardTime(1, TimeUnit.SECONDS);
     populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, SERVER_1_PEM_FILE, false, false, false);
     provider.checkAndReloadCertificates();
     verifyWatcherUpdates(SERVER_0_PEM_FILE, SERVER_1_PEM_FILE);
@@ -212,7 +211,7 @@ public class FileWatcherCertificateProviderTest {
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+    timeProvider.forwardTime(1, TimeUnit.SECONDS);
     populateTarget(null, null, SERVER_1_PEM_FILE, false, false, false);
     provider.checkAndReloadCertificates();
     verifyWatcherUpdates(null, SERVER_1_PEM_FILE);
@@ -234,7 +233,7 @@ public class FileWatcherCertificateProviderTest {
     doReturn(scheduledFuture)
         .when(timeService)
         .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
-    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+    timeProvider.forwardTime(1, TimeUnit.SECONDS);
     populateTarget(SERVER_0_PEM_FILE, SERVER_0_KEY_FILE, null, false, false, false);
     provider.checkAndReloadCertificates();
     verifyWatcherUpdates(SERVER_0_PEM_FILE, null);
@@ -290,10 +289,10 @@ public class FileWatcherCertificateProviderTest {
     provider.checkAndReloadCertificates();
 
     reset(mockWatcher);
-    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+    timeProvider.forwardTime(1, TimeUnit.SECONDS);
     populateTarget(CLIENT_PEM_FILE, CLIENT_KEY_FILE, null, false, false, true);
-    fakeClock.forwardTime(
-        CERT0_EXPIRY_TIME_MILLIS - 610_000L - fakeClock.currentTimeMillis(),
+    timeProvider.forwardTime(
+        CERT0_EXPIRY_TIME_MILLIS - 610_000L - timeProvider.currentTimeMillis(),
         TimeUnit.MILLISECONDS);
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(Status.Code.UNKNOWN, NoSuchFileException.class, 1, 0, "root.pem");
@@ -319,18 +318,18 @@ public class FileWatcherCertificateProviderTest {
     provider.checkAndReloadCertificates();
 
     reset(mockWatcher);
-    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+    timeProvider.forwardTime(1, TimeUnit.SECONDS);
     populateTarget(
         certFile, keyFile, rootFile, certFile == null, keyFile == null, rootFile == null);
-    fakeClock.forwardTime(
-        CERT0_EXPIRY_TIME_MILLIS - 610_000L - fakeClock.currentTimeMillis(),
+    timeProvider.forwardTime(
+        CERT0_EXPIRY_TIME_MILLIS - 610_000L - timeProvider.currentTimeMillis(),
         TimeUnit.MILLISECONDS);
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(
         null, null, firstUpdateCertCount, firstUpdateRootCount, (String[]) null);
 
     reset(mockWatcher);
-    fakeClock.forwardTime(20, TimeUnit.SECONDS);
+    timeProvider.forwardTime(20, TimeUnit.SECONDS);
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(
         Status.Code.UNKNOWN,
@@ -448,6 +447,27 @@ public class FileWatcherCertificateProviderTest {
     public V get(long timeout, TimeUnit unit) {
       calls.add(new Record(timeout, unit));
       return null;
+    }
+  }
+
+  /**
+   * Fake TimeProvider that roughly mirrors FakeClock. Not using FakeClock because it incorrectly
+   * fails to align the wall-time API TimeProvider.currentTimeNanos() with currentTimeMillis() and
+   * fixing it upsets a _lot_ of tests.
+   */
+  static class FakeTimeProvider implements TimeProvider {
+    public long currentTimeNanos = TimeUnit.SECONDS.toNanos(1262332800); /* 2010-01-01 */
+
+    @Override public long currentTimeNanos() {
+      return currentTimeNanos;
+    }
+
+    public void forwardTime(long duration, TimeUnit unit) {
+      currentTimeNanos += unit.toNanos(duration);
+    }
+
+    public long currentTimeMillis() {
+      return TimeUnit.NANOSECONDS.toMillis(currentTimeNanos);
     }
   }
 }
