@@ -89,7 +89,7 @@ public class GlobalLoggingTagsTest {
     File cgroupFile = cgroupFolder.newFile();
 
     Files.write("test-namespace1".getBytes(StandardCharsets.UTF_8), namespaceFile);
-    Files.write("test-hostname2".getBytes(StandardCharsets.UTF_8), hostnameFile);
+    Files.write("test-hostname2\n".getBytes(StandardCharsets.UTF_8), hostnameFile);
     Files.write(FILE_CONTENTS.getBytes(StandardCharsets.UTF_8), cgroupFile);
 
     ImmutableMap.Builder<String, String> customTags = ImmutableMap.builder();

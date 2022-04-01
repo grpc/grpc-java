@@ -71,10 +71,10 @@ final class GlobalLoggingTags {
       String hostnameFile, String cgroupFile) {
     // namespace name: contents of file /var/run/secrets/kubernetes.io/serviceaccount/namespace
     populateFromFileContents(customTags, "namespace_name",
-        namespaceFile, (value) -> value);
+        namespaceFile, (value) -> value.trim());
 
     // pod_name: hostname i.e. contents of /etc/hostname
-    populateFromFileContents(customTags, "pod_name", hostnameFile, (value) -> value);
+    populateFromFileContents(customTags, "pod_name", hostnameFile, (value) -> value.trim());
 
     // container_id: parsed from /proc/self/cgroup . Note: only works for Linux-based containers
     populateFromFileContents(customTags, "container_id", cgroupFile,
