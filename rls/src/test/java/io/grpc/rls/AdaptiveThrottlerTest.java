@@ -41,6 +41,8 @@ public class AdaptiveThrottlerTest {
 
   @Test
   public void shouldThrottle() {
+    long startTime = fakeClock.currentTimeMillis();
+
     // initial states
     assertThat(throttler.requestStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(0L);
     assertThat(throttler.throttledStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(0L);
@@ -72,7 +74,7 @@ public class AdaptiveThrottlerTest {
         .of(1.0f / 3.0f);
 
     // Skip half a second (half the duration).
-    fakeClock.forwardTime(500 - fakeClock.currentTimeMillis(), TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(500 - (fakeClock.currentTimeMillis() - startTime), TimeUnit.MILLISECONDS);
 
     // Request 3, throttled by backend
     assertThat(throttler.shouldThrottle(0.4f)).isFalse();
@@ -96,7 +98,8 @@ public class AdaptiveThrottlerTest {
         .of(3.0f / 5.0f);
 
     // Skip to the point where only requests 3 and 4 are visible.
-    fakeClock.forwardTime(1250 - fakeClock.currentTimeMillis(), TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(
+        1250 - (fakeClock.currentTimeMillis() - startTime), TimeUnit.MILLISECONDS);
 
     assertThat(throttler.requestStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(2L);
     assertThat(throttler.throttledStat.get(fakeTimeProvider.currentTimeNanos())).isEqualTo(2L);
