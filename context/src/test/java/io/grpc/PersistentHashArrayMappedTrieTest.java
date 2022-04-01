@@ -84,6 +84,7 @@ public class PersistentHashArrayMappedTrieTest {
     assertEquals(2, ret.size());
   }
 
+  @SuppressWarnings("CheckReturnValue")
   @Test
   public void collisionLeaf_assertKeysDifferent() {
     Key key1 = new Key(0);
@@ -94,6 +95,7 @@ public class PersistentHashArrayMappedTrieTest {
     }
   }
 
+  @SuppressWarnings("CheckReturnValue")
   @Test
   public void collisionLeaf_assertHashesSame() {
     try {
