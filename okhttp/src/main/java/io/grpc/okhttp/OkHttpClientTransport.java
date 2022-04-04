@@ -28,10 +28,6 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
-import com.squareup.okhttp.Credentials;
-import com.squareup.okhttp.HttpUrl;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.internal.http.StatusLine;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
@@ -61,6 +57,8 @@ import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import io.grpc.okhttp.internal.ConnectionSpec;
+import io.grpc.okhttp.internal.Credentials;
+import io.grpc.okhttp.internal.StatusLine;
 import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.FrameReader;
 import io.grpc.okhttp.internal.framed.FrameWriter;
@@ -69,6 +67,8 @@ import io.grpc.okhttp.internal.framed.HeadersMode;
 import io.grpc.okhttp.internal.framed.Http2;
 import io.grpc.okhttp.internal.framed.Settings;
 import io.grpc.okhttp.internal.framed.Variant;
+import io.grpc.okhttp.internal.proxy.HttpUrl;
+import io.grpc.okhttp.internal.proxy.Request;
 import io.perfmark.PerfMark;
 import java.io.EOFException;
 import java.io.IOException;
@@ -709,12 +709,13 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   private Request createHttpProxyRequest(InetSocketAddress address, String proxyUsername,
-      String proxyPassword) {
+                                         String proxyPassword) {
     HttpUrl tunnelUrl = new HttpUrl.Builder()
         .scheme("https")
         .host(address.getHostName())
         .port(address.getPort())
         .build();
+
     Request.Builder request = new Request.Builder()
         .url(tunnelUrl)
         .header("Host", tunnelUrl.host() + ":" + tunnelUrl.port())

@@ -47,7 +47,8 @@ dependencies {
     testImplementation project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-core').sourceSets.test.output,
-            libraries.mockito
+            libraries.mockito,
+            libraries.okhttp
     alpnagent libraries.jetty_alpn_agent
 }
 

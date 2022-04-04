@@ -27,6 +27,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
@@ -486,10 +487,14 @@ public class RoundRobinLoadBalancerTest {
     assertThat(pickers.hasNext()).isFalse();
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void readyPicker_emptyList() {
     // ready picker list must be non-empty
-    new ReadyPicker(Collections.<Subchannel>emptyList(), 0);
+    try {
+      new ReadyPicker(Collections.<Subchannel>emptyList(), 0);
+      fail();
+    } catch (IllegalArgumentException expected) {
+    }
   }
 
   @Test

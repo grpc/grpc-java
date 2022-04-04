@@ -51,7 +51,7 @@ include ":grpc-xds"
 include ":grpc-bom"
 include ":grpc-rls"
 include ":grpc-authz"
-include ":grpc-observability"
+include ":grpc-gcp-observability"
 
 project(':grpc-api').projectDir = "$rootDir/api" as File
 project(':grpc-core').projectDir = "$rootDir/core" as File
@@ -78,7 +78,7 @@ project(':grpc-xds').projectDir = "$rootDir/xds" as File
 project(':grpc-bom').projectDir = "$rootDir/bom" as File
 project(':grpc-rls').projectDir = "$rootDir/rls" as File
 project(':grpc-authz').projectDir = "$rootDir/authz" as File
-project(':grpc-observability').projectDir = "$rootDir/observability" as File
+project(':grpc-gcp-observability').projectDir = "$rootDir/gcp-observability" as File
 
 if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {
     println '*** Skipping the build of codegen and compilation of proto files because skipCodegen=true'
