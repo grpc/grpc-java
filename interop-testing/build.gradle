@@ -64,6 +64,13 @@ test {
     jvmArgs "-javaagent:" + configurations.alpnagent.asPath
 }
 
+compileJava {
+    // serialVersionUID is basically guaranteed to be useless in our tests
+    options.compilerArgs += [
+	"-Xlint:-deprecation"
+    ]
+}
+
 // For the generated scripts, use Netty tcnative (i.e. OpenSSL).
 // Note that OkHttp currently only supports ALPN, so OpenSSL version >= 1.0.2 is required.
 
