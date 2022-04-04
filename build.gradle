@@ -56,8 +56,8 @@ subprojects {
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
         nettyVersion = '4.1.72.Final'
-        guavaVersion = '31.0.1-android'
-        googleauthVersion = '1.4.0'
+        guavaVersion = '31.1-android'
+        googleauthVersion = '1.6.0'
         protobufVersion = '3.19.2'
         protocVersion = protobufVersion
         opencensusVersion = '0.28.0'
@@ -151,10 +151,10 @@ subprojects {
             animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.19",
             autovalue: "com.google.auto.value:auto-value:${autovalueVersion}",
             autovalue_annotation: "com.google.auto.value:auto-value-annotations:${autovalueVersion}",
-            errorprone: "com.google.errorprone:error_prone_annotations:2.10.0",
+            errorprone: "com.google.errorprone:error_prone_annotations:2.11.0",
             cronet_api: 'org.chromium.net:cronet-api:92.4515.131',
             cronet_embedded: 'org.chromium.net:cronet-embedded:92.4515.131',
-            gson: "com.google.code.gson:gson:2.8.9",
+            gson: "com.google.code.gson:gson:2.9.0",
             guava: "com.google.guava:guava:${guavaVersion}",
             javax_annotation: 'org.apache.tomcat:annotations-api:6.0.53',
             jsr305: 'com.google.code.findbugs:jsr305:3.0.2',

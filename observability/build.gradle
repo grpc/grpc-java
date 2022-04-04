@@ -15,13 +15,13 @@ dependencies {
 
     implementation project(':grpc-protobuf'),
             project(':grpc-stub'),
-            ('com.google.guava:guava:31.0.1-jre'),
+            ('com.google.guava:guava:31.1-jre'),
             ('com.google.errorprone:error_prone_annotations:2.11.0'),
-            ('com.google.auth:google-auth-library-credentials:1.4.0'),
+            ('com.google.auth:google-auth-library-credentials:1.6.0'),
             ('org.checkerframework:checker-qual:3.20.0'),
             ('com.google.auto.value:auto-value-annotations:1.9'),
-            ('com.google.http-client:google-http-client:1.41.0'),
-            ('com.google.http-client:google-http-client-gson:1.41.0'),
+            ('com.google.http-client:google-http-client:1.41.5'),
+            ('com.google.http-client:google-http-client-gson:1.41.5'),
             ('com.google.api.grpc:proto-google-common-protos:2.7.1'),
             ("com.google.cloud:google-cloud-logging:${cloudLoggingVersion}")
 
