@@ -39,23 +39,14 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   private final FrameWriter frameWriter;
 
-  private final OkHttpFrameLogger frameLogger;
+  private final OkHttpFrameLogger frameLogger =
+      new OkHttpFrameLogger(Level.FINE, OkHttpClientTransport.class);
 
   ExceptionHandlingFrameWriter(
       TransportExceptionHandler transportExceptionHandler, FrameWriter frameWriter) {
-    this(transportExceptionHandler, frameWriter,
-        new OkHttpFrameLogger(Level.FINE, OkHttpClientTransport.class));
-  }
-
-  @VisibleForTesting
-  ExceptionHandlingFrameWriter(
-      TransportExceptionHandler transportExceptionHandler,
-      FrameWriter frameWriter,
-      OkHttpFrameLogger frameLogger) {
     this.transportExceptionHandler =
         checkNotNull(transportExceptionHandler, "transportExceptionHandler");
     this.frameWriter = Preconditions.checkNotNull(frameWriter, "frameWriter");
-    this.frameLogger = Preconditions.checkNotNull(frameLogger, "frameLogger");
   }
 
   @Override
