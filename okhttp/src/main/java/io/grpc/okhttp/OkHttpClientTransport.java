@@ -521,6 +521,10 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     FrameWriter rawFrameWriter = variant.newWriter(Okio.buffer(asyncSink), true);
 
     synchronized (lock) {
+      // Handle FrameWriter exceptions centrally, since there are many callers. Note that errors
+      // coming from rawFrameWriter are generally broken invariants/bugs, as AsyncSink does not
+      // propagate syscall errors through the FrameWriter. But we handle the AsyncSink failures with
+      // the same TransportExceptionHandler instance so it is all mixed back together.
       frameWriter = new ExceptionHandlingFrameWriter(this, rawFrameWriter);
       outboundFlow = new OutboundFlowController(this, frameWriter);
     }

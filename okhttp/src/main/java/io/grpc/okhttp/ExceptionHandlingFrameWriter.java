@@ -31,6 +31,12 @@ import java.util.logging.Logger;
 import okio.Buffer;
 import okio.ByteString;
 
+/**
+ * FrameWriter that propagates IOExceptions via callback instead of throwing. This allows
+ * centralized handling of errors. Exceptions only impact the single call that throws them; callers
+ * should be sure to kill the connection after an exception (potentially after sending a GOAWAY) as
+ * otherwise additional frames after the failed/omitted one could cause HTTP/2 confusion.
+ */
 final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
