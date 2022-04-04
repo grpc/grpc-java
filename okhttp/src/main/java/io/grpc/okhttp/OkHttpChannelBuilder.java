@@ -505,7 +505,7 @@ public final class OkHttpChannelBuilder extends
     return this;
   }
 
-  ClientTransportFactory buildTransportFactory() {
+  OkHttpTransportFactory buildTransportFactory() {
     boolean enableKeepAlive = keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED;
     return new OkHttpTransportFactory(
         transportExecutor,
@@ -712,25 +712,25 @@ public final class OkHttpChannelBuilder extends
    */
   @Internal
   static final class OkHttpTransportFactory implements ClientTransportFactory {
-    private final Executor executor;
+    final Executor executor;
     private final boolean usingSharedExecutor;
     private final boolean usingSharedScheduler;
-    private final TransportTracer.Factory transportTracerFactory;
-    private final SocketFactory socketFactory;
-    @Nullable private final SSLSocketFactory sslSocketFactory;
+    final TransportTracer.Factory transportTracerFactory;
+    final SocketFactory socketFactory;
+    @Nullable final SSLSocketFactory sslSocketFactory;
     @Nullable
-    private final HostnameVerifier hostnameVerifier;
-    private final ConnectionSpec connectionSpec;
-    private final int maxMessageSize;
+    final HostnameVerifier hostnameVerifier;
+    final ConnectionSpec connectionSpec;
+    final int maxMessageSize;
     private final boolean enableKeepAlive;
     private final long keepAliveTimeNanos;
     private final AtomicBackoff keepAliveBackoff;
     private final long keepAliveTimeoutNanos;
-    private final int flowControlWindow;
+    final int flowControlWindow;
     private final boolean keepAliveWithoutCalls;
-    private final int maxInboundMetadataSize;
+    final int maxInboundMetadataSize;
     private final ScheduledExecutorService timeoutService;
-    private final boolean useGetForSafeMethods;
+    final boolean useGetForSafeMethods;
     private boolean closed;
 
     private OkHttpTransportFactory(
@@ -793,22 +793,13 @@ public final class OkHttpChannelBuilder extends
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
       // TODO(carl-mastrangelo): Pass channelLogger in.
       OkHttpClientTransport transport = new OkHttpClientTransport(
+          this,
           inetSocketAddr,
           options.getAuthority(),
           options.getUserAgent(),
           options.getEagAttributes(),
-          executor,
-          socketFactory,
-          sslSocketFactory,
-          hostnameVerifier,
-          connectionSpec,
-          maxMessageSize,
-          flowControlWindow,
           options.getHttpConnectProxiedSocketAddress(),
-          tooManyPingsRunnable,
-          maxInboundMetadataSize,
-          transportTracerFactory.create(),
-          useGetForSafeMethods);
+          tooManyPingsRunnable);
       if (enableKeepAlive) {
         transport.enableKeepAlive(
             true, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos, keepAliveWithoutCalls);
