@@ -18,6 +18,7 @@
  */
 package io.grpc.okhttp.internal.proxy;
 
+import java.io.EOFException;
 import java.net.IDN;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -433,8 +434,7 @@ public final class HttpUrl {
   }
 
   static void canonicalize(Buffer out, String input, int pos, int limit,
-                           String encodeSet, boolean alreadyEncoded, boolean plusIsSpace, boolean asciiOnly)
-      throws Exception {
+                           String encodeSet, boolean alreadyEncoded, boolean plusIsSpace, boolean asciiOnly) {
     Buffer utf8Buffer = null; // Lazily allocated.
     int codePoint;
     for (int i = pos; i < limit; i += Character.charCount(codePoint)) {
@@ -456,10 +456,15 @@ public final class HttpUrl {
         }
         utf8Buffer.writeUtf8CodePoint(codePoint);
         while (!utf8Buffer.exhausted()) {
-          int b = utf8Buffer.readByte() & 0xff;
-          out.writeByte('%');
-          out.writeByte(HEX_DIGITS[(b >> 4) & 0xf]);
-          out.writeByte(HEX_DIGITS[b & 0xf]);
+          try {
+            fakeEofExceptionMethod(); // Okio 2.x can throw EOFException from readByte()
+            int b = utf8Buffer.readByte() & 0xff;
+            out.writeByte('%');
+            out.writeByte(HEX_DIGITS[(b >> 4) & 0xf]);
+            out.writeByte(HEX_DIGITS[b & 0xf]);
+          } catch (EOFException e) {
+            throw new IndexOutOfBoundsException(e.getMessage());
+          }
         }
       } else {
         // This character doesn't need encoding. Just copy it over.
@@ -467,4 +472,6 @@ public final class HttpUrl {
       }
     }
   }
+
+  private static void fakeEofExceptionMethod() throws EOFException {}
 }
