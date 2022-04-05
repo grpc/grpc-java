@@ -17,7 +17,6 @@
 package io.grpc.gcp.observability.logging;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.anyIterable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -122,7 +121,7 @@ public class GcpLogSinkTest {
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
       System.out.println(entry);
-      assertEquals(expectedStructLogProto, entry.getPayload().getData());
+      assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
     }
     verifyNoMoreInteractions(mockLogging);
   }
@@ -141,9 +140,9 @@ public class GcpLogSinkTest {
     System.out.println(logEntrySetCaptor.getValue());
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
-      assertEquals( expectedMonitoredResource, entry.getResource());
-      assertEquals(customTags, entry.getLabels());
-      assertEquals(expectedStructLogProto, entry.getPayload().getData());
+      assertThat(entry.getResource()).isEqualTo(expectedMonitoredResource);
+      assertThat(entry.getLabels()).isEqualTo(customTags);
+      assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
     }
     verifyNoMoreInteractions(mockLogging);
   }
@@ -162,8 +161,8 @@ public class GcpLogSinkTest {
     verify(mockLogging, times(1)).write(logEntrySetCaptor.capture());
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
-      assertEquals(expectedEmptyLabels, entry.getLabels());
-      assertEquals(expectedStructLogProto, entry.getPayload().getData());
+      assertThat(entry.getLabels()).isEqualTo(expectedEmptyLabels);
+      assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
     }
   }
 
@@ -174,7 +173,6 @@ public class GcpLogSinkTest {
     String destinationProjectId = "DESTINATION_PROJECT";
     Map<String, String> expectedLabels = GcpLogSink.getCustomTags(emptyCustomTags, locationTags,
         destinationProjectId);
-    expectedLabels.put("source_project_id", "PROJECT");
     GcpLogSink mockSink = new GcpLogSink(mockLogging, destinationProjectId, locationTags,
         emptyCustomTags, flushLimit);
     mockSink.write(logProto);
@@ -184,10 +182,9 @@ public class GcpLogSinkTest {
     verify(mockLogging, times(1)).write(logEntrySetCaptor.capture());
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
-      assertEquals(expectedLabels, entry.getLabels());
-      assertEquals(expectedStructLogProto, entry.getPayload().getData());
+      assertThat(entry.getLabels()).isEqualTo(expectedLabels);
+      assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
     }
-
   }
 
   @Test

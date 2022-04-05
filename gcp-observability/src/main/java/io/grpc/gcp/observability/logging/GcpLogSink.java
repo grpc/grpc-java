@@ -24,13 +24,13 @@ import com.google.cloud.logging.Payload.JsonPayload;
 import com.google.cloud.logging.Severity;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.internal.JsonParser;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import java.io.IOException;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -133,16 +133,16 @@ public class GcpLogSink implements Sink {
   @VisibleForTesting
   static Map<String, String> getCustomTags(Map<String, String> customTags,
       Map<String, String> locationTags, String destinationProjectId) {
-    Map<String, String> tags = new HashMap<>();
+    ImmutableMap.Builder<String, String> tagsBuilder = ImmutableMap.builder();
     String sourceProjectId = locationTags.get("project_id");
-    if (!Objects.equals(sourceProjectId, destinationProjectId)
-        && !Strings.isNullOrEmpty(destinationProjectId)) {
-      tags.put("source_project_id", sourceProjectId);
+    if (!Strings.isNullOrEmpty(destinationProjectId)
+        && !Objects.equals(sourceProjectId, destinationProjectId)) {
+      tagsBuilder.put("source_project_id", sourceProjectId);
     }
     if (customTags != null) {
-      tags.putAll(customTags);
+      tagsBuilder.putAll(customTags);
     }
-    return tags;
+    return tagsBuilder.build();
   }
 
   @VisibleForTesting
