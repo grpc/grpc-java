@@ -99,4 +99,21 @@ public class GlobalLoggingTagsTest {
         "fe61ca6482b58f4a9831d08d6ea15db25f9fd19b4be19a54df8c6c0eab8742b7", "namespace_name",
         "test-namespace1", "pod_name", "test-hostname2");
   }
+
+  @Test
+  public void testNonKubernetesInstanceValues() throws IOException {
+    String namespaceFilePath = "/var/run/secrets/kubernetes.io/serviceaccount/namespace";
+    File hostnameFile = hostnameFolder.newFile();
+    File cgroupFile = cgroupFolder.newFile();
+
+    Files.write("test-hostname2\n".getBytes(StandardCharsets.UTF_8), hostnameFile);
+    Files.write(FILE_CONTENTS.getBytes(StandardCharsets.UTF_8), cgroupFile);
+
+    ImmutableMap.Builder<String, String> customTags = ImmutableMap.builder();
+    GlobalLoggingTags.populateFromKubernetesValues(customTags,
+        namespaceFilePath, hostnameFile.getAbsolutePath(), cgroupFile.getAbsolutePath());
+    assertThat(customTags.build()).containsExactly("container_id",
+        "fe61ca6482b58f4a9831d08d6ea15db25f9fd19b4be19a54df8c6c0eab8742b7",
+        "pod_name", "test-hostname2");
+  }
 }
