@@ -107,15 +107,15 @@ public class ConfigFilterHelperTest {
         FilterParams.create(true, 128, 128));
     expectedServiceFilters.put("service2",
         FilterParams.create(true, 2048, 1024));
-    assertEquals(configFilterHelper.perServiceFilters, expectedServiceFilters);
+    assertEquals(expectedServiceFilters, configFilterHelper.perServiceFilters);
 
     Map<String, FilterParams> expectedMethodFilters = new HashMap<>();
     expectedMethodFilters.put("service1/Method2",
         FilterParams.create(true, 1024, 1024));
-    assertEquals(configFilterHelper.perMethodFilters, expectedMethodFilters);
+    assertEquals(expectedMethodFilters, configFilterHelper.perMethodFilters);
 
     Set<EventType> expectedLogEventTypeSet = ImmutableSet.copyOf(configEventTypes);
-    assertEquals(configFilterHelper.logEventTypeSet, expectedLogEventTypeSet);
+    assertEquals(expectedLogEventTypeSet, configFilterHelper.logEventTypeSet);
   }
 
   @Test
@@ -130,7 +130,7 @@ public class ConfigFilterHelperTest {
     method = builder.setFullMethodName("service1/Method6").build();
     FilterParams resultParams
         = configFilterHelper.isMethodToBeLogged(method);
-    assertEquals(resultParams, expectedParams);
+    assertEquals(expectedParams, resultParams);
   }
 
   @Test
@@ -146,7 +146,7 @@ public class ConfigFilterHelperTest {
     method = builder.setFullMethodName("service3/Method3").build();
     FilterParams resultParams
         = configFilterHelper.isMethodToBeLogged(method);
-    assertEquals(resultParams, expectedParams);
+    assertEquals(expectedParams, resultParams);
   }
 
   @Test
@@ -159,14 +159,14 @@ public class ConfigFilterHelperTest {
     method = builder.setFullMethodName("service1/Method2").build();
     FilterParams resultParams
         = configFilterHelper.isMethodToBeLogged(method);
-    assertEquals(resultParams, expectedParams);
+    assertEquals(expectedParams, resultParams);
 
     FilterParams expectedParamsWildCard =
         FilterParams.create(true, 2048, 1024);
     method = builder.setFullMethodName("service2/Method1").build();
     FilterParams resultParamsWildCard
         = configFilterHelper.isMethodToBeLogged(method);
-    assertEquals(resultParamsWildCard, expectedParamsWildCard);
+    assertEquals(expectedParamsWildCard, resultParamsWildCard);
   }
 
   @Test
