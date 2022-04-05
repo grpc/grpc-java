@@ -17,7 +17,6 @@
 package io.grpc.gcp.observability.logging;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.anyIterable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -67,6 +66,7 @@ public class GcpLogSinkTest {
       "KEY2", "VALUE2");
   private static final long flushLimit = 10L;
   private final long seqId = 1;
+  private final String destProjectName = "PROJECT";
   private final String serviceName = "service";
   private final String methodName = "method";
   private final String authority = "authority";
@@ -103,14 +103,16 @@ public class GcpLogSinkTest {
 
   @Test
   public void createSink() {
-    Sink mockSink = new GcpLogSink(mockLogging, locationTags, customTags, flushLimit);
+    Sink mockSink = new GcpLogSink(mockLogging, destProjectName, locationTags,
+        customTags, flushLimit);
     assertThat(mockSink).isInstanceOf(GcpLogSink.class);
   }
 
   @Test
   @SuppressWarnings("unchecked")
   public void verifyWrite() throws Exception {
-    Sink mockSink = new GcpLogSink(mockLogging, locationTags, customTags, flushLimit);
+    Sink mockSink = new GcpLogSink(mockLogging, destProjectName, locationTags,
+        customTags, flushLimit);
     mockSink.write(logProto);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
@@ -119,7 +121,7 @@ public class GcpLogSinkTest {
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
       System.out.println(entry);
-      assertEquals(entry.getPayload().getData(), expectedStructLogProto);
+      assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
     }
     verifyNoMoreInteractions(mockLogging);
   }
@@ -127,7 +129,8 @@ public class GcpLogSinkTest {
   @Test
   @SuppressWarnings("unchecked")
   public void verifyWriteWithTags() {
-    GcpLogSink mockSink = new GcpLogSink(mockLogging, locationTags, customTags, flushLimit);
+    GcpLogSink mockSink = new GcpLogSink(mockLogging, destProjectName, locationTags,
+        customTags, flushLimit);
     MonitoredResource expectedMonitoredResource = GcpLogSink.getResource(locationTags);
     mockSink.write(logProto);
 
@@ -137,9 +140,9 @@ public class GcpLogSinkTest {
     System.out.println(logEntrySetCaptor.getValue());
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
-      assertEquals(entry.getResource(), expectedMonitoredResource);
-      assertEquals(entry.getLabels(), customTags);
-      assertEquals(entry.getPayload().getData(), expectedStructLogProto);
+      assertThat(entry.getResource()).isEqualTo(expectedMonitoredResource);
+      assertThat(entry.getLabels()).isEqualTo(customTags);
+      assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
     }
     verifyNoMoreInteractions(mockLogging);
   }
@@ -149,7 +152,8 @@ public class GcpLogSinkTest {
   public void emptyCustomTags_labelsNotSet() {
     Map<String, String> emptyCustomTags = null;
     Map<String, String> expectedEmptyLabels = new HashMap<>();
-    GcpLogSink mockSink = new GcpLogSink(mockLogging, locationTags, emptyCustomTags, flushLimit);
+    GcpLogSink mockSink = new GcpLogSink(mockLogging, destProjectName, locationTags,
+        emptyCustomTags, flushLimit);
     mockSink.write(logProto);
 
     ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
@@ -157,15 +161,37 @@ public class GcpLogSinkTest {
     verify(mockLogging, times(1)).write(logEntrySetCaptor.capture());
     for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
       LogEntry entry = it.next();
-      assertEquals(entry.getLabels(), expectedEmptyLabels);
-      assertEquals(entry.getPayload().getData(), expectedStructLogProto);
+      assertThat(entry.getLabels()).isEqualTo(expectedEmptyLabels);
+      assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
+    }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void emptyCustomTags_setSourceProject() {
+    Map<String, String> emptyCustomTags = null;
+    String destinationProjectId = "DESTINATION_PROJECT";
+    Map<String, String> expectedLabels = GcpLogSink.getCustomTags(emptyCustomTags, locationTags,
+        destinationProjectId);
+    GcpLogSink mockSink = new GcpLogSink(mockLogging, destinationProjectId, locationTags,
+        emptyCustomTags, flushLimit);
+    mockSink.write(logProto);
+
+    ArgumentCaptor<Collection<LogEntry>> logEntrySetCaptor = ArgumentCaptor.forClass(
+        (Class) Collection.class);
+    verify(mockLogging, times(1)).write(logEntrySetCaptor.capture());
+    for (Iterator<LogEntry> it = logEntrySetCaptor.getValue().iterator(); it.hasNext(); ) {
+      LogEntry entry = it.next();
+      assertThat(entry.getLabels()).isEqualTo(expectedLabels);
+      assertThat(entry.getPayload().getData()).isEqualTo(expectedStructLogProto);
     }
   }
 
   @Test
   public void verifyFlush() {
     long lowerFlushLimit = 2L;
-    GcpLogSink mockSink = new GcpLogSink(mockLogging, locationTags, customTags, lowerFlushLimit);
+    GcpLogSink mockSink = new GcpLogSink(mockLogging, destProjectName, locationTags,
+        customTags, lowerFlushLimit);
     mockSink.write(logProto);
     verify(mockLogging, never()).flush();
     mockSink.write(logProto);
@@ -177,7 +203,8 @@ public class GcpLogSinkTest {
 
   @Test
   public void verifyClose() throws Exception {
-    Sink mockSink = new GcpLogSink(mockLogging, locationTags, customTags, flushLimit);
+    Sink mockSink = new GcpLogSink(mockLogging, destProjectName, locationTags,
+        customTags, flushLimit);
     mockSink.write(logProto);
     verify(mockLogging, times(1)).write(anyIterable());
     mockSink.close();

@@ -24,14 +24,15 @@ import com.google.cloud.logging.Payload.JsonPayload;
 import com.google.cloud.logging.Severity;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.internal.JsonParser;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import java.io.IOException;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -71,15 +72,16 @@ public class GcpLogSink implements Sink {
    */
   public GcpLogSink(String destinationProjectId, Map<String, String> locationTags,
       Map<String, String> customTags, Long flushLimit) {
-    this(createLoggingClient(destinationProjectId), locationTags, customTags, flushLimit);
+    this(createLoggingClient(destinationProjectId), destinationProjectId, locationTags,
+        customTags, flushLimit);
 
   }
 
   @VisibleForTesting
-  GcpLogSink(Logging client, Map<String, String> locationTags, Map<String, String> customTags,
-      Long flushLimit) {
+  GcpLogSink(Logging client, String destinationProjectId, Map<String, String> locationTags,
+      Map<String, String> customTags, Long flushLimit) {
     this.gcpLoggingClient = client;
-    this.customTags = customTags != null ? customTags : new HashMap<>();
+    this.customTags = getCustomTags(customTags, locationTags, destinationProjectId);
     this.kubernetesResource = getResource(locationTags);
     this.flushLimit = flushLimit != null ? flushLimit : FALLBACK_FLUSH_LIMIT;
     this.flushCounter = 0L;
@@ -109,6 +111,7 @@ public class GcpLogSink implements Sink {
               .setSeverity(logEntrySeverity)
               .setLogName(DEFAULT_LOG_NAME)
               .setResource(kubernetesResource);
+
       if (!customTags.isEmpty()) {
         grpcLogEntryBuilder.setLabels(customTags);
       }
@@ -125,6 +128,21 @@ public class GcpLogSink implements Sink {
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Caught exception while writing to Cloud Logging", e);
     }
+  }
+
+  @VisibleForTesting
+  static Map<String, String> getCustomTags(Map<String, String> customTags,
+      Map<String, String> locationTags, String destinationProjectId) {
+    ImmutableMap.Builder<String, String> tagsBuilder = ImmutableMap.builder();
+    String sourceProjectId = locationTags.get("project_id");
+    if (!Strings.isNullOrEmpty(destinationProjectId)
+        && !Objects.equals(sourceProjectId, destinationProjectId)) {
+      tagsBuilder.put("source_project_id", sourceProjectId);
+    }
+    if (customTags != null) {
+      tagsBuilder.putAll(customTags);
+    }
+    return tagsBuilder.build();
   }
 
   @VisibleForTesting
