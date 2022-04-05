@@ -175,7 +175,7 @@ public class OkHttpClientTransportTest {
   private OkHttpClientTransport clientTransport;
   private final MockFrameReader frameReader = new MockFrameReader();
   private final Socket socket = new MockSocket(frameReader);
-  private FrameWriter frameWriter = mock(FrameWriter.class, AdditionalAnswers.delegatesTo(
+  private final FrameWriter frameWriter = mock(FrameWriter.class, AdditionalAnswers.delegatesTo(
       new MockFrameWriter(socket, capturedBuffer)));
   private ExecutorService executor = Executors.newCachedThreadPool();
   private long nanoTime; // backs a ticker, for testing ping round-trip time measurement
@@ -261,7 +261,7 @@ public class OkHttpClientTransportTest {
     clientTransport = new OkHttpClientTransport(
         address,
         "hostname",
-        /*agent=*/ null,
+        /*userAgent=*/ null,
         EAG_ATTRS,
         executor,
         socketFactory,
@@ -2492,10 +2492,6 @@ public class OkHttpClientTransportTest {
       // which will eventually close the socket.
       this.socket = socket;
       this.capturedBuffer = capturedBuffer;
-    }
-
-    void setSocket(Socket socket) {
-      this.socket = socket;
     }
 
     @Override
