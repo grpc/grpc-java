@@ -16,9 +16,11 @@
 
 package io.grpc.gcp.observability;
 
+import io.grpc.Internal;
 import io.grpc.observabilitylog.v1.GrpcLogRecord.EventType;
 import java.util.List;
 
+@Internal
 public interface ObservabilityConfig {
   /** Is Cloud Logging enabled. */
   boolean isEnableCloudLogging();
