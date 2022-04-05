@@ -33,7 +33,8 @@ import okio.Timeout;
 
 /**
  * A sink that asynchronously write / flushes a buffer internally. AsyncSink provides flush
- * coalescing to minimize network packing transmit.
+ * coalescing to minimize network packing transmit. Because I/O is handled asynchronously, most I/O
+ * exceptions will be delivered via a callback.
  */
 final class AsyncSink implements Sink {
 

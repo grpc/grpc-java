@@ -357,7 +357,7 @@ public final class FakeClock {
 
   public long currentTimeMillis() {
     // Normally millis and nanos are of different epochs. Add an offset to simulate that.
-    return TimeUnit.NANOSECONDS.toMillis(currentTimeNanos + 123456789L);
+    return TimeUnit.NANOSECONDS.toMillis(currentTimeNanos + 1234567890123456789L);
   }
 
   /**

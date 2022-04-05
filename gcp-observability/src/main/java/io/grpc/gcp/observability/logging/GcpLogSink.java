@@ -24,14 +24,15 @@ import com.google.cloud.logging.Payload.JsonPayload;
 import com.google.cloud.logging.Severity;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.internal.JsonParser;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import java.io.IOException;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -49,12 +50,12 @@ public class GcpLogSink implements Sink {
   private static final Set<String> kubernetesResourceLabelSet
       = ImmutableSet.of("project_id", "location", "cluster_name", "namespace_name",
       "pod_name", "container_name");
-  private static final int FALLBACK_FLUSH_LIMIT = 100;
+  private static final long FALLBACK_FLUSH_LIMIT = 100L;
   private final Map<String, String> customTags;
   private final Logging gcpLoggingClient;
   private final MonitoredResource kubernetesResource;
-  private final int flushLimit;
-  private int flushCounter;
+  private final Long flushLimit;
+  private long flushCounter;
 
   private static Logging createLoggingClient(String projectId) {
     LoggingOptions.Builder builder = LoggingOptions.newBuilder();
@@ -70,19 +71,20 @@ public class GcpLogSink implements Sink {
    * @param destinationProjectId cloud project id to write logs
    */
   public GcpLogSink(String destinationProjectId, Map<String, String> locationTags,
-      Map<String, String> customTags, int flushLimit) {
-    this(createLoggingClient(destinationProjectId), locationTags, customTags, flushLimit);
+      Map<String, String> customTags, Long flushLimit) {
+    this(createLoggingClient(destinationProjectId), destinationProjectId, locationTags,
+        customTags, flushLimit);
 
   }
 
   @VisibleForTesting
-  GcpLogSink(Logging client, Map<String, String> locationTags, Map<String, String> customTags,
-      int flushLimit) {
+  GcpLogSink(Logging client, String destinationProjectId, Map<String, String> locationTags,
+      Map<String, String> customTags, Long flushLimit) {
     this.gcpLoggingClient = client;
-    this.customTags = customTags != null ? customTags : new HashMap<>();
+    this.customTags = getCustomTags(customTags, locationTags, destinationProjectId);
     this.kubernetesResource = getResource(locationTags);
-    this.flushLimit = flushLimit != 0 ? flushLimit : FALLBACK_FLUSH_LIMIT;
-    this.flushCounter = 0;
+    this.flushLimit = flushLimit != null ? flushLimit : FALLBACK_FLUSH_LIMIT;
+    this.flushCounter = 0L;
   }
 
   /**
@@ -109,6 +111,7 @@ public class GcpLogSink implements Sink {
               .setSeverity(logEntrySeverity)
               .setLogName(DEFAULT_LOG_NAME)
               .setResource(kubernetesResource);
+
       if (!customTags.isEmpty()) {
         grpcLogEntryBuilder.setLabels(customTags);
       }
@@ -116,15 +119,30 @@ public class GcpLogSink implements Sink {
       synchronized (this) {
         logger.log(Level.FINEST, "Writing gRPC event : {0} to Cloud Logging", event);
         gcpLoggingClient.write(Collections.singleton(grpcLogEntry));
-        flushCounter += 1;
+        flushCounter = ++flushCounter;
         if (flushCounter >= flushLimit) {
           gcpLoggingClient.flush();
-          flushCounter = 0;
+          flushCounter = 0L;
         }
       }
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Caught exception while writing to Cloud Logging", e);
     }
+  }
+
+  @VisibleForTesting
+  static Map<String, String> getCustomTags(Map<String, String> customTags,
+      Map<String, String> locationTags, String destinationProjectId) {
+    ImmutableMap.Builder<String, String> tagsBuilder = ImmutableMap.builder();
+    String sourceProjectId = locationTags.get("project_id");
+    if (!Strings.isNullOrEmpty(destinationProjectId)
+        && !Objects.equals(sourceProjectId, destinationProjectId)) {
+      tagsBuilder.put("source_project_id", sourceProjectId);
+    }
+    if (customTags != null) {
+      tagsBuilder.putAll(customTags);
+    }
+    return tagsBuilder.build();
   }
 
   @VisibleForTesting

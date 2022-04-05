@@ -18,7 +18,6 @@ package io.grpc.gcp.observability.interceptors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -118,14 +117,13 @@ public class LogHelperTest {
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress socketAddress = new InetSocketAddress(address, port);
-    assertEquals(
-        Address
+    assertThat(LogHelper.socketAddressToProto(socketAddress))
+        .isEqualTo(Address
             .newBuilder()
             .setType(Address.Type.TYPE_IPV4)
             .setAddress("127.0.0.1")
             .setIpPort(12345)
-            .build(),
-        LogHelper.socketAddressToProto(socketAddress));
+            .build());
   }
 
   @Test
@@ -134,14 +132,13 @@ public class LogHelperTest {
     InetAddress address = InetAddress.getByName("2001:db8:0:0:0:0:2:1");
     int port = 12345;
     InetSocketAddress socketAddress = new InetSocketAddress(address, port);
-    assertEquals(
-        Address
+    assertThat(LogHelper.socketAddressToProto(socketAddress))
+        .isEqualTo(Address
             .newBuilder()
             .setType(Address.Type.TYPE_IPV6)
             .setAddress("2001:db8::2:1") // RFC 5952 section 4: ipv6 canonical form required
             .setIpPort(12345)
-            .build(),
-        LogHelper.socketAddressToProto(socketAddress));
+            .build());
   }
 
   @Test
@@ -152,31 +149,30 @@ public class LogHelperTest {
         return "some-socket-address";
       }
     };
-    assertEquals(
-        Address.newBuilder()
+    assertThat(LogHelper.socketAddressToProto(unknownSocket))
+        .isEqualTo(Address.newBuilder()
             .setType(Address.Type.TYPE_UNKNOWN)
             .setAddress("some-socket-address")
-            .build(),
-        LogHelper.socketAddressToProto(unknownSocket));
+            .build());
   }
 
   @Test
   public void metadataToProto_empty() {
-    assertEquals(
-        GrpcLogRecord.newBuilder()
+    assertThat(metadataToProtoTestHelper(
+            EventType.GRPC_CALL_REQUEST_HEADER, new Metadata(), Integer.MAX_VALUE))
+        .isEqualTo(GrpcLogRecord.newBuilder()
             .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
             .setMetadata(
                 GrpcLogRecord.Metadata.getDefaultInstance())
-            .build(),
-        metadataToProtoTestHelper(
-            EventType.GRPC_CALL_REQUEST_HEADER, new Metadata(), Integer.MAX_VALUE));
+            .build());
   }
 
   @Test
   public void metadataToProto() {
     int nonEmptyMetadataSize = 30;
-    assertEquals(
-        GrpcLogRecord.newBuilder()
+    assertThat(metadataToProtoTestHelper(
+            EventType.GRPC_CALL_REQUEST_HEADER, nonEmptyMetadata, Integer.MAX_VALUE))
+        .isEqualTo(GrpcLogRecord.newBuilder()
             .setEventType(EventType.GRPC_CALL_REQUEST_HEADER)
             .setMetadata(
                 GrpcLogRecord.Metadata
@@ -186,9 +182,7 @@ public class LogHelperTest {
                     .addEntry(ENTRY_C)
                     .build())
             .setPayloadSize(nonEmptyMetadataSize)
-            .build(),
-        metadataToProtoTestHelper(
-            EventType.GRPC_CALL_REQUEST_HEADER, nonEmptyMetadata, Integer.MAX_VALUE));
+            .build());
   }
 
   @Test
@@ -199,51 +193,44 @@ public class LogHelperTest {
   @Test
   public void metadataToProto_truncated() {
     // 0 byte limit not enough for any metadata
-    assertEquals(
-        io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata.getDefaultInstance(),
-        LogHelper.createMetadataProto(nonEmptyMetadata, 0).payload.build());
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 0).payload.build())
+        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata.getDefaultInstance());
     // not enough bytes for first key value
-    assertEquals(
-        io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata.getDefaultInstance(),
-        LogHelper.createMetadataProto(nonEmptyMetadata, 9).payload.build());
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 9).payload.build())
+        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata.getDefaultInstance());
     // enough for first key value
-    assertEquals(
-        io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 10).payload.build())
+        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
             .newBuilder()
             .addEntry(ENTRY_A)
-            .build(),
-        LogHelper.createMetadataProto(nonEmptyMetadata, 10).payload.build());
+            .build());
     // Test edge cases for >= 2 key values
-    assertEquals(
-        io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 19).payload.build())
+        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
             .newBuilder()
             .addEntry(ENTRY_A)
-            .build(),
-        LogHelper.createMetadataProto(nonEmptyMetadata, 19).payload.build());
-    assertEquals(
-        io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
-            .newBuilder()
-            .addEntry(ENTRY_A)
-            .addEntry(ENTRY_B)
-            .build(),
-        LogHelper.createMetadataProto(nonEmptyMetadata, 20).payload.build());
-    assertEquals(
-        io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
+            .build());
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 20).payload.build())
+        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
             .newBuilder()
             .addEntry(ENTRY_A)
             .addEntry(ENTRY_B)
-            .build(),
-        LogHelper.createMetadataProto(nonEmptyMetadata, 29).payload.build());
+            .build());
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 29).payload.build())
+        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
+            .newBuilder()
+            .addEntry(ENTRY_A)
+            .addEntry(ENTRY_B)
+            .build());
 
     // not truncated: enough for all keys
-    assertEquals(
-        io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
+    assertThat(LogHelper.createMetadataProto(nonEmptyMetadata, 30).payload.build())
+        .isEqualTo(io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata
             .newBuilder()
             .addEntry(ENTRY_A)
             .addEntry(ENTRY_B)
             .addEntry(ENTRY_C)
-            .build(),
-        LogHelper.createMetadataProto(nonEmptyMetadata, 30).payload.build());
+            .build());
   }
 
   @Test
@@ -251,12 +238,11 @@ public class LogHelperTest {
     byte[] bytes
         = "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes(
         StandardCharsets.US_ASCII);
-    assertEquals(
-        GrpcLogRecord.newBuilder()
+    assertThat(messageTestHelper(bytes, Integer.MAX_VALUE))
+        .isEqualTo(GrpcLogRecord.newBuilder()
             .setMessage(ByteString.copyFrom(bytes))
             .setPayloadSize(bytes.length)
-            .build(),
-        messageTestHelper(bytes, Integer.MAX_VALUE));
+            .build());
   }
 
   @Test
@@ -264,22 +250,20 @@ public class LogHelperTest {
     byte[] bytes
         = "this is a long message: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".getBytes(
         StandardCharsets.US_ASCII);
-    assertEquals(
-        GrpcLogRecord.newBuilder()
+    assertThat(messageTestHelper(bytes, 0))
+        .isEqualTo(GrpcLogRecord.newBuilder()
             .setPayloadSize(bytes.length)
             .setPayloadTruncated(true)
-            .build(),
-        messageTestHelper(bytes, 0));
+            .build());
 
     int limit = 10;
     String truncatedMessage = "this is a ";
-    assertEquals(
-        GrpcLogRecord.newBuilder()
+    assertThat(messageTestHelper(bytes, limit))
+        .isEqualTo(GrpcLogRecord.newBuilder()
             .setMessage(ByteString.copyFrom(truncatedMessage.getBytes(StandardCharsets.US_ASCII)))
             .setPayloadSize(bytes.length)
             .setPayloadTruncated(true)
-            .build(),
-        messageTestHelper(bytes, limit));
+            .build());
   }
 
 
@@ -569,10 +553,8 @@ public class LogHelperTest {
     int zeroHeaderBytes = 0;
     PayloadBuilder<io.grpc.observabilitylog.v1.GrpcLogRecord.Metadata.Builder> pair =
         LogHelper.createMetadataProto(metadata, zeroHeaderBytes);
-    assertEquals(
-        key.name(),
-        Objects.requireNonNull(Iterables.getOnlyElement(pair.payload.getEntryBuilderList()))
-            .getKey());
+    assertThat(Objects.requireNonNull(Iterables.getOnlyElement(pair.payload.getEntryBuilderList()))
+            .getKey()).isEqualTo(key.name());
     assertFalse(pair.truncated);
   }
 

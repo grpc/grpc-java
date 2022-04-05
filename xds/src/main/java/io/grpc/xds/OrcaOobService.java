@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.BindableService;
+import io.grpc.ExperimentalApi;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -30,7 +31,7 @@ import java.util.concurrent.TimeUnit;
  * for periodic load reports. A user should use the public set-APIs to update the server machine's
  * utilization metrics data.
  */
-@io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/9006")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/9006")
 public final class OrcaOobService {
   /**
    * Empty or invalid (non-positive) minInterval config in will be treated to this default value.

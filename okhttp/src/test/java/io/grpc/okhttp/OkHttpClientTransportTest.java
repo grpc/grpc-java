@@ -48,6 +48,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.base.Ticker;
@@ -78,18 +79,23 @@ import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.OkHttpClientTransport.ClientFrameHandler;
 import io.grpc.okhttp.OkHttpFrameLogger.Direction;
 import io.grpc.okhttp.internal.ConnectionSpec;
+import io.grpc.okhttp.internal.Protocol;
 import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.FrameReader;
 import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Header;
 import io.grpc.okhttp.internal.framed.HeadersMode;
 import io.grpc.okhttp.internal.framed.Settings;
+import io.grpc.okhttp.internal.framed.Variant;
 import io.grpc.testing.TestMethodDescriptors;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -116,6 +122,8 @@ import javax.net.SocketFactory;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLSocketFactory;
 import okio.Buffer;
+import okio.BufferedSink;
+import okio.BufferedSource;
 import okio.ByteString;
 import org.junit.After;
 import org.junit.Before;
@@ -154,8 +162,6 @@ public class OkHttpClientTransportTest {
 
   @Rule public final Timeout globalTimeout = Timeout.seconds(10);
 
-  private FrameWriter frameWriter;
-
   private MethodDescriptor<Void, Void> method = TestMethodDescriptors.voidMethod();
 
   @Mock
@@ -167,8 +173,10 @@ public class OkHttpClientTransportTest {
   private final TransportTracer transportTracer = new TransportTracer();
   private final Queue<Buffer> capturedBuffer = new ArrayDeque<>();
   private OkHttpClientTransport clientTransport;
-  private MockFrameReader frameReader;
-  private Socket socket;
+  private final MockFrameReader frameReader = new MockFrameReader();
+  private final Socket socket = new MockSocket(frameReader);
+  private final FrameWriter frameWriter = mock(FrameWriter.class, AdditionalAnswers.delegatesTo(
+      new MockFrameWriter(socket, capturedBuffer)));
   private ExecutorService executor = Executors.newCachedThreadPool();
   private long nanoTime; // backs a ticker, for testing ping round-trip time measurement
   private SettableFuture<Void> connectedFuture;
@@ -183,10 +191,6 @@ public class OkHttpClientTransportTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    frameReader = new MockFrameReader();
-    socket = new MockSocket(frameReader);
-    MockFrameWriter mockFrameWriter = new MockFrameWriter(socket, capturedBuffer);
-    frameWriter = mock(FrameWriter.class, AdditionalAnswers.delegatesTo(mockFrameWriter));
   }
 
   @After
@@ -233,12 +237,9 @@ public class OkHttpClientTransportTest {
     clientTransport = new OkHttpClientTransport(
         userAgent,
         executor,
-        frameReader,
-        frameWriter,
-        new OkHttpFrameLogger(Level.FINE, logger),
-        startId,
-        socket,
+        new FakeSocketFactory(socket),
         stopwatchSupplier,
+        new FakeVariant(frameReader, frameWriter),
         connectingCallback,
         connectedFuture,
         maxMessageSize,
@@ -249,6 +250,9 @@ public class OkHttpClientTransportTest {
     if (waitingForConnected) {
       connectedFuture.get(TIME_OUT_MS, TimeUnit.MILLISECONDS);
     }
+    if (startId != DEFAULT_START_STREAM_ID) {
+      clientTransport.setNextStreamId(startId);
+    }
   }
 
   @Test
@@ -257,7 +261,7 @@ public class OkHttpClientTransportTest {
     clientTransport = new OkHttpClientTransport(
         address,
         "hostname",
-        /*agent=*/ null,
+        /*userAgent=*/ null,
         EAG_ATTRS,
         executor,
         socketFactory,
@@ -301,6 +305,10 @@ public class OkHttpClientTransportTest {
     logger.setLevel(Level.ALL);
 
     initTransport();
+    assertThat(logs).hasSize(1);
+    LogRecord log = logs.remove(0);
+    assertThat(log.getMessage()).startsWith(Direction.OUTBOUND + " SETTINGS: ack=false");
+    assertThat(log.getLevel()).isEqualTo(Level.FINE);
 
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream =
@@ -310,7 +318,7 @@ public class OkHttpClientTransportTest {
 
     frameHandler().headers(false, false, 3, 0, grpcResponseHeaders(), HeadersMode.HTTP_20_HEADERS);
     assertThat(logs).hasSize(1);
-    LogRecord log = logs.remove(0);
+    log = logs.remove(0);
     assertThat(log.getMessage()).startsWith(Direction.INBOUND + " HEADERS: streamId=" + 3);
     assertThat(log.getLevel()).isEqualTo(Level.FINE);
 
@@ -414,7 +422,6 @@ public class OkHttpClientTransportTest {
     int initialWindowSize = 65535;
     startTransport(
             DEFAULT_START_STREAM_ID, null, true, DEFAULT_MAX_MESSAGE_SIZE, initialWindowSize, null);
-    clientTransport.sendConnectionPrefaceAndSettings();
 
     ArgumentCaptor<Settings> settings = ArgumentCaptor.forClass(Settings.class);
     verify(frameWriter, timeout(TIME_OUT_MS)).settings(settings.capture());
@@ -430,7 +437,6 @@ public class OkHttpClientTransportTest {
     int initialWindowSize = 75535; // 65535 + 10000
     startTransport(
             DEFAULT_START_STREAM_ID, null, true, DEFAULT_MAX_MESSAGE_SIZE, initialWindowSize, null);
-    clientTransport.sendConnectionPrefaceAndSettings();
 
     ArgumentCaptor<Settings> settings = ArgumentCaptor.forClass(Settings.class);
     verify(frameWriter, timeout(TIME_OUT_MS)).settings(settings.capture());
@@ -1697,6 +1703,7 @@ public class OkHttpClientTransportTest {
   @Test
   public void writeBeforeConnected() throws Exception {
     initTransportAndDelayConnected();
+    reset(frameWriter);
     final String message = "Hello Server";
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream =
@@ -1722,6 +1729,7 @@ public class OkHttpClientTransportTest {
   @Test
   public void cancelBeforeConnected() throws Exception {
     initTransportAndDelayConnected();
+    reset(frameWriter);
     final String message = "Hello Server";
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream =
@@ -2385,10 +2393,20 @@ public class OkHttpClientTransportTest {
   }
 
   private static class MockSocket extends Socket {
-    MockFrameReader frameReader;
+    final MockFrameReader frameReader;
+    private final PipedOutputStream outputStream = new PipedOutputStream();
+    private final PipedInputStream outputStreamSink = new PipedInputStream();
+    private final PipedOutputStream inputStreamSource = new PipedOutputStream();
+    private final PipedInputStream inputStream = new PipedInputStream();
 
     MockSocket(MockFrameReader frameReader) {
       this.frameReader = frameReader;
+      try {
+        outputStreamSink.connect(outputStream);
+        inputStream.connect(inputStreamSource);
+      } catch (IOException ex) {
+        throw new AssertionError(ex);
+      }
     }
 
     @Override
@@ -2399,6 +2417,16 @@ public class OkHttpClientTransportTest {
     @Override
     public SocketAddress getLocalSocketAddress() {
       return InetSocketAddress.createUnresolved("localhost", 4000);
+    }
+
+    @Override
+    public OutputStream getOutputStream() {
+      return outputStream;
+    }
+
+    @Override
+    public InputStream getInputStream() {
+      return inputStream;
     }
   }
 
@@ -2464,10 +2492,6 @@ public class OkHttpClientTransportTest {
       // which will eventually close the socket.
       this.socket = socket;
       this.capturedBuffer = capturedBuffer;
-    }
-
-    void setSocket(Socket socket) {
-      this.socket = socket;
     }
 
     @Override
@@ -2557,6 +2581,67 @@ public class OkHttpClientTransportTest {
     @Override
     public Socket createSocket(InetAddress inetAddress, int i, InetAddress inetAddress1, int i1) {
       throw exception;
+    }
+  }
+
+  static class FakeSocketFactory extends SocketFactory {
+    private Socket socket;
+
+    public FakeSocketFactory(Socket socket) {
+      this.socket = Preconditions.checkNotNull(socket, "socket");
+    }
+
+    @Override public Socket createSocket() {
+      Preconditions.checkNotNull(this.socket, "socket");
+      Socket socket = this.socket;
+      this.socket = null;
+      return socket;
+    }
+
+    @Override public Socket createSocket(InetAddress host, int port) {
+      return createSocket();
+    }
+
+    @Override public Socket createSocket(
+        InetAddress host, int port, InetAddress localAddress, int localPort) {
+      return createSocket();
+    }
+
+    @Override public Socket createSocket(String host, int port) {
+      return createSocket();
+    }
+
+    @Override public Socket createSocket(
+        String host, int port, InetAddress localHost, int localPort) {
+      return createSocket();
+    }
+  }
+
+  static class FakeVariant implements Variant {
+    private FrameReader frameReader;
+    private FrameWriter frameWriter;
+
+    public FakeVariant(FrameReader frameReader, FrameWriter frameWriter) {
+      this.frameReader = frameReader;
+      this.frameWriter = frameWriter;
+    }
+
+    @Override public Protocol getProtocol() {
+      return Protocol.HTTP_2;
+    }
+
+    @Override public FrameReader newReader(BufferedSource source, boolean client) {
+      Preconditions.checkNotNull(this.frameReader, "frameReader");
+      FrameReader frameReader = this.frameReader;
+      this.frameReader = null;
+      return frameReader;
+    }
+
+    @Override public FrameWriter newWriter(BufferedSink sink, boolean client) {
+      Preconditions.checkNotNull(this.frameWriter, "frameWriter");
+      FrameWriter frameWriter = this.frameWriter;
+      this.frameWriter = null;
+      return frameWriter;
     }
   }
 }

@@ -65,7 +65,7 @@ public class LoggingTest {
   private static final Map<String, String> customTags = ImmutableMap.of(
       "KEY1", "Value1",
       "KEY2", "VALUE2");
-  private static final int flushLimit = 100;
+  private static final long flushLimit = 100L;
 
   /**
    * Cloud logging test using LoggingChannelProvider and LoggingServerProvider.
