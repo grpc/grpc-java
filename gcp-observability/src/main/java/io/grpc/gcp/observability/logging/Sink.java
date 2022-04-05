@@ -16,13 +16,13 @@
 
 package io.grpc.gcp.observability.logging;
 
-import io.grpc.ExperimentalApi;
+import io.grpc.Internal;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 
 /**
  * Sink for GCP observability.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/8869")
+@Internal
 public interface Sink {
   /**
    * Writes the {@code message} to the destination.

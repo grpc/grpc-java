@@ -26,6 +26,7 @@ import com.google.protobuf.util.Timestamps;
 import io.grpc.Attributes;
 import io.grpc.Deadline;
 import io.grpc.Grpc;
+import io.grpc.Internal;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -51,6 +52,7 @@ import javax.annotation.Nullable;
 /**
  * Helper class for GCP observability logging.
  */
+@Internal
 public class LogHelper {
   private static final Logger logger = Logger.getLogger(LogHelper.class.getName());
 
