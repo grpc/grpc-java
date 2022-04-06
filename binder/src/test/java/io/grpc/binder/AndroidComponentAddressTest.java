@@ -27,6 +27,7 @@ import com.google.common.testing.EqualsTester;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
 public final class AndroidComponentAddressTest {
@@ -83,6 +84,37 @@ public final class AndroidComponentAddressTest {
                     .setAction("custom-action")
                     .setType("some-type")
                     .setComponent(hostComponent)))
+        .testEquals();
+  }
+
+  @Test
+  @Config(sdk = 30)
+  public void testPackageFilterEquality30AndUp() {
+    new EqualsTester()
+        .addEqualityGroup(
+            AndroidComponentAddress.forBindIntent(
+                new Intent().setAction("action").setComponent(new ComponentName("pkg", "cls"))),
+            AndroidComponentAddress.forBindIntent(
+                new Intent()
+                    .setAction("action")
+                    .setPackage("pkg")
+                    .setComponent(new ComponentName("pkg", "cls"))))
+        .testEquals();
+  }
+
+  @Test
+  @Config(sdk = 29)
+  public void testPackageFilterEqualityPre30() {
+    new EqualsTester()
+        .addEqualityGroup(
+            AndroidComponentAddress.forBindIntent(
+                new Intent().setAction("action").setComponent(new ComponentName("pkg", "cls"))))
+        .addEqualityGroup(
+            AndroidComponentAddress.forBindIntent(
+                new Intent()
+                    .setAction("action")
+                    .setPackage("pkg")
+                    .setComponent(new ComponentName("pkg", "cls"))))
         .testEquals();
   }
 }
