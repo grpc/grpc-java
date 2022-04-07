@@ -45,7 +45,6 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
