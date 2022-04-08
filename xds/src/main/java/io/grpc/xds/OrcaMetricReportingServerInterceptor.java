@@ -40,7 +40,7 @@ import java.util.Map;
  *
  * @since 1.23.0
  */
-final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
+public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
 
   private static final OrcaMetricReportingServerInterceptor INSTANCE =
       new OrcaMetricReportingServerInterceptor();

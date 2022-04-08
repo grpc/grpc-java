@@ -26,9 +26,12 @@ import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.omg.PortableInterceptor.Interceptor;
 
 /** Server that manages startup/shutdown of a single {@code TestService}. */
 public class TestServiceServer {
@@ -67,6 +70,7 @@ public class TestServiceServer {
   private int port = 8080;
   private boolean useTls = true;
   private boolean useAlts = false;
+  private boolean useOrca = false;
 
   private ScheduledExecutorService executor;
   private Server server;
@@ -107,6 +111,8 @@ public class TestServiceServer {
           usage = true;
           break;
         }
+      } else if ("use_orca".equals(key)) {
+        useOrca = Boolean.parseBoolean(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -128,6 +134,7 @@ public class TestServiceServer {
               + "\n  --local_handshaker_port=PORT"
               + "\n                        Use local ALTS handshaker service on the specified port "
               + "\n                        for testing. Only effective when --use_alts=true."
+              + "\n  --use_orca=true|false  Whether to report backend metrics. Default " + s.useOrca
       );
       System.exit(1);
     }
@@ -151,6 +158,7 @@ public class TestServiceServer {
     } else {
       serverCreds = InsecureServerCredentials.create();
     }
+    List<Interceptor> optionalInterceptors = Arrays.asList(OrcaMetricReportingServerInterceptor)
     server = Grpc.newServerBuilderForPort(port, serverCreds)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .addService(
