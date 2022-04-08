@@ -106,7 +106,11 @@ import io.envoyproxy.envoy.type.v3.Int64Range;
 import io.grpc.ClientInterceptor;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status.Code;
+import io.grpc.internal.JsonUtil;
+import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.lookup.v1.GrpcKeyBuilder;
 import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
 import io.grpc.lookup.v1.NameMatcher;
@@ -1734,11 +1738,13 @@ public class ClientXdsClientDataTest {
         .build();
 
     CdsUpdate update = ClientXdsClient.processCluster(
-        cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
-    assertThat(update.lbPolicy()).isEqualTo(CdsUpdate.LbPolicy.RING_HASH);
-    assertThat(update.minRingSize())
+        cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
+        LoadBalancerRegistry.getDefaultRegistry());
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("ring_hash_experimental");
+    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "minRingSize"))
         .isEqualTo(ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE);
-    assertThat(update.maxRingSize())
+    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "maxRingSize"))
         .isEqualTo(ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE);
   }
 
@@ -1758,9 +1764,11 @@ public class ClientXdsClientDataTest {
         .build();
 
     CdsUpdate update = ClientXdsClient.processCluster(
-        cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
-    assertThat(update.lbPolicy()).isEqualTo(CdsUpdate.LbPolicy.LEAST_REQUEST);
-    assertThat(update.choiceCount())
+        cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
+        LoadBalancerRegistry.getDefaultRegistry());
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
+    assertThat(lbConfig.getPolicyName()).isEqualTo("least_request_experimental");
+    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "choiceCount"))
         .isEqualTo(ClientXdsClient.DEFAULT_LEAST_REQUEST_CHOICE_COUNT);
   }
 
@@ -1783,7 +1791,8 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "Cluster cluster-foo.googleapis.com: transport-socket-matches not supported.");
-    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
+    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
+        LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @Test
@@ -1808,7 +1817,8 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
-    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
+    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
+        LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @Test
@@ -1835,7 +1845,8 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
-    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
+    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
+        LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @Test
@@ -1860,7 +1871,8 @@ public class ClientXdsClientDataTest {
 
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid least_request_lb_config");
-    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO);
+    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
+        LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @Test
@@ -1877,7 +1889,8 @@ public class ClientXdsClientDataTest {
                 .setServiceName("service-foo.googleapis.com"))
         .setLbPolicy(LbPolicy.ROUND_ROBIN)
         .build();
-    ClientXdsClient.processCluster(cluster1, retainedEdsResources, null, LRS_SERVER_INFO);
+    ClientXdsClient.processCluster(cluster1, retainedEdsResources, null, LRS_SERVER_INFO,
+        LoadBalancerRegistry.getDefaultRegistry());
 
     Cluster cluster2 = Cluster.newBuilder()
         .setName("cluster-foo.googleapis.com")
@@ -1890,7 +1903,8 @@ public class ClientXdsClientDataTest {
                 .setServiceName("service-foo.googleapis.com"))
         .setLbPolicy(LbPolicy.ROUND_ROBIN)
         .build();
-    ClientXdsClient.processCluster(cluster2, retainedEdsResources, null, LRS_SERVER_INFO);
+    ClientXdsClient.processCluster(cluster2, retainedEdsResources, null, LRS_SERVER_INFO,
+        LoadBalancerRegistry.getDefaultRegistry());
 
     Cluster cluster3 = Cluster.newBuilder()
         .setName("cluster-foo.googleapis.com")
@@ -1908,7 +1922,8 @@ public class ClientXdsClientDataTest {
     thrown.expectMessage(
         "Cluster cluster-foo.googleapis.com: field eds_cluster_config must be set to indicate to"
             + " use EDS over ADS or self ConfigSource");
-    ClientXdsClient.processCluster(cluster3, retainedEdsResources, null, LRS_SERVER_INFO);
+    ClientXdsClient.processCluster(cluster3, retainedEdsResources, null, LRS_SERVER_INFO,
+        LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @Test
