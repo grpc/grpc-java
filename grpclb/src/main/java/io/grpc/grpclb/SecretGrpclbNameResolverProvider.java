@@ -22,7 +22,11 @@ import io.grpc.InternalServiceProviders;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.internal.GrpcUtil;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
+import java.util.Collection;
+import java.util.Collections;
 
 /**
  * A provider for {@code io.grpc.grpclb.GrpclbNameResolver}.
@@ -84,6 +88,11 @@ final class SecretGrpclbNameResolverProvider {
     public int priority() {
       // Must be higher than DnsNameResolverProvider#priority.
       return 6;
+    }
+
+    @Override
+    protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+      return Collections.singleton(InetSocketAddress.class);
     }
   }
 }

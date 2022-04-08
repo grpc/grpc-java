@@ -19,6 +19,12 @@ package io.grpc;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
+import com.google.common.collect.ImmutableSet;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.net.URI;
+import java.util.Collection;
+import java.util.Collections;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -156,6 +162,236 @@ public class ManagedChannelRegistryTest {
     }
   }
 
+  @Test
+  public void newChannelBuilder_usesScheme() {
+    NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
+    class SocketAddress1 extends SocketAddress {
+    }
+
+    class SocketAddress2 extends SocketAddress {
+    }
+
+    nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        return Collections.singleton(SocketAddress1.class);
+      }
+    });
+    nameResolverRegistry.register(new BaseNameResolverProvider(true, 6, "sc2") {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        fail("Should not be called");
+        throw new AssertionError();
+      }
+    });
+
+    ManagedChannelRegistry registry = new ManagedChannelRegistry();
+    registry.register(new BaseProvider(true, 5) {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        return Collections.singleton(SocketAddress2.class);
+      }
+
+      @Override
+      public NewChannelBuilderResult newChannelBuilder(
+              String passedTarget, ChannelCredentials passedCreds) {
+        fail("Should not be called");
+        throw new AssertionError();
+      }
+    });
+    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+      @Override public ManagedChannelBuilder<?> delegate() {
+        throw new UnsupportedOperationException();
+      }
+    }
+
+    final ManagedChannelBuilder<?> mcb = new MockChannelBuilder();
+    registry.register(new BaseProvider(true, 4) {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        return Collections.singleton(SocketAddress1.class);
+      }
+
+      @Override
+      public NewChannelBuilderResult newChannelBuilder(
+              String passedTarget, ChannelCredentials passedCreds) {
+        return NewChannelBuilderResult.channelBuilder(mcb);
+      }
+    });
+    assertThat(
+        registry.newChannelBuilder(nameResolverRegistry, "sc1:" + target, creds)).isSameInstanceAs(
+        mcb);
+  }
+
+  @Test
+  public void newChannelBuilder_unsupportedSocketAddressTypes() {
+    NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
+    class SocketAddress1 extends SocketAddress {
+    }
+
+    class SocketAddress2 extends SocketAddress {
+    }
+
+    nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        return ImmutableSet.of(SocketAddress1.class, SocketAddress2.class);
+      }
+    });
+
+    ManagedChannelRegistry registry = new ManagedChannelRegistry();
+    registry.register(new BaseProvider(true, 5) {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        return Collections.singleton(SocketAddress2.class);
+      }
+
+      @Override
+      public NewChannelBuilderResult newChannelBuilder(
+              String passedTarget, ChannelCredentials passedCreds) {
+        fail("Should not be called");
+        throw new AssertionError();
+      }
+    });
+    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+      @Override public ManagedChannelBuilder<?> delegate() {
+        throw new UnsupportedOperationException();
+      }
+    }
+
+    registry.register(new BaseProvider(true, 4) {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        return Collections.singleton(SocketAddress1.class);
+      }
+
+      @Override
+      public NewChannelBuilderResult newChannelBuilder(
+              String passedTarget, ChannelCredentials passedCreds) {
+        fail("Should not be called");
+        throw new AssertionError();
+      }
+    });
+    try {
+      registry.newChannelBuilder(nameResolverRegistry, "sc1:" + target, creds);
+      fail("expected exception");
+    } catch (ManagedChannelRegistry.ProviderNotFoundException ex) {
+      assertThat(ex).hasMessageThat().contains("does not support 1 or more of");
+      assertThat(ex).hasMessageThat().contains("SocketAddress1");
+      assertThat(ex).hasMessageThat().contains("SocketAddress2");
+    }
+  }
+
+  @Test
+  public void newChannelBuilder_inetSocketAddress_asDefault() {
+    NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
+
+    ManagedChannelRegistry registry = new ManagedChannelRegistry();
+    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+      @Override public ManagedChannelBuilder<?> delegate() {
+        throw new UnsupportedOperationException();
+      }
+    }
+
+    final ManagedChannelBuilder<?> mcb = new MockChannelBuilder();
+    registry.register(new BaseProvider(true, 4) {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        return Collections.singleton(InetSocketAddress.class);
+      }
+
+      @Override
+      public NewChannelBuilderResult newChannelBuilder(
+              String passedTarget, ChannelCredentials passedCreds) {
+        return NewChannelBuilderResult.channelBuilder(mcb);
+      }
+    });
+    assertThat(
+        registry.newChannelBuilder(nameResolverRegistry, "sc1:" + target, creds)).isSameInstanceAs(
+        mcb);
+  }
+
+  @Test
+  public void newChannelBuilder_noSchemeUsesDefaultScheme() {
+    NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
+    class SocketAddress1 extends SocketAddress {
+    }
+
+    nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        return Collections.singleton(SocketAddress1.class);
+      }
+    });
+
+    ManagedChannelRegistry registry = new ManagedChannelRegistry();
+    class MockChannelBuilder extends ForwardingChannelBuilder<MockChannelBuilder> {
+      @Override public ManagedChannelBuilder<?> delegate() {
+        throw new UnsupportedOperationException();
+      }
+    }
+
+    final ManagedChannelBuilder<?> mcb = new MockChannelBuilder();
+    registry.register(new BaseProvider(true, 4) {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        return Collections.singleton(SocketAddress1.class);
+      }
+
+      @Override
+      public NewChannelBuilderResult newChannelBuilder(
+              String passedTarget, ChannelCredentials passedCreds) {
+        return NewChannelBuilderResult.channelBuilder(mcb);
+      }
+    });
+    assertThat(registry.newChannelBuilder(nameResolverRegistry, target, creds)).isSameInstanceAs(
+        mcb);
+  }
+
+  @Test
+  public void newChannelBuilder_badUri() {
+    NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
+    ManagedChannelRegistry registry = new ManagedChannelRegistry();
+    try {
+      registry.newChannelBuilder(nameResolverRegistry,":testing123", creds);
+      fail("expected exception");
+    } catch (ManagedChannelRegistry.ProviderNotFoundException ex) {
+      assertThat(ex).hasMessageThat().contains("Expected scheme name at index 0: :testing123");
+    }
+  }
+
+  private static class BaseNameResolverProvider extends NameResolverProvider {
+    private final boolean isAvailable;
+    private final int priority;
+    private final String defaultScheme;
+
+    public BaseNameResolverProvider(boolean isAvailable, int priority, String defaultScheme) {
+      this.isAvailable = isAvailable;
+      this.priority = priority;
+      this.defaultScheme = defaultScheme;
+    }
+
+    @Override
+    public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+      return null;
+    }
+
+    @Override
+    public String getDefaultScheme() {
+      return defaultScheme;
+    }
+
+    @Override
+    protected boolean isAvailable() {
+      return isAvailable;
+    }
+
+    @Override
+    protected int priority() {
+      return priority;
+    }
+  }
+
   private static class BaseProvider extends ManagedChannelProvider {
     private final boolean isAvailable;
     private final int priority;
@@ -183,6 +419,11 @@ public class ManagedChannelRegistryTest {
     @Override
     protected ManagedChannelBuilder<?> builderForTarget(String target) {
       throw new UnsupportedOperationException();
+    }
+
+    @Override
+    protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+      return Collections.singleton(InetSocketAddress.class);
     }
   }
 }

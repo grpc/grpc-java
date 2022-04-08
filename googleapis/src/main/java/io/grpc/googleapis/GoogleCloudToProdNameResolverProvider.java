@@ -22,7 +22,11 @@ import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.InternalSharedXdsClientPoolProvider;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -56,6 +60,11 @@ public final class GoogleCloudToProdNameResolverProvider extends NameResolverPro
   @Override
   protected int priority() {
     return 4;
+  }
+
+  @Override
+  protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+    return Collections.singleton(InetSocketAddress.class);
   }
 
   private static final class SharedXdsClientPoolProviderBootstrapSetter

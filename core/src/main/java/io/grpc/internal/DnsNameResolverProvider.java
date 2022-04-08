@@ -21,7 +21,11 @@ import com.google.common.base.Stopwatch;
 import io.grpc.InternalServiceProviders;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.URI;
+import java.util.Collection;
+import java.util.Collections;
 
 /**
  * A provider for {@link DnsNameResolver}.
@@ -74,5 +78,10 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   @Override
   public int priority() {
     return 5;
+  }
+
+  @Override
+  protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+    return Collections.singleton(InetSocketAddress.class);
   }
 }

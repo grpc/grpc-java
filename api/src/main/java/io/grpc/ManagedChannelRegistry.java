@@ -18,11 +18,18 @@ package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.GuardedBy;
@@ -144,6 +151,31 @@ public final class ManagedChannelRegistry {
   }
 
   ManagedChannelBuilder<?> newChannelBuilder(String target, ChannelCredentials creds) {
+    return newChannelBuilder(NameResolverRegistry.getDefaultRegistry(), target, creds);
+  }
+
+  @VisibleForTesting
+  ManagedChannelBuilder<?> newChannelBuilder(NameResolverRegistry nameResolverRegistry,
+      String target, ChannelCredentials creds) {
+    URI uri;
+    try {
+      uri = new URI(target);
+    } catch (URISyntaxException e) {
+      throw new ProviderNotFoundException(e.getMessage());
+    }
+    String scheme = uri.getScheme();
+    if (scheme == null) {
+      scheme = nameResolverRegistry.asFactory().getDefaultScheme();
+    }
+    Map<String, NameResolverProvider> nameResolverProviderMap
+        = nameResolverRegistry.providers();
+
+    NameResolverProvider nameResolverProvider = nameResolverProviderMap.get(scheme);
+    Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
+        = (nameResolverProvider != null)
+        ? nameResolverProvider.getSupportedSocketAddressTypes() :
+        Collections.singleton(InetSocketAddress.class);
+
     List<ManagedChannelProvider> providers = providers();
     if (providers.isEmpty()) {
       throw new ProviderNotFoundException("No functional channel service provider found. "
@@ -152,15 +184,24 @@ public final class ManagedChannelRegistry {
     }
     StringBuilder error = new StringBuilder();
     for (ManagedChannelProvider provider : providers()) {
-      ManagedChannelProvider.NewChannelBuilderResult result
-          = provider.newChannelBuilder(target, creds);
-      if (result.getChannelBuilder() != null) {
-        return result.getChannelBuilder();
+      Collection<Class<? extends SocketAddress>> channelProviderSocketAddressTypes
+          = provider.getSupportedSocketAddressTypes();
+      if (channelProviderSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
+        ManagedChannelProvider.NewChannelBuilderResult result
+            = provider.newChannelBuilder(target, creds);
+        if (result.getChannelBuilder() != null) {
+          return result.getChannelBuilder();
+        }
+        error.append("; ");
+        error.append(provider.getClass().getName());
+        error.append(": ");
+        error.append(result.getError());
+      } else {
+        error.append("; ");
+        error.append(provider.getClass().getName());
+        error.append(": does not support 1 or more of ");
+        error.append(Arrays.toString(nameResolverSocketAddressTypes.toArray()));
       }
-      error.append("; ");
-      error.append(provider.getClass().getName());
-      error.append(": ");
-      error.append(result.getError());
     }
     throw new ProviderNotFoundException(error.substring(2));
   }
