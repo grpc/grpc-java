@@ -723,8 +723,8 @@ public final class OkHttpChannelBuilder extends
   static final class OkHttpTransportFactory implements ClientTransportFactory {
     private final ObjectPool<Executor> executorPool;
     final Executor executor;
-    private final ObjectPool<ScheduledExecutorService> timeoutServicePool;
-    private final ScheduledExecutorService timeoutService;
+    private final ObjectPool<ScheduledExecutorService> scheduledExecutorServicePool;
+    final ScheduledExecutorService scheduledExecutorService;
     final TransportTracer.Factory transportTracerFactory;
     final SocketFactory socketFactory;
     @Nullable final SSLSocketFactory sslSocketFactory;
@@ -744,7 +744,7 @@ public final class OkHttpChannelBuilder extends
 
     private OkHttpTransportFactory(
         ObjectPool<Executor> executorPool,
-        ObjectPool<ScheduledExecutorService> timeoutServicePool,
+        ObjectPool<ScheduledExecutorService> scheduledExecutorServicePool,
         @Nullable SocketFactory socketFactory,
         @Nullable SSLSocketFactory sslSocketFactory,
         @Nullable HostnameVerifier hostnameVerifier,
@@ -760,8 +760,8 @@ public final class OkHttpChannelBuilder extends
         boolean useGetForSafeMethods) {
       this.executorPool = executorPool;
       this.executor = executorPool.getObject();
-      this.timeoutServicePool = timeoutServicePool;
-      this.timeoutService = timeoutServicePool.getObject();
+      this.scheduledExecutorServicePool = scheduledExecutorServicePool;
+      this.scheduledExecutorService = scheduledExecutorServicePool.getObject();
       this.socketFactory = socketFactory;
       this.sslSocketFactory = sslSocketFactory;
       this.hostnameVerifier = hostnameVerifier;
@@ -812,7 +812,7 @@ public final class OkHttpChannelBuilder extends
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
-      return timeoutService;
+      return scheduledExecutorService;
     }
 
     @Nullable
@@ -825,7 +825,7 @@ public final class OkHttpChannelBuilder extends
       }
       ClientTransportFactory factory = new OkHttpTransportFactory(
           executorPool,
-          timeoutServicePool,
+          scheduledExecutorServicePool,
           socketFactory,
           result.factory,
           hostnameVerifier,
@@ -850,7 +850,7 @@ public final class OkHttpChannelBuilder extends
       closed = true;
 
       executorPool.returnObject(executor);
-      timeoutServicePool.returnObject(timeoutService);
+      scheduledExecutorServicePool.returnObject(scheduledExecutorService);
     }
   }
 }
