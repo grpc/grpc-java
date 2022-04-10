@@ -63,7 +63,7 @@ public final class CertificateUtils {
    * @param inputStream is a {@link InputStream} from the private key file
    */
   public static PrivateKey getPrivateKey(InputStream inputStream)
-      throws UnsupportedEncodingException, IOException, NoSuchAlgorithmException,
+      throws IOException, NoSuchAlgorithmException,
       InvalidKeySpecException {
     BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"));
     String line;
