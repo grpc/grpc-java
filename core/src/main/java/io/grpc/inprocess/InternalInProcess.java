@@ -51,7 +51,8 @@ public final class InternalInProcess {
       Attributes eagAttrs,
       ObjectPool<ScheduledExecutorService> serverSchedulerPool,
       List<ServerStreamTracer.Factory> serverStreamTracerFactories,
-      ServerListener serverListener) {
+      ServerListener serverListener,
+      boolean includeCauseWithStatus) {
     return new InProcessTransport(
         name,
         maxInboundMetadataSize,
@@ -60,6 +61,7 @@ public final class InternalInProcess {
         eagAttrs,
         serverSchedulerPool,
         serverStreamTracerFactories,
-        serverListener);
+        serverListener,
+        includeCauseWithStatus);
   }
 }

@@ -79,7 +79,8 @@ public final class StandaloneInProcessTransportTest extends AbstractTransportTes
         eagAttrs(),
         schedulerPool,
         testServer.streamTracerFactories,
-        testServer.serverListener);
+        testServer.serverListener,
+        false);
   }
 
   @Override
