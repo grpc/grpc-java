@@ -21,17 +21,20 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
+import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
 import io.grpc.internal.testing.TestUtils;
-import java.util.Arrays;
+import io.grpc.xds.OrcaMetricReportingServerInterceptor;
+import io.grpc.xds.OrcaOobService;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import org.omg.PortableInterceptor.Interceptor;
 
 /** Server that manages startup/shutdown of a single {@code TestService}. */
 public class TestServiceServer {
@@ -158,14 +161,20 @@ public class TestServiceServer {
     } else {
       serverCreds = InsecureServerCredentials.create();
     }
-    List<Interceptor> optionalInterceptors = Arrays.asList(OrcaMetricReportingServerInterceptor)
-    server = Grpc.newServerBuilderForPort(port, serverCreds)
+    List<ServerInterceptor> optionalInterceptors = new ArrayList<>();
+    if (useOrca) {
+      optionalInterceptors.add(TestServiceImpl.reportQueryMetricsInterceptor());
+      optionalInterceptors.add(OrcaMetricReportingServerInterceptor.getInstance());
+    }
+    ServerBuilder<?> builder = Grpc.newServerBuilderForPort(port, serverCreds)
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .addService(
             ServerInterceptors.intercept(
-                new TestServiceImpl(executor), TestServiceImpl.interceptors()))
-        .build()
-        .start();
+                new TestServiceImpl(executor), TestServiceImpl.interceptors(optionalInterceptors)));
+    if (useOrca) {
+      builder.addService(new OrcaOobService( 1, TimeUnit.SECONDS, executor).getService());
+    }
+    server = builder.build().start();
   }
 
   @VisibleForTesting

@@ -56,7 +56,8 @@ public enum TestCases {
   VERY_LARGE_REQUEST("very large request"),
   PICK_FIRST_UNARY("all requests are sent to one server despite multiple servers are resolved"),
   RPC_SOAK("sends 'soak_iterations' large_unary rpcs in a loop, each on the same channel"),
-  CHANNEL_SOAK("sends 'soak_iterations' large_unary rpcs in a loop, each on a new channel");
+  CHANNEL_SOAK("sends 'soak_iterations' large_unary rpcs in a loop, each on a new channel"),
+  ORCA("report backend metrics per query and out-of-band");
 
   private final String description;
 

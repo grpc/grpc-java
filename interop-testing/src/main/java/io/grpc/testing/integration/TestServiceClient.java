@@ -22,6 +22,8 @@ import io.grpc.ChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
@@ -73,7 +75,7 @@ public class TestServiceClient {
   private String serverHost = "localhost";
   private String serverHostOverride;
   private int serverPort = 8080;
-  private String testCase = "empty_unary";
+  private TestCases testCase = TestCases.fromString("empty_unary");
   private boolean useTls = true;
   private boolean useAlts = false;
   private boolean useH2cUpgrade = false;
@@ -91,6 +93,7 @@ public class TestServiceClient {
   private int soakPerIterationMaxAcceptableLatencyMs = 1000;
   private int soakOverallTimeoutSeconds =
       soakIterations * soakPerIterationMaxAcceptableLatencyMs / 1000;
+  private LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
   private Tester tester = new Tester();
 
@@ -122,7 +125,7 @@ public class TestServiceClient {
       } else if ("server_port".equals(key)) {
         serverPort = Integer.parseInt(value);
       } else if ("test_case".equals(key)) {
-        testCase = value;
+        testCase = TestCases.fromString(value);
       } else if ("use_tls".equals(key)) {
         useTls = Boolean.parseBoolean(value);
       } else if ("use_upgrade".equals(key)) {
@@ -239,6 +242,10 @@ public class TestServiceClient {
   private synchronized void tearDown() {
     try {
       tester.tearDown();
+      if (customBackendMetricsLoadBalancerProvider != null) {
+        LoadBalancerRegistry.getDefaultRegistry()
+            .deregister(customBackendMetricsLoadBalancerProvider);
+      }
     } catch (RuntimeException ex) {
       throw ex;
     } catch (Exception ex) {
@@ -249,7 +256,7 @@ public class TestServiceClient {
   private void run() {
     System.out.println("Running test " + testCase);
     try {
-      runTest(TestCases.fromString(testCase));
+      runTest(testCase);
     } catch (RuntimeException ex) {
       throw ex;
     } catch (Exception ex) {
@@ -460,6 +467,12 @@ public class TestServiceClient {
             soakPerIterationMaxAcceptableLatencyMs,
             soakOverallTimeoutSeconds);
         break;
+
+      }
+
+      case ORCA: {
+        tester.testOrca();
+        break;
       }
 
       default:
@@ -517,6 +530,11 @@ public class TestServiceClient {
           channelCredentials = InsecureChannelCredentials.create();
         }
       }
+      if (TestCases.ORCA.equals(testCase)) {
+        customBackendMetricsLoadBalancerProvider = new CustomBackendMetricsLoadBalancerProvider();
+        LoadBalancerRegistry.getDefaultRegistry()
+            .register(customBackendMetricsLoadBalancerProvider);
+      }
       if (useGeneric) {
         ManagedChannelBuilder<?> channelBuilder;
         if (serverPort == 0) {
@@ -531,6 +549,9 @@ public class TestServiceClient {
         if (serviceConfig != null) {
           channelBuilder.disableServiceConfigLookUp();
           channelBuilder.defaultServiceConfig(serviceConfig);
+        }
+        if (TestCases.ORCA.equals(testCase)) {
+          channelBuilder.defaultLoadBalancingPolicy(TEST_ORCA_LB_POLICY_NAME);
         }
         return channelBuilder;
       }
@@ -554,6 +575,9 @@ public class TestServiceClient {
           nettyBuilder.disableServiceConfigLookUp();
           nettyBuilder.defaultServiceConfig(serviceConfig);
         }
+        if (TestCases.ORCA.equals(testCase)) {
+          nettyBuilder.defaultLoadBalancingPolicy(TEST_ORCA_LB_POLICY_NAME);
+        }
         return nettyBuilder.intercept(createCensusStatsClientInterceptor());
       }
 
@@ -576,6 +600,9 @@ public class TestServiceClient {
       if (serviceConfig != null) {
         okBuilder.disableServiceConfigLookUp();
         okBuilder.defaultServiceConfig(serviceConfig);
+      }
+      if (TestCases.ORCA.equals(testCase)) {
+        okBuilder.defaultLoadBalancingPolicy(TEST_ORCA_LB_POLICY_NAME);
       }
       return okBuilder.intercept(createCensusStatsClientInterceptor());
     }

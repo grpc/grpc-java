@@ -26,6 +26,7 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.internal.LogExceptionRunnable;
+import io.grpc.services.CallMetricRecorder;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.integration.Messages.Payload;
@@ -37,7 +38,9 @@ import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Queue;
@@ -435,11 +438,34 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   }
 
   /** Returns interceptors necessary for full service implementation. */
-  public static List<ServerInterceptor> interceptors() {
-    return Arrays.asList(
+  public static List<ServerInterceptor> interceptors(
+      Collection<ServerInterceptor> optionalInterceptors) {
+    ArrayList<ServerInterceptor> interceptorList = new ArrayList<>(optionalInterceptors);
+    interceptorList.addAll(Arrays.asList(
         echoRequestHeadersInterceptor(Util.METADATA_KEY),
         echoRequestMetadataInHeaders(Util.ECHO_INITIAL_METADATA_KEY),
-        echoRequestMetadataInTrailers(Util.ECHO_TRAILING_METADATA_KEY));
+        echoRequestMetadataInTrailers(Util.ECHO_TRAILING_METADATA_KEY)));
+    return interceptorList;
+  }
+
+  /**
+   * Update hardcoded backend metrics data for the call.
+   */
+  public static ServerInterceptor reportQueryMetricsInterceptor() {
+    return new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+          ServerCall<ReqT, RespT> call, Metadata headers,
+          ServerCallHandler<ReqT, RespT> next) {
+        return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
+          @Override
+          public void request(int numMessages) {
+            super.request(numMessages);
+            CallMetricRecorder.getCurrent().recordCallMetric("queue", 2.0);
+          }
+        }, headers);
+      }
+    };
   }
 
   /**
