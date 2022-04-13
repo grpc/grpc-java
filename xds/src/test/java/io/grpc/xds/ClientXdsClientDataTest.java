@@ -30,7 +30,6 @@ import com.google.protobuf.Message;
 import com.google.protobuf.StringValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.UInt32Value;
-import com.google.protobuf.UInt64Value;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
@@ -38,9 +37,6 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.EdsClusterConfig;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
-import io.envoyproxy.envoy.config.cluster.v3.Cluster.LeastRequestLbConfig;
-import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
-import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig.HashFunction;
 import io.envoyproxy.envoy.config.core.v3.Address;
 import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
 import io.envoyproxy.envoy.config.core.v3.CidrRange;
@@ -108,9 +104,6 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status.Code;
-import io.grpc.internal.JsonUtil;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.lookup.v1.GrpcKeyBuilder;
 import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
 import io.grpc.lookup.v1.NameMatcher;
@@ -1740,12 +1733,8 @@ public class ClientXdsClientDataTest {
     CdsUpdate update = ClientXdsClient.processCluster(
         cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
         LoadBalancerRegistry.getDefaultRegistry());
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("ring_hash_experimental");
-    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "minRingSize"))
-        .isEqualTo(ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE);
-    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "maxRingSize"))
-        .isEqualTo(ClientXdsClient.DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE);
+    assertThat(update.lbPolicySelection().getProvider().getPolicyName()).isEqualTo(
+        "ring_hash_experimental");
   }
 
   @Test
@@ -1766,10 +1755,8 @@ public class ClientXdsClientDataTest {
     CdsUpdate update = ClientXdsClient.processCluster(
         cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
         LoadBalancerRegistry.getDefaultRegistry());
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("least_request_experimental");
-    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "choiceCount"))
-        .isEqualTo(ClientXdsClient.DEFAULT_LEAST_REQUEST_CHOICE_COUNT);
+    assertThat(update.lbPolicySelection().getProvider().getPolicyName()).isEqualTo(
+        "least_request_experimental");
   }
 
   @Test
@@ -1791,86 +1778,6 @@ public class ClientXdsClientDataTest {
     thrown.expect(ResourceInvalidException.class);
     thrown.expectMessage(
         "Cluster cluster-foo.googleapis.com: transport-socket-matches not supported.");
-    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
-        LoadBalancerRegistry.getDefaultRegistry());
-  }
-
-  @Test
-  public void parseCluster_ringHashLbPolicy_invalidRingSizeConfig_minGreaterThanMax()
-      throws ResourceInvalidException {
-    Cluster cluster = Cluster.newBuilder()
-        .setName("cluster-foo.googleapis.com")
-        .setType(DiscoveryType.EDS)
-        .setEdsClusterConfig(
-            EdsClusterConfig.newBuilder()
-                .setEdsConfig(
-                    ConfigSource.newBuilder()
-                        .setAds(AggregatedConfigSource.getDefaultInstance()))
-                .setServiceName("service-foo.googleapis.com"))
-        .setLbPolicy(LbPolicy.RING_HASH)
-        .setRingHashLbConfig(
-            RingHashLbConfig.newBuilder()
-                .setHashFunction(HashFunction.XX_HASH)
-                .setMinimumRingSize(UInt64Value.newBuilder().setValue(1000L))
-                .setMaximumRingSize(UInt64Value.newBuilder().setValue(100L)))
-        .build();
-
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
-    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
-        LoadBalancerRegistry.getDefaultRegistry());
-  }
-
-  @Test
-  public void parseCluster_ringHashLbPolicy_invalidRingSizeConfig_tooLargeRingSize()
-      throws ResourceInvalidException {
-    Cluster cluster = Cluster.newBuilder()
-        .setName("cluster-foo.googleapis.com")
-        .setType(DiscoveryType.EDS)
-        .setEdsClusterConfig(
-            EdsClusterConfig.newBuilder()
-                .setEdsConfig(
-                    ConfigSource.newBuilder()
-                        .setAds(AggregatedConfigSource.getDefaultInstance()))
-                .setServiceName("service-foo.googleapis.com"))
-        .setLbPolicy(LbPolicy.RING_HASH)
-        .setRingHashLbConfig(
-            RingHashLbConfig.newBuilder()
-                .setHashFunction(HashFunction.XX_HASH)
-                .setMinimumRingSize(UInt64Value.newBuilder().setValue(1000L))
-                .setMaximumRingSize(
-                    UInt64Value.newBuilder()
-                        .setValue(ClientXdsClient.MAX_RING_HASH_LB_POLICY_RING_SIZE + 1)))
-        .build();
-
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid ring_hash_lb_config");
-    ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
-        LoadBalancerRegistry.getDefaultRegistry());
-  }
-
-  @Test
-  public void parseCluster_leastRequestLbPolicy_invalidChoiceCountConfig_tooSmallChoiceCount()
-      throws ResourceInvalidException {
-    ClientXdsClient.enableLeastRequest = true;
-    Cluster cluster = Cluster.newBuilder()
-        .setName("cluster-foo.googleapis.com")
-        .setType(DiscoveryType.EDS)
-        .setEdsClusterConfig(
-            EdsClusterConfig.newBuilder()
-                .setEdsConfig(
-                    ConfigSource.newBuilder()
-                        .setAds(AggregatedConfigSource.getDefaultInstance()))
-                .setServiceName("service-foo.googleapis.com"))
-        .setLbPolicy(LbPolicy.LEAST_REQUEST)
-        .setLeastRequestLbConfig(
-            LeastRequestLbConfig.newBuilder()
-                .setChoiceCount(UInt32Value.newBuilder().setValue(1))
-        )
-        .build();
-
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Cluster cluster-foo.googleapis.com: invalid least_request_lb_config");
     ClientXdsClient.processCluster(cluster, new HashSet<String>(), null, LRS_SERVER_INFO,
         LoadBalancerRegistry.getDefaultRegistry());
   }
