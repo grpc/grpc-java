@@ -68,8 +68,6 @@ final class RingHashLoadBalancer extends LoadBalancer {
 
   private List<RingEntry> ring;
   private ConnectivityState currentState;
-  // If we need to proactively start connecting, simply iterate through all the subchannels.
-  // Alternatively, we can do it more fairly and effectively.
   private Iterator<Subchannel> connectionAttemptIterator = subchannels.values().iterator();
 
   RingHashLoadBalancer(Helper helper) {
@@ -255,24 +253,6 @@ final class RingHashLoadBalancer extends LoadBalancer {
     // TODO(chengyuanzhang): avoid unnecessary reprocess caused by duplicated server addr updates
     helper.updateBalancingState(overallState, picker);
     currentState = overallState;
-    // While the ring_hash policy is reporting TRANSIENT_FAILURE, it will
-    // not be getting any pick requests from the priority policy.
-    // However, because the ring_hash policy does not attempt to
-    // reconnect to subchannels unless it is getting pick requests,
-    // it will need special handling to ensure that it will eventually
-    // recover from TRANSIENT_FAILURE state once the problem is resolved.
-    // Specifically, it will make sure that it is attempting to connect to
-    // at least one subchannel at any given time.  After a given subchannel
-    // fails a connection attempt, it will move on to the next subchannel
-    // in the ring.  It will keep doing this until one of the subchannels
-    // successfully connects, at which point it will report READY and stop
-    // proactively trying to connect.  The policy will remain in
-    // TRANSIENT_FAILURE until at least one subchannel becomes connected,
-    // even if subchannels are in state CONNECTING during that time.
-    //
-    // Note that we do the same thing when the policy is in state
-    // CONNECTING, just to ensure that we don't remain in CONNECTING state
-    // indefinitely if there are no new picks coming in.
     if (start_connection_attempt) {
       if (!connectionAttemptIterator.hasNext()) {
         connectionAttemptIterator = subchannels.values().iterator();
