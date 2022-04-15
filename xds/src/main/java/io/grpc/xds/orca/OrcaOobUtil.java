@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.orca;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;

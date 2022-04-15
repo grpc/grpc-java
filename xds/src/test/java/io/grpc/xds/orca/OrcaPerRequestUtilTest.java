@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.orca;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -30,8 +30,9 @@ import static org.mockito.Mockito.when;
 import com.github.xds.data.orca.v3.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
-import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
-import io.grpc.xds.OrcaPerRequestUtil.OrcaReportingTracerFactory;
+import io.grpc.xds.orca.OrcaPerRequestUtil;
+import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
+import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaReportingTracerFactory;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;

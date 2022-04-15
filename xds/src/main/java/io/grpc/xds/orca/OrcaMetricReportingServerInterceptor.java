@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.orca;
 
 import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
