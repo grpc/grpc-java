@@ -666,6 +666,7 @@ public class RingHashLoadBalancerTest {
     }
     verify(helper, atLeastOnce())
         .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verifyConnection(3);
 
     // Picking subchannel triggers connection. RPC hash hits server0.
     PickSubchannelArgs args = new PickSubchannelArgsImpl(
@@ -676,6 +677,7 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription())
         .isEqualTo("[FakeSocketAddress-server0] unreachable");
+    verifyConnection(1);
   }
 
   @Test
