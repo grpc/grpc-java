@@ -34,7 +34,7 @@ import java.util.List;
  * Utility class that provides method for {@link LoadBalancer} to install listeners to receive
  * per-request backend cost metrics in the format of Open Request Cost Aggregation (ORCA).
  */
-abstract class OrcaPerRequestUtil {
+public abstract class OrcaPerRequestUtil {
   private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER = new ClientStreamTracer() {};
   private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
       new ClientStreamTracer.Factory() {

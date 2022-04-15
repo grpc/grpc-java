@@ -40,7 +40,7 @@ import java.util.Map;
  *
  * @since 1.23.0
  */
-final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
+public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
 
   private static final OrcaMetricReportingServerInterceptor INSTANCE =
       new OrcaMetricReportingServerInterceptor();
@@ -48,7 +48,7 @@ final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
   @VisibleForTesting
   static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
       Metadata.Key.of(
-          "x-endpoint-load-metrics-bin",
+          "endpoint-load-metrics-bin",
           ProtoUtils.metadataMarshaller(OrcaLoadReport.getDefaultInstance()));
 
   @VisibleForTesting
