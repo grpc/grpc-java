@@ -23,7 +23,6 @@ import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.rls.CachingRlsLbClient.RLS_DATA_KEY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -55,12 +54,12 @@ import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.rls.CachingRlsLbClient.CacheEntry;
 import io.grpc.rls.CachingRlsLbClient.CachedRouteLookupResponse;
 import io.grpc.rls.CachingRlsLbClient.RlsPicker;
-import io.grpc.rls.DoNotUseDirectScheduledExecutorService.FakeTimeProvider;
 import io.grpc.rls.LbPolicyConfiguration.ChildLoadBalancingPolicy;
 import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.LruCache.EvictionListener;
@@ -130,13 +129,11 @@ public class CachingRlsLbClientTest {
       new ChildLbResolvedAddressFactory(
           ImmutableList.of(new EquivalentAddressGroup(socketAddress)), Attributes.EMPTY);
   private final TestLoadBalancerProvider lbProvider = new TestLoadBalancerProvider();
-  private final DoNotUseDirectScheduledExecutorService fakeScheduledExecutorService =
-      mock(DoNotUseDirectScheduledExecutorService.class, CALLS_REAL_METHODS);
-  private final FakeTimeProvider fakeTimeProvider =
-      fakeScheduledExecutorService.getFakeTimeProvider();
+  private final FakeClock fakeClock = new FakeClock();
   private final StaticFixedDelayRlsServerImpl rlsServerImpl =
       new StaticFixedDelayRlsServerImpl(
-          TimeUnit.MILLISECONDS.toNanos(SERVER_LATENCY_MILLIS), fakeScheduledExecutorService);
+          TimeUnit.MILLISECONDS.toNanos(SERVER_LATENCY_MILLIS),
+          fakeClock.getScheduledExecutorService());
   private final ChildLoadBalancingPolicy childLbPolicy =
       new ChildLoadBalancingPolicy("target", Collections.<String, Object>emptyMap(), lbProvider);
   private final Helper helper =
@@ -158,7 +155,7 @@ public class CachingRlsLbClientTest {
             .setHelper(helper)
             .setLbPolicyConfig(lbPolicyConfiguration)
             .setThrottler(fakeThrottler)
-            .setTimeProvider(fakeTimeProvider)
+            .setTicker(fakeClock.getTicker())
             .build();
   }
 
@@ -200,19 +197,19 @@ public class CachingRlsLbClientTest {
     assertThat(resp.isPending()).isTrue();
 
     // server response
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
 
     // cache hit for staled entry
-    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.staleAgeInNanos(), TimeUnit.NANOSECONDS);
+    fakeClock.forwardTime(ROUTE_LOOKUP_CONFIG.staleAgeInNanos(), TimeUnit.NANOSECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
 
     // async refresh finishes
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
     inOrder
         .verify(evictionListener)
         .onEviction(eq(routeLookupRequest), any(CacheEntry.class), eq(EvictionType.REPLACED));
@@ -222,7 +219,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.hasData()).isTrue();
 
     // existing cache expired
-    fakeTimeProvider.forwardTime(ROUTE_LOOKUP_CONFIG.maxAgeInNanos(), TimeUnit.NANOSECONDS);
+    fakeClock.forwardTime(ROUTE_LOOKUP_CONFIG.maxAgeInNanos(), TimeUnit.NANOSECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
 
@@ -256,7 +253,7 @@ public class CachingRlsLbClientTest {
             .setHelper(helper)
             .setLbPolicyConfig(lbPolicyConfiguration)
             .setThrottler(fakeThrottler)
-            .setTimeProvider(fakeTimeProvider)
+            .setTicker(fakeClock.getTicker())
             .build();
     RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
@@ -270,7 +267,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.isPending()).isTrue();
 
     // server response
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
@@ -296,7 +293,7 @@ public class CachingRlsLbClientTest {
 
     assertThat(resp.hasError()).isTrue();
 
-    fakeTimeProvider.forwardTime(10, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
     // initially backed off entry is backed off again
     verify(evictionListener)
         .onEviction(eq(routeLookupRequest), any(CacheEntry.class), eq(EvictionType.REPLACED));
@@ -307,14 +304,14 @@ public class CachingRlsLbClientTest {
 
     // let it pass throttler
     fakeThrottler.nextResult = false;
-    fakeTimeProvider.forwardTime(10, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
 
     assertThat(resp.isPending()).isTrue();
 
     // server responses
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
 
@@ -337,7 +334,7 @@ public class CachingRlsLbClientTest {
     // valid channel
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.isPending()).isTrue();
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
@@ -369,7 +366,7 @@ public class CachingRlsLbClientTest {
         RouteLookupRequest.create(ImmutableMap.<String, String>of());
     CachedRouteLookupResponse errorResp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(errorResp.isPending()).isTrue();
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     errorResp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(errorResp.hasError()).isTrue();
@@ -405,7 +402,7 @@ public class CachingRlsLbClientTest {
 
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.isPending()).isTrue();
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasData()).isTrue();
@@ -418,7 +415,7 @@ public class CachingRlsLbClientTest {
     // request2 has same target, it should reuse childPolicyWrapper
     CachedRouteLookupResponse resp2 = getInSyncContext(routeLookupRequest2);
     assertThat(resp2.isPending()).isTrue();
-    fakeTimeProvider.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
     resp2 = getInSyncContext(routeLookupRequest2);
     assertThat(resp2.hasData()).isTrue();
@@ -670,7 +667,7 @@ public class CachingRlsLbClientTest {
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
-      return fakeScheduledExecutorService;
+      return fakeClock.getScheduledExecutorService();
     }
 
     @Override

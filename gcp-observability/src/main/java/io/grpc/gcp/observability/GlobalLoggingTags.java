@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.util.Strings;
 import com.google.auth.http.HttpTransportFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
@@ -50,6 +51,13 @@ final class GlobalLoggingTags {
     customTags = customTagsBuilder.build();
   }
 
+  private static String applyTrim(String value) {
+    if (!Strings.isNullOrEmpty(value)) {
+      value = value.trim();
+    }
+    return value;
+  }
+
   Map<String, String> getLocationTags() {
     return locationTags;
   }
@@ -71,10 +79,11 @@ final class GlobalLoggingTags {
       String hostnameFile, String cgroupFile) {
     // namespace name: contents of file /var/run/secrets/kubernetes.io/serviceaccount/namespace
     populateFromFileContents(customTags, "namespace_name",
-        namespaceFile, (value) -> value.trim());
+        namespaceFile, GlobalLoggingTags::applyTrim);
 
     // pod_name: hostname i.e. contents of /etc/hostname
-    populateFromFileContents(customTags, "pod_name", hostnameFile, (value) -> value.trim());
+    populateFromFileContents(customTags, "pod_name", hostnameFile,
+        GlobalLoggingTags::applyTrim);
 
     // container_id: parsed from /proc/self/cgroup . Note: only works for Linux-based containers
     populateFromFileContents(customTags, "container_id", cgroupFile,

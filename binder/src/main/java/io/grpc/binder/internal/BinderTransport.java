@@ -29,6 +29,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.TransactionTooLargeException;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -58,7 +59,6 @@ import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
-import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -567,7 +567,7 @@ public abstract class BinderTransport
       this.securityPolicy = securityPolicy;
       this.offloadExecutor = offloadExecutorPool.getObject();
       numInUseStreams = new AtomicInteger();
-      pingTracker = new PingTracker(TimeProvider.SYSTEM_TIME_PROVIDER, (id) -> sendPing(id));
+      pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
 
       serviceBinding =
           new ServiceBinding(

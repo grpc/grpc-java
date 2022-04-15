@@ -39,6 +39,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -121,8 +122,10 @@ public class CdsLoadBalancer2Test {
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_RESOLVER_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider("round_robin"));
-    lbRegistry.register(new FakeLoadBalancerProvider("ring_hash_experimental"));
-    lbRegistry.register(new FakeLoadBalancerProvider("least_request_experimental"));
+    lbRegistry.register(
+        new FakeLoadBalancerProvider("ring_hash_experimental", new RingHashLoadBalancerProvider()));
+    lbRegistry.register(new FakeLoadBalancerProvider("least_request_experimental",
+        new LeastRequestLoadBalancerProvider()));
     loadBalancer = new CdsLoadBalancer2(helper, lbRegistry);
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -539,9 +542,15 @@ public class CdsLoadBalancer2Test {
 
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {
     private final String policyName;
+    private final LoadBalancerProvider configParsingDelegate;
 
     FakeLoadBalancerProvider(String policyName) {
+      this(policyName, null);
+    }
+
+    FakeLoadBalancerProvider(String policyName, LoadBalancerProvider configParsingDelegate) {
       this.policyName = policyName;
+      this.configParsingDelegate = configParsingDelegate;
     }
 
     @Override
@@ -564,6 +573,15 @@ public class CdsLoadBalancer2Test {
     @Override
     public String getPolicyName() {
       return policyName;
+    }
+
+    @Override
+    public NameResolver.ConfigOrError parseLoadBalancingPolicyConfig(
+        Map<String, ?> rawLoadBalancingPolicyConfig) {
+      if (configParsingDelegate != null) {
+        return configParsingDelegate.parseLoadBalancingPolicyConfig(rawLoadBalancingPolicyConfig);
+      }
+      return super.parseLoadBalancingPolicyConfig(rawLoadBalancingPolicyConfig);
     }
   }
 

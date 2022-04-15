@@ -27,6 +27,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.protobuf.util.JsonFormat;
+import io.grpc.Internal;
 import io.grpc.internal.JsonParser;
 import io.grpc.observabilitylog.v1.GrpcLogRecord;
 import java.io.IOException;
@@ -40,6 +41,7 @@ import java.util.logging.Logger;
 /**
  * Sink for Google Cloud Logging.
  */
+@Internal
 public class GcpLogSink implements Sink {
   private final Logger logger = Logger.getLogger(GcpLogSink.class.getName());
 

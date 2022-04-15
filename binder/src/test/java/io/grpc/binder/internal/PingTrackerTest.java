@@ -50,7 +50,7 @@ public final class PingTrackerTest {
     callback = new TestCallback();
     pingTracker =
         new PingTracker(
-            clock.getTimeProvider(),
+            clock.getTicker(),
             (id) -> {
               sentPings.add(id);
               if (pingFailureStatus != null) {

@@ -150,9 +150,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       String name, int maxInboundMetadataSize, String authority, String userAgent,
       Attributes eagAttrs, ObjectPool<ScheduledExecutorService> serverSchedulerPool,
       List<ServerStreamTracer.Factory> serverStreamTracerFactories,
-      ServerListener serverListener) {
+      ServerListener serverListener, boolean includeCauseWithStatus) {
     this(new InProcessSocketAddress(name), maxInboundMetadataSize, authority, userAgent, eagAttrs,
-        Optional.of(serverListener), false);
+        Optional.of(serverListener), includeCauseWithStatus);
     this.serverMaxInboundMetadataSize = maxInboundMetadataSize;
     this.serverSchedulerPool = serverSchedulerPool;
     this.serverStreamTracerFactories = serverStreamTracerFactories;

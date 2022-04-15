@@ -17,7 +17,6 @@
 package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_SIZE;
 import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_UPDATE_RATIO;
 
@@ -52,7 +51,6 @@ import io.grpc.internal.InUseStateAggregator;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
 import io.grpc.internal.SerializingExecutor;
-import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
@@ -162,6 +160,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final Executor executor;
   // Wrap on executor, to guarantee some operations be executed serially.
   private final SerializingExecutor serializingExecutor;
+  private final ScheduledExecutorService scheduler;
   private final int maxMessageSize;
   private int connectionUnacknowledgedBytesRead;
   private ClientFrameHandler clientFrameHandler;
@@ -191,7 +190,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @GuardedBy("lock")
   private final Deque<OkHttpClientStream> pendingStreams = new LinkedList<>();
   private final ConnectionSpec connectionSpec;
-  private ScheduledExecutorService scheduler;
   private KeepAliveManager keepAliveManager;
   private boolean enableKeepAlive;
   private long keepAliveTimeNanos;
@@ -227,87 +225,64 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   SettableFuture<Void> connectedFuture;
 
   public OkHttpClientTransport(
+      OkHttpChannelBuilder.OkHttpTransportFactory transportFactory,
       InetSocketAddress address,
       String authority,
       @Nullable String userAgent,
       Attributes eagAttrs,
-      Executor executor,
-      @Nullable SocketFactory socketFactory,
-      @Nullable SSLSocketFactory sslSocketFactory,
-      @Nullable HostnameVerifier hostnameVerifier,
-      ConnectionSpec connectionSpec,
-      int maxMessageSize,
-      int initialWindowSize,
       @Nullable HttpConnectProxiedSocketAddress proxiedAddr,
-      Runnable tooManyPingsRunnable,
-      int maxInboundMetadataSize,
-      TransportTracer transportTracer,
-      boolean useGetForSafeMethods) {
+      Runnable tooManyPingsRunnable) {
     this(
+        transportFactory,
         address,
         authority,
         userAgent,
         eagAttrs,
-        executor,
-        socketFactory,
-        sslSocketFactory,
-        hostnameVerifier,
-        connectionSpec,
         GrpcUtil.STOPWATCH_SUPPLIER,
         new Http2(),
-        maxMessageSize,
-        initialWindowSize,
         proxiedAddr,
-        tooManyPingsRunnable,
-        maxInboundMetadataSize,
-        transportTracer,
-        useGetForSafeMethods);
+        tooManyPingsRunnable);
   }
 
   private OkHttpClientTransport(
+      OkHttpChannelBuilder.OkHttpTransportFactory transportFactory,
       InetSocketAddress address,
       String authority,
       @Nullable String userAgent,
       Attributes eagAttrs,
-      Executor executor,
-      @Nullable SocketFactory socketFactory,
-      @Nullable SSLSocketFactory sslSocketFactory,
-      @Nullable HostnameVerifier hostnameVerifier,
-      ConnectionSpec connectionSpec,
       Supplier<Stopwatch> stopwatchFactory,
       Variant variant,
-      int maxMessageSize,
-      int initialWindowSize,
       @Nullable HttpConnectProxiedSocketAddress proxiedAddr,
-      Runnable tooManyPingsRunnable,
-      int maxInboundMetadataSize,
-      TransportTracer transportTracer,
-      boolean useGetForSafeMethods) {
+      Runnable tooManyPingsRunnable) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.defaultAuthority = authority;
-    this.maxMessageSize = maxMessageSize;
-    this.initialWindowSize = initialWindowSize;
-    this.executor = Preconditions.checkNotNull(executor, "executor");
-    serializingExecutor = new SerializingExecutor(executor);
+    this.maxMessageSize = transportFactory.maxMessageSize;
+    this.initialWindowSize = transportFactory.flowControlWindow;
+    this.executor = Preconditions.checkNotNull(transportFactory.executor, "executor");
+    serializingExecutor = new SerializingExecutor(transportFactory.executor);
+    this.scheduler = Preconditions.checkNotNull(
+        transportFactory.scheduledExecutorService, "scheduledExecutorService");
     // Client initiated streams are odd, server initiated ones are even. Server should not need to
     // use it. We start clients at 3 to avoid conflicting with HTTP negotiation.
     nextStreamId = 3;
-    this.socketFactory = socketFactory == null ? SocketFactory.getDefault() : socketFactory;
-    this.sslSocketFactory = sslSocketFactory;
-    this.hostnameVerifier = hostnameVerifier;
-    this.connectionSpec = Preconditions.checkNotNull(connectionSpec, "connectionSpec");
+    this.socketFactory = transportFactory.socketFactory == null
+        ? SocketFactory.getDefault() : transportFactory.socketFactory;
+    this.sslSocketFactory = transportFactory.sslSocketFactory;
+    this.hostnameVerifier = transportFactory.hostnameVerifier;
+    this.connectionSpec = Preconditions.checkNotNull(
+        transportFactory.connectionSpec, "connectionSpec");
     this.stopwatchFactory = Preconditions.checkNotNull(stopwatchFactory, "stopwatchFactory");
     this.variant = Preconditions.checkNotNull(variant, "variant");
     this.userAgent = GrpcUtil.getGrpcUserAgent("okhttp", userAgent);
     this.proxiedAddr = proxiedAddr;
     this.tooManyPingsRunnable =
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
-    this.maxInboundMetadataSize = maxInboundMetadataSize;
-    this.transportTracer = Preconditions.checkNotNull(transportTracer);
+    this.maxInboundMetadataSize = transportFactory.maxInboundMetadataSize;
+    this.transportTracer = transportFactory.transportTracerFactory.create();
     this.logId = InternalLogId.allocate(getClass(), address.toString());
     this.attributes = Attributes.newBuilder()
         .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs).build();
-    this.useGetForSafeMethods = useGetForSafeMethods;
+    this.useGetForSafeMethods = transportFactory.useGetForSafeMethods;
     initTransportTracer();
   }
 
@@ -316,36 +291,23 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
    */
   @VisibleForTesting
   OkHttpClientTransport(
+      OkHttpChannelBuilder.OkHttpTransportFactory transportFactory,
       String userAgent,
-      Executor executor,
-      @Nullable SocketFactory socketFactory,
       Supplier<Stopwatch> stopwatchFactory,
       Variant variant,
       @Nullable Runnable connectingCallback,
       SettableFuture<Void> connectedFuture,
-      int maxMessageSize,
-      int initialWindowSize,
-      Runnable tooManyPingsRunnable,
-      TransportTracer transportTracer) {
+      Runnable tooManyPingsRunnable) {
     this(
+        transportFactory,
         new InetSocketAddress("127.0.0.1", 80),
         "notarealauthority:80",
         userAgent,
         Attributes.EMPTY,
-        executor,
-        socketFactory,
-        null,
-        null,
-        OkHttpChannelBuilder.INTERNAL_DEFAULT_CONNECTION_SPEC,
         stopwatchFactory,
         variant,
-        maxMessageSize,
-        initialWindowSize,
         null,
-        tooManyPingsRunnable,
-        Integer.MAX_VALUE,
-        transportTracer,
-        false);
+        tooManyPingsRunnable);
     this.connectingCallback = connectingCallback;
     this.connectedFuture = Preconditions.checkNotNull(connectedFuture, "connectedFuture");
   }
@@ -510,7 +472,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     this.listener = Preconditions.checkNotNull(listener, "listener");
 
     if (enableKeepAlive) {
-      scheduler = SharedResourceHolder.get(TIMER_SERVICE);
       keepAliveManager = new KeepAliveManager(
           new ClientKeepAlivePinger(this), scheduler, keepAliveTimeNanos, keepAliveTimeoutNanos,
           keepAliveWithoutCalls);
@@ -987,8 +948,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
     if (keepAliveManager != null) {
       keepAliveManager.onTransportTermination();
-      // KeepAliveManager should stop using the scheduler after onTransportTermination gets called.
-      scheduler = SharedResourceHolder.release(TIMER_SERVICE, scheduler);
     }
 
     if (ping != null) {
