@@ -152,12 +152,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
     connectionAttemptIterator = subchannels.values().iterator();
     int randomAdvance = random.nextInt(subchannels.size());
     while (randomAdvance-- > 0) {
-      if (!connectionAttemptIterator.hasNext()) {
-        connectionAttemptIterator = subchannels.values().iterator();
-        connectionAttemptIterator.next();
-      } else {
-        connectionAttemptIterator.next();
-      }
+      connectionAttemptIterator.next();
     }
 
     // Update the picker before shutting down the subchannels, to reduce the chance of race
@@ -228,7 +223,6 @@ final class RingHashLoadBalancer extends LoadBalancer {
    */
   private void updateBalancingState() {
     checkState(!subchannels.isEmpty(), "no subchannel has been created");
-    ConnectivityState overallState = null;
     boolean start_connection_attempt = false;
     int num_idle_ = 0;
     int num_ready_ = 0;
@@ -247,6 +241,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
         num_idle_++;
       }
     }
+    ConnectivityState overallState;
     if (num_ready_ > 0) {
       overallState = READY;
     } else if (num_transient_failure_ >= 2) {
@@ -289,15 +284,7 @@ final class RingHashLoadBalancer extends LoadBalancer {
       if (!connectionAttemptIterator.hasNext()) {
         connectionAttemptIterator = subchannels.values().iterator();
       }
-      if (connectionAttemptIterator.hasNext()) {
-        final Subchannel finalSubchannel = connectionAttemptIterator.next();
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            finalSubchannel.requestConnection();
-          }
-        });
-      }
+      connectionAttemptIterator.next().requestConnection();
     }
   }
 
