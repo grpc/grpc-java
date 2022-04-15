@@ -43,6 +43,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 /**
@@ -68,9 +69,8 @@ final class RingHashLoadBalancer extends LoadBalancer {
 
   private List<RingEntry> ring;
   private ConnectivityState currentState;
-  // If we need to proactively start connecting, simply iterate through all the subchannels.
-  // Alternatively, we can do it more fairly and effectively.
   private Iterator<Subchannel> connectionAttemptIterator = subchannels.values().iterator();
+  private final Random random = new Random();
 
   RingHashLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -146,7 +146,19 @@ final class RingHashLoadBalancer extends LoadBalancer {
     for (EquivalentAddressGroup addr : removedAddrs) {
       removedSubchannels.add(subchannels.remove(addr));
     }
+    // If we need to proactively start connecting, iterate through all the subchannels, starting
+    // at a random position.
+    // Alternatively, we should better start at the same position.
     connectionAttemptIterator = subchannels.values().iterator();
+    int randomAdvance = random.nextInt(subchannels.size());
+    while (randomAdvance-- > 0) {
+      if (!connectionAttemptIterator.hasNext()) {
+        connectionAttemptIterator = subchannels.values().iterator();
+        connectionAttemptIterator.next();
+      } else {
+        connectionAttemptIterator.next();
+      }
+    }
 
     // Update the picker before shutting down the subchannels, to reduce the chance of race
     // between picking a subchannel and shutting it down.

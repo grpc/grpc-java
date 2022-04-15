@@ -548,11 +548,7 @@ public class RingHashLoadBalancerTest {
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("unreachable")));
     verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    verify(subchannels.get(Collections.singletonList(servers.get(2))))
-        .requestConnection();
-    Subchannel attempted = connectionRequestedQueue.poll();
-    assertThat(attempted).isNotNull();
-    clearInvocations(attempted);
+    verifyConnection(1);
 
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
@@ -613,16 +609,18 @@ public class RingHashLoadBalancerTest {
         ConnectivityStateInfo.forTransientFailure(
             Status.PERMISSION_DENIED.withDescription("permission denied")));
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    verify(subchannels.get(Collections.singletonList(servers.get(1))))
-        .requestConnection();  // LB attempts to recover by itself
+    verifyConnection(2); // LB attempts to recover by itself
 
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isFalse();  // fail the RPC
     assertThat(result.getStatus().getCode())
         .isEqualTo(Code.UNAVAILABLE);  // with error status for the original server hit by hash
     assertThat(result.getStatus().getDescription()).isEqualTo("unreachable");
-    verify(subchannels.get(Collections.singletonList(servers.get(1))), times(2))
-        .requestConnection();  // kickoff connection to server3 (next first non-failing)
+    verify(subchannels.get(Collections.singletonList(servers.get(1))))
+        .requestConnection(); // kickoff connection to server3 (next first non-failing)
+    // TODO: zivy@
+    //verify(subchannels.get(Collections.singletonList(servers.get(0)))).requestConnection();
+    //verify(subchannels.get(Collections.singletonList(servers.get(2)))).requestConnection();
 
     // Now connecting to server1.
     deliverSubchannelState(
