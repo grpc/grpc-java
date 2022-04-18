@@ -618,9 +618,8 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().getDescription()).isEqualTo("unreachable");
     verify(subchannels.get(Collections.singletonList(servers.get(1))))
         .requestConnection(); // kickoff connection to server3 (next first non-failing)
-    // TODO: zivy@
-    //verify(subchannels.get(Collections.singletonList(servers.get(0)))).requestConnection();
-    //verify(subchannels.get(Collections.singletonList(servers.get(2)))).requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(0)))).requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(2)))).requestConnection();
 
     // Now connecting to server1.
     deliverSubchannelState(
@@ -664,6 +663,7 @@ public class RingHashLoadBalancerTest {
     }
     verify(helper, atLeastOnce())
         .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verifyConnection(3);
 
     // Picking subchannel triggers connection. RPC hash hits server0.
     PickSubchannelArgs args = new PickSubchannelArgsImpl(
@@ -674,6 +674,233 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(result.getStatus().getDescription())
         .isEqualTo("[FakeSocketAddress-server0] unreachable");
+    verify(subchannels.get(Collections.singletonList(servers.get(0))))
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(1))))
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(2))))
+        .requestConnection();
+  }
+
+  @Test
+  public void firstSubchannelIdle() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+
+    deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(1))),
+        ConnectivityStateInfo.forTransientFailure(
+        Status.UNAVAILABLE.withDescription("unreachable")));
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verifyConnection(1);
+
+    // Picking subchannel triggers connection. RPC hash hits server0.
+    PickSubchannelArgs args = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    verify(subchannels.get(Collections.singletonList(servers.get(0))))
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(2))), never())
+        .requestConnection();
+  }
+
+  @Test
+  public void firstSubchannelConnecting() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+
+    deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(0))),
+        ConnectivityStateInfo.forNonError(CONNECTING));
+    deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(1))),
+        ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+
+    // Picking subchannel triggers connection.
+    PickSubchannelArgs args = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    verify(subchannels.get(Collections.singletonList(servers.get(0))), never())
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(2))), never())
+        .requestConnection();
+  }
+
+  @Test
+  public void firstSubchannelFailure() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+    // ring:
+    //   "[FakeSocketAddress-server1]_0"
+    //   "[FakeSocketAddress-server0]_0"
+    //   "[FakeSocketAddress-server2]_0"
+
+    deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(0))),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNAVAILABLE.withDescription("unreachable")));
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verifyConnection(1);
+
+    // Picking subchannel triggers connection.
+    PickSubchannelArgs args = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    verify(subchannels.get(Collections.singletonList(servers.get(0))))
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(2))))
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
+        .requestConnection();
+  }
+
+  @Test
+  public void secondSubchannelConnecting() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+    // ring:
+    //   "[FakeSocketAddress-server1]_0"
+    //   "[FakeSocketAddress-server0]_0"
+    //   "[FakeSocketAddress-server2]_0"
+
+    Subchannel firstSubchannel = subchannels.get(Collections.singletonList(servers.get(0)));
+    deliverSubchannelState(firstSubchannel,
+        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription(
+            firstSubchannel.getAddresses().getAddresses() + "unreachable")));
+    deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(2))),
+        ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verifyConnection(1);
+
+    // Picking subchannel triggers connection.
+    PickSubchannelArgs args = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isTrue();
+    verify(subchannels.get(Collections.singletonList(servers.get(0))))
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(2))), never())
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
+        .requestConnection();
+  }
+
+  @Test
+  public void secondSubchannelFailure() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+    // ring:
+    //   "[FakeSocketAddress-server1]_0"
+    //   "[FakeSocketAddress-server0]_0"
+    //   "[FakeSocketAddress-server2]_0"
+
+    Subchannel firstSubchannel = subchannels.get(Collections.singletonList(servers.get(0)));
+    deliverSubchannelState(firstSubchannel,
+        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription(
+            firstSubchannel.getAddresses().getAddresses() + " unreachable")));
+    deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(2))),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNAVAILABLE.withDescription("unreachable")));
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verifyConnection(2);
+
+    // Picking subchannel triggers connection.
+    PickSubchannelArgs args = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isFalse();
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .isEqualTo("[FakeSocketAddress-server0] unreachable");
+    verify(subchannels.get(Collections.singletonList(servers.get(0))))
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(2))))
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(1))))
+        .requestConnection();
+  }
+
+  @Test
+  public void thirdSubchannelConnecting() {
+    // Map each server address to exactly one ring entry.
+    RingHashConfig config = new RingHashConfig(3, 3);
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+    loadBalancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
+    verify(helper, times(3)).createSubchannel(any(CreateSubchannelArgs.class));
+    verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
+    // ring:
+    //   "[FakeSocketAddress-server1]_0"
+    //   "[FakeSocketAddress-server0]_0"
+    //   "[FakeSocketAddress-server2]_0"
+
+    Subchannel firstSubchannel = subchannels.get(Collections.singletonList(servers.get(0)));
+    deliverSubchannelState(firstSubchannel,
+        ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription(
+            firstSubchannel.getAddresses().getAddresses() + " unreachable")));
+    deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(2))),
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNAVAILABLE.withDescription("unreachable")));
+    deliverSubchannelState(subchannels.get(Collections.singletonList(servers.get(1))),
+        ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(helper, times(2)).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verifyConnection(3);
+
+    // Picking subchannel triggers connection.
+    PickSubchannelArgs args = new PickSubchannelArgsImpl(
+        TestMethodDescriptors.voidMethod(), new Metadata(),
+        CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
+    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
+    assertThat(result.getStatus().isOk()).isFalse();
+    assertThat(result.getStatus().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(result.getStatus().getDescription())
+        .isEqualTo("[FakeSocketAddress-server0] unreachable");
+    verify(subchannels.get(Collections.singletonList(servers.get(0))))
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(2))))
+        .requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
+        .requestConnection();
   }
 
   @Test
@@ -706,8 +933,7 @@ public class RingHashLoadBalancerTest {
         CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
-    // enabled me. there is a bug in picker behavior
-    // verify(subchannels.get(Collections.singletonList(servers.get(0)))).requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(0)))).requestConnection();
     verify(subchannels.get(Collections.singletonList(servers.get(2)))).requestConnection();
     verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
         .requestConnection();
