@@ -95,7 +95,8 @@ public abstract class OrcaOobUtil {
   }
 
   /**
-   * Creates a new {@link LoadBalancer.Helper} with provided {@link OrcaOobReportListener} installed
+   * Creates a new {@link io.grpc.LoadBalancer.Helper} with provided
+   * {@link OrcaOobReportListener} installed
    * to receive callback when an out-of-band ORCA report is received.
    *
    * <p>Example usages:
@@ -197,9 +198,9 @@ public abstract class OrcaOobUtil {
   }
 
   /**
-   * Blueprint for the wrapper that wraps a {@link LoadBalancer.Helper} with the capability of
-   * allowing {@link LoadBalancer}s interested in receiving out-of-band ORCA reports to update the
-   * reporting configuration such as reporting interval.
+   * Blueprint for the wrapper that wraps a {@link io.grpc.LoadBalancer.Helper} with the capability
+   * of allowing {@link LoadBalancer}s interested in receiving out-of-band ORCA reports to update
+   * the reporting configuration such as reporting interval.
    */
   public abstract static class OrcaReportingHelperWrapper {
 
@@ -220,8 +221,8 @@ public abstract class OrcaOobUtil {
     public abstract void setReportingConfig(OrcaReportingConfig config);
 
     /**
-     * Returns a wrapped {@link LoadBalancer.Helper}. Subchannels created through it will retrieve
-     * ORCA load reports if the server supports it.
+     * Returns a wrapped {@link io.grpc.LoadBalancer.Helper}. Subchannels created through it will
+     * retrieve ORCA load reports if the server supports it.
      */
     public abstract LoadBalancer.Helper asHelper();
   }
