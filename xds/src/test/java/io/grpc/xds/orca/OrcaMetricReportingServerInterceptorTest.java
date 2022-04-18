@@ -119,8 +119,7 @@ public class OrcaMetricReportingServerInterceptorTest {
 
   @Test
   public void shareCallMetricRecorderInContext() throws IOException {
-    final CallMetricRecorder callMetricRecorder =
-        InternalCallMetricRecorder.newCallMetricRecorder();
+    final CallMetricRecorder callMetricRecorder = new CallMetricRecorder();
     ServerStreamTracer.Factory callMetricRecorderSharingStreamTracerFactory =
         new ServerStreamTracer.Factory() {
       @Override
@@ -128,7 +127,7 @@ public class OrcaMetricReportingServerInterceptorTest {
         return new ServerStreamTracer() {
           @Override
           public Context filterContext(Context context) {
-            return context.withValue(InternalCallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
+            return context.withValue(CallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
           }
         };
       }
