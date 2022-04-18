@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package io.grpc.services;
+package io.grpc.xds.orca;
 
+import com.github.xds.data.orca.v3.OrcaLoadReport;
 import io.grpc.Context;
 import io.grpc.Internal;
-import java.util.Map;
 
 /**
  * Internal {@link CallMetricRecorder} accessor.  This is intended for usage internal to the gRPC
@@ -37,7 +37,7 @@ public final class InternalCallMetricRecorder {
     return new CallMetricRecorder();
   }
 
-  public static Map<String, Double> finalizeAndDump(CallMetricRecorder recorder) {
+  public static OrcaLoadReport finalizeAndDump(CallMetricRecorder recorder) {
     return recorder.finalizeAndDump();
   }
 }

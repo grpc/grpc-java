@@ -28,9 +28,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.protobuf.ProtoUtils;
-import io.grpc.services.CallMetricRecorder;
-import io.grpc.services.InternalCallMetricRecorder;
-import java.util.Map;
 
 /**
  * A {@link ServerInterceptor} that intercepts a {@link ServerCall} by running server-side RPC
@@ -73,12 +70,9 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
         new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void close(Status status, Metadata trailers) {
-            Map<String, Double> metricValues =
-                InternalCallMetricRecorder.finalizeAndDump(finalCallMetricRecorder);
-            // Only attach a metric report if there are some metric values to be reported.
-            if (!metricValues.isEmpty()) {
-              OrcaLoadReport report =
-                  OrcaLoadReport.newBuilder().putAllRequestCost(metricValues).build();
+            OrcaLoadReport report = InternalCallMetricRecorder
+                .finalizeAndDump(finalCallMetricRecorder);
+            if (!report.equals(OrcaLoadReport.getDefaultInstance())) {
               trailers.put(ORCA_ENDPOINT_LOAD_METRICS_KEY, report);
             }
             super.close(status, trailers);
