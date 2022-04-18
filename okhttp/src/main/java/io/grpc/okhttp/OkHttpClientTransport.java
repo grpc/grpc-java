@@ -17,7 +17,6 @@
 package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
 import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_SIZE;
 import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_UPDATE_RATIO;
 
@@ -52,7 +51,6 @@ import io.grpc.internal.InUseStateAggregator;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
 import io.grpc.internal.SerializingExecutor;
-import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
@@ -162,6 +160,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final Executor executor;
   // Wrap on executor, to guarantee some operations be executed serially.
   private final SerializingExecutor serializingExecutor;
+  private final ScheduledExecutorService scheduler;
   private final int maxMessageSize;
   private int connectionUnacknowledgedBytesRead;
   private ClientFrameHandler clientFrameHandler;
@@ -191,7 +190,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @GuardedBy("lock")
   private final Deque<OkHttpClientStream> pendingStreams = new LinkedList<>();
   private final ConnectionSpec connectionSpec;
-  private ScheduledExecutorService scheduler;
   private KeepAliveManager keepAliveManager;
   private boolean enableKeepAlive;
   private long keepAliveTimeNanos;
@@ -262,6 +260,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     this.initialWindowSize = transportFactory.flowControlWindow;
     this.executor = Preconditions.checkNotNull(transportFactory.executor, "executor");
     serializingExecutor = new SerializingExecutor(transportFactory.executor);
+    this.scheduler = Preconditions.checkNotNull(
+        transportFactory.scheduledExecutorService, "scheduledExecutorService");
     // Client initiated streams are odd, server initiated ones are even. Server should not need to
     // use it. We start clients at 3 to avoid conflicting with HTTP negotiation.
     nextStreamId = 3;
@@ -472,7 +472,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     this.listener = Preconditions.checkNotNull(listener, "listener");
 
     if (enableKeepAlive) {
-      scheduler = SharedResourceHolder.get(TIMER_SERVICE);
       keepAliveManager = new KeepAliveManager(
           new ClientKeepAlivePinger(this), scheduler, keepAliveTimeNanos, keepAliveTimeoutNanos,
           keepAliveWithoutCalls);
@@ -949,8 +948,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
     if (keepAliveManager != null) {
       keepAliveManager.onTransportTermination();
-      // KeepAliveManager should stop using the scheduler after onTransportTermination gets called.
-      scheduler = SharedResourceHolder.release(TIMER_SERVICE, scheduler);
     }
 
     if (ping != null) {

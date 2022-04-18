@@ -43,9 +43,6 @@ import io.envoyproxy.envoy.config.cluster.v3.CircuitBreakers.Thresholds;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.CustomClusterType;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster.DiscoveryType;
-import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
-import io.envoyproxy.envoy.config.cluster.v3.Cluster.LeastRequestLbConfig;
-import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.core.v3.HttpProtocolOptions;
 import io.envoyproxy.envoy.config.core.v3.RoutingPriority;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
@@ -70,12 +67,18 @@ import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
 import io.grpc.InternalLogId;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
+import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.internal.TimeProvider;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.AuthorityInfo;
@@ -136,14 +139,6 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   @VisibleForTesting
   static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
   private static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
-  @VisibleForTesting
-  static final long DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE = 1024L;
-  @VisibleForTesting
-  static final long DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE = 8 * 1024 * 1024L;
-  @VisibleForTesting
-  static final int DEFAULT_LEAST_REQUEST_CHOICE_COUNT = 2;
-  @VisibleForTesting
-  static final long MAX_RING_HASH_LB_POLICY_RING_SIZE = 8 * 1024 * 1024L;
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";
   @VisibleForTesting
@@ -211,6 +206,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         }
       });
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
+  private final LoadBalancerRegistry loadBalancerRegistry
+      = LoadBalancerRegistry.getDefaultRegistry();
   private final Map<ServerInfo, AbstractXdsClient> serverChannelMap = new HashMap<>();
   private final Map<String, ResourceSubscriber> ldsResourceSubscribers = new HashMap<>();
   private final Map<String, ResourceSubscriber> rdsResourceSubscribers = new HashMap<>();
@@ -1598,8 +1595,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
         if (getBootstrapInfo() != null && getBootstrapInfo().certProviders() != null) {
           certProviderInstances = getBootstrapInfo().certProviders().keySet();
         }
-        cdsUpdate =
-            processCluster(cluster, retainedEdsResources, certProviderInstances, serverInfo);
+        cdsUpdate = processCluster(cluster, retainedEdsResources, certProviderInstances, serverInfo,
+            loadBalancerRegistry);
       } catch (ResourceInvalidException e) {
         errors.add(
             "CDS response Cluster '" + clusterName + "' validation error: " + e.getMessage());
@@ -1618,7 +1615,8 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
 
   @VisibleForTesting
   static CdsUpdate processCluster(Cluster cluster, Set<String> retainedEdsResources,
-      Set<String> certProviderInstances, ServerInfo serverInfo)
+      Set<String> certProviderInstances, ServerInfo serverInfo,
+      LoadBalancerRegistry loadBalancerRegistry)
       throws ResourceInvalidException {
     StructOrError<CdsUpdate.Builder> structOrError;
     switch (cluster.getClusterDiscoveryTypeCase()) {
@@ -1639,40 +1637,16 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
     }
     CdsUpdate.Builder updateBuilder = structOrError.getStruct();
 
-    if (cluster.getLbPolicy() == LbPolicy.RING_HASH) {
-      RingHashLbConfig lbConfig = cluster.getRingHashLbConfig();
-      long minRingSize =
-          lbConfig.hasMinimumRingSize()
-              ? lbConfig.getMinimumRingSize().getValue()
-              : DEFAULT_RING_HASH_LB_POLICY_MIN_RING_SIZE;
-      long maxRingSize =
-          lbConfig.hasMaximumRingSize()
-              ? lbConfig.getMaximumRingSize().getValue()
-              : DEFAULT_RING_HASH_LB_POLICY_MAX_RING_SIZE;
-      if (lbConfig.getHashFunction() != RingHashLbConfig.HashFunction.XX_HASH
-          || minRingSize > maxRingSize
-          || maxRingSize > MAX_RING_HASH_LB_POLICY_RING_SIZE) {
-        throw new ResourceInvalidException(
-            "Cluster " + cluster.getName() + ": invalid ring_hash_lb_config: " + lbConfig);
-      }
-      updateBuilder.ringHashLbPolicy(minRingSize, maxRingSize);
-    } else if (cluster.getLbPolicy() == LbPolicy.ROUND_ROBIN) {
-      updateBuilder.roundRobinLbPolicy();
-    } else if (enableLeastRequest && cluster.getLbPolicy() == LbPolicy.LEAST_REQUEST) {
-      LeastRequestLbConfig lbConfig =  cluster.getLeastRequestLbConfig();
-      int choiceCount =
-              lbConfig.hasChoiceCount()
-                ? lbConfig.getChoiceCount().getValue()
-                : DEFAULT_LEAST_REQUEST_CHOICE_COUNT;
-      if (choiceCount < DEFAULT_LEAST_REQUEST_CHOICE_COUNT) {
-        throw new ResourceInvalidException(
-                "Cluster " + cluster.getName() + ": invalid least_request_lb_config: " + lbConfig);
-      }
-      updateBuilder.leastRequestLbPolicy(choiceCount);
-    } else {
-      throw new ResourceInvalidException(
-          "Cluster " + cluster.getName() + ": unsupported lb policy: " + cluster.getLbPolicy());
+    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(
+        LegacyLoadBalancerConfigFactory.newConfig(cluster, enableLeastRequest));
+    LoadBalancerProvider lbProvider = loadBalancerRegistry.getProvider(lbConfig.getPolicyName());
+    NameResolver.ConfigOrError configOrError = lbProvider
+        .parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue());
+    if (configOrError.getError() != null) {
+      throw new ResourceInvalidException(structOrError.getErrorDetail());
     }
+
+    updateBuilder.lbPolicySelection(new PolicySelection(lbProvider, configOrError.getConfig()));
 
     return updateBuilder.build();
   }
@@ -2572,11 +2546,11 @@ final class ClientXdsClient extends XdsClient implements XdsResponseHandler, Res
   static final class ResourceInvalidException extends Exception {
     private static final long serialVersionUID = 0L;
 
-    private ResourceInvalidException(String message) {
+    ResourceInvalidException(String message) {
       super(message, null, false, false);
     }
 
-    private ResourceInvalidException(String message, Throwable cause) {
+    ResourceInvalidException(String message, Throwable cause) {
       super(cause != null ? message + ": " + cause.getMessage() : message, cause, false, false);
     }
   }
