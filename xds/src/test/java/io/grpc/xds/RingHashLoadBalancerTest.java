@@ -618,9 +618,8 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().getDescription()).isEqualTo("unreachable");
     verify(subchannels.get(Collections.singletonList(servers.get(1))))
         .requestConnection(); // kickoff connection to server3 (next first non-failing)
-    // TODO: zivy@
-    //verify(subchannels.get(Collections.singletonList(servers.get(0)))).requestConnection();
-    //verify(subchannels.get(Collections.singletonList(servers.get(2)))).requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(0)))).requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(2)))).requestConnection();
 
     // Now connecting to server1.
     deliverSubchannelState(
@@ -934,8 +933,7 @@ public class RingHashLoadBalancerTest {
         CallOptions.DEFAULT.withOption(XdsNameResolver.RPC_HASH_KEY, hashFunc.hashVoid()));
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
-    // enabled me. there is a bug in picker behavior
-    // verify(subchannels.get(Collections.singletonList(servers.get(0)))).requestConnection();
+    verify(subchannels.get(Collections.singletonList(servers.get(0)))).requestConnection();
     verify(subchannels.get(Collections.singletonList(servers.get(2)))).requestConnection();
     verify(subchannels.get(Collections.singletonList(servers.get(1))), never())
         .requestConnection();

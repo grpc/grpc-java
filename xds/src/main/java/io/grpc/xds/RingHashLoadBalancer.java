@@ -401,8 +401,11 @@ final class RingHashLoadBalancer extends LoadBalancer {
       // Try finding a READY subchannel. Starting from the ring entry next to the RPC's hash.
       // If the one of the first two subchannels is not in TRANSIENT_FAILURE, return result
       // based on that subchannel. Otherwise, fail the pick unless a READY subchannel is found.
-      // Meanwhile, trigger connection for the first subchannel that is in IDLE if no subchannel
-      // before it is in CONNECTING or READY.
+      // Meanwhile, trigger connection for the channel and status:
+      // For the first subchannel that is in IDLE or TRANSIENT_FAILURE;
+      // And for the second subchannel that is in IDLE or TRANSIENT_FAILURE;
+      // And for each of the following subchannels that is in TRANSIENT_FAILURE or IDLE,
+      // stop until we find the first subchannel that is in CONNECTING or IDLE status.
       boolean foundFirstNonFailed = false;  // true if having subchannel(s) in CONNECTING or IDLE
       Subchannel firstSubchannel = null;
       Subchannel secondSubchannel = null;
