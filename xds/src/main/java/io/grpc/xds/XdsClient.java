@@ -27,19 +27,15 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.net.UrlEscapers;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.Any;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
-import io.grpc.internal.ServiceConfigUtil.PolicySelection;
 import io.grpc.xds.AbstractXdsClient.ResourceType;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.LoadStatsManager2.ClusterLocalityStats;
-import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -182,7 +178,8 @@ abstract class XdsClient {
 
     abstract ClusterType clusterType();
 
-    abstract PolicySelection lbPolicySelection();
+    // Endpoint-level load balancing policy.
+    abstract LbPolicy lbPolicy();
 
     // Only valid if lbPolicy is "ring_hash_experimental".
     abstract long minRingSize();
@@ -279,7 +276,7 @@ abstract class XdsClient {
       return MoreObjects.toStringHelper(this)
           .add("clusterName", clusterName())
           .add("clusterType", clusterType())
-          .add("lbPolicySelection", lbPolicySelection())
+          .add("lbPolicy", lbPolicy())
           .add("minRingSize", minRingSize())
           .add("maxRingSize", maxRingSize())
           .add("choiceCount", choiceCount())
@@ -300,23 +297,19 @@ abstract class XdsClient {
       // Private, use one of the static factory methods instead.
       protected abstract Builder clusterType(ClusterType clusterType);
 
-      protected abstract Builder lbPolicySelection(PolicySelection lbPolicySelection);
+      // Private, use roundRobinLbPolicy() or ringHashLbPolicy(long, long).
+      protected abstract Builder lbPolicy(LbPolicy lbPolicy);
 
       Builder roundRobinLbPolicy() {
-        return this.lbPolicySelection(new PolicySelection(
-            LoadBalancerRegistry.getDefaultRegistry().getProvider("round_robin"), null));
+        return this.lbPolicy(LbPolicy.ROUND_ROBIN);
       }
 
-      Builder ringHashLbPolicy(Long minRingSize, Long maxRingSize) {
-        return this.lbPolicySelection(new PolicySelection(
-            LoadBalancerRegistry.getDefaultRegistry().getProvider("ring_hash_experimental"),
-            new RingHashConfig(minRingSize, maxRingSize)));
+      Builder ringHashLbPolicy(long minRingSize, long maxRingSize) {
+        return this.lbPolicy(LbPolicy.RING_HASH).minRingSize(minRingSize).maxRingSize(maxRingSize);
       }
 
-      Builder leastRequestLbPolicy(Integer choiceCount) {
-        return this.lbPolicySelection(new PolicySelection(
-            LoadBalancerRegistry.getDefaultRegistry().getProvider("least_request_experimental"),
-            new LeastRequestConfig(choiceCount)));
+      Builder leastRequestLbPolicy(int choiceCount) {
+        return this.lbPolicy(LbPolicy.LEAST_REQUEST).choiceCount(choiceCount);
       }
 
       // Private, use leastRequestLbPolicy(int).
