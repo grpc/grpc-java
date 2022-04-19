@@ -436,6 +436,44 @@ public class PriorityLoadBalancerTest {
   }
 
   @Test
+  public void connectingResetFailOverIfSeenReadyOrIdleSinceTransientFailure() {
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
+    PriorityChildConfig priorityChildConfig1 =
+        new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
+    PriorityLbConfig priorityLbConfig =
+        new PriorityLbConfig(
+            ImmutableMap.of("p0", priorityChildConfig0, "p1", priorityChildConfig1),
+            ImmutableList.of("p0", "p1"));
+    priorityLb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+    assertThat(fooBalancers).hasSize(1);
+    assertThat(fooHelpers).hasSize(1);
+    Helper helper0 = Iterables.getOnlyElement(fooHelpers);
+
+    // p0 gets IDLE.
+    helper0.updateBalancingState(
+        IDLE,
+        BUFFER_PICKER);
+    assertCurrentPickerIsBufferPicker();
+
+    // p0 goes to CONNECTING, reset failover timer
+    fakeClock.forwardTime(5, TimeUnit.SECONDS);
+    helper0.updateBalancingState(
+        CONNECTING,
+        BUFFER_PICKER);
+    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), eq(BUFFER_PICKER));
+
+    // failover happens
+    fakeClock.forwardTime(10, TimeUnit.SECONDS);
+    assertThat(fooBalancers).hasSize(2);
+    assertThat(fooHelpers).hasSize(2);
+  }
+
+  @Test
   public void readyToConnectDoesNotFailOverButUpdatesPicker() {
     PriorityChildConfig priorityChildConfig0 =
         new PriorityChildConfig(new PolicySelection(fooLbProvider, new Object()), true);
